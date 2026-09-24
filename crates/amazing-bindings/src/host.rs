@@ -320,6 +320,8 @@ pub enum Operation {
     ElementOuterHTML,
     ElementSetOuterHTML,
     ElementInsertAdjacentHTML,
+    ElementInsertAdjacentElement,
+    ElementInsertAdjacentText,
     ElementInnerText,
     ElementSetInnerText,
     GetRootNode,

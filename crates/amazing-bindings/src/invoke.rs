@@ -293,8 +293,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         let value = args.first().cloned().unwrap_or_else(|| host.undefined());
         let default_empty = matches!(operation, O::TextConstructor | O::CommentConstructor)
             && host.is_undefined(&value);
-        let nullable =
-            matches!(operation, O::SetNodeValue | O::SetTextContent) && host.is_nullish(&value);
+        let nullable = (matches!(operation, O::SetNodeValue | O::SetTextContent)
+            && host.is_nullish(&value))
+            || (operation == O::SetData && host.is_nullish(&value) && !host.is_undefined(&value));
         if !default_empty && !nullable {
             data = host.to_dom_string(&value)?;
         }

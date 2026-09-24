@@ -1511,7 +1511,7 @@ impl DocumentHost for RuntimeBindingHost<'_> {
             DocumentField::CharacterSet => self.state.borrow().document_character_set.clone(),
             DocumentField::ContentType => self.state.borrow().document_content_type.clone(),
             DocumentField::Referrer => self.state.borrow().document_referrer.clone(),
-            DocumentField::CompatMode => None,
+            DocumentField::CompatMode => Some("CSS1Compat".into()),
         };
         let Some(value) = value else {
             return Err(throw_dom_error(self, DomError::NotSupportedError));

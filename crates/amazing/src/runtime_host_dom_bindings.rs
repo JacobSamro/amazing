@@ -40,11 +40,6 @@ impl RuntimeBindingHost<'_> {
     pub(super) fn install_window_event_target(&mut self) -> Result<(), Throw> {
         let prototype = self.prototype(Interface::EventTarget)
             .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
-        let global = self.js.binding_global_object();
-        for name in ["addEventListener", "removeEventListener", "dispatchEvent"] {
-            let method = self.js.binding_get_property(&prototype, name)?;
-            self.define_data_property(&global, name, method, true, false, true)?;
-        }
-        Ok(())
+        self.js.binding_set_global_prototype(&prototype)
     }
 }

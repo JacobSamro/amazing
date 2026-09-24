@@ -11,6 +11,8 @@ fn detached_created_element_has_live_style() {
         native_forwarded: false,
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script("document.compatMode").unwrap(),
+        amazing_js::value::JsValue::str("CSS1Compat"));
     assert_eq!(scheduler.run_script(
         "let cell = document.createElement('td'); let style = cell.style; \
          style.cssText = 'font-variant-ligatures: normal'; \
@@ -100,6 +102,10 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
         native_forwarded: false,
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "window instanceof EventTarget && Object.getPrototypeOf(window) === EventTarget.prototype && \
+         !window.hasOwnProperty('addEventListener') && !window.hasOwnProperty('removeEventListener')"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
     assert_eq!(scheduler.run_script(
         "let hit = 0; function one() { hit += 1; } function two() { hit += 10; } \
          addEventListener('load', one); addEventListener.call(undefined, 'load', two); \

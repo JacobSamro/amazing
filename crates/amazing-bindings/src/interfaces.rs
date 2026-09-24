@@ -211,6 +211,7 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    method("moveBefore", O::MoveBefore, 2),
     getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
     getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
@@ -448,6 +449,7 @@ const SELECTION: &[Member] = &[
     method("toString", O::SelectionToString, 0),
 ];
 const ELEMENT: &[Member] = &[
+    method("moveBefore", O::MoveBefore, 2),
     getter("namespaceURI", O::ElementNamespaceURI),
     getter("prefix", O::ElementPrefix),
     getter("localName", O::ElementLocalName),
@@ -460,6 +462,8 @@ const ELEMENT: &[Member] = &[
     method("getHTML", O::ElementGetHTML, 0),
     getter("outerHTML", O::ElementOuterHTML), setter("outerHTML", O::ElementSetOuterHTML),
     method("insertAdjacentHTML", O::ElementInsertAdjacentHTML, 2),
+    method("insertAdjacentElement", O::ElementInsertAdjacentElement, 2),
+    method("insertAdjacentText", O::ElementInsertAdjacentText, 2),
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     method("matches", O::ElementMatches, 1),

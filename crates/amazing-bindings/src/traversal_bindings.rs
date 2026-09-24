@@ -82,7 +82,9 @@ pub(crate) fn invoke<H: BindingHost>(
             else { Err(DomError::TypeError) })?;
         let root = args.first().and_then(|v| host.node_brand(v))
             .ok_or_else(|| host.type_error("Expected a root Node"))?;
-        let show = if let Some(value) = args.get(1) { unsigned_long(host, value)? } else { u32::MAX };
+        let show = if let Some(value) = args.get(1).filter(|value| !host.is_undefined(value)) {
+            unsigned_long(host, value)?
+        } else { u32::MAX };
         let filter = args.get(2).filter(|v| !host.is_nullish(v)).cloned();
         let callback = filter.map(|value| host.retain_value(value));
         let result = host.with_dom(|dom| if op == O::CreateNodeIterator {
