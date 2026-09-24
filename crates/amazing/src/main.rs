@@ -72,6 +72,9 @@ const PIPELINE: &[(&str, &str)] = &[
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "--type=utility") {
+        return runtime_host_replaced_content::run_image_utility_child();
+    }
     #[cfg(windows)]
     if args.len() == 1 {
         return cmd::launch::default_gpui_shell();

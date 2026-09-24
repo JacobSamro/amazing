@@ -93,6 +93,7 @@ dependencies = [
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-process",
  "amazing-regex",
  "amazing-storage",
  "amazing-svg",

@@ -42,6 +42,7 @@ pub(crate) struct PageImageState {
 pub(crate) struct PageMedia {
     images: Vec<PageImage>,
     decoded: HashMap<String, amazing_media::Image>,
+    decoder: crate::runtime_host_replaced_content::UtilityImageDecoder,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -278,7 +279,7 @@ fn load_image(media: &mut PageMedia, url: &str, attempted: &mut HashSet<String>)
         if !attempted.insert(url.to_owned()) {
             return;
         }
-        let image = if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+        let bytes = if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
             amazing_net::ParsedUrl::parse(url)
                 .map_err(|error| format!("{error:?}"))
                 .and_then(|parsed| amazing_fetch::process_data_url(&parsed)
@@ -287,17 +288,12 @@ fn load_image(media: &mut PageMedia, url: &str, attempted: &mut HashSet<String>)
                     if data.body.len() > 16 * 1024 * 1024 {
                         return Err("resource size limit".to_owned());
                     }
-                    if data.mime_type.type_ == "image" && data.mime_type.subtype == "svg+xml" {
-                        amazing_svg::decode(&data.body, amazing_svg::DecodeLimits::default())
-                            .map_err(|error| error.to_string())
-                    } else {
-                        amazing_media::decode_image(&data.body).map_err(|error| error.to_string())
-                    }
+                    Ok(data.body)
                 })
         } else {
             load_resource(url, 16 * 1024 * 1024)
-                .and_then(|bytes| amazing_media::decode_image(&bytes).map_err(|error| error.to_string()))
         };
+        let image = bytes.and_then(|bytes| media.decoder.decode(&bytes));
         match image {
             Ok(image) => { media.decoded.insert(url.to_owned(), image); }
             Err(error) => media.warnings.push(format!("image {url:?}: {error}")),
@@ -340,7 +336,7 @@ pub(crate) fn load_page_media_in_viewport(
             let selected = crate::runtime_host_replaced_content::select_image_source(
                 dom, node, environment,
                 |query| crate::runtime_host_replaced_content::matches_image_media(query, viewport_width),
-                |mime| crate::runtime_host_replaced_content::supports_image_type(mime, false),
+                |mime| crate::runtime_host_replaced_content::supports_image_type(mime, true),
             );
             if let Some(selected) = selected {
                 let resolved = resolve_script_url(page, &selected.url);

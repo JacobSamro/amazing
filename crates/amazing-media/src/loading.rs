@@ -119,6 +119,7 @@ mod tests {
         assert!(request.select(Some("b.png")));
         assert!(!request.finish(old, true));
         assert!(!request.complete);
+        request.fetch_started = true;
         assert!(request.finish(request.generation, true));
         assert!(request.complete && request.decoded);
     }

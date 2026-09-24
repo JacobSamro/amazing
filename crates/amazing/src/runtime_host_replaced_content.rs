@@ -13,6 +13,80 @@ use amazing_paint::display_list_view::{
 };
 use amazing_paint::ImageProvider;
 use amazing_text::TextSystem;
+use std::{collections::BTreeMap, process::ExitCode, time::Duration};
+
+/// The same browser executable serves the IMAGE utility role. The process
+/// library enters the platform sandbox before it accepts decoder requests.
+pub(crate) fn run_image_utility_child() -> ExitCode {
+    use amazing_process::{bootstrap_child, Capabilities, Role};
+    let connection = bootstrap_child(Role::Utility, Capabilities(BTreeMap::new()),
+        |connection, _, channel| {
+            amazing_process::utility::serve_utility(connection, channel);
+            Ok(())
+        });
+    let Ok(connection) = connection else { return ExitCode::FAILURE; };
+    while !connection.is_closed() {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    ExitCode::SUCCESS
+}
+
+#[derive(Default)]
+pub(crate) struct UtilityImageDecoder {
+    host: Option<amazing_process::ProcessHost>,
+}
+
+impl UtilityImageDecoder {
+    pub(crate) fn decode(&mut self, bytes: &[u8]) -> Result<amazing_media::Image, String> {
+        #[cfg(test)]
+        {
+            // Unit-test executables do not expose the browser's --type entry.
+            return if bytes.iter().copied().find(|b| !b.is_ascii_whitespace()) == Some(b'<') {
+                amazing_svg::decode(bytes, amazing_svg::DecodeLimits::default()).map_err(|e| e.to_string())
+            } else {
+                amazing_media::decode_image(bytes).map_err(|e| e.to_string())
+            };
+        }
+        #[cfg(not(test))]
+        {
+            use amazing_process::{Capabilities, ProcessHost, RestartPolicy};
+            if self.host.is_none() {
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                match ProcessHost::spawn_sandboxed_utility(&exe,
+                    Capabilities(BTreeMap::new()), RestartPolicy::Never) {
+                    Ok(host) => self.host = Some(host),
+                    Err(error) => {
+                        #[cfg(target_os = "linux")]
+                        if bytes.starts_with(b"BM") || bytes.starts_with(b"P3")
+                            || bytes.starts_with(b"P6") || bytes.starts_with(b"<") {
+                            // Some Linux build hosts deny user namespaces. Keep
+                            // their original basic-image path; expanded codecs
+                            // still require the sandboxed utility process.
+                            return if bytes.starts_with(b"<") {
+                                amazing_svg::decode(bytes, amazing_svg::DecodeLimits::default())
+                                    .map_err(|e| e.to_string())
+                            } else {
+                                amazing_media::decode_image(bytes).map_err(|e| e.to_string())
+                            };
+                        }
+                        return Err(error.to_string());
+                    }
+                }
+            }
+            let result = self.host.as_mut().expect("utility was started")
+                .decode_untrusted(amazing_process::utility::IMAGE, bytes, Duration::from_secs(5));
+            match result {
+                Ok(frame) => Ok(amazing_media::Image {
+                    width: frame.width, height: frame.height, pixels: frame.bytes().to_vec(),
+                }),
+                Err(error) => {
+                    self.host = None;
+                    Err(error.to_string())
+                }
+            }
+        }
+    }
+}
 
 /// One affected layout item. `item` carries new geometry, property IDs and
 /// display position; the adapter fills its stable key from the live DOM.
