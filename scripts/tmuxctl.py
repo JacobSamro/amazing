@@ -315,6 +315,8 @@ LANE_GRANTS.setdefault("replaced-content", []).append("crates/amazing/tests/phas
 LANE_GRANTS["dom-bindings"].append("crates/amazing/src/dom_host.rs")
 # JSRT: one-line [[NumberData]] non-enumerable fix in js-stdlib's Number installer.
 LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/builtins_std_number_math.rs")
+# JSRT: JsFunction gains a strict bit; mechanical initializer edits in two external files.
+LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-js/examples/test262_host.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
