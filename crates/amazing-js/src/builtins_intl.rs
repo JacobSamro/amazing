@@ -72,6 +72,17 @@ fn intl_title(input: &str) -> String {
 }
 
 fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
+    let alias = INTL_LANGUAGE_ALIASES.iter()
+        .filter(|(old, _)| old.contains('-') && old.split('-').skip(1).all(|part| part.len() >= 4)
+            && input.len() >= old.len()
+            && input.get(..old.len()).is_some_and(|part| part.eq_ignore_ascii_case(old))
+            && (input.len() == old.len() || input.as_bytes()[old.len()] == b'-'))
+        .max_by_key(|(old, _)| old.len());
+    let aliased;
+    let input = if let Some((old, replacement)) = alias {
+        aliased = format!("{replacement}{}", &input[old.len()..]);
+        aliased.as_str()
+    } else { input };
     if input.is_empty() || !input.is_ascii() || input.contains('_') {
         return Err(Throw::range_error("invalid language tag"));
     }
@@ -97,7 +108,10 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
     }
     if i < parts.len() && ((parts[i].len() == 2 && parts[i].bytes().all(|b| b.is_ascii_alphabetic()))
         || (parts[i].len() == 3 && parts[i].bytes().all(|b| b.is_ascii_digit()))) {
-        let region = parts[i].to_ascii_uppercase();
+        let mut region = parts[i].to_ascii_uppercase();
+        if region == "SU" && canonical.get(1).is_some_and(|part| part == "Armn") {
+            region = "AM".into();
+        }
         canonical.push(intl_alias(INTL_REGION_ALIASES, &region).unwrap_or(&region).to_string());
         i += 1;
     }
@@ -129,6 +143,15 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
             return Err(Throw::range_error("duplicate language extension"));
         }
         let mut subtags: Vec<String> = parts[start..i].iter().map(|part| part.to_ascii_lowercase()).collect();
+        if singleton == "t" {
+            let mut variants = std::collections::HashSet::new();
+            for part in subtags.iter().take_while(|part| part.len() != 2) {
+                if ((5..=8).contains(&part.len()) || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit()))
+                    && !variants.insert(part.as_str()) {
+                    return Err(Throw::range_error("duplicate transformed-language variant"));
+                }
+            }
+        }
         if singleton == "u" {
             let mut attributes = Vec::new();
             let mut keywords = Vec::new();
@@ -147,6 +170,10 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
                 if !keywords.iter().any(|(old, _): &(String, Vec<String>)| old == &key) {
                     let value = if key == "ca" && j == value_start + 1 && subtags[value_start] == "islamicc" {
                         vec!["islamic".into(), "civil".into()]
+                    } else if key == "ca" && subtags[value_start..j] == ["ethiopic", "amete", "alem"] {
+                        vec!["ethioaa".into()]
+                    } else if ["kf", "kn"].contains(&key.as_str()) && subtags[value_start..j] == ["true"] {
+                        Vec::new()
                     } else { subtags[value_start..j].to_vec() };
                     keywords.push((key, value));
                 }
@@ -345,7 +372,14 @@ fn intl_locale_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
                 if prefix == 0 { subtags[0] = value; }
                 else {
                     let position = if prefix == 1 { 1 } else if subtags.get(1).is_some_and(|part| part.len() == 4) { 2 } else { 1 };
-                    if subtags.get(position).is_some_and(|part| part.len() == value.len()) { subtags[position] = value; }
+                    let replaces = if prefix == 1 {
+                        subtags.get(position).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+                    } else {
+                        subtags.get(position).is_some_and(|part|
+                            (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+                                || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit())))
+                    };
+                    if replaces { subtags[position] = value; }
                     else { subtags.insert(position, value); }
                 }
                 tag = intl_canonical_tag(&subtags.join("-"))?;
@@ -403,7 +437,11 @@ fn intl_locale_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
                 || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
                 return Err(Throw::range_error(format!("invalid {option} option")));
             }
-            keywords.insert(key.to_string(), text);
+            keywords.insert(key.to_string(), if key == "ca" && text == "ethiopic-amete-alem" {
+                "ethioaa".into()
+            } else if key == "ca" && text == "islamicc" {
+                "islamic-civil".into()
+            } else { text });
         }
         let numeric = i.get_prop(options, "numeric")?;
         if !numeric.is_undefined() { keywords.insert("kn".into(), if numeric.to_boolean() { "true" } else { "false" }.into()); }
@@ -432,7 +470,7 @@ fn intl_locale_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         }
         if !keywords.is_empty() {
             let base = tag.split("-u-").next().unwrap_or(&tag);
-            let suffix = keywords.into_iter().map(|(key, value)| if value == "true" { key }
+            let suffix = keywords.into_iter().map(|(key, value)| if value.is_empty() || value == "true" { key }
                 else { format!("{key}-{value}") }).collect::<Vec<_>>().join("-");
             tag = intl_canonical_tag(&format!("{base}-u-{suffix}"))?;
         }
@@ -509,13 +547,28 @@ fn intl_locale_minimize(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
     let language = pieces[0];
     let script = pieces.get(1).copied().unwrap_or("Latn");
     let region = pieces.get(2).copied().unwrap_or("US");
-    let shortened = if intl_locale_maximized_base(language) == maximal { language.to_string() }
-        else if intl_locale_maximized_base(&format!("{language}-{region}")) == maximal {
+    let maximal_base = format!("{language}-{script}-{region}");
+    let shortened = if intl_locale_maximized_base(language) == maximal_base { language.to_string() }
+        else if intl_locale_maximized_base(&format!("{language}-{region}")) == maximal_base {
             format!("{language}-{region}")
-        } else if intl_locale_maximized_base(&format!("{language}-{script}")) == maximal {
+        } else if intl_locale_maximized_base(&format!("{language}-{script}")) == maximal_base {
             format!("{language}-{script}")
         } else { format!("{language}-{script}-{region}") };
     let mut shortened = shortened;
+    let base = tag.split("-u-").next().unwrap_or(&tag);
+    let parts: Vec<&str> = base.split('-').collect();
+    let mut variant_start = 1;
+    if parts.get(variant_start).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) {
+        variant_start += 1;
+    }
+    if parts.get(variant_start).is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+        || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) {
+        variant_start += 1;
+    }
+    for variant in &parts[variant_start..] {
+        shortened.push('-');
+        shortened.push_str(variant);
+    }
     if let Some((_, extension)) = tag.split_once("-u-") {
         shortened.push_str("-u-"); shortened.push_str(extension);
     }

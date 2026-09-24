@@ -19,13 +19,13 @@ fn intl_locale_region(tag: &str) -> &'static str {
             return data.region;
         }
     }
-    if let Some(subdivision) = intl_unicode_keyword(tag, "sd") {
-        let region = subdivision.get(..2).unwrap_or("").to_ascii_uppercase();
+    if let Some(region) = intl_locale_explicit_region(tag) {
         if let Some(data) = INTL_LOCALE_REGIONS.iter().find(|data| data.region == region) {
             return data.region;
         }
     }
-    if let Some(region) = intl_locale_explicit_region(tag) {
+    if let Some(subdivision) = intl_unicode_keyword(tag, "sd") {
+        let region = subdivision.get(..2).unwrap_or("").to_ascii_uppercase();
         if let Some(data) = INTL_LOCALE_REGIONS.iter().find(|data| data.region == region) {
             return data.region;
         }
@@ -90,13 +90,15 @@ fn intl_locale_first_day_of_week(_: &mut Interpreter, this: JsValue, _: Vec<JsVa
     Ok(intl_unicode_keyword(&tag, "fw").map(JsValue::str).unwrap_or(JsValue::Undefined))
 }
 
-fn intl_locale_variants(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn intl_locale_variants(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let tag = intl_locale_tag(&this)?;
     let mut parts = tag.split('-').skip(1).peekable();
-    if parts.peek().is_some_and(|part| part.len() == 4) { parts.next(); }
-    if parts.peek().is_some_and(|part| part.len() == 2 || part.len() == 3) { parts.next(); }
-    let variants = parts.take_while(|part| part.len() > 1).map(JsValue::str);
-    intl_array(i, variants)
+    if parts.peek().is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) { parts.next(); }
+    if parts.peek().is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+        || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) { parts.next(); }
+    let variants = parts.take_while(|part| part.len() > 1).collect::<Vec<_>>();
+    if variants.is_empty() { Ok(JsValue::Undefined) }
+    else { Ok(JsValue::str(variants.join("-"))) }
 }
 
 fn intl_locale_get_calendars(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -109,9 +111,14 @@ fn intl_locale_get_calendars(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>
 
 fn intl_locale_get_collations(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let tag = intl_locale_tag(&this)?;
-    let collation = intl_unicode_keyword(&tag, "co").filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "emoji".into());
-    intl_array(i, [JsValue::str(collation)])
+    if let Some(collation) = intl_unicode_keyword(&tag, "co").filter(|value| !value.is_empty()) {
+        return intl_array(i, [JsValue::str(collation)]);
+    }
+    let language = tag.split('-').next().unwrap_or("und");
+    if language == "und" || !INTL_NUMBER_DATA.iter().any(|data| data.locale == language) {
+        return intl_array(i, [JsValue::str("emoji"), JsValue::str("eor")]);
+    }
+    intl_array(i, [JsValue::str("emoji")])
 }
 
 fn intl_locale_get_hour_cycles(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -119,7 +126,12 @@ fn intl_locale_get_hour_cycles(i: &mut Interpreter, this: JsValue, _: Vec<JsValu
     if let Some(value) = intl_unicode_keyword(&tag, "hc") {
         return intl_array(i, [JsValue::str(value)]);
     }
-    intl_array(i, intl_locale_region_data(&tag).hour_cycles.iter().map(|value| JsValue::str(*value)))
+    let language = tag.split('-').next().unwrap_or("und");
+    let region = intl_locale_region(&tag);
+    let key = format!("{language}-{region}");
+    let hours = INTL_LOCALE_HOUR_CYCLES.iter().find(|(locale, _)| *locale == key.as_str())
+        .map(|(_, values)| *values).unwrap_or(intl_locale_region_data(&tag).hour_cycles);
+    intl_array(i, hours.iter().map(|value| JsValue::str(*value)))
 }
 
 fn intl_locale_get_numbering_systems(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {

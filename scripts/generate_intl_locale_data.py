@@ -90,6 +90,18 @@ def main() -> None:
             + ", time_zones: " + array(sorted(zones_by_region.get(region, ()))) + " },"
         )
     lines.append("];")
+    lines.append("const INTL_LOCALE_HOUR_CYCLES: &[(&str, &[&str])] = &[")
+    for locale, time in sorted(times.items()):
+        if "-" not in locale:
+            continue
+        hours = []
+        for field in (time["_preferred"], time["_allowed"]):
+            for symbol in field.split():
+                cycle = HOURS.get(symbol[0])
+                if cycle and cycle not in hours:
+                    hours.append(cycle)
+        lines.append(f"    ({quoted(locale)}, {array(hours)}),")
+    lines.append("];")
     likely_lines = []
     for language, expanded in sorted(likely.items()):
         if "-" in expanded:
