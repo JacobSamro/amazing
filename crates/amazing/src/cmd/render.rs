@@ -1,6 +1,6 @@
 //! Style, layout, raster, and audio commands.
 use std::{cell::RefCell, rc::Rc, process::ExitCode, time::Duration};
-use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
+use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_text_from_sheets, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::{execute_inline_scripts, prepare_page_scripts}};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
 use crate::animation_scene::AnimationScene;
@@ -362,7 +362,7 @@ fn paint_host_surface_with_updates(
         style_candidate = Some(candidate);
     }
     let styled = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
-    let media = load_page_media(&dom.dom, html_path, &styled);
+    let mut media = crate::page::load_page_media_in_viewport(&dom.dom, html_path, &styled, width, 1.0);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
@@ -370,7 +370,7 @@ fn paint_host_surface_with_updates(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_styled_document(
+    let mut root = amazing_layout::layout_styled_document(
         &dom.dom,
         &styled,
         &page_text.provider,
@@ -378,6 +378,14 @@ fn paint_host_surface_with_updates(
         width,
         fixed_height.map(|height| height as f32),
     );
+    if media.load_visible_lazy(&root, amazing_media::loading::ViewportRect {
+        x: 0.0, y: 0.0, width, height: fixed_height.unwrap_or(600) as f32,
+    }) > 0 {
+        root = amazing_layout::layout_styled_document(
+            &dom.dom, &styled, &page_text.provider, &media,
+            width, fixed_height.map(|height| height as f32),
+        );
+    }
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.

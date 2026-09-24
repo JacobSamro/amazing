@@ -9,6 +9,8 @@
 #![forbid(unsafe_code)]
 
 pub mod image_size;
+pub mod responsive;
+pub mod loading;
 pub use image_size::ImageSize;
 
 use std::fmt;

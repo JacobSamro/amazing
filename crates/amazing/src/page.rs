@@ -24,6 +24,18 @@ fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
 struct PageImage {
     node: amazing_dom::NodeIdx,
     url: String,
+    density: f32,
+    loading: amazing_media::loading::Loading,
+    decoding: amazing_media::loading::Decoding,
+    request: amazing_media::loading::ImageRequest,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PageImageState {
+    pub(crate) current_src: String,
+    pub(crate) complete: bool,
+    pub(crate) natural_width: u32,
+    pub(crate) natural_height: u32,
 }
 
 #[derive(Default)]
@@ -31,6 +43,24 @@ pub(crate) struct PageMedia {
     images: Vec<PageImage>,
     decoded: HashMap<String, amazing_media::Image>,
     pub(crate) warnings: Vec<String>,
+}
+
+impl PageMedia {
+    pub(crate) fn has_pending_lazy(&self) -> bool {
+        self.images.iter().any(|entry| entry.loading == amazing_media::loading::Loading::Lazy && !entry.request.fetch_started)
+    }
+
+    pub(crate) fn image_state(&self, node: amazing_dom::NodeIdx) -> Option<PageImageState> {
+        let entry = self.images.iter().find(|entry| entry.node == node)?;
+        let image = self.decoded.get(&entry.url);
+        let density = entry.density.max(f32::MIN_POSITIVE);
+        Some(PageImageState {
+            current_src: entry.url.clone(),
+            complete: entry.request.complete,
+            natural_width: image.map_or(0, |image| (image.width as f32 / density).round() as u32),
+            natural_height: image.map_or(0, |image| (image.height as f32 / density).round() as u32),
+        })
+    }
 }
 
 pub(crate) struct PageText {
@@ -180,7 +210,11 @@ impl amazing_layout::ReplacedElementProvider for PageMedia {
         self.images
             .iter()
             .find(|entry| entry.node == node)
-            .and_then(|entry| self.intrinsic_size_by_url(&entry.url))
+            .and_then(|entry| self.intrinsic_size_by_url(&entry.url).map(|size| amazing_layout::IntrinsicSize {
+                width: size.width / entry.density.max(f32::MIN_POSITIVE),
+                height: size.height / entry.density.max(f32::MIN_POSITIVE),
+            }).or_else(|| (entry.loading == amazing_media::loading::Loading::Lazy)
+                .then_some(amazing_layout::IntrinsicSize { width: 300.0, height: 150.0 })))
     }
 
     fn intrinsic_size_by_url(&self, url: &str) -> Option<amazing_layout::IntrinsicSize> {
@@ -220,6 +254,10 @@ impl amazing_paint::ImageProvider for PagePaint<'_> {
         amazing_paint::ImageProvider::image_by_url(self.media, url)
     }
 
+    fn presentation(&self, node: amazing_dom::NodeIdx) -> amazing_paint::image::ImagePresentation {
+        self.styles.get(node).map(amazing_paint::image::ImagePresentation::from_style).unwrap_or_default()
+    }
+
     fn svg(&self, node: amazing_dom::NodeIdx, width: u32, height: u32, dpr: f32) -> Option<amazing_media::Image> {
         if self.dom.namespace(node) != Some(amazing_dom::Namespace::Svg)
             || self.dom.name(node) != Some("svg")
@@ -236,12 +274,7 @@ impl amazing_paint::ImageProvider for PagePaint<'_> {
     }
 }
 
-pub(crate) fn load_page_media(
-    dom: &amazing_dom::Dom,
-    page: &str,
-    styled: &amazing_css::StyledDom,
-) -> PageMedia {
-    fn load_image(media: &mut PageMedia, url: &str, attempted: &mut HashSet<String>) {
+fn load_image(media: &mut PageMedia, url: &str, attempted: &mut HashSet<String>) {
         if !attempted.insert(url.to_owned()) {
             return;
         }
@@ -269,7 +302,23 @@ pub(crate) fn load_page_media(
             Ok(image) => { media.decoded.insert(url.to_owned(), image); }
             Err(error) => media.warnings.push(format!("image {url:?}: {error}")),
         }
-    }
+}
+
+pub(crate) fn load_page_media(
+    dom: &amazing_dom::Dom,
+    page: &str,
+    styled: &amazing_css::StyledDom,
+) -> PageMedia {
+    load_page_media_in_viewport(dom, page, styled, 800.0, 1.0)
+}
+
+pub(crate) fn load_page_media_in_viewport(
+    dom: &amazing_dom::Dom,
+    page: &str,
+    styled: &amazing_css::StyledDom,
+    viewport_width: f32,
+    device_pixel_ratio: f32,
+) -> PageMedia {
 
     fn walk(
         dom: &amazing_dom::Dom,
@@ -278,17 +327,36 @@ pub(crate) fn load_page_media(
         styled: &amazing_css::StyledDom,
         media: &mut PageMedia,
         attempted: &mut HashSet<String>,
+        viewport_width: f32,
+        device_pixel_ratio: f32,
     ) {
         if dom.name(node) == Some("img") {
-            let source = dom
-                .attrs_of(node)
-                .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
-                .map(|(_, value)| value.as_str())
-                .filter(|value| !value.trim().is_empty());
-            if let Some(source) = source {
-                let resolved = resolve_script_url(page, source);
-                load_image(media, &resolved, attempted);
-                media.images.push(PageImage { node, url: resolved });
+            let environment = amazing_media::responsive::SourceEnvironment {
+                viewport_width,
+                device_pixel_ratio,
+                slot_width: None,
+                allow_auto_sizes: false,
+            };
+            let selected = crate::runtime_host_replaced_content::select_image_source(
+                dom, node, environment,
+                |query| crate::runtime_host_replaced_content::matches_image_media(query, viewport_width),
+                |mime| crate::runtime_host_replaced_content::supports_image_type(mime, false),
+            );
+            if let Some(selected) = selected {
+                let resolved = resolve_script_url(page, &selected.url);
+                let attrs = dom.attrs_of(node).unwrap_or(&[]);
+                let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str());
+                let loading = amazing_media::loading::Loading::from_attribute(attr("loading"));
+                let decoding = amazing_media::loading::Decoding::from_attribute(attr("decoding"));
+                let mut request = amazing_media::loading::ImageRequest::default();
+                request.select(Some(&resolved));
+                if loading == amazing_media::loading::Loading::Eager {
+                    request.fetch_started = true;
+                    load_image(media, &resolved, attempted);
+                    request.finish(request.generation, media.decoded.contains_key(&resolved));
+                }
+                media.images.push(PageImage { node, url: resolved, density: selected.density,
+                    loading, decoding, request });
             }
         }
         for pseudo in [
@@ -316,13 +384,58 @@ pub(crate) fn load_page_media(
             }
         }
         for child in dom.children(node) {
-            walk(dom, child, page, styled, media, attempted);
+            walk(dom, child, page, styled, media, attempted, viewport_width, device_pixel_ratio);
         }
     }
 
     let mut media = PageMedia::default();
-    walk(dom, amazing_dom::NodeIdx(0), page, styled, &mut media, &mut HashSet::new());
+    walk(dom, amazing_dom::NodeIdx(0), page, styled, &mut media, &mut HashSet::new(), viewport_width, device_pixel_ratio);
     media
+}
+
+impl PageMedia {
+    /// Fetch lazy images whose laid-out boxes intersect the visible viewport.
+    /// The caller relayouts if an image gains intrinsic dimensions.
+    pub(crate) fn load_visible_lazy(
+        &mut self,
+        layout: &amazing_layout::LayoutBox,
+        viewport: amazing_media::loading::ViewportRect,
+    ) -> usize {
+        fn rect_for(layout: &amazing_layout::LayoutBox, node: amazing_dom::NodeIdx) -> Option<amazing_layout::Rect> {
+            for line in &layout.lines {
+                if let Some(fragment) = line.replaced.iter().find(|fragment| fragment.node == node) {
+                    return Some(amazing_layout::Rect { x: fragment.x, y: fragment.y, w: fragment.width, h: fragment.height });
+                }
+            }
+            if layout.node == Some(node) { return Some(layout.content_box); }
+            let flow = match &layout.flow {
+                amazing_layout::Flow::Blocks(c) | amazing_layout::Flow::Flex(c) | amazing_layout::Flow::Grid(c) => c.as_slice(),
+                _ => &[],
+            };
+            flow.iter().chain(&layout.positioned).find_map(|child| rect_for(child, node))
+        }
+        let mut ready = Vec::new();
+        for (index, entry) in self.images.iter_mut().enumerate() {
+            if entry.loading != amazing_media::loading::Loading::Lazy { continue; }
+            let rect = rect_for(layout, entry.node).map(|rect| amazing_media::loading::ViewportRect {
+                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+            });
+            if crate::runtime_host_replaced_content::schedule_image_fetch(
+                &mut entry.request, Some(&entry.url), entry.loading, rect, viewport, 0.0,
+            ) == crate::runtime_host_replaced_content::ImageFetchDecision::Start {
+                ready.push(index);
+            }
+        }
+        let mut attempted = self.decoded.keys().cloned().collect::<HashSet<_>>();
+        for index in &ready {
+            let url = self.images[*index].url.clone();
+            load_image(self, &url, &mut attempted);
+            let decoded = self.decoded.contains_key(&url);
+            let generation = self.images[*index].request.generation;
+            self.images[*index].request.finish(generation, decoded);
+        }
+        ready.len()
+    }
 }
 
 pub(crate) fn collect_style_text(
@@ -428,6 +541,36 @@ mod tests {
         assert_eq!(sheets.len(), 1);
         assert_eq!(sheets[0].0, "body{color:red}");
         assert_eq!(sheets[0].2.base_url.as_deref(), Some("data:text/css,body%7Bcolor%3Ared%7D"));
+    }
+
+    #[test]
+    fn picture_and_density_candidates_select_intrinsic_css_size() {
+        let base = "data:image/x-portable-pixmap,P6%0A2%201%0A255%0A%FF%00%00%00%FF%00";
+        let dom = amazing_html::parse(&format!(
+            "<picture><source type='image/avif' srcset='bad.avif'><source type='image/x-portable-pixmap' srcset='{base} 2x'><img src='missing.ppm'></picture>"
+        ));
+        let styled = amazing_css::compute(&dom, &[]);
+        let media = load_page_media_in_viewport(&dom, "https://example.test/page", &styled, 800.0, 2.0);
+        assert!(media.warnings.is_empty(), "{:?}", media.warnings);
+        let entry = &media.images[0];
+        assert_eq!(entry.url, base);
+        assert_eq!(media.intrinsic_size(entry.node).unwrap().width, 1.0);
+        assert_eq!(media.image_state(entry.node).unwrap().natural_width, 1);
+    }
+
+    #[test]
+    fn lazy_image_loads_only_after_its_box_enters_viewport() {
+        let url = "data:image/x-portable-pixmap,P6%0A1%201%0A255%0A%FF%00%00";
+        let dom = amazing_html::parse(&format!("<body><div style='height:900px'></div><img loading=lazy width=20 height=20 src='{url}'></body>"));
+        let styled = amazing_css::compute(&dom, &[]);
+        let mut media = load_page_media_in_viewport(&dom, "https://example.test/page", &styled, 800.0, 1.0);
+        assert!(!media.image_state(media.images[0].node).unwrap().complete);
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_styled_document(&dom, &styled, &text, &media, 800.0, Some(600.0));
+        assert_eq!(media.load_visible_lazy(&layout, amazing_media::loading::ViewportRect { x:0.0,y:0.0,width:800.0,height:600.0 }), 0);
+        assert_eq!(media.load_visible_lazy(&layout, amazing_media::loading::ViewportRect { x:0.0,y:800.0,width:800.0,height:600.0 }), 1);
+        assert!(media.image_state(media.images[0].node).unwrap().complete);
+        assert_eq!(media.image_state(media.images[0].node).unwrap().natural_width, 1);
     }
 
     #[test]

@@ -32,7 +32,8 @@ mod windows {
     use amazing_paint::Surface;
     use amazing_compositor::PropertyUpdate;
 
-    use crate::{BrowserDomHost, PageMedia, load_page_media};
+    use crate::{BrowserDomHost, PageMedia};
+    use crate::page::load_page_media_in_viewport;
     use crate::animation_scene::AnimationScene;
     use crate::page::load_page_text_from_sheets;
     use crate::page::PagePaint;
@@ -506,6 +507,9 @@ mod windows {
         fn scroll(&mut self, delta: i32) {
             self.tab_mut().scroll_y = self.tab().scroll_y.saturating_add(delta);
             self.clamp_scroll();
+            if self.tab().runtime.as_ref().is_some_and(|runtime| runtime.media.has_pending_lazy()) {
+                self.repaint_runtime();
+            }
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
             unsafe { InvalidateRect(self.hwnd, null(), 0) };
@@ -514,6 +518,7 @@ mod windows {
         fn repaint_runtime(&mut self) {
             let width = self.width;
             let viewport_height = self.viewport_height.max(1) as f32;
+            let scroll_y = self.tab().scroll_y;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
             let Some(runtime) = tab.runtime.as_mut() else {
@@ -532,7 +537,7 @@ mod windows {
                 sheet
             }).collect::<Vec<_>>();
             let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, runtime.animations.animated());
-            let media = load_page_media(&host_ref.dom, &page, &styled);
+            let mut media = load_page_media_in_viewport(&host_ref.dom, &page, &styled, width.max(1) as f32, 1.0);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
@@ -540,7 +545,7 @@ mod windows {
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let layout = amazing_layout::layout_styled_document(
+            let mut layout = amazing_layout::layout_styled_document(
                 &host_ref.dom,
                 &styled,
                 &page_text.provider,
@@ -548,6 +553,15 @@ mod windows {
                 width.max(1) as f32,
                 Some(viewport_height),
             );
+            if media.load_visible_lazy(&layout, amazing_media::loading::ViewportRect {
+                x: 0.0, y: scroll_y.max(0) as f32,
+                width: width.max(1) as f32, height: viewport_height,
+            }) > 0 {
+                layout = amazing_layout::layout_styled_document(
+                    &host_ref.dom, &styled, &page_text.provider, &media,
+                    width.max(1) as f32, Some(viewport_height),
+                );
+            }
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
@@ -562,7 +576,7 @@ mod windows {
             runtime.layout = layout;
             runtime.media = media;
             tab.surface = Some(surface);
-            tab.scroll_y = 0;
+            tab.scroll_y = scroll_y;
             self.clamp_scroll();
         }
 
@@ -1038,7 +1052,7 @@ mod windows {
         }
         let host_ref = host.borrow();
         let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, animations.animated());
-        let media = load_page_media(&host_ref.dom, input, &styled);
+        let mut media = load_page_media_in_viewport(&host_ref.dom, input, &styled, width.max(1) as f32, 1.0);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
@@ -1046,7 +1060,7 @@ mod windows {
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let root = amazing_layout::layout_styled_document(
+        let mut root = amazing_layout::layout_styled_document(
             &host_ref.dom,
             &styled,
             &page_text.provider,
@@ -1054,6 +1068,14 @@ mod windows {
             width.max(1) as f32,
             Some(700.0),
         );
+        if media.load_visible_lazy(&root, amazing_media::loading::ViewportRect {
+            x: 0.0, y: 0.0, width: width.max(1) as f32, height: 700.0,
+        }) > 0 {
+            root = amazing_layout::layout_styled_document(
+                &host_ref.dom, &styled, &page_text.provider, &media,
+                width.max(1) as f32, Some(700.0),
+            );
+        }
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;

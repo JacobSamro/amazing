@@ -23,6 +23,7 @@ const MAX_SCRIPT_BYTES: usize = 4 * 1024 * 1024;
 struct PageImage {
     node: amazing_dom::NodeIdx,
     image: amazing_media::Image,
+    density: f32,
 }
 
 #[derive(Clone, Default)]
@@ -40,8 +41,8 @@ impl amazing_layout::ReplacedElementProvider for PageResources {
             .iter()
             .find(|entry| entry.node == node)
             .map(|entry| amazing_layout::IntrinsicSize {
-                width: entry.image.width as f32,
-                height: entry.image.height as f32,
+                width: entry.image.width as f32 / entry.density,
+                height: entry.image.height as f32 / entry.density,
             })
     }
 }
@@ -1239,6 +1240,48 @@ fn load_page_resources(
     options: &FetchOptions,
     session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> PageResources {
+    fn attr<'a>(dom: &'a amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<&'a str> {
+        dom.attrs_of(node)?.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+    fn source_for(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<amazing_media::responsive::SelectedSource> {
+        use amazing_media::responsive::{ImageSources, PictureSource, SourceEnvironment, select_source};
+        let mut picture = Vec::new();
+        if let Some(parent) = dom.get(node).parent.filter(|parent| dom.name(*parent) == Some("picture")) {
+            for sibling in dom.children(parent) {
+                if sibling == node { break; }
+                if dom.name(sibling) == Some("source") {
+                    picture.push(PictureSource {
+                        srcset: attr(dom, sibling, "srcset").unwrap_or(""),
+                        sizes: attr(dom, sibling, "sizes"),
+                        media: attr(dom, sibling, "media"),
+                        mime_type: attr(dom, sibling, "type"),
+                    });
+                }
+            }
+        }
+        select_source(ImageSources {
+            src: attr(dom, node, "src"), srcset: attr(dom, node, "srcset"),
+            sizes: attr(dom, node, "sizes"), picture: &picture,
+        }, SourceEnvironment {
+            viewport_width: VIEWPORT_WIDTH as f32, device_pixel_ratio: 1.0,
+            slot_width: None, allow_auto_sizes: false,
+        }, |query| {
+            let query = query.trim().to_ascii_lowercase();
+            if query == "all" || query == "screen" { return true; }
+            let condition = query.strip_prefix('(').and_then(|s| s.strip_suffix(')'));
+            let Some((feature, width)) = condition.and_then(|s| s.split_once(':')) else { return false; };
+            let Some(width) = width.trim().strip_suffix("px").and_then(|n| n.trim().parse::<f32>().ok()) else { return false; };
+            match feature.trim() {
+                "min-width" => VIEWPORT_WIDTH as f32 >= width,
+                "max-width" => (VIEWPORT_WIDTH as f32) <= width,
+                _ => false,
+            }
+        }, |mime| matches!(mime.to_ascii_lowercase().as_str(),
+            "image/png" | "image/jpeg" | "image/gif" | "image/webp" |
+            "image/bmp" | "image/x-ms-bmp" | "image/x-icon" |
+            "image/x-portable-pixmap" | "image/svg+xml"))
+    }
     fn walk(
         dom: &amazing_dom::Dom,
         node: amazing_dom::NodeIdx,
@@ -1251,15 +1294,8 @@ fn load_page_resources(
             return;
         }
         if dom.name(node) == Some("img")
-            && let Some(source) = dom
-                .attrs_of(node)
-                .and_then(|attrs| {
-                    attrs
-                        .iter()
-                        .find(|(name, _)| name.eq_ignore_ascii_case("src"))
-                })
-                .map(|(_, value)| value.as_str())
-            && let Some(address) = resolve_resource_address(document_url, source)
+            && let Some(source) = source_for(dom, node)
+            && let Some(address) = resolve_resource_address(document_url, &source.url)
             && let Ok(response) = fetch_resource(session, &address, options)
             && response.status == 200
             && let Some(image) = decode_web_image(&response.body)
@@ -1269,6 +1305,7 @@ fn load_page_resources(
             resources.images.push(PageImage {
                 node,
                 image,
+                density: source.density,
             });
         }
 
