@@ -671,6 +671,9 @@ fn content_ink_bounds(box_: &LayoutBox, width: u32, height: u32) -> PaintBounds 
             include(PaintBounds { x: word.x - radius, y: line.baseline - radius, width: word.width + radius * 2.0, height: radius * 2.0 });
         }
     }
+    for edge in &box_.table_decoration().borders {
+        include(PaintBounds::from_layout(edge.rect));
+    }
     finite_bounds(result.unwrap_or(PaintBounds { x: box_.content_box.x, y: box_.content_box.y, width: 0.0, height: 0.0 }), viewport)
 }
 
