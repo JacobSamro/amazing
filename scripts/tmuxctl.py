@@ -656,7 +656,7 @@ def clean_lines(raw: str) -> list[str]:
 def state_of(raw: str) -> str:
     if any(m in raw for m in BUSY_MARKERS):
         return "busy"
-    if IDLE_MARKER in raw or OC_FOOTER in raw:
+    if IDLE_MARKER in raw or OC_FOOTER in raw or "Ask anything" in raw:
         return "idle"
     return "unknown"
 
@@ -1230,6 +1230,9 @@ def cmd_restart(args) -> int:
         tmux(["new-session", "-d", "-s", session, "-c", worktree], check=True)
         print(f"{lane}: recreated exited session", flush=True)
 
+    # Detached sessions default to a tiny window; OpenCode then drops its footer
+    # and mode line, which is what state detection reads. Give it a real size.
+    tmux(["resize-window", "-t", session, "-x", "200", "-y", "50"])
     tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && {AGENT_LAUNCH}"])
     tmux(["send-keys", "-t", session, "Enter"])
     deadline = time.time() + 45
