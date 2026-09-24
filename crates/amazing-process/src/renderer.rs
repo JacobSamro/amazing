@@ -137,9 +137,14 @@ pub struct RendererEndpoint {
     events: BrowserEventsProxy,
     state: Mutex<RendererState>,
     channel: Option<HandleChannel>,
+    history: crate::history::HistoryRenderer,
 }
 impl RendererEndpoint {
-    pub fn new(connection: Arc<Connection>, channel: Option<HandleChannel>) -> Self {
+    pub fn new(
+        connection: Arc<Connection>,
+        channel: Option<HandleChannel>,
+        history: crate::history::HistoryRenderer,
+    ) -> Self {
         Self {
             network: NetworkProxy::new(connection.clone(), Duration::from_secs(5)),
             events: BrowserEventsProxy::new(connection, Duration::from_secs(5)),
@@ -152,6 +157,7 @@ impl RendererEndpoint {
                 in_flight: None,
             }),
             channel,
+            history,
         }
     }
     fn notify(&self, sequence: u64, shared: Option<SharedFrameReady>) -> Result<(), Error> {
@@ -179,6 +185,9 @@ impl RendererControls for RendererEndpoint {
         Ok(frame)
     }
     fn input(&self, event: InputEvent) -> Result<InputAck, Error> {
+        if self.history.is_quiescent() {
+            return Err(Error::Remote("document frozen".into()));
+        }
         let mut state = self.state.lock().unwrap();
         if state.frame.is_none() {
             return Err(Error::Remote("no document".into()));
@@ -289,9 +298,11 @@ impl RendererControls for RendererEndpoint {
 }
 /// Bind a renderer process to its browser IPC connection.
 pub fn serve_renderer(connection: &Arc<Connection>, channel: Option<HandleChannel>) {
-    connection.bind(0, crate::Ping);
+    let history = crate::history::HistoryRenderer::default();
+    crate::history::serve_history_renderer(connection, history.clone());
     connection.bind(
         7,
-        RendererReceiver(RendererEndpoint::new(connection.clone(), channel)),
+        RendererReceiver(RendererEndpoint::new(connection.clone(), channel, history)),
     );
+    connection.bind(0, crate::Ping);
 }

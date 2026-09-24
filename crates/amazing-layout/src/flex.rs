@@ -1438,6 +1438,19 @@ mod tests {
     }
 
     #[test]
+    fn sideways_lr_auto_width_uses_intrinsic_block_extent_for_column_reverse() {
+        let root = lay(
+            "<body><div style='display:flex;writing-mode:sideways-lr;flex-direction:column-reverse'><div style='width:20px;height:20px'></div><div style='width:20px;height:20px'></div><div style='width:20px;height:20px'></div></div></body>",
+            "body{margin:0}", 800.0,
+        );
+        let Flow::Blocks(containers) = &root.flow else { panic!("want container") };
+        assert!(close(containers[0].content_box.w, 60.0));
+        let children = kids(&root);
+        assert!(close(children[0].border_box.x, 40.0));
+        assert!(close(children[2].border_box.x, 0.0));
+    }
+
+    #[test]
     fn vertical_rl_column_reverse_runs_left_to_right() {
         let root = lay(
             "<body><div style=\"display:flex;writing-mode:vertical-rl;flex-direction:column-reverse;width:100px;height:30px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",

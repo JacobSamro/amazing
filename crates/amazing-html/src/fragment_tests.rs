@@ -8,6 +8,36 @@ fn dump(context: &str, src: &str) -> String {
 }
 
 #[test]
+fn ordinary_element_contexts_use_in_body_fragment_rules() {
+    for context in ["span", "section", "article", "x-widget", "option", "DIV"] {
+        assert_eq!(dump(context, "<b>one</b><i>two</i>"),
+            "#document\n  <b>\n    \"one\"\n  <i>\n    \"two\"\n", "{context}");
+    }
+}
+
+#[test]
+fn remaining_rawtext_fragment_contexts_do_not_parse_markup_or_entities() {
+    for context in ["xmp", "iframe", "noembed", "noframes"] {
+        assert_eq!(dump(context, "a<b>&amp;</b>"),
+            "#document\n  \"a<b>&amp;</b>\"\n", "{context}");
+    }
+}
+
+#[test]
+fn head_defaults_to_in_body_while_table_context_uses_table_body_mode() {
+    assert_eq!(dump("head", "<b>x</b>"),
+        "#document\n  <b>\n    \"x\"\n");
+    assert_eq!(dump("tbody", "<tr><td>x"),
+        "#document\n  <tr>\n    <td>\n      \"x\"\n");
+}
+
+#[test]
+fn table_fragment_resets_to_its_virtual_context_after_a_section_closes() {
+    assert_eq!(dump("table", "<tbody><tr><td>x</td></tr></tbody><tr><td>y"),
+        "#document\n  <tbody>\n    <tr>\n      <td>\n        \"x\"\n  <tbody>\n    <tr>\n      <td>\n        \"y\"\n");
+}
+
+#[test]
 fn virtual_table_family_contexts_keep_only_fragment_children() {
     assert_eq!(dump("table", "<table><tr>"),
         "#document\n  <tbody>\n    <tr>\n");

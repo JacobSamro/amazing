@@ -727,3 +727,107 @@ The locked win-002 nextest gates passed on the fixed base: `amazing` **153
 passed / 3 skipped** and workspace **2,026 passed / 5 skipped**. The driver
 package has no library target, so its separate doctest command is N/A.
 Workspace doctests passed **2/2** on win-002.
+
+## IA-GENERATED-IMAGES — decoded URL cache (2026-09-24)
+
+On fixed local `dev` base `c9947a0` containing RC-17b, the page adapter now
+loads CSS generated `content: url(...)` and marker images once per resolved URL.
+`PageMedia` serves the same decoded image to layout's intrinsic-size query and
+paint's URL query, while `<img>` keeps its NodeIdx lookup. GUI layout, media
+loading, and paint use stylesheets with their source URL so the generated key
+stays resolved across all three stages. Owned tests cover shared cache identity
+with an `<img>` and final rendered pixels for generated content.
+
+The pinned RC-17b seven-case generated-content selection at upstream
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, 800×600, stayed **2 pass /
+5 mismatch** in both after sweeps. All classifications and actual image hashes
+matched RC-17b's prior after report, so this adoption claims **zero WPT gains
+and zero losses**. Per-case reports and comparison are under
+`crates/amazing/tests/generated_images/evidence/`.
+
+Final locked win-002 gates passed: `amazing` nextest **155/155** (3 skipped),
+workspace nextest **2,097/2,097** (5 skipped), and workspace doctests **2/2**.
+The three source hashes matched the win-002 gate tree. The driver package has
+no library target for a separate doctest run.
+
+## IA-INVALIDATION-ORACLE — diagnostic coordinator (2026-09-24)
+
+Fixed base: local `dev` `0075614` (DOM-21 render journal and CSS-15 invalidator). `AMAZING_INVALIDATION_ORACLE=1` keeps style state across WPT rendering updates, drains the DOM journal at a frozen epoch, validates node generations, and feeds attribute/state changes to `StyleInvalidator`. Stylesheet, viewport, structural, text and unknown mutations conservatively request a full style result. The candidate style is compared with a fresh computation before layout. The coordinator also rebuilds a separate full layout, display-list view and full-painter surface; it compares styles, layout geometry/fragments, paint item order/property trees and final RGBA bytes before presenting the compositor candidate. Any difference presents the full result, records the first divergence and writes a PPM pixel diff when candidate pixels exist.
+
+Current lower-crate limits: layout and paint have no retained `GeometryDelta`/display-list update seam. The coordinator therefore runs full layout and paint on every update and does not claim the ADR's frame-time or property-only zero-work targets. A request for those additive seams is in `.agents/integrator-assist/questions.md`.
+
+Owned diagnostics cover a TestRendered class mutation and COMP-7's effects scroller at 512×512; both preserve the default PPM bytes and report compositor/full parity. A direct journal unit test proves one stable attribute mutation avoids a full style fallback, then a structural mutation selects full style. Linux locked crate gate with isolated storage: 169 passed, 1 skipped; this is iteration evidence, not the Windows final gate.
+
+Windows diagnostic finding: the 512×512 effects scroller has a one-channel-level compositor/full difference at (38,178), candidate `[95,95,95,255]` versus full `[96,96,96,255]` on both frames. Linux matches exactly. The oracle falls back to the full painter and writes a PPM diff. This is routed to compositor/replaced-content; the effects case has no exact-pixel credit until fixed.
+
+## IA-ORACLE-LAYOUT + IA-ORACLE-PAINT — retained candidate (2026-09-24)
+
+On fixed local `dev` base `93bb98b`, the invalidation coordinator now passes CSS changed properties and DOM text/replaced inputs to `LayoutTree::update`, compares its retained root with an independent full layout, and paints from the retained root. It compares stable keyed paint snapshots, translates safe `DisplayListView::update` results into compositor paint deltas, and retains the compositor/presenter across frames. A parity loss presents the full painter and resets the scene. The default renderer remains unchanged.
+
+The Win-001 release mutation trace passed its direct-render byte comparisons, with full-painter fallback for 21 known one-channel effects differences. Article and effects p95 were **266.614 ms** and **248.500 ms**, missing ADR 0010's 20/31 ms targets. Opacity p95 was **110.244 ms**, with 20/20/20 style/layout/paint-view calls over 20 mutations and zero tile uploads; property-only zero work is not met. The driver trace includes a full oracle and resource work, unlike the ADR's compositor-only baseline. Exact counts and command are in `crates/amazing/tests/invalidation_oracle/evidence/layout_paint_win001_2026-09-24.md`. Layout still rebuilds width changes and paint still compares complete views; follow-up owner requests are in `.agents/integrator-assist/questions.md`.
+
+## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
+`data:image/svg+xml` with the bounded SVG decoder, including percent-encoded
+and base64 data URL bodies handled by Fetch. Raster data URLs continue through
+the media decoder. A page test proves a data-SVG `list-style-image` enters the
+URL cache, exposes its intrinsic size, and paints red pixels.
+
+## IA driver render test isolation (2026-09-24)
+
+The `css3_stylesheets` and `render_wpt` integration fixtures now give every
+renderer subprocess a unique storage profile. Their temp/output paths also
+include a process ID and timestamp to avoid reuse across runs. The earlier
+IPC 50-cycle stress logs showed both named tests failing in all 50 runs when
+the shared profile was corrupt. On fixed local `dev` base `544d7e8`, 50 new
+full-workspace parallel Linux cycles selected and passed both tests, and each
+workspace run exited 0 with **2,154 passed / 5 skipped**. The per-cycle summary
+is under `crates/amazing/tests/driver_flakes/evidence/`.
+
+## IA-STORAGE-EVENTS — cross-document localStorage delivery (2026-09-24)
+
+On fixed local `dev` base `f676798`, a successful localStorage mutation queues
+one `storage` task on each other live document in the same profile and storage
+key. The receiving scheduler admits its inbox after pre-existing JS requests,
+and delivers a `storage` event to window listeners and `onstorage` with exact
+UTF-16 key and values, source URL, and the receiving document's Storage
+wrapper. Equal-value writes and the source document emit no event. A driver
+test covers set, remove, clear, same-origin filtering, task timing, and listener
+removal. Session storage remains per arena: a browsing-context-group seam from
+storage is needed before sessionStorage can share data and notify related
+documents.
+
+## IA-ANIMATIONS-2 — CSS sampled style adoption (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the animation scene now serializes
+compositor samples into `AnimatedValues`, preserves animation and transition
+origins while a transition runs, and removes the transition origin after its
+end/cancel event. The driver passes those values to
+`compute_with_animations` for the rendering style and media/paint resources.
+The existing stylesheet-based layout entry point and its sampled box-style
+application remain until LAYOUT-14 item 8 provides `layout_styled_document`.
+`PropertyUpdate` currently omits an origin field, so the driver classifies
+samples by the compositor's documented animation-before-transition order and
+transition lifecycle events; a compositor origin field would remove that
+inference. Tests cover animation and transition cascade sources and retained
+precedence.
+
+## IA-ANIMATIONS-2 — styled layout adoption (2026-09-24)
+
+On fixed local `dev` base `ac04822`, WPT rendering and the Windows GUI pass
+their sampled `StyledDom` directly to `layout_styled_document`. Media, layout,
+and paint therefore use the same animation and transition cascade result. The
+old box-tree style mutation and second layout pass are removed. The
+invalidation oracle keeps its plain-style candidate check and lays out its
+independent reference from freshly computed sampled styles. A render test
+checks that an important width declaration beats the sampled animation in
+layout; existing tests cover animated width, color, opacity, and transition
+events.
+
+Locked win-002 `amazing`, workspace nextest, and workspace doctest gates passed.
+The pinned Win-001 three-case animation render selection at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` stayed **2 pass / 1 mismatch**
+before and after. Every actual image hash and differing-pixel count matched;
+the remaining `animation-important-002` mismatch is unchanged. Reports and
+comparison are under `crates/amazing/tests/animations/evidence/layout-*.json`.

@@ -77,7 +77,8 @@ fn html_cascade_layout_and_paint_keep_content_size_separate_from_fit() {
 #[test]
 fn images_participate_in_opacity_and_overflow_groups() {
     let s = render("body{height:4px;overflow:hidden} img{object-fit:contain;opacity:.5}");
-    assert_eq!(s.get_pixel(0, 2), Some([255, 128, 128, 255]));
+    // Half opacity quantizes to alpha 128/255; white over red leaves 127.
+    assert_eq!(s.get_pixel(0, 2), Some([255, 127, 127, 255]));
     assert_eq!(s.get_pixel(0, 4), Some([255; 4]));
 }
 

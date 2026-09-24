@@ -109,7 +109,37 @@ pub struct NavigationRequestInit {
     pub reload_or_history: bool,
     pub client_reserved_id: Option<u64>,
 }
+/// Browser-minted parent browsing context for a child-document navigation.
+#[derive(Clone)]
+pub struct NavigableContext {
+    pub top_level_origin: Origin,
+    pub parent_origin: Origin,
+    /// Top-level through immediate parent, in browsing-context order.
+    pub ancestor_origins: Vec<Origin>,
+    pub sandbox_flags: u32,
+    pub frame_csp: crate::CspPolicyList,
+    pub referrer: String,
+    pub referrer_policy: String,
+    pub now_unix: i64,
+}
 impl ApiRequest {
+    pub fn child_navigation(target: HttpUrl, parent: &NavigableContext) -> Result<Self, ApiError> {
+        if parent.ancestor_origins.is_empty() || parent.ancestor_origins.len() > 32
+            || parent.ancestor_origins.first() != Some(&parent.top_level_origin)
+            || parent.ancestor_origins.last() != Some(&parent.parent_origin)
+            || parent.sandbox_flags & !0xffff != 0 {
+            return Err(ApiError::Network(FetchError::FrameEmbedding));
+        }
+        let mut request = Self::navigation(target, NavigationRequestInit {
+            method: "GET".into(), body: Vec::new(),
+            referrer: parent.referrer.clone(),
+            referrer_policy: parent.referrer_policy.clone(),
+            initiator_origin: parent.parent_origin.clone(),
+            reload_or_history: false, client_reserved_id: None,
+        })?;
+        request.destination = Destination::Other; // wire destination: frame
+        Ok(request)
+    }
     pub fn navigation(target: HttpUrl, init: NavigationRequestInit) -> Result<Self, ApiError> {
         let units: Vec<u16> = target.serialize().encode_utf16().collect();
         let body = if init.body.is_empty() && matches!(init.method.as_str(), "GET" | "HEAD") {
@@ -353,6 +383,10 @@ impl ApiRequest {
     pub fn url(&self) -> &HttpUrl {
         &self.url
     }
+    /// Network-owned HSTS rewrite before Fetch policy and cache lookup.
+    pub fn upgrade_hsts(&mut self, url: HttpUrl) {
+        self.url = url;
+    }
     pub fn method(&self) -> &str {
         &self.method
     }
@@ -483,6 +517,8 @@ pub struct ApiResponseInit {
 pub struct ApiResponse {
     pub response_type: ApiResponseType,
     pub url: String,
+    /// Trusted URL chain; never exposed through the JavaScript Response interface.
+    pub url_list: Vec<String>,
     pub redirected: bool,
     pub status: u16,
     pub status_text: String,
@@ -529,6 +565,7 @@ impl ApiResponse {
         Ok(Self {
             response_type: ApiResponseType::Default,
             url: String::new(),
+            url_list: Vec::new(),
             redirected: false,
             status,
             status_text,
@@ -540,6 +577,7 @@ impl ApiResponse {
         Self {
             response_type: ApiResponseType::Error,
             url: String::new(),
+            url_list: Vec::new(),
             redirected: false,
             status: 0,
             status_text: String::new(),
@@ -596,6 +634,7 @@ impl ApiResponse {
         Ok(Self {
             response_type: self.response_type,
             url: self.url.clone(),
+            url_list: self.url_list.clone(),
             redirected: self.redirected,
             status: self.status,
             status_text: self.status_text.clone(),
@@ -604,6 +643,7 @@ impl ApiResponse {
         })
     }
     pub(crate) fn from_policy(response: crate::Response) -> Result<Self, ApiError> {
+        let url_list = response.url_list.iter().map(HttpUrl::serialize).collect();
         let url = response
             .url_list
             .last()
@@ -626,6 +666,7 @@ impl ApiResponse {
         Ok(Self {
             response_type,
             url,
+            url_list,
             redirected,
             status: response.status,
             status_text: response.status_text,
@@ -714,7 +755,8 @@ pub fn fetch_api(
             RedirectAction::Follow => continue,
             RedirectAction::Manual(response) => return ApiResponse::from_policy(response),
             RedirectAction::NavigationPending => {
-                return Err(ApiError::Network(FetchError::Redirect))
+                let filtered = filter_response(&policy, &response).map_err(ApiError::Network)?;
+                return ApiResponse::from_policy(filtered);
             }
             RedirectAction::NotRedirect => {}
         }
@@ -889,18 +931,20 @@ impl PendingFetchApi {
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
     ) -> Option<Result<ApiResponse, ApiError>> {
-        self.on_event_with_cache(event, dispatcher, now, |_| None, None)
+        self.on_event_with_cache(event, dispatcher, now, |_| None, |_| None, None)
     }
     pub(crate) fn on_event_with_cache<
         R: amazing_net::dispatch::Resolver,
         C: amazing_net::dispatch::Connector,
         F: FnMut(&Request) -> Option<String>,
+        U: FnMut(&HttpUrl) -> Option<HttpUrl>,
     >(
         &mut self,
         event: &amazing_net::dispatch::NetEvent,
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
         mut cookie_for: F,
+        mut hsts_upgrade: U,
         mut cache: Option<&mut crate::PreflightCache>,
     ) -> Option<Result<ApiResponse, ApiError>> {
         use amazing_net::dispatch::NetEvent;
@@ -995,7 +1039,10 @@ impl PendingFetchApi {
                             }
                         }
                         let location = response.headers.get("location");
-                        match redirect_location(&mut self.policy, &response, location.as_deref()) {
+                        match crate::redirect_location_with_upgrade(
+                            &mut self.policy, &response, location.as_deref(),
+                            |url| hsts_upgrade(&url).unwrap_or(url),
+                        ) {
                             Ok(RedirectAction::Follow) => {
                                 // A new hop gets credentials for its own URL only.
                                 self.cookie_header = cookie_for(&self.policy);
@@ -1022,7 +1069,9 @@ impl PendingFetchApi {
                             }
                             Ok(RedirectAction::Manual(r)) => Some(ApiResponse::from_policy(r)),
                             Ok(RedirectAction::NavigationPending) => {
-                                Some(Err(ApiError::Network(FetchError::Redirect)))
+                                Some(filter_response(&self.policy, &response)
+                                    .map_err(ApiError::Network)
+                                    .and_then(ApiResponse::from_policy))
                             }
                             Ok(RedirectAction::NotRedirect) => Some(
                                 filter_response(&self.policy, &response)

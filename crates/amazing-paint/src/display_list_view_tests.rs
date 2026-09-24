@@ -130,6 +130,68 @@ fn property_ids_and_direct_hints_follow_nested_state() {
         assert!((item.properties.scroll as usize) < view.scrolls().len());
     }
 }
+
+#[test]
+fn property_owners_bind_to_one_dom_generation_or_require_rebuild() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='outer'><div class='inner'></div></div></body>",
+        "body{margin:0}.outer{width:30px;height:30px;overflow:scroll;transform:translate(2px,3px);opacity:.5}.inner{width:10px;height:10px;background:blue}",
+        48.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::with_node_generations(
+        &root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| Some(7),
+    );
+    let owners = view.property_owner_mapping().expect("unique property owners");
+    assert_eq!(owners.transforms.len(), 1);
+    assert_eq!(owners.effects.len(), 1);
+    assert_eq!(owners.scrolls.len(), 1);
+    let owner = *owners.transforms.keys().next().unwrap();
+    assert_eq!(owner.generation, 7);
+    assert_eq!(owners.effects.get(&owner), Some(&1));
+    assert_eq!(owners.scrolls.get(&owner), Some(&1));
+    assert_eq!(view.transforms()[1].owner, Some(owner));
+    assert_eq!(view.effects()[1].owner, Some(owner));
+    assert_eq!(view.scrolls()[1].owner, Some(owner));
+
+    let missing = DisplayListView::new(
+        &root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+    );
+    assert!(missing.property_owner_mapping().is_none());
+    let mut duplicate = view;
+    duplicate.effects.push(duplicate.effects[1]);
+    assert!(duplicate.property_owner_mapping().is_none());
+}
+
+#[test]
+fn content_bounds_scroll_extent_and_sticky_constraints_are_local() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='scroller'><div class='sticky'>S</div><div class='overflow'></div></div></body>",
+        "body{margin:0}.scroller{width:40px;height:30px;overflow:scroll}.sticky{position:sticky;top:5px;width:20px;height:10px;font-size:4px}.overflow{width:90px;height:70px;background:blue}",
+        120.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 120, 120, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let scroll = view.scrolls().iter().skip(1).next().expect("scroller");
+    assert_eq!(scroll.initial_offset, (0.0, 0.0));
+    assert!(scroll.contents.width > scroll.bounds.width);
+    assert!(scroll.contents.height > scroll.bounds.height);
+    let sticky = view.items().iter().find_map(|item| item.sticky).expect("sticky metadata");
+    assert_eq!(sticky.top, Some(5.0));
+    assert!(sticky.scroll > 0 && (sticky.scroll as usize) < view.scrolls().len());
+    assert!(sticky.containing_block.width >= sticky.normal.width);
+    let content = view.items().iter().find(|item| item.kind == PaintItemKind::Content && item.local_bounds.width > 0.0).unwrap();
+    assert!(content.local_bounds.width < 120.0);
+
+    let offsets = DisplayListView::with_scroll_offsets(
+        &root, 120, 120, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| false, &|_| Some((3.0, 7.0)),
+    );
+    assert!(offsets.scrolls().iter().skip(1).all(|node| node.initial_offset == (3.0, 7.0)));
+}
 #[test]
 fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {
     let root = amazing_layout::layout_document_with_text(

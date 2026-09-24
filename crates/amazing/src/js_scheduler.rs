@@ -122,6 +122,14 @@ impl DriverScheduler {
             self.admit(request)?;
             self.pending.pop_front();
         }
+        // Cross-document storage notifications enter this document as tasks,
+        // after requests already emitted by its own script execution.
+        self.bindings.schedule_storage_events(&mut self.js)?;
+        self.pending.extend(self.js.take_scheduling_requests());
+        while let Some(request) = self.pending.front().copied() {
+            self.admit(request)?;
+            self.pending.pop_front();
+        }
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
         }
@@ -250,7 +258,8 @@ impl DriverScheduler {
                     did_work = true;
                     self.invoke(callback, Some(timestamp))
                 }
-                Action::CheckpointCleanup | Action::Render { .. } => Ok(()),
+                Action::CheckpointCleanup => { self.bindings.storage_deactivate_transactions(); Ok(()) },
+                Action::Render { .. } => Ok(()),
             };
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.

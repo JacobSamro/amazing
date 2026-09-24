@@ -86,6 +86,7 @@ fn access(u: &HttpUrl) -> CookieAccess<'_> {
         http_api: true,
         top_level_navigation: false,
         method: "GET",
+        partition_key: None,
     }
 }
 #[test]

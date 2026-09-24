@@ -21,7 +21,8 @@
 //! - `currentcolor` intentionally does NOT parse here — it is a keyword
 //!   that resolves against another computed property, so the caller
 //!   (the paint consumer) resolves it against the element's `color`.
-//! - `hsl()`/`hwb()`/`lab()`/`color()` and system colors are unsupported.
+//! - Advanced spaces and functions live in `color_advanced`; `color-mix()`
+//!   currently supports sRGB, linear sRGB and LCH interpolation.
 //! - Float channel precision is f32; rounding is round-half-away-from-zero
 //!   after clamping, which is deterministic but not spec-normative.
 
@@ -29,6 +30,11 @@
 /// does not understand; never panics on arbitrary (even non-UTF8-boundary-
 /// friendly slicing is avoided entirely) input.
 pub fn parse_css_color(input: &str) -> Option<[u8; 4]> {
+    parse_css_color_depth(input, 0)
+}
+
+fn parse_css_color_depth(input: &str, depth: usize) -> Option<[u8; 4]> {
+    if depth > 16 { return None; }
     let s = input.trim();
     if s.is_empty() {
         return None;
@@ -50,6 +56,8 @@ pub fn parse_css_color(input: &str) -> Option<[u8; 4]> {
         "lch" => advanced::lch(inner),
         "oklab" => advanced::oklab(inner),
         "oklch" => advanced::oklch(inner),
+        "color-mix" => advanced::color_mix(inner, depth),
+        "contrast-color" => advanced::contrast_color(inner, depth),
         _ => None,
     }
 }
@@ -234,6 +242,7 @@ const NAMED: &[(&str, [u8; 4])] = &[
     ("coral", [255, 127, 80, 255]),
     ("crimson", [220, 20, 60, 255]),
     ("cyan", [0, 255, 255, 255]),
+    ("darkblue", [0, 0, 139, 255]),
     ("darkgray", [169, 169, 169, 255]),
     ("darkgrey", [169, 169, 169, 255]),
     ("dimgray", [105, 105, 105, 255]),
@@ -251,12 +260,15 @@ const NAMED: &[(&str, [u8; 4])] = &[
     ("ivory", [255, 255, 240, 255]),
     ("khaki", [240, 230, 140, 255]),
     ("lavender", [230, 230, 250, 255]),
+    ("lightyellow", [255, 255, 224, 255]),
     ("lime", [0, 255, 0, 255]),
     ("magenta", [255, 0, 255, 255]),
     ("maroon", [128, 0, 0, 255]),
+    ("mistyrose", [255, 228, 225, 255]),
     ("navy", [0, 0, 128, 255]),
     ("olive", [128, 128, 0, 255]),
     ("orange", [255, 165, 0, 255]),
+    ("palegreen", [152, 251, 152, 255]),
     ("orchid", [218, 112, 214, 255]),
     ("pink", [255, 192, 203, 255]),
     ("plum", [221, 160, 221, 255]),

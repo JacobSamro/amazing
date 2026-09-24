@@ -221,6 +221,7 @@ impl fmt::Debug for Obj {
             (Exotic::CollectionIterator(_), _) => write!(f, "[collection iterator]"),
             (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
+            (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -640,6 +641,7 @@ pub enum Exotic {
     CollectionIterator(CollectionIteratorState),
     SymbolObject(JsSymbol),
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
+    ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -799,6 +801,8 @@ pub struct JsObject {
     pub(crate) lexical_new_target: Option<JsValue>,
     /// Engine-private brand and identity; never reflected as a JS property.
     pub(crate) host_identity: Option<HostIdentity>,
+    /// Annex B [[IsHTMLDDA]] internal slot, used by IsLooselyEqual.
+    pub(crate) is_html_dda: bool,
 }
 
 impl Default for JsObject {
@@ -821,6 +825,7 @@ impl JsObject {
             lexical_super_constructor: None,
             lexical_new_target: None,
             host_identity: None,
+            is_html_dda: false,
         }
     }
 

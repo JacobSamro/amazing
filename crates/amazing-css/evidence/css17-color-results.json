@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "candidate_commit": "1e992990378c9930ac1812ae59da0ad9e2e7fd49",
+  "fixed_base": "77746ddf80e67488440094a87a0cf46eb12607f4",
+  "baseline": "css15-final pinned report on the same WPT revision",
+  "oracles": "css12-oracles.json",
+  "selections": {
+    "broad": {
+      "cases": 259,
+      "baseline": {
+        "pass": 198,
+        "mismatch": 61,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "candidate": {
+        "pass": 202,
+        "mismatch": 57,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-color__color-mix-percents-01.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-color__deprecated-sameas-008.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-color__relative-currentcolor-hsl-01.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-color__contrast-color-001.html",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ],
+      "pass_losses": [],
+      "actual_pixel_hash_changes": [
+        "css-color__color-mix-currentcolor-002.html",
+        "css-color__color-mix-percents-01.html",
+        "css-color__deprecated-sameas-008.html",
+        "css-color__relative-currentcolor-hsl-01.html",
+        "css-color__contrast-color-001.html",
+        "css-color__color-mix-currentcolor-003.html",
+        "css-values__calc-rem-lang.html"
+      ],
+      "baseline_report_sha256": "b35f1db4399eeb4309f77c9b2bc959c12c79d0bdc0e00e13ca61904f19f45ec2",
+      "candidate_report_sha256": "54f0eb4726223b2b20325a1a1a16bb97fcdee291ee996711416e3f7a43b3f2ca"
+    },
+    "cascade": {
+      "cases": 72,
+      "baseline": {
+        "pass": 68,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 2,
+        "crash": 0
+      },
+      "candidate": {
+        "pass": 68,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 2,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "pass_losses": [],
+      "actual_pixel_hash_changes": [
+        "css-color__color-mix-currentcolor-002.html"
+      ],
+      "baseline_report_sha256": "1769c3836fa59b45d723cd514d838e0a36d75b66608c5dbef99d9c3f7545906e",
+      "candidate_report_sha256": "dbaac8a6474cf98f095ef480ae19961cb921ffd5bd3dfe844ae15c1a78dbdf0e"
+    }
+  }
+}

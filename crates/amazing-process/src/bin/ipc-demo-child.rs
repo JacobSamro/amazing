@@ -4,7 +4,7 @@ use amazing_process::protocol::{
     AcquireFrame, AcquireResult, BrowserEvents, BrowserEventsReceiver, FrameReady, Navigate,
     RendererProxy, Viewport,
 };
-use amazing_process::{bootstrap_child, Capabilities, Ping, Role};
+use amazing_process::{bootstrap_child, Capabilities, Role};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::time::Duration;
@@ -133,24 +133,47 @@ fn main() {
         ("renderer".into(), "1".into()),
         ("network".into(), "1".into()),
     ]));
-    let Ok((conn, parent, channel)) = bootstrap_child(role, caps) else {
+    let Ok(conn) = bootstrap_child(role, caps, |conn, parent, channel| {
+        if let Some(delay) = parent
+            .0
+            .get("__bind_delay_ms")
+            .and_then(|value| value.parse::<u64>().ok())
+        {
+            std::thread::sleep(Duration::from_millis(delay.min(1000)));
+        }
+        if parent
+            .0
+            .get("__sandbox_probe")
+            .is_some_and(|value| value == "1")
+        {
+            conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler));
+        }
+        match role {
+            Role::Renderer => amazing_process::renderer::serve_renderer(conn, channel),
+            Role::Gpu => amazing_process::gpu::serve_gpu(conn),
+            Role::Network => amazing_process::network::serve_network(conn),
+            Role::Utility => {
+                conn.bind(17, EchoReceiver(EchoHandler));
+                amazing_process::utility::serve_utility(conn, channel);
+            }
+            Role::Storage => {
+                let root = parent
+                    .0
+                    .get("__storage_root")
+                    .ok_or(amazing_process::Error::Role)?;
+                let quota = parent
+                    .0
+                    .get("__storage_quota")
+                    .and_then(|s| s.parse().ok())
+                    .ok_or(amazing_process::Error::Role)?;
+                amazing_process::storage::serve_storage(conn, std::path::Path::new(root), quota)?;
+            }
+            Role::Browser => return Err(amazing_process::Error::Role),
+        }
+        Ok(())
+    }) else {
         return;
     };
-    if parent
-        .0
-        .get("__sandbox_probe")
-        .is_some_and(|value| value == "1")
-    {
-        conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler));
-    }
-    match role {
-        Role::Renderer => amazing_process::renderer::serve_renderer(&conn, channel),
-        Role::Network => amazing_process::network::serve_network(&conn),
-        _ => {
-            conn.bind(0, Ping);
-            conn.bind(17, EchoReceiver(EchoHandler));
-        }
-    }
     while !conn.is_closed() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }

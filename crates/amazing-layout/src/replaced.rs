@@ -238,14 +238,15 @@ pub(crate) fn construct(
     })
 }
 
-/// CSS generated image fragment. Unavailable intrinsic dimensions use the
-/// default 300 by 150 CSS-pixel object size.
+/// CSS generated image fragment. Markers without intrinsic dimensions use a
+/// 1em square; other generated images use the default object size.
 pub(crate) fn generated_image(
     origin: NodeIdx,
     url: &str,
     style: &ComputedStyle,
     font_size: f32,
     source_order: u64,
+    marker: bool,
     provider: &dyn ReplacedElementProvider,
 ) -> InlineNode {
     let natural = provider.intrinsic_size_by_url(url)
@@ -255,7 +256,11 @@ pub(crate) fn generated_image(
             width: style.scale_used_length(size.width as f64) as f32,
             height: style.scale_used_length(size.height as f64) as f32,
         })
-        .unwrap_or(IntrinsicSize { width: 300.0, height: 150.0 });
+        .unwrap_or(if marker {
+            IntrinsicSize { width: font_size, height: font_size }
+        } else {
+            IntrinsicSize { width: 300.0, height: 150.0 }
+        });
     let mut replaced = Box::new(InlineReplaced {
         kind: ReplacedKind::Image,
         generated_url: Some(url.to_owned()),

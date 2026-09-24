@@ -47,6 +47,7 @@ pub enum AnimatedOrigin {
 #[derive(Debug, Clone, Default)]
 pub struct AnimatedValues {
     values: BTreeMap<(NodeIdx, String, AnimatedOrigin), AnimatedStyleValue>,
+    compositor_owned: BTreeMap<(NodeIdx, String), crate::animation::CompositorAnimation>,
 }
 
 impl AnimatedValues {
@@ -68,6 +69,9 @@ impl AnimatedValues {
         origin: AnimatedOrigin,
     ) -> bool {
         let property = property.to_ascii_lowercase();
+        if self.compositor_owned.contains_key(&(node, property.clone())) {
+            return false;
+        }
         if !computed::is_supported_property(&property)
             || crate::syntax::tokenize(css).iter().any(|token| {
                 matches!(token, crate::syntax::Token::Function(name) if name.eq_ignore_ascii_case("var"))
@@ -91,6 +95,9 @@ impl AnimatedValues {
 
     pub fn get(&self, node: NodeIdx, property: &str) -> Option<&AnimatedStyleValue> {
         let property = property.to_ascii_lowercase();
+        if self.compositor_owned.contains_key(&(node, property.clone())) {
+            return None;
+        }
         self.values
             .get(&(node, property.clone(), AnimatedOrigin::Transition))
             .or_else(|| self.values.get(&(node, property, AnimatedOrigin::Animation)))
@@ -98,6 +105,114 @@ impl AnimatedValues {
 
     pub fn remove(&mut self, node: NodeIdx, property: &str, origin: AnimatedOrigin) {
         self.values.remove(&(node, property.to_ascii_lowercase(), origin));
+    }
+
+    /// Hand the resolved animation to the compositor. CSS no longer inserts
+    /// per-frame samples for this property until completion or cancellation.
+    pub fn handoff(&mut self, animation: crate::animation::CompositorAnimation) -> bool {
+        if !animation.valid() { return false; }
+        let key = (animation.node, animation.property.as_str().to_owned());
+        if self.compositor_owned.contains_key(&key) { return false; }
+        self.values.remove(&(key.0, key.1.clone(), AnimatedOrigin::Animation));
+        self.values.remove(&(key.0, key.1.clone(), AnimatedOrigin::Transition));
+        self.compositor_owned.insert(key, animation);
+        true
+    }
+
+    pub fn compositor_owned(&self, node: NodeIdx, property: &str) -> bool {
+        self.compositor_owned.contains_key(&(node, property.to_ascii_lowercase()))
+    }
+
+    pub fn owned_animation(&self, node: NodeIdx, property: &str)
+        -> Option<&crate::animation::CompositorAnimation> {
+        self.compositor_owned.get(&(node, property.to_ascii_lowercase()))
+    }
+
+    /// Main-thread computed-style reads use the same pure sampler as vsync.
+    pub fn sample_owned(&self, node: NodeIdx, property: &str, t_ms: f64)
+        -> Option<crate::animation::AnimationSample> {
+        let animation = self.compositor_owned.get(&(node, property.to_ascii_lowercase()))?;
+        crate::animation::sample(animation, t_ms)
+    }
+
+    pub fn read_owned_style(&self, node: NodeIdx, property: &str, t_ms: f64)
+        -> Option<AnimatedStyleValue> {
+        let value = self.sample_owned(node, property, t_ms)?.value?;
+        let css = value.to_css();
+        let typed = crate::values::parse(property, &css)?;
+        Some(AnimatedStyleValue { css, typed })
+    }
+
+    /// Commit a completed fill at its cascade origin and dispatch the end
+    /// event through the caller's main-thread callback. Stale generations or
+    /// early completion messages are ignored.
+    pub fn commit_property_update(
+        &mut self,
+        update: crate::animation::AnimationPropertyUpdate,
+        mut dispatch: impl FnMut(crate::animation::AnimationMainThreadEvent),
+    ) -> bool {
+        use crate::animation::{AnimationKind, AnimationMainThreadEvent, AnimationMainThreadEventKind};
+        let key = (update.node, update.property.as_str().to_owned());
+        let Some(animation) = self.compositor_owned.get(&key) else { return false; };
+        if animation.id != update.id || animation.generation != update.generation { return false; }
+        let sampled = crate::animation::sample(animation, update.time_ms);
+        if !update.cancelled && !sampled.as_ref().is_some_and(|sample| sample.finished) { return false; }
+        let animation = self.compositor_owned.remove(&key).expect("validated owner");
+        let origin = match animation.kind {
+            AnimationKind::Animation => AnimatedOrigin::Animation,
+            AnimationKind::Transition => AnimatedOrigin::Transition,
+        };
+        if let Some(value) = sampled.and_then(|sample| sample.value) {
+            let css = value.to_css();
+            if let Some(typed) = crate::values::parse(key.1.as_str(), &css) {
+                self.values.insert((key.0, key.1.clone(), origin), AnimatedStyleValue { css, typed });
+            }
+        }
+        let kind = match (animation.kind, update.cancelled) {
+            (AnimationKind::Animation, false) => AnimationMainThreadEventKind::AnimationEnd,
+            (AnimationKind::Animation, true) => AnimationMainThreadEventKind::AnimationCancel,
+            (AnimationKind::Transition, false) => AnimationMainThreadEventKind::TransitionEnd,
+            (AnimationKind::Transition, true) => AnimationMainThreadEventKind::TransitionCancel,
+        };
+        let same_animation_pending = animation.kind == AnimationKind::Animation
+            && self.compositor_owned.values().any(|other| {
+                other.id == animation.id && other.node == animation.node
+                    && other.generation == animation.generation
+            });
+        if !same_animation_pending {
+            let active_duration = animation.timing.duration_ms * animation.timing.iterations;
+            let elapsed_time_ms = if update.cancelled {
+                (update.time_ms - animation.start_time_ms - animation.timing.delay_ms)
+                    .clamp(0.0, active_duration)
+            } else { active_duration };
+            dispatch(AnimationMainThreadEvent {
+                node: animation.node,
+                generation: animation.generation,
+                name: animation.name,
+                kind,
+                elapsed_time_ms,
+            });
+        }
+        true
+    }
+
+    /// Any mutation that can invalidate a handoff returns ownership to the
+    /// main thread and emits cancellation events there.
+    pub fn cancel_for_mutation(
+        &mut self, node: NodeIdx, generation: u64, t_ms: f64,
+        mut dispatch: impl FnMut(crate::animation::AnimationMainThreadEvent),
+    ) -> Vec<crate::animation::CompositorAnimation> {
+        let handoffs: Vec<_> = self.compositor_owned.values()
+            .filter(|animation| animation.node == node && animation.generation == generation)
+            .cloned().collect();
+        for animation in &handoffs {
+            let update = crate::animation::AnimationPropertyUpdate {
+                id: animation.id, node, generation, property: animation.property,
+                time_ms: t_ms, cancelled: true,
+            };
+            self.commit_property_update(update, &mut dispatch);
+        }
+        handoffs
     }
 }
 
@@ -340,7 +455,7 @@ use context::{CompiledRule, compile_sheets};
 
 #[path = "cascade_invalidation.rs"]
 mod invalidation;
-pub use invalidation::{recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
+pub use invalidation::{recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
 
 #[path = "presentational_hints.rs"]
 mod hints;
@@ -1247,10 +1362,14 @@ hr { display: block; margin: 0.5em auto;
 button, input, select { display: inline-block; }
 textarea { display: inline-block; font-family: monospace; }
 ruby { display: ruby; }
-rb { display: ruby-base; }
-rt { display: ruby-text; font-size: 50%; }
-rtc { display: ruby-text-container; font-size: 50%; }
+rbc { display: ruby-base-container; }
+rb { display: ruby-base; white-space: nowrap; }
+rt { display: ruby-text; }
+rtc { display: ruby-text-container; }
 rp { display: none; }
+ruby, rb, rt, rbc, rtc { unicode-bidi: isolate; }
+rtc, rt { font-variant-east-asian: ruby; white-space: nowrap; line-height: 1; }
+rtc, :not(rtc) > rt { font-size: 50%; }
 "#;
 
 #[cfg(test)]
@@ -1573,6 +1692,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_content_data_url_and_gradient_image_runs() {
+        let (dom, elements) = fixture();
+        let p = elements[5];
+        let css = parse_stylesheet(
+            "p::before { content: url(data:image/png;base64,AA+10/20==) } \
+             p::after { content: linear-gradient(red, blue) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::Before).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("data:image/png;base64,AA+10/20==".into())]
+        );
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::After).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("linear-gradient(red,blue)".into())]
+        );
+    }
+
+    #[test]
     fn pseudo_box_generation_and_selector_specificity() {
         let (dom, elements) = fixture();
         let p = elements[5];
@@ -1641,6 +1779,44 @@ mod tests {
         assert_eq!(styled.get(els[1]).unwrap().get("display"), Some("none"));
         // Heading picked up its UA font-size.
         assert_eq!(styled.get(els[4]).unwrap().get("font-size"), Some("32px"));
+    }
+
+    #[test]
+    fn ruby_defaults_ua_mapping_and_inherited_properties() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let ruby = dom.create_element(body, "ruby");
+        let rbc = dom.create_element(ruby, "rbc");
+        let rb = dom.create_element(rbc, "rb");
+        let rtc = dom.create_element(ruby, "rtc");
+        let rt = dom.create_element(rtc, "rt");
+        let direct_rt = dom.create_element(ruby, "rt");
+        let rp = dom.create_element(ruby, "rp");
+        let styled = compute(&dom, &[]);
+        for (node, display) in [(ruby, "ruby"), (rbc, "ruby-base-container"),
+            (rb, "ruby-base"), (rtc, "ruby-text-container"), (rt, "ruby-text"),
+            (rp, "none")] {
+            assert_eq!(styled.get(node).unwrap().get("display"), Some(display));
+        }
+        for (property, initial) in [("ruby-align", "space-around"), ("ruby-position", "alternate"),
+            ("ruby-overhang", "auto"), ("ruby-merge", "separate")] {
+            assert_eq!(styled.get(rt).unwrap().get(property), Some(initial));
+        }
+        assert_eq!(styled.get(rb).unwrap().get("white-space"), Some("nowrap"));
+        assert_eq!(styled.get(rt).unwrap().get("line-height"), Some("1"));
+        assert_eq!(styled.get(rt).unwrap().get("font-size"), Some("8px"));
+        assert_eq!(styled.get(direct_rt).unwrap().get("font-size"), Some("8px"));
+
+        let css = parse_stylesheet("ruby { ruby-align: center; ruby-position: under alternate; ruby-overhang: none; ruby-merge: merge } rt { ruby-align: inherit }");
+        let styled = compute(&dom, &[css]);
+        for node in [rbc, rb, rtc, rt] {
+            let style = styled.get(node).unwrap();
+            assert_eq!(style.get("ruby-align"), Some("center"));
+            assert_eq!(style.get("ruby-position"), Some("alternate under"));
+            assert_eq!(style.get("ruby-overhang"), Some("spaces"));
+            assert_eq!(style.get("ruby-merge"), Some("merge"));
+        }
     }
 
     #[test]

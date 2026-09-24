@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "base": "ac048223eedb2d7454f89f71e6b79fd4bb23b027",
+  "after": "81a3c931752865ee9e019d9d931079c324ae67dd",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "before_counts": {
+    "pass": 2,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 2,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "rows": [
+    {
+      "id": "animation-duration-infinite",
+      "before": "pass",
+      "after": "pass",
+      "actual_sha256_before": "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+      "actual_sha256_after": "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+      "differing_pixels_before": 0,
+      "differing_pixels_after": 0
+    },
+    {
+      "id": "animation-important-002",
+      "before": "mismatch",
+      "after": "mismatch",
+      "actual_sha256_before": "863de4935cc2db0ebf4e8ac3ea7f6c6f11ea0bc34b86422fd6565c296b72163d",
+      "actual_sha256_after": "863de4935cc2db0ebf4e8ac3ea7f6c6f11ea0bc34b86422fd6565c296b72163d",
+      "differing_pixels_before": 1823,
+      "differing_pixels_after": 1823
+    },
+    {
+      "id": "background-color-animation-in-body",
+      "before": "pass",
+      "after": "pass",
+      "actual_sha256_before": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "actual_sha256_after": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels_before": 0,
+      "differing_pixels_after": 0
+    }
+  ]
+}

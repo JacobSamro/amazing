@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "ticket-cases",
+    "case_count": 6
+  },
+  "sparse_paths": [
+    "css/css-writing-modes",
+    "css/css-fonts",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css__css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+      "test": "css/css-writing-modes/text-combine-upright-line-breaking-rules-001.html"
+    },
+    {
+      "id": "css__css-writing-modes__text-orientation-upright-directionality-001.html",
+      "test": "css/css-writing-modes/text-orientation-upright-directionality-001.html"
+    },
+    {
+      "id": "css__css-writing-modes__writing-mode-vertical-lr-002.xht",
+      "test": "css/css-writing-modes/writing-mode-vertical-lr-002.xht"
+    },
+    {
+      "id": "css__css-writing-modes__direction-upright-001.html",
+      "test": "css/css-writing-modes/direction-upright-001.html"
+    },
+    {
+      "id": "css__css-fonts__first-available-font-002.html",
+      "test": "css/css-fonts/first-available-font-002.html"
+    },
+    {
+      "id": "css__css-fonts__font-variant-ligatures-11.optional.html",
+      "test": "css/css-fonts/font-variant-ligatures-11.optional.html"
+    }
+  ]
+}

@@ -92,7 +92,8 @@ fn mixed_content_top_level_navigation_exception_and_cors_image() {
     cors_image.mode = RequestMode::Cors;
     cors_image.security.client_restricts_mixed_content = true;
     cors_image.security.destination = Destination::Image;
-    assert_eq!(cors_image.prepare().unwrap_err(), FetchError::MixedContent);
+    cors_image.prepare().unwrap();
+    assert_eq!(cors_image.url().serialize(), "https://b.test/i.png");
 }
 #[test]
 fn corp_same_origin_same_site_scheme_downgrade_and_coep() {

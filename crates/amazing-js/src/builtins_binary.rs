@@ -359,6 +359,27 @@ impl Interpreter {
         let buffer = self.binding_create_array_buffer(bytes)?;
         self.binary_new_view(binary_obj(&buffer)?, 0, None, Some(BinaryKind::Uint8))
     }
+    /// Return a byte snapshot of an ArrayBuffer or ArrayBufferView for host
+    /// bindings. A detached backing store is an error even for an empty view.
+    pub fn binding_buffer_source_bytes(&self, value: &JsValue) -> Result<Option<Vec<u8>>, Throw> {
+        let JsValue::Object(object) = value else { return Ok(None) };
+        match binary_state(object) {
+            Some(BinaryState::Buffer(buffer)) => {
+                let buffer = buffer.borrow();
+                if buffer.shared { return Ok(None); }
+                if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+                Ok(Some(buffer.bytes.clone()))
+            }
+            Some(BinaryState::View(view)) => {
+                let buffer = view.buffer.borrow();
+                if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+                if binary_view_out_of_bounds(&view) { return Ok(Some(Vec::new())); }
+                let byte_length = binary_view_bytes(&view);
+                Ok(Some(buffer.bytes[view.offset..view.offset + byte_length].to_vec()))
+            }
+            None => Ok(None),
+        }
+    }
     pub fn binding_detach_array_buffer(&mut self, value: &JsValue) -> Result<(), Throw> {
         let buffer = binary_buffer(value)?;
         let mut buffer = buffer.borrow_mut();
@@ -1169,6 +1190,56 @@ mod binary_tests {
         interpreter.set_prop(&value, "1", JsValue::num(42.0)).unwrap();
         let view = binary_typed(&value).unwrap().0;
         assert_eq!(view.buffer.borrow().bytes, [2, 42, 255]);
+    }
+
+    #[test]
+    fn binding_buffer_source_snapshots_buffers_and_view_windows() {
+        let mut interpreter = Interpreter::new();
+        let buffer = interpreter.binding_create_array_buffer(vec![1, 2, 3, 4, 5, 6]).unwrap();
+        let object = binary_obj(&buffer).unwrap();
+        let data_view = interpreter.binary_new_view(object.clone(), 1, Some(3), None).unwrap();
+        let typed_view = interpreter.binary_new_view(object, 2, Some(4), Some(BinaryKind::Uint16)).unwrap();
+        let mut snapshot = interpreter.binding_buffer_source_bytes(&buffer).unwrap().unwrap();
+        assert_eq!(snapshot, [1, 2, 3, 4, 5, 6]);
+        snapshot[0] = 99;
+        assert_eq!(interpreter.binding_buffer_source_bytes(&buffer).unwrap(), Some(vec![1, 2, 3, 4, 5, 6]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&data_view).unwrap(), Some(vec![2, 3, 4]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&typed_view).unwrap(), Some(vec![3, 4, 5, 6]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&JsValue::num(7.0)).unwrap(), None);
+        assert_eq!(interpreter.binding_buffer_source_bytes(&interpreter.object_value()).unwrap(), None);
+    }
+
+    #[test]
+    fn binding_buffer_source_tracks_resize_and_out_of_bounds_views() {
+        let mut interpreter = Interpreter::new();
+        let buffer = interpreter.binary_new_buffer(vec![1, 2, 3, 4, 5, 6], 10, true, false);
+        let object = binary_obj(&buffer).unwrap();
+        let tracking = interpreter.binary_new_view(object.clone(), 2, None, Some(BinaryKind::Uint16)).unwrap();
+        let data_view = interpreter.binary_new_view(object.clone(), 2, None, None).unwrap();
+        let fixed = interpreter.binary_new_view(object, 2, Some(4), Some(BinaryKind::Uint8)).unwrap();
+        assert_eq!(interpreter.binding_buffer_source_bytes(&tracking).unwrap(), Some(vec![3, 4, 5, 6]));
+        binary_buffer(&buffer).unwrap().borrow_mut().bytes.truncate(5);
+        assert_eq!(interpreter.binding_buffer_source_bytes(&tracking).unwrap(), Some(vec![3, 4]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&data_view).unwrap(), Some(vec![3, 4, 5]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&fixed).unwrap(), Some(vec![]));
+        binary_buffer(&buffer).unwrap().borrow_mut().bytes.truncate(1);
+        assert_eq!(interpreter.binding_buffer_source_bytes(&tracking).unwrap(), Some(vec![]));
+        assert_eq!(interpreter.binding_buffer_source_bytes(&data_view).unwrap(), Some(vec![]));
+    }
+
+    #[test]
+    fn binding_buffer_source_rejects_detached_backing_stores() {
+        let mut interpreter = Interpreter::new();
+        let buffer = interpreter.binding_create_array_buffer(vec![8, 9]).unwrap();
+        let view = interpreter.binary_new_view(binary_obj(&buffer).unwrap(), 0, None, None).unwrap();
+        interpreter.binding_detach_array_buffer(&buffer).unwrap();
+        for value in [&buffer, &view] {
+            let error = interpreter.binding_buffer_source_bytes(value).unwrap_err();
+            let JsValue::Object(object) = error.0 else { panic!("expected TypeError object") };
+            assert_eq!(object.borrow().get_own("name"), Some(JsValue::str("TypeError")));
+        }
+        let shared = interpreter.binary_new_buffer(vec![1, 2], 2, false, true);
+        assert_eq!(interpreter.binding_buffer_source_bytes(&shared).unwrap(), None);
     }
 
     #[test]

@@ -295,6 +295,36 @@ pub(crate) fn display_canonical(css: &str) -> Option<&'static str> {
     }
 }
 
+/// CSS Ruby 1 keyword grammars and the legacy `ruby-overhang: none` alias.
+pub(crate) fn ruby_canonical(property: &str, css: &str) -> Option<&'static str> {
+    let tokens = tokenize(css);
+    let words = significant(&tokens);
+    let words: Option<Vec<_>> = words.iter().map(|token| match token {
+        Token::Ident(word) => Some(word.to_ascii_lowercase()),
+        _ => None,
+    }).collect();
+    let words = words?;
+    let words: Vec<_> = words.iter().map(String::as_str).collect();
+    match (property, words.as_slice()) {
+        ("ruby-align", ["start"]) => Some("start"),
+        ("ruby-align", ["center"]) => Some("center"),
+        ("ruby-align", ["space-between"]) => Some("space-between"),
+        ("ruby-align", ["space-around"]) => Some("space-around"),
+        ("ruby-position", ["alternate"]) => Some("alternate"),
+        ("ruby-position", ["over"]) => Some("over"),
+        ("ruby-position", ["under"]) => Some("under"),
+        ("ruby-position", ["inter-character"]) => Some("inter-character"),
+        ("ruby-position", ["alternate", "over"] | ["over", "alternate"]) => Some("alternate over"),
+        ("ruby-position", ["alternate", "under"] | ["under", "alternate"]) => Some("alternate under"),
+        ("ruby-overhang", ["auto"]) => Some("auto"),
+        ("ruby-overhang", ["spaces"] | ["none"]) => Some("spaces"),
+        ("ruby-merge", ["separate"]) => Some("separate"),
+        ("ruby-merge", ["merge"]) => Some("merge"),
+        ("ruby-merge", ["auto"]) => Some("auto"),
+        _ => None,
+    }
+}
+
 /// None means invalid in a grammar owned here; Unparsed means outside our scope.
 pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     use ComputedValue as V;
@@ -331,6 +361,28 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         }
         "display" => {
             return Display::parse(display_canonical(css).unwrap_or(css)).map(V::Display);
+        }
+        "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge" => {
+            return ruby_canonical(property, css).map(|_| V::Unparsed);
+        }
+        "image-orientation" => {
+            if matches!(s, "from-image" | "none") { return Some(V::Unparsed); }
+            let parts: Vec<_> = s.split_ascii_whitespace().collect();
+            if parts == ["flip"]
+                || matches!(parts.as_slice(), [angle] if Angle::parse(angle).is_some())
+                || matches!(parts.as_slice(), ["flip", angle] | [angle, "flip"] if Angle::parse(angle).is_some()) {
+                return Some(V::Unparsed);
+            }
+            return None;
+        }
+        "object-fit" => {
+            return matches!(s, "fill" | "contain" | "cover" | "none" | "scale-down").then_some(V::Unparsed);
+        }
+        "object-position" => {
+            let parts: Vec<_> = s.split_ascii_whitespace().collect();
+            let valid = |part: &str| matches!(part, "left" | "right" | "top" | "bottom" | "center")
+                || LengthPercentage::parse(part).is_some();
+            return (!parts.is_empty() && parts.len() <= 4 && parts.iter().all(|part| valid(part))).then_some(V::Unparsed);
         }
         "grid-template-columns" | "grid-template-rows" => {
             return Some(
@@ -624,6 +676,23 @@ mod tests {
             assert!(matches!(parse("width", &calc),
                 Some(ComputedValue::LengthPercentageExpression(value)) if value == calc));
         }
+    }
+    #[test]
+    fn ruby_one_grammars_and_display_values() {
+        for display in ["ruby", "ruby-base", "ruby-text", "ruby-base-container", "ruby-text-container"] {
+            assert!(matches!(parse("display", display), Some(ComputedValue::Display(_))), "{display}");
+        }
+        for (property, valid, invalid) in [
+            ("ruby-align", &["start", "center", "space-between", "space-around"][..], &["end", "justify", "space-evenly"][..]),
+            ("ruby-position", &["over", "under", "alternate", "alternate over", "over alternate", "under alternate", "inter-character"][..], &["over under", "alternate alternate", "inter-character over"][..]),
+            ("ruby-overhang", &["auto", "spaces", "none"][..], &["all", "never", "auto spaces"][..]),
+            ("ruby-merge", &["separate", "merge", "auto"][..], &["collapse", "none", "merge separate"][..]),
+        ] {
+            for css in valid { assert!(parse(property, css).is_some(), "{property}: {css}"); }
+            for css in invalid { assert!(parse(property, css).is_none(), "{property}: {css}"); }
+        }
+        assert_eq!(ruby_canonical("ruby-position", "UNDER alternate"), Some("alternate under"));
+        assert_eq!(ruby_canonical("ruby-overhang", "NONE"), Some("spaces"));
     }
     #[test]
     fn angles_preserve_turn_count_and_convert_all_units() {

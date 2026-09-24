@@ -69,7 +69,8 @@ fn opacity_composites_the_whole_box_group_once() {
         30,
         30,
     );
-    assert_eq!(surface.get_pixel(10, 10), Some([128, 128, 128, 255]));
+    // 50% quantizes to alpha 128/255; white contributes 127/255, rounded to 127.
+    assert_eq!(surface.get_pixel(10, 10), Some([127, 127, 127, 255]));
 }
 
 #[test]
@@ -234,7 +235,8 @@ fn percentage_opacity_composites_as_a_number() {
         20,
         20,
     );
-    assert_eq!(surface.get_pixel(5, 5), Some([128, 128, 128, 255]));
+    // 50% quantizes to alpha 128/255; white contributes 127/255, rounded to 127.
+    assert_eq!(surface.get_pixel(5, 5), Some([127, 127, 127, 255]));
 }
 
 #[test]

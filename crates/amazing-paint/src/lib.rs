@@ -45,9 +45,11 @@
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
 pub mod background;
+mod blend;
 pub mod color;
 pub mod controls;
 mod display_list;
+mod gradient;
 pub mod display_list_view;
 pub mod image;
 pub mod paint;
@@ -55,6 +57,7 @@ pub mod surface;
 pub mod text;
 
 pub use color::parse_css_color;
+pub use blend::{blend_source_over, quantize_opacity};
 pub use paint::{
     paint_document, paint_document_with, paint_document_with_resources,
     paint_document_with_text_resources, paint_document_with_text_resources_and_controls,

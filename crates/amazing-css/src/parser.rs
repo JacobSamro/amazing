@@ -320,6 +320,25 @@ fn parse_font_sources(value: &str) -> Vec<FontSource> {
 fn parse_font_source_candidate(tokens: &[Token]) -> Option<FontSource> {
     let mut position = 0usize;
     skip_whitespace(tokens, &mut position);
+    if let Some(Token::Url { value, .. }) = tokens.get(position) {
+        if value.is_empty() { return None; }
+        let url = value.clone();
+        position += 1;
+        skip_whitespace(tokens, &mut position);
+        let mut format = None;
+        let mut technologies = Vec::new();
+        while let Some(Token::Function(name)) = tokens.get(position) {
+            let (argument, after_function) = function_argument(tokens, position)?;
+            if name.eq_ignore_ascii_case("format") && format.is_none() {
+                format = Some(parse_one_ident_or_string(argument)?);
+            } else if name.eq_ignore_ascii_case("tech") {
+                technologies.push(parse_one_ident_or_string(argument)?);
+            } else { return None; }
+            position = after_function;
+            skip_whitespace(tokens, &mut position);
+        }
+        return (position == tokens.len()).then_some(FontSource { url, local: None, format, technologies });
+    }
     let Token::Function(name) = tokens.get(position)? else {
         return None;
     };
@@ -758,7 +777,8 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
         ) || if name.eq_ignore_ascii_case("font-synthesis") {
             crate::font_properties::expand_synthesis(&serialize(value_tokens)).is_some()
         } else if crate::font_properties::is_audited_longhand(&name.to_ascii_lowercase())
-            || matches!(name.to_ascii_lowercase().as_str(), "font-feature-settings" | "font-variant-ligatures") {
+            || matches!(name.to_ascii_lowercase().as_str(), "font-feature-settings" | "font-variant-ligatures"
+                | "image-orientation" | "object-fit" | "object-position") {
             let value = serialize(value_tokens);
             matches!(value.to_ascii_lowercase().as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer")
                 || crate::values::parse(&name.to_ascii_lowercase(), &value).is_some()
@@ -921,6 +941,17 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn unquoted_data_url_survives_declarations_and_font_sources() {
+        let url = "data:font/woff2;base64,AA+10/20==";
+        let css = format!("@font-face {{ font-family: Data; src: url({url}) format(woff2) }}");
+        let faces = parse_font_faces(&css);
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].sources[0].url, url);
+        let declarations = parse_declarations(&format!("background-image: url({url});"));
+        assert_eq!(declarations[0].value, format!("url({url})"));
     }
 
     #[test]

@@ -5,15 +5,18 @@ use crate::{
         PendingFetchApi,
     },
     cache::{CacheKind, CacheLimits, CacheLookup, CacheRequest, CacheResponse, CacheStore},
+    hsts::HstsStore,
     cookies::{CookieAccess, CookieSite, CookieStore},
     filter_response, CredentialsMode, CspDestination, CspPolicyList, Destination, FetchError,
-    HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext,
+    HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext, Site,
 };
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
-use std::{collections::{BTreeMap, VecDeque}, time::Instant};
+use std::{collections::{BTreeMap, VecDeque}, io, time::Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ServiceId(pub u64);
+/// Browser request identifier returned by `start_subresource`.
+pub type RequestId = ServiceId;
 
 /// Script-visible response metadata after Fetch policy has accepted the head.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,25 +25,56 @@ pub struct ApiResponseHead {
     pub reason: String,
     pub headers: Vec<(String, String)>,
     pub final_url: String,
+    /// Trusted redirect chain for the navigation controller.
+    pub url_list: Vec<String>,
+    /// An origin transition within the chain or to this response's Location.
+    pub redirect_tainted: bool,
     pub response_type: crate::api::ApiResponseType,
     pub redirected: bool,
 }
 impl ApiResponseHead {
     fn from_response(response: &ApiResponse) -> Self {
+        let chain_tainted = url_chain_tainted(&response.url_list);
+        let location_tainted = response.headers.get_string("location").ok().flatten()
+            .and_then(|location| HttpUrl::parse(&response.url).ok()
+                .and_then(|base| base.resolve(&location).ok()
+                    .map(|target| base.origin() != target.origin())))
+            .unwrap_or(false);
         Self {
             status: response.status,
             reason: response.status_text.clone(),
             headers: response.headers.raw_entries().to_vec(),
             final_url: response.url.clone(),
+            url_list: response.url_list.clone(),
+            redirect_tainted: chain_tainted || location_tainted,
             response_type: response.response_type,
             redirected: response.redirected,
         }
     }
 }
 
+fn url_chain_tainted(urls: &[String]) -> bool {
+    urls.windows(2).any(|pair| match (HttpUrl::parse(&pair[0]), HttpUrl::parse(&pair[1])) {
+        (Ok(left), Ok(right)) => left.origin() != right.origin(),
+        _ => false,
+    })
+}
+
+fn policy_response_type(kind: crate::api::ApiResponseType) -> crate::ResponseType {
+    match kind {
+        crate::api::ApiResponseType::Default | crate::api::ApiResponseType::Basic => crate::ResponseType::Basic,
+        crate::api::ApiResponseType::Cors => crate::ResponseType::Cors,
+        crate::api::ApiResponseType::Opaque => crate::ResponseType::Opaque,
+        crate::api::ApiResponseType::OpaqueRedirect => crate::ResponseType::OpaqueRedirect,
+        crate::api::ApiResponseType::Error => crate::ResponseType::Error,
+    }
+}
+
 #[derive(Clone)]
 pub struct ClientContext {
     pub cookie_site: CookieSite,
+    pub partition_key: Option<Site>,
+    pub frame_ancestors: Vec<Origin>,
     pub security: SecurityContext,
     pub csp: CspPolicyList,
     pub csp_destination: CspDestination,
@@ -88,6 +122,8 @@ impl Default for ClientContext {
     fn default() -> Self {
         Self {
             cookie_site: CookieSite::NoClient,
+            partition_key: None,
+            frame_ancestors: Vec::new(),
             security: SecurityContext::default(),
             csp: CspPolicyList::default(),
             csp_destination: CspDestination::None,
@@ -117,6 +153,17 @@ pub enum ServiceEvent {
         id: ServiceId,
         result: Result<ApiResponse, ApiError>,
     },
+    /// Browser-internal result; never convert this body into a JS Response.
+    SubresourceFinished { id: RequestId, response: SubresourceResponse },
+    SubresourceFailed { id: RequestId, error: ApiError },
+}
+
+/// Validated network bytes for a trusted renderer consumer.
+#[derive(Debug)]
+pub struct SubresourceResponse {
+    pub response_type: crate::ResponseType,
+    pub head: ApiResponseHead,
+    pub body: Vec<u8>,
 }
 
 struct Task {
@@ -131,7 +178,9 @@ struct Task {
     credentials: CredentialsMode,
     client_origin: Origin,
     head: Option<(u16, HeaderList)>,
+    head_reason: String,
     body: Vec<u8>,
+    trusted_subresource: bool,
 }
 
 pub const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
@@ -177,13 +226,21 @@ fn validated_stream_head(task: &Task, event: &NetEvent) -> Option<ApiResponseHea
     if !task.pending.is_main() || task.revalidating || !task.pending.policy().integrity.is_empty() {
         return None;
     }
-    if (300..400).contains(status) && headers.get("location").is_some() { return None; }
+    let navigation_redirect = (300..400).contains(status) && headers.get("location").is_some()
+        && task.pending.policy().mode == crate::RequestMode::Navigate;
+    if (300..400).contains(status) && headers.get("location").is_some() && !navigation_redirect {
+        return None;
+    }
     let mut policy = task.pending.policy().clone();
     if policy.prepare().ok()?.taint == crate::ResponseType::Opaque { return None; }
     let mut fields = HeaderList::default();
     for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
     let internal = InternalResponse { status: *status, status_text: reason.clone(),
         headers: fields, body: Some(Vec::new()) };
+    if navigation_redirect {
+        crate::redirect_location(&mut policy, &internal, internal.headers.get("location").as_deref())
+            .ok()?;
+    }
     let filtered = filter_response(&policy, &internal).ok()?;
     let response = ApiResponse::from_policy(filtered).ok()?;
     Some(ApiResponseHead::from_response(&response))
@@ -204,10 +261,26 @@ fn opaque_stream_head(task: &Task, event: &NetEvent)
         headers: fields, body: Some(Vec::new()) }))
 }
 
+/// The network process owns durable storage; Fetch only asks it to persist
+/// the bounded policy store after a mutation.
+pub trait CachePersistence {
+    fn save(&self, cache: &CacheStore) -> io::Result<()>;
+}
+pub trait HstsPersistence {
+    fn save(&self, hsts: &HstsStore, now: i64) -> io::Result<()>;
+}
+pub trait CookiePersistence {
+    fn save(&self, cookies: &mut CookieStore<crate::psl::PublicSuffixList>, now: i64) -> io::Result<()>;
+}
+
 pub struct NetworkService {
     pub dispatcher: Dispatcher,
-    pub cookies: CookieStore,
+    pub cookies: CookieStore<crate::psl::PublicSuffixList>,
+    cookie_persistence: Option<Box<dyn CookiePersistence>>,
     pub cache: CacheStore,
+    pub hsts: HstsStore,
+    hsts_persistence: Option<Box<dyn HstsPersistence>>,
+    cache_persistence: Option<Box<dyn CachePersistence>>,
     pub preflight_cache: crate::PreflightCache,
     next_id: u64,
     active: BTreeMap<ServiceId, Task>,
@@ -217,6 +290,31 @@ pub struct NetworkService {
     ready: Vec<ServiceEvent>,
 }
 impl NetworkService {
+    pub fn start_child_navigation(&mut self, target: HttpUrl,
+        parent: &crate::api::NavigableContext) -> Result<ServiceId, ApiError> {
+        let request = ApiRequest::child_navigation(target, parent)?;
+        let top = parent.top_level_origin.site(&crate::psl::PublicSuffixList);
+        let same_site = parent.ancestor_origins.iter()
+            .all(|origin| origin.site(&crate::psl::PublicSuffixList) == top);
+        let context = ClientContext {
+            cookie_site: if same_site {
+                CookieSite::Origin(parent.top_level_origin.clone())
+            } else { CookieSite::CrossSite },
+            partition_key: Some(top),
+            frame_ancestors: parent.ancestor_origins.clone(),
+            security: SecurityContext {
+                destination: Destination::Other,
+                client_restricts_mixed_content: parent.top_level_origin.serialize().starts_with("https://")
+                    || parent.parent_origin.serialize().starts_with("https://"),
+                top_level_navigation: false,
+                ..SecurityContext::default()
+            },
+            csp: parent.frame_csp.clone(),
+            csp_destination: CspDestination::Frame,
+            now_unix: parent.now_unix,
+        };
+        self.start(request, context)
+    }
     pub fn start_font(
         &mut self,
         font: FontRequest,
@@ -226,12 +324,63 @@ impl NetworkService {
         context.csp_destination = CspDestination::Font;
         self.start(font.request, context)
     }
+    /// Browser-only subresource path. The ordinary buffered and JS Fetch paths
+    /// continue to receive filtered (possibly opaque) bodies.
+    pub fn start_subresource(&mut self, mut request: ApiRequest,
+        mut context: ClientContext, destination: Destination) -> RequestId {
+        request.destination = destination;
+        request.cache = ApiCache::NoStore;
+        context.security.destination = destination;
+        context.csp_destination = match destination {
+            Destination::Script => CspDestination::Script,
+            Destination::Style => CspDestination::Style,
+            Destination::Image => CspDestination::Image,
+            Destination::Font => CspDestination::Font,
+            Destination::Audio | Destination::Video => CspDestination::Media,
+            Destination::Worker | Destination::SharedWorker | Destination::ServiceWorker => CspDestination::Worker,
+            Destination::Document => CspDestination::Frame,
+            Destination::Empty | Destination::Other => CspDestination::Connect,
+        };
+        let id = match self.start_at(request, context, Instant::now()) {
+            Ok(id) => id,
+            Err(error) => {
+                let id = ServiceId(self.next_id);
+                self.next_id = self.next_id.wrapping_add(1).max(1);
+                self.ready.push(ServiceEvent::SubresourceFailed { id, error });
+                return id;
+            }
+        };
+        if let Some(task) = self.active.get_mut(&id) {
+            task.trusted_subresource = true;
+        } else if let Some(event) = self.ready.iter_mut().find(|event|
+            matches!(event, ServiceEvent::Finished { id: found, .. } if *found == id)) {
+            let ServiceEvent::Finished { result, .. } = std::mem::replace(event,
+                ServiceEvent::StreamFinished { id }) else {
+                unreachable!()
+            };
+            let result = result.and_then(|mut response| {
+                let head = ApiResponseHead::from_response(&response);
+                let body = response.body.bytes()?;
+                Ok(SubresourceResponse { response_type: policy_response_type(response.response_type), head, body })
+            });
+            *event = match result {
+                Ok(response) => ServiceEvent::SubresourceFinished { id, response },
+                Err(error) => ServiceEvent::SubresourceFailed { id, error },
+            };
+        }
+        id
+    }
     pub fn new(limits: DispatchLimits) -> Self {
         Self {
             dispatcher: Dispatcher::new(limits),
-            cookies: CookieStore::default(),
+            cookies: CookieStore::new(crate::psl::PublicSuffixList, Default::default())
+                .expect("valid cookie limits"),
+            cookie_persistence: None,
             cache: CacheStore::new(CacheKind::Private, CacheLimits::default())
                 .expect("valid cache limits"),
+            hsts: HstsStore::new(),
+            hsts_persistence: None,
+            cache_persistence: None,
             preflight_cache: crate::PreflightCache::default(),
             next_id: 1,
             active: BTreeMap::new(),
@@ -239,6 +388,34 @@ impl NetworkService {
             websockets: BTreeMap::new(),
             prefer_websocket: false,
             ready: Vec::new(),
+        }
+    }
+    /// Install a restored cache and its persistence hook before requests start.
+    pub fn install_cache(&mut self, cache: CacheStore, persistence: Box<dyn CachePersistence>) {
+        self.cache = cache;
+        self.cache_persistence = Some(persistence);
+    }
+    pub fn install_hsts(&mut self, hsts: HstsStore, persistence: Box<dyn HstsPersistence>) {
+        self.hsts = hsts;
+        self.hsts_persistence = Some(persistence);
+    }
+    pub fn install_cookies(&mut self,
+        cookies: CookieStore<crate::psl::PublicSuffixList>, persistence: Box<dyn CookiePersistence>) {
+        self.cookies = cookies;
+        self.cookie_persistence = Some(persistence);
+    }
+    pub fn persist_cookies(&mut self, now: i64) {
+        if let Some(disk) = &self.cookie_persistence {
+            if let Err(error) = disk.save(&mut self.cookies, now) {
+                eprintln!("cookie persistence failed: {error}");
+            }
+        }
+    }
+    fn persist_cache(&self) {
+        if let Some(persistence) = &self.cache_persistence {
+            if let Err(error) = persistence.save(&self.cache) {
+                eprintln!("HTTP cache persistence failed: {error}");
+            }
         }
     }
     pub fn open_websocket(
@@ -280,6 +457,7 @@ impl NetworkService {
             http_api: true,
             top_level_navigation: false,
             method: "GET",
+            partition_key: client.context.partition_key,
         };
         let cookie = self
             .cookies
@@ -414,7 +592,7 @@ impl NetworkService {
         mut context: ClientContext,
         now: Instant,
     ) -> Result<ServiceId, ApiError> {
-        if request.mode == crate::RequestMode::Navigate {
+        if request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
             context.security.destination = Destination::Document;
             context.security.top_level_navigation = true;
         }
@@ -423,6 +601,9 @@ impl NetworkService {
         }
         if request.body.is_unusable() {
             return Err(ApiError::BodyUsed);
+        }
+        if let Some(upgraded) = self.hsts.upgrade(request.url(), context.now_unix) {
+            request.upgrade_hsts(upgraded);
         }
         let id = ServiceId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1).max(1);
@@ -460,6 +641,7 @@ impl NetworkService {
                 http_api: true,
                 top_level_navigation: context.security.top_level_navigation,
                 method: &method,
+                partition_key: context.partition_key.clone(),
             };
             let bytes = self
                 .cookies
@@ -469,15 +651,29 @@ impl NetworkService {
         } else {
             String::new()
         };
+        if matches!(request.cache, ApiCache::NoCache | ApiCache::NoStore) {
+            if request.headers.get_string("cache-control")?.is_none() {
+                let value = if request.cache == ApiCache::NoCache { "max-age=0" } else { "no-cache" };
+                request.headers.append_string("Cache-Control", value)?;
+            }
+            if request.cache == ApiCache::NoStore && request.headers.get_string("pragma")?.is_none() {
+                request.headers.append_string("Pragma", "no-cache")?;
+            }
+        }
         let headers = request.headers.to_header_list()?;
-        let cacheable = method == "GET" && request.cache == ApiCache::Default;
+        let cacheable = method == "GET" && matches!(request.cache,
+            ApiCache::Default | ApiCache::NoCache | ApiCache::Reload);
         let mut revalidating = false;
         let mut conditional_headers = HeaderList::default();
-        if cacheable {
+        if cacheable && request.cache != ApiCache::Reload {
+            let mut lookup_headers = headers.clone();
+            if request.cache == ApiCache::NoCache {
+                lookup_headers.append("Cache-Control", "no-cache").map_err(ApiError::Network)?;
+            }
             let cache_request = CacheRequest {
                 uri: &url,
                 method: &method,
-                headers: &headers,
+                headers: &lookup_headers,
                 cookie: &cookie,
             };
             match self
@@ -557,7 +753,9 @@ impl NetworkService {
                 credentials: request.credentials,
                 client_origin,
                 head: None,
+                head_reason: String::new(),
                 body: Vec::new(),
+                trusted_subresource: false,
             },
         );
         Ok(id)
@@ -607,6 +805,28 @@ impl NetworkService {
                 }
                 continue;
             };
+            if let NetEvent::Head { url, status, headers, .. } = &event {
+                let ancestors = &self.active[&id].context.frame_ancestors;
+                let redirects = matches!(status, 301 | 302 | 303 | 307 | 308)
+                    && headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("location") && !value.is_empty());
+                if !ancestors.is_empty() && !redirects {
+                    let mut fields = HeaderList::default();
+                    let check = headers.iter().try_for_each(|(name, value)| fields.append(name, value))
+                        .and_then(|_| HttpUrl::parse(url)
+                            .and_then(|parsed| crate::check_frame_embedding(&parsed, &fields, ancestors)));
+                    if check.is_err() {
+                        self.dispatcher.cancel(wire_id);
+                        self.active.remove(&id);
+                        let error = ApiError::Network(FetchError::FrameEmbedding);
+                        if self.streams.contains_key(&id) {
+                            self.finish_stream(id, Err(error), &mut result);
+                        } else {
+                            result.push(ServiceEvent::Finished { id, result: Err(error) });
+                        }
+                        continue;
+                    }
+                }
+            }
             let mut finished = None;
             let cookies = &mut self.cookies;
             if let Some(task) = self.active.get_mut(&id) {
@@ -648,6 +868,7 @@ impl NetworkService {
                         NetEvent::Head {
                             url,
                             status,
+                            reason,
                             headers,
                             ..
                         } => {
@@ -656,6 +877,13 @@ impl NetworkService {
                                 let _ = fields.append(name, value);
                             }
                             if let Ok(parsed) = HttpUrl::parse(url) {
+                                if let Some(hsts) = headers.get_all("strict-transport-security").into_iter().next() {
+                                    if self.hsts.observe(&parsed, hsts, task.context.now_unix) {
+                                        if let Some(disk) = &self.hsts_persistence {
+                                            let _ = disk.save(&self.hsts, task.context.now_unix);
+                                        }
+                                    }
+                                }
                                 let accept = task.credentials == CredentialsMode::Include
                                     || (task.credentials == CredentialsMode::SameOrigin
                                         && parsed.origin() == &task.client_origin);
@@ -669,20 +897,28 @@ impl NetworkService {
                                             .security
                                             .top_level_navigation,
                                         method: &task.method,
+                                        partition_key: task.context.partition_key.clone(),
                                     };
+                                    let mut changed = false;
                                     for cookie in headers.get_all("set-cookie") {
-                                        let _ = cookies.set_cookie(
+                                        changed |= cookies.set_cookie(
                                             cookie.as_bytes(),
                                             &access,
                                             task.context.now_unix,
-                                        );
+                                        ).is_ok();
+                                    }
+                                    if changed {
+                                        if let Some(disk) = &self.cookie_persistence {
+                                            let _ = disk.save(cookies, task.context.now_unix);
+                                        }
                                     }
                                 }
                             }
                             task.head = Some((*status, fields));
+                            task.head_reason = reason.clone();
                             task.body.clear();
                         }
-                        NetEvent::Body { bytes, .. } if task.cacheable => {
+                        NetEvent::Body { bytes, .. } if task.cacheable || task.trusted_subresource => {
                             task.body.extend_from_slice(bytes)
                         }
                         _ => {}
@@ -693,6 +929,7 @@ impl NetworkService {
                 let site = task.context.cookie_site.clone();
                 let top_level = task.context.security.top_level_navigation;
                 let wall_time = task.context.now_unix;
+                let partition_key = task.context.partition_key.clone();
                 finished = task.pending.on_event_with_cache(
                     &event,
                     &mut self.dispatcher,
@@ -710,6 +947,7 @@ impl NetworkService {
                             http_api: true,
                             top_level_navigation: top_level,
                             method: policy.method(),
+                            partition_key: partition_key.clone(),
                         };
                         cookies
                             .cookie_header(&access, wall_time)
@@ -717,13 +955,34 @@ impl NetworkService {
                             .and_then(|bytes| String::from_utf8(bytes).ok())
                             .filter(|value| !value.is_empty())
                     },
+                    |url| self.hsts.upgrade(url, wall_time),
                     Some(&mut self.preflight_cache),
                 );
             }
             let wire_done = matches!(&event, NetEvent::Done { .. });
             if !self.streams.contains_key(&id) { result.push(ServiceEvent::Network { id, event }); }
             if let Some(mut outcome) = finished {
+                let mut subresource = None;
                 if let Some(task) = self.active.remove(&id) {
+                    if outcome.is_ok() {
+                        if let Some((status, response_headers)) = &task.head {
+                            let before = self.cache.len();
+                            self.cache.invalidate_unsafe(&task.method, &task.url, *status);
+                            if let Ok(base) = HttpUrl::parse(&task.url) {
+                                for field in ["location", "content-location"] {
+                                    if let Some(value) = response_headers.get(field) {
+                                        if let Ok(target) = base.resolve(&value) {
+                                            if target.origin() == base.origin() {
+                                                self.cache.invalidate_unsafe(
+                                                    &task.method, &target.serialize(), *status);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if self.cache.len() != before { self.persist_cache(); }
+                        }
+                    }
                     if task.revalidating && wire_done {
                         if let Some((304, response_headers)) = &task.head {
                             let request = CacheRequest {
@@ -732,14 +991,16 @@ impl NetworkService {
                                 headers: &task.headers,
                                 cookie: &task.cookie,
                             };
-                            outcome = self
-                                .cache
-                                .update_304(
+                            let updated = self.cache.update_304(
                                     &request,
                                     response_headers,
                                     task.context.now_unix,
                                     task.context.now_unix,
-                                )
+                                );
+                            if updated.as_ref().is_ok_and(Option::is_some) {
+                                self.persist_cache();
+                            }
+                            outcome = updated
                                 .ok()
                                 .flatten()
                                 .ok_or(ApiError::Network(FetchError::Transport))
@@ -756,6 +1017,28 @@ impl NetworkService {
                                 });
                         }
                     }
+                    if task.trusted_subresource {
+                        subresource = Some(outcome.as_ref().map(|response| {
+                            let mut head = ApiResponseHead::from_response(response);
+                            if let Some((status, fields)) = &task.head {
+                                head.status = *status;
+                                head.reason = task.head_reason.clone();
+                                head.headers = fields.iter().filter(|(name, _)|
+                                    !crate::headers::forbidden_response(name))
+                                    .map(|(name, value)| (name.to_owned(), value.to_owned())).collect();
+                            }
+                            head.final_url = task.pending.policy().url().serialize();
+                            head.url_list = task.pending.policy().url_list().iter()
+                                .map(HttpUrl::serialize).collect();
+                            head.redirected = head.url_list.len() > 1;
+                            head.redirect_tainted = url_chain_tainted(&head.url_list);
+                            SubresourceResponse {
+                                response_type: policy_response_type(response.response_type),
+                                head,
+                                body: task.body.clone(),
+                            }
+                        }).map_err(Clone::clone));
+                    }
                     if task.cacheable && outcome.as_ref().is_ok_and(|r| !r.redirected) {
                         if let Some((status, response_headers)) = task.head {
                             let request = CacheRequest {
@@ -769,16 +1052,23 @@ impl NetworkService {
                                 headers: response_headers,
                                 body: task.body,
                             };
-                            let _ = self.cache.store(
+                            if self.cache.store(
                                 &request,
                                 response,
                                 task.context.now_unix,
                                 task.context.now_unix,
-                            );
+                            ).unwrap_or(false) {
+                                self.persist_cache();
+                            }
                         }
                     }
                 }
-                if self.streams.contains_key(&id) {
+                if let Some(subresource) = subresource {
+                    match subresource {
+                        Ok(response) => result.push(ServiceEvent::SubresourceFinished { id, response }),
+                        Err(error) => result.push(ServiceEvent::SubresourceFailed { id, error }),
+                    }
+                } else if self.streams.contains_key(&id) {
                     self.finish_stream(id, outcome, &mut result);
                 } else {
                     result.push(ServiceEvent::Finished { id, result: outcome });
@@ -938,6 +1228,7 @@ mod tests {
                     http_api: true,
                     top_level_navigation: false,
                     method: "GET",
+                    partition_key: None,
                 },
                 100,
             )

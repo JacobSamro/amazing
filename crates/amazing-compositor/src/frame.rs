@@ -174,12 +174,12 @@ fn blit_shift(old: &Surface, new: &mut Surface, dx: i32, dy: i32) -> Vec<PixelRe
     damage
 }
 fn alpha_over(dst: [u8; 4], src: [u8; 4], opacity: u8, mode: BlendMode) -> [u8; 4] {
+    if mode == BlendMode::Normal {
+        return amazing_paint::blend_source_over(src, dst, opacity);
+    }
     let sa = (src[3] as u32 * opacity as u32 + 127) / 255;
     if sa == 0 {
         return dst;
-    }
-    if sa == 255 && mode == BlendMode::Normal {
-        return [src[0], src[1], src[2], 255];
     }
     let da = dst[3] as u32;
     let oa = sa + (da * (255 - sa) + 127) / 255;
@@ -427,7 +427,7 @@ impl Compositor {
                 continue;
             }
             let integer = is_integer_translation(snap.matrix);
-            let opacity = (snap.opacity.clamp(0., 1.) * 255.).round() as u8;
+            let opacity = amazing_paint::quantize_opacity(snap.opacity);
             for y in draw.y0..draw.y1 {
                 for x in draw.x0..draw.x1 {
                     let dx = x as f32 + 0.5;
@@ -451,5 +451,18 @@ impl Compositor {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod blend_tests {
+    use super::{alpha_over, BlendMode};
+
+    #[test]
+    fn retained_frame_uses_paint_integer_source_over() {
+        assert_eq!(
+            alpha_over([191, 191, 191, 255], [0, 0, 0, 255], 128, BlendMode::Normal),
+            [95, 95, 95, 255],
+        );
     }
 }

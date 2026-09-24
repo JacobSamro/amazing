@@ -1,12 +1,12 @@
 //! Driver bridge from computed CSS to the retained CSS animation clock.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amazing_compositor::{
     AnimationColor, AnimationFrameOutput, AnimationValue, ColorSpace, Compositor,
     ComputedValues, CssAnimationEngine, CssAnimationLonghands, CssKeyframeInput,
     CssTransitionLonghands, PropertyTrees, PropertyUpdate, resolve_css_keyframes,
 };
-use amazing_css::{StyledDom, Stylesheet};
+use amazing_css::{AnimatedValues, StyledDom, Stylesheet};
 use amazing_dom::{Dom, NodeIdx, NodeKind};
 
 pub(crate) struct AnimationScene {
@@ -16,6 +16,8 @@ pub(crate) struct AnimationScene {
     // retained presenter when it owns the matching scene.
     compositor: Compositor,
     previous: BTreeMap<u64, ComputedValues>,
+    animated: AnimatedValues,
+    active_transitions: BTreeSet<(u64, String)>,
 }
 
 impl AnimationScene {
@@ -25,6 +27,8 @@ impl AnimationScene {
             compositor: Compositor::new(PropertyTrees::default(), Vec::new(), 0)
                 .expect("empty animation compositor"),
             previous: BTreeMap::new(),
+            animated: AnimatedValues::default(),
+            active_transitions: BTreeSet::new(),
         }
     }
 
@@ -40,6 +44,8 @@ impl AnimationScene {
         let styled = amazing_css::compute(dom, sheets);
         self.frame_from_styles(dom, &styled, sheets, now_ms)
     }
+
+    pub(crate) fn animated(&self) -> &AnimatedValues { &self.animated }
 
     fn frame_from_styles(
         &mut self,
@@ -78,9 +84,55 @@ impl AnimationScene {
             self.engine.cancel_element(*element, now_ms);
         }
         self.previous = next;
-        self.engine.tick(now_ms, &mut self.compositor)
-            .map_err(|error| format!("animation property update failed: {error:?}"))
+        let output = self.engine.tick(now_ms, &mut self.compositor)
+            .map_err(|error| format!("animation property update failed: {error:?}"))?;
+        self.animated = sampled_values(&output, &mut self.active_transitions);
+        Ok(output)
     }
+}
+
+fn sampled_values(
+    output: &AnimationFrameOutput,
+    active_transitions: &mut BTreeSet<(u64, String)>,
+) -> AnimatedValues {
+    use amazing_compositor::CssAnimationEventKind as Kind;
+    let mut ended = BTreeSet::new();
+    for event in &output.events {
+        let key = (event.element, event.name.clone());
+        match event.kind {
+            Kind::TransitionRun | Kind::TransitionStart => { active_transitions.insert(key); }
+            Kind::TransitionEnd | Kind::TransitionCancel => { ended.insert(key); }
+            _ => {}
+        }
+    }
+    // The compositor emits animation samples before transition samples. Keep
+    // both cascade origins while a transition is active; CSS resolves their
+    // precedence. PropertyUpdate does not yet carry its origin, so the last
+    // sample for an active transition is its transition sample.
+    let mut groups: BTreeMap<(u64, String), Vec<&PropertyUpdate>> = BTreeMap::new();
+    for update in &output.main_thread_updates {
+        groups.entry((update.element, update.property.clone())).or_default().push(update);
+    }
+    let mut animated = AnimatedValues::default();
+    for (key, updates) in groups {
+        let node = NodeIdx(key.0 as u32);
+        let animation = if active_transitions.contains(&key) && updates.len() > 1 {
+            updates.get(updates.len() - 2)
+        } else if !active_transitions.contains(&key) {
+            updates.last()
+        } else { None };
+        if let Some(update) = animation
+            && let Some(css) = css_value(&update.value) {
+                animated.insert(node, &key.1, &css);
+        }
+        if active_transitions.contains(&key) && !ended.contains(&key)
+            && let Some(update) = updates.last()
+            && let Some(css) = css_value(&update.value) {
+                animated.insert_transition(node, &key.1, &css);
+        }
+    }
+    for key in ended { active_transitions.remove(&key); }
+    animated
 }
 
 fn computed_values(style: &amazing_css::ComputedStyle) -> ComputedValues {
@@ -129,34 +181,6 @@ fn css_value(value: &AnimationValue) -> Option<String> {
     }
 }
 
-/// Apply supported sampled styles to the freshly built box tree, without
-/// modifying DOM style attributes or feeding samples back into transition
-/// detection. Geometry changes then require a layout pass before raster.
-pub(crate) fn apply_to_layout(
-    root: &mut amazing_layout::LayoutBox,
-    updates: &[PropertyUpdate],
-) -> bool {
-    let mut changed = false;
-    if let Some(node) = root.node {
-        for update in updates.iter().filter(|update| update.element == node.0 as u64) {
-            if let Some(value) = css_value(&update.value) {
-                root.style.set(&update.property, &value);
-                changed = true;
-            }
-        }
-    }
-    match &mut root.flow {
-        amazing_layout::Flow::Blocks(children)
-        | amazing_layout::Flow::Flex(children)
-        | amazing_layout::Flow::Grid(children) => {
-            for child in children { changed |= apply_to_layout(child, updates); }
-        }
-        _ => {}
-    }
-    for child in &mut root.positioned { changed |= apply_to_layout(child, updates); }
-    changed
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +199,8 @@ mod tests {
         let middle = scene.frame(&dom, &[sheet.clone()], 50.).unwrap();
         assert!(middle.main_thread_updates.iter().any(|update| update.element == box_node.0 as u64
             && update.property == "opacity" && matches!(update.value, AnimationValue::Opacity(v) if (v - 0.5).abs() < 0.01)));
+        let sampled = amazing_css::compute_with_animations(&dom, &[sheet.clone()], scene.animated());
+        assert_eq!(sampled.source(box_node, "opacity"), Some(amazing_css::ElementStyleSource::Animation));
         let end = scene.frame(&dom, &[sheet], 100.).unwrap();
         assert!(end.events.iter().any(|event| event.kind == amazing_compositor::CssAnimationEventKind::AnimationEnd));
     }
@@ -196,7 +222,38 @@ mod tests {
         let middle = scene.frame(&dom, &[sheet.clone()], 60.).unwrap();
         assert!(middle.main_thread_updates.iter().any(|update| update.element == box_node.0 as u64
             && update.property == "width" && matches!(update.value, AnimationValue::LengthPx(v) if (v - 20.).abs() < 0.1)));
+        let sampled = amazing_css::compute_with_animations(&dom, &[sheet.clone()], scene.animated());
+        assert_eq!(sampled.source(box_node, "width"), Some(amazing_css::ElementStyleSource::Transition));
         let ended = scene.frame(&dom, &[sheet], 110.).unwrap();
         assert!(ended.events.iter().any(|event| event.kind == amazing_compositor::CssAnimationEventKind::TransitionEnd));
+        assert!(scene.animated().get(box_node, "width").is_none());
+    }
+
+    #[test]
+    fn transition_sample_preserves_animation_origin_under_it() {
+        use amazing_compositor::{CssAnimationEvent, CssAnimationEventKind};
+        let mut active = BTreeSet::new();
+        let output = AnimationFrameOutput {
+            events: vec![CssAnimationEvent { element: 7, kind: CssAnimationEventKind::TransitionRun,
+                name: "opacity".into(), elapsed_time_ms: 0. }],
+            main_thread_updates: vec![
+                PropertyUpdate { element: 7, property: "opacity".into(), value: AnimationValue::Opacity(0.25) },
+                PropertyUpdate { element: 7, property: "opacity".into(), value: AnimationValue::Opacity(0.75) },
+            ],
+            ..Default::default()
+        };
+        let values = sampled_values(&output, &mut active);
+        assert_eq!(values.get(NodeIdx(7), "opacity").unwrap().css, "0.75");
+        let dom = amazing_html::parse("<body><div></div></body>");
+        let node = (0..dom.node_count()).map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("div")).unwrap();
+        let mut values = AnimatedValues::default();
+        values.insert(node, "opacity", "0.25");
+        values.insert_transition(node, "opacity", "0.75");
+        let styled = amazing_css::compute_with_animations(&dom, &[], &values);
+        assert_eq!(styled.get(node).unwrap().get("opacity"), Some("0.75"));
+        values.remove(node, "opacity", amazing_css::AnimatedOrigin::Transition);
+        let styled = amazing_css::compute_with_animations(&dom, &[], &values);
+        assert_eq!(styled.get(node).unwrap().get("opacity"), Some("0.25"));
     }
 }

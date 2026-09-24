@@ -1,6 +1,7 @@
 //! Driver-owned WebIDL installation over the same arena used for page parsing.
 //! DOMString values cross the runtime boundary as exact UTF-16 code units.
 use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
+use std::collections::{BTreeMap, VecDeque};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
@@ -15,6 +16,7 @@ use amazing_bindings::{
 };
 use amazing_dom::{Dom, DomError, NodeIdx, NodeKind, Namespace, abort::AbortSignalId};
 use amazing_bindings::{Blob, BlobPart, File, FormData};
+use amazing_bindings::storage_interfaces::{StorageInterface as SI, MemberKind as SM};
 use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
 use amazing_js::value::Exotic;
 use amazing_js::{
@@ -22,20 +24,30 @@ use amazing_js::{
     env::{EnvHandle, EnvKind},
     interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
-        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
+        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue, Throw,
     },
 };
 
+#[path = "runtime_host_storage.rs"]
+mod runtime_host_storage;
+use runtime_host_storage::StorageRuntime;
+
 use crate::dom_host::BrowserDomHost;
+use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
+use self::compositor::{CanvasObject, CanvasTarget};
+#[path = "runtime_host_compositor.rs"] mod compositor;
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
 
 #[derive(Clone, Copy)]
 enum NativeEntry {
+    Canvas(CanvasTarget, Member),
     Operation(Operation),
     IllegalConstructor,
     CapturePromiseResolvers,
+    Storage(SI, &'static str, SM),
+    StorageTick,
 }
 
 enum WebObject {
@@ -49,6 +61,11 @@ enum WebObject {
 }
 
 struct BindingState {
+    canvas_text_system: Option<Rc<dyn amazing_text::TextSystem>>,
+    canvas_dirty: HashSet<NodeIdx>,
+    canvas_style_values: HashMap<(NodeIdx, &'static str), JsValue>,
+    canvas_slots: HashMap<NodeIdx, CanvasSlot>,
+    canvas_objects: Vec<(JsValue, CanvasObject)>,
     host: Rc<RefCell<BrowserDomHost>>,
     arena: u64,
     functions: Vec<NativeEntry>,
@@ -67,6 +84,9 @@ struct BindingState {
     web_objects: Vec<WebObject>,
     font_sets: HashMap<NodeIdx, u64>,
     window_event_target_slot: u64,
+    storage: Option<StorageRuntime>,
+    storage_classes: HashMap<SI, (JsValue, JsValue)>,
+    storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -408,6 +428,11 @@ pub(crate) fn install(
         slot
     };
     let state = Rc::new(RefCell::new(BindingState {
+        canvas_text_system: None,
+        canvas_dirty: HashSet::new(),
+        canvas_style_values: HashMap::new(),
+        canvas_slots: HashMap::new(),
+        canvas_objects: Vec::new(),
         host,
         arena,
         functions: Vec::new(),
@@ -426,6 +451,9 @@ pub(crate) fn install(
         web_objects: Vec::new(),
         font_sets: HashMap::new(),
         window_event_target_slot,
+        storage: None,
+        storage_classes: HashMap::new(),
+        storage_inbox: VecDeque::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -440,7 +468,8 @@ pub(crate) fn install(
             state: for_dispatch.clone(),
         };
         match entry {
-            NativeEntry::Operation(operation) => invoke(&mut adapter, operation, this, &args),
+            NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
+            NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -449,6 +478,8 @@ pub(crate) fn install(
                 adapter.state.borrow_mut().captured_resolvers = Some((resolve.clone(), reject.clone()));
                 Ok(JsValue::Undefined)
             }
+            NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
+            NativeEntry::StorageTick => adapter.storage_tick(),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -459,6 +490,8 @@ pub(crate) fn install(
     install_interfaces(&mut adapter)?;
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
+    adapter.install_storage_interfaces()?;
+    adapter.install_canvas()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;
@@ -477,6 +510,9 @@ pub(crate) fn install(
     // private wrapper while older browser globals remain available upstream.
     let fresh = EnvHandle::new(EnvKind::Global, Some(adapter.js.global_env.clone()));
     fresh.declare_lexical("document", document.clone(), false)?;
+    let (local_storage,session_storage)=adapter.storage_lexical_areas()?;
+    fresh.declare_lexical("localStorage",local_storage,false)?;
+    fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
     adapter
         .js

@@ -168,7 +168,7 @@ fn control_opacity_and_ancestor_clip_use_display_list_groups() {
         "button{background:red;appearance:none;opacity:.5}body{height:8px;overflow:hidden}",
     );
     let s = draw(&b, &state(false));
-    assert_eq!(at(&s, r, 5.0, 4.0), [255, 128, 128, 255]);
+    assert_eq!(at(&s, r, 5.0, 4.0), [255, 127, 127, 255]);
     assert_eq!(at(&s, r, 5.0, 15.0), [255; 4]);
 }
 

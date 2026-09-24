@@ -20,5 +20,9 @@ amazing-layout = { path = "../amazing-layout" }
 amazing-paint = { path = "../amazing-paint" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-media = { path = "../amazing-media" }
+amazing-image = { path = "../amazing-image" }
 amazing-svg = { path = "../amazing-svg" }
 amazing-net = { path = "../amazing-net" }
+amazing-compositor = { path = "../amazing-compositor" }
+amazing-text-provider = { path = "../amazing-text-provider" }
+amazing-storage = { path = "../amazing-storage" }

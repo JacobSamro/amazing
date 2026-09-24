@@ -1,0 +1,38 @@
+{
+  "fixed_base": "5860d66e7e1104753f4d7bb8bc171ba607288caa",
+  "selection": "selection.json mutation_cases; synthetic 64x32 paint-view fixtures",
+  "gate": "win-002 amazing-paint 118/118 and paint doctests 0/0; workspace 2223/2223 with 5 skipped, workspace doctests 2/2 on fixed 5860d66",
+  "test_functions": 9,
+  "asserted_update_outcomes": {
+    "delta": 3,
+    "requires_full_rebuild": 10
+  },
+  "fallback_reasons": {
+    "OrderChanged": 3,
+    "AmbiguousGeneration": 1,
+    "PropertyStateChanged": 3,
+    "UnseparableGroup": 1,
+    "UnsafeBounds": 1,
+    "stacking_reorder_explicit_full_fallback": 1
+  },
+  "dom_generation_resolver_checks": 1,
+  "changed_item_ranges": [
+    {
+      "case": "bounds-crossing-tile-edge",
+      "range": [
+        2,
+        3
+      ],
+      "changed_items": 1
+    }
+  ],
+  "retired_resources": [
+    {
+      "case": "background-url-change",
+      "key": "BackgroundUrl(old)",
+      "count": 1
+    }
+  ],
+  "first_unexpected_divergence": null,
+  "oracle_note": "Tests assert full RGBA equality against fresh paint_document/full view for tile-edge damage, removal/reorder, transform, text, stacking reorder, and opacity-group cases; replaced pixels assert a visible old/new difference. Unsupported cases return RequiresFullRebuild with the fresh new view retained by the caller."
+}

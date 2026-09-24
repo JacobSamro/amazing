@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "fixed_base": "e7628370a6b0b4599c01cb23dbf89ef81473f942",
+  "host": "win-002",
+  "locked": true,
+  "paint_nextest": {
+    "passed": 107,
+    "skipped": 0
+  },
+  "image_nextest": {
+    "passed": 47,
+    "skipped": 0
+  },
+  "workspace_nextest": {
+    "passed": 2081,
+    "skipped": 5
+  },
+  "paint_doctests": 0,
+  "image_doctests": 0,
+  "workspace_doctests": 2,
+  "log_gzip_sha256": "196b7cd5282be3890409c361aadd4638d8c235d36301e6a160099d31d28fbc0a"
+}
