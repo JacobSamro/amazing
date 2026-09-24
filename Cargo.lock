@@ -262,6 +262,7 @@ dependencies = [
  "amazing-dom",
  "amazing-fetch",
  "amazing-html",
+ "amazing-image",
  "amazing-ipc",
  "amazing-ipc-platform",
  "amazing-layout",
