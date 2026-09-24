@@ -37,13 +37,13 @@ impl FetchInterface {
     }
     pub const fn brand(self) -> InterfaceBrand {
         InterfaceBrand(match self {
-            Self::Headers => 100,
-            Self::Request => 101,
-            Self::Response => 102,
-            Self::XMLHttpRequest => 103,
-            Self::XMLHttpRequestUpload => 104,
-            Self::ProgressEvent => 105,
-            Self::HeadersIterator => 106,
+            Self::Headers => 200,
+            Self::Request => 201,
+            Self::Response => 202,
+            Self::XMLHttpRequest => 203,
+            Self::XMLHttpRequestUpload => 204,
+            Self::ProgressEvent => 205,
+            Self::HeadersIterator => 206,
         })
     }
 }

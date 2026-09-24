@@ -682,3 +682,25 @@ impl FetchHost for RuntimeBindingHost<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use amazing_js::value::JsValue;
+
+    use crate::{dom_host::BrowserDomHost, js_scheduler::DriverScheduler};
+
+    #[test]
+    fn fetch_wrappers_do_not_alias_storage_wrappers() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        let result = scheduler.run_script("var r = new Request('/'); var h = new Headers(); h.append('X-Probe', 'yes'); r.method === 'GET' && !!r.signal && h.has('x-probe') && h.get('x-probe') === 'yes'")
+            .unwrap_or_else(|error| panic!("Fetch wrapper probe: {}", error.describe()));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+}
