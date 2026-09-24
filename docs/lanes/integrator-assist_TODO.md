@@ -766,6 +766,12 @@ On fixed local `dev` base `93bb98b`, the invalidation coordinator now passes CSS
 
 The Win-001 release mutation trace passed its direct-render byte comparisons, with full-painter fallback for 21 known one-channel effects differences. Article and effects p95 were **266.614 ms** and **248.500 ms**, missing ADR 0010's 20/31 ms targets. Opacity p95 was **110.244 ms**, with 20/20/20 style/layout/paint-view calls over 20 mutations and zero tile uploads; property-only zero work is not met. The driver trace includes a full oracle and resource work, unlike the ADR's compositor-only baseline. Exact counts and command are in `crates/amazing/tests/invalidation_oracle/evidence/layout_paint_win001_2026-09-24.md`. Layout still rebuilds width changes and paint still compares complete views; follow-up owner requests are in `.agents/integrator-assist/questions.md`.
 
+## IA-COMP-ADOPT — rendering-update property scene (2026-09-24)
+
+The rendering-update coordinator creates a generation-aware retained property scene from `PaintViewSource::property_bindings()`. CSS attribute classification runs before style, layout, and paint; a validated compositor-only class or inline-style delta updates the scene and cached CSS values with zero stage rebuilds. COMP-12's `scene.on_vsync` is called at the WPT frame checkpoint for active CSS handoffs. RC-20's retained paint view is seeded with DOM generations and accepts LAYOUT-17 keyed damage when its mapping is unambiguous; `AmbiguousGeneration` requests full paint. Unsupported RC-20 seeds keep the RC-19 paint-delta path. Any validation or parity loss uses the full painter.
+
+The Win-001 release trace on `58df3b15` passed. The document `<style>` opacity class fixture took **0/0/0** style/layout/paint-view calls and zero uploads over 20 frames. Effects had **40 layer-rounding pixels** (two per frame), zero parity losses, and zero fallbacks. Article/effects p95 were **149.999/120.875 ms**, still above ADR 0010's **20/31 ms** targets. Evidence and direct-full baselines are in `crates/amazing/tests/invalidation_oracle/evidence/comp_adopt_win001_2026-09-24.md`.
+
 ## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
 
 On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
