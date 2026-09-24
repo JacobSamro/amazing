@@ -325,7 +325,7 @@ fn run() -> io::Result<()> {
 }
 fn main() -> std::process::ExitCode {
     if std::env::args().any(|arg| arg == "--capabilities-v2") {
-        println!("{{\"protocol\":2,\"module\":true,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}");
+        println!("{{\"protocol\":2,\"module\":true,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}");
         return std::process::ExitCode::SUCCESS;
     }
     if std::env::args().any(|arg| arg == "--module-request") {
