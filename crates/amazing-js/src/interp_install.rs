@@ -325,12 +325,13 @@ impl Interpreter {
         self.object_proto.borrow_mut().define("toString", symbol_data(object_to_string, true, true)).unwrap();
         let object_value_of = symbol_method(self, "valueOf", native_object_value_of);
         self.object_proto.borrow_mut().define("valueOf", symbol_data(object_value_of, true, true)).unwrap();
-        for (name, function) in [
-            ("call", native_function_call as crate::value::NativeFn),
-            ("apply", native_function_apply as crate::value::NativeFn),
-            ("bind", native_function_bind as crate::value::NativeFn),
+        for (name, function, length) in [
+            ("call", native_function_call as crate::value::NativeFn, 1),
+            ("apply", native_function_apply as crate::value::NativeFn, 2),
+            ("bind", native_function_bind as crate::value::NativeFn, 1),
         ] {
             let method = symbol_method(self, name, function);
+            symbol_method_length(&method, length);
             self.function_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
         for (n, f) in [

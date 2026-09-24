@@ -36,6 +36,7 @@ fn native_object_from_entries(
     let input = object_argument(&args);
     let entries = i.iterate(&input)?;
     let object = i.object_value();
+    let JsValue::Object(result) = &object else { unreachable!() };
     for entry in entries {
         if !entry.is_object() {
             return Err(Throw::type_error("entry is not an object"));
@@ -43,7 +44,10 @@ fn native_object_from_entries(
         let key_value = i.get_prop(&entry, "0")?;
         let value = i.get_prop(&entry, "1")?;
         let key = i.to_property_key(&key_value)?;
-        i.set_prop(&object, key, value)?;
+        result.borrow_mut().define(key, Property {
+            value, writable: true, enumerable: true, configurable: true,
+            getter: None, setter: None,
+        }).unwrap();
     }
     Ok(object)
 }
@@ -266,6 +270,14 @@ fn native_object_to_locale_string(
         return Err(Throw::type_error("toString is not callable"));
     }
     i.call_value(&method, this, Vec::new())
+}
+
+fn native_function_prototype(
+    _: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::Undefined)
 }
 
 fn native_function_to_string(

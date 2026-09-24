@@ -119,6 +119,7 @@ struct CompiledFunction {
     is_arrow: bool,
     is_generator: bool,
     is_async: bool,
+    strict: bool,
 }
 
 #[derive(Debug)]
@@ -687,6 +688,7 @@ impl FunctionCode {
             proto_for_new: None,
         });
         object.proto = Some(i.function_proto.clone());
+        object.strict_function = self.0.strict;
         let handle = Obj(Rc::new(RefCell::new(object)));
         if self.0.is_generator || self.0.is_async {
             handle.borrow_mut().constructible = false;

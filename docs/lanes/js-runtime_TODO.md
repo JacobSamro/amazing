@@ -496,3 +496,7 @@ asserts TypeError even for zero-length resizable-backed TypedArrays despite
 comments saying they should freeze successfully. The runtime currently follows
 those assertions; revisit this when the corpus is updated or the integer-indexed
 integrity model is made complete.
+
+## Queued JSRT-8 internal-slot cleanup
+
+Move `[[...]]` pseudo-properties such as `[[NumberData]]`, `[[StringData]]`, and `[[DateValue]]` out of ordinary property storage into a real `JsObject` internal-slot field. Reflection through `getOwnPropertyNames`, `for...in`, JSON, and `Object.create` must never reveal them. Coordinate the call-site migration with js-stdlib and js-binary. The current Number constructor has a narrow non-enumerable descriptor fix to preserve Object.create conformance until this migration.

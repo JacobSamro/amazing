@@ -803,6 +803,8 @@ pub struct JsObject {
     pub(crate) host_identity: Option<HostIdentity>,
     /// Annex B [[IsHTMLDDA]] internal slot, used by IsLooselyEqual.
     pub(crate) is_html_dda: bool,
+    /// Strictness captured when an ECMAScript function is created.
+    pub(crate) strict_function: bool,
 }
 
 impl Default for JsObject {
@@ -826,6 +828,7 @@ impl JsObject {
             lexical_new_target: None,
             host_identity: None,
             is_html_dda: false,
+            strict_function: false,
         }
     }
 

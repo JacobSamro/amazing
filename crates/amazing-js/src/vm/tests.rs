@@ -17,6 +17,10 @@ fn differential(source: &str, names: &[&str]) {
     let expected = tree.run_script(source);
     let actual = vm.run_script_with_backend(source, ExecutionBackend::Bytecode);
     match (expected, actual) {
+        (Ok(a), Ok(b)) if source == "this" => {
+            assert_eq!(a, JsValue::Object(tree.global_obj.clone()));
+            assert_eq!(b, JsValue::Object(vm.global_obj.clone()));
+        }
         (Ok(a), Ok(b)) => assert!(same_value(&a, &b), "{source}: {a:?} != {b:?}"),
         (Err(a), Err(b)) => assert_eq!(a.describe(), b.describe(), "{source}"),
         (a, b) => panic!("{source}: {a:?} != {b:?}"),
@@ -60,6 +64,9 @@ fn primitive_and_operator_differential_corpus() {
         "typeof null",
         "typeof 3",
         "typeof this",
+        "(function(){ return this===globalThis })()",
+        "(function(){ 'use strict'; return this===undefined })()",
+        "(function(){ return Object.getPrototypeOf(this)===Number.prototype }).call(5)",
         "'10' < '2'",
         "'10' > 2",
         "2 <= 2",

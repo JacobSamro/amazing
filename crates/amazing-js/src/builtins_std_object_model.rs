@@ -76,6 +76,9 @@ impl Interpreter {
                 if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
                     return Err(Throw::range_error("invalid array length"));
                 }
+                if target.borrow().own_prop("length").is_some_and(|old| !old.writable && old.value != JsValue::num(number)) {
+                    return Ok(false);
+                }
                 if !array_prepare_length_change(target, number as u32) { return Ok(false); }
                 fields.value = Some(JsValue::num(number));
             }

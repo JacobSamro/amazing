@@ -774,6 +774,19 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_calls_bind_sloppy_and_strict_this() {
+        let mut i = Interpreter::new();
+        for source in [
+            "this===globalThis",
+            "(function(){return this===globalThis})()",
+            "(function(){'use strict';return this===undefined})()",
+            "(function(){return Object.getPrototypeOf(this)===Number.prototype}).call(5)",
+        ] {
+            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
     fn native_error_constructors_inherit_error_constructor() {
         let mut i = Interpreter::new();
         let source = "['EvalError','RangeError','ReferenceError','SyntaxError','TypeError','URIError'].every(name => Object.getPrototypeOf(globalThis[name])===Error && Object.getPrototypeOf(globalThis[name].prototype)===Error.prototype)";
@@ -786,14 +799,20 @@ mod tests {
         for source in [
             "Object.is(NaN,NaN) && !Object.is(0,-0) && Object.entries({a:1})[0].join(',')==='a,1'",
             "var x=Object.fromEntries([['a',1],['b',2]]); x.a===1 && x.b===2",
+            "var p={}; Object.prototype.entrySetter=0; Object.defineProperty(Object.prototype,'entrySetter',{set:function(v){p.called=v},configurable:true}); var x=Object.fromEntries([['entrySetter',7]]); x.entrySetter===7 && p.called===undefined && Object.keys(x).join(',')==='entrySetter'",
             "var x={a:1}; Object.freeze(x); Object.isFrozen(x) && Object.isSealed(x) && Object.getOwnPropertyDescriptor(x,'a').writable===false",
             "var x=Object.defineProperties({}, {a:{value:1,enumerable:true},b:{value:2}}); Object.keys(x).join(',')==='a' && Object.getOwnPropertyDescriptors(x).b.value===2",
             "var p={}, x=Object.create(p); p.isPrototypeOf(x) && x.toLocaleString()==='[object Object]'",
             "Boolean.prototype.valueOf()===false && Boolean.prototype.toString()==='false' && new Boolean(true).valueOf()===true && true.toString()==='true'",
             "Object.keys(new Boolean(true)).length===0",
             "typeof Function.prototype.toString.call(Array.prototype.sort)==='string'",
+            "Function.prototype.call.toString()==='function call() { [native code] }' && Function.prototype.apply.toString()==='function apply() { [native code] }' && Function.prototype.bind.toString()==='function bind() { [native code] }'",
+            "Function.prototype.hasOwnProperty('call') && Function.prototype.hasOwnProperty('apply') && Function.prototype.hasOwnProperty('bind') && Function.prototype.call.length===1 && Function.prototype.apply.length===2 && Function.prototype.bind.length===1",
+            "typeof Function.prototype==='function' && Function.prototype()===undefined && Function.prototype.length===0 && !('prototype' in Function.prototype)",
+            "function testCase(){}; testCase.call.toString()==='function call() { [native code] }' && testCase.bind(null).toString()==='function bound() { [native code] }'",
             "function F(a,b){this.sum=a+b}; var B=F.bind(null,2); var x=new B(3); x.sum===5 && B.name==='bound F' && B.length===1 && !('prototype' in B)",
             "function f(a,b){return a+b}; f.apply(null,{0:2,1:3,length:2})===5",
+            "function f(){}; var p={}; Object.setPrototypeOf(f,p); Object.getPrototypeOf(Function.prototype.bind.call(f,null))===p",
             "var x=Array(3); x.length===3 && !(0 in x) && Array.of(3).length===1 && Array[Symbol.species]===Array",
             "typeof Array.fromAsync==='function'",
             "Array.fromAsync.length===1",
@@ -801,7 +820,8 @@ mod tests {
             "Array.fromAsync([1,2]) instanceof Promise",
             "var x=Object.groupBy([1,2,3], n=>n%2); x[0].join(',')==='2' && x[1].join(',')==='1,3'",
         ] {
-            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+            let actual = i.run_script(source).unwrap_or_else(|error| panic!("{source}: {}", error.describe()));
+            assert_eq!(actual, JsValue::Bool(true), "{source}");
         }
     }
 

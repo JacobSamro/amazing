@@ -1096,7 +1096,7 @@ fn native_function_bind(
     let target_name = match target_name { JsValue::Str(name) => name.to_utf8_lossy(), _ => String::new() };
     let target_constructible = matches!(&this, JsValue::Object(object) if object.borrow().constructible);
     let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
-    data.borrow_mut().set_own("target", this);
+    data.borrow_mut().set_own("target", this.clone());
     data.borrow_mut()
         .set_own("this", args.first().cloned().unwrap_or(JsValue::Undefined));
     data.borrow_mut()
@@ -1104,6 +1104,9 @@ fn native_function_bind(
     let bound = Interpreter::native("bound", native_bound, &i.function_proto);
     if let JsValue::Object(function) = &bound {
         let mut function = function.borrow_mut();
+        if let JsValue::Object(target) = &this {
+            function.proto = target.borrow().proto.clone();
+        }
         function.func.as_mut().unwrap().home = Some(data);
         function.constructible = target_constructible;
         function.delete_own("prototype");

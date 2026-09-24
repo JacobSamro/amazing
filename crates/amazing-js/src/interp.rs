@@ -262,8 +262,15 @@ impl Interpreter {
     pub fn new() -> Self {
         let object_proto = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         let function_proto = Obj(Rc::new(RefCell::new({
-            let mut o = JsObject::ordinary();
+            let mut o = JsObject::function(JsFunction {
+                name: String::new(), params: Vec::new(),
+                body: FunctionBody::Native(native_function_prototype),
+                is_arrow: false, is_async: false, is_generator: false,
+                env: EnvHandle::new(EnvKind::Global, None),
+                home: None, proto_for_new: None,
+            });
             o.proto = Some(object_proto.clone());
+            o.constructible = false;
             o
         })));
         let array_proto = Obj(Rc::new(RefCell::new({
@@ -1058,8 +1065,7 @@ impl Interpreter {
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let previous_strict = self.strict_eval_context;
-        if p.body.iter().take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(_), .. })))
-            .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(value), .. }) if value == "use strict")) {
+        if has_use_strict_directive(&p.body) {
             self.strict_eval_context = true;
         }
         let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
@@ -2534,6 +2540,15 @@ impl Interpreter {
             .func
             .clone()
             .ok_or_else(|| Throw::type_error("value is not callable"))?;
+        let strict_function = o.borrow().strict_function;
+        let interpreted = matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_));
+        let this = if interpreted && !fun.is_arrow && !strict_function {
+            match this {
+                JsValue::Null | JsValue::Undefined => JsValue::Object(self.global_obj.clone()),
+                JsValue::Object(_) => this,
+                primitive => native_object(self, JsValue::Undefined, vec![primitive])?,
+            }
+        } else { this };
         let derived_constructor = o.borrow().derived_constructor.clone();
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
@@ -2549,6 +2564,8 @@ impl Interpreter {
             new_target: new_target.clone().or(lexical_new_target),
         });
         let previous_completion = self.completion.clone();
+        let previous_strict = self.strict_eval_context;
+        if interpreted { self.strict_eval_context = strict_function; }
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
@@ -2632,6 +2649,7 @@ impl Interpreter {
             }
         })();
         self.completion = previous_completion;
+        self.strict_eval_context = previous_strict;
         self.frames.pop();
         self.depth -= 1;
         if bytecode_async {
@@ -2772,6 +2790,7 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(self.function_proto.clone());
+        o.strict_function = self.strict_eval_context || has_use_strict_directive(&f.body.body);
         let h = Obj(Rc::new(RefCell::new(o)));
         let p = Obj(Rc::new(RefCell::new({
             let mut x = JsObject::ordinary();
@@ -2800,6 +2819,7 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(self.function_proto.clone());
+        o.strict_function = self.strict_eval_context || matches!(&a.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         let handle = Obj(Rc::new(RefCell::new(o)));
         if let Some(frame) = self.frames.last() {
             let mut arrow = handle.borrow_mut();
@@ -2821,6 +2841,7 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(self.function_proto.clone());
+        o.strict_function = true;
         let handle = Obj(Rc::new(RefCell::new(o)));
         JsValue::Object(handle)
     }
@@ -3971,46 +3992,7 @@ impl Interpreter {
 
 }
 
-fn reference_name(reference: &Reference) -> Option<String> {
-    match reference {
-        Reference::Binding(name) => Some(name.clone()),
-        Reference::Property(_, key) => key.as_string().map(|name| name.to_utf8_lossy()),
-    }
-}
-
-fn binding_names(binding: &Binding) -> Vec<String> {
-    match binding {
-        Binding::Ident(identifier) => vec![identifier.name.clone()],
-        Binding::Array(elements) => elements
-            .iter()
-            .flatten()
-            .flat_map(|element| binding_names(element))
-            .collect(),
-        Binding::Object(properties) => properties
-            .iter()
-            .flat_map(|(_, property)| binding_names(property))
-            .collect(),
-        Binding::Rest(inner) | Binding::Default(inner, _) => binding_names(inner),
-    }
-}
-
-fn is_destructuring_expr(expression: &ast::Expr) -> bool {
-    match &expression.kind {
-        ExprKind::Paren(inner) => is_destructuring_expr(inner),
-        ExprKind::Array(_) | ExprKind::Object(_) => true,
-        _ => false,
-    }
-}
-
-fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
-    match left {
-        ForLeft::Decl(declaration) if declaration.kind != ast::VarKind::Var => {
-            EnvHandle::new(EnvKind::Block, Some(env.clone()))
-        }
-        _ => env.clone(),
-    }
-}
-
+include!("interp_helpers.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
