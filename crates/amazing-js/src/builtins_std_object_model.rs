@@ -184,6 +184,14 @@ impl Interpreter {
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Ok(false);
         }
+        if let Some(name) = key.as_string() {
+            let name = name.to_utf8_lossy();
+            if let Some(forward_to) = self.binding_put_forwards_target(target, &name) {
+                let forwarded = self.get_prop(&receiver, &name)?;
+                self.set_prop(&forwarded, forward_to, value)?;
+                return Ok(true);
+            }
+        }
         if let JsValue::Object(object) = &receiver {
             if Rc::ptr_eq(&object.0, &target.0) {
                 if let Some(result) = binary_set_index(self, target, key, value.clone()) {

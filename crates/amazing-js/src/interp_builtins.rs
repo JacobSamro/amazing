@@ -1135,7 +1135,13 @@ fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<J
         let new_target = if bound.as_ref() == Some(&new_target) { target.clone() } else { new_target };
         i.construct_with_new_target(&target, arguments, new_target)
     } else {
-        i.call_value(&target, receiver, arguments)
+        let direct = i.direct_eval_call;
+        let eval_env = i.direct_eval_env.take();
+        i.direct_eval_call = false;
+        let result = i.call_value(&target, receiver, arguments);
+        i.direct_eval_call = direct;
+        i.direct_eval_env = eval_env;
+        result
     }
 }
 
@@ -1248,15 +1254,27 @@ fn native_date_to_string(
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let program = if i.strict_eval_context && i.direct_eval_call {
+    let direct = i.direct_eval_call;
+    let program = if i.strict_eval_context && direct {
         crate::parser::parse_script_strict(&source)
     } else {
         crate::parse_script(&source)
     }.map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let caller = i.direct_eval_env.take().unwrap_or_else(|| i.global_env.clone());
+    let strict = direct && (i.strict_eval_context || has_use_strict_directive(&program.body));
+    i.direct_eval_env = Some(if strict {
+        EnvHandle::new(EnvKind::Function, Some(caller))
+    } else if direct { caller } else { i.global_env.clone() });
     let previous = i.in_eval;
+    let previous_strict = i.strict_eval_context;
+    let previous_direct = i.direct_eval_call;
+    if !direct { i.strict_eval_context = false; }
+    i.direct_eval_call = false;
     i.in_eval = true;
     let result = i.run_program(&program);
     i.in_eval = previous;
+    i.strict_eval_context = previous_strict;
+    i.direct_eval_call = previous_direct;
     result
 }
 
@@ -2479,6 +2497,7 @@ fn native_array_push(
     this: JsValue,
     a: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let this = array_receiver(i, this)?;
     let mut n = i.array_length(&this);
     for v in a {
         i.set_prop(&this, &n.to_string(), v)?;
@@ -2718,6 +2737,9 @@ fn native_string_split(
 }
 
 fn string_this_units(i: &mut Interpreter, this: JsValue) -> Result<crate::value::JsString, Throw> {
+    if matches!(this, JsValue::Null | JsValue::Undefined) {
+        return Err(Throw::type_error("String method called on null or undefined"));
+    }
     if let JsValue::Object(object) = &this {
         if let Some(JsValue::Str(data)) = object.borrow().get_own("[[StringData]]") {
             return Ok(data);
@@ -3059,6 +3081,7 @@ fn native_array_slice(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let this = array_receiver(i, this)?;
     let length = i.array_length(&this) as i64;
     let start = i
         .to_number(args.first().unwrap_or(&JsValue::num(0.0)))?

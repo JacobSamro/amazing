@@ -865,11 +865,50 @@ mod tests {
         for source in [
             "function f(){'use strict'; return eval('this')}; f()===undefined",
             "var f=(p=eval('var arguments=1'),arguments)=>{}; try { f(); false } catch(e) { e instanceof SyntaxError }",
+            "function outer(){var x=0; function inner(){eval('var x=1')} inner(); return x===0} outer()",
+            "function optional(){var local=1; return eval?.('typeof local')} optional()==='undefined'",
+            "function boundEval(){var local=1; var eval=globalThis.eval.bind(null,'typeof local'); return eval()} boundEval()==='undefined'",
+            "try { throw null } catch(err) { eval('var err;') } true",
         ] {
             assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
         }
         let mut i = Interpreter::new();
         assert_eq!(i.run_script("Object.preventExtensions(globalThis); try { eval('var newGlobalName'); false } catch(e) { e instanceof TypeError }").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn array_push_rejects_null_receiver_even_without_arguments() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script("try { Array.prototype.push.call(null); false } catch(e) { e instanceof TypeError }").unwrap(), JsValue::Bool(true));
+        assert_eq!(i.run_script("try { Array.prototype.slice.call(null); false } catch(e) { e instanceof TypeError }").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn intl_options_reject_embedded_nul() {
+        let mut i = Interpreter::new();
+        for source in [
+            "Intl.Collator.supportedLocalesOf([], {localeMatcher: 'lookup\\0cookie'})",
+            "new Intl.Collator('en', {localeMatcher: 'lookup\\0cookie'})",
+            "new Intl.Collator('en', {usage: 'sort\\0cookie'})",
+            "new Intl.Collator('en', {caseFirst: 'upper\\0cookie'})",
+            "new Intl.Collator('en', {sensitivity: 'base\\0cookie'})",
+            "Intl.DateTimeFormat.supportedLocalesOf([], {localeMatcher: 'lookup\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {localeMatcher: 'lookup\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {hourCycle: 'h24\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {weekday: 'narrow\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {era: 'narrow\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {year: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {month: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {day: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {hour: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {minute: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {second: '2-digit\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {formatMatcher: 'basic\\0cookie'})",
+            "new Intl.DateTimeFormat('en', {timeZone: 'UTC\\0cookie'})",
+        ] {
+            let source = format!("try {{ {source}; false }} catch(e) {{ e instanceof RangeError }}");
+            assert_eq!(i.run_script(&source).unwrap(), JsValue::Bool(true), "{source}");
+        }
     }
 
     #[test]

@@ -568,22 +568,6 @@ impl Interpreter {
         self.global_obj
             .borrow_mut()
             .set_own("[[DomNode]]", JsValue::num(0.0));
-        self.global_obj.borrow_mut().set_own(
-            "addEventListener",
-            Self::native(
-                "addEventListener",
-                native_dom_add_event_listener,
-                &self.function_proto,
-            ),
-        );
-        self.global_obj.borrow_mut().set_own(
-            "removeEventListener",
-            Self::native(
-                "removeEventListener",
-                native_dom_remove_event_listener,
-                &self.function_proto,
-            ),
-        );
         let _ = self.global_env.declare_var("window", window);
         self.install_location();
         let document = self.make_dom_document();
@@ -1085,6 +1069,7 @@ impl Interpreter {
         self.completion = JsValue::Undefined;
         let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
         self.hoist(&p.body, &env)?;
+        self.in_eval = false;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
                 self.completion = self.eval_expr(e, &env)?;
@@ -1123,7 +1108,8 @@ impl Interpreter {
                 StmtKind::Function(f) => {
                     if let Some(n) = &f.name {
                         let v = self.make_function(f, env);
-                        env.declare_var(&n.name, v)?;
+                        if self.in_eval { env.var_scope().declare_var(&n.name, v)?; }
+                        else { env.declare_var(&n.name, v)?; }
                     }
                 }
                 StmtKind::Block(b) => self.hoist(&b.body, env)?,
@@ -1178,13 +1164,14 @@ impl Interpreter {
         match binding {
             Binding::Ident(identifier) => {
                 if self.in_eval {
-                    if env.kind() == EnvKind::Global {
+                    let var_env = env.var_scope();
+                    if var_env.kind() == EnvKind::Global {
                         let global = self.global_obj.borrow();
                         if !global.extensible && global.own_prop(identifier.name.as_str()).is_none() {
                             return Err(Throw::type_error("cannot declare global var on non-extensible object"));
                         }
                     }
-                    env.declare_var(&identifier.name, JsValue::Undefined)?;
+                    var_env.declare_var(&identifier.name, JsValue::Undefined)?;
                 } else {
                     env.hoist_var(&identifier.name)?;
                 }
@@ -2472,7 +2459,7 @@ impl Interpreter {
         let argv = self.eval_args(args, e)?;
         let previous_direct_eval = self.direct_eval_call;
         let previous_direct_eval_env = self.direct_eval_env.take();
-        self.direct_eval_call = matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval");
+        self.direct_eval_call = !optional && matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval");
         self.direct_eval_env = self.direct_eval_call.then(|| e.clone());
         let result = self.call_value(&f, this, argv);
         self.direct_eval_call = previous_direct_eval;
@@ -2769,10 +2756,10 @@ impl Interpreter {
             Some(new_target.clone()),
         )?;
         if v.is_object() {
-            // Legacy native constructors create their own result object. When
-            // reached through a subclass, its prototype comes from newTarget.
-            // Host constructors return canonical wrappers and are left alone.
-            if matches!(fun.body, FunctionBody::Native(_)) && new_target != *f {
+            // Native and host constructors may return an existing object. A
+            // subclass still supplies its prototype through newTarget; in
+            // particular, a canonical DOM wrapper must retain its identity.
+            if matches!(fun.body, FunctionBody::Native(_) | FunctionBody::HostNative(..)) && new_target != *f {
                 if let JsValue::Object(prototype) = self.get_prop(&new_target, "prototype")? {
                     if let JsValue::Object(result) = &v {
                         result.borrow_mut().proto = Some(prototype);
