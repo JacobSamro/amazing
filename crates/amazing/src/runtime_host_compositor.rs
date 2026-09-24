@@ -107,6 +107,7 @@ impl RetainedPropertyScene {
     }
 
     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    pub(crate) fn compositor_mut(&mut self) -> &mut Compositor { &mut self.compositor }
 }
 
 #[cfg(test)]

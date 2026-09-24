@@ -255,7 +255,7 @@ fn render_wpt_surface_after_first_paint(
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
     let first_updates = sample_animation_frame(&host, html_path, &mut animations, 0.)?;
     let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "",
-        animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))?;
+        animations.animated(), false, crate::render_oracle::enabled().then_some(&mut oracle))?;
     after_first_paint(&first);
     let Some(scheduler) = scheduler.as_mut() else {
         return Ok(first);
@@ -292,7 +292,7 @@ fn render_wpt_surface_after_first_paint(
             .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
     }
     paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "",
-        animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))
+        animations.animated(), false, crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
 fn sample_animation_frame(
@@ -326,7 +326,7 @@ fn paint_host_surface(
 ) -> Result<amazing_paint::Surface, PageError> {
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
     paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css,
-        &amazing_css::AnimatedValues::default(), crate::render_oracle::enabled().then_some(&mut oracle))
+        &amazing_css::AnimatedValues::default(), true, crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
 fn paint_host_surface_with_updates(
@@ -336,6 +336,9 @@ fn paint_host_surface_with_updates(
     fixed_height: Option<u32>,
     extra_css: &str,
     animated: &amazing_css::AnimatedValues,
+    // The WPT animation loop may have samples elsewhere in the document;
+    // CSS-13's inline classifier does not account for those samples yet.
+    property_only_allowed: bool,
     mut coordinator: Option<&mut crate::render_oracle::RenderCoordinator>,
 ) -> Result<amazing_paint::Surface, PageError> {
 
@@ -356,8 +359,10 @@ fn paint_host_surface_with_updates(
         let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
         let epoch = dom.dom.render_mutation_epoch();
         let journal = dom.dom.take_render_mutations(epoch);
-        if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
-            return Ok(surface);
+        if property_only_allowed {
+            if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
+                return Ok(surface);
+            }
         }
         let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
         let full = amazing_css::compute(&dom.dom, &sheets);
@@ -674,8 +679,8 @@ mod oracle_trace_tests {
         let direct_node = find_node(&direct_host);
         let mut coordinator = crate::render_oracle::RenderCoordinator::default();
         let animated = amazing_css::AnimatedValues::default();
-        let _ = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), "", &animated, Some(&mut coordinator)).unwrap();
-        let _ = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), "", &animated, None).unwrap();
+        let _ = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), "", &animated, true, Some(&mut coordinator)).unwrap();
+        let _ = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), "", &animated, true, None).unwrap();
         let mut candidate_us = Vec::new();
         let mut direct_us = Vec::new();
         let mut style_calls = 0;
@@ -689,7 +694,7 @@ mod oracle_trace_tests {
             let class = if index % 2 == 0 { format!("{base_class} changed").trim().to_owned() } else { base_class.to_owned() };
             let start = Instant::now();
             host.borrow_mut().dom.set_attribute(node, "class", &class).unwrap();
-            let candidate = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), "", &animated, Some(&mut coordinator)).unwrap();
+            let candidate = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), "", &animated, true, Some(&mut coordinator)).unwrap();
             candidate_us.push(start.elapsed().as_micros());
             let work = coordinator.last_work();
             style_calls += work.style_rebuild_calls;
@@ -701,7 +706,7 @@ mod oracle_trace_tests {
             dirtied += work.tiles_dirtied;
             let start = Instant::now();
             direct_host.borrow_mut().dom.set_attribute(direct_node, "class", &class).unwrap();
-            let direct = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), "", &animated, None).unwrap();
+            let direct = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), "", &animated, true, None).unwrap();
             direct_us.push(start.elapsed().as_micros());
             assert_eq!(candidate.pixels, direct.pixels, "{name} frame {index}");
         }
@@ -716,5 +721,33 @@ mod oracle_trace_tests {
         trace("article-class", ARTICLE, "main", "");
         trace("effects-class", EFFECTS, "section", "scroller");
         trace("opacity-class", OPACITY, "div", "");
+    }
+
+    #[test]
+    fn inline_opacity_uses_validated_property_scene() {
+        const HTML: &str = "<body style='margin:0'><div id='box' style='width:64px;height:64px;background:green;opacity:.5'></div></body>";
+        let make_host = || Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(HTML), native_forwarded: false,
+        }));
+        let host = make_host();
+        let full_host = make_host();
+        let node = (0..host.borrow().dom.node_count()).map(|index| NodeIdx(index as u32))
+            .find(|node| host.borrow().dom.get_attribute_ns(*node, None, "id") == Some("box"))
+            .unwrap();
+        let mut coordinator = crate::render_oracle::RenderCoordinator::default();
+        let animated = amazing_css::AnimatedValues::default();
+        paint_host_surface_with_updates(&host, "opacity.html", 128., Some(128), "", &animated, true,
+            Some(&mut coordinator)).unwrap();
+        let next = "width:64px;height:64px;background:green;opacity:.25";
+        host.borrow_mut().dom.set_attribute(node, "style", next).unwrap();
+        full_host.borrow_mut().dom.set_attribute(node, "style", next).unwrap();
+        let candidate = paint_host_surface_with_updates(&host, "opacity.html", 128., Some(128), "",
+            &animated, true, Some(&mut coordinator)).unwrap();
+        let full = paint_host_surface_with_updates(&full_host, "opacity.html", 128., Some(128), "",
+            &animated, true, None).unwrap();
+        assert_eq!(candidate.pixels, full.pixels);
+        let work = coordinator.last_work();
+        assert_eq!((work.style_rebuild_calls, work.layout_update_calls,
+            work.paint_view_rebuild_calls, work.tile_uploads), (0, 0, 0, 0));
     }
 }

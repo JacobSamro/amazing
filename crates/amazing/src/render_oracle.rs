@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::page::PagePaint;
+use crate::runtime_binding_host::compositor::RetainedPropertyScene;
 
 static PARITY_LOSSES: AtomicU64 = AtomicU64::new(0);
 static FULL_FALLBACKS: AtomicU64 = AtomicU64::new(0);
@@ -99,8 +100,22 @@ pub(crate) struct RenderCoordinator {
 /// The compositor and its presenter have one scene lifetime. A full-painter
 /// fallback discards both so a later property update cannot target stale IDs.
 struct RetainedCompositorSession {
-    compositor: Compositor,
+    scene: RetainedScene,
     presenter: ReferenceCpuPresenter,
+}
+
+enum RetainedScene {
+    Plain(Compositor),
+    Property(RetainedPropertyScene),
+}
+
+impl RetainedScene {
+    fn compositor_mut(&mut self) -> &mut Compositor {
+        match self {
+            Self::Plain(compositor) => compositor,
+            Self::Property(scene) => scene.compositor_mut(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -143,10 +158,25 @@ impl RenderCoordinator {
         viewport: (u32, u32),
         journal: &[RenderMutation],
     ) -> Option<Surface> {
-        let _delta = self.classify_css_value_deltas(dom, sheets, viewport, journal)?;
-        // A classified value still needs COMP-11's validated cached-frame
-        // adapter before the full pipeline can be skipped.
-        None
+        let delta = self.classify_css_value_deltas(dom, sheets, viewport, journal)?;
+        let mut next_styles = self.previous.as_ref()?.clone();
+        let session = self.session.as_mut()?;
+        let RetainedScene::Property(scene) = &mut session.scene else { return None; };
+        let update = AttributeStyleUpdate::CompositorOnly(delta);
+        let frame = match scene.apply_attribute_style_update(dom, &mut next_styles, &update) {
+            Ok(frame) => frame,
+            Err(_) => { self.reset_scene(); return None; }
+        };
+        let pixels = match session.presenter.present(&frame) {
+            Ok(pixels) => pixels,
+            Err(_) => { self.reset_scene(); return None; }
+        };
+        self.previous = Some(next_styles);
+        // The next normal update builds a fresh layout with the patched style
+        // cache; geometry never silently reuses an older box style.
+        self.layout = None;
+        self.last_work = FrameWork::default();
+        Some(pixels)
     }
 
     fn classify_css_value_deltas(&self, dom: &Dom, sheets: &[Stylesheet],
@@ -482,9 +512,16 @@ pub(crate) fn compositor_candidate(
                     new_bounds: amazing_compositor::Rect::new(change.new_bounds.x, change.new_bounds.y,
                         change.new_bounds.width, change.new_bounds.height),
                 }).collect() };
-            match session.compositor.apply_paint_delta(&delta) {
-                Ok(count) => { dirtied_tiles = count; true }
-                Err(error) => { eprintln!("amazing oracle: paint delta fallback: {error:?}"); false }
+            let bindings_valid = match &mut session.scene {
+                RetainedScene::Plain(_) => true,
+                RetainedScene::Property(scene) => source.property_bindings()
+                    .is_some_and(|bindings| scene.compositor_mut().bind_property_nodes(&bindings).is_ok()),
+            };
+            if !bindings_valid { false } else {
+                match session.scene.compositor_mut().apply_paint_delta(&delta) {
+                    Ok(count) => { dirtied_tiles = count; true }
+                    Err(error) => { eprintln!("amazing oracle: paint delta fallback: {error:?}"); false }
+                }
             }
         }
         _ => false,
@@ -496,12 +533,24 @@ pub(crate) fn compositor_candidate(
             .collect::<Option<Vec<_>>>() {
             let _ = fresh.bind_paint_item_keys(&keys);
         }
-        self.session = Some(RetainedCompositorSession {
-            compositor: fresh, presenter: ReferenceCpuPresenter::default(),
-        });
+        let scene = if let Some(bindings) = source.property_bindings() {
+            match RetainedPropertyScene::new(dom, fresh, &bindings, source.mode(), width, height) {
+                Ok(scene) => RetainedScene::Property(scene),
+                Err(_) => {
+                    let mut plain = source.compositor(width, height).map_err(|error| error.to_string())?;
+                    if let Some(keys) = view.items().iter().map(|item| item.key.map(|key| PaintItemKey(key.compositor_id())))
+                        .collect::<Option<Vec<_>>>() { let _ = plain.bind_paint_item_keys(&keys); }
+                    RetainedScene::Plain(plain)
+                }
+            }
+        } else {
+            RetainedScene::Plain(fresh)
+        };
+        self.session = Some(RetainedCompositorSession { scene,
+            presenter: ReferenceCpuPresenter::default() });
     }
     let session = self.session.as_mut().expect("oracle compositor initialized");
-    let frame = source.build_frame(&mut session.compositor, width, height)
+    let frame = source.build_frame(session.scene.compositor_mut(), width, height)
         .map_err(|error| error.to_string())?;
     let uploads = frame.resources.uploads.len();
     self.last_work.tile_uploads = uploads;
