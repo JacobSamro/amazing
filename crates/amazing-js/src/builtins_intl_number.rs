@@ -138,8 +138,24 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         .find(|entry| entry.code == code)).map_or(2, |entry| entry.digits);
     let default_fraction = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else { 0 };
     let default_max = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else if style == "percent" { 0 } else { 3 };
-    let min_fraction = intl_integer_option(i, &options, "minimumFractionDigits", 0, 100, default_fraction)?;
-    let max_fraction = intl_integer_option(i, &options, "maximumFractionDigits", 0, 100, default_max.max(min_fraction))?;
+    let minimum_option = i.get_prop(&options, "minimumFractionDigits")?;
+    let minimum_option = if minimum_option.is_undefined() { None } else {
+        let value = i.to_number(&minimum_option)?;
+        if !value.is_finite() || !(0.0..=100.0).contains(&value) {
+            return Err(Throw::range_error("invalid minimumFractionDigits option"));
+        }
+        Some(value.trunc() as usize)
+    };
+    let maximum_option = i.get_prop(&options, "maximumFractionDigits")?;
+    let maximum_option = if maximum_option.is_undefined() { None } else {
+        let value = i.to_number(&maximum_option)?;
+        if !value.is_finite() || !(0.0..=100.0).contains(&value) {
+            return Err(Throw::range_error("invalid maximumFractionDigits option"));
+        }
+        Some(value.trunc() as usize)
+    };
+    let min_fraction = minimum_option.unwrap_or_else(|| default_fraction.min(maximum_option.unwrap_or(100)));
+    let max_fraction = maximum_option.unwrap_or_else(|| default_max.max(min_fraction));
     if min_fraction > max_fraction { return Err(Throw::range_error("minimumFractionDigits exceeds maximumFractionDigits")); }
     let min_sig_value = i.get_prop(&options, "minimumSignificantDigits")?;
     let max_sig_value = i.get_prop(&options, "maximumSignificantDigits")?;
@@ -200,14 +216,16 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     Ok(JsValue::Object(object))
 }
 
-fn intl_valid_unit(unit: &str) -> bool {
-    const UNITS: &[&str] = &["acre", "bit", "byte", "celsius", "centimeter", "day", "degree",
+const INTL_SIMPLE_UNITS: &[&str] = &["acre", "bit", "byte", "celsius", "centimeter", "day", "degree",
         "fahrenheit", "fluid-ounce", "foot", "gallon", "gigabit", "gigabyte", "gram", "hectare",
         "hour", "inch", "kilobit", "kilobyte", "kilogram", "kilometer", "liter", "megabit",
         "megabyte", "meter", "microsecond", "mile", "mile-scandinavian", "milliliter",
         "millimeter", "millisecond", "minute", "month", "nanosecond", "ounce", "percent",
         "petabyte", "pound", "second", "stone", "terabit", "terabyte", "week", "yard", "year"];
-    UNITS.contains(&unit) || unit.split_once("-per-").is_some_and(|(a, b)| UNITS.contains(&a) && UNITS.contains(&b))
+
+fn intl_valid_unit(unit: &str) -> bool {
+    INTL_SIMPLE_UNITS.contains(&unit) || unit.split_once("-per-").is_some_and(|(a, b)|
+        INTL_SIMPLE_UNITS.contains(&a) && INTL_SIMPLE_UNITS.contains(&b))
 }
 
 fn intl_number_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -282,23 +300,68 @@ fn intl_parts_array(i: &mut Interpreter, parts: Vec<(&'static str, String)>) -> 
     intl_array(i, values)
 }
 
+fn intl_number_range_endpoint(i: &mut Interpreter, state: &IntlNumberState, value: &JsValue) -> Result<(String, bool), Throw> {
+    if let JsValue::BigInt(bigint) = value {
+        return Ok((intl_format_bigint(state, &bigint.to_radix_string(10)), true));
+    }
+    if let JsValue::Str(_) = value {
+        let text = i.to_string(value)?;
+        let digits = text.strip_prefix('-').unwrap_or(&text);
+        if digits.len() > 15 && digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Ok((intl_format_bigint(state, &text), true));
+        }
+    }
+    let number = i.to_number(value)?;
+    if number.is_nan() { return Err(Throw::range_error("NaN range endpoint")); }
+    Ok((intl_format_number(state, number).0, false))
+}
+
 fn intl_number_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_number_state(&this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRange requires two numbers"));
     }
-    let start = i.to_number(&args[0])?;
-    let end = i.to_number(&args[1])?;
-    if start.is_nan() || end.is_nan() { return Err(Throw::range_error("NaN range endpoint")); }
-    let left = intl_format_number(&state, start).0;
-    let right = intl_format_number(&state, end).0;
-    Ok(JsValue::str(if left == right { format!("~{left}") } else { format!("{left}–{right}") }))
+    let (left, left_exact) = intl_number_range_endpoint(i, &state, &args[0])?;
+    let (right, right_exact) = intl_number_range_endpoint(i, &state, &args[1])?;
+    if left == right { return Ok(JsValue::str(format!("~{left}"))); }
+    if state.style == "currency" && state.sign_display == "always" {
+        let shared = left.chars().zip(right.chars())
+            .take_while(|(a, b)| a == b && !a.is_ascii_digit())
+            .map(|(ch, _)| ch.len_utf8()).sum::<usize>();
+        if shared > 0 { return Ok(JsValue::str(format!("{left}–{}", &right[shared..]))); }
+    }
+    Ok(JsValue::str(if left_exact && right_exact { format!("{left}–{right}") }
+        else { format!("{left} – {right}") }))
 }
 
 fn intl_number_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let text = intl_number_format_range(i, this, args)?;
-    let text = i.to_string(&text)?;
-    intl_parts_array(i, vec![("literal", text)])
+    let state = intl_number_state(&this)?;
+    if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
+        return Err(Throw::type_error("formatRangeToParts requires two numbers"));
+    }
+    let start = i.to_number(&args[0])?;
+    let end = i.to_number(&args[1])?;
+    if start.is_nan() || end.is_nan() { return Err(Throw::range_error("NaN range endpoint")); }
+    let (left, left_parts) = intl_format_number(&state, start);
+    let (right, right_parts) = intl_format_number(&state, end);
+    let mut parts: Vec<(&'static str, String, &'static str)> = Vec::new();
+    if left == right {
+        parts.push(("approximatelySign", "~".into(), "shared"));
+        parts.extend(left_parts.into_iter().map(|(kind, value)| (kind, value, "shared")));
+    } else {
+        parts.extend(left_parts.into_iter().map(|(kind, value)| (kind, value, "startRange")));
+        parts.push(("literal", " – ".into(), "shared"));
+        parts.extend(right_parts.into_iter().map(|(kind, value)| (kind, value, "endRange")));
+    }
+    let mut values = Vec::new();
+    for (kind, value, source) in parts {
+        let part = i.object_value();
+        i.set_prop(&part, "type", JsValue::str(kind))?;
+        i.set_prop(&part, "value", JsValue::str(value))?;
+        i.set_prop(&part, "source", JsValue::str(source))?;
+        values.push(part);
+    }
+    intl_array(i, values)
 }
 
 fn intl_round_scaled(value: f64, mode: &str) -> f64 {
