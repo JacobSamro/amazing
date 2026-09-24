@@ -33,7 +33,7 @@ mod windows {
     use amazing_compositor::PropertyUpdate;
 
     use crate::{BrowserDomHost, PageMedia, load_page_media};
-    use crate::animation_scene::{AnimationScene, apply_to_layout};
+    use crate::animation_scene::AnimationScene;
     use crate::page::load_page_text_from_sheets;
     use crate::page::PagePaint;
 
@@ -531,7 +531,7 @@ mod windows {
                 sheet.base_url = Some(url.clone());
                 sheet
             }).collect::<Vec<_>>();
-            let styled = amazing_css::compute(&host_ref.dom, &sheets);
+            let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, runtime.animations.animated());
             let media = load_page_media(&host_ref.dom, &page, &styled);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
@@ -540,18 +540,14 @@ mod windows {
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let mut layout = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+            let layout = amazing_layout::layout_styled_document(
                 &host_ref.dom,
-                &sheets,
-                width.max(1) as f32,
-                Some(viewport_height),
+                &styled,
                 &page_text.provider,
                 &media,
+                width.max(1) as f32,
+                Some(viewport_height),
             );
-            if apply_to_layout(&mut layout, &runtime.animation_updates) {
-                amazing_layout::block::layout_root_in_viewport(&mut layout, width.max(1) as f32,
-                    Some(viewport_height), &amazing_layout::font::FontSource::fallback());
-            }
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
@@ -1041,7 +1037,7 @@ mod windows {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let styled = amazing_css::compute(&host_ref.dom, &sheets);
+        let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, animations.animated());
         let media = load_page_media(&host_ref.dom, input, &styled);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
@@ -1050,18 +1046,14 @@ mod windows {
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let mut root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+        let root = amazing_layout::layout_styled_document(
             &host_ref.dom,
-            &sheets,
-            width.max(1) as f32,
-            Some(700.0),
+            &styled,
             &page_text.provider,
             &media,
+            width.max(1) as f32,
+            Some(700.0),
         );
-        if apply_to_layout(&mut root, &initial_animation.main_thread_updates) {
-            amazing_layout::block::layout_root_in_viewport(&mut root, width.max(1) as f32,
-                Some(700.), &amazing_layout::font::FontSource::fallback());
-        }
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
