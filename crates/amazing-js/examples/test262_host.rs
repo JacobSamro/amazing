@@ -323,9 +323,64 @@ fn run() -> io::Result<()> {
     }
     Ok(())
 }
+// Keep every host feature flag in one place. Protocol 1 predates module
+// requests, so only that protocol's module field is masked below.
+struct Capabilities {
+    module: bool,
+    asynchronous: bool,
+    can_block: bool,
+    create_realm: bool,
+    detach_array_buffer: bool,
+    gc: bool,
+    agent: bool,
+    is_html_dda: bool,
+    abstract_module_source: bool,
+    eval_script: bool,
+    global: bool,
+    print: bool,
+    intl402: bool,
+}
+
+const CAPABILITIES: Capabilities = Capabilities {
+    module: true,
+    asynchronous: true,
+    can_block: false,
+    create_realm: false,
+    detach_array_buffer: true,
+    gc: false,
+    agent: false,
+    is_html_dda: false,
+    abstract_module_source: false,
+    eval_script: true,
+    global: true,
+    print: true,
+    intl402: true,
+};
+
+impl Capabilities {
+    fn emit(&self, protocol: u8) {
+        println!(
+            "{{\"protocol\":{protocol},\"module\":{},\"async\":{},\"can_block\":{},\"createRealm\":{},\"detachArrayBuffer\":{},\"gc\":{},\"agent\":{},\"IsHTMLDDA\":{},\"AbstractModuleSource\":{},\"evalScript\":{},\"global\":{},\"print\":{},\"intl402\":{}}}",
+            self.module && protocol >= 2,
+            self.asynchronous,
+            self.can_block,
+            self.create_realm,
+            self.detach_array_buffer,
+            self.gc,
+            self.agent,
+            self.is_html_dda,
+            self.abstract_module_source,
+            self.eval_script,
+            self.global,
+            self.print,
+            self.intl402,
+        );
+    }
+}
+
 fn main() -> std::process::ExitCode {
     if std::env::args().any(|arg| arg == "--capabilities-v2") {
-        println!("{{\"protocol\":2,\"module\":true,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}");
+        CAPABILITIES.emit(2);
         return std::process::ExitCode::SUCCESS;
     }
     if std::env::args().any(|arg| arg == "--module-request") {
@@ -335,9 +390,7 @@ fn main() -> std::process::ExitCode {
         };
     }
     if std::env::args().any(|a| a == "--capabilities") {
-        println!(
-            "{{\"protocol\":1,\"module\":false,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}"
-        );
+        CAPABILITIES.emit(1);
         return std::process::ExitCode::SUCCESS;
     }
     match run() {
