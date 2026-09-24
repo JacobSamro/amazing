@@ -340,7 +340,7 @@ use context::{CompiledRule, compile_sheets};
 
 #[path = "cascade_invalidation.rs"]
 mod invalidation;
-pub use invalidation::{recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
+pub use invalidation::{recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
 
 #[path = "presentational_hints.rs"]
 mod hints;

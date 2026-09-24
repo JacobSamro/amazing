@@ -46,6 +46,22 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn apply_compositor_values(
+        &mut self,
+        opacity: Option<f32>,
+        transform: Option<(&str, Vec<crate::values::Transform>)>,
+    ) {
+        if let Some(value) = opacity {
+            let css = value.to_string();
+            self.typed.insert("opacity".into(), ComputedValue::Number(css.parse().expect("finite opacity")));
+            self.props.insert("opacity".into(), css);
+        }
+        if let Some((css, value)) = transform {
+            self.props.insert("transform".into(), css.to_owned());
+            self.typed.insert("transform".into(), ComputedValue::Transform(value));
+        }
+    }
+
     /// Source stylesheet URL of a winning URL-bearing property.
     pub fn url_base(&self, property: &str) -> Option<&str> {
         self.url_bases.get(property).map(String::as_str)
