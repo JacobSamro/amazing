@@ -60,7 +60,16 @@ impl Compositor {
         let Some(hit) = self.hit_test(x, y) else {
             return Ok(WheelResult::NoScroller);
         };
-        let mut id = hit.scroll;
+        self.scroll_by_node(hit.scroll, dx, dy)
+    }
+    /// Scroll a known node, bubbling unused movement to scrollable ancestors.
+    pub fn scroll_by_node(
+        &mut self, start: ScrollId, dx: f32, dy: f32,
+    ) -> Result<WheelResult, TreeError> {
+        if !dx.is_finite() || !dy.is_finite() {
+            return Err(TreeError::NonFinite);
+        }
+        let mut id = start;
         while id.0 != 0 {
             let Some(node) = self.trees.scroll(id) else {
                 return Ok(WheelResult::NoScroller);
@@ -78,6 +87,28 @@ impl Compositor {
             id = node.parent;
         }
         Ok(WheelResult::NoScroller)
+    }
+    pub fn scroll_range(&self, id: ScrollId) -> Option<(f32, f32)> {
+        let node = self.trees.scroll(id)?;
+        (id.0 != 0).then_some((
+            (node.contents.w - node.container.w).max(0.),
+            (node.contents.h - node.container.h).max(0.),
+        ))
+    }
+    /// Clamp a direct programmatic, drag or animation target to the scrollport.
+    pub fn scroll_to_clamped(
+        &mut self, id: ScrollId, target: (f32, f32),
+    ) -> Result<Option<(f32, f32)>, TreeError> {
+        if !target.0.is_finite() || !target.1.is_finite() {
+            return Err(TreeError::NonFinite);
+        }
+        let (max_x, max_y) = self.scroll_range(id).ok_or(TreeError::InvalidNode)?;
+        let offset = (target.0.clamp(0., max_x), target.1.clamp(0., max_y));
+        if self.trees.scroll(id).ok_or(TreeError::InvalidNode)?.offset == offset {
+            return Ok(None);
+        }
+        self.trees.set_scroll(id, offset)?;
+        Ok(Some(offset))
     }
     /// Apply computed snap points after a scroll gesture settles.
     pub fn settle_scroll(&mut self, id: ScrollId) -> Result<(f32, f32), TreeError> {

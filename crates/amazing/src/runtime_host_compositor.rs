@@ -5,7 +5,7 @@ use amazing_canvas::{self as canvas, FillRule, ImageData as CanvasImageData, Pai
 use amazing_compositor::{BoundProperty, BoundPropertyChange, BoundPropertyNode, BoundPropertyValue,
     Compositor, CssCompositorTimeline, CompositorFrame, DrawQuad, HandoffError,
     HandoffCompletion, HandoffTickOutput, Matrix4, NodePropertyKey, PaintViewRasterMode,
-    PropertyBindingError, Rect, SceneError,
+    PropertyBindingError, Rect, SceneError, ScrollController, ScrollInput, ScrollInputResult,
     SolidColorQuad, BlendMode};
 use amazing_css::{AttributeStyleUpdate, AnimatedValues, StyledDom};
 use amazing_css::animation::AnimationMainThreadEvent;
@@ -26,6 +26,16 @@ pub(crate) enum PropertySceneError {
     Animation(HandoffError),
     Binding(PropertyBindingError),
     NeedsPaint(SceneError),
+}
+
+pub(crate) struct ScrollFrame {
+    pub(crate) result: ScrollInputResult,
+    pub(crate) frame: Option<CompositorFrame>,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DomScrollEvent {
+    pub(crate) owner: NodePropertyKey,
+    pub(crate) offset: (f32, f32),
 }
 
 impl RetainedPropertyScene {
@@ -71,6 +81,74 @@ impl RetainedPropertyScene {
             opacity: 1., blend: BlendMode::Normal,
         }));
         Ok(frame)
+    }
+
+    /// Wheel/trackpad/touch eligibility is resolved from DOM listener
+    /// `passive` flags before this call. Keyboard, drag and scrollTo do not
+    /// have a cancelable wheel/touch default action.
+    pub(crate) fn on_scroll_input(
+        &mut self, dom: &Dom, controller: &mut ScrollController,
+        input: ScrollInput, has_non_passive_listener: bool, now_ms: f64,
+    ) -> Result<ScrollFrame, PropertySceneError> {
+        let start = match input {
+            ScrollInput::Wheel { x, y, .. }
+            | ScrollInput::Trackpad { x, y, .. }
+            | ScrollInput::TouchPan { x, y, .. } =>
+                self.compositor.hit_test(x, y).map(|hit| hit.scroll),
+            ScrollInput::Keyboard { node, .. }
+            | ScrollInput::ScrollbarDrag { node, .. }
+            | ScrollInput::ScrollTo { node, .. }
+            | ScrollInput::Momentum { node, .. } => Some(node),
+        };
+        let mut node = start;
+        while let Some(id) = node.filter(|id| id.0 != 0) {
+            let Some(scroll) = self.compositor.trees().scroll(id) else {
+                return Err(PropertySceneError::NeedsFullRendering);
+            };
+            let Some(owner) = self.compositor.scroll_owner(id) else {
+                return Ok(ScrollFrame { result: ScrollInputResult::MainThread, frame: None });
+            };
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+            node = Some(scroll.parent);
+        }
+        let result = controller.handle_input(&mut self.compositor, input,
+            has_non_passive_listener, now_ms)
+            .map_err(|_| PropertySceneError::NeedsFullRendering)?;
+        let frame = match result {
+            ScrollInputResult::Scrolled { .. } =>
+                Some(self.apply_property_only(dom, &[])?),
+            _ => None,
+        };
+        Ok(ScrollFrame { result, frame })
+    }
+
+    /// Sample smooth and momentum scrolls at vsync, with no upstream call.
+    /// The caller posts `take_scroll_events` as a separate main-thread task.
+    pub(crate) fn on_scroll_vsync(
+        &mut self, dom: &Dom, controller: &mut ScrollController, now_ms: f64,
+    ) -> Result<Option<CompositorFrame>, PropertySceneError> {
+        let changed = controller.tick(&mut self.compositor, now_ms)
+            .map_err(|_| PropertySceneError::NeedsFullRendering)?;
+        if changed.is_empty() { return Ok(None); }
+        self.apply_property_only(dom, &[]).map(Some)
+    }
+
+    pub(crate) fn take_scroll_events(
+        &self, dom: &Dom, controller: &mut ScrollController,
+    ) -> Result<Vec<DomScrollEvent>, PropertySceneError> {
+        let mut mapped = Vec::new();
+        for event in controller.pending_scroll_events() {
+            let owner = self.compositor.scroll_owner(event.node)
+                .ok_or(PropertySceneError::NeedsFullRendering)?;
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+            mapped.push(DomScrollEvent { owner, offset: event.offset });
+        }
+        controller.take_scroll_events();
+        Ok(mapped)
     }
 
     /// Consume CSS-13's resolved inline-style delta. Recomputed changes stay
@@ -355,6 +433,71 @@ mod property_scene_tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[1].kind,
             amazing_css::animation::AnimationMainThreadEventKind::TransitionCancel);
+    }
+
+    #[test]
+    fn scroll_frame_oracle_has_zero_upstream_calls_and_async_event() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let scroll = trees.add_scroll(amazing_compositor::ScrollId(0), (0., 0.),
+            Rect::new(0., 0., 64., 64.), Rect::new(0., 0., 64., 192.)).unwrap();
+        let chunk = PaintChunk {
+            items: 0..1, state: PropertyTreeState { scroll, ..Default::default() },
+            bounds: Rect::new(0., 0., 64., 192.),
+            reasons: CompositingReasons::SCROLLER,
+        };
+        let mut compositor = Compositor::new(trees, vec![chunk.clone()], 1).unwrap();
+        let mut source = Surface::new(64, 192);
+        source.clear([40, 80, 160, 255]);
+        let first = compositor.build_frame(&source, 64, 64).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let key = NodePropertyKey { node: element.0, generation, property: BoundProperty::Scroll };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Scroll(scroll))], PaintViewRasterMode::RawLocal,
+            64, 64).unwrap();
+        let mut controller = ScrollController::default();
+        let style_calls = Cell::new(0);
+        let layout_calls = Cell::new(0);
+        let paint_view_calls = Cell::new(0);
+        let input = ScrollInput::Wheel { x: 10., y: 10., delta: (0., 40.) };
+        let fallback = scene.on_scroll_input(&dom, &mut controller, input, true, 0.).unwrap();
+        assert_eq!(fallback.result, ScrollInputResult::MainThread);
+        assert!(fallback.frame.is_none());
+        let scrolled = scene.on_scroll_input(&dom, &mut controller, input, false, 0.).unwrap();
+        assert_eq!(scrolled.result, ScrollInputResult::Scrolled {
+            node: scroll, offset: (0., 40.),
+        });
+        let frame = scrolled.frame.unwrap();
+        assert!(frame.resources.uploads.is_empty());
+        let actual = presenter.present(&frame).unwrap();
+        let mut full_trees = PropertyTrees::new();
+        let full_scroll = full_trees.add_scroll(amazing_compositor::ScrollId(0), (0., 40.),
+            Rect::new(0., 0., 64., 64.), Rect::new(0., 0., 64., 192.)).unwrap();
+        let mut full = Compositor::new(full_trees, vec![PaintChunk {
+            state: PropertyTreeState { scroll: full_scroll, ..Default::default() }, ..chunk
+        }], 1).unwrap();
+        let mut full_frame = full.build_frame(&source, 64, 64).unwrap();
+        let viewport = Rect::new(0., 0., 64., 64.);
+        full_frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+        assert_eq!(actual.pixels,
+            ReferenceCpuPresenter::default().present(&full_frame).unwrap().pixels);
+        assert_eq!((style_calls.get(), layout_calls.get(), paint_view_calls.get()), (0, 0, 0));
+        assert_eq!(scene.take_scroll_events(&dom, &mut controller).unwrap(),
+            vec![DomScrollEvent { owner: key, offset: (0., 40.) }]);
+        assert!(scene.take_scroll_events(&dom, &mut controller).unwrap().is_empty());
+        assert_eq!(scene.on_scroll_input(&dom, &mut controller, ScrollInput::ScrollTo {
+            node: scroll, target: (0., 100.),
+            behavior: amazing_compositor::ScrollBehavior::Smooth,
+        }, false, 100.).unwrap().result, ScrollInputResult::Scheduled { node: scroll });
+        let smooth_frame = scene.on_scroll_vsync(&dom, &mut controller, 225.).unwrap().unwrap();
+        assert!(smooth_frame.resources.uploads.is_empty());
+        assert_eq!(scene.take_scroll_events(&dom, &mut controller).unwrap().len(), 1);
     }
 }
 
