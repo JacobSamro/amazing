@@ -3,6 +3,7 @@ set -euo pipefail
 cargo build -q -p amazing-net --example wpt_shim --locked
 cargo build -q -p amazing --locked
 root=$(mktemp -d)
+export AMAZING_STORAGE_DIR="$root/storage"
 pipe=$(mktemp -u)
 mkfifo "$pipe"
 exec 3<>"$pipe"

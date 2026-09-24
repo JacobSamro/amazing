@@ -43,6 +43,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-Location 'C:\Users\server\src\wt\net'
 $env:CARGO_TARGET_DIR = 'C:\Users\server\target\net'
+$env:AMAZING_STORAGE_DIR = Join-Path $env:CARGO_TARGET_DIR ('net26-storage-' + $PID)
 $root = 'C:\Users\server\target\net26-wpt'
 $revision = (git -C $root rev-parse HEAD).Trim()
 if ($revision -ne 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293') { throw "Wrong WPT revision: $revision" }
@@ -76,4 +77,5 @@ try {
   Remove-Item Env:AMAZING_WPT_SHIM_ADDR -ErrorAction SilentlyContinue
   Stop-Process -Id $shim.Id -Force -ErrorAction SilentlyContinue
   Remove-Item $out,$err -ErrorAction SilentlyContinue
+  Remove-Item $env:AMAZING_STORAGE_DIR -Recurse -Force -ErrorAction SilentlyContinue
 }
