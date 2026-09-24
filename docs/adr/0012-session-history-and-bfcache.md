@@ -1,6 +1,6 @@
 # ADR 0012 — Session history and the back-forward cache
 
-Status: proposed for project review (2026-09-24). Design only; no runtime adoption.
+Status: accepted (2026-09-24). The browser-side model and IPC protocol are implemented by the ipc lane (IPC-9); driver adoption follows ADR 0009-style parity gates.
 Owner: IPC lane for the process contract; HTML and driver owners review the
 navigation algorithms and bindings. Depends on ADR 0005, 0008, and 0009.
 
