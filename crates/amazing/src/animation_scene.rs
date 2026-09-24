@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use amazing_compositor::{
     AnimationColor, AnimationFrameOutput, AnimationValue, ColorSpace, Compositor,
-    ComputedValues, CssAnimationEngine, CssAnimationLonghands, CssKeyframeInput,
+    ComputedValues, CssAnimationEngine, CssAnimationLonghands, CssCompositorTimeline, CssKeyframeInput,
     CssTransitionLonghands, PropertyTrees, PropertyUpdate, resolve_css_keyframes,
 };
 use amazing_css::{AnimatedValues, StyledDom, Stylesheet};
@@ -18,6 +18,7 @@ pub(crate) struct AnimationScene {
     previous: BTreeMap<u64, ComputedValues>,
     animated: AnimatedValues,
     active_transitions: BTreeSet<(u64, String)>,
+    css_timeline: CssCompositorTimeline,
 }
 
 impl AnimationScene {
@@ -29,6 +30,7 @@ impl AnimationScene {
             previous: BTreeMap::new(),
             animated: AnimatedValues::default(),
             active_transitions: BTreeSet::new(),
+            css_timeline: CssCompositorTimeline::default(),
         }
     }
 
@@ -46,6 +48,10 @@ impl AnimationScene {
     }
 
     pub(crate) fn animated(&self) -> &AnimatedValues { &self.animated }
+
+    pub(crate) fn handoff_state_mut(&mut self) -> (&mut CssCompositorTimeline, &mut AnimatedValues) {
+        (&mut self.css_timeline, &mut self.animated)
+    }
 
     fn frame_from_styles(
         &mut self,
