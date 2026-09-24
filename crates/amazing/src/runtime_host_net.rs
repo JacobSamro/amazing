@@ -21,6 +21,7 @@ pub(super) struct NetRuntime {
     fetch_objects: Vec<Rc<RefCell<FetchObject>>>,
     fetch_interfaces: Vec<(FetchInterface, JsValue, JsValue)>,
     fetch_network: NetworkService,
+    legacy_fetch: Option<JsValue>,
     fetch_listeners: Vec<(u64, u64, String, JsValue)>,
     fetch_header_iterator_prototype: Option<JsValue>,
     pub(super) fetch_resolver_capture: Option<(JsValue, JsValue)>,
@@ -37,6 +38,7 @@ impl NetRuntime {
             fetch_objects: Vec::new(),
             fetch_interfaces: Vec::new(),
             fetch_network: NetworkService::new(DispatchLimits::default()),
+            legacy_fetch: None,
             fetch_listeners: Vec::new(),
             fetch_header_iterator_prototype: None,
             fetch_resolver_capture: None,
@@ -235,6 +237,10 @@ impl FetchHost for RuntimeBindingHost<'_> {
         operation: FetchOperation,
         policy: HostCallPolicy,
     ) -> JsValue {
+        if operation == FetchOperation::Fetch {
+            let global = self.js.binding_global_object();
+            self.state.borrow_mut().net.legacy_fetch = self.js.binding_get_property(&global, "fetch").ok();
+        }
         self.native(name, length, NativeEntry::Fetch(operation), policy)
     }
     fn fetch_register(
@@ -322,6 +328,24 @@ impl FetchHost for RuntimeBindingHost<'_> {
             .clone()
             .unwrap_or_else(|| "http://localhost/".into());
         HttpUrl::parse(&url).map_err(|_| Throw::type_error("Invalid document URL"))
+    }
+    fn fetch_local_file(&mut self, args: &[JsValue]) -> Result<Option<JsValue>, Throw> {
+        let base = self.state.borrow().document_url.clone().unwrap_or_default();
+        if !base.starts_with("file:") && !std::path::Path::new(&base).is_file() {
+            return Ok(None);
+        }
+        let Some(input) = args.first() else { return Ok(None); };
+        let input = String::from_utf16_lossy(&self.js.binding_to_dom_string(input)?);
+        let target = crate::cmd::js::resolve_script_url(&base, &input);
+        if target.starts_with("http:") || target.starts_with("https:")
+            || target.starts_with("data:") || target.starts_with("about:") {
+            return Ok(None);
+        }
+        let Some(fetch) = self.state.borrow().net.legacy_fetch.clone() else {
+            return Ok(None);
+        };
+        let global = self.js.binding_global_object();
+        binding_call(self.js, &fetch, &global, args).map(Some)
     }
     fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<JsValue, Throw> {
         let started = self.state.borrow_mut().net.fetch_network.start(request, ClientContext::default());

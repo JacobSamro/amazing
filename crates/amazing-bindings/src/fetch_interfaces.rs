@@ -178,6 +178,8 @@ pub trait FetchHost: BindingHost {
     fn fetch_base(&self) -> Result<HttpUrl, Self::Error>;
     fn fetch_execute(&mut self, request: &mut ApiRequest) -> Result<ApiResponse, ApiError>;
     fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<Self::Value, Self::Error>;
+    /// Browser-local file pages retain their existing relative resource loader.
+    fn fetch_local_file(&mut self, args: &[Self::Value]) -> Result<Option<Self::Value>, Self::Error>;
     fn fetch_promise(
         &mut self,
         result: Result<Self::Value, ApiError>,
@@ -893,6 +895,9 @@ pub fn invoke<H: FetchHost>(
             host.fetch_allocate(FetchInterface::Request, FetchObject::Request(value, signal))
         }
         O::Fetch => {
+            if let Some(promise) = host.fetch_local_file(args)? {
+                return Ok(promise);
+            }
             let (request, signal) = match request(host, args) {
                 Ok(request) => request, Err(error) => return host.fetch_reject_throw(error),
             };
