@@ -129,6 +129,13 @@ impl RetainedPropertyScene {
     pub(crate) fn on_scroll_vsync(
         &mut self, dom: &Dom, controller: &mut ScrollController, now_ms: f64,
     ) -> Result<Option<CompositorFrame>, PropertySceneError> {
+        for id in controller.active_scrolls() {
+            let owner = self.compositor.scroll_owner(id)
+                .ok_or(PropertySceneError::NeedsFullRendering)?;
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
         let changed = controller.tick(&mut self.compositor, now_ms)
             .map_err(|_| PropertySceneError::NeedsFullRendering)?;
         if changed.is_empty() { return Ok(None); }

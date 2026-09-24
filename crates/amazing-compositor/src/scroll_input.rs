@@ -60,6 +60,9 @@ pub struct ScrollController {
 }
 impl ScrollController {
     pub fn active_count(&self) -> usize { self.motion.len() }
+    pub fn active_scrolls(&self) -> impl Iterator<Item = ScrollId> + '_ {
+        self.motion.keys().copied()
+    }
     pub fn pending_scroll_events(&self) -> impl Iterator<Item = AsyncScrollEvent> + '_ {
         self.pending_events.values().copied()
     }
