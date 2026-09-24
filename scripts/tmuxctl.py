@@ -330,6 +330,8 @@ LANE_GRANTS.setdefault("js-lang", []).extend(["crates/amazing-js/src/vm/compiler
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/src/navigator.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
 # HTML-26: forms move to html for the duration of the ticket.
 LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-dom/src/forms.rs", "crates/amazing-bindings/src/form_bindings.rs"])
+# COMP-13b: document viewport scrolling moves from the GPUI outer div to the compositor root scroller.
+LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/src/main.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
