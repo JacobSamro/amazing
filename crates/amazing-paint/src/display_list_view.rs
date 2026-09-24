@@ -18,6 +18,9 @@ use crate::surface::Surface;
 #[path = "display_list_delta.rs"]
 mod delta;
 pub use delta::{PaintFallbackReason, PaintItemChange, PaintResourceKey, PaintViewDelta, PaintViewUpdate};
+#[path = "retained_paint.rs"]
+mod retained;
+pub use retained::{PaintDamage, RetainedPaintDelta, RetainedPaintView, RetainedRaster};
 
 /// An RGBA8 destination for rasterized paint items.
 pub type RgbaSurface = Surface;

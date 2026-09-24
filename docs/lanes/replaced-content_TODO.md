@@ -933,3 +933,28 @@ gradient/scroll 2/2 in both rounds. There were no pass losses. SVG
 remains a mismatch with fewer differing pixels (18,864 to 3,072). Those two
 cases alone changed actual/diff hashes across the newer merged base; every
 reference hash and both rounds agree.
+
+## RC-20 bounded retained paint update (2026-09-24)
+
+COMP-11 property ownership landed first as `2bee652`: non-root transform,
+opacity/effect and scroll property nodes carry `PaintNodeKey { node, generation }`.
+`DisplayListView::property_owner_mapping()` returns view-local IDs for each CSS
+property kind. A missing or duplicate owner returns `None`, requiring scene
+rebuild; synthetic root nodes are excluded.
+
+`RetainedPaintView::from_view` now owns the seed item's metadata, local raw
+raster and resource set. `apply_damage` accepts keyed `PaintDamage::Remove` and
+`PaintDamage::Upsert` values from layout's geometry/style damage. It validates
+the whole damage set before mutation, rasterizes only upserts, keeps untouched
+pixel buffers allocated, and reports changed ranges, added/removed keys,
+conservative old/new bounds and resources no longer referenced by any item.
+Both individual tile and aggregate retained allocations are bounded. Unstable
+identity, property-table changes, unsafe geometry, and unsupported item raster
+return a full-rebuild reason. The old two-full-view comparison remains an
+oracle for same-epoch parity checks.
+
+The pushed RC-20 base is `f66be2b`. `LAYOUT-17` and the requested
+`runtime_host_replaced-content.rs` adapter are not present on this base; the
+paint-local delta type is ready for their damage list when the owning lanes
+publish it. IA-ORACLE-PAINT's 31 ms p95 cannot be credited until that driver
+adopts the retained path and the Windows release trace measures it.

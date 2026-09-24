@@ -237,7 +237,7 @@ impl DisplayListView<'_> {
     }
 }
 
-fn damage_bounds(bounds: PaintBounds) -> Option<PaintBounds> {
+pub(super) fn damage_bounds(bounds: PaintBounds) -> Option<PaintBounds> {
     if ![bounds.x, bounds.y, bounds.width, bounds.height]
         .into_iter().all(f32::is_finite)
         || bounds.width <= 0.0 || bounds.height <= 0.0
