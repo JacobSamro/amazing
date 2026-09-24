@@ -738,16 +738,18 @@ mod oracle_trace_tests {
         let animated = amazing_css::AnimatedValues::default();
         paint_host_surface_with_updates(&host, "opacity.html", 128., Some(128), "", &animated, true,
             Some(&mut coordinator)).unwrap();
-        let next = "width:64px;height:64px;background:green;opacity:.25";
-        host.borrow_mut().dom.set_attribute(node, "style", next).unwrap();
-        full_host.borrow_mut().dom.set_attribute(node, "style", next).unwrap();
-        let candidate = paint_host_surface_with_updates(&host, "opacity.html", 128., Some(128), "",
-            &animated, true, Some(&mut coordinator)).unwrap();
-        let full = paint_host_surface_with_updates(&full_host, "opacity.html", 128., Some(128), "",
-            &animated, true, None).unwrap();
-        assert_eq!(candidate.pixels, full.pixels);
-        let work = coordinator.last_work();
-        assert_eq!((work.style_rebuild_calls, work.layout_update_calls,
-            work.paint_view_rebuild_calls, work.tile_uploads), (0, 0, 0, 0));
+        for opacity in [".25", ".75"] {
+            let next = format!("width:64px;height:64px;background:green;opacity:{opacity}");
+            host.borrow_mut().dom.set_attribute(node, "style", &next).unwrap();
+            full_host.borrow_mut().dom.set_attribute(node, "style", &next).unwrap();
+            let candidate = paint_host_surface_with_updates(&host, "opacity.html", 128., Some(128), "",
+                &animated, true, Some(&mut coordinator)).unwrap();
+            let full = paint_host_surface_with_updates(&full_host, "opacity.html", 128., Some(128), "",
+                &animated, true, None).unwrap();
+            assert_eq!(candidate.pixels, full.pixels);
+            let work = coordinator.last_work();
+            assert_eq!((work.style_rebuild_calls, work.layout_update_calls,
+                work.paint_view_rebuild_calls, work.tile_uploads), (0, 0, 0, 0));
+        }
     }
 }
