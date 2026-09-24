@@ -99,14 +99,16 @@ impl CompositorAnimationTimeline<CssCompositorAnimation> {
     pub fn tick_css(
         &mut self, now_ms: f64, compositor: &mut Compositor,
     ) -> Result<(HandoffTickOutput, Vec<AnimationPropertyUpdate>), HandoffError> {
-        let pending = self.active.iter().map(|active| (active.key, active.animation.clone()))
+        let pending = self.active.iter().map(|active| (
+            active.key, active.animation.id, active.animation.node, active.animation.property,
+        ))
             .collect::<Vec<_>>();
         let output = self.tick(now_ms, compositor, css_sample)?;
         let updates = output.completions.iter().filter_map(|completion| {
-            let animation = &pending.iter().find(|(key, _)| *key == completion.key)?.1;
+            let &(_, id, node, property) = pending.iter()
+                .find(|(key, _, _, _)| *key == completion.key)?;
             Some(AnimationPropertyUpdate {
-                id: animation.id, node: animation.node,
-                generation: completion.key.generation, property: animation.property,
+                id, node, generation: completion.key.generation, property,
                 time_ms: now_ms, cancelled: completion.end == HandoffEnd::Canceled,
             })
         }).collect();
@@ -298,6 +300,35 @@ mod tests {
         assert_eq!(output.completions[0].update.value, AnimationValue::Opacity(0.));
         assert_eq!(timeline.active_count(), 0);
         assert!(timeline.tick_css(116., &mut compositor).unwrap().0.completions.is_empty());
+    }
+
+    #[test]
+    fn css_keyframe_animation_uses_shared_sample_and_completes_once() {
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 0., BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, Vec::new(), 0).unwrap();
+        let key = NodePropertyKey { node: 11, generation: 6, property: BoundProperty::Opacity };
+        compositor.bind_property_nodes(&[(key, BoundPropertyNode::Opacity(effect))]).unwrap();
+        let sheet = amazing_css::parse_stylesheet(
+            "@keyframes fade { from { opacity:0 } to { opacity:1 } }");
+        let animation = CompositorAnimation::from_keyframes(
+            17, NodeIdx(11), 6, &sheet.keyframes[0], AnimationProperty::Opacity,
+            timing(), 0., None,
+        ).unwrap();
+        let expected = css_animation::sample(&animation, 50.).unwrap().value.unwrap();
+        let mut timeline = CssCompositorTimeline::default();
+        timeline.install_css(animation).unwrap();
+        let (mid, completions) = timeline.tick_css(50., &mut compositor).unwrap();
+        assert!(mid.completions.is_empty());
+        assert!(completions.is_empty());
+        let AnimationFrameValue::Opacity(value) = expected else { panic!() };
+        assert_eq!(compositor.trees().effect(effect).unwrap().opacity, value);
+        let (end, completions) = timeline.tick_css(100., &mut compositor).unwrap();
+        assert_eq!(end.completions.len(), 1);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].id, 17);
+        assert!(!completions[0].cancelled);
+        assert!(timeline.tick_css(116., &mut compositor).unwrap().1.is_empty());
     }
 
     #[test]
