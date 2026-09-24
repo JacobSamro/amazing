@@ -455,10 +455,10 @@ def owned_paths(lane: str) -> list[str]:
 # 2026-09-24: the fleet moved from Codex (gpt-6-sol medium) to OpenCode running
 # DeepSeek V4.1 Flash. `--auto` is OpenCode's equivalent of `codex --yolo`.
 AGENT_MODEL = "opencode-go/deepseek-v4.1-flash"
-AGENT_EFFORT = "high"
+AGENT_EFFORT = "default"  # model offers low/high/max only; default sits between
 # What the OpenCode mode line prints for AGENT_MODEL; used to spot model drift.
 AGENT_MODEL_LABEL = "DeepSeek V4.1 Flash"
-AGENT_LAUNCH = f"opencode --auto -m {AGENT_MODEL}"  # TUI default variant is high
+AGENT_LAUNCH = f"opencode --auto -m {AGENT_MODEL}"
 # Process names a live agent pane runs under (Codex kept for panes not yet moved).
 AGENT_COMMANDS = ("opencode", "node", "codex")
 
