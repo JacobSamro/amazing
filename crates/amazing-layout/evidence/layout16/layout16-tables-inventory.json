@@ -1,0 +1,30 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection_policy":  "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes.",
+    "exclude_path_regex":  "",
+    "blocked_content_regex":  "",
+    "per_category":  120,
+    "include_path_regex":  "",
+    "categories":  [
+                       {
+                           "category":  "css-tables",
+                           "document_files":  19,
+                           "testharness_files":  7,
+                           "reftests":  7,
+                           "eligible_static_self_contained":  5,
+                           "selected":  5,
+                           "excluded":  {
+                                            "xml-reference-mode":  2,
+                                            "not-reftest":  12
+                                        },
+                           "selected_paths":  [
+                                                  "css/css-tables/zero-rowspan-001.html",
+                                                  "css/css-tables/table-row-group-nested-anonymous-001.html",
+                                                  "css/css-tables/zero-rowspan-002.html",
+                                                  "css/css-tables/baseline-empty-cell-001.html",
+                                                  "css/css-tables/anonymous-table-ws-001.html"
+                                              ]
+                       }
+                   ]
+}
