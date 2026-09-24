@@ -274,9 +274,9 @@ fn binary_configure_constructor(object: &Obj, name: &str, length: usize, prototy
     let _ = object.define("length", binary_property(JsValue::num(length as f64)));
     let _ = object.define("prototype", binary_locked_property(JsValue::Object(prototype.clone())));
 }
-fn binary_accessor(function: JsFunction, setter: Option<JsFunction>, enumerable: bool) -> Property {
+fn binary_accessor(function: JsValue, setter: Option<JsValue>, enumerable: bool) -> Property {
     Property { value: JsValue::Undefined, writable: false, enumerable, configurable: true,
-        getter: Some(Box::new(function)), setter: setter.map(Box::new) }
+        getter: Some(function), setter }
 }
 fn binary_method(i: &Interpreter, object: &Obj, name: &str, f: crate::value::NativeFn, arity: usize) {
     let method = Interpreter::native(name, f, &i.function_proto);
@@ -290,9 +290,7 @@ fn binary_method(i: &Interpreter, object: &Obj, name: &str, f: crate::value::Nat
 }
 fn binary_getter(i: &Interpreter, object: &Obj, name: &str, f: crate::value::NativeFn) {
     let method = Interpreter::native(&format!("get {name}"), f, &i.function_proto);
-    let JsValue::Object(callable) = method else { unreachable!() };
-    let function = callable.borrow().func.clone().unwrap();
-    let _ = object.borrow_mut().define(name, binary_accessor(function, None, false));
+    let _ = object.borrow_mut().define(name, binary_accessor(method, None, false));
 }
 
 impl Interpreter {
@@ -458,7 +456,7 @@ impl Interpreter {
         let tag_getter = Self::native("get [Symbol.toStringTag]", binary_typed_tag, &self.function_proto);
         if let JsValue::Object(getter) = tag_getter {
             let _ = typed_proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
-                binary_accessor(getter.borrow().func.clone().unwrap(), None, false));
+                binary_accessor(JsValue::Object(getter.clone()), None, false));
         }
         binary_species(self, intrinsic_obj);
         binary_method(self, intrinsic_obj, "from", binary_typed_static, 1);
@@ -499,7 +497,7 @@ fn binary_species(i: &Interpreter, constructor: &Obj) {
     let getter = Interpreter::native("get [Symbol.species]", binary_species_getter, &i.function_proto);
     if let JsValue::Object(getter) = getter {
         let _ = constructor.borrow_mut().define(WellKnownSymbol::Species.symbol(),
-            binary_accessor(getter.borrow().func.clone().unwrap(), None, false));
+            binary_accessor(JsValue::Object(getter.clone()), None, false));
     }
 }
 fn binary_species_getter(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> { Ok(this) }

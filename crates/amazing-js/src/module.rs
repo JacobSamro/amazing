@@ -255,6 +255,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             };
             let engine = interpreter.as_mut().unwrap_or(root_interpreter);
             let module_env = EnvHandle::new(EnvKind::Global, Some(engine.global_env.clone()));
+            module_env.bind_this(JsValue::Undefined);
             engine.global_env = module_env.clone();
             let mut meta = JsObject::ordinary();
             meta.proto = Some(engine.object_proto.clone());
@@ -704,6 +705,14 @@ mod tests {
             .unwrap();
         let namespace = linker.evaluate("root", &mut Interpreter::new()).unwrap();
         assert_eq!(namespace["result"], JsValue::num(43.0));
+    }
+
+    #[test]
+    fn module_top_level_this_is_undefined_with_global_this_bound() {
+        let mut linker = ModuleLinker::new(|_: &str, _: &str| Err("unresolved".into()));
+        linker.link("root", "export const result = this === undefined;").unwrap();
+        let namespace = linker.evaluate("root", &mut Interpreter::new()).unwrap();
+        assert_eq!(namespace["result"], JsValue::Bool(true));
     }
 
     #[test]

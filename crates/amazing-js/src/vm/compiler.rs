@@ -15,9 +15,16 @@ const MAX_INSTRUCTIONS: usize = 262_144;
 // Deeper valid syntax falls back atomically before instruction execution.
 const MAX_DEPTH: usize = 64;
 
+fn has_use_strict_directive(statements: &[Stmt]) -> bool {
+    statements.iter()
+        .take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(Expr { kind: ExprKind::Str(_), .. })))
+        .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(Expr { kind: ExprKind::Str(value), .. }) if value == "use strict"))
+}
+
 /// Compile the entire AST before any binding mutation or JavaScript execution.
 pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
     let mut c = Compiler::new(false);
+    c.strict = has_use_strict_directive(&ast.body);
     c.hoist_functions(&ast.body)?;
     for statement in &ast.body {
         c.statement(statement)?;
@@ -33,6 +40,7 @@ struct Compiler {
     depth: usize,
     is_generator: bool,
     is_async: bool,
+    strict: bool,
 }
 
 impl Compiler {
@@ -50,6 +58,7 @@ impl Compiler {
             depth: 0,
             is_generator: false,
             is_async: false,
+            strict: false,
         }
     }
 
@@ -72,6 +81,7 @@ impl Compiler {
             params.push(name.name.clone());
         }
         let mut child = Self::new(true);
+        child.strict = self.strict || has_use_strict_directive(&function.body.body);
         child.is_generator = function.is_generator;
         child.is_async = function.is_async;
         child.hoist_functions(&function.body.body)?;
@@ -92,6 +102,7 @@ impl Compiler {
             is_arrow: false,
             is_generator: function.is_generator,
             is_async: function.is_async,
+            strict: child.strict,
             is_method: false,
         })))
     }
@@ -115,6 +126,7 @@ impl Compiler {
             params.push(name.name.clone());
         }
         let mut child = Self::new(true);
+        child.strict = self.strict || matches!(&arrow.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         child.is_async = arrow.is_async;
         match &arrow.body {
             ast::ArrowBody::Expr(expression) => {
@@ -135,6 +147,7 @@ impl Compiler {
             is_arrow: true,
             is_generator: false,
             is_async: arrow.is_async,
+            strict: child.strict,
             is_method: false,
         })))
     }

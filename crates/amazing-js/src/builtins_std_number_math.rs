@@ -193,7 +193,7 @@ fn std_number_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     } else { 0.0 };
     if let JsValue::Object(object) = &this {
         if object.borrow().constructed {
-            object.borrow_mut().set_own("[[NumberData]]", JsValue::num(value));
+            object.borrow_mut().define("[[NumberData]]", symbol_data(JsValue::num(value), false, false)).unwrap();
             return Ok(this);
         }
     }
