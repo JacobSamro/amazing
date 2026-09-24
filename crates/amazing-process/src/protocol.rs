@@ -38,9 +38,10 @@ interface! {pub interface NetworkRequests(8) => NetworkProxy, NetworkReceiver {
     fn cancel_request(request:RequestId) -> bool = 3;
 }}
 
-/// Version 2 is isolated from the IPC-2 demo interface (8). The browser
+/// Version 3 adds redirect metadata and browser-only subresource starts. It
+/// remains isolated from the IPC-2 demo interface (8). The browser
 /// constructs NetworkContext; page input must never supply its trust fields.
-pub const NETWORK_VERSION: u16 = 2;
+pub const NETWORK_VERSION: u16 = 3;
 pub const NETWORK_MAX_REQUEST_BODY: usize = 1024 * 1024;
 pub const NETWORK_MAX_RESPONSE_BODY: u32 = 32 * 1024 * 1024;
 pub const NETWORK_CHUNK: u32 = 32 * 1024;
@@ -67,7 +68,8 @@ wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkCancel {i
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkEpoch {client_id:u64, epoch:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkHead {
     id:u64, client_id:u64, epoch:u64, status:u16, url:String, reason:String,
-    headers:Vec<HeaderField>, response_type:String, redirected:bool
+    headers:Vec<HeaderField>, response_type:String, redirected:bool,
+    url_list:Vec<String>, redirect_tainted:bool
 }}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkBody {id:u64, epoch:u64, bytes:ByteBuf}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkComplete {id:u64, epoch:u64, error:Option<String>}}
@@ -79,9 +81,60 @@ interface! {pub interface NetworkRequestsV2(10) => NetworkProxyV2, NetworkReceiv
     fn read(request:NetworkRead) -> NetworkReply = 2;
     fn cancel(request:NetworkCancel) -> NetworkComplete = 3;
     fn cancel_epoch(request:NetworkEpoch) -> Vec<NetworkComplete> = 4;
+    fn subresource(request:NetworkStart) -> NetworkStarted = 5;
 }}
 interface! {pub interface BrowserEvents(9) => BrowserEventsProxy, BrowserEventsReceiver {
     fn frame_ready(event:FrameReady) -> () = 1;
+}}
+
+// The byte blob is the IPC-owned encoding of CompositorFrameSnapshot, including
+// its versioned ResourceDeltaSnapshot and retained property trees.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct GpuFrame {sequence:u64, snapshot:ByteBuf}}
+interface! {pub interface GpuPresentation(11) => GpuProxy, GpuReceiver {
+    fn submit(frame:GpuFrame) -> Frame = 1;
+}}
+
+// Utility output is an immutable ADR 0007 mapping. `payload_len` excludes
+// padding in the final RGBA row; image dimensions or audio metadata describe
+// the decoded content, not the shape of the transport mapping.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct DecodeRequest {kind:u8, bytes:ByteBuf}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct DecodedReady {kind:u8, width:u32, height:u32, sample_rate:u32, channels:u16, payload_len:u32, shared:SharedFrameReady}}
+interface! {pub interface UtilityDecoder(12) => UtilityProxy, UtilityReceiver {
+    fn decode(request:DecodeRequest) -> DecodedReady = 1;
+    fn acquire(request:AcquireFrame) -> AcquireResult = 2;
+    fn received(request:AcquireFrame) -> bool = 3;
+    fn release(request:ReleaseFrame) -> bool = 4;
+}}
+
+// Only the browser owns the Storage connection and chooses partition keys.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePartition {origin:String, top_level_site:String, bucket:String}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StorageEntry {partition:StoragePartition, namespace:String, key:ByteBuf}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePut {entry:StorageEntry, value:ByteBuf}}
+interface! {pub interface StorageService(13) => StorageProxy, StorageReceiver {
+    fn put(request:StoragePut) -> bool = 1;
+    fn get(request:StorageEntry) -> Option<ByteBuf> = 2;
+    fn delete(request:StorageEntry) -> bool = 3;
+    fn checkpoint(request:()) -> bool = 4;
+}}
+
+// Browser-minted document tokens and epochs gate every lifecycle transition.
+// The renderer reports the observable HTML event order in its acknowledgment.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryFreeze {document:u64, epoch:u64, deadline_ms:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryRestore {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryDiscard {document:u64, epoch:u64}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum HistoryLifecycleEvent {
+    PageHidePersisted(())=1, VisibilityHidden(())=2,
+    VisibilityVisible(())=3, PageShowPersisted(())=4
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryAck {
+    document:u64, epoch:u64, quiescent:bool, events:Vec<HistoryLifecycleEvent>
+}}
+interface! {pub interface HistoryLifecycle(14) => HistoryProxy, HistoryReceiver {
+    fn activate(request:HistoryActivate) -> bool = 1;
+    fn freeze(request:HistoryFreeze) -> HistoryAck = 2;
+    fn restore(request:HistoryRestore) -> HistoryAck = 3;
+    fn discard(request:HistoryDiscard) -> bool = 4;
 }}
 
 impl Frame {

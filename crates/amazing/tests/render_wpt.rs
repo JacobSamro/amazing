@@ -2,13 +2,16 @@ use std::fs;
 use std::process::Command;
 
 fn fixture_path(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("amazing-render-wpt-{}-{name}", std::process::id()))
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    std::env::temp_dir().join(format!("amazing-render-wpt-{}-{nonce}-{name}", std::process::id()))
 }
 
 #[test]
 fn fixed_render_writes_the_exact_requested_viewport() {
     let html = fixture_path("fixed.html");
     let ppm = fixture_path("fixed.ppm");
+    let storage = fixture_path("fixed-storage");
     fs::write(
         &html,
         "<!doctype html><style>body{margin:0;background:green}</style>",
@@ -22,6 +25,7 @@ fn fixed_render_writes_the_exact_requested_viewport() {
             "37",
             "23",
         ])
+        .env("AMAZING_STORAGE_DIR", &storage)
         .output()
         .expect("run fixed renderer");
     assert!(
@@ -35,6 +39,7 @@ fn fixed_render_writes_the_exact_requested_viewport() {
     assert_eq!(bytes.len(), header.len() + 37 * 23 * 3);
     let _ = fs::remove_file(html);
     let _ = fs::remove_file(ppm);
+    let _ = fs::remove_dir_all(storage);
 }
 
 #[test]
@@ -65,6 +70,7 @@ fn wait_timeout_and_page_script_error_do_not_write_images() {
     ] {
         let html = fixture_path(&format!("{name}.html"));
         let ppm = fixture_path(&format!("{name}.ppm"));
+        let storage = fixture_path(&format!("{name}-storage"));
         let _ = fs::remove_file(&ppm);
         fs::write(&html, source).expect("write render fixture");
         let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
@@ -75,11 +81,13 @@ fn wait_timeout_and_page_script_error_do_not_write_images() {
                 "64",
                 "48",
             ])
+            .env("AMAZING_STORAGE_DIR", &storage)
             .output()
             .expect("run fixed renderer");
         assert_eq!(output.status.code(), Some(exit));
         assert!(String::from_utf8_lossy(&output.stderr).contains(detail));
         assert!(!ppm.exists());
         let _ = fs::remove_file(html);
+        let _ = fs::remove_dir_all(storage);
     }
 }

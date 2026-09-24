@@ -119,6 +119,10 @@ fn items(tokens: &[Token], alt: bool) -> Option<Vec<Item>> {
                 out.push(Item::Text(s.clone()));
                 i += 1;
             }
+            Token::Url { value, .. } if !alt && !value.is_empty() => {
+                out.push(Item::Image(value.clone()));
+                i += 1;
+            }
             Token::Ident(name) if !alt => {
                 out.push(match name.to_ascii_lowercase().as_str() {
                     "open-quote" => Item::OpenQuote,
@@ -131,6 +135,11 @@ fn items(tokens: &[Token], alt: bool) -> Option<Vec<Item>> {
             }
             Token::Function(name) => {
                 let (body, end) = function_body(tokens, i)?;
+                if !alt && image_function_name(name) {
+                    out.push(Item::Image(crate::syntax::serialize(&tokens[i..end])));
+                    i = end;
+                    continue;
+                }
                 let params = args(body)?;
                 out.push(match name.to_ascii_lowercase().as_str() {
                     "attr" if (1..=2).contains(&params.len()) => Item::Attr(
@@ -223,6 +232,9 @@ pub(crate) fn image_function_name(name: &str) -> bool {
 fn list_style_image(css: &str, base: Option<&str>) -> Option<Item> {
     let tokens = tokenize(css);
     let significant = compact(&tokens);
+    if let [Token::Url { value, .. }] = significant.as_slice() {
+        return (!value.is_empty()).then(|| Item::Image(resolve_image_url(value, base)));
+    }
     let Token::Function(name) = significant.first()? else { return None; };
     let (body, end) = function_body(&significant, 0)?;
     if end != significant.len() || body.is_empty() { return None; }
@@ -759,5 +771,21 @@ mod tests {
         assert!(!valid_property("counter-increment", "reversed(x)"));
         assert!(!valid_property("quotes", "'unpaired'"));
         assert!(valid_property("counter-reset", "reversed(list-item) 5"));
+    }
+
+    #[test]
+    fn content_accepts_image_functions_as_image_runs() {
+        for image in [
+            "linear-gradient(red, blue)",
+            "radial-gradient(circle, red, blue)",
+            "conic-gradient(red, blue)",
+            "repeating-linear-gradient(red, blue)",
+            "image-set(url(a.png) 1x, url(b.png) 2x)",
+            "cross-fade(url(a.png), url(b.png), 50%)",
+        ] {
+            let parsed = parse_content(image).expect(image);
+            let canonical = crate::syntax::serialize(&tokenize(image));
+            assert!(matches!(parsed.items.as_slice(), [Item::Image(value)] if value == &canonical), "{image}");
+        }
     }
 }

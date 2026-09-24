@@ -5,7 +5,7 @@
 //!
 //! Modules, in dependency order:
 //! - [`syntax`]: CSS Syntax Module Level 3 §4 tokenizer (see its module docs
-//!   for the deviation list: no dedicated `url()` token, simplified EOF
+//!   for the deviation list: simplified EOF
 //!   recovery, comments dropped).
 //! - [`parser`]: qualified rules + declarations (css-syntax-3 §5) with
 //!   spec-style error recovery, layers, scope, and static variable-bearing `@supports`;
@@ -40,6 +40,7 @@
 pub mod cascade;
 pub mod animation;
 pub mod color;
+mod change_classification;
 mod computed;
 mod font_properties;
 pub mod generated;
@@ -54,9 +55,10 @@ pub use cascade::{
     ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
     compute_with_animations, AnimatedOrigin, AnimatedStyleValue, AnimatedValues,
     compute_element_paint_style,
-    recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
+    recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
 };
 pub use computed::ComputedStyle;
+pub use change_classification::{StyleChangeKind, classify_style_property};
 pub use animation::{Keyframe, KeyframesRule, keyframes_rules};
 pub use parser::{
     Declaration, FontFaceRule, FontSource, Rule, Stylesheet, parse_declarations, parse_font_faces,

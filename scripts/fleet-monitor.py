@@ -39,6 +39,7 @@ import tmuxctl  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 SEEN = REPO / ".agents" / ".monitor-seen"
 POLL = int(sys.argv[1]) if len(sys.argv) > 1 else 45
+_last_disk_check = 0.0
 
 
 def load_seen() -> set[str]:
@@ -176,6 +177,26 @@ def scan(seen: set[str]) -> list[str]:
                 if key not in seen:
                     remember(seen, key)
                     events.append(f"CONTEXT  {lane} {pct} left -- checkpoint and restart")
+
+    # Build-host disk. Two venus hosts filled up on 2026-09-24 and killed lane
+    # builds and Test262 runs mid-flight; a warning at 15 GB leaves room to
+    # prune before anything breaks. Checked every ~10 minutes, not every poll.
+    global _last_disk_check
+    if time.time() - _last_disk_check > 600:
+        _last_disk_check = time.time()
+        for host in ("venus-001", "venus-003"):
+            try:
+                out = subprocess.run(["ssh", "-o", "ConnectTimeout=10", host,
+                                      "df -BG --output=avail / | tail -1"],
+                                     capture_output=True, text=True, timeout=30).stdout
+                free = int(out.strip().rstrip("G") or 0)
+            except (subprocess.TimeoutExpired, ValueError):
+                continue
+            if free < 15:
+                key = digest(f"disk:{host}:{int(time.time() // 1800)}")
+                if key not in seen:
+                    remember(seen, key)
+                    events.append(f"SERVER   {host} root disk low: {free} GB free -- prune ~/amazing/target and ~/amazing/out")
 
     try:
         down = server_down()

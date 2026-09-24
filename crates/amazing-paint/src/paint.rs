@@ -177,6 +177,7 @@ impl RasterState {
         if let Some(mask) = rounded {
             self.begin_group_with_mask(
                 GroupEffect {
+                    owner: box_.node,
                     opacity: 1.0,
                     transform: crate::display_list::Affine::IDENTITY,
                     origin_x: 0.0,
@@ -255,25 +256,8 @@ fn composite_group(
 }
 
 fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
-    let source_alpha = source[3] as f32 / 255.0 * opacity.clamp(0.0, 1.0);
-    let destination_alpha = destination[3] as f32 / 255.0;
-    let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
-    if output_alpha <= 0.0 {
-        return [0, 0, 0, 0];
-    }
-    let channel = |index: usize| {
-        ((source[index] as f32 * source_alpha
-            + destination[index] as f32 * destination_alpha * (1.0 - source_alpha))
-            / output_alpha)
-            .round()
-            .clamp(0.0, 255.0) as u8
-    };
-    [
-        channel(0),
-        channel(1),
-        channel(2),
-        (output_alpha * 255.0).round().clamp(0.0, 255.0) as u8,
-    ]
+    let opacity = crate::quantize_opacity(opacity);
+    crate::blend_source_over(source, destination, opacity)
 }
 
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
@@ -1048,10 +1032,8 @@ fn paint_shaped_lines(
                 w: replaced.width,
                 h: replaced.height,
             };
-            if let Some((url, presentation)) = generated_image_url(box_, replaced) {
-                if let Some(image) = resolved_replaced_image(images, replaced.node, Some(&url)) {
-                    paint_image(surface, &rect, image, presentation, clip);
-                }
+            if let Some((url, presentation, font_size)) = generated_image_url(box_, replaced) {
+                paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
                 continue;
             }
             if let Some(svg) = svg_for_rect(
@@ -1083,13 +1065,13 @@ fn paint_shaped_lines(
 fn generated_image_url(
     box_: &LayoutBox,
     replaced: &amazing_layout::ReplacedFrag,
-) -> Option<(String, ImagePresentation)> {
+) -> Option<(String, ImagePresentation, f32)> {
     box_.styled_replaced_fragments().find_map(|fragment| {
         (fragment.node == replaced.node
             && fragment.source_order == replaced.source_order)
             .then(|| {
                 fragment.generated_url.map(|url| {
-                    (url, ImagePresentation::from_style(fragment.style))
+                    (url, ImagePresentation::from_style(fragment.style), fragment.font_size)
                 })
             })
             .flatten()
@@ -1104,6 +1086,26 @@ fn resolved_replaced_image<'a>(
     match generated_url {
         Some(url) => images.image_by_url(url),
         None => images.image(node),
+    }
+}
+
+fn paint_generated_image(
+    surface: &mut Surface,
+    rect: &amazing_layout::Rect,
+    key: &str,
+    presentation: ImagePresentation,
+    font_size: f32,
+    images: &dyn ImageProvider,
+    clip: ClipRect,
+) {
+    if let Some(image) = images.image_by_url(key) {
+        paint_image(surface, rect, image, presentation, clip);
+        return;
+    }
+    if !rect.w.is_finite() || !rect.h.is_finite() || rect.w <= 0.0 || rect.h <= 0.0
+        || rect.w > u32::MAX as f32 || rect.h > u32::MAX as f32 { return; }
+    if let Some(image) = crate::gradient::raster(key, rect.w.ceil() as u32, rect.h.ceil() as u32, font_size) {
+        paint_image(surface, rect, &image, presentation, clip);
     }
 }
 
@@ -1683,10 +1685,8 @@ fn paint_lines(
                 w: replaced.width,
                 h: replaced.height,
             };
-            if let Some((url, presentation)) = generated_image_url(b, replaced) {
-                if let Some(image) = resolved_replaced_image(images, replaced.node, Some(&url)) {
-                    paint_image(surface, &rect, image, presentation, clip);
-                }
+            if let Some((url, presentation, font_size)) = generated_image_url(b, replaced) {
+                paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
                 continue;
             }
             if let Some(svg) = svg_for_rect(
@@ -1876,6 +1876,67 @@ mod tests {
         };
         assert_eq!(pixel(0), Some([255, 0, 0, 255]));
         assert_eq!(pixel(1), Some([0, 0, 255, 255]));
+    }
+
+    #[test]
+    fn generated_gradient_renders_through_replaced_image_key() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let mut root = amazing_layout::layout_document_with_text(
+            "<body></body>",
+            "body{margin:0}body::before{content:url(https://example.test/image.png);width:20px;height:10px}",
+            100.0,
+            &text,
+        );
+        // CSS's generated-content parser currently admits url() but not
+        // gradients. Substitute the paint-facing key to exercise the shared
+        // generated-image seam until the CSS owner opens that syntax.
+        if let amazing_layout::Flow::Inlines(items) = &mut root.flow {
+            for item in items {
+                if let amazing_layout::InlineNode::Replaced { replaced, .. } = item {
+                    replaced.generated_url = Some("linear-gradient(to right, red, blue)".into());
+                }
+            }
+        }
+        let fragment = root.styled_replaced_fragments().next().expect("generated gradient fragment");
+        assert!(fragment.generated_url.as_deref().is_some_and(|key| key.starts_with("linear-gradient")));
+        let surface = paint_document_with_text_resources(&root, 100, 50, &text, &NoImages);
+        let y = (fragment.content_box.y + 2.0) as u32;
+        let left = surface.get_pixel((fragment.content_box.x + 2.0) as u32, y).unwrap();
+        let right = surface.get_pixel((fragment.content_box.x + fragment.content_box.w - 3.0) as u32, y).unwrap();
+        assert!(left[0] > left[2], "left gradient pixel: {left:?}");
+        assert!(right[2] > right[0], "right gradient pixel: {right:?}");
+    }
+
+    #[test]
+    fn list_style_gradient_reaches_generated_image_painter() {
+        fn generated(box_: &LayoutBox) -> Option<(String, amazing_layout::Rect)> {
+            for fragment in box_.styled_replaced_fragments() {
+                if let Some(key) = fragment.generated_url {
+                    if key.starts_with("linear-gradient") { return Some((key, fragment.content_box)); }
+                }
+            }
+            if let amazing_layout::Flow::Blocks(children)
+                | amazing_layout::Flow::Flex(children)
+                | amazing_layout::Flow::Grid(children) = &box_.flow {
+                for child in children { if let Some(found) = generated(child) { return Some(found); } }
+            }
+            for child in &box_.positioned {
+                if let Some(found) = generated(child) { return Some(found); }
+            }
+            None
+        }
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(
+            "<body><ul><li>item</li></ul></body>",
+            "body{margin:0}ul{margin:0 0 0 200px}li{list-style-image:linear-gradient(red,blue)}",
+            500.0,
+            &text,
+        );
+        let (key, rect) = generated(&root).expect("gradient list marker");
+        assert!(key.starts_with("linear-gradient"));
+        let surface = paint_document_with_text_resources(&root, 500, 300, &text, &NoImages);
+        let point = surface.get_pixel((rect.x + rect.w * 0.5) as u32, (rect.y + rect.h * 0.25) as u32).unwrap();
+        assert!(point[0] > point[2] && point[2] > 0, "gradient marker pixel: {point:?}");
     }
     use crate::text::{draw_fragment, RectInkProvider};
     use amazing_layout::{Flow, Rect};

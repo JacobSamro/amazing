@@ -132,9 +132,7 @@ impl Interpreter {
         self.define_global("Number", replacement.clone());
         if let JsValue::Object(number) = replacement {
             number.borrow_mut().define("length", symbol_data(JsValue::num(1.0), false, true)).unwrap();
-            let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
-            prototype.borrow_mut().proto = Some(self.object_proto.clone());
-            prototype.borrow_mut().set_own("[[NumberData]]", JsValue::num(0.0));
+            let prototype = self.number_proto.clone();
             number.borrow_mut().define("prototype", symbol_data(JsValue::Object(prototype.clone()), false, false)).unwrap();
             prototype.borrow_mut().define("constructor", symbol_data(JsValue::Object(number.clone()), true, true)).unwrap();
             for (name, value) in [

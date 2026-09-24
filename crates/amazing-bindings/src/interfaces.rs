@@ -146,11 +146,16 @@ const PARENT: &[Member] = &[
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::FragmentChildren),
+    getter("firstElementChild", O::FirstElementChild),
+    getter("lastElementChild", O::LastElementChild),
+    getter("childElementCount", O::ChildElementCount),
     method("append", O::Append, 0),
     method("prepend", O::Prepend, 0),
     method("replaceChildren", O::ReplaceChildren, 0),
 ];
 const CHARACTER_DATA: &[Member] = &[
+    getter("previousElementSibling", O::PreviousElementSibling),
+    getter("nextElementSibling", O::NextElementSibling),
     getter("data", O::Data),
     setter("data", O::SetData),
     getter("length", O::Length),
@@ -165,6 +170,7 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
     getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
     getter("head", O::DocumentHead),
@@ -173,7 +179,9 @@ const DOCUMENT: &[Member] = &[
     getter("doctype", O::DocumentDoctype),
     getter("readyState", O::DocumentReadyState),
     getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
-    getter("characterSet", O::DocumentCharacterSet), getter("contentType", O::DocumentContentType),
+    getter("characterSet", O::DocumentCharacterSet),
+    getter("charset", O::DocumentCharacterSet), getter("inputEncoding", O::DocumentCharacterSet),
+    getter("contentType", O::DocumentContentType),
     getter("compatMode", O::DocumentCompatMode), getter("referrer", O::DocumentReferrer),
     method("getElementById", O::DocumentGetElementById, 1),
     method("getElementsByName", O::DocumentGetElementsByName, 1),
@@ -186,6 +194,9 @@ const DOCUMENT: &[Member] = &[
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::DocumentChildren),
+    getter("firstElementChild", O::FirstElementChild),
+    getter("lastElementChild", O::LastElementChild),
+    getter("childElementCount", O::ChildElementCount),
     method("getElementsByTagName", O::DocumentGetElementsByTagName, 1),
     method("getElementsByTagNameNS", O::DocumentGetElementsByTagNameNS, 2),
     method("getElementsByClassName", O::DocumentGetElementsByClassName, 1),
@@ -252,6 +263,9 @@ const FORM_DATA: &[Member] = &[
 const FONT_FACE_SET: &[Member] = &[
     getter("status", O::FontFaceSetStatus), getter("ready", O::FontFaceSetReady),
 ];
+const DOM_PARSER: &[Member] = &[
+    method("parseFromString", O::DOMParserParseFromString, 2),
+];
 const DOM_IMPLEMENTATION: &[Member] = &[
     method("createDocumentType", O::ImplementationCreateDocumentType, 3),
     method("createDocument", O::ImplementationCreateDocument, 3),
@@ -299,6 +313,26 @@ const DOM_TOKEN_LIST: &[Member] = &[
     getter("value", O::TokenListValue),
     setter("value", O::TokenListSetValue),
     method("toString", O::TokenListValue, 0),
+];
+const LOCATION: &[Member] = &[
+    getter("href", O::LocationHref), setter("href", O::LocationSetHref),
+    getter("origin", O::LocationOrigin),
+    getter("protocol", O::LocationProtocol), setter("protocol", O::LocationSetProtocol),
+    getter("host", O::LocationHost), setter("host", O::LocationSetHost),
+    getter("hostname", O::LocationHostname), setter("hostname", O::LocationSetHostname),
+    getter("port", O::LocationPort), setter("port", O::LocationSetPort),
+    getter("pathname", O::LocationPathname), setter("pathname", O::LocationSetPathname),
+    getter("search", O::LocationSearch), setter("search", O::LocationSetSearch),
+    getter("hash", O::LocationHash), setter("hash", O::LocationSetHash),
+    method("assign", O::LocationAssign, 1), method("replace", O::LocationReplace, 1),
+    method("reload", O::LocationReload, 0),
+    getter("ancestorOrigins", O::LocationAncestorOrigins),
+    method("toString", O::LocationToString, 0),
+];
+const DOM_STRING_LIST: &[Member] = &[
+    getter("length", O::DOMStringListLength),
+    method("item", O::DOMStringListItem, 1),
+    method("contains", O::DOMStringListContains, 1),
 ];
 const NODE_ITERATOR: &[Member] = &[
     getter("root", O::TraversalRoot),
@@ -376,13 +410,24 @@ const ELEMENT: &[Member] = &[
     getter("id", O::ElementId),
     setter("id", O::ElementSetId),
     getter("children", O::ElementChildren),
+    getter("firstElementChild", O::FirstElementChild),
+    getter("lastElementChild", O::LastElementChild),
+    getter("childElementCount", O::ChildElementCount),
+    getter("previousElementSibling", O::PreviousElementSibling),
+    getter("nextElementSibling", O::NextElementSibling),
     method("getElementsByTagName", O::ElementGetElementsByTagName, 1),
     method("getElementsByTagNameNS", O::ElementGetElementsByTagNameNS, 2),
     method("getElementsByClassName", O::ElementGetElementsByClassName, 1),
     getter("classList", O::ElementClassList),
+    setter("classList", O::ElementSetClassName),
     getter("className", O::ElementClassName),
     setter("className", O::ElementSetClassName),
     getter("attributes", O::ElementAttributes),
+    method("hasAttributes", O::ElementHasAttributes, 0),
+    method("getAttributeNames", O::ElementGetAttributeNames, 0),
+    method("hasAttribute", O::ElementHasAttribute, 1),
+    method("hasAttributeNS", O::ElementHasAttributeNS, 2),
+    method("toggleAttribute", O::ElementToggleAttribute, 1),
     method("getAttribute", O::ElementGetAttribute, 1),
     method("getAttributeNS", O::ElementGetAttributeNS, 2),
     method("setAttribute", O::ElementSetAttribute, 2),
@@ -446,7 +491,7 @@ const HYPERLINK: &[Member] = &[
     method("toString", O::ElementHref, 0),
     getter("target", O::ElementTarget), setter("target", O::ElementSetTarget),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
-    getter("relList", O::ElementRelList),
+    getter("relList", O::ElementRelList), setter("relList", O::ElementSetRelList),
     getter("download", O::ElementDownload), setter("download", O::ElementSetDownload),
 ];
 const IMAGE: &[Member] = &[
@@ -511,7 +556,7 @@ const FORM: &[Member] = &[
     form_get("noValidate", F::NoValidate), form_set("noValidate", F::NoValidate),
     form_get("target", F::Target), form_set("target", F::Target),
     form_get("rel", F::Rel), form_set("rel", F::Rel),
-    form_get("relList", F::RelList),
+    form_get("relList", F::RelList), form_set("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
@@ -525,7 +570,7 @@ const FORM_CONTROL: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const OUTPUT: &[Member] = &[
-    getter("htmlFor", O::OutputHtmlFor),
+    getter("htmlFor", O::OutputHtmlFor), setter("htmlFor", O::OutputSetHtmlFor),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
@@ -533,7 +578,7 @@ const OUTPUT: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const IFRAME: &[Member] = &[
-    getter("sandbox", O::IFrameSandbox),
+    getter("sandbox", O::IFrameSandbox), setter("sandbox", O::IFrameSetSandbox),
 ];
 const BUTTON: &[Member] = &[
     form_get("command", F::Command), form_set("command", F::Command),
@@ -638,8 +683,8 @@ const SCRIPT: &[Member] = &[
 const LINK: &[Member] = &[
     getter("href", O::ElementHref), setter("href", O::ElementSetHref),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
-    getter("relList", O::ElementRelList),
-    getter("sizes", O::LinkSizes),
+    getter("relList", O::ElementRelList), setter("relList", O::ElementSetRelList),
+    getter("sizes", O::LinkSizes), setter("sizes", O::LinkSetSizes),
     getter("media", O::LinkMedia), setter("media", O::LinkSetMedia),
     getter("type", O::ResourceType), setter("type", O::ResourceSetType),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
@@ -660,6 +705,12 @@ const OLIST: &[Member] = &[
 ];
 const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
 pub static INTERFACES: &[D] = &[
+    D { interface: I::Location, name: "Location", parent: None,
+        constructor: None, members: LOCATION },
+    D { interface: I::DOMStringList, name: "DOMStringList", parent: None,
+        constructor: None, members: DOM_STRING_LIST },
+    D { interface: I::DOMParser, name: "DOMParser", parent: None,
+        constructor: Some(O::DOMParserConstructor), members: DOM_PARSER },
     D { interface: I::URL, name: "URL", parent: None, constructor: Some(O::URLConstructor), members: URL },
     D { interface: I::URLSearchParams, name: "URLSearchParams", parent: None,
         constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
@@ -693,6 +744,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::DocumentConstructor),
         members: DOCUMENT,
     },
+    D { interface: I::XMLDocument, name: "XMLDocument", parent: Some(I::Document),
+        constructor: None, members: &[] },
     D {
         interface: I::DocumentFragment,
         name: "DocumentFragment",
@@ -835,7 +888,7 @@ pub static INTERFACES: &[D] = &[
         name: "ProcessingInstruction",
         parent: Some(I::CharacterData),
         constructor: None,
-        members: &[],
+        members: &[getter("target", O::ProcessingInstructionTarget)],
     },
     D {
         interface: I::AbstractRange,

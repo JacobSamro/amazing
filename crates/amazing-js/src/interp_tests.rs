@@ -1,6 +1,25 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loose_equality_handles_html_dda_internal_slot() {
+        let mut interpreter = Interpreter::new();
+        let mut html_dda = JsObject::ordinary();
+        html_dda.proto = Some(interpreter.object_proto.clone());
+        html_dda.is_html_dda = true;
+        let html_dda = JsValue::object(html_dda);
+        let mut ordinary = JsObject::ordinary();
+        ordinary.proto = Some(interpreter.object_proto.clone());
+        let ordinary = JsValue::object(ordinary);
+        for nullish in [JsValue::Null, JsValue::Undefined] {
+            assert!(interpreter.loose_eq(&html_dda, &nullish).unwrap());
+            assert!(interpreter.loose_eq(&nullish, &html_dda).unwrap());
+            assert!(!interpreter.loose_eq(&ordinary, &nullish).unwrap());
+        }
+        assert!(!interpreter.loose_eq(&html_dda, &JsValue::Bool(false)).unwrap());
+    }
+
     fn external() -> Interpreter {
         Interpreter::new_with_external_scheduler(64).unwrap()
     }

@@ -1,4 +1,5 @@
-use amazing_ipc::{codec, interface, memory_pair, wire_enum, wire_struct, Connection, Error};
+use amazing_ipc::{codec, interface, memory_pair, wire_enum, wire_struct, Connection, Dispatcher, Error};
+use amazing_ipc::version::{negotiate, VersionRange};
 use std::collections::BTreeMap;
 use std::time::Duration;
 wire_enum! {#[derive(Debug,PartialEq,Eq)] pub enum Mode {Off(()) = 0, On(String) = 1}}
@@ -109,4 +110,44 @@ fn timeout_cancels_request_and_interfaces_are_associated() {
             .unwrap(),
         6
     );
+}
+
+#[test]
+fn interface_version_compatibility_matrix_and_optional_field() {
+    let local = [VersionRange { interface: 3, min: 1, max: 3 }];
+    for (min, max, expected) in [(1, 1, Some(1)), (1, 2, Some(2)), (2, 4, Some(3)), (4, 5, None)] {
+        let remote = [VersionRange { interface: 3, min, max }];
+        assert_eq!(negotiate(&local, &remote).unwrap().get(&3).copied(), expected);
+    }
+    assert_eq!(negotiate(&local, &[local[0], local[0]]), Err(codec::Error::Invalid));
+    assert_eq!(negotiate(&local, &[VersionRange { interface: 3, min: 3, max: 2 }]), Err(codec::Error::Invalid));
+    let field = codec::MinVersion { since: 2, value: Some("new".to_string()) };
+    let decoded: codec::MinVersion<String> = codec::decode(&codec::encode(&field).unwrap()).unwrap();
+    assert_eq!(decoded.at(1), None);
+    assert_eq!(decoded.at(2).map(String::as_str), Some("new"));
+}
+
+#[test]
+fn unknown_method_is_rejected_without_closing_the_interface() {
+    let receiver = EchoReceiver(Server);
+    assert_eq!(receiver.dispatch(65535, &[]), Err(Error::UnknownMethod));
+    let answer = receiver.dispatch(1, &codec::encode(&"ok".to_string()).unwrap()).unwrap();
+    assert_eq!(codec::decode::<String>(&answer).unwrap(), "ok");
+    let (a, b) = memory_pair();
+    let client = Connection::with_versions(a, [(3, 1)].into());
+    let server = Connection::new(b);
+    server.bind(3, receiver);
+    assert_eq!(client.call(4, 1, vec![], Duration::from_secs(1)), Err(Error::UnknownInterface));
+    assert_eq!(
+        client.call(3, 65535, vec![], Duration::from_secs(1)),
+        Err(Error::Remote("UnknownMethod".into()))
+    );
+    assert_eq!(EchoProxy::new(client, Duration::from_secs(1)).echo("still open".into()).unwrap(), "still open");
+}
+
+#[test]
+fn packet_payload_uses_frame_budget_for_resource_uploads() {
+    let packet = amazing_ipc::Packet { interface: 11, id: 1, kind: amazing_ipc::REQUEST, payload: vec![7; 256 * 256 * 4] };
+    let encoded = codec::encode(&packet).unwrap();
+    assert_eq!(codec::decode::<amazing_ipc::Packet>(&encoded).unwrap().payload, packet.payload);
 }

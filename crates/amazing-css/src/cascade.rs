@@ -340,7 +340,7 @@ use context::{CompiledRule, compile_sheets};
 
 #[path = "cascade_invalidation.rs"]
 mod invalidation;
-pub use invalidation::{recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
+pub use invalidation::{recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
 
 #[path = "presentational_hints.rs"]
 mod hints;
@@ -1247,10 +1247,14 @@ hr { display: block; margin: 0.5em auto;
 button, input, select { display: inline-block; }
 textarea { display: inline-block; font-family: monospace; }
 ruby { display: ruby; }
-rb { display: ruby-base; }
-rt { display: ruby-text; font-size: 50%; }
-rtc { display: ruby-text-container; font-size: 50%; }
+rbc { display: ruby-base-container; }
+rb { display: ruby-base; white-space: nowrap; }
+rt { display: ruby-text; }
+rtc { display: ruby-text-container; }
 rp { display: none; }
+ruby, rb, rt, rbc, rtc { unicode-bidi: isolate; }
+rtc, rt { font-variant-east-asian: ruby; white-space: nowrap; line-height: 1; }
+rtc, :not(rtc) > rt { font-size: 50%; }
 "#;
 
 #[cfg(test)]
@@ -1573,6 +1577,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_content_data_url_and_gradient_image_runs() {
+        let (dom, elements) = fixture();
+        let p = elements[5];
+        let css = parse_stylesheet(
+            "p::before { content: url(data:image/png;base64,AA+10/20==) } \
+             p::after { content: linear-gradient(red, blue) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::Before).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("data:image/png;base64,AA+10/20==".into())]
+        );
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::After).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("linear-gradient(red,blue)".into())]
+        );
+    }
+
+    #[test]
     fn pseudo_box_generation_and_selector_specificity() {
         let (dom, elements) = fixture();
         let p = elements[5];
@@ -1641,6 +1664,44 @@ mod tests {
         assert_eq!(styled.get(els[1]).unwrap().get("display"), Some("none"));
         // Heading picked up its UA font-size.
         assert_eq!(styled.get(els[4]).unwrap().get("font-size"), Some("32px"));
+    }
+
+    #[test]
+    fn ruby_defaults_ua_mapping_and_inherited_properties() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let ruby = dom.create_element(body, "ruby");
+        let rbc = dom.create_element(ruby, "rbc");
+        let rb = dom.create_element(rbc, "rb");
+        let rtc = dom.create_element(ruby, "rtc");
+        let rt = dom.create_element(rtc, "rt");
+        let direct_rt = dom.create_element(ruby, "rt");
+        let rp = dom.create_element(ruby, "rp");
+        let styled = compute(&dom, &[]);
+        for (node, display) in [(ruby, "ruby"), (rbc, "ruby-base-container"),
+            (rb, "ruby-base"), (rtc, "ruby-text-container"), (rt, "ruby-text"),
+            (rp, "none")] {
+            assert_eq!(styled.get(node).unwrap().get("display"), Some(display));
+        }
+        for (property, initial) in [("ruby-align", "space-around"), ("ruby-position", "alternate"),
+            ("ruby-overhang", "auto"), ("ruby-merge", "separate")] {
+            assert_eq!(styled.get(rt).unwrap().get(property), Some(initial));
+        }
+        assert_eq!(styled.get(rb).unwrap().get("white-space"), Some("nowrap"));
+        assert_eq!(styled.get(rt).unwrap().get("line-height"), Some("1"));
+        assert_eq!(styled.get(rt).unwrap().get("font-size"), Some("8px"));
+        assert_eq!(styled.get(direct_rt).unwrap().get("font-size"), Some("8px"));
+
+        let css = parse_stylesheet("ruby { ruby-align: center; ruby-position: under alternate; ruby-overhang: none; ruby-merge: merge } rt { ruby-align: inherit }");
+        let styled = compute(&dom, &[css]);
+        for node in [rbc, rb, rtc, rt] {
+            let style = styled.get(node).unwrap();
+            assert_eq!(style.get("ruby-align"), Some("center"));
+            assert_eq!(style.get("ruby-position"), Some("alternate under"));
+            assert_eq!(style.get("ruby-overhang"), Some("spaces"));
+            assert_eq!(style.get("ruby-merge"), Some("merge"));
+        }
     }
 
     #[test]

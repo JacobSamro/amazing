@@ -1297,3 +1297,56 @@ values override animations. Transitions override all other origins. Author
 show the winning value; `StyledDom::source()` reports its origin. The compositor
 or driver must serialize its `AnimationValue` samples into the CSS insertion
 API and route main-thread property updates at the rendering-update boundary.
+
+## CSS-17 color consensus cluster
+
+Commit `1e99299` adds two-color `color-mix()` in sRGB, linear sRGB and LCH,
+`contrast-color()` choosing black or white, relative HSL identity from
+`currentColor`, and the `InactiveBorder` system alias. A mix using
+`currentColor` resolves against the element's computed color; `color` uses its
+parent's color, while an inherited background mix retains its source and
+resolves again on the child. The selected WPT `color-mix-currentcolor-002` and
+`-003` cases verify this inheritance path. Other color spaces and general
+relative-color expressions remain separate work.
+
+The pinned 259-case broad selection moved from **198 pass / 61 mismatch** to
+**202 pass / 57 mismatch**, with four Chrome/Safari consensus gains and zero
+pass losses. The 72-case cascade selection remained **68 pass / 2 mismatch /
+2 unsupported**, with no classification changes. Both use WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; per-case hashes and
+classifications are in `crates/amazing-css/evidence/css17-*-case-results.jsonl`
+and the summary in `css17-color-results.json`. Windows exact-source gate:
+CSS **266/266**, workspace **2027/2027** plus five skipped, doctests **2/2**.
+
+## CSS-18 selector serialization and complex logical lists
+
+Commit `3172976` re-escapes decoded identifiers when declaration and selector
+tokens are serialized, so `:lang(\*-FR)` retains its wildcard language range
+through stylesheet parsing. `:is()`, `:where()`, and `:not()` accept complex
+selector-list arguments with combinators. The first two drop invalid list
+items and match nothing when none remain. Complex arguments use their full
+selector specificity, while `:where()` stays zero. Style invalidation takes
+the conservative relational fallback for these complex arguments.
+
+The pinned 259-case broad WPT selection moved from **202 pass / 57 mismatch**
+to **204 pass / 55 mismatch**, gaining `is-where-pseudo-elements` and
+`lang-015` with zero losses. Both are Chrome/Safari pass-consensus cases.
+The 72-case cascade selection remained **68 pass / 2 mismatch / 2
+unsupported** with identical classifications. Per-case classifications and
+pixel hashes are in `crates/amazing-css/evidence/css18-*-case-results.jsonl`;
+`css18-selector-results.json` records counts and report hashes. Linux CSS
+**268/268** and workspace **2027/2027** plus five skipped passed.
+The exact-source Windows gate passed CSS **268/268**, workspace **2029/2029**
+plus five skipped, and doctests **2/2**.
+
+## CSS Ruby 1 property handoff for LAYOUT-16
+
+The ruby display values were already accepted by the typed `display` parser and the UA sheet already mapped `ruby`, `rb`, `rt`, `rtc`, and `rp`. Add `rbc` mapping and complete the UA defaults (annotation size only once within `rtc`, nonwrapping bases/annotations, ruby font variant, and isolation). Register the inherited `ruby-align`, `ruby-position`, `ruby-overhang`, and `ruby-merge` properties with their CSS Ruby 1 initials and value grammars. The `ruby-position` unordered two-keyword form canonicalizes to `alternate over/under`; legacy `ruby-overhang: none` computes to `spaces`. See [CSS Ruby 1](https://drafts.csswg.org/css-ruby-1/).
+
+Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped. Windows exact-source gate and doctests are recorded in `.agents/css/report.md`.
+
+## CSS-13 style-change severity and compositor handoff (ADR 0010)
+
+`StyleChangeKind` orders `None`, `CompositorOnly`, `PaintOnly`, `Layout`, and `Rebuild`. The explicit table covers all 193 registered longhands; its registry test fails when a new property lacks a classification. `StyleDelta::change_kind(node)` reports the most severe computed change from incremental recalculation. Changes to pseudo boxes or unknown computed state require rebuild. The normal recomputation path escalates transform changes to layout and opacity changes to rebuild because it cannot prove a retained property-tree-only update.
+
+`StyleInvalidator::update_attribute` handles a single class/style mutation and returns `AttributeStyleUpdate`. Its `CompositorOnly` variant is a value-only path: it parses only the old/new inline declarations and existing cached style, never calls CSS `compute`, and carries `opacity: Option<f32>` plus a final row-major local `transform_matrix`. The matrix includes the default 50%/50% transform origin; `Matrix4(matrix)` is the compositor conversion, with no second origin application. `update_attribute_with_box` accepts `CachedBoxSize` from unchanged retained layout for percent translations and rotation/scale origin composition. `CompositorStyleDelta::apply_to_styles` patches the retained computed style for repeated updates. The fast path rejects selector dependencies on `style`, `:has`, `attr()` dependencies, invalid or important declarations, non-inline winners, a transform that appears/disappears, child elements under a changed transform, unsupported relative lengths, explicit transform-origin, and opacity crossing 1. All rejected cases use incremental recomputation and a conservative severity.

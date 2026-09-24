@@ -6,6 +6,21 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 interface! {pub interface Echo(17) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
 #[test]
+fn bootstrap_acknowledges_only_after_handlers_are_bound() {
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let mut host = ProcessHost::spawn(
+        exe,
+        Role::Utility,
+        Capabilities(BTreeMap::from([("__bind_delay_ms".into(), "150".into())])),
+        RestartPolicy::Never,
+    )
+    .unwrap();
+    host.ping(Duration::from_secs(2)).unwrap();
+    let proxy = EchoProxy::new(host.connection.clone(), Duration::from_secs(2));
+    assert_eq!(proxy.echo("ready".into()).unwrap(), "echo:ready");
+    host.kill().unwrap();
+}
+#[test]
 fn child_roundtrip_crash_and_restart() {
     let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
     let mut host = ProcessHost::spawn(

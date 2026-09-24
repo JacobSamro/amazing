@@ -262,7 +262,7 @@ impl Program {
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
-            frame.env.declare_var(name, JsValue::Undefined)?;
+            frame.env.hoist_var(name)?;
         }
         for function in &self.functions {
             consume(&mut frame.fuel)?;

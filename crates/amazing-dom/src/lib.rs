@@ -18,6 +18,7 @@ pub mod attr;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
+pub mod render_mutation;
 pub mod markup;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
@@ -97,6 +98,7 @@ pub enum NodeKind {
 pub struct Node {
     owner_document: NodeIdx,
     namespaced_attributes: Vec<namespace::NamespacedAttribute>,
+    attribute_order: Vec<namespace::AttributeKey>,
     character_data_units: Option<Vec<u16>>,
     prefix: Option<String>,
     pub kind: NodeKind,
@@ -128,8 +130,14 @@ pub struct Dom {
     collections: Vec<collection::LiveCollection>,
     abort_signals: abort::AbortSignals,
     document_states: Vec<(NodeIdx, document_surface::ReadyState)>,
+    document_metadata: Vec<(NodeIdx, document_surface::DocumentMetadata)>,
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
+    node_generations: Vec<u64>,
+    node_slot_live: Vec<bool>,
+    free_node_slots: Vec<NodeIdx>,
+    render_epoch: u64,
+    render_mutations: Vec<render_mutation::RenderMutation>,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     shadow_roots: Vec<shadow::ShadowRootData>,
@@ -177,8 +185,14 @@ impl Dom {
             collections: Vec::new(),
             abort_signals: abort::AbortSignals::default(),
             document_states: Vec::new(),
+            document_metadata: Vec::new(),
             token_lists: Vec::new(),
             mutation_generation: 0,
+            node_generations: Vec::new(),
+            node_slot_live: Vec::new(),
+            free_node_slots: Vec::new(),
+            render_epoch: 0,
+            render_mutations: Vec::new(),
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             shadow_roots: Vec::new(),
@@ -193,6 +207,7 @@ impl Dom {
         dom.nodes.push(Node {
             owner_document: NodeIdx(0),
             namespaced_attributes: Vec::new(),
+            attribute_order: Vec::new(),
             character_data_units: None,
             prefix: None,
             kind: NodeKind::Document,
@@ -202,6 +217,8 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
+        dom.node_generations.push(1);
+        dom.node_slot_live.push(true);
         dom
     }
 
@@ -213,15 +230,22 @@ impl Dom {
     /// [`attach_before`] it. Used by the tree builder for foster-parented
     /// insertions where the final position isn't known at creation time.
     pub fn alloc_unattached(&mut self, kind: NodeKind) -> NodeIdx {
-        let index = u32::try_from(self.nodes.len()).expect("DOM arena exhausted u32 handles");
+        let index = self.free_node_slots.pop().map_or_else(||
+            u32::try_from(self.nodes.len()).expect("DOM arena exhausted u32 handles"), |node| node.0);
         let owner_document = if matches!(kind, NodeKind::Document) {
             NodeIdx(index)
         } else {
             NodeIdx(0)
         };
-        self.nodes.push(Node {
+        let attribute_order = if let NodeKind::Element { attrs, .. } = &kind {
+            attrs.iter().map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).collect()
+        } else { Vec::new() };
+        let node = Node {
             owner_document,
             namespaced_attributes: Vec::new(),
+            attribute_order,
             character_data_units: None,
             prefix: None,
             kind,
@@ -230,8 +254,31 @@ impl Dom {
             last_child: None,
             next_sibling: None,
             prev_sibling: None,
-        });
+        };
+        if (index as usize) < self.nodes.len() {
+            self.nodes[index as usize] = node;
+            self.node_generations[index as usize] = self.node_generations[index as usize]
+                .checked_add(1).expect("DOM node generation exhausted");
+            self.node_slot_live[index as usize] = true;
+        } else {
+            self.nodes.push(node);
+            self.node_generations.push(1);
+            self.node_slot_live.push(true);
+        }
         NodeIdx(index)
+    }
+
+    /// GC seam: the caller must prove no DOM side table or script wrapper can
+    /// still reach this unattached leaf. Detaching alone never retires a node.
+    #[allow(dead_code)] // Reserved for the DOM wrapper collector; exercised by the reuse test.
+    pub(crate) fn retire_unreachable_node(&mut self, node: NodeIdx) -> Result<(), DomError> {
+        self.check_node(node)?;
+        if node.0 == 0 || self.get(node).parent.is_some() || self.get(node).first_child.is_some() {
+            return Err(DomError::InvalidNode);
+        }
+        self.node_slot_live[node.0 as usize] = false;
+        self.free_node_slots.push(node);
+        Ok(())
     }
 
     pub fn get(&self, idx: NodeIdx) -> &Node {
@@ -380,6 +427,12 @@ impl Dom {
         if let NodeKind::Element { attrs: slot, .. } = &mut self.nodes[idx.0 as usize].kind {
             *slot = attrs;
         }
+        let namespaced: Vec<_> = self.nodes[idx.0 as usize].attribute_order.iter()
+            .filter(|key| key.namespace_uri.is_some()).cloned().collect();
+        self.nodes[idx.0 as usize].attribute_order = self.attrs_of(idx).unwrap().iter()
+            .map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).chain(namespaced).collect();
     }
 
     pub fn is_text(&self, idx: NodeIdx) -> bool {

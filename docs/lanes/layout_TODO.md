@@ -1138,3 +1138,85 @@ line-break opportunity around U+FFFC in `inline.rs::split_atomic_units`. It
 also owns style-aware font-relative units, full font-feature precedence,
 vertical text and bidi corrections, and TEXT-8 computed `TextStyle` stretch
 and oblique angle fields (`stretch_percent`, `oblique_angle_degrees`).
+
+## LAYOUT-14 — text metrics, spacing, and vertical inline layout
+
+Fixed base `d9b253e` for the pinned Windows render comparison; WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. The 192-case union of ten
+retained selections and vertical/ruby targets moved **148/192 → 153/192**:
+five exact gains, zero losses, and the same ten object-fit timeouts on both
+sides. Those image timeouts predate this patch on the fixed base. The focused
+13-case font/spacing selection moved **3/13 → 8/13**, with zero losses. Raw
+reports and manifests are under `crates/amazing-layout/evidence/layout14/`.
+
+The exact gains in the retained union are `sideways-lr-main-axis`,
+`baseline-with-orthogonal-flow-001`, `tcy-white-space-processing-001`,
+`text-combine-upright-line-breaking-rules-001`, and `rbc-rtc-basic-001`.
+The focused gains are `first-available-font-002`, both
+`font-feature-resolution` cases, `letter-spacing-200`, and
+`word-spacing-001`. `word-spacing-percent-001` stays exact: its percentage
+uses the current font size. The ten original retained selections have zero
+pass losses.
+
+Layout now resolves font-relative units through the first available font,
+maps computed font features with kerning and explicit-setting precedence,
+applies letter/word spacing, supplies exact stretch and oblique values,
+supports vertical inline columns and additional ruby/text-combine placement,
+preserves the provider's break opportunity around atomic units, exposes
+`layout_styled_document`, and sizes markers lacking an intrinsic image size
+at 1em square.
+
+Remaining measured vertical/ruby mismatches are
+`direction-upright-001` (nested bidi scopes),
+`text-combine-upright-compression-001` (atomic placement),
+`nested-ruby-pairing-001` (nested annotation model), and
+`ruby-overhang-spaces-vertical-001` (contextual overhang). The vertical-LR
+Ahem placement case improved from 4,083 to 1,299 differing pixels but remains
+nonexact. The focused `letter-spacing-end-of-line-001`,
+`letter-spacing-ligatures-001`, and `word-spacing-002/003` also remain
+nonexact. These are open layout conformance work, not counted as passes.
+
+The source-verified win-002 gate passed layout **269/269** nextest and
+**0/0** doctests, workspace **2135/2135** nextest (5 skipped) and **2/2**
+doctests. The default Windows storage profile was corrupt after STORE-2 and
+caused two unrelated integration tests to panic on startup; the passing gate
+used a fresh `AMAZING_STORAGE_DIR` and its full log is in the evidence folder.
+
+LAYOUT-15 is queued next: ADR 0010 step 3, retained layout with
+`LayoutTree::update` returning `GeometryDelta` and a full-layout debug oracle.
+
+## LAYOUT-15 — retained layout seam (ADR 0010 step 3)
+
+`amazing_layout::retained::LayoutTree` owns the laid-out root and DOM slot
+generations. `update` accepts CSS `StyleDelta`, changed text/replaced nodes,
+providers and viewport, then returns dirty severity and old/new box geometry
+keyed by DOM generation and source order. It records border/content geometry,
+layout overflow, hit rectangles and exact line-fragment fingerprints. Unknown
+dependencies return `RequiresFullRebuild` and refresh the tree in the same
+call. Dirty propagation stops at `contain: layout` only when the rebuilt
+boundary's outgoing geometry and overflow match the previous state.
+
+Opacity-only changes on retained principal boxes update style in place and
+preserve box geometry. The debug oracle compares the retained result against
+a fresh full layout, including fragments, and switches to the full result on
+the first mismatch. Other style, intrinsic, text, DOM-generation and viewport
+changes currently take the explicit full-rebuild path. This is a conservative
+starting point: independent subtree relayout and broad paint-only properties
+remain future work, and frame-time targets require coordinator adoption.
+The coordinator integration request is routed to integrator-assist in
+`.agents/layout/questions.md`.
+
+The source-verified win-002 gate on candidate `811c385` passed
+**277/277** layout nextest, **0/0** layout doctests, **2214/2214** workspace
+nextest (5 skipped), and **2/2** workspace doctests. The existing render
+path does not call `LayoutTree::update` yet; a pinned retained WPT selection
+checks that adding the API leaves current rendering unchanged. The layout
+unit tests exercise the CSS `StyleDelta` path, generation changes, severity,
+stable/unstable containment output, and oracle fallback.
+
+Pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` on
+fixed dev base `f676798`: the 192-case retained/vertical union was
+**163 pass / 29 mismatch / 0 timeout → 163 / 29 / 0**. All case IDs,
+classifications, actual pixel hashes and reference hashes matched exactly;
+zero gains and zero losses. The raw paired reports and source hashes are in
+`crates/amazing-layout/evidence/layout15/`.

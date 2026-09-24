@@ -472,10 +472,27 @@ impl Interpreter {
             });
         }
         self.define_global("String", string_ctor);
-        self.define_global(
-            "Boolean",
-            Self::native("Boolean", native_boolean, &self.function_proto),
-        );
+        let boolean_ctor = Self::native("Boolean", native_boolean, &self.function_proto);
+        if let JsValue::Object(object) = &boolean_ctor {
+            let _ = object.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(self.boolean_proto.clone()), writable: false,
+                enumerable: false, configurable: false, getter: None, setter: None,
+            });
+        }
+        let _ = self.boolean_proto.borrow_mut().define("constructor", Property {
+            value: boolean_ctor.clone(), writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        });
+        for (name, native) in [
+            ("toString", native_boolean_to_string as crate::value::NativeFn),
+            ("valueOf", native_boolean_value_of as crate::value::NativeFn),
+        ] {
+            let _ = self.boolean_proto.borrow_mut().define(name, Property {
+                value: symbol_method(self, name, native), writable: true,
+                enumerable: false, configurable: true, getter: None, setter: None,
+            });
+        }
+        self.define_global("Boolean", boolean_ctor);
         self.define_global(
             "isNaN",
             Self::native("isNaN", native_is_nan, &self.function_proto),

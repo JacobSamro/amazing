@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod host;
+pub mod storage_interfaces;
 pub mod dom_exception;
 
 mod interfaces;
@@ -30,6 +31,7 @@ mod traversal_bindings;
 mod event_bindings;
 mod abort_bindings;
 mod document_bindings;
+mod parser_bindings;
 mod element_reflection;
 pub use abort_bindings::fire_abort_timeout;
 mod mutation_bindings;
@@ -38,11 +40,13 @@ mod custom_element_bindings;
 mod form_bindings;
 mod form_reflection;
 mod web_bindings;
+mod location_bindings;
 mod attr_bindings;
 mod character_data_bindings;
 mod tokenlist;
 mod html_reflection;
 mod markup_bindings;
+pub mod canvas_interfaces;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use amazing_fetch::api::{Blob, BlobPart, File, FormData};

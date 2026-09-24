@@ -1,6 +1,7 @@
 //! Typed, bounded IPC over ordered in-process or child stdio transports.
 #![forbid(unsafe_code)]
 pub mod codec;
+pub mod version;
 use codec::{Decoder, Encoder, Wire};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -17,6 +18,7 @@ pub enum Error {
     Cancelled,
     Remote(String),
     UnknownInterface,
+    UnknownMethod,
     Timeout,
 }
 impl From<codec::Error> for Error {
@@ -141,14 +143,18 @@ impl Wire for Packet {
         self.interface.encode(e)?;
         self.id.encode(e)?;
         self.kind.encode(e)?;
-        self.payload.encode(e)
+        if self.payload.len() > codec::MAX_FRAME - 8 {
+            return Err(codec::Error::Limit);
+        }
+        (self.payload.len() as u32).encode(e)?;
+        e.bytes(&self.payload)
     }
     fn decode(d: &mut Decoder<'_>) -> Result<Self, codec::Error> {
         Ok(Self {
             interface: u32::decode(d)?,
             id: u64::decode(d)?,
             kind: u8::decode(d)?,
-            payload: Vec::<u8>::decode(d)?,
+            payload: codec::ByteBuf::decode(d)?.0,
         })
     }
 }
@@ -164,16 +170,30 @@ pub struct Connection {
     next: AtomicU64,
     pending: Mutex<HashMap<u64, mpsc::Sender<Result<Vec<u8>, Error>>>>,
     handlers: Mutex<HashMap<u32, Arc<dyn Dispatcher>>>,
+    versions: Mutex<Option<std::collections::BTreeMap<u32, u16>>>,
     closed: AtomicBool,
     cancelled: Mutex<std::collections::HashSet<u64>>,
 }
 impl Connection {
     pub fn new(transport: Arc<dyn Transport>) -> Arc<Self> {
+        Self::with_optional_versions(transport, None)
+    }
+    pub fn with_versions(
+        transport: Arc<dyn Transport>,
+        versions: std::collections::BTreeMap<u32, u16>,
+    ) -> Arc<Self> {
+        Self::with_optional_versions(transport, Some(versions))
+    }
+    fn with_optional_versions(
+        transport: Arc<dyn Transport>,
+        versions: Option<std::collections::BTreeMap<u32, u16>>,
+    ) -> Arc<Self> {
         let this = Arc::new(Self {
             transport,
             next: AtomicU64::new(1),
             pending: Mutex::new(HashMap::new()),
             handlers: Mutex::new(HashMap::new()),
+            versions: Mutex::new(versions),
             closed: AtomicBool::new(false),
             cancelled: Mutex::new(Default::default()),
         });
@@ -186,6 +206,12 @@ impl Connection {
             .lock()
             .unwrap()
             .insert(interface, Arc::new(handler));
+    }
+    pub fn interface_version(&self, interface: u32) -> Option<u16> {
+        self.versions.lock().unwrap().as_ref()?.get(&interface).copied()
+    }
+    fn allows(&self, interface: u32) -> bool {
+        self.versions.lock().unwrap().as_ref().is_none_or(|v| v.contains_key(&interface))
     }
     fn send(&self, p: Packet) -> Result<(), Error> {
         if self.closed.load(Ordering::Acquire) {
@@ -200,6 +226,9 @@ impl Connection {
         payload: Vec<u8>,
         timeout: Duration,
     ) -> Result<Vec<u8>, Error> {
+        if !self.allows(interface) {
+            return Err(Error::UnknownInterface);
+        }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         self.pending.lock().unwrap().insert(id, tx);
@@ -278,6 +307,9 @@ impl Connection {
                             let mut d = Decoder::raw(&p.payload);
                             let method = u16::decode(&mut d)?;
                             let body = d.take(d.remaining())?;
+                            if !conn.allows(p.interface) {
+                                return Err(Error::UnknownInterface);
+                            }
                             handler
                                 .ok_or(Error::UnknownInterface)?
                                 .dispatch(method, body)
@@ -311,7 +343,10 @@ impl Connection {
 macro_rules! interface {($vis:vis interface $name:ident ($iid:literal) => $proxy:ident, $receiver:ident {$(fn $method:ident ($arg:ident : $req:ty) -> $res:ty = $mid:literal;)*})=>{
  $vis trait $name:Send+Sync+'static {$(fn $method(&self,$arg:$req)->Result<$res,$crate::Error>;)*}
  $vis struct $proxy {connection:std::sync::Arc<$crate::Connection>,timeout:std::time::Duration}
- impl $proxy {pub fn new(connection:std::sync::Arc<$crate::Connection>,timeout:std::time::Duration)->Self{Self{connection,timeout}} $(pub fn $method(&self,$arg:$req)->Result<$res,$crate::Error>{let body=$crate::codec::encode(&$arg)?;let answer=self.connection.call($iid,$mid,body,self.timeout)?;Ok($crate::codec::decode(&answer)?)})*}
+ impl $proxy {pub fn new(connection:std::sync::Arc<$crate::Connection>,timeout:std::time::Duration)->Self{Self{connection,timeout}} $(pub fn $method(&self,$arg:$req)->Result<$res,$crate::Error>{let body=$crate::codec::encode(&$arg)?;let answer=self.connection.call($iid,$mid,body,self.timeout)?;Ok($crate::codec::decode(&answer)?)})*
+ /// Decode a request without executing its handler; used by bounded fuzz drivers.
+ pub fn validate_request(method:u16,payload:&[u8])->Result<(),$crate::Error>{match method {$($mid=>{let _:$req=$crate::codec::decode(payload)?;Ok(())}),*,_=>Err($crate::Error::UnknownMethod)}}
+ }
  $vis struct $receiver<T:$name>(pub T);
- impl<T:$name> $crate::Dispatcher for $receiver<T>{fn dispatch(&self,method:u16,payload:&[u8])->Result<Vec<u8>,$crate::Error>{match method {$($mid=>{let arg:$req=$crate::codec::decode(payload)?;let result=self.0.$method(arg)?;Ok($crate::codec::encode(&result)?)}),* ,_=>Err($crate::Error::Remote("unknown method".into()))}}}
+ impl<T:$name> $crate::Dispatcher for $receiver<T>{fn dispatch(&self,method:u16,payload:&[u8])->Result<Vec<u8>,$crate::Error>{match method {$($mid=>{let arg:$req=$crate::codec::decode(payload)?;let result=self.0.$method(arg)?;Ok($crate::codec::encode(&result)?)}),* ,_=>Err($crate::Error::UnknownMethod)}}}
 };}

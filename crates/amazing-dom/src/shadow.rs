@@ -143,6 +143,7 @@ impl Dom {
             available_to_element_internals,
             keep_custom_element_registry_null: false,
         });
+        self.record_render_full(host, "shadow root attached");
         self.reassign_all_slots();
         Ok(root)
     }
@@ -364,6 +365,12 @@ impl Dom {
                 let index = self.slot_states.iter().position(|state| state.slot == slot);
                 let old = index.map_or_else(Vec::new, |i| self.slot_states[i].assigned.clone());
                 if old != desired {
+                    let old_handles = old.iter().map(|id| self.render_handle(*id)).collect();
+                    let new_handles = desired.iter().map(|id| self.render_handle(*id)).collect();
+                    self.record_render_mutation(slot,
+                        crate::render_mutation::RenderMutationKind::SlotAssignment {
+                            old: old_handles, new: new_handles,
+                        });
                     self.queue_slotchange(slot);
                 }
                 if let Some(index) = index {
@@ -384,6 +391,13 @@ impl Dom {
             .map(|state| state.slot)
             .collect();
         for slot in removed {
+            if let Some(state) = self.slot_state(slot) {
+                let old = state.assigned.iter().map(|id| self.render_handle(*id)).collect();
+                self.record_render_mutation(slot,
+                    crate::render_mutation::RenderMutationKind::SlotAssignment {
+                        old, new: Vec::new(),
+                    });
+            }
             self.queue_slotchange(slot);
         }
         for state in &mut self.slot_states {

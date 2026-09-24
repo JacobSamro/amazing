@@ -107,6 +107,8 @@ fn has_scope(comp: &Compound) -> bool {
     comp.simple.iter().any(|s| match s {
         Simple::Pseudo(Pseudo::Scope) => true,
         Simple::Negation(v) | Simple::Matches(v) | Simple::Where(v) => v.iter().any(has_scope),
+        Simple::ComplexNegation(v) | Simple::ComplexMatches(v) | Simple::ComplexWhere(v) =>
+            v.iter().any(|selector| selector.compounds.iter().any(has_scope)),
         _ => false,
     })
 }

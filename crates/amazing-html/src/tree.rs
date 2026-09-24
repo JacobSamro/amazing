@@ -178,6 +178,7 @@ pub struct TreeBuilder {
     shadow_templates: Vec<(NodeIdx, NodeIdx)>,
     allow_declarative_shadow_roots: bool,
     fragment: bool,
+    fragment_context: Option<String>,
 }
 
 impl Default for TreeBuilder {
@@ -206,6 +207,7 @@ impl TreeBuilder {
             shadow_templates: Vec::new(),
             allow_declarative_shadow_roots: true,
             fragment: false,
+            fragment_context: None,
         }
     }
 
@@ -656,6 +658,13 @@ impl TreeBuilder {
                         return;
                     }
                     if self.dom.namespace(node) == Some(Namespace::Html) {
+                        // The in-body rules synthesize an element for a stray
+                        // </p> or </br>. Those recovery elements belong after
+                        // the foreign subtree. Other unmatched end tags must
+                        // leave that subtree open.
+                        if matches!(name.as_str(), "p" | "br") {
+                            self.open.truncate(position + 1);
+                        }
                         self.process_token_in_html(Token::EndTag { name });
                         return;
                     }
@@ -974,7 +983,9 @@ impl TreeBuilder {
                 "template" => Some(*self.template_modes.last().unwrap_or(&Mode::InTemplate)),
                 "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
-                "html" if self.fragment => Some(Mode::InBody),
+                "html" if self.fragment => Some(fragment_insertion_mode(
+                    self.fragment_context.as_deref().unwrap_or("html")
+                )),
                 "html" => Some(if self.head.is_none() {
                     Mode::BeforeHead
                 } else {
@@ -2771,14 +2782,10 @@ pub fn build_with_custom_element_host(
     builder.into_dom()
 }
 
-/// Fragment tree construction with only the synthetic `html` root on the open
-/// stack. The context element sets the initial mode but is not a tree child.
-pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
-    let mut builder = TreeBuilder::new();
-    builder.allow_declarative_shadow_roots = false;
-    builder.fragment = true;
-    builder.insert_and_push("html", Vec::new());
-    builder.mode = match context {
+/// The fragment context is the last node used by the reset insertion mode
+/// algorithm, even though it is not on the synthetic open-element stack.
+fn fragment_insertion_mode(context: &str) -> Mode {
+    match context {
         "html" => Mode::BeforeHead,
         "frameset" => Mode::InFrameset,
         "select" => Mode::InSelect,
@@ -2790,10 +2797,21 @@ pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
         "caption" => Mode::InCaption,
         "colgroup" => Mode::InColumnGroup,
         _ => Mode::InBody,
-    };
+    }
+}
+
+/// Fragment tree construction with only the synthetic `html` root on the open
+/// stack. The context element sets the initial mode but is not a tree child.
+pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
+    let mut builder = TreeBuilder::new();
+    builder.allow_declarative_shadow_roots = false;
+    builder.fragment = true;
+    builder.fragment_context = Some(context.to_owned());
+    builder.insert_and_push("html", Vec::new());
+    builder.mode = fragment_insertion_mode(context);
     if context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
-    if matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext") {
+    if matches!(context, "textarea" | "title" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "script" | "noscript" | "plaintext") {
         tokenizer.enter_fragment_text_context(context);
     }
     loop {
@@ -3078,6 +3096,27 @@ mod tests {
             dom.dump(NodeIdx(0)),
             "#document\n  <html>\n    <head>\n    <body>\n      <a>\n        <svg svg>\n          <svg tr>\n            <svg input>\n"
         );
+    }
+
+    #[test]
+    fn unmatched_p_and_br_end_tags_leave_foreign_content_before_html_recovery() {
+        for (foreign, ending, html_child) in [
+            ("svg", "p", "p"), ("svg", "br", "br"),
+            ("math", "p", "p"), ("math", "br", "br"),
+        ] {
+            let dom = build(&format!("<{foreign}></{ending}><foo>"));
+            assert_eq!(dom.dump(NodeIdx(0)), format!(
+                "#document\n  <html>\n    <head>\n    <body>\n      <{foreign} {foreign}>\n      <{html_child}>\n      <foo>\n"
+            ), "{foreign} / {ending}");
+        }
+    }
+
+    #[test]
+    fn other_unmatched_end_tags_keep_the_foreign_stack_open() {
+        assert_eq!(build("<math><annotation-xml></svg>x").dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <math math>\n        <math annotation-xml>\n          \"x\"\n");
+        assert_eq!(build("<svg><tfoot></mi><td>").dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        <svg tfoot>\n          <svg td>\n");
     }
 
     #[test]

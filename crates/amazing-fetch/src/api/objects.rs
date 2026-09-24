@@ -483,6 +483,8 @@ pub struct ApiResponseInit {
 pub struct ApiResponse {
     pub response_type: ApiResponseType,
     pub url: String,
+    /// Trusted URL chain; never exposed through the JavaScript Response interface.
+    pub url_list: Vec<String>,
     pub redirected: bool,
     pub status: u16,
     pub status_text: String,
@@ -529,6 +531,7 @@ impl ApiResponse {
         Ok(Self {
             response_type: ApiResponseType::Default,
             url: String::new(),
+            url_list: Vec::new(),
             redirected: false,
             status,
             status_text,
@@ -540,6 +543,7 @@ impl ApiResponse {
         Self {
             response_type: ApiResponseType::Error,
             url: String::new(),
+            url_list: Vec::new(),
             redirected: false,
             status: 0,
             status_text: String::new(),
@@ -596,6 +600,7 @@ impl ApiResponse {
         Ok(Self {
             response_type: self.response_type,
             url: self.url.clone(),
+            url_list: self.url_list.clone(),
             redirected: self.redirected,
             status: self.status,
             status_text: self.status_text.clone(),
@@ -604,6 +609,7 @@ impl ApiResponse {
         })
     }
     pub(crate) fn from_policy(response: crate::Response) -> Result<Self, ApiError> {
+        let url_list = response.url_list.iter().map(HttpUrl::serialize).collect();
         let url = response
             .url_list
             .last()
@@ -626,6 +632,7 @@ impl ApiResponse {
         Ok(Self {
             response_type,
             url,
+            url_list,
             redirected,
             status: response.status,
             status_text: response.status_text,
@@ -714,7 +721,8 @@ pub fn fetch_api(
             RedirectAction::Follow => continue,
             RedirectAction::Manual(response) => return ApiResponse::from_policy(response),
             RedirectAction::NavigationPending => {
-                return Err(ApiError::Network(FetchError::Redirect))
+                let filtered = filter_response(&policy, &response).map_err(ApiError::Network)?;
+                return ApiResponse::from_policy(filtered);
             }
             RedirectAction::NotRedirect => {}
         }
@@ -1022,7 +1030,9 @@ impl PendingFetchApi {
                             }
                             Ok(RedirectAction::Manual(r)) => Some(ApiResponse::from_policy(r)),
                             Ok(RedirectAction::NavigationPending) => {
-                                Some(Err(ApiError::Network(FetchError::Redirect)))
+                                Some(filter_response(&self.policy, &response)
+                                    .map_err(ApiError::Network)
+                                    .and_then(ApiResponse::from_policy))
                             }
                             Ok(RedirectAction::NotRedirect) => Some(
                                 filter_response(&self.policy, &response)

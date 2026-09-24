@@ -90,6 +90,7 @@ mod grid_algorithm;
 pub mod inline;
 pub mod position;
 pub mod replaced;
+pub mod retained;
 mod svg;
 pub mod values;
 
@@ -168,6 +169,10 @@ pub struct LayoutBox {
     pub style: ComputedStyle,
     pub font_size: f32,
     pub line_height: f32,
+    /// Computed face request used for font-relative CSS lengths on this box.
+    pub(crate) font_metric_style: Option<amazing_text::TextStyle>,
+    /// Root element's face request for rch/ric/rex/rcap.
+    pub(crate) root_font_metric_style: Option<amazing_text::TextStyle>,
     pub flow: Flow,
     /// Absolute/fixed descendants removed from this box's formatting context.
     /// They are laid out by the post-normal-flow positioning pass.
@@ -222,6 +227,8 @@ impl LayoutBox {
             style,
             font_size,
             line_height,
+            font_metric_style: None,
+            root_font_metric_style: None,
             flow: Flow::Empty,
             positioned: Vec::new(),
             inline_atomic: false,
@@ -305,6 +312,10 @@ pub enum InlineNode {
         source_mappings: Vec<TextSourceMapping>,
         font_size: f32,
         style: Box<amazing_text::TextStyle>,
+        /// Used CSS letter spacing in px; applied between visual character units.
+        letter_spacing: f32,
+        /// Used CSS word spacing; the percentage is relative to the current font size.
+        word_spacing: values::LengthPercentage,
         color: String,
         background_color: String,
         inline_padding: values::Sides,
@@ -453,19 +464,24 @@ pub fn layout_dom_document_with_text_and_replaced_in_viewport(
     text: &dyn TextSystem,
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
-    let mut root = layout_dom_document_with_replaced_in_viewport(
-        dom,
-        author_css,
-        viewport_width,
-        viewport_height,
-        &font::FontSource::fallback(),
-        replaced,
-    );
-    if has_floats(&root) {
-        block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
-    } else {
-        apply_shaped_text(&mut root, text);
-    }
+    let sheet = amazing_css::parse_stylesheet(author_css);
+    let styled = amazing_css::compute(dom, &[sheet]);
+    layout_styled_document(dom, &styled, text, replaced, viewport_width, viewport_height)
+}
+
+/// Lays out a document whose styles have already been computed by the caller.
+/// This is the entry point for animation and incremental style updates.
+pub fn layout_styled_document(
+    dom: &amazing_dom::Dom,
+    styled: &amazing_css::StyledDom,
+    text: &dyn TextSystem,
+    replaced: &dyn ReplacedElementProvider,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+) -> LayoutBox {
+    let fonts = font::FontSource::fallback();
+    let mut root = box_tree::build_layout_tree_with_replaced(dom, styled, &fonts, replaced);
+    block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
     root
 }
 
@@ -481,27 +497,7 @@ pub fn layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
     let styled = amazing_css::compute(dom, author_sheets);
-    let fonts = font::FontSource::fallback();
-    let mut root = box_tree::build_layout_tree_with_replaced(dom, &styled, &fonts, replaced);
-    block::layout_root_in_viewport(&mut root, viewport_width, viewport_height, &fonts);
-    if has_floats(&root) {
-        block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
-    } else {
-        apply_shaped_text(&mut root, text);
-    }
-    root
-}
-
-fn has_floats(layout: &LayoutBox) -> bool {
-    table_tree::role(layout) == table_tree::Role::Table
-        || floats::side(&layout.style).is_some()
-        || match &layout.flow {
-            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
-                children.iter().any(has_floats)
-            }
-            _ => false,
-        }
-        || layout.positioned.iter().any(has_floats)
+    layout_styled_document(dom, &styled, text, replaced, viewport_width, viewport_height)
 }
 
 fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
@@ -511,14 +507,14 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     block::refresh_atomic_inline_metrics(layout);
     if let Flow::Inlines(items) = &layout.flow {
         let first_style = items.iter().find_map(|item| match item {
-            InlineNode::Text { style, .. } => Some(style),
-            InlineNode::Ruby { columns, .. } => columns.first().map(|column| &column.base.style),
+            InlineNode::Text { style, .. } => Some(style.as_ref()),
+            InlineNode::Ruby { columns, .. } => columns.first().map(|column| column.base.style.as_ref()),
             InlineNode::BidiStart { .. }
             | InlineNode::BidiEnd
             | InlineNode::Break
             | InlineNode::Replaced { .. }
             | InlineNode::Atomic { .. } => None,
-        });
+        }).or(layout.font_metric_style.as_ref());
         if let Some(style) = first_style
             && let Ok(metrics) = text.metrics(style)
         {
@@ -562,6 +558,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 },
                 &strut,
                 base_direction,
+                style.writing_mode,
                 text,
                 &layout.float_context,
                 !layout.style.get("white-space").is_some_and(|value| {
@@ -896,6 +893,36 @@ mod shaped_text_tests {
 
     struct AtomicOrderFake(FallbackTextSystem);
 
+    struct RelativeMetricsFake(FallbackTextSystem);
+
+    impl TextSystem for RelativeMetricsFake {
+        fn generation(&self) -> u64 { self.0.generation() }
+        fn metrics(&self, style: &amazing_text::TextStyle) -> Result<FontMetrics, TextError> {
+            self.0.metrics(style)
+        }
+        fn font_relative_metrics(&self, style: &amazing_text::TextStyle) -> amazing_text::FontRelativeMetrics {
+            let mut metrics = self.0.font_relative_metrics(style);
+            if style.families.first().is_some_and(|family| family.contains("Metric Face")) {
+                metrics.ch_advance = 100.0;
+                metrics.ic_advance = 80.0;
+                metrics.x_height = 60.0;
+                metrics.cap_height = 70.0;
+            } else {
+                metrics.ic_advance = 17.0;
+            }
+            metrics
+        }
+        fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
+            self.0.shape(paragraph)
+        }
+        fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError> {
+            self.0.shape_line(request)
+        }
+        fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError> {
+            self.0.rasterize(request)
+        }
+    }
+
     impl TextSystem for AtomicOrderFake {
         fn generation(&self) -> u64 { self.0.generation() }
         fn metrics(&self, style: &amazing_text::TextStyle) -> Result<FontMetrics, TextError> {
@@ -986,6 +1013,41 @@ mod shaped_text_tests {
         assert_eq!(line.glyphs[1].cluster, 1..2);
         assert_eq!(line.glyphs[0].glyph, GlyphId('A' as u32));
         assert!(line.glyphs[1].x > line.glyphs[0].x);
+    }
+
+    #[test]
+    fn precomputed_style_entry_point_matches_document_layout() {
+        let dom = amazing_html::parse("<body><p>AB</p></body>");
+        let sheet = amazing_css::parse_stylesheet("p{margin-left:7px;letter-spacing:2px}");
+        let styled = amazing_css::compute(&dom, &[sheet]);
+        let text = FallbackTextSystem::new();
+        let precomputed = layout_styled_document(&dom, &styled, &text, &NoReplacedElements, 200.0, None);
+        let direct = layout_dom_document_with_text_and_replaced_in_viewport(
+            &dom, "p{margin-left:7px;letter-spacing:2px}", 200.0, None, &text, &NoReplacedElements,
+        );
+        let node = (0..dom.node_count()).map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p")).unwrap();
+        let a = find(&precomputed, node).unwrap();
+        let b = find(&direct, node).unwrap();
+        assert_eq!(a.border_box, b.border_box);
+        assert_eq!(a.lines[0].glyphs[1].x, b.lines[0].glyphs[1].x);
+    }
+
+    #[test]
+    fn block_lengths_use_element_and_root_font_metrics() {
+        let html = "<html><body><div id=target>\u{a0}</div></body></html>";
+        let css = "body{margin:0} #target{font-family:'Metric Face';width:1ch;height:0.5ch;margin-top:0.5ch;padding-left:1ex}";
+        let dom = amazing_html::parse(html);
+        let target = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("div"))
+            .unwrap();
+        let layout = layout_document_with_text(html, css, 300.0, &RelativeMetricsFake(FallbackTextSystem::new()));
+        let box_ = find(&layout, target).unwrap();
+        assert_eq!(box_.content_box.w, 100.0);
+        assert_eq!(box_.content_box.h, 50.0);
+        assert_eq!(box_.margin.top, Some(50.0));
+        assert_eq!(box_.padding.left, 60.0);
     }
 
     #[test]
@@ -1422,6 +1484,22 @@ mod shaped_text_tests {
 
         assert_eq!(lines.len(), 2);
         assert!(lines[1].glyphs[0].x < lines[0].glyphs[0].x);
+    }
+
+    #[test]
+    fn vertical_lr_preformatted_lines_advance_to_the_right() {
+        let html = "<body><p style=\"writing-mode:vertical-lr;width:120px;height:120px;font-size:20px;line-height:20px;white-space:pre\">ab\ncd</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let layout = layout_document_with_text(html, "", 200.0, &FallbackTextSystem::new());
+        let lines = &find(&layout, paragraph).unwrap().lines;
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].glyphs[0].x > lines[0].glyphs[0].x);
+        assert_eq!(lines[0].glyphs[0].x, lines[0].glyphs[1].x);
+        assert!(lines[0].glyphs[1].y > lines[0].glyphs[0].y);
     }
 
     #[test]

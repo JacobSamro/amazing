@@ -1,0 +1,62 @@
+IA driver render fixture isolation — 50 full-workspace parallel cycles
+Fixed base: local dev 544d7e8
+Source commit: 3f440dea2bb2794c40e4699c025dd683259ab08f
+Host: venus-001, Linux iteration only; Windows final gate recorded separately.
+Command per cycle: AMAZING_STORAGE_DIR=/tmp/ia-driver-flakes-full-$n cargo nextest run --workspace --locked --no-fail-fast --status-level pass --final-status-level fail
+Each cycle used a fresh workspace storage root; each named render test also gave its child renderer a unique storage root. Every cycle selected both named tests and exited 0.
+Full logs: venus-001:~/amazing/out/ia-driver-flakes-50-full/1.log through 50.log
+Earlier IPC stress logs under venus-001:~/amazing/out/ipc-ping-50-complete/ had both named tests fail in all 50 cycles with shared-profile `IndexedDB open: Corrupt` errors (the timeout case then exited 1 instead of 3). Their other workspace failures belong to the storage lane.
+Result: 50/50 full-workspace exits 0; both named driver tests executed and passed in all 50 cycles (100/100 test executions).
+Additional check on the host's pre-existing shared default storage profile (no `AMAZING_STORAGE_DIR` override): the two named tests passed 2/2 at source commit 3f440de, nextest run b6917b3c-5cbe-4cf4-8512-142db7e994fa.
+
+Cycle  Workspace summary
+01 Summary [  23.065s] 2154 tests run: 2154 passed, 5 skipped
+02 Summary [  25.725s] 2154 tests run: 2154 passed, 5 skipped
+03 Summary [  20.050s] 2154 tests run: 2154 passed, 5 skipped
+04 Summary [  21.585s] 2154 tests run: 2154 passed, 5 skipped
+05 Summary [  21.696s] 2154 tests run: 2154 passed, 5 skipped
+06 Summary [  23.942s] 2154 tests run: 2154 passed, 5 skipped
+07 Summary [  24.806s] 2154 tests run: 2154 passed, 5 skipped
+08 Summary [  24.252s] 2154 tests run: 2154 passed, 5 skipped
+09 Summary [  24.025s] 2154 tests run: 2154 passed, 5 skipped
+10 Summary [  20.515s] 2154 tests run: 2154 passed, 5 skipped
+11 Summary [  19.182s] 2154 tests run: 2154 passed, 5 skipped
+12 Summary [  20.402s] 2154 tests run: 2154 passed, 5 skipped
+13 Summary [  19.563s] 2154 tests run: 2154 passed, 5 skipped
+14 Summary [  18.783s] 2154 tests run: 2154 passed, 5 skipped
+15 Summary [  18.893s] 2154 tests run: 2154 passed, 5 skipped
+16 Summary [  18.485s] 2154 tests run: 2154 passed, 5 skipped
+17 Summary [  19.192s] 2154 tests run: 2154 passed, 5 skipped
+18 Summary [  22.225s] 2154 tests run: 2154 passed, 5 skipped
+19 Summary [  20.603s] 2154 tests run: 2154 passed, 5 skipped
+20 Summary [  20.637s] 2154 tests run: 2154 passed, 5 skipped
+21 Summary [  27.570s] 2154 tests run: 2154 passed, 5 skipped
+22 Summary [  21.722s] 2154 tests run: 2154 passed, 5 skipped
+23 Summary [  19.828s] 2154 tests run: 2154 passed, 5 skipped
+24 Summary [  18.978s] 2154 tests run: 2154 passed, 5 skipped
+25 Summary [  19.148s] 2154 tests run: 2154 passed, 5 skipped
+26 Summary [  31.669s] 2154 tests run: 2154 passed, 5 skipped
+27 Summary [  22.083s] 2154 tests run: 2154 passed, 5 skipped
+28 Summary [  20.956s] 2154 tests run: 2154 passed, 5 skipped
+29 Summary [  23.368s] 2154 tests run: 2154 passed, 5 skipped
+30 Summary [  23.336s] 2154 tests run: 2154 passed, 5 skipped
+31 Summary [  22.811s] 2154 tests run: 2154 passed, 5 skipped
+32 Summary [  23.136s] 2154 tests run: 2154 passed, 5 skipped
+33 Summary [  23.395s] 2154 tests run: 2154 passed, 5 skipped
+34 Summary [  28.843s] 2154 tests run: 2154 passed, 5 skipped
+35 Summary [  22.609s] 2154 tests run: 2154 passed, 5 skipped
+36 Summary [  22.335s] 2154 tests run: 2154 passed, 5 skipped
+37 Summary [  35.278s] 2154 tests run: 2154 passed, 5 skipped
+38 Summary [  21.709s] 2154 tests run: 2154 passed, 5 skipped
+39 Summary [  20.076s] 2154 tests run: 2154 passed, 5 skipped
+40 Summary [  24.736s] 2154 tests run: 2154 passed, 5 skipped
+41 Summary [  24.784s] 2154 tests run: 2154 passed, 5 skipped
+42 Summary [  23.750s] 2154 tests run: 2154 passed, 5 skipped
+43 Summary [  23.583s] 2154 tests run: 2154 passed, 5 skipped
+44 Summary [  22.765s] 2154 tests run: 2154 passed, 5 skipped
+45 Summary [  24.939s] 2154 tests run: 2154 passed, 5 skipped
+46 Summary [  18.053s] 2154 tests run: 2154 passed, 5 skipped
+47 Summary [  16.135s] 2154 tests run: 2154 passed, 5 skipped
+48 Summary [  17.359s] 2154 tests run: 2154 passed, 5 skipped
+49 Summary [  17.286s] 2154 tests run: 2154 passed, 5 skipped
+50 Summary [  18.301s] 2154 tests run: 2154 passed, 5 skipped

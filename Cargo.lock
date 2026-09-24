@@ -81,6 +81,7 @@ name = "amazing"
 version = "0.0.1"
 dependencies = [
  "amazing-bindings",
+ "amazing-canvas",
  "amazing-common",
  "amazing-compositor",
  "amazing-css",
@@ -93,6 +94,7 @@ dependencies = [
  "amazing-net",
  "amazing-paint",
  "amazing-regex",
+ "amazing-storage",
  "amazing-svg",
  "amazing-text",
  "amazing-text-provider",
@@ -105,6 +107,7 @@ dependencies = [
 name = "amazing-bindings"
 version = "0.0.1"
 dependencies = [
+ "amazing-canvas",
  "amazing-dom",
  "amazing-fetch",
  "amazing-net",
@@ -238,6 +241,7 @@ dependencies = [
 name = "amazing-process"
 version = "0.0.1"
 dependencies = [
+ "amazing-compositor",
  "amazing-css",
  "amazing-dom",
  "amazing-fetch",
@@ -248,7 +252,9 @@ dependencies = [
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-storage",
  "amazing-svg",
+ "amazing-text-provider",
 ]
 
 [[package]]

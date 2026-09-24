@@ -1,0 +1,9 @@
+WPT revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293; Git blob IDs frozen before RC-18 source edits.
+css/css-content/element-replacement-gradient.html bb1010b07533ebab2332b784b40b8622578c28bf
+css/css-content/element-replacement-gradient-ref.html ecbc1947e45d0bc693fced9744e287898944274e
+css/css-lists/list-style-image-gradients.html eb797155643d725e526c17d803f77c2129dda59d
+css/css-lists/list-style-image-gradients-ref.html 21092dad6e1a71762d588940091d29fa98b84114
+css/css-overflow/inline-block-with-scrollable-descendant.html c2c667726a37a3f1bd75cc5a94b05ea292351e06
+css/css-overflow/inline-block-with-scrollable-descendant-ref.html 4cad918f1bf3a89cd02c0792d16ec560b586641f
+css/css-overflow/overflow-img-scroll-non-replaced.html 6468c73068894979a8585191eb7358f0ee241880
+css/css-overflow/overflow-img-scroll-non-replaced-ref.html 426cb2be6609cfb2656da4240d132f2cde7544b0

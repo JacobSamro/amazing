@@ -2,6 +2,28 @@ use super::*;
 use crate::range::BoundaryPoint;
 
 #[test]
+fn attributes_keep_one_insertion_order_across_namespaces_and_clones() {
+    let mut dom = Dom::new();
+    let element = dom.create_element(NodeIdx(0), "div");
+    dom.set_attribute_qualified_ns(element, Some("urn:a"), "a:first", "1").unwrap();
+    dom.set_attribute(element, "plain", "2").unwrap();
+    dom.set_attribute_qualified_ns(element, Some("urn:b"), "b:last", "3").unwrap();
+    let names = |dom: &Dom, element| dom.attributes_expanded(element).unwrap().iter()
+        .map(AttributeRef::qualified_name).collect::<Vec<_>>();
+    assert_eq!(names(&dom, element), ["a:first", "plain", "b:last"]);
+    dom.set_attribute_ns(element, Some("urn:a"), "first", "updated").unwrap();
+    assert_eq!(names(&dom, element), ["a:first", "plain", "b:last"]);
+    let nodes = dom.attribute_nodes(element).unwrap();
+    assert_eq!(nodes.iter().map(|node| dom.attr_snapshot(*node).unwrap().name()).collect::<Vec<_>>(),
+        ["a:first", "plain", "b:last"]);
+    let copy = dom.clone_node(element, false).unwrap();
+    assert_eq!(names(&dom, copy), ["a:first", "plain", "b:last"]);
+    dom.remove_attribute_ns(element, Some("urn:a"), "first").unwrap();
+    dom.set_attribute_qualified_ns(element, Some("urn:a"), "a:first", "4").unwrap();
+    assert_eq!(names(&dom, element), ["plain", "b:last", "a:first"]);
+}
+
+#[test]
 fn create_element_local_name_does_not_extract_colon_prefix() {
     let mut dom = Dom::new();
     let element = dom.create_element_local_in(NodeIdx(0), Some(HTML), ":good:times:").unwrap();

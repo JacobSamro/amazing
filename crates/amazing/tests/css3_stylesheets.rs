@@ -7,7 +7,9 @@ struct Fixture(PathBuf);
 
 impl Fixture {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!("amazing-css3-{}-{name}", std::process::id()));
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("amazing-css3-{}-{nonce}-{name}", std::process::id()));
         fs::create_dir_all(&path).unwrap();
         Self(path)
     }
@@ -21,6 +23,7 @@ impl Fixture {
     fn run(&self, args: &[&str]) -> String {
         let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
             .args(args)
+            .env("AMAZING_STORAGE_DIR", self.0.join("storage"))
             .output()
             .unwrap();
         assert!(

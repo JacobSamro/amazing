@@ -46,6 +46,22 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn apply_compositor_values(
+        &mut self,
+        opacity: Option<f32>,
+        transform: Option<(&str, Vec<crate::values::Transform>)>,
+    ) {
+        if let Some(value) = opacity {
+            let css = value.to_string();
+            self.typed.insert("opacity".into(), ComputedValue::Number(css.parse().expect("finite opacity")));
+            self.props.insert("opacity".into(), css);
+        }
+        if let Some((css, value)) = transform {
+            self.props.insert("transform".into(), css.to_owned());
+            self.typed.insert("transform".into(), ComputedValue::Transform(value));
+        }
+    }
+
     /// Source stylesheet URL of a winning URL-bearing property.
     pub fn url_base(&self, property: &str) -> Option<&str> {
         self.url_bases.get(property).map(String::as_str)
@@ -140,8 +156,15 @@ impl ComputedStyle {
         let Some(color) = self.props.get("color") else { return };
         let Some([red, green, blue, alpha]) = crate::color::parse_css_color(color) else { return };
         let resolved = format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}");
-        for property in self.relative_colors.keys() {
-            self.props.insert(property.clone(), resolved.clone());
+        for (property, source) in &self.relative_colors {
+            let value = if relative_currentcolor_identity(source) {
+                Some(resolved.clone())
+            } else {
+                resolve_currentcolor_mix(source, &resolved)
+            };
+            if let Some(value) = value {
+                self.props.insert(property.clone(), value);
+            }
         }
     }
 
@@ -749,6 +772,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "normal",
         inherited: false,
     },
+    PropertyMetadata { name: "ruby-align", initial: "space-around", inherited: true },
+    PropertyMetadata { name: "ruby-position", initial: "alternate", inherited: true },
+    PropertyMetadata { name: "ruby-overhang", initial: "auto", inherited: true },
+    PropertyMetadata { name: "ruby-merge", initial: "separate", inherited: true },
     PropertyMetadata {
         name: "text-align",
         initial: "start",
@@ -1293,6 +1320,9 @@ fn expand_list_style(value: &str) -> Option<Vec<(String, String)>> {
             }
             [Token::Str(_)] | [Token::Ident(_)] => {
                 if style_type.replace(css).is_some() { return None; }
+            }
+            [Token::Url { .. }] => {
+                if image.replace(css).is_some() { return None; }
             }
             [Token::Function(name), Token::OpenParen, .., Token::CloseParen]
                 if name.eq_ignore_ascii_case("url") || crate::generated::image_function_name(name) => {
@@ -2787,7 +2817,7 @@ pub(crate) fn resolve_with_root(
                 &mut resolver,
             ),
         };
-        if relative_currentcolor_identity(&value) {
+        if relative_currentcolor_identity(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
         } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
             (specified.is_none() && property.inherited)) &&
@@ -2991,6 +3021,9 @@ fn compute_normal_value(
             None => value,
         }
     };
+    let computed = if property.name == "color" && color_mix_currentcolor(&computed) {
+        resolve_currentcolor_mix(&computed, parent.unwrap_or("black")).unwrap_or(computed)
+    } else { computed };
     let computed = if property.name.starts_with("animation-") || property.name.starts_with("transition-") {
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "font-size" {
@@ -3001,6 +3034,8 @@ fn compute_normal_value(
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
+    } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
+        values::ruby_canonical(property.name, &computed).unwrap_or(property.initial).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "zoom" {
@@ -3022,6 +3057,9 @@ fn compute_normal_value(
 // explicit inheritance so each element resolves currentColor against itself.
 fn relative_currentcolor_identity(value: &str) -> bool {
     let lower = value.trim().to_ascii_lowercase();
+    if matches!(lower.as_str(), "hsl(from currentcolor h s l)" | "hsla(from currentcolor h s l)") {
+        return true;
+    }
     let Some(inner) = lower.strip_prefix("color(").and_then(|value| value.strip_suffix(')')) else {
         return false;
     };
@@ -3030,11 +3068,30 @@ fn relative_currentcolor_identity(value: &str) -> bool {
         "display-p3-linear" | "a98-rgb" | "prophoto-rgb" | "rec2020", "r", "g", "b"])
 }
 
+fn color_mix_currentcolor(value: &str) -> bool {
+    let tokens = tokenize(value);
+    matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("color-mix"))
+        && tokens.iter().any(|token| matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor")))
+}
+
+fn resolve_currentcolor_mix(value: &str, color: &str) -> Option<String> {
+    if !color_mix_currentcolor(value) { return None; }
+    let [r, g, b, a] = crate::color::parse_css_color(color)?;
+    let mut tokens = tokenize(value);
+    for token in &mut tokens {
+        if matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor")) {
+            *token = Token::Hash(format!("{r:02x}{g:02x}{b:02x}{a:02x}"));
+        }
+    }
+    let [r, g, b, a] = crate::color::parse_css_color(&serialize(&tokens))?;
+    Some(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))
+}
+
 fn normalized_extended_color(value: &str) -> Option<String> {
     let lower = value.trim().to_ascii_lowercase();
-    if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color("].iter()
+    if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color(", "color-mix(", "contrast-color("].iter()
         .any(|prefix| lower.starts_with(prefix))
-        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "threedlightshadow")
+        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "inactiveborder" | "threedlightshadow")
     {
         return None;
     }

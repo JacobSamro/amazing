@@ -39,6 +39,60 @@ pub struct Binding {
     /// `true` for `let`/`const`: lexical bindings reject ANY same-frame
     /// redeclaration (§14.3.1), unlike `var`-over-`var`.
     pub lexical: bool,
+    /// Module declarations are allocated before evaluation. Imports point at
+    /// the same exporter cell, so reads always observe later writes.
+    pub initialized: bool,
+    pub import_target: Option<BindingCell>,
+}
+
+#[derive(Clone)]
+pub struct BindingCell(Rc<RefCell<Binding>>);
+
+impl std::fmt::Debug for BindingCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BindingCell({:p})", Rc::as_ptr(&self.0))
+    }
+}
+
+impl BindingCell {
+    pub fn new_value(value: JsValue) -> BindingCell {
+        BindingCell(Rc::new(RefCell::new(Binding {
+            value,
+            mutable: false,
+            lexical: true,
+            initialized: true,
+            import_target: None,
+        })))
+    }
+
+    fn target(&self) -> BindingCell {
+        let mut cell = self.clone();
+        for _ in 0..1024 {
+            let next = cell.0.borrow().import_target.clone();
+            match next {
+                Some(next) if !Rc::ptr_eq(&next.0, &cell.0) => cell = next,
+                _ => break,
+            }
+        }
+        cell
+    }
+
+    pub fn read(&self) -> Result<JsValue, Throw> {
+        let cell = self.target();
+        let binding = cell.0.borrow();
+        if !binding.initialized {
+            return Err(Throw::reference_error("module binding is uninitialized"));
+        }
+        Ok(binding.value.clone())
+    }
+
+    pub fn is_uninitialized(&self) -> bool {
+        !self.target().0.borrow().initialized
+    }
+
+    pub fn same_target(&self, other: &BindingCell) -> bool {
+        Rc::ptr_eq(&self.target().0, &other.target().0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +113,7 @@ pub struct Env {
     /// Per-binding cells: assignment mutates through `&self` without
     /// borrowing the whole frame, so a held `borrow()` on the frame never
     /// conflicts with an inner write.
-    vars: HashMap<String, RefCell<Binding>>,
+    vars: HashMap<String, BindingCell>,
     /// Receiver recorded by a call (`None` = transparent frame).
     pub this_binding: Option<JsValue>,
     /// Derived constructors have a local `this` binding that throws until super().
@@ -77,7 +131,19 @@ impl Env {
         mutable: bool,
         lexical: bool,
     ) -> Result<(), Throw> {
-        match self.vars.get(name).map(|b| b.borrow()) {
+        if let Some(cell) = self.vars.get(name) {
+            let mut existing = cell.0.borrow_mut();
+            if !existing.initialized
+                && existing.import_target.is_none()
+                && lexical
+                && existing.lexical
+            {
+                existing.value = value;
+                existing.initialized = true;
+                return Ok(());
+            }
+        }
+        match self.vars.get(name).map(|b| b.0.borrow()) {
             Some(existing) if !existing.mutable || !mutable || lexical || existing.lexical => {
                 return Err(Throw::syntax_error(format!(
                     "identifier '{name}' has already been declared"
@@ -87,11 +153,13 @@ impl Env {
         }
         self.vars.insert(
             name.to_string(),
-            RefCell::new(Binding {
+            BindingCell(Rc::new(RefCell::new(Binding {
                 value,
                 mutable,
                 lexical,
-            }),
+                initialized: true,
+                import_target: None,
+            }))),
         );
         Ok(())
     }
@@ -99,7 +167,7 @@ impl Env {
     /// §9.1.2 GetIdentifierReference: walk the chain; None = unresolvable.
     fn resolve_raw(&self, name: &str) -> Option<JsValue> {
         if let Some(b) = self.vars.get(name) {
-            return Some(b.borrow().value.clone());
+            return b.read().ok();
         }
         let p = self.parent.as_ref()?;
         p.0.borrow().resolve_raw(name)
@@ -110,7 +178,13 @@ impl Env {
     /// `Err` for assignment to `const`.
     fn assign_raw(&self, name: &str, value: JsValue) -> Result<bool, Throw> {
         if let Some(b) = self.vars.get(name) {
-            let mut b = b.borrow_mut();
+            if b.0.borrow().import_target.is_some() {
+                return Err(Throw::type_error(format!("assignment to import '{name}'")));
+            }
+            let mut b = b.0.borrow_mut();
+            if !b.initialized {
+                return Err(Throw::reference_error(format!("{name} is uninitialized")));
+            }
             if !b.mutable {
                 return Err(Throw::type_error(format!(
                     "assignment to constant variable '{name}'"
@@ -165,19 +239,81 @@ impl EnvHandle {
 
     /// `var` declaration: mutable, non-lexical, redeclaration-friendly.
     pub fn declare_var(&self, name: &str, value: JsValue) -> Result<(), Throw> {
-        self.0
-            .borrow_mut()
-            .declare_raw(name, value, true, false)
+        self.0.borrow_mut().declare_raw(name, value, true, false)
+    }
+
+    /// VarDeclarationInstantiation leaves an existing var/function value in
+    /// place. An existing lexical binding is still a declaration conflict.
+    pub fn hoist_var(&self, name: &str) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        if let Some(existing) = env.vars.get(name) {
+            if existing.0.borrow().lexical {
+                return Err(Throw::syntax_error(format!(
+                    "identifier '{name}' has already been declared"
+                )));
+            }
+            return Ok(());
+        }
+        env.declare_raw(name, JsValue::Undefined, true, false)
     }
 
     /// `let`/`const` declaration.
-    pub fn declare_lexical(
-        &self,
-        name: &str,
-        value: JsValue,
-        mutable: bool,
-    ) -> Result<(), Throw> {
+    pub fn declare_lexical(&self, name: &str, value: JsValue, mutable: bool) -> Result<(), Throw> {
         self.0.borrow_mut().declare_raw(name, value, mutable, true)
+    }
+
+    pub fn declare_uninitialized(&self, name: &str, mutable: bool) -> Result<BindingCell, Throw> {
+        let mut env = self.0.borrow_mut();
+        if env.vars.contains_key(name) {
+            return Err(Throw::syntax_error(format!(
+                "duplicate module binding '{name}'"
+            )));
+        }
+        let cell = BindingCell(Rc::new(RefCell::new(Binding {
+            value: JsValue::Undefined,
+            mutable,
+            lexical: true,
+            initialized: false,
+            import_target: None,
+        })));
+        env.vars.insert(name.to_owned(), cell.clone());
+        Ok(cell)
+    }
+
+    pub fn declare_import(&self, name: &str, target: BindingCell) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        if env.vars.contains_key(name) {
+            return Err(Throw::syntax_error(format!(
+                "duplicate import binding '{name}'"
+            )));
+        }
+        env.vars.insert(
+            name.to_owned(),
+            BindingCell(Rc::new(RefCell::new(Binding {
+                value: JsValue::Undefined,
+                mutable: false,
+                lexical: true,
+                initialized: true,
+                import_target: Some(target),
+            }))),
+        );
+        Ok(())
+    }
+
+    /// The cell in this frame, without consulting parent environments.
+    pub fn local_cell(&self, name: &str) -> Option<BindingCell> {
+        self.0.borrow().vars.get(name).cloned()
+    }
+
+    pub fn is_uninitialized(&self, name: &str) -> bool {
+        let frame = self.0.borrow();
+        if let Some(cell) = frame.vars.get(name) {
+            return cell.is_uninitialized();
+        }
+        frame
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.is_uninitialized(name))
     }
 
     pub fn resolve(&self, name: &str) -> Option<JsValue> {
@@ -185,7 +321,27 @@ impl EnvHandle {
     }
 
     pub fn has(&self, name: &str) -> bool {
-        self.resolve(name).is_some()
+        self.0.borrow().vars.contains_key(name)
+            || self
+                .0
+                .borrow()
+                .parent
+                .as_ref()
+                .is_some_and(|parent| parent.has(name))
+    }
+
+    pub fn shares_binding_frame(&self, other: &EnvHandle, name: &str) -> bool {
+        fn owner(env: &EnvHandle, name: &str) -> Option<EnvHandle> {
+            let frame = env.0.borrow();
+            if frame.vars.contains_key(name) { return Some(env.clone()); }
+            let parent = frame.parent.clone();
+            drop(frame);
+            parent.as_ref().and_then(|parent| owner(parent, name))
+        }
+        match (owner(self, name), owner(other, name)) {
+            (Some(left), Some(right)) => Rc::ptr_eq(&left.0, &right.0),
+            _ => false,
+        }
     }
 
     pub fn assign(&self, name: &str, value: JsValue) -> Result<bool, Throw> {
@@ -328,5 +484,22 @@ mod tests {
         assert_eq!(cur.resolve("deep"), Some(s("found")));
         assert!(cur.assign("deep", s("updated")).unwrap());
         assert_eq!(cur.resolve("deep"), Some(s("updated")));
+    }
+
+    #[test]
+    fn import_alias_tracks_exporter_and_observes_tdz() {
+        let exporter = EnvHandle::new(EnvKind::Global, None);
+        let importer = EnvHandle::new(EnvKind::Global, None);
+        let cell = exporter.declare_uninitialized("counter", true).unwrap();
+        importer.declare_import("value", cell).unwrap();
+        assert!(importer.is_uninitialized("value"));
+        assert_eq!(importer.resolve("value"), None);
+        exporter
+            .declare_lexical("counter", JsValue::num(1.0), true)
+            .unwrap();
+        assert_eq!(importer.resolve("value"), Some(JsValue::num(1.0)));
+        exporter.assign("counter", JsValue::num(2.0)).unwrap();
+        assert_eq!(importer.resolve("value"), Some(JsValue::num(2.0)));
+        assert!(importer.assign("value", JsValue::num(3.0)).is_err());
     }
 }

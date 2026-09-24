@@ -4,7 +4,7 @@
 #[path = "../../amazing-net/tests/support/wpt_server.rs"]
 mod wpt_server;
 use amazing_fetch::{
-    api::{ApiError, ApiRequest, ApiRequestInit, ApiRequestInput, ApiResponse, BodyInput},
+    api::{ApiError, ApiRequest, ApiRequestInit, ApiRequestInput, ApiResponse, BodyInput, NavigationRequestInit},
     service::{ClientContext, NetworkService, ServiceEvent, ServiceId},
     xhr::{Xhr, XhrEventKind, XhrResponseType, XhrResponseValue, XhrState, XhrTextDecoder},
     HttpUrl,
@@ -30,6 +30,13 @@ fn request(base: &HttpUrl, url: &str, init: ApiRequestInit) -> ApiRequest {
     )
     .unwrap()
 }
+fn navigation(url: &str, method: &str, body: &[u8], origin: &HttpUrl) -> ApiRequest {
+    ApiRequest::navigation(HttpUrl::parse(url).unwrap(), NavigationRequestInit {
+        method: method.into(), body: body.to_vec(), referrer: String::new(),
+        referrer_policy: String::new(), initiator_origin: origin.origin().clone(),
+        reload_or_history: false, client_reserved_id: None,
+    }).unwrap()
+}
 fn finish(service: &mut NetworkService, id: ServiceId) -> Result<ApiResponse, ApiError> {
     let now = Instant::now();
     for tick in 0..4000 {
@@ -43,6 +50,21 @@ fn finish(service: &mut NetworkService, id: ServiceId) -> Result<ApiResponse, Ap
         thread::sleep(Duration::from_millis(1));
     }
     panic!("WPT service request did not finish");
+}
+fn finish_subresource(service: &mut NetworkService, id: ServiceId)
+    -> Result<amazing_fetch::service::SubresourceResponse, ApiError> {
+    let now = Instant::now();
+    for tick in 0..4000 {
+        for event in service.step(8192, now + Duration::from_millis(tick)) {
+            match event {
+                ServiceEvent::SubresourceFinished { id: found, response } if found == id => return Ok(response),
+                ServiceEvent::SubresourceFailed { id: found, error } if found == id => return Err(error),
+                _ => {}
+            }
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    panic!("WPT subresource {id:?} did not finish");
 }
 fn fetch(
     service: &mut NetworkService,
@@ -557,4 +579,135 @@ fn xhr_status_chunked_and_timeout_from_wpt() {
         xhr.state() == XhrState::Done && events.iter().any(|e| e.kind == XhrEventKind::Timeout),
     );
     m.done();
+}
+
+#[test]
+fn navigation_redirect_heads_allow_browser_controlled_multi_hop() {
+    let first = WptServer::new();
+    let second = WptServer::new();
+    let origin = HttpUrl::parse(&first.url("/start")).unwrap();
+    let second_redirect = second.url("/xhr/resources/redirect.py?code=307&location=status.py%3Fcode%3D200");
+    for status in [301, 302] {
+        let first_url = first.url(&format!(
+            "/xhr/resources/redirect.py?code={status}&location={}", second_redirect.replace('&', "%26")
+        ));
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let id = service.start(navigation(&first_url, "POST", b"a=1", &origin), ClientContext::default()).unwrap();
+        let response = finish(&mut service, id).unwrap();
+        assert_eq!(response.status, status);
+        let second_location = response.headers.get_string("location").unwrap().unwrap();
+        assert!(second_location.starts_with(&second.url("/xhr/resources/redirect.py?code=307")));
+        assert_eq!(response.url_list, vec![first_url.clone()]);
+        assert_eq!(response.url, first_url);
+
+        // HTML owns the method rewrite and starts each hop in the same navigation epoch.
+        let id = service.start(navigation(&second_location, "GET", b"", &origin), ClientContext::default()).unwrap();
+        let second_response = finish(&mut service, id).unwrap();
+        assert_eq!(second_response.status, 307);
+        let final_url = second_response.headers.get_string("location").unwrap().unwrap();
+        let final_url = HttpUrl::parse(&second_location).unwrap().resolve(&final_url).unwrap().serialize();
+        let id = service.start(navigation(&final_url, "GET", b"", &origin), ClientContext::default()).unwrap();
+        assert_eq!(finish(&mut service, id).unwrap().status, 200);
+    }
+    assert!(first.seen().iter().all(|request| request.method == "POST"));
+    assert!(second.seen().iter().all(|request| request.method == "GET"));
+}
+
+#[test]
+fn streaming_navigation_303_emits_location_head_before_credit() {
+    let server = WptServer::new();
+    let url = server.url("/xhr/resources/redirect.py?code=303&location=status.py%3Fcode%3D200");
+    let origin = HttpUrl::parse(&url).unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let id = service.start_stream_with_credit(
+        navigation(&url, "POST", b"a=1", &origin), ClientContext::default(), 0,
+    ).unwrap();
+    let start = Instant::now();
+    let mut head = None;
+    for tick in 0..4000 {
+        for event in service.step(8192, start + Duration::from_millis(tick)) {
+            match event {
+                ServiceEvent::ResponseHead { id: found, head: value } if found == id => head = Some(value),
+                ServiceEvent::StreamFailed { id: found, error } if found == id => panic!("{error:?}"),
+                _ => {}
+            }
+        }
+        if head.is_some() { break; }
+        thread::sleep(Duration::from_millis(1));
+    }
+    let head = head.expect("navigation redirect head");
+    assert_eq!(head.status, 303);
+    assert_eq!(head.headers.iter().find(|(name, _)| name.eq_ignore_ascii_case("location"))
+        .map(|(_, value)| value.as_str()), Some("status.py?code=200"));
+    assert_eq!(head.url_list, vec![url]);
+    assert!(!head.redirect_tainted);
+    assert_eq!(head.response_type, amazing_fetch::api::ApiResponseType::Basic);
+    assert_eq!(server.seen()[0].method, "POST");
+    let final_url = origin.resolve("status.py?code=200").unwrap().serialize();
+    let next = service.start(navigation(&final_url, "GET", b"", &origin), ClientContext::default()).unwrap();
+    assert_eq!(finish(&mut service, next).unwrap().status, 200);
+    assert_eq!(server.seen()[1].method, "GET");
+}
+
+#[test]
+fn streaming_cross_origin_navigation_head_marks_redirect_taint() {
+    let first = WptServer::new();
+    let second = WptServer::new();
+    let target = second.url("/xhr/resources/status.py?code=200");
+    let url = first.url(&format!("/xhr/resources/redirect.py?code=302&location={target}"));
+    let origin = HttpUrl::parse(&url).unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let id = service.start_stream_with_credit(
+        navigation(&url, "POST", b"a=1", &origin), ClientContext::default(), 0,
+    ).unwrap();
+    let start = Instant::now();
+    for tick in 0..4000 {
+        for event in service.step(8192, start + Duration::from_millis(tick)) {
+            if let ServiceEvent::ResponseHead { id: found, head } = event {
+                if found == id {
+                    assert_eq!(head.status, 302);
+                    assert_eq!(head.url_list, vec![url]);
+                    assert!(head.redirect_tainted);
+                    return;
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    panic!("cross-origin navigation head did not arrive");
+}
+
+#[test]
+fn trusted_subresource_keeps_validated_opaque_bytes_and_rejects_orb() {
+    let server = WptServer::new();
+    let initiator = HttpUrl::parse("http://127.0.0.1:1/page").unwrap();
+    let mut init = ApiRequestInit::default();
+    init.mode = Some("no-cors".into());
+    let url = server.url("/fetch/api/resources/status.py?type=image/png&content=abc");
+    let mut image_request = request(&initiator, &url, init);
+    image_request.set_response_body_limit(3).unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let id = service.start_subresource(image_request, ClientContext::default(), amazing_fetch::Destination::Image);
+    let response = finish_subresource(&mut service, id).unwrap();
+    assert_eq!(response.response_type, amazing_fetch::ResponseType::Opaque);
+    assert_eq!(response.head.status, 200);
+    assert_eq!(response.body, b"abc");
+    assert!(response.head.headers.iter().any(|(name, value)|
+        name.eq_ignore_ascii_case("content-type") && value == "image/png"));
+
+    let mut init = ApiRequestInit::default();
+    init.mode = Some("no-cors".into());
+    let blocked = server.url("/fetch/api/resources/status.py?type=application/json&content=%7B%22x%22%3A1%7D");
+    let id = service.start_subresource(request(&initiator, &blocked, init),
+        ClientContext::default(), amazing_fetch::Destination::Image);
+    assert!(matches!(finish_subresource(&mut service, id),
+        Err(ApiError::Network(amazing_fetch::FetchError::OpaqueResponse))));
+
+    let mut init = ApiRequestInit::default();
+    init.mode = Some("no-cors".into());
+    let mut limited = request(&initiator, &url, init);
+    limited.set_response_body_limit(2).unwrap();
+    let id = service.start_subresource(limited, ClientContext::default(), amazing_fetch::Destination::Image);
+    assert!(matches!(finish_subresource(&mut service, id),
+        Err(ApiError::Network(amazing_fetch::FetchError::ResponseTooLarge))));
 }

@@ -484,29 +484,13 @@ fn sample(
     ]
 }
 fn blend(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: BlendMode) -> [u8; 4] {
+    let opacity = amazing_paint::quantize_opacity(opacity);
     if mode == BlendMode::Normal {
-        let sa = src[3] as f32 / 255. * opacity.clamp(0., 1.);
-        let da = dst[3] as f32 / 255.;
-        let oa = sa + da * (1. - sa);
-        if oa <= 0. {
-            return [0; 4];
-        }
-        let mut out = [0; 4];
-        for channel in 0..3 {
-            out[channel] = ((src[channel] as f32 * sa + dst[channel] as f32 * da * (1. - sa)) / oa)
-                .round()
-                .clamp(0., 255.) as u8;
-        }
-        out[3] = (oa * 255.).round().clamp(0., 255.) as u8;
-        return out;
+        return amazing_paint::blend_source_over(src, dst, opacity);
     }
-    let opacity = (opacity.clamp(0., 1.) * 255.).round() as u8;
     let sa = (src[3] as u32 * opacity as u32 + 127) / 255;
     if sa == 0 {
         return dst;
-    }
-    if sa == 255 && mode == BlendMode::Normal {
-        return [src[0], src[1], src[2], 255];
     }
     let da = dst[3] as u32;
     let oa = sa + (da * (255 - sa) + 127) / 255;
@@ -663,6 +647,15 @@ impl Presenter for ReferenceCpuPresenter {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn normal_effect_blend_uses_integer_opacity_rounding() {
+        assert_eq!(
+            blend([191, 191, 191, 255], [0, 0, 0, 255], 0.5, BlendMode::Normal),
+            [95, 95, 95, 255],
+        );
+    }
+
     struct Colors(Cell<u8>);
     impl PaintSource for Colors {
         fn item_count(&self) -> usize {

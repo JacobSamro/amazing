@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "RC-18 generated gradient and scrolling static match reftests",
+    "rule": "Four pinned script-free rel=match cases selected before RC-18 source edits; two exercise generated gradients and two overflow/scroller layout."
+  },
+  "sparse_paths": [
+    "css/css-content",
+    "css/css-lists",
+    "css/css-overflow",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css__css-content__element-replacement-gradient",
+      "test": "css/css-content/element-replacement-gradient.html"
+    },
+    {
+      "id": "css__css-lists__list-style-image-gradients",
+      "test": "css/css-lists/list-style-image-gradients.html"
+    },
+    {
+      "id": "css__css-overflow__inline-block-with-scrollable-descendant",
+      "test": "css/css-overflow/inline-block-with-scrollable-descendant.html"
+    },
+    {
+      "id": "css__css-overflow__overflow-img-scroll-non-replaced",
+      "test": "css/css-overflow/overflow-img-scroll-non-replaced.html"
+    }
+  ]
+}

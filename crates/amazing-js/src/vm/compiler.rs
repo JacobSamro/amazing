@@ -235,6 +235,9 @@ impl Compiler {
                     };
                     if declaration.kind == VarKind::Var {
                         self.program.hoisted.push(name.name.clone());
+                        if binding.init.is_none() {
+                            continue;
+                        }
                     }
                     if declaration.kind == VarKind::Const && binding.init.is_none() {
                         return Err(self.error(binding.span, "const requires an initializer"));

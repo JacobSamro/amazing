@@ -863,3 +863,98 @@ image hashes were identical, with zero pass losses. These are raw counts; the
 missing production URL lookup means the WPT selection shows no URL rendering
 gain yet. Reports, fixture hashes and comparison are in
 `tests/wpt-replaced-content/rc17b/`.
+
+## RC-18 — generated gradient raster and compositor geometry metadata
+
+Paint display-list items now expose bounded untransformed content ink estimates,
+scrollable extents with an optional adapter-supplied initial offset, and sticky
+insets plus containing-block bounds. Decorations with uncertain shadow overflow
+retain the viewport fallback. The raw local tile path and full painter remain
+unchanged. Generated-image keys that contain CSS linear, radial or conic
+functions, including repeating variants, raster through the same replaced
+fragment path as URL images. Paint uses the CSS tokenizer and color parser;
+fragment geometry and font size determine sampling. Unsupported gradient
+syntax returns no image rather than painting a guessed value.
+
+At fixed base `e762837`, win-002 locked gates passed paint **107/107**,
+standalone image **47/47**, workspace **2,081 passed / 5 skipped**, and
+workspace doctests **2/2**; paint and image doctest sets have zero cases.
+The pinned four-case generated-gradient/scroll selection moved **3 pass /
+1 mismatch** to **2 pass / 2 mismatch**. The raw pass loss is
+`css/css-lists/list-style-image-gradients.html`: before, both the gradient
+marker and its data-SVG reference marker were absent; after, paint draws the
+gradient but the driver still leaves the data-SVG reference absent. Do not
+count this as a conformance gain. The retained focused 12 stayed **10/2** and
+SVG 35 stayed **25/9/1 reference script crash**, with identical per-case
+classifications and actual/reference/diff hashes in all four runs and zero
+losses. Evidence and source/hash audit are in `tests/wpt-replaced-content/rc18/`.
+
+CSS currently rejects gradient image functions in `content`, so generated
+pseudo content needs the routed CSS parser seam before it reaches paint.
+Layout's no-intrinsic-size fallback makes gradient markers 300×150 until its
+marker sizing rule is supplied; the driver also needs its data-SVG reference
+resource. These cross-lane follow-ups are in the replaced-content questions.
+
+## RC-19 — stable paint item keys and conservative display-list deltas
+
+Paint items now carry an optional stable key `(DOM NodeIdx, arena generation,
+paint phase, local ordinal)`. `DisplayListView::with_dom_generations` uses
+`Dom::node_generation` from the fixed base; older constructors remain the full
+paint oracle and deliberately cannot publish a delta without generations. The
+64-bit compositor adapter hash is checked for duplicates and collisions.
+
+`old.update(&new)` compares bounded, freshly constructed
+views at one frozen epoch. It returns changed keys and contiguous item ranges,
+old/new local ink bounds expanded one pixel, and retired URL/generated/replaced
+resource identities. It compares each item raster against the full painter and
+falls back explicitly for order changes, unknown/reused generation, property
+state changes, unseparable effect groups, unsafe bounds, raster failures and
+large views. The first implementation is a correctness seam, not yet an
+incremental builder: it may raster each item across the full viewport and caps
+comparison at 512 items / 1,048,576 pixels. The caller keeps the fresh full
+view for presentation when the result is `RequiresFullRebuild`. The compositor
+must still validate chunk containment before accepting old/new bounds.
+
+Paint exports the integer source-over helper and `quantize_opacity` adopted by
+the compositor in the paired merge. Half-opacity over opaque white rounds to
+127 under the documented premultiplied rule. The fixed RC-19 delta base is
+pushed `5860d66`, which also contains the DOM generation resolver, per-test
+storage isolation and the granted driver assertion updates. The refreshed
+win-001 tree matched 14/14 audited source, fixture, test and lockfile hashes
+and the pinned WPT revision. The synthetic mutation tests assert three delta
+updates, ten explicit full fallbacks and one DOM resolver case; details are
+retained in `tests/wpt-replaced-content/rc19/mutation-results.json`. On the
+fixed base, win-002 paint passed 118/118, workspace passed 2223/2223 with five
+skipped, and workspace doctests passed 2/2. The retained 51-case WPT pair is
+recorded separately in `tests/wpt-replaced-content/rc19/final-comparison.json`:
+focused 10/2, SVG 26/8 plus the known reference-script crash, and
+gradient/scroll 2/2 in both rounds. There were no pass losses. SVG
+`non-scaling-stroke-010` changed from mismatch to pass, and the gradient marker
+remains a mismatch with fewer differing pixels (18,864 to 3,072). Those two
+cases alone changed actual/diff hashes across the newer merged base; every
+reference hash and both rounds agree.
+
+## RC-20 bounded retained paint update (2026-09-24)
+
+COMP-11 property ownership landed first as `2bee652`: non-root transform,
+opacity/effect and scroll property nodes carry `PaintNodeKey { node, generation }`.
+`DisplayListView::property_owner_mapping()` returns view-local IDs for each CSS
+property kind. A missing or duplicate owner returns `None`, requiring scene
+rebuild; synthetic root nodes are excluded.
+
+`RetainedPaintView::from_view` now owns the seed item's metadata, local raw
+raster and resource set. `apply_damage` accepts keyed `PaintDamage::Remove` and
+`PaintDamage::Upsert` values from layout's geometry/style damage. It validates
+the whole damage set before mutation, rasterizes only upserts, keeps untouched
+pixel buffers allocated, and reports changed ranges, added/removed keys,
+conservative old/new bounds and resources no longer referenced by any item.
+Both individual tile and aggregate retained allocations are bounded. Unstable
+identity, property-table changes, unsafe geometry, and unsupported item raster
+return a full-rebuild reason. The old two-full-view comparison remains an
+oracle for same-epoch parity checks.
+
+The pushed RC-20 base is `f66be2b`. `LAYOUT-17` and the requested
+`runtime_host_replaced-content.rs` adapter are not present on this base; the
+paint-local delta type is ready for their damage list when the owning lanes
+publish it. IA-ORACLE-PAINT's 31 ms p95 cannot be credited until that driver
+adopts the retained path and the Windows release trace measures it.

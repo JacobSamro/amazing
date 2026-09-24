@@ -27,6 +27,34 @@ impl Interpreter {
         self.frames.last().and_then(|frame| frame.new_target.clone())
     }
 
+    /// Produce the existing DOM facade for an element already allocated by the
+    /// binding layer. Its style and dataset objects remain live for that node.
+    pub fn binding_make_legacy_dom_element(&self, node: u32) -> JsValue {
+        self.make_dom_element(node)
+    }
+
+    pub fn binding_replace_location_object(&mut self, location: JsValue) -> Result<(), Throw> {
+        self.global_obj.borrow_mut().set_own("[[LocationObject]]", location.clone());
+        let location_property = { self.global_obj.borrow().own_prop("location").cloned() };
+        if let Some(mut property) = location_property {
+            property.configurable = false;
+            self.global_obj.borrow_mut().define("location", property)
+                .map_err(|_| Throw::type_error("Cannot install Window.location"))?;
+        }
+        self.global_env.assign("location", location).map(|_| ())
+    }
+
+    pub fn binding_location_href(&self) -> &str { &self.location_url }
+
+    pub fn binding_location_navigate(&mut self, href: &str, _replace: bool) {
+        self.location_url = href.to_owned();
+        self.pending_navigation = Some(href.to_owned());
+    }
+
+    pub fn binding_location_reload(&mut self) {
+        self.pending_navigation = Some(self.location_url.clone());
+    }
+
     /// Set the instance-owned native dispatcher before installing host functions.
     /// The dispatcher must not capture unrooted JS values in its Rust closure.
     pub fn set_host_native_dispatcher(&mut self, dispatch: Rc<HostNativeDispatch>) {
@@ -35,6 +63,38 @@ impl Interpreter {
 
     pub fn binding_global_object(&self) -> JsValue {
         JsValue::Object(self.global_obj.clone())
+    }
+
+    /// Register WebIDL [PutForwards] on an interface prototype or global
+    /// object. The mapping is private runtime state and applies to inherited
+    /// receivers even when a legacy wrapper has an own read-only data property.
+    pub fn binding_install_put_forwards(
+        &mut self, prototype: &JsValue, attribute: &str, forward_to: &str,
+    ) -> Result<(), Throw> {
+        let JsValue::Object(owner) = prototype else {
+            return Err(Throw::type_error("PutForwards owner must be an object"));
+        };
+        if attribute == forward_to {
+            return Err(Throw::type_error("PutForwards cannot target itself"));
+        }
+        self.put_forwards.retain(|(weak, name, _)|
+            weak.upgrade().is_some() && !(weak.upgrade().is_some_and(|live|
+                Rc::ptr_eq(&live, &owner.0)) && name == attribute));
+        self.put_forwards.push((Rc::downgrade(&owner.0), attribute.into(), forward_to.into()));
+        Ok(())
+    }
+
+    pub(super) fn binding_put_forwards_target(&self, receiver: &Obj, attribute: &str) -> Option<String> {
+        let mut current = Some(receiver.clone());
+        while let Some(object) = current {
+            for (weak, name, target) in self.put_forwards.iter().rev() {
+                if name == attribute && weak.upgrade().is_some_and(|live| Rc::ptr_eq(&live, &object.0)) {
+                    return Some(target.clone());
+                }
+            }
+            current = object.borrow().proto.clone();
+        }
+        None
     }
 
     /// `None` selects a null prototype; pass `binding_global_object`'s

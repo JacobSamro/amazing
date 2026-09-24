@@ -22,6 +22,8 @@ amazing-text-provider = { path = "../amazing-text-provider" }
 amazing-net = { path = "../amazing-net" }
 amazing-fetch = { path = "../amazing-fetch" }
 amazing-js = { path = "../amazing-js" }
+amazing-storage = { path = "../amazing-storage" }
+amazing-canvas = { path = "../amazing-canvas" }
 amazing-regex = { path = "../amazing-regex" }
 amazing-webrtc = { path = "../amazing-webrtc" }
 amazing-webrtc-codecs = { path = "../amazing-webrtc-codecs" }

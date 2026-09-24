@@ -87,7 +87,10 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
         let slot = host.with_dom(|dom| dom.token_list(node, spec.name))?;
         let mut key = host.node_platform_key(node);
         key.slot = slot as u64;
-        return host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST);
+        let list = host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST)?;
+        return if setter {
+            crate::tokenlist::invoke(host, O::TokenListSetValue, list, args)
+        } else { Ok(list) };
     }
     if setter {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;

@@ -184,6 +184,80 @@ fn error_type(i: &mut Interpreter, inspect: &JsValue, error: &Throw) -> String {
         _ => "<unknown constructor>".into(),
     }
 }
+fn emit_module(phase: &str, kind: &str, detail: &str, unsupported: Option<&str>) {
+    println!(
+        "\nTEST262_RESULT {{\"protocol\":2,\"phase\":{},\"error_type\":{},\"detail\":{},\"unsupported\":{}}}",
+        quote(phase), quote(kind), quote(detail),
+        unsupported.map(quote).unwrap_or("null".into())
+    );
+}
+
+fn run_module_request() -> io::Result<()> {
+    use amazing_js::module::{ModuleLinker, ModulePhase};
+    use std::path::Path;
+    let mut bytes = Vec::new();
+    io::stdin().take(128 * 1024 * 1024).read_to_end(&mut bytes)?;
+    let mut input = bytes.as_slice();
+    if field(&mut input)? != "AMAZING_TEST262_2_MODULE" {
+        return Err(io::Error::other("bad module protocol"));
+    }
+    let source = field(&mut input)?;
+    let path = field(&mut input)?;
+    let root = field(&mut input)?;
+    let mut helpers = Vec::new();
+    while !input.is_empty() {
+        helpers.push((field(&mut input)?, field(&mut input)?));
+    }
+    if let Err(error) = amazing_js::parse_module(&source) {
+        emit_module("parse", "SyntaxError", &error.to_string(), None);
+        return Ok(());
+    }
+    let mut i = Interpreter::new();
+    install(&mut i);
+    let inspect = i.run_script("(function(e) { return e.constructor.name; })")
+        .map_err(|error| io::Error::other(error.describe()))?;
+    for (name, source) in helpers {
+        let helper = match parse_script(&source) {
+            Ok(program) => program,
+            Err(error) => {
+                emit_module("harness-parse", "SyntaxError", &format!("{name}: {error}"), None);
+                return Ok(());
+            }
+        };
+        if let Err(error) = i.run_program(&helper) {
+            let kind = error_type(&mut i, &inspect, &error);
+            emit_module("harness-runtime", &kind, &format!("{name}: {}", describe(&error)), None);
+            return Ok(());
+        }
+    }
+    let root_path = Path::new(&root).canonicalize()?;
+    let resolver = |specifier: &str, referrer: &str| -> Result<(String, String), String> {
+        let referrer = if referrer == path { root_path.join(&path) }
+            else { Path::new(referrer).to_path_buf() };
+        let candidate = referrer.parent().unwrap_or(&root_path).join(specifier);
+        let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
+        if !canonical.starts_with(&root_path) {
+            return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
+        }
+        let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
+        Ok((canonical.to_string_lossy().into_owned(), source))
+    };
+    let mut linker = ModuleLinker::new(resolver);
+    if let Err(failure) = linker.link(&path, &source).and_then(|_| linker.evaluate(&path, &mut i).map(|_| ())) {
+        match failure.phase {
+            ModulePhase::Parse => emit_module("parse", "SyntaxError", &failure.message, None),
+            ModulePhase::Resolution => emit_module("resolution", "SyntaxError", &failure.message, None),
+            ModulePhase::Async => emit_module("runtime", "", &failure.message, Some("module.async-evaluation")),
+            ModulePhase::Runtime => {
+                let kind = failure.thrown.as_ref().map(|error| error_type(&mut i, &inspect, error)).unwrap_or_else(|| "Error".into());
+                emit_module("runtime", &kind, &failure.message, None);
+            }
+        }
+        return Ok(());
+    }
+    emit_module("complete", "", "", None);
+    Ok(())
+}
 fn run() -> io::Result<()> {
     let mut bytes = Vec::new();
     io::stdin()
@@ -250,6 +324,16 @@ fn run() -> io::Result<()> {
     Ok(())
 }
 fn main() -> std::process::ExitCode {
+    if std::env::args().any(|arg| arg == "--capabilities-v2") {
+        println!("{{\"protocol\":2,\"module\":true,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}");
+        return std::process::ExitCode::SUCCESS;
+    }
+    if std::env::args().any(|arg| arg == "--module-request") {
+        return match run_module_request() {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(error) => { eprintln!("Test262 module host protocol: {error}"); std::process::ExitCode::FAILURE }
+        };
+    }
     if std::env::args().any(|a| a == "--capabilities") {
         println!(
             "{{\"protocol\":1,\"module\":false,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}"

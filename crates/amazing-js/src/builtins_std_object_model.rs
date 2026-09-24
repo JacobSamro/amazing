@@ -58,6 +58,10 @@ impl Interpreter {
     }
 
     fn define_own_property(&mut self, target: &Obj, key: &PropertyKey, descriptor: &JsValue) -> Result<bool, Throw> {
+        if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+            let JsValue::Object(fields) = descriptor else { return Err(Throw::type_error("property descriptor must be an object")); };
+            return namespace_define_allowed(self, target, key, fields);
+        }
         if let JsValue::Object(descriptor_object) = descriptor {
             if let Some(result) = binary_define_index_object(self, target, key, descriptor_object) {
                 return result;
@@ -142,6 +146,9 @@ impl Interpreter {
     }
 
     fn set_with_receiver(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, receiver: JsValue) -> Result<bool, Throw> {
+        if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+            return Ok(false);
+        }
         let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
             let property = if let Some(name) = key.as_string() {

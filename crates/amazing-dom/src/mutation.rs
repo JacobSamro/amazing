@@ -368,6 +368,7 @@ impl Dom {
         let old = self
             .get_attribute_ns(node, namespace, name)
             .map(str::to_owned);
+        let newly_inserted = old.is_none();
         if let Some(ns) = namespace {
             let attrs = &mut self.nodes[node.0 as usize].namespaced_attributes;
             if let Some(current) = attrs
@@ -389,6 +390,11 @@ impl Dom {
             } else {
                 attrs.push((name.into(), value.into()));
             }
+        }
+        if newly_inserted {
+            self.nodes[node.0 as usize].attribute_order.push(crate::namespace::AttributeKey {
+                namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
+            });
         }
         self.sync_attached_attr_value(node, namespace, name, value);
         self.queue_attribute_record(node, namespace, name, old.clone());
@@ -451,6 +457,8 @@ impl Dom {
         } else if let NodeKind::Element { attrs, .. } = &mut self.nodes[node.0 as usize].kind {
             attrs.retain(|(local, _)| local != name);
         }
+        self.nodes[node.0 as usize].attribute_order.retain(|key|
+            key.namespace_uri.as_deref() != namespace || key.local_name != name);
         self.detach_attached_attr(node, namespace, name);
         self.queue_attribute_record(node, namespace, name, Some(old.clone()));
         self.custom_element_attribute_changed(node, namespace, name, Some(old), None);
@@ -466,6 +474,20 @@ impl Dom {
         old: Option<String>,
     ) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
+        let new_value = self.get_attribute_ns(target, namespace, name)
+            .map(|value| value.encode_utf16().collect());
+        let new_tokens = self.selector_tokens(target);
+        let mut old_tokens = new_tokens.clone();
+        let old_value = old.as_ref().map(|value| value.encode_utf16().collect());
+        old_tokens.restore_attribute(namespace, name, old_value.clone());
+        self.record_render_mutation(target,
+            crate::render_mutation::RenderMutationKind::Attribute {
+                namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
+                old_value, new_value, old_tokens, new_tokens,
+            });
+        if namespace.is_none() && matches!(name, "checked" | "selected" | "value") {
+            self.record_render_full(target, "form attribute state");
+        }
         let mut record = MutationRecord::new(MutationType::Attributes, target);
         record.attribute_name = Some(name.into());
         record.attribute_namespace = namespace.map(str::to_owned);
@@ -536,8 +558,12 @@ impl Dom {
         record.old_value_utf16 = Some(old.clone());
         self.mutations
             .queue(&self.inclusive_ancestors(node), record);
-        let mut data = old;
+        let mut data = old.clone();
         data.splice(offset..offset + count, value.iter().copied());
+        self.record_render_mutation(node,
+            crate::render_mutation::RenderMutationKind::CharacterData {
+                old_value: old, new_value: data.clone(),
+            });
         self.store_character_data(node, data);
         self.ranges_replace_data(node, offset, count, value.len());
         Ok(())

@@ -68,6 +68,15 @@ pub fn build_layout_tree_with_replaced(
                 }
             }
             crate::table_tree::normalize(&mut root);
+            let root_metric_style = dom_html(dom)
+                .and_then(|html| styled.get(html).map(|style| (html, style)))
+                .map(|(html, style)| text_style(
+                    dom, html, style,
+                    values::resolve_used_font_size(style, values::ROOT_FONT_SIZE), false,
+                ))
+                .or_else(|| root.font_metric_style.clone())
+                .unwrap_or_default();
+            assign_root_font_metric_style(&mut root, &root_metric_style, None);
             let order = document_order(dom);
             assign_source_order(&mut root, &order);
             root
@@ -115,6 +124,7 @@ fn build_element(
     let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
+    box_.font_metric_style = Some(text_style(dom, idx, &box_.style, font_size, false));
     if crate::svg::is_outer(dom, idx) {
         box_.svg_root = Some(idx);
         box_.svg_sizing = Some(crate::svg::SvgSizing::from_dom(dom, idx));
@@ -175,6 +185,7 @@ fn generated_box(
         font_size,
         line_height,
     );
+    box_.font_metric_style = Some(text_style(dom, origin, &box_.style, font_size, false));
     box_.generated_pseudo = Some(pseudo);
     box_.outside_marker = pseudo == PseudoElement::Marker
         && styled
@@ -209,6 +220,7 @@ fn generated_box(
                     PseudoElement::After => 3,
                     _ => 2,
                 }) << 32) | run_index as u64,
+                pseudo == PseudoElement::Marker,
                 replaced,
             )),
             _ => {}
@@ -274,6 +286,26 @@ fn document_order(dom: &Dom) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
     let mut slots = std::collections::HashMap::new();
     visit(dom, NodeIdx(0), &mut 0, &mut slots);
     slots
+}
+
+fn assign_root_font_metric_style(
+    box_: &mut LayoutBox,
+    root_style: &TextStyle,
+    inherited_style: Option<&TextStyle>,
+) {
+    if box_.font_metric_style.is_none() {
+        box_.font_metric_style = inherited_style.cloned();
+    }
+    box_.root_font_metric_style = Some(root_style.clone());
+    let current = box_.font_metric_style.as_ref();
+    if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut box_.flow {
+        for child in children {
+            assign_root_font_metric_style(child, root_style, current);
+        }
+    }
+    for child in &mut box_.positioned {
+        assign_root_font_metric_style(child, root_style, current);
+    }
 }
 
 fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<NodeIdx, [u64; 4]>) {
@@ -743,6 +775,34 @@ fn split_families(value: &str) -> Vec<String> {
     families
 }
 
+fn font_stretch_percent(value: &str) -> f32 {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "ultra-condensed" => 50.0,
+        "extra-condensed" => 62.5,
+        "condensed" => 75.0,
+        "semi-condensed" => 87.5,
+        "normal" => 100.0,
+        "semi-expanded" => 112.5,
+        "expanded" => 125.0,
+        "extra-expanded" => 150.0,
+        "ultra-expanded" => 200.0,
+        value => value.trim_end_matches('%').parse::<f32>().ok()
+            .filter(|percent| percent.is_finite() && *percent > 0.0)
+            .unwrap_or(100.0),
+    }
+}
+
+fn font_oblique_angle_degrees(value: &str) -> Option<f32> {
+    let mut words = value.split_ascii_whitespace();
+    if !words.next()?.eq_ignore_ascii_case("oblique") {
+        return None;
+    }
+    words.next()
+        .and_then(|angle| angle.strip_suffix("deg"))
+        .and_then(|degrees| degrees.parse::<f32>().ok())
+        .filter(|degrees| degrees.is_finite())
+}
+
 fn text_style(
     dom: &Dom,
     owner: NodeIdx,
@@ -777,7 +837,7 @@ fn text_style(
         _ => TextOrientation::Mixed,
     };
     let direction_value = style.get("direction").unwrap_or("ltr");
-    let direction = if writing_mode.is_vertical_flow()
+    let direction = if writing_mode.uses_vertical_metrics()
         && text_orientation == TextOrientation::Upright
     {
         // Writing Modes §5.1: upright's used direction is ltr and every
@@ -838,30 +898,16 @@ fn text_style(
         value if value.eq_ignore_ascii_case("anywhere") => OverflowWrap::Anywhere,
         _ => OverflowWrap::Normal,
     };
-    let stretch = match style.get("font-stretch").unwrap_or("normal") {
-        value if value.eq_ignore_ascii_case("ultra-condensed") => 50,
-        value if value.eq_ignore_ascii_case("extra-condensed") => 62,
-        value if value.eq_ignore_ascii_case("condensed") => 75,
-        value if value.eq_ignore_ascii_case("semi-condensed") => 87,
-        value if value.eq_ignore_ascii_case("semi-expanded") => 112,
-        value if value.eq_ignore_ascii_case("expanded") => 125,
-        value if value.eq_ignore_ascii_case("extra-expanded") => 150,
-        value if value.eq_ignore_ascii_case("ultra-expanded") => 200,
-        value => value
-            .trim_end_matches('%')
-            .parse::<u16>()
-            .ok()
-            .filter(|stretch| (1..=1000).contains(stretch))
-            .unwrap_or(100),
-    };
+    let stretch_percent = font_stretch_percent(style.get("font-stretch").unwrap_or("normal"));
+    let stretch = stretch_percent.round() as u16;
     TextStyle {
         families: split_families(style.get("font-family").unwrap_or("serif")),
         size: font_size,
         weight,
         stretch,
-        stretch_percent: 0.0,
+        stretch_percent,
         slant,
-        oblique_angle_degrees: None,
+        oblique_angle_degrees: style.get("font-style").and_then(font_oblique_angle_degrees),
         direction,
         writing_mode,
         text_orientation,
@@ -873,7 +919,9 @@ fn text_style(
         line_break,
         overflow_wrap,
         language: inherited_attribute(dom, owner, "lang").map(str::to_owned),
-        features: crate::font_features::from_style(style),
+        features: crate::font_features::from_style(style,
+            values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
+                .and_then(|length| length.resolve(None)).unwrap_or(0.0)),
         variations: Vec::new(),
         synthesis: amazing_text::FontSynthesis::default(),
     }
@@ -904,6 +952,10 @@ fn inline_text(
         source_mappings,
         font_size,
         style: Box::new(text_style(dom, owner, style, font_size, inline_box)),
+        letter_spacing: values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
+            .and_then(|length| length.resolve(None)).unwrap_or(0.0),
+        word_spacing: values::style_length_percentage(style, "word-spacing", font_size, font_size * 0.6)
+            .unwrap_or_default(),
         color: style.get("color").unwrap_or("black").to_owned(),
         background_color: if inline_box {
             style
@@ -1282,6 +1334,21 @@ fn ruby_inline(
             RubyRole::Base => {},
         }
     }
+    // Ruby 1 box fixup: bare text in a ruby-text-container pairs character by
+    // character with a same-length anonymous base sequence. A single rtc
+    // annotation over the whole string would incorrectly fuse both positions.
+    if bases.len() == 1 && annotations.len() == 1 && annotations[0].1 == usize::MAX {
+        let base_count = bases[0].text.chars().count();
+        let annotation_count = annotations[0].0.text.chars().count();
+        if base_count > 1 && base_count == annotation_count
+            && bases[0].text.chars().all(is_ruby_ideograph)
+            && annotations[0].0.text.chars().all(is_ruby_ideograph)
+        {
+            bases = split_ruby_characters(&bases[0]);
+            annotations = split_ruby_characters(&annotations[0].0)
+                .into_iter().map(|annotation| (annotation, 1)).collect();
+        }
+    }
     // Build the fallback only once. Re-traversing the full ruby subtree for
     // every missing base makes adversarial annotation-only markup quadratic.
     let empty_base_template = empty_ruby_text(dom, styled, node, parent_font_size);
@@ -1335,6 +1402,29 @@ fn ruby_inline(
         column += span;
     }
     InlineNode::Ruby { node, columns }
+}
+
+fn is_ruby_ideograph(ch: char) -> bool {
+    matches!(ch as u32, 0x3040..=0x30ff | 0x3400..=0x9fff | 0xf900..=0xfaff)
+}
+
+fn split_ruby_characters(text: &RubyText) -> Vec<RubyText> {
+    text.text.char_indices().map(|(start, ch)| {
+        let end = start + ch.len_utf8();
+        let mut part = text.clone();
+        part.text = ch.to_string();
+        part.source_mappings = text.source_mappings.iter().filter_map(|mapping| {
+            let begin = mapping.text_range.start.max(start);
+            let finish = mapping.text_range.end.min(end);
+            (begin < finish).then(|| TextSourceMapping {
+                text_range: begin - start..finish - start,
+                source: mapping.source,
+                source_range: mapping.source_range.start + begin - mapping.text_range.start
+                    ..mapping.source_range.start + finish - mapping.text_range.start,
+            })
+        }).collect();
+        part
+    }).collect()
 }
 
 fn nonzero_length(value: Option<&str>) -> bool {
@@ -1900,6 +1990,25 @@ fn flatten_inline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_width_and_oblique_angle_keep_fractional_css_values() {
+        assert_eq!(font_stretch_percent("extra-condensed"), 62.5);
+        assert_eq!(font_stretch_percent("semi-condensed"), 87.5);
+        assert_eq!(font_stretch_percent("87.5%"), 87.5);
+        assert_eq!(font_oblique_angle_degrees("oblique 12.5deg"), Some(12.5));
+        assert_eq!(font_oblique_angle_degrees("oblique"), None);
+        assert_eq!(font_oblique_angle_degrees("italic"), None);
+        let (_, root) = tree_css(
+            "<body><p>wide</p></body>",
+            "p { font-stretch: 62.5%; font-style: oblique 12.5deg }",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let InlineNode::Text { style, .. } = &items[0] else { panic!("want text") };
+        assert_eq!(style.stretch_percent, 62.5);
+        assert_eq!(style.oblique_angle_degrees, Some(12.5));
+    }
     use crate::font::FontSource;
 
     /// Builds a tree through the real pipeline for a tiny page.
@@ -2034,6 +2143,20 @@ mod tests {
         let Flow::Inlines(items) = &marker.flow else { panic!("marker image") };
         let InlineNode::Replaced { replaced, .. } = &items[0] else { panic!("replaced marker") };
         assert_eq!(replaced.generated_url.as_deref(), Some("https://example.test/dot.png"));
+    }
+
+    #[test]
+    fn marker_image_without_intrinsic_size_uses_one_em_square() {
+        let (_, root) = tree_css(
+            "<body><ul><li>item</li></ul></body>",
+            "li { font-size: 24px; list-style-image: url(https://example.test/dot.png) }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(list) = &body[0].flow else { panic!("list blocks") };
+        let marker = &list[0].positioned[0];
+        let Flow::Inlines(items) = &marker.flow else { panic!("marker image") };
+        let InlineNode::Replaced { size, .. } = &items[0] else { panic!("replaced marker") };
+        assert_eq!((size.width, size.height), (24.0, 24.0));
     }
 
     #[test]
@@ -2308,6 +2431,19 @@ mod tests {
     }
 
     #[test]
+    fn bare_rtc_text_pairs_with_anonymous_ideographic_bases() {
+        let (_, root) = tree("<body><p><ruby>でい<rtc>する</rtc></ruby></p></body>");
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else { panic!("want ruby") };
+        assert_eq!(columns.len(), 2);
+        assert_eq!(columns[0].base.text, "で");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "す");
+        assert_eq!(columns[1].base.text, "い");
+        assert_eq!(columns[1].annotation.as_ref().unwrap().text, "る");
+    }
+
+    #[test]
     fn computed_ruby_container_display_uses_ruby_fixup() {
         let (_, root) = tree(
             "<body><p><span style=\"display:ruby\"><b style=\"display:ruby-base\">base</b><i style=\"display:ruby-text\">note</i></span></p></body>",
@@ -2379,6 +2515,18 @@ mod tests {
         let InlineNode::Text { style, .. } = &items[0] else { panic!("want text") };
 
         assert_eq!(style.direction, Direction::LeftToRight);
+    }
+
+    #[test]
+    fn upright_sideways_text_keeps_rtl_direction() {
+        let (_, root) = tree(
+            "<body><p style=\"writing-mode:sideways-rl;text-orientation:upright;direction:rtl\">אב</p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let InlineNode::Text { style, .. } = &items[0] else { panic!("want text") };
+
+        assert_eq!(style.direction, Direction::RightToLeft);
     }
 
     #[test]

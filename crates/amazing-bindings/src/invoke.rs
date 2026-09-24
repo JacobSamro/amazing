@@ -14,7 +14,7 @@ fn node_result(node: Option<NodeIdx>) -> ResultValue {
     node.map_or(ResultValue::Null, ResultValue::Node)
 }
 fn valid(dom: &Dom, node: NodeIdx) -> Result<(), DomError> {
-    if (node.0 as usize) < dom.node_count() {
+    if dom.node_generation(node).is_some() {
         Ok(())
     } else {
         Err(DomError::InvalidNode)
@@ -29,6 +29,13 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
             kind,
             NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
         ),
+        O::FirstElementChild | O::LastElementChild | O::ChildElementCount => matches!(
+            kind, NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
+        ),
+        O::PreviousElementSibling | O::NextElementSibling => matches!(
+            kind, NodeKind::Element { .. } | NodeKind::Text { .. } | NodeKind::CDATASection { .. }
+                | NodeKind::Comment { .. } | NodeKind::ProcessingInstruction { .. }
+        ),
         O::Before | O::After | O::ReplaceWith | O::Remove => {
             !matches!(kind, NodeKind::Document | NodeKind::DocumentFragment)
         }
@@ -37,6 +44,7 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
         | O::ElementTagName => matches!(kind, NodeKind::Element { .. }),
         O::DocumentTypeName | O::DocumentTypePublicId | O::DocumentTypeSystemId =>
             matches!(kind, NodeKind::DocumentType { .. }),
+        O::ProcessingInstructionTarget => matches!(kind, NodeKind::ProcessingInstruction { .. }),
         _ => true,
     };
     if good {
@@ -165,6 +173,12 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     if crate::web_bindings::handles(operation) {
         return crate::web_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::location_bindings::handles(operation) {
+        return crate::location_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::parser_bindings::handles(operation) {
+        return crate::parser_bindings::invoke(host, operation, receiver, args);
     }
     if crate::character_data_bindings::handles(operation) {
         return crate::character_data_bindings::invoke(host, operation, receiver, args);
@@ -314,7 +328,15 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     let result = host.with_dom(|dom| {
         use ResultValue as R;
         let result = match operation {
-            O::DocumentConstructor => R::Node(dom.create_document()),
+            O::DocumentConstructor => {
+                let document = dom.create_document();
+                dom.set_document_metadata(document, amazing_dom::document_surface::DocumentMetadata {
+                    url: "about:blank".into(), content_type: "application/xml".into(),
+                    character_set: "UTF-8".into(),
+                })?;
+                dom.set_document_ready_state(document, amazing_dom::document_surface::ReadyState::Complete)?;
+                R::Node(document)
+            }
             O::TextConstructor | O::CommentConstructor | O::CreateText | O::CreateComment => {
                 R::Node(character_node(
                     dom,
@@ -423,6 +445,12 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                 };
                 R::String(value.encode_utf16().collect())
             }
+            O::ProcessingInstructionTarget => {
+                let NodeKind::ProcessingInstruction { target, .. } = &dom.get(target).kind else {
+                    unreachable!("validated ProcessingInstruction receiver")
+                };
+                R::String(target.encode_utf16().collect())
+            }
             O::NodeValue => if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
                 R::String(dom.attr_snapshot(target)?.value)
             } else { dom.character_data_utf16(target).map_or(R::Null, R::String) },
@@ -468,6 +496,11 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             O::PreviousSibling => node_result(dom.get(target).prev_sibling),
             O::NextSibling => node_result(dom.get(target).next_sibling),
             O::ChildNodes => R::Children(target),
+            O::FirstElementChild => node_result(dom.first_element_child(target)),
+            O::LastElementChild => node_result(dom.last_element_child(target)),
+            O::ChildElementCount => R::Number(dom.child_element_count(target) as f64),
+            O::PreviousElementSibling => node_result(dom.previous_element_sibling(target)),
+            O::NextElementSibling => node_result(dom.next_element_sibling(target)),
             O::TemplateContent => R::Node(dom.ensure_template_contents(target)?),
             O::HasChildNodes => R::Boolean(dom.get(target).first_child.is_some()),
             O::IsConnected => R::Boolean(dom.is_connected(target)),
@@ -498,7 +531,10 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         ResultValue::Boolean(v) => host.boolean(v),
         ResultValue::Number(v) => host.number(v),
         ResultValue::String(v) => host.string(&v)?,
-        ResultValue::Node(v) => host.wrap_node(v)?,
+        ResultValue::Node(v) => {
+            if operation == O::DocumentConstructor { host.mark_constructed_document(v); }
+            host.wrap_node(v)?
+        },
         ResultValue::Children(v) => host.child_nodes(v)?,
     })
 }

@@ -131,6 +131,7 @@ impl Dom {
         }
         let constructor = def.constructor;
         self.custom_elements.element_states.push((element, definition, CustomElementState::Precustomized));
+        self.record_render_full(element, "custom element upgrade state");
         self.custom_elements.definitions[definition].construction_stack.push(ConstructionEntry::Element(element));
         Ok(constructor)
     }
@@ -155,9 +156,11 @@ impl Dom {
             .find(|(node, id, _)| *node == element && *id == definition).ok_or(DomError::InvalidNode)?;
         if !constructed || marker != Some(ConstructionEntry::AlreadyConstructed) {
             entry.2 = CustomElementState::Failed;
+            self.record_render_full(element, "custom element upgrade state");
             return Err(DomError::TypeError);
         }
         entry.2 = CustomElementState::Custom;
+        self.record_render_full(element, "custom element upgrade state");
         let def = self.custom_elements.definitions[definition].clone();
         if let Some(callback) = def.callbacks.attribute_changed {
             let attributes: Vec<_> = self.attributes_expanded(element).unwrap_or_default()
