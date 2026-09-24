@@ -165,7 +165,7 @@ pub fn deliver_mutation_checkpoint<H: BindingHost>(host: &mut H) -> Result<(), H
         let observer_value = host.wrap_platform_object(key(host, observer.slot()), InterfaceBrand::MUTATION_OBSERVER)?;
         let function = host.root_value(CallbackId(callback))
             .ok_or_else(|| host.type_error("Released MutationCallback"))?;
-        let this = host.undefined();
+        let this = observer_value.clone();
         if let Err(error) = host.call(&function, &this, &[values, observer_value]) {
             if first_error.is_none() { first_error = Some(error); }
         }
