@@ -255,3 +255,124 @@ pub(super) fn oklch(inner: &str) -> Option<[u8; 4]> {
     let lab = [lightness, chroma * angle.cos(), chroma * angle.sin()];
     Some(rgba(xyz_to_srgb(oklab_xyz(lab)), a))
 }
+
+/// CSS Color 5's two-color mix. Keep interpolation in its declared space;
+/// converting the endpoints to sRGB before mixing gives visibly wrong LCH hues.
+pub(super) fn color_mix(inner: &str, depth: usize) -> Option<[u8; 4]> {
+    let parts = split_top_level_commas(inner)?;
+    let [method, first, second] = parts.as_slice() else { return None };
+    let space = method.trim().strip_prefix("in ")?.trim().to_ascii_lowercase();
+    if !matches!(space.as_str(), "srgb" | "srgb-linear" | "lch") { return None; }
+    let (first, p1) = mix_item(first, depth)?;
+    let (second, p2) = mix_item(second, depth)?;
+    let (p1, p2) = match (p1, p2) {
+        (None, None) => (0.5, 0.5),
+        (Some(a), None) => (a, 1.0 - a),
+        (None, Some(b)) => (1.0 - b, b),
+        (Some(a), Some(b)) => (a, b),
+    };
+    let sum = p1 + p2;
+    if sum <= 0.0 { return None; }
+    let multiplier = sum.min(1.0);
+    let p1 = p1 / sum;
+    let p2 = p2 / sum;
+    let a1 = first[3] as f64 / 255.0;
+    let a2 = second[3] as f64 / 255.0;
+    let alpha = a1 * p1 + a2 * p2;
+    let (w1, w2) = if alpha > 0.0 { (a1 * p1 / alpha, a2 * p2 / alpha) }
+        else { (p1, p2) };
+    let output_alpha = byte(alpha * multiplier);
+    if space == "lch" {
+        let one = srgb_to_lch(first);
+        let two = srgb_to_lch(second);
+        let h1 = if one[1] < 0.0001 { two[2] } else { one[2] };
+        let h2 = if two[1] < 0.0001 { h1 } else { two[2] };
+        let delta = (h2 - h1 + 540.0).rem_euclid(360.0) - 180.0;
+        let angle = (h1 + delta * w2).to_radians();
+        let lightness = one[0] * w1 + two[0] * w2;
+        let chroma = one[1] * w1 + two[1] * w2;
+        return Some(lab_color(lightness, chroma * angle.cos(), chroma * angle.sin(), output_alpha));
+    }
+    let mut rgb = [0.0; 3];
+    for i in 0..3 {
+        let one = first[i] as f64 / 255.0;
+        let two = second[i] as f64 / 255.0;
+        rgb[i] = if space == "srgb-linear" {
+            srgb_encode(srgb_decode(one) * w1 + srgb_decode(two) * w2)
+        } else { one * w1 + two * w2 };
+    }
+    Some(rgba(rgb, output_alpha))
+}
+
+fn mix_item(item: &str, depth: usize) -> Option<([u8; 4], Option<f64>)> {
+    let item = item.trim();
+    let mut mix_percent = None;
+    let mut color = item;
+    if let Some((first, rest)) = item.split_once(' ') {
+        if let Some(p) = percentage(first) {
+            mix_percent = Some(p / 100.0);
+            color = rest.trim();
+        }
+    }
+    if mix_percent.is_none() {
+        if let Some((rest, last)) = item.rsplit_once(' ') {
+            if let Some(p) = percentage(last) {
+                mix_percent = Some(p / 100.0);
+                color = rest.trim();
+            }
+        }
+    }
+    if mix_percent.is_some_and(|p| !(0.0..=1.0).contains(&p)) { return None; }
+    Some((super::parse_css_color_depth(color, depth + 1)?, mix_percent))
+}
+
+fn split_top_level_commas(value: &str) -> Option<Vec<&str>> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    for (i, ch) in value.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.checked_sub(1)?,
+            ',' if depth == 0 => { parts.push(value[start..i].trim()); start = i + 1; }
+            _ => {}
+        }
+    }
+    if depth != 0 { return None; }
+    parts.push(value[start..].trim());
+    (!parts.iter().any(|part| part.is_empty())).then_some(parts)
+}
+
+fn srgb_to_lch(rgb: [u8; 4]) -> [f64; 3] {
+    let linear = [0, 1, 2].map(|i| srgb_decode(rgb[i] as f64 / 255.0));
+    let d65 = matrix([
+        [0.41239079926595934, 0.357584339383878, 0.1804807884018343],
+        [0.21263900587151027, 0.715168678767756, 0.07219231536073371],
+        [0.01933081871559185, 0.11919477979462599, 0.9505321522496607],
+    ], linear);
+    let d50 = matrix([
+        [1.0479298208405488, 0.022946793341019088, -0.05019222954313557],
+        [0.029627815688159344, 0.990434484573249, -0.01707382502938514],
+        [-0.009243058152591178, 0.015055144896577895, 0.7518742899580008],
+    ], d65);
+    let white = [0.3457 / 0.3585, 1.0, (1.0 - 0.3457 - 0.3585) / 0.3585];
+    let epsilon = 216.0 / 24389.0;
+    let kappa = 24389.0 / 27.0;
+    let f = [0, 1, 2].map(|i| {
+        let value = d50[i] / white[i];
+        if value > epsilon { value.cbrt() } else { (kappa * value + 16.0) / 116.0 }
+    });
+    let l = 116.0 * f[1] - 16.0;
+    let a = 500.0 * (f[0] - f[1]);
+    let b = 200.0 * (f[1] - f[2]);
+    [l, a.hypot(b), b.atan2(a).to_degrees().rem_euclid(360.0)]
+}
+
+pub(super) fn contrast_color(inner: &str, depth: usize) -> Option<[u8; 4]> {
+    let color = super::parse_css_color_depth(inner.trim(), depth + 1)?;
+    let alpha = color[3] as f64 / 255.0;
+    let luminance = [0, 1, 2].into_iter().zip([0.2126, 0.7152, 0.0722])
+        .map(|(i, weight)| srgb_decode((color[i] as f64 * alpha + 255.0 * (1.0 - alpha)) / 255.0) * weight)
+        .sum::<f64>();
+    Some(if luminance > 0.179 { [0, 0, 0, 255] } else { [255, 255, 255, 255] })
+}
