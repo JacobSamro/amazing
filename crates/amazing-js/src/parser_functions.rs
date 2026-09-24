@@ -9,7 +9,11 @@ impl Parser {
     pub(super) fn parse_function_rest(&mut self, is_async: bool) -> Result<FunctionItem, SyntaxError> {
         self.bump(); // function
         let is_generator = self.eat_punct(Punct::Star);
-        let name = if matches!(self.cur().kind, TokenKind::Ident(_)) {
+        let name = if matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
+            && !self.strict_script && !is_generator {
+            let token = self.bump();
+            Some(Ident::new("yield", token.span))
+        } else if matches!(self.cur().kind, TokenKind::Ident(_)) {
             Some(self.expect_ident()?)
         } else {
             None
@@ -32,13 +36,16 @@ impl Parser {
         self.in_function += 1;
         let saved_field = self.in_class_field_initializer;
         let saved_super = self.super_call_allowed;
+        let saved_super_property = self.super_property_allowed;
         let saved_formals = self.in_formal_params;
         self.in_class_field_initializer = 0;
         self.super_call_allowed = false;
+        self.super_property_allowed = false;
         self.in_formal_params = 0;
         let body = self.parse_block();
         self.in_formal_params = saved_formals;
         self.super_call_allowed = saved_super;
+        self.super_property_allowed = saved_super_property;
         self.in_class_field_initializer = saved_field;
         self.in_async = saved_async;
         self.in_generator = saved_generator;
@@ -46,6 +53,11 @@ impl Parser {
         self.in_new_target -= 1;
         self.in_static_block = saved_static_block;
         let body = body?;
+        if let Some(name) = &name {
+            if (self.strict_script || has_use_strict(&body)) && matches!(name.name.as_str(), "eval" | "arguments" | "yield") {
+                return Err(self.err_at(name.span.start, "invalid strict function name"));
+            }
+        }
         if self.strict_script || has_use_strict(&body) {
             if let Some(at) = self.tokens.borrow().legacy_escape_in(body.span) {
                 return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
@@ -86,6 +98,19 @@ impl Parser {
                 if strict && matches!(name.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "package" | "private" | "protected" | "public" | "static" | "yield" | "let") {
                     return Err(self.err_at(name.span.start, "invalid strict parameter name"));
                 }
+            }
+        }
+        let parameter_names: HashSet<_> = params.iter().flat_map(|param| binding_names(&param.binding))
+            .map(|name| name.name.clone()).collect();
+        for statement in &body.body {
+            let lexical = match &statement.kind {
+                StmtKind::Var(decl) if decl.kind != VarKind::Var => decl.decls.iter()
+                    .flat_map(|decl| binding_names(&decl.binding)).collect::<Vec<_>>(),
+                StmtKind::Class(class) => class.name.iter().collect(),
+                _ => Vec::new(),
+            };
+            if let Some(name) = lexical.into_iter().find(|name| parameter_names.contains(&name.name)) {
+                return Err(self.err_at(name.span.start, "parameter conflicts with lexical binding"));
             }
         }
         Ok(())
@@ -142,6 +167,7 @@ impl Parser {
     pub(super) fn validate_method_params(
         &self,
         params: &[Param],
+        body: &Block,
         strict: bool,
         own_strict_directive: bool,
     ) -> Result<(), SyntaxError> {
@@ -167,6 +193,19 @@ impl Parser {
                         "eval and arguments cannot be strict parameters",
                     ));
                 }
+            }
+        }
+        let parameter_names: HashSet<_> = params.iter().flat_map(|param| binding_names(&param.binding))
+            .map(|name| name.name.clone()).collect();
+        for statement in &body.body {
+            let lexical = match &statement.kind {
+                StmtKind::Var(decl) if decl.kind != VarKind::Var => decl.decls.iter()
+                    .flat_map(|decl| binding_names(&decl.binding)).collect::<Vec<_>>(),
+                StmtKind::Class(class) => class.name.iter().collect(),
+                _ => Vec::new(),
+            };
+            if let Some(name) = lexical.into_iter().find(|name| parameter_names.contains(&name.name)) {
+                return Err(self.err_at(name.span.start, "parameter conflicts with lexical binding"));
             }
         }
         Ok(())
@@ -244,7 +283,10 @@ impl Parser {
                 self.loop_depth = 0;
                 self.switch_depth = 0;
                 self.in_static_block += 1;
+                let saved_super_property = self.super_property_allowed;
+                self.super_property_allowed = true;
                 let block = self.parse_block();
+                self.super_property_allowed = saved_super_property;
                 self.in_static_block -= 1;
                 (self.in_function, self.in_generator, self.in_async,
                     self.in_new_target, self.loop_depth, self.switch_depth, self.labels) = saved;
@@ -353,6 +395,8 @@ impl Parser {
             {
                 return Err(self.err_at(start, "class constructors cannot be async or generators"));
             }
+            let saved_super_property = self.super_property_allowed;
+            self.super_property_allowed = true;
             self.in_async += usize::from(is_async);
             self.in_generator += usize::from(is_generator);
             self.in_new_target += 1;
@@ -366,6 +410,7 @@ impl Parser {
                 Err(error) => {
                     self.in_new_target -= 1;
                     self.in_static_block = saved_static_block;
+                    self.super_property_allowed = saved_super_property;
                     return Err(error);
                 }
             };
@@ -388,9 +433,10 @@ impl Parser {
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
             self.super_call_allowed = saved_super;
+            self.super_property_allowed = saved_super_property;
             self.in_class_field_initializer = saved_field;
             let body = body?;
-            self.validate_method_params(&params, true, has_use_strict(&body))?;
+            self.validate_method_params(&params, &body, true, has_use_strict(&body))?;
             self.validate_strict_statements(&body.body)?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
@@ -419,7 +465,10 @@ impl Parser {
         self.declare_private(&key, MethodKind::Method, is_static)?;
         let init = if self.eat_punct(Punct::Eq) {
             self.in_class_field_initializer += 1;
+            let saved_super_property = self.super_property_allowed;
+            self.super_property_allowed = true;
             let init = self.parse_assignment_expr();
+            self.super_property_allowed = saved_super_property;
             self.in_class_field_initializer -= 1;
             Some(init?)
         } else {

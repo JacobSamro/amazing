@@ -42,6 +42,7 @@ pub struct PaintViewDelta {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaintFallbackReason {
     AmbiguousGeneration,
+    AmbiguousPropertyOwner,
     DuplicateKey,
     KeyCollision,
     OrderChanged,
@@ -89,6 +90,9 @@ impl DisplayListView<'_> {
             || old_resources.is_none() || new_resources.is_none()
         {
             return fallback(PaintFallbackReason::AmbiguousGeneration);
+        }
+        if self.property_owner_mapping().is_none() || next.property_owner_mapping().is_none() {
+            return fallback(PaintFallbackReason::AmbiguousPropertyOwner);
         }
         if self.width != next.width || self.height != next.height {
             return fallback(PaintFallbackReason::ViewportChanged);
@@ -233,7 +237,7 @@ impl DisplayListView<'_> {
     }
 }
 
-fn damage_bounds(bounds: PaintBounds) -> Option<PaintBounds> {
+pub(super) fn damage_bounds(bounds: PaintBounds) -> Option<PaintBounds> {
     if ![bounds.x, bounds.y, bounds.width, bounds.height]
         .into_iter().all(f32::is_finite)
         || bounds.width <= 0.0 || bounds.height <= 0.0

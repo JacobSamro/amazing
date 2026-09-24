@@ -3941,6 +3941,7 @@ include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
 include!("builtins_intl_data.rs");
+include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");
 include!("builtins_intl_number.rs");
 include!("builtins_intl_plural.rs");

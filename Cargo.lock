@@ -252,7 +252,9 @@ dependencies = [
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-storage",
  "amazing-svg",
+ "amazing-text-provider",
 ]
 
 [[package]]

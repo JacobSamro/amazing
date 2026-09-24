@@ -565,6 +565,7 @@ mod tests {
         StyleDelta {
             styles,
             changed: BTreeMap::from([(node, vec![property.to_string()])]),
+            change_kinds: BTreeMap::new(),
             recalculated: vec![node],
             full_rebuild: false,
         }
@@ -732,6 +733,7 @@ mod tests {
             StyleDelta {
                 styles,
                 changed: BTreeMap::new(),
+                change_kinds: BTreeMap::new(),
                 recalculated: Vec::new(),
                 full_rebuild: false,
             },
@@ -844,6 +846,7 @@ mod generation_tests {
             StyleDelta {
                 styles: after,
                 changed: BTreeMap::new(),
+                change_kinds: BTreeMap::new(),
                 recalculated: Vec::new(),
                 full_rebuild: false,
             },

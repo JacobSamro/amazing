@@ -84,6 +84,9 @@ impl Parser {
         if !self.at_punct(Punct::Question) {
             return Ok(test);
         }
+        if matches!(test.kind, ExprKind::Yield { .. }) {
+            return Err(self.err_at(test.span.start, "yield must be parenthesized in a conditional test"));
+        }
         self.bump(); // ?
                      // The middle operand allows `in` even inside for-heads.
         let saved = self.no_in;
@@ -135,7 +138,7 @@ impl Parser {
             // ExponentiationExpression no unary left operand), so
             // `-2 ** 2` is a SyntaxError while `(-2) ** 2` parses.
             if kind == BinKind::Arithmetic(BinOp::Pow)
-                && matches!(left.kind, ExprKind::Unary { .. } | ExprKind::Update { .. })
+                && matches!(left.kind, ExprKind::Unary { .. })
             {
                 return Err(self.err("unary operand needs parentheses before `**`"));
             }
@@ -303,6 +306,9 @@ impl Parser {
             if op == UnOp::Delete && is_private_reference(&operand) {
                 return Err(self.err_at(start, "cannot delete a private name"));
             }
+            if op == UnOp::Delete && self.strict_script && matches!(operand.kind, ExprKind::Ident(_)) {
+                return Err(self.err_at(start, "cannot delete an identifier in strict mode"));
+            }
             return Ok(Expr::new(
                 ExprKind::Unary {
                     op,
@@ -374,6 +380,7 @@ impl Parser {
             if self.at_kw(crate::tokens::Keyword::Import)
                 && (self.nth_punct(1, Punct::LParen)
                     || self.nth_punct(1, Punct::Dot)
+                        && !matches!(&self.nth(2).kind, TokenKind::Ident(name) if name == "meta")
                         && self.nth_punct(3, Punct::LParen)) {
                 return Err(self.err_at(start, "dynamic import cannot be the operand of new"));
             }
@@ -385,7 +392,8 @@ impl Parser {
                 if self.in_new_target == 0 && self.in_static_block == 0 {
                     return Err(self.err_at(start, "new.target is only valid in functions"));
                 }
-                return Ok(Expr::new(ExprKind::NewTarget, self.span_from(start)));
+                let meta = Expr::new(ExprKind::NewTarget, self.span_from(start));
+                return self.parse_member_suffix(meta, true);
             }
             let callee = if self.at_kw(crate::tokens::Keyword::New) {
                 self.parse_lhs()?
@@ -613,6 +621,9 @@ impl Parser {
             }
             TokenKind::Keyword(K::Super) => {
                 self.bump();
+                if !self.super_property_allowed && !self.super_call_allowed {
+                    return Err(self.err_at(start, "super is only valid in method code"));
+                }
                 if !self.at_punct(Punct::Dot) && !self.at_punct(Punct::LBracket)
                     && !self.at_punct(Punct::LParen) {
                     return Err(self.err_at(start, "bare super is not an expression"));
@@ -716,6 +727,9 @@ impl Parser {
         {
             self.bump(); // async
             let param = self.expect_ident()?;
+            if param.name == "await" {
+                return Err(self.err_at(param.span.start, "await is reserved in async arrow formals"));
+            }
             self.bump(); // =>
             return self.finish_arrow(start, vec![plain_param(param)], true);
         }
@@ -725,7 +739,10 @@ impl Parser {
             let save_end = self.last_end;
             let save_noin = self.no_in;
             self.bump(); // async
-            match self.try_arrow_params() {
+            self.in_async += 1;
+            let params = self.try_arrow_params();
+            self.in_async -= 1;
+            match params {
                 Ok(params) => return self.finish_arrow(start, params, true),
                 Err(_) => {
                     self.pos = save_pos;
@@ -819,6 +836,19 @@ impl Parser {
                 }
             }
         }
+        if let ArrowBody::Block(block) = &body {
+            for statement in &block.body {
+                let lexical = match &statement.kind {
+                    StmtKind::Var(decl) if decl.kind != VarKind::Var => decl.decls.iter()
+                        .flat_map(|decl| binding_names(&decl.binding)).collect::<Vec<_>>(),
+                    StmtKind::Class(class) => class.name.iter().collect(),
+                    _ => Vec::new(),
+                };
+                if let Some(name) = lexical.into_iter().find(|name| names.contains(&name.name)) {
+                    return Err(self.err_at(name.span.start, "arrow parameter conflicts with lexical binding"));
+                }
+            }
+        }
         Ok(Expr::new(
             ExprKind::Arrow(ArrowFunc {
                 params,
@@ -847,6 +877,9 @@ impl Parser {
             return Err(self.err("`yield` is only valid inside generator functions"));
         }
         self.bump(); // yield
+        if self.at_punct(Punct::Star) && self.cur().newline_before {
+            return Err(self.err("newline before yield star"));
+        }
         let delegate = self.eat_punct(Punct::Star);
         let argument = if self.starts_expression() && !self.cur().newline_before {
             Some(Box::new(self.parse_assignment_expr()?))
@@ -1013,6 +1046,8 @@ impl Parser {
             }));
         }
         if self.at_punct(Punct::LParen) {
+            let saved_super_property = self.super_property_allowed;
+            self.super_property_allowed = true;
             self.in_async += usize::from(is_async);
             self.in_generator += usize::from(is_generator);
             self.in_new_target += 1;
@@ -1026,6 +1061,7 @@ impl Parser {
                 Err(error) => {
                     self.in_new_target -= 1;
                     self.in_static_block = saved_static_block;
+                    self.super_property_allowed = saved_super_property;
                     return Err(error);
                 }
             };
@@ -1033,10 +1069,12 @@ impl Parser {
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block());
             self.in_new_target -= 1;
             self.in_static_block = saved_static_block;
+            self.super_property_allowed = saved_super_property;
             let body = body?;
             let own_strict_directive = has_use_strict(&body);
             self.validate_method_params(
                 &params,
+                &body,
                 self.strict_script || own_strict_directive,
                 own_strict_directive,
             )?;
