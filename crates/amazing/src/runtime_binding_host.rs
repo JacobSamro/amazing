@@ -488,6 +488,7 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    adapter.install_dom_unscopables()?;
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;

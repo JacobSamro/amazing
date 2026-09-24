@@ -1155,6 +1155,18 @@ pub fn html_element_interface(local: &str) -> I {
     }
 }
 
+/// DOM mixin members marked [Unscopable] in the DOM Standard. Each interface
+/// receives its own null-prototype @@unscopables object.
+pub fn unscopable_members(interface: I) -> &'static [&'static str] {
+    match interface {
+        I::Document | I::DocumentFragment => &["prepend", "append", "replaceChildren"],
+        I::Element => &["prepend", "append", "replaceChildren", "before", "after",
+            "replaceWith", "remove", "slot"],
+        I::CharacterData | I::DocumentType => &["before", "after", "replaceWith", "remove"],
+        _ => &[],
+    }
+}
+
 /// Add these descriptors without deleting unrelated existing browser APIs.
 /// Constructors require `new`; illegal constructors still expose prototypes.
 /// Runtime defines writable/configurable methods, enumerable configurable

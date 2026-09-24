@@ -52,7 +52,7 @@ pub mod canvas_interfaces;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use amazing_fetch::api::{Blob, BlobPart, File, FormData};
-pub use interfaces::{html_element_interface, install, InstallReport, OptionalCapability, INTERFACES};
+pub use interfaces::{html_element_interface, install, unscopable_members, InstallReport, OptionalCapability, INTERFACES};
 pub use invoke::{invoke, supported_index_count, supported_names};
 pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for_document};
 

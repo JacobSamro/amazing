@@ -121,6 +121,25 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
 }
 
 #[test]
+fn dom_mixin_unscopables_are_on_the_declaring_prototype() {
+    let host = std::rc::Rc::new(std::cell::RefCell::new(crate::dom_host::BrowserDomHost {
+        dom: amazing_dom::Dom::new(), native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let u = Element.prototype[Symbol.unscopables]; \
+         Object.getPrototypeOf(u) === null && u.before && u.after && u.replaceWith && \
+         u.remove && u.prepend && u.append && u.replaceChildren && u.slot && \
+         !Object.getOwnPropertyDescriptor(Element.prototype, Symbol.unscopables).writable && \
+         Document.prototype[Symbol.unscopables].prepend && \
+         DocumentFragment.prototype[Symbol.unscopables].append && \
+         CharacterData.prototype[Symbol.unscopables].remove && \
+         DocumentType.prototype[Symbol.unscopables].before"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
 fn dom_parser_documents_share_the_arena_without_running_scripts() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body></body>"),

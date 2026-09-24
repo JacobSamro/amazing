@@ -3,6 +3,23 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn install_dom_unscopables(&mut self) -> Result<(), Throw> {
+        for interface in [Interface::Document, Interface::DocumentFragment, Interface::Element,
+            Interface::CharacterData, Interface::DocumentType] {
+            let prototype = self.prototype(interface)
+                .ok_or_else(|| Throw::type_error("Missing DOM interface prototype"))?;
+            let unscopables = self.js.binding_create_object(None)?;
+            for name in amazing_bindings::unscopable_members(interface) {
+                self.define_data_property(&unscopables, name, JsValue::Bool(true),
+                    true, true, true)?;
+            }
+            self.js.binding_define_symbol_data_property(&prototype,
+                amazing_js::value::WellKnownSymbol::Unscopables.symbol(), unscopables,
+                BindingPropertyFlags { writable: false, enumerable: false, configurable: true })?;
+        }
+        Ok(())
+    }
+
     pub(super) fn dom_window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
         if self.is_nullish(value) || self.same_value(value, &self.js.binding_global_object()) {
             Some(self.state.borrow().window_event_target_slot)
