@@ -140,7 +140,9 @@ impl RenderCoordinator {
         self.sheets = sheets.to_vec();
         self.viewport = viewport;
         self.generations = (0..dom.node_count()).map(|index|
-            dom.node_generation(NodeIdx(index as u32)).expect("arena node").generation).collect();
+            // Free slots have no generation (None); they never match a live
+            // node's key, so 0 is a safe placeholder.
+            dom.node_generation(NodeIdx(index as u32)).unwrap_or(0)).collect();
     }
 
     fn to_style_mutation(&self, entry: &RenderMutation) -> StyleMutation {
