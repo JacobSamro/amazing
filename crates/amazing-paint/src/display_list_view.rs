@@ -162,6 +162,8 @@ pub struct StickyMetadata {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransformNode {
     pub parent: u32,
+    /// Stable DOM owner; absent only for the synthetic root in a bindable view.
+    pub owner: Option<PaintNodeKey>,
     /// CSS 2D affine matrix [a, b, c, d, e, f], including transform origin.
     pub matrix: [f32; 6],
 }
@@ -175,12 +177,16 @@ pub struct ClipNode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectNode {
     pub parent: u32,
+    /// Stable DOM owner; absent only for the synthetic root in a bindable view.
+    pub owner: Option<PaintNodeKey>,
     pub opacity: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScrollNode {
     pub parent: u32,
+    /// Stable DOM owner; absent only for the synthetic root in a bindable view.
+    pub owner: Option<PaintNodeKey>,
     pub bounds: PaintBounds,
     /// Untransformed scrollable overflow, including the scrollport itself.
     pub contents: PaintBounds,
@@ -205,6 +211,16 @@ pub struct DisplayListView<'a> {
     text: &'a dyn TextSystem,
     images: &'a dyn ImageProvider,
     controls: &'a dyn ControlProvider,
+}
+
+/// Per-property lookup into one view's property tables. IDs are valid only
+/// while this view is retained. `None` from `property_owner_mapping` means the
+/// caller must rebuild the scene instead of binding a property update.
+#[derive(Debug, Clone)]
+pub struct PropertyOwnerMapping {
+    pub transforms: HashMap<PaintNodeKey, u32>,
+    pub effects: HashMap<PaintNodeKey, u32>,
+    pub scrolls: HashMap<PaintNodeKey, u32>,
 }
 
 impl<'a> DisplayListView<'a> {
@@ -304,6 +320,7 @@ impl<'a> DisplayListView<'a> {
             ambiguous_generation: false,
             transforms: vec![TransformNode {
                 parent: 0,
+                owner: None,
                 matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
             }],
             clips: vec![ClipNode {
@@ -312,10 +329,12 @@ impl<'a> DisplayListView<'a> {
             }],
             effects: vec![EffectNode {
                 parent: 0,
+                owner: None,
                 opacity: 1.0,
             }],
             scrolls: vec![ScrollNode {
                 parent: 0,
+                owner: None,
                 bounds: PaintBounds::viewport(width, height),
                 contents: scrollable_extent(root, PaintBounds::viewport(width, height)),
                 initial_offset: offset_for(root, scroll_offset),
@@ -335,9 +354,11 @@ impl<'a> DisplayListView<'a> {
             match &view.commands[command_index] {
                 PaintCommand::BeginGroup(group) => {
                     group_stack.push(state);
+                    let owner = group.owner.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation }));
                     let next = view.effects.len() as u32;
                     view.effects.push(EffectNode {
                         parent: state.effect,
+                        owner,
                         opacity: group.opacity,
                     });
                     state.effect = next;
@@ -346,6 +367,7 @@ impl<'a> DisplayListView<'a> {
                         let next = view.transforms.len() as u32;
                         view.transforms.push(TransformNode {
                             parent: state.transform,
+                            owner,
                             matrix: [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f],
                         });
                         state.transform = next;
@@ -370,6 +392,7 @@ impl<'a> DisplayListView<'a> {
                         let next = view.scrolls.len() as u32;
                         view.scrolls.push(ScrollNode {
                             parent: state.scroll,
+                            owner: box_.node.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation })),
                             bounds,
                             contents: scrollable_extent(box_, bounds),
                             initial_offset: offset_for(box_, scroll_offset),
@@ -489,6 +512,42 @@ impl<'a> DisplayListView<'a> {
 
     pub fn scrolls(&self) -> &[ScrollNode] {
         &self.scrolls
+    }
+
+    /// Resolve a DOM owner and CSS property to a view-local property ID.
+    /// Missing generations and duplicate owners are ambiguous, so the caller
+    /// must use its full scene rebuild path. Root entries are synthetic.
+    pub fn property_owner_mapping(&self) -> Option<PropertyOwnerMapping> {
+        if self.ambiguous_generation {
+            return None;
+        }
+        let mut mapping = PropertyOwnerMapping {
+            transforms: HashMap::new(),
+            effects: HashMap::new(),
+            scrolls: HashMap::new(),
+        };
+        for (id, node) in self.transforms.iter().enumerate().skip(1) {
+            if mapping.transforms.insert(node.owner?, id as u32).is_some() {
+                return None;
+            }
+        }
+        for (id, node) in self.effects.iter().enumerate().skip(1) {
+            if mapping.effects.insert(node.owner?, id as u32).is_some() {
+                return None;
+            }
+        }
+        for (id, node) in self.scrolls.iter().enumerate().skip(1) {
+            if mapping.scrolls.insert(node.owner?, id as u32).is_some() {
+                return None;
+            }
+        }
+        let mut generations = self.node_generations.clone();
+        for owner in mapping.transforms.keys().chain(mapping.effects.keys()).chain(mapping.scrolls.keys()) {
+            if generations.insert(owner.node, owner.generation).is_some_and(|old| old != owner.generation) {
+                return None;
+            }
+        }
+        Some(mapping)
     }
 
     /// Paints items in `[start, end)` using the existing command rasterizer.

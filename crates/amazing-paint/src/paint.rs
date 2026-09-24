@@ -177,6 +177,7 @@ impl RasterState {
         if let Some(mask) = rounded {
             self.begin_group_with_mask(
                 GroupEffect {
+                    owner: box_.node,
                     opacity: 1.0,
                     transform: crate::display_list::Affine::IDENTITY,
                     origin_x: 0.0,

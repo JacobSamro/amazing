@@ -68,6 +68,7 @@ impl Affine {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GroupEffect {
+    pub owner: Option<amazing_dom::NodeIdx>,
     pub opacity: f32,
     pub transform: Affine,
     pub origin_x: f32,
@@ -456,6 +457,7 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
     }
     let border = box_.border_box;
     Some(GroupEffect {
+        owner: box_.node,
         opacity,
         transform: transform.unwrap_or(Affine::IDENTITY),
         origin_x: border.x + border.w * 0.5,
