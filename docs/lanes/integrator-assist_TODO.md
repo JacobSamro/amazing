@@ -760,6 +760,12 @@ Owned diagnostics cover a TestRendered class mutation and COMP-7's effects scrol
 
 Windows diagnostic finding: the 512×512 effects scroller has a one-channel-level compositor/full difference at (38,178), candidate `[95,95,95,255]` versus full `[96,96,96,255]` on both frames. Linux matches exactly. The oracle falls back to the full painter and writes a PPM diff. This is routed to compositor/replaced-content; the effects case has no exact-pixel credit until fixed.
 
+## IA-ORACLE-LAYOUT + IA-ORACLE-PAINT — retained candidate (2026-09-24)
+
+On fixed local `dev` base `93bb98b`, the invalidation coordinator now passes CSS changed properties and DOM text/replaced inputs to `LayoutTree::update`, compares its retained root with an independent full layout, and paints from the retained root. It compares stable keyed paint snapshots, translates safe `DisplayListView::update` results into compositor paint deltas, and retains the compositor/presenter across frames. A parity loss presents the full painter and resets the scene. The default renderer remains unchanged.
+
+The Win-001 release mutation trace passed its direct-render byte comparisons, with full-painter fallback for 21 known one-channel effects differences. Article and effects p95 were **266.614 ms** and **248.500 ms**, missing ADR 0010's 20/31 ms targets. Opacity p95 was **110.244 ms**, with 20/20/20 style/layout/paint-view calls over 20 mutations and zero tile uploads; property-only zero work is not met. The driver trace includes a full oracle and resource work, unlike the ADR's compositor-only baseline. Exact counts and command are in `crates/amazing/tests/invalidation_oracle/evidence/layout_paint_win001_2026-09-24.md`. Layout still rebuilds width changes and paint still compares complete views; follow-up owner requests are in `.agents/integrator-assist/questions.md`.
+
 ## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
 
 On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
