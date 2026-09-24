@@ -187,10 +187,22 @@ fn class_item(class: &ClassItem) -> Result<(), SyntaxError> {
 fn expression(expr: &Expr, pattern: bool) -> Result<(), SyntaxError> {
     match &expr.kind {
         ExprKind::Object(items) => {
+            let mut proto_data_seen = false;
             for item in items {
                 match item {
                     ObjElem::Spread(inner) => expression(inner, pattern)?,
                     ObjElem::Prop(property) => {
+                        if !pattern && matches!(property.value, PropValue::Init(_))
+                            && prop_key_name(&property.key) == Some("__proto__") {
+                            if proto_data_seen {
+                                return Err(SyntaxError::new(
+                                    "duplicate __proto__ data property",
+                                    property.span.start.line,
+                                    property.span.start.column,
+                                ));
+                            }
+                            proto_data_seen = true;
+                        }
                         if let PropKey::Computed(key) = &property.key {
                             expression(key, false)?;
                         }

@@ -44,6 +44,7 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
         | O::ElementTagName => matches!(kind, NodeKind::Element { .. }),
         O::DocumentTypeName | O::DocumentTypePublicId | O::DocumentTypeSystemId =>
             matches!(kind, NodeKind::DocumentType { .. }),
+        O::ProcessingInstructionTarget => matches!(kind, NodeKind::ProcessingInstruction { .. }),
         _ => true,
     };
     if good {
@@ -443,6 +444,12 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                     _ => system_id,
                 };
                 R::String(value.encode_utf16().collect())
+            }
+            O::ProcessingInstructionTarget => {
+                let NodeKind::ProcessingInstruction { target, .. } = &dom.get(target).kind else {
+                    unreachable!("validated ProcessingInstruction receiver")
+                };
+                R::String(target.encode_utf16().collect())
             }
             O::NodeValue => if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
                 R::String(dom.attr_snapshot(target)?.value)

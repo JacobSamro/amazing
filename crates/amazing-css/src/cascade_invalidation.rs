@@ -4,6 +4,8 @@ use super::*;
 use crate::selectors::{Combinator, Compound, Pseudo, Simple};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use crate::{StyleChangeKind, classify_style_property};
+use crate::values::{ComputedValue, LengthPercentage, Transform};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MutationKind {
@@ -98,8 +100,66 @@ pub struct RecalcRoots {
 pub struct StyleDelta {
     pub styles: StyledDom,
     pub changed: BTreeMap<NodeIdx, Vec<String>>,
+    /// Highest severity among each node's changed computed properties.
+    pub change_kinds: BTreeMap<NodeIdx, StyleChangeKind>,
     pub recalculated: Vec<NodeIdx>,
     pub full_rebuild: bool,
+}
+
+impl StyleDelta {
+    pub fn change_kind(&self, node: NodeIdx) -> StyleChangeKind {
+        self.change_kinds.get(&node).copied().unwrap_or_default()
+    }
+}
+
+/// Resolved values for a compositor update that did not run CSS computation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompositorStyleDelta {
+    pub node: NodeIdx,
+    pub opacity: Option<f32>,
+    /// Row-major local matrix, directly constructible as compositor `Matrix4`.
+    pub transform_matrix: Option<[[f32; 4]; 4]>,
+    transform_value: Option<Vec<Transform>>,
+    transform_css: Option<String>,
+}
+
+/// Border-box size from the retained layout tree. The caller must only pass
+/// this when the box geometry is unchanged at this rendering update.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CachedBoxSize {
+    pub width: f32,
+    pub height: f32,
+}
+
+impl CompositorStyleDelta {
+    /// Keep the retained style cache in sync for the next value-only update.
+    /// This patches computed values directly and does not run CSS `compute`.
+    pub fn apply_to_styles(&self, styles: &mut StyledDom) -> bool {
+        let Some(style) = styles.styles.get_mut(&self.node.0) else { return false; };
+        style.apply_compositor_values(
+            self.opacity,
+            self.transform_css.as_deref().zip(self.transform_value.clone()),
+        );
+        true
+    }
+}
+
+/// The caller can apply `CompositorOnly` directly to retained property nodes.
+/// `Recomputed` carries the normal incremental style result and its severity.
+#[derive(Debug)]
+pub enum AttributeStyleUpdate {
+    CompositorOnly(CompositorStyleDelta),
+    Recomputed(StyleDelta),
+}
+
+impl AttributeStyleUpdate {
+    pub fn change_kind(&self, node: NodeIdx) -> StyleChangeKind {
+        match self {
+            Self::CompositorOnly(delta) if delta.node == node => StyleChangeKind::CompositorOnly,
+            Self::CompositorOnly(_) => StyleChangeKind::None,
+            Self::Recomputed(delta) => delta.change_kind(node),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +171,125 @@ pub struct StyleMismatch {
 }
 
 impl StyleInvalidator {
+    /// Invalidate one class or style attribute. A safe inline-only opacity or
+    /// transform edit returns resolved values without calling CSS `compute`.
+    pub fn update_attribute(
+        &self,
+        dom: &Dom,
+        old_styles: &StyledDom,
+        node: NodeIdx,
+        name: &str,
+        old: Option<&str>,
+        new: Option<&str>,
+        stylesheet_epoch: u64,
+    ) -> AttributeStyleUpdate {
+        self.update_attribute_with_box(dom, old_styles, node, name, old, new, stylesheet_epoch, None)
+    }
+
+    /// As `update_attribute`, with a stable border-box size from retained
+    /// layout for percentage translations and transform-origin composition.
+    pub fn update_attribute_with_box(
+        &self,
+        dom: &Dom,
+        old_styles: &StyledDom,
+        node: NodeIdx,
+        name: &str,
+        old: Option<&str>,
+        new: Option<&str>,
+        stylesheet_epoch: u64,
+        box_size: Option<CachedBoxSize>,
+    ) -> AttributeStyleUpdate {
+        if name.eq_ignore_ascii_case("style") && stylesheet_epoch == self.context.epoch {
+            if let Some(delta) = self.try_compositor_inline_change(dom, old_styles, node, old, new, box_size) {
+                return AttributeStyleUpdate::CompositorOnly(delta);
+            }
+        }
+        AttributeStyleUpdate::Recomputed(self.recompute_attribute_change(
+            dom, old_styles, node, name, old, new, stylesheet_epoch,
+        ))
+    }
+
+    fn try_compositor_inline_change(
+        &self,
+        dom: &Dom,
+        old_styles: &StyledDom,
+        node: NodeIdx,
+        old: Option<&str>,
+        new: Option<&str>,
+        box_size: Option<CachedBoxSize>,
+    ) -> Option<CompositorStyleDelta> {
+        let index = &self.context.features;
+        if index.has_relational || index.has_nth_of
+            || index.sets.contains_key(&Feature::Attribute("style".into()))
+            || !dom.is_descendant(node, NodeIdx(0))
+            || self.context.ua_rules.iter().chain(self.context.author_rules.iter()).any(|rule| {
+                rule.decls.iter().any(|declaration| declaration.value.to_ascii_lowercase().contains("attr("))
+            })
+        { return None; }
+        let old = old?;
+        let new = new?;
+        if dom.attrs_of(node)?.iter().find(|(name, _)| name == "style").map(|(_, value)| value.as_str()) != Some(new)
+            || old.to_ascii_lowercase().contains("attr(") || new.to_ascii_lowercase().contains("attr(")
+        { return None; }
+        let before = crate::parse_declarations(old);
+        let after = crate::parse_declarations(new);
+        let compositor = |name: &str| matches!(name, "opacity" | "transform");
+        if before.iter().filter(|d| !compositor(&d.property)).collect::<Vec<_>>()
+            != after.iter().filter(|d| !compositor(&d.property)).collect::<Vec<_>>()
+            || before.iter().chain(after.iter()).any(|d| d.property == "all")
+        { return None; }
+        let style = old_styles.get(node)?;
+        let mut opacity = None;
+        let mut transform_value = None;
+        let mut transform_matrix = None;
+        let mut transform_css = None;
+        for property in ["opacity", "transform"] {
+            let old_decls: Vec<_> = before.iter().filter(|d| d.property == property).collect();
+            let new_decls: Vec<_> = after.iter().filter(|d| d.property == property).collect();
+            if old_decls == new_decls { continue; }
+            let ([old], [new]) = (old_decls.as_slice(), new_decls.as_slice()) else { return None; };
+            if old.important || new.important
+                || old_styles.source(node, property) != Some(super::ElementStyleSource::Inline)
+            { return None; }
+            let old_value = crate::values::parse(property, &old.value)?;
+            let new_value = crate::values::parse(property, &new.value)?;
+            if style.typed(property) != Some(&old_value) { return None; }
+            match (property, old_value, new_value) {
+                ("opacity", ComputedValue::Number(a), ComputedValue::Number(b))
+                    if a < 1.0 && b < 1.0 => opacity = Some(b as f32),
+                ("transform", ComputedValue::Transform(a), ComputedValue::Transform(b))
+                    if !a.is_empty() && !b.is_empty()
+                        && !dom.children(node).any(|child| dom.name(child).is_some())
+                        && !before.iter().chain(after.iter()).any(|d| d.property == "transform-origin")
+                        && !self.context.author_rules.iter().any(|rule| rule.decls.iter().any(|d| d.property == "transform-origin")) => {
+                            transform_matrix = Some(local_transform_matrix(&b, box_size)?);
+                            transform_value = Some(b);
+                            transform_css = Some(new.value.clone());
+                        },
+                _ => return None,
+            }
+        }
+        (opacity.is_some() || transform_matrix.is_some()).then_some(CompositorStyleDelta {
+            node, opacity, transform_matrix, transform_value, transform_css,
+        })
+    }
+
+    /// Apply one already-recorded class or inline-style mutation incrementally.
+    /// The caller updates `dom` before calling this method.
+    pub fn recompute_attribute_change(
+        &self,
+        dom: &Dom,
+        old_styles: &StyledDom,
+        node: NodeIdx,
+        name: &str,
+        old: Option<&str>,
+        new: Option<&str>,
+        stylesheet_epoch: u64,
+    ) -> StyleDelta {
+        let mutation = RenderMutation::attribute(node, name, old, new);
+        recompute_roots(dom, old_styles, self.collect(&[mutation], stylesheet_epoch))
+    }
+
     pub fn new(author_sheets: &[Stylesheet], stylesheet_epoch: u64) -> Self {
         let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
         let author_rules = compile_sheets(author_sheets, false);
@@ -328,6 +507,14 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
                     collect_compound(nested, effect, index);
                 }
             }
+            Simple::ComplexNegation(args) | Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => {
+                index.has_relational = true;
+                for selector in args {
+                    for nested in &selector.compounds {
+                        collect_compound(nested, effect, index);
+                    }
+                }
+            }
             Simple::Has(_) => index.has_relational = true,
             Simple::NthChildOf { selectors, .. } => {
                 index.has_structural = true;
@@ -455,13 +642,28 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
         (out, recalculated)
     };
     let changed = changed_properties(old_styles, &styles);
+    let change_kinds = changed.iter().map(|(&node, names)| {
+        let severity = names.iter().map(|name| {
+            match name.as_str() {
+                "transform" => StyleChangeKind::Layout,
+                "opacity" => StyleChangeKind::Rebuild,
+                _ => match classify_style_property(name) {
+                Some(kind) => kind,
+                None => StyleChangeKind::Rebuild,
+                },
+            }
+        }).max().unwrap_or_default();
+        (node, severity)
+    }).collect();
     StyleDelta {
         styles,
         changed,
+        change_kinds,
         recalculated,
         full_rebuild: full,
     }
 }
+
 
 fn changed_properties(old: &StyledDom, new: &StyledDom) -> BTreeMap<NodeIdx, Vec<String>> {
     let mut changed = BTreeMap::new();
@@ -507,6 +709,93 @@ fn changed_properties(old: &StyledDom, new: &StyledDom) -> BTreeMap<NodeIdx, Vec
         changed.insert(NodeIdx(id), differing);
     }
     changed
+}
+
+fn local_transform_matrix(
+    operations: &[Transform],
+    box_size: Option<CachedBoxSize>,
+) -> Option<[[f32; 4]; 4]> {
+    type Matrix = [[f32; 4]; 4];
+    const IDENTITY: Matrix = [
+        [1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0],
+    ];
+    fn mul(a: Matrix, b: Matrix) -> Matrix {
+        let mut out = [[0.0; 4]; 4];
+        for i in 0..4 {
+            for j in 0..4 {
+                out[i][j] = (0..4).map(|k| a[i][k] * b[k][j]).sum();
+            }
+        }
+        out
+    }
+    fn translation(x: f32, y: f32) -> Matrix {
+        let mut out = IDENTITY;
+        out[0][3] = x;
+        out[1][3] = y;
+        out
+    }
+    fn finite(value: f64) -> Option<f32> {
+        let narrowed = value as f32;
+        (value.is_finite() && narrowed.is_finite()).then_some(narrowed)
+    }
+    fn length(value: &LengthPercentage, basis: Option<f32>) -> Option<f32> {
+        match value {
+            LengthPercentage::Px(value) => finite(*value),
+            LengthPercentage::Percentage(value) => finite(*value * f64::from(basis?) / 100.0),
+            LengthPercentage::Relative(_, _) => None,
+        }
+    }
+    let box_size = box_size.filter(|size| {
+        size.width.is_finite() && size.height.is_finite() && size.width >= 0.0 && size.height >= 0.0
+    });
+    let needs_origin = operations.iter().any(|op| !matches!(op, Transform::Translate(_, _)));
+    if needs_origin && box_size.is_none() { return None; }
+    let mut matrix = IDENTITY;
+    for op in operations {
+        let next = match op {
+            Transform::Translate(x, y) => translation(
+                length(x, box_size.map(|size| size.width))?,
+                length(y, box_size.map(|size| size.height))?,
+            ),
+            Transform::Scale(x, y) => {
+                let mut out = IDENTITY;
+                out[0][0] = finite(*x)?;
+                out[1][1] = finite(*y)?;
+                out
+            }
+            Transform::Rotate(angle) => {
+                let (sin, cos) = finite(angle.radians)?.sin_cos();
+                let mut out = IDENTITY;
+                out[0][0] = cos; out[0][1] = -sin;
+                out[1][0] = sin; out[1][1] = cos;
+                out
+            }
+            Transform::SkewX(angle) => {
+                let mut out = IDENTITY;
+                out[0][1] = finite(angle.radians)?.tan();
+                out
+            }
+            Transform::SkewY(angle) => {
+                let mut out = IDENTITY;
+                out[1][0] = finite(angle.radians)?.tan();
+                out
+            }
+            Transform::Matrix(values) => [
+                [finite(values[0])?, finite(values[2])?, 0.0, finite(values[4])?],
+                [finite(values[1])?, finite(values[3])?, 0.0, finite(values[5])?],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+        matrix = mul(matrix, next);
+    }
+    if needs_origin {
+        let size = box_size?;
+        matrix = mul(mul(translation(size.width / 2.0, size.height / 2.0), matrix),
+            translation(-size.width / 2.0, -size.height / 2.0));
+    }
+    matrix.iter().flatten().all(|value| value.is_finite()).then_some(matrix)
 }
 
 fn first_mismatch(incremental: &StyledDom, full: &StyledDom) -> Option<StyleMismatch> {

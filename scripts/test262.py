@@ -8,13 +8,15 @@ Run: python scripts/test262.py TEST262_ROOT --binary HOST.exe --output results.j
 Contract: https://github.com/tc39/test262/blob/3655e7464de3d52643ecddd4b5f9f4f3e7f62398/INTERPRETING.md
 Each variant gets a fresh process/realm and a wall-clock deadline. Helpers are
 separate scripts, byte-preserved and unmodified; strictness applies to the test
-only. Raw sources are unchanged and receive no helpers. Modules/async and other
-unavailable host capabilities are explicit unsupported results, not successes.
+only. Raw sources are unchanged and receive no helpers. Module tests use a
+separate protocol and module grammar goal; async and unavailable host
+capabilities are explicit unsupported results, not successes.
 Ordinary missing language/builtin features are failures, never guessed skips.
 
 Host stdin: little-endian u32 byte length + UTF-8 bytes for each field: protocol
-magic, test source, then pairs of helper name/source. Stdout ends with a
-TEST262_RESULT JSON record; only successful host exit and protocol 1 are accepted.
+magic, test source, then pairs of helper name/source. Module requests use a
+distinct magic plus source path and checkout root. Stdout ends with a
+TEST262_RESULT JSON record; only successful host exits and recognized protocols are accepted.
 Negative matching uses actual phase AND thrown constructor name, not error.name.
 The host reports missing constructor wiring as unknown (an engine failure).
 
@@ -45,6 +47,7 @@ except ImportError:
     raise SystemExit("Install runner dependency: python -m pip install PyYAML==6.0.3")
 
 PROTOCOL = "AMAZING_TEST262_1"
+MODULE_PROTOCOL = "AMAZING_TEST262_2_MODULE"
 STATUSES = ("pass", "fail", "timeout", "unsupported", "skipped")
 FLAGS = {"onlyStrict", "noStrict", "raw", "module", "async", "generated",
          "CanBlockIsFalse", "CanBlockIsTrue", "non-deterministic"}
@@ -159,6 +162,13 @@ def request(source: str, variant: str, helpers: list[tuple[str, str]]) -> bytes:
     return framed([PROTOCOL, source] + [item for pair in helpers for item in pair])
 
 
+def module_request(source: str, path: str, test_root: pathlib.Path,
+                   helpers: list[tuple[str, str]]) -> bytes:
+    """Module messages use a separate magic; classic bytes stay unchanged."""
+    return framed([MODULE_PROTOCOL, source, path, str(test_root / "test")]
+                  + [item for pair in helpers for item in pair])
+
+
 def result(status: str, reason: str, **details) -> dict:
     return {"status": status, "reason": reason, **details}
 
@@ -183,9 +193,10 @@ def classify(meta: dict, outcome: dict) -> dict:
     return result("fail", f"{phase}:{outcome['error_type']}", observed=outcome)
 
 
-def execute(binary: pathlib.Path, payload: bytes, timeout: float) -> dict:
+def execute(binary: pathlib.Path, payload: bytes, timeout: float, module: bool = False) -> dict:
     try:
-        child = subprocess.run([str(binary)], input=payload, capture_output=True, timeout=timeout)
+        child = subprocess.run([str(binary)] + (["--module-request"] if module else []),
+                               input=payload, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return result("timeout", "execution.deadline")
     except OSError as error:
@@ -201,9 +212,11 @@ def execute(binary: pathlib.Path, payload: bytes, timeout: float) -> dict:
         if not final.startswith("TEST262_RESULT "):
             raise ValueError("missing result frame")
         outcome = json.loads(final[len("TEST262_RESULT "):])
-        if outcome.get("protocol") != 1 or outcome.get("phase") not in {
-            "parse", "runtime", "harness-parse", "harness-runtime", "complete"
-        } or not isinstance(outcome.get("error_type"), str):
+        protocol = outcome.get("protocol")
+        phases = {"parse", "runtime", "harness-parse", "harness-runtime", "complete"}
+        if protocol == 2:
+            phases |= {"resolution"}
+        if protocol not in {1, 2} or outcome.get("phase") not in phases or not isinstance(outcome.get("error_type"), str):
             raise ValueError("invalid host result")
         return {"outcome": outcome}
     except (ValueError, IndexError, AttributeError) as error:
@@ -256,7 +269,9 @@ def run_file(path: pathlib.Path, root: pathlib.Path, binary: pathlib.Path,
         if reason:
             verdict = result("unsupported", reason)
         else:
-            response = execute(binary, request(source, variant, helpers), timeout)
+            payload = (module_request(source, name, root, helpers) if variant == "module"
+                       else request(source, variant, helpers))
+            response = execute(binary, payload, timeout, variant == "module")
             verdict = classify(meta, response["outcome"]) if "outcome" in response else response
         record["variants"].append({"variant": variant, **verdict})
     record["status"] = aggregate(record["variants"])
@@ -347,7 +362,7 @@ def self_test(root: pathlib.Path, binary: pathlib.Path, caps: dict) -> None:
     assert classify(neg, observed("complete", ""))["status"] == "fail"
     assert classify(neg, observed("harness-parse", "SyntaxError"))["status"] == "fail"
     assert unavailable("x", {"flags": ["async"]}, caps) == (None if caps.get("async") else "host.async")
-    assert unavailable("x", {"flags": ["module"]}, caps) == "host.module"
+    assert unavailable("x", {"flags": ["module"]}, caps) == (None if caps.get("module") else "host.module")
     assert unavailable("x", {"flags": ["CanBlockIsTrue"]}, caps) == "host.CanBlockIsTrue"
     assert unavailable("x", {"flags": ["CanBlockIsFalse"]}, caps) is None
     def probe(source, meta=None, helpers=None):
@@ -418,12 +433,14 @@ def main() -> int:
         parser.error("reproducible runner requires PyYAML==6.0.3")
     root = args.test262_root.resolve()
     binary = args.binary.resolve()
-    cap_result = subprocess.run([str(binary), "--capabilities"], capture_output=True, check=True, timeout=10)
+    cap_result = subprocess.run([str(binary), "--capabilities-v2"], capture_output=True, timeout=10)
+    if cap_result.returncode:
+        cap_result = subprocess.run([str(binary), "--capabilities"], capture_output=True, check=True, timeout=10)
     caps = json.loads(cap_result.stdout)
-    if caps.get("protocol") != 1:
-        parser.error("use amazing-js example test262_host, protocol 1")
-    if caps.get("module"):
-        parser.error("protocol 1 supports classic scripts only")
+    if caps.get("protocol") not in {1, 2}:
+        parser.error("use amazing-js example test262_host, protocol 1 or 2")
+    if caps.get("protocol") == 1 and caps.get("module"):
+        parser.error("protocol 1 supports synchronous classic scripts only")
     validate_async_host(caps, parser)
     if args.self_test:
         self_test(root, binary, caps)

@@ -46,6 +46,22 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn apply_compositor_values(
+        &mut self,
+        opacity: Option<f32>,
+        transform: Option<(&str, Vec<crate::values::Transform>)>,
+    ) {
+        if let Some(value) = opacity {
+            let css = value.to_string();
+            self.typed.insert("opacity".into(), ComputedValue::Number(css.parse().expect("finite opacity")));
+            self.props.insert("opacity".into(), css);
+        }
+        if let Some((css, value)) = transform {
+            self.props.insert("transform".into(), css.to_owned());
+            self.typed.insert("transform".into(), ComputedValue::Transform(value));
+        }
+    }
+
     /// Source stylesheet URL of a winning URL-bearing property.
     pub fn url_base(&self, property: &str) -> Option<&str> {
         self.url_bases.get(property).map(String::as_str)
@@ -756,6 +772,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "normal",
         inherited: false,
     },
+    PropertyMetadata { name: "ruby-align", initial: "space-around", inherited: true },
+    PropertyMetadata { name: "ruby-position", initial: "alternate", inherited: true },
+    PropertyMetadata { name: "ruby-overhang", initial: "auto", inherited: true },
+    PropertyMetadata { name: "ruby-merge", initial: "separate", inherited: true },
     PropertyMetadata {
         name: "text-align",
         initial: "start",
@@ -3014,6 +3034,8 @@ fn compute_normal_value(
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
+    } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
+        values::ruby_canonical(property.name, &computed).unwrap_or(property.initial).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "zoom" {

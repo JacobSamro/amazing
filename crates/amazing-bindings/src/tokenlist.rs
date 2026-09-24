@@ -30,11 +30,9 @@ fn attribute_value<H: BindingHost>(host: &mut H, element: NodeIdx, attribute: &s
 }
 fn set_attribute_value<H: BindingHost>(host: &mut H, element: NodeIdx, attribute: &str, units: Vec<u16>) -> Result<(), H::Error> {
     host.with_dom(|dom| {
-        if dom.get_attribute_node(element, None, attribute).is_none() {
-            dom.set_attribute(element, attribute, "")?;
-        }
+        dom.set_attribute(element, attribute, &String::from_utf16_lossy(&units))?;
         let attr = dom.get_attribute_node(element, None, attribute).ok_or(DomError::InvalidStateError)?;
-        dom.set_attr_value(attr, units)
+        dom.store_attr_value_units(attr, units)
     })
 }
 fn whitespace(unit: u16) -> bool { matches!(unit, 0x9 | 0xA | 0xC | 0xD | 0x20) }
@@ -141,6 +139,7 @@ pub(crate) fn invoke<H: BindingHost>(
         O::TokenListToggle => {
             let force = args.get(1).map(|v| host.to_boolean(v));
             let add = force.unwrap_or(!present);
+            if force.is_some() && add == present { return Ok(host.boolean(add)); }
             if add { if !present { current.push(first.clone()); } }
             else { current.retain(|token| token != first); }
             Some(add)

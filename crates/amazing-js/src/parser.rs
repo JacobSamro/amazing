@@ -320,6 +320,9 @@ struct Parser {
     block_depth: usize,
     /// Only a class constructor may contain a direct `super()` call.
     super_call_allowed: bool,
+    /// Super property access belongs to method, field, or static-block code;
+    /// arrows inherit it, ordinary functions start a fresh context.
+    super_property_allowed: bool,
     /// Depth of `${ … }` substitutions currently being parsed. A
     /// `TemplatePart` token seen at depth > 0 is the enclosing template's
     /// continuation (the lexer absorbed the closing `}` into it), not the
@@ -352,6 +355,7 @@ impl Parser {
             in_static_block: 0,
             block_depth: 0,
             super_call_allowed: false,
+            super_property_allowed: false,
             template_depth: 0,
             private_scopes: Vec::new(),
             class_heritage: Vec::new(),
@@ -1911,8 +1915,11 @@ mod construct_tests {
     #[test]
     fn this_super_and_member_chains() {
         assert!(matches!(expr_kind("this"), ExprKind::This));
-        let e = expr_kind("super.method()");
-        let ExprKind::Call { callee, .. } = e else {
+        let script = parse_script("class C { method() { super.method(); } }").unwrap();
+        let StmtKind::Class(class) = &script.body[0].kind else { panic!("class") };
+        let ClassMember::Method(method) = &class.members[0] else { panic!("method") };
+        let StmtKind::Expression(e) = &method.body.body[0].kind else { panic!("expression") };
+        let ExprKind::Call { callee, .. } = &e.kind else {
             panic!("expected call")
         };
         let ExprKind::Member { obj, .. } = &callee.kind else {
@@ -1922,7 +1929,8 @@ mod construct_tests {
             matches!(obj.kind, ExprKind::Super),
             "`super.m()` callee object"
         );
-        assert!(parse_script("super[key] = 1;").is_ok());
+        assert!(parse_script("super[key] = 1;").is_err());
+        assert!(parse_script("class C { method() { super[key] = 1; } }").is_ok());
     }
 
     #[test]
