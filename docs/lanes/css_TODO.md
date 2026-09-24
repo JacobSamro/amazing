@@ -1297,3 +1297,23 @@ values override animations. Transitions override all other origins. Author
 show the winning value; `StyledDom::source()` reports its origin. The compositor
 or driver must serialize its `AnimationValue` samples into the CSS insertion
 API and route main-thread property updates at the rendering-update boundary.
+
+## CSS-17 color consensus cluster
+
+Commit `1e99299` adds two-color `color-mix()` in sRGB, linear sRGB and LCH,
+`contrast-color()` choosing black or white, relative HSL identity from
+`currentColor`, and the `InactiveBorder` system alias. A mix using
+`currentColor` resolves against the element's computed color; `color` uses its
+parent's color, while an inherited background mix retains its source and
+resolves again on the child. The selected WPT `color-mix-currentcolor-002` and
+`-003` cases verify this inheritance path. Other color spaces and general
+relative-color expressions remain separate work.
+
+The pinned 259-case broad selection moved from **198 pass / 61 mismatch** to
+**202 pass / 57 mismatch**, with four Chrome/Safari consensus gains and zero
+pass losses. The 72-case cascade selection remained **68 pass / 2 mismatch /
+2 unsupported**, with no classification changes. Both use WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; per-case hashes and
+classifications are in `crates/amazing-css/evidence/css17-*-case-results.jsonl`
+and the summary in `css17-color-results.json`. Windows exact-source gate:
+CSS **266/266**, workspace **2027/2027** plus five skipped, doctests **2/2**.
