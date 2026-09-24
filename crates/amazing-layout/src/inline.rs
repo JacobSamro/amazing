@@ -2030,7 +2030,15 @@ fn shape_chunk(
                         ruby.space_before = advance_in_range(&shaped, previous_end..offset)
                             + separator_spacing(&paragraph_text, previous_end..offset, &spacing);
                         ruby.preserved_space_before = 0.0;
-                        ruby.break_after = ruby.break_after && break_after;
+                        // Adjacent ruby columns use the base-text break rule.
+                        // A paragraph shaper may omit a break between two
+                        // U+FFFC placeholders even when the bases are Han.
+                        // At the ruby boundary, use the paragraph break.
+                        ruby.break_after = if matches!(atomics.get(&end), Some(AtomicInline::Ruby(next)) if next.node == ruby.node) {
+                            ruby.break_after
+                        } else {
+                            break_after
+                        };
                         units.push(ShapedUnit::Ruby(ruby));
                     },
                 }
