@@ -5,6 +5,8 @@
 pub mod cache;
 pub mod core;
 pub mod idb;
+pub mod locks;
+pub mod manager;
 #[cfg(test)]
 mod tests;
 pub mod web;

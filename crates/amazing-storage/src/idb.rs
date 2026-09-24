@@ -3,9 +3,13 @@ use crate::core::{BucketKey, DiskStore, EntryKey, Error as StorageError, Storage
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 mod codec;
+mod graph;
+pub fn graph_view(wire: &amazing_js::SerializedValue) -> StructuredValue { graph::view(wire) }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum StructuredValue {
+    Graph { wire: amazing_js::SerializedValue, view: Box<StructuredValue> },
+    Hole,
     Undefined,
     Null,
     Bool(bool),
@@ -15,6 +19,19 @@ pub enum StructuredValue {
     Binary(Vec<u8>),
     Array(Vec<Self>),
     Object(BTreeMap<String, Self>),
+}
+impl PartialEq for StructuredValue {
+    fn eq(&self, other: &Self) -> bool {
+        use StructuredValue::*;
+        match (self, other) {
+            (Graph { wire: a, .. }, Graph { wire: b, .. }) => format!("{a:?}") == format!("{b:?}"),
+            (Hole, Hole) | (Undefined, Undefined) | (Null, Null) => true,
+            (Bool(a), Bool(b)) => a == b, (Number(a), Number(b)) | (Date(a), Date(b)) => a == b,
+            (String(a), String(b)) => a == b, (Binary(a), Binary(b)) => a == b,
+            (Array(a), Array(b)) => a == b, (Object(a), Object(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum Key {
@@ -41,12 +58,14 @@ impl Key {
     }
     pub fn from_value(value: &StructuredValue) -> Result<Self> {
         match value {
+            StructuredValue::Graph { view, .. } => Self::from_value(view),
             StructuredValue::Number(n) => Self::number(*n),
             StructuredValue::Date(n) => Self::date(*n),
             StructuredValue::String(s) => Ok(Self::String(s.clone())),
             StructuredValue::Binary(b) => Ok(Self::Binary(b.clone())),
             StructuredValue::Array(a) => Ok(Self::Array(
-                a.iter().map(Self::from_value).collect::<Result<_>>()?,
+                a.iter().filter(|value| !matches!(value, StructuredValue::Hole))
+                    .map(Self::from_value).collect::<Result<_>>()?,
             )),
             _ => Err(Error::Data),
         }
@@ -148,20 +167,29 @@ pub enum KeyPath {
     Single(String),
     Compound(Vec<String>),
 }
-fn property<'a>(value: &'a StructuredValue, path: &str) -> Option<&'a StructuredValue> {
+fn property(value: &StructuredValue, path: &str) -> Option<StructuredValue> {
     if path.is_empty() {
-        return Some(value);
+        return Some(value.clone());
     }
-    let mut current = value;
+    let mut current = value.clone();
     for component in path.split('.') {
-        current = match current {
-            StructuredValue::Object(map) => map.get(component)?,
+        current = match &current {
+            StructuredValue::Graph { view, .. } => property(view, component)?,
+            StructuredValue::Object(map) => map.get(component)?.clone(),
+            StructuredValue::String(value) if component == "length" =>
+                StructuredValue::Number(value.encode_utf16().count() as f64),
+            StructuredValue::Array(value) if component == "length" =>
+                StructuredValue::Number(value.len() as f64),
             _ => return None,
         };
     }
     Some(current)
 }
 fn assign(value: &mut StructuredValue, path: &str, key: &Key) -> Result<()> {
+    if let StructuredValue::Graph { wire, view } = value {
+        assign(view, path, key)?;
+        return graph::assign_key(wire, path, key);
+    }
     let mut parts = path.split('.').peekable();
     let mut current = value;
     while let Some(part) = parts.next() {
@@ -189,14 +217,14 @@ fn key_value(key: &Key) -> StructuredValue {
 }
 fn extract(value: &StructuredValue, path: &KeyPath) -> Result<Option<Key>> {
     match path {
-        KeyPath::Single(p) => property(value, p).map(Key::from_value).transpose(),
+        KeyPath::Single(p) => property(value, p).as_ref().map(Key::from_value).transpose(),
         KeyPath::Compound(paths) => {
             let mut keys = Vec::new();
             for p in paths {
                 let Some(v) = property(value, p) else {
                     return Ok(None);
                 };
-                keys.push(Key::from_value(v)?);
+                keys.push(Key::from_value(&v)?);
             }
             Ok(Some(Key::Array(keys)))
         }
@@ -480,12 +508,12 @@ impl Cursor {
         from_index: bool,
     ) -> Self {
         entries.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
-        if matches!(direction, Direction::Prev | Direction::PrevUnique) {
-            entries.reverse();
-        }
         if matches!(direction, Direction::NextUnique | Direction::PrevUnique) {
             let mut seen = BTreeSet::new();
             entries.retain(|e| seen.insert(e.0.clone()));
+        }
+        if matches!(direction, Direction::Prev | Direction::PrevUnique) {
+            entries.reverse();
         }
         Self {
             records: entries

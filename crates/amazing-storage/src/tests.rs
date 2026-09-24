@@ -5,9 +5,56 @@ use crate::{
     web::*,
 };
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 fn partition() -> StorageKey {
     StorageKey::new("https://a.example", "https://top.example")
+}
+
+#[test]
+fn profile_quota_counts_web_idb_and_cache_together_and_persists_grant() {
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let root = std::env::temp_dir().join(format!("amazing-profile-quota-{}-{nonce}", std::process::id()));
+    let quota = Arc::new(Mutex::new(QuotaLedger::new(30)));
+    let mut stores = Vec::new();
+    for name in ["web", "idb", "cache"] {
+        let mut disk = DiskStore::open(root.join(name), 1000).unwrap();
+        disk.attach_quota(quota.clone());
+        stores.push(disk);
+    }
+    let entry = |namespace: &str| EntryKey { bucket: bucket(), namespace: namespace.into(), key: b"a".to_vec() };
+    stores[0].put(entry("w"), vec![1; 10]).unwrap();
+    stores[1].put(entry("i"), vec![2; 10]).unwrap();
+    assert_eq!(stores[2].put(entry("c"), vec![3; 10]), Err(crate::core::Error::QuotaExceeded));
+    assert_eq!(quota.lock().unwrap().usage(&partition()), 24);
+    let mut manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), quota.clone()).unwrap();
+    assert_eq!(manager.estimate(&partition()), crate::manager::Estimate { usage: 24, quota: 30 });
+    assert!(!manager.persisted(&partition()));
+    assert!(manager.persist(partition()).unwrap());
+    drop(manager);
+    let manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), quota.clone()).unwrap();
+    assert!(manager.persisted(&partition()));
+    assert!(stores[0].delete(&entry("w")).unwrap());
+    stores[2].put(entry("c"), vec![3; 10]).unwrap();
+    assert_eq!(manager.estimate(&partition()).usage, 24);
+    drop(manager);
+    drop(stores);
+    let reopened_quota = Arc::new(Mutex::new(QuotaLedger::new(30)));
+    let mut reopened = Vec::new();
+    for name in ["web", "idb", "cache"] {
+        let mut disk = DiskStore::open(root.join(name), 1000).unwrap();
+        disk.attach_quota(reopened_quota.clone());
+        reopened.push(disk);
+    }
+    let manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), reopened_quota).unwrap();
+    assert_eq!(manager.estimate(&partition()).usage, 24);
+    assert!(manager.persisted(&partition()));
+    drop(manager);
+    drop(reopened);
+    let _ = std::fs::remove_dir_all(root);
 }
 fn bucket() -> BucketKey {
     BucketKey::new(partition(), "default")
