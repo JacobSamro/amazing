@@ -201,12 +201,12 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A {}",
+        "changed = 1; class A extends Object {}",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
-        "changed = 1; 2n;",
+        "changed = 1; async function* g() { yield 1; }",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);

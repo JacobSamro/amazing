@@ -180,3 +180,79 @@ transition queries, day lengths, and zone-aware date arithmetic.
 
 Linux `amazing-js` nextest passed 283/283 tests with one skipped; its doctest
 passed 1/1. The final Windows workspace gate is recorded in the lane report.
+
+## JSS-next checkpoint: Temporal and Iterator
+
+Fixed base: local `dev` `18a54d31c350c99a96e24dd72b6c49cdfe0e118c`.
+The three largest owned failing Test262 built-ins directories on that base were
+Temporal (1,284 failures), Iterator (437), and String (298). Temporal parsing,
+calendar conversion, IANA offset parsing, and PlainYearMonth differences now
+cover more ISO forms and enforce the tested range and rounding rules. Iterator
+adds `includes`, `chunks`, `windows`, `zip`, and `zipKeyed` with lazy state,
+argument validation, and iterator closing.
+
+Pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`:
+
+| Full Linux comparison | Pass | Fail | Timeout | Unsupported | Skipped | New passing variants | Lost variants |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed base | 26,206 | 26,791 | 22 | 559 | 294 | — | — |
+| After Temporal | 26,545 | 26,452 | 22 | 559 | 294 | 678 | 0 |
+| After Iterator | 26,615 | 26,382 | 22 | 559 | 294 | 140 | 0 |
+
+String and the requested win-002 gate remain for JSS-next after the priority
+structured-clone insert. These Linux measurements are cluster comparisons,
+not the final Windows gate.
+
+## JSS-SC structured clone priority insert
+
+On rebased fixed base `484ea8799b1629aacecd79c654d387b86d5459ea`, the
+`structured_clone.rs` module implements an owned `SerializedValue` graph with
+node indices for cycles and repeated object identity. It carries primitives,
+BigInt, boxed primitives, Date, RegExp, ArrayBuffer, TypedArray, DataView, Map,
+Set, Error, arrays, and ordinary objects across realms. The public
+`StructuredCloneHost` hook stores a host type name and owned bytes for later
+Blob, File, and ImageData integration. `Interpreter::structured_serialize`,
+`structured_serialize_for_storage`, `structured_serialize_with_transfer`,
+`structured_serialize_with_host`, `structured_deserialize`, and
+`structured_deserialize_with_host` expose the IPC and storage seam; the global
+`structuredClone(value, { transfer })` uses it. Transfer detaches reachable
+ArrayBuffers only after successful serialization. Functions, symbols,
+duplicate/unreachable transfer entries, and unsupported host objects raise
+DataCloneError. The graph is `Send` and does not retain interpreter objects.
+
+A small shared array write correction preserves the non-enumerable `length`
+descriptor while array literals and indexed writes grow an array. This fixed
+nested array WPT assertions. An `EvalError` constructor completes the native
+Error family used by the structured clone WPT battery.
+
+Pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`,
+identical input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`:
+
+| Full Linux comparison | Pass | Fail | Timeout | Unsupported | Skipped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fixed dev base | 26,206 | 26,791 | 22 | 559 | 294 |
+| Structured clone branch, including JSS-next checkpoint | 26,659 | 26,337 | 23 | 559 | 294 |
+
+At `(path, variant)` granularity, 903 variants newly pass and **zero previously
+passing variants are lost**. Relative to the JSS-next Temporal/Iterator
+checkpoint on the same JS base, this insert adds 85 passing variants with zero
+losses. The final classification SHA-256 is
+`d967e1b651e329b585febb37fab85dbda2847d793e3e1015d827d371b67de33a`.
+The one extra timed-out file was not reclassified as a pass or unsupported.
+Linux `amazing-js` nextest passed 297/297, with one skipped; its doctest run
+passed.
+
+Pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`:
+`html/webappapis/structured-clone/structured-clone.any.js` passed **112/152**
+subtests, with 40 failures, no harness error, and no subtest timeout. The two
+other source tests in this directory classified as one timeout (cross-realm
+window method) and one harness error (detached-window script). Raw runner
+records are in `js-stdlib-sc-wpt-battery.json`, `js-stdlib-sc-wpt-cross-realm.json`,
+and `js-stdlib-sc-wpt-detached-window.json` beside this file. Most battery
+failures concern platform objects that need the host hook (Blob, File,
+FileList, ImageBitmap, MessagePort, OffscreenCanvas); Object.prototype and
+SharedArrayBuffer cases remain measured failures.
+
+IPC and storage integration signatures were posted in their lane questions.
+The exact-commit Windows workspace gate is recorded in the lane report.

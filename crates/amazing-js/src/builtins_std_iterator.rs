@@ -7,6 +7,10 @@ enum StdIteratorOperation {
     Wrap,
     Map(JsValue), Filter(JsValue), Take(f64), Drop(f64), FlatMap(JsValue),
     Concat { sources: Vec<JsValue>, position: usize },
+    Chunks { size: usize, buffer: Vec<JsValue> },
+    Windows { size: usize, partial: bool, buffer: Vec<JsValue> },
+    Zip { records: Vec<StdIteratorRecord>, keys: Option<Vec<PropertyKey>>,
+        mode: String, padding: Vec<JsValue>, exhausted: Vec<bool> },
 }
 
 struct StdIteratorState {
@@ -58,6 +62,8 @@ impl Interpreter {
             for (name, length, native) in [
                 ("from", 1, std_iterator_from as crate::value::NativeFn),
                 ("concat", 0, std_iterator_concat as crate::value::NativeFn),
+                ("zip", 1, std_iterator_zip as crate::value::NativeFn),
+                ("zipKeyed", 1, std_iterator_zip_keyed as crate::value::NativeFn),
             ] {
                 object.borrow_mut().define(name,
                     symbol_data(std_collection_method(self, name, length, native), true, true)).unwrap();
@@ -79,6 +85,9 @@ impl Interpreter {
             ("some", 1, std_iterator_some as crate::value::NativeFn),
             ("every", 1, std_iterator_every as crate::value::NativeFn),
             ("find", 1, std_iterator_find as crate::value::NativeFn),
+            ("includes", 1, std_iterator_includes as crate::value::NativeFn),
+            ("chunks", 1, std_iterator_chunks as crate::value::NativeFn),
+            ("windows", 1, std_iterator_windows as crate::value::NativeFn),
         ] {
             base.borrow_mut().define(name, symbol_data(std_collection_method(self, name, length, native), true, true)).unwrap();
         }
@@ -215,7 +224,11 @@ fn std_iterator_return(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
     let mut state = STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().remove(&std_weak_id(owner)))
         .filter(|state| std_weak_same(&state.owner, owner))
         .ok_or_else(|| Throw::type_error("incompatible Iterator helper receiver"))?;
-    let close = if !state.done { state.source.as_ref().map(|source| std_iterator_close(i, source)).transpose() } else { Ok(None) };
+    let close = if state.done { Ok(()) }
+        else if let StdIteratorOperation::Zip { records, exhausted, .. } = &state.operation {
+            records.iter().zip(exhausted).rev().filter(|(_, done)| !**done)
+                .try_for_each(|(record, _)| std_iterator_close(i, record))
+        } else { state.source.as_ref().map(|source| std_iterator_close(i, source)).transpose().map(|_| ()) };
     state.done = true;
     STD_ITERATOR_STATES.with(|registry| registry.borrow_mut().insert(std_weak_id(owner), state));
     close?;
@@ -290,6 +303,79 @@ fn std_iterator_state_step(i: &mut Interpreter, state: &mut StdIteratorState) ->
                 }
                 state.source = None;
                 *position += 1;
+            }
+            StdIteratorOperation::Chunks { size, buffer } => {
+                while buffer.len() < *size {
+                    let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
+                        state.done = true;
+                        return if buffer.is_empty() { Ok(None) }
+                            else { array_values(i, std::mem::take(buffer)).map(Some) };
+                    };
+                    buffer.push(value);
+                }
+                return array_values(i, std::mem::take(buffer)).map(Some);
+            }
+            StdIteratorOperation::Windows { size, partial, buffer } => {
+                if buffer.len() == *size { buffer.remove(0); }
+                loop {
+                    let Some(value) = std_iterator_step(i, state.source.as_ref().unwrap())? else {
+                        state.done = true;
+                        return if *partial && !buffer.is_empty() && buffer.len() < *size {
+                            array_values(i, std::mem::take(buffer)).map(Some)
+                        } else { Ok(None) };
+                    };
+                    buffer.push(value);
+                    if buffer.len() == *size {
+                        return array_values(i, buffer.clone()).map(Some);
+                    }
+                }
+            }
+            StdIteratorOperation::Zip { records, keys, mode, padding, exhausted } => {
+                if records.is_empty() { state.done = true; return Ok(None); }
+                let mut values = Vec::with_capacity(records.len());
+                let mut any_done = false;
+                let mut all_done = true;
+                for (index, record) in records.iter().enumerate() {
+                    if exhausted[index] {
+                        any_done = true;
+                        values.push(padding.get(index).cloned().unwrap_or(JsValue::Undefined));
+                        continue;
+                    }
+                    match std_iterator_step(i, record)? {
+                        Some(value) => { all_done = false; values.push(value); }
+                        None => {
+                            exhausted[index] = true;
+                            any_done = true;
+                            if mode == "shortest" {
+                                state.done = true;
+                                for (record, done) in records.iter().zip(exhausted.iter()).rev() {
+                                    if !done { std_iterator_close(i, record)?; }
+                                }
+                                return Ok(None);
+                            }
+                            values.push(padding.get(index).cloned().unwrap_or(JsValue::Undefined));
+                        }
+                    }
+                }
+                if all_done || (any_done && mode != "longest") {
+                    state.done = true;
+                    for (record, done) in records.iter().zip(exhausted.iter()).rev() {
+                        if !done { std_iterator_close(i, record)?; }
+                    }
+                    if any_done && mode == "strict" && !all_done {
+                        return Err(Throw::type_error("zipped iterators have unequal lengths"));
+                    }
+                    return Ok(None);
+                }
+                if let Some(keys) = keys {
+                    let mut object = JsObject::ordinary();
+                    object.proto = None;
+                    for (key, value) in keys.iter().cloned().zip(values) {
+                        object.define(key, symbol_data(value, true, true)).unwrap();
+                    }
+                    return Ok(Some(JsValue::object(object)));
+                }
+                return array_values(i, values).map(Some);
             }
         }
     }
@@ -406,4 +492,147 @@ fn std_iterator_find(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         index = index.checked_add(1).ok_or_else(|| Throw::range_error("iterator index overflow"))?;
     }
     Ok(JsValue::Undefined)
+}
+
+fn std_iterator_includes(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if !this.is_object() { return Err(Throw::type_error("iterator must be an object")); }
+    let searched = std_reflect_arg(&args, 0);
+    let skipped = std_reflect_arg(&args, 1);
+    let count = if skipped.is_undefined() { 0.0 }
+        else if let JsValue::Num(number) = skipped { number }
+        else {
+            std_iterator_close(i, &StdIteratorRecord { iterator: this, next: JsValue::Undefined })?;
+            return Err(Throw::type_error("skippedElements must be a Number"));
+        };
+    if count.is_nan() || (!count.is_infinite() && count.fract() != 0.0) {
+        std_iterator_close(i, &StdIteratorRecord { iterator: this, next: JsValue::Undefined })?;
+        return Err(Throw::type_error("skippedElements must be integral"));
+    }
+    if count < 0.0 || count > 9_007_199_254_740_991.0 {
+        std_iterator_close(i, &StdIteratorRecord { iterator: this, next: JsValue::Undefined })?;
+        return Err(Throw::range_error("skippedElements is out of range"));
+    }
+    let source = i.std_iterator_direct(this)?;
+    let mut skipped = 0.0;
+    while let Some(value) = std_iterator_step(i, &source)? {
+        if skipped < count { skipped += 1.0; continue; }
+        let equal = match (&value, &searched) {
+            (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan() => true,
+            _ => value == searched,
+        };
+        if equal {
+            std_iterator_close(i, &source)?;
+            return Ok(JsValue::Bool(true));
+        }
+    }
+    Ok(JsValue::Bool(false))
+}
+
+fn std_iterator_chunk_size(i: &mut Interpreter, this: &JsValue, value: JsValue) -> Result<usize, Throw> {
+    let number = match value {
+        JsValue::Num(number) if number.is_finite() && number.fract() == 0.0 => number,
+        _ => {
+            std_iterator_close(i, &StdIteratorRecord { iterator: this.clone(), next: JsValue::Undefined })?;
+            return Err(Throw::type_error("iterator chunk size must be an integral Number"));
+        }
+    };
+    if !(1.0..=4_294_967_295.0).contains(&number) {
+        std_iterator_close(i, &StdIteratorRecord { iterator: this.clone(), next: JsValue::Undefined })?;
+        return Err(Throw::range_error("iterator chunk size is out of range"));
+    }
+    Ok(number as usize)
+}
+
+fn std_iterator_chunks(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if !this.is_object() { return Err(Throw::type_error("iterator must be an object")); }
+    let size = std_iterator_chunk_size(i, &this, std_reflect_arg(&args, 0))?;
+    std_iterator_helper(i, this, StdIteratorOperation::Chunks { size, buffer: Vec::new() })
+}
+
+fn std_iterator_windows(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if !this.is_object() { return Err(Throw::type_error("iterator must be an object")); }
+    let size = std_iterator_chunk_size(i, &this, std_reflect_arg(&args, 0))?;
+    let undersized = std_reflect_arg(&args, 1);
+    let partial = if undersized.is_undefined() || undersized == JsValue::str("only-full") { false }
+        else if undersized == JsValue::str("allow-partial") { true }
+        else {
+            std_iterator_close(i, &StdIteratorRecord { iterator: this, next: JsValue::Undefined })?;
+            return Err(Throw::type_error("invalid undersized option"));
+        };
+    std_iterator_helper(i, this, StdIteratorOperation::Windows { size, partial, buffer: Vec::new() })
+}
+
+fn std_iterator_zip_options(i: &mut Interpreter, option: JsValue) -> Result<(String, JsValue), Throw> {
+    if !option.is_undefined() && !option.is_object() {
+        return Err(Throw::type_error("Iterator.zip options must be an object"));
+    }
+    let mode = if option.is_undefined() { JsValue::Undefined } else { i.get_prop(&option, "mode")? };
+    let mode = if mode.is_undefined() { "shortest".to_string() }
+        else if let JsValue::Str(value) = mode { value.to_utf8_lossy() }
+        else { return Err(Throw::type_error("invalid Iterator.zip mode")); };
+    if !matches!(mode.as_str(), "shortest" | "longest" | "strict") {
+        return Err(Throw::type_error("invalid Iterator.zip mode"));
+    }
+    let padding = if option.is_undefined() || mode != "longest" { JsValue::Undefined }
+        else { i.get_prop(&option, "padding")? };
+    if !padding.is_undefined() && !padding.is_object() {
+        return Err(Throw::type_error("Iterator.zip padding must be an object"));
+    }
+    Ok((mode, padding))
+}
+
+fn std_iterator_zip_impl(i: &mut Interpreter, args: Vec<JsValue>, keyed: bool) -> Result<JsValue, Throw> {
+    let iterables = std_reflect_arg(&args, 0);
+    if !iterables.is_object() {
+        return Err(Throw::type_error("Iterator.zip input must be an object"));
+    }
+    let (mode, padding_arg) = std_iterator_zip_options(i, std_reflect_arg(&args, 1))?;
+    let mut keys = None;
+    let values = if keyed {
+        let JsValue::Object(object) = &iterables else {
+            return Err(Throw::type_error("Iterator.zipKeyed input must be an object"));
+        };
+        let own_keys = i.own_property_keys(&iterables)?;
+        let mut selected = Vec::new();
+        let mut values = Vec::new();
+        for key in own_keys {
+            if object.borrow().own_prop(&key).is_some_and(|property| property.enumerable) {
+                values.push(i.get_prop(&iterables, key.clone())?);
+                selected.push(key);
+            }
+        }
+        keys = Some(selected);
+        values
+    } else {
+        let outer = i.std_iterator_from_value(iterables)?;
+        let mut values = Vec::new();
+        while let Some(value) = std_iterator_step(i, &outer)? { values.push(value); }
+        values
+    };
+    let mut records = Vec::with_capacity(values.len());
+    for value in values { records.push(i.std_iterator_from_value(value)?); }
+    let mut padding = Vec::new();
+    if !padding_arg.is_undefined() {
+        if keyed {
+            for key in keys.as_ref().unwrap() { padding.push(i.get_prop(&padding_arg, key.clone())?); }
+        } else {
+            let source = i.std_iterator_from_value(padding_arg)?;
+            let mut exhausted = false;
+            for _ in 0..records.len() {
+                if let Some(value) = std_iterator_step(i, &source)? { padding.push(value); }
+                else { exhausted = true; break; }
+            }
+            if !exhausted { std_iterator_close(i, &source)?; }
+        }
+    }
+    let exhausted = vec![false; records.len()];
+    Ok(i.std_iterator_object(None, StdIteratorOperation::Zip { records, keys, mode, padding, exhausted }, false))
+}
+
+fn std_iterator_zip(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    std_iterator_zip_impl(i, args, false)
+}
+
+fn std_iterator_zip_keyed(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    std_iterator_zip_impl(i, args, true)
 }

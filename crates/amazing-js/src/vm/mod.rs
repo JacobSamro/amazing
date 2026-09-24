@@ -10,7 +10,7 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, PropertyKey, Throw};
+use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -50,6 +50,41 @@ enum KeyOperand {
     Dynamic(Register),
 }
 
+#[derive(Debug)]
+enum CallArgument {
+    Value(Register),
+    Spread(usize),
+}
+
+#[derive(Debug)]
+struct ClassMethodCode {
+    key: KeyOperand,
+    kind: crate::ast::MethodKind,
+    code: FunctionCode,
+}
+
+#[derive(Debug)]
+struct ClassCode {
+    constructor: FunctionCode,
+    methods: Vec<ClassMethodCode>,
+}
+
+fn expand_arguments(
+    registers: &[JsValue],
+    spreads: &[Option<Vec<JsValue>>],
+    arguments: &[CallArgument],
+) -> Result<Vec<JsValue>, Throw> {
+    let mut values = Vec::new();
+    for argument in arguments {
+        match argument {
+            CallArgument::Value(register) => values.push(registers[*register].clone()),
+            CallArgument::Spread(slot) => values.extend(spreads[*slot].as_ref()
+                .ok_or_else(|| Throw::type_error("missing VM spread capture"))?.iter().cloned()),
+        }
+    }
+    Ok(values)
+}
+
 impl KeyOperand {
     fn resolve(&self, registers: &[JsValue]) -> Result<PropertyKey, Throw> {
         match self {
@@ -67,6 +102,7 @@ impl KeyOperand {
 enum Instruction {
     Constant(Register, JsValue),
     Numeric(Register, Numeric),
+    RegExp(Register, Rc<amazing_regex::Regex>),
     ToKey(Register),
     LoadName(Register, String, bool),
     LoadThis(Register),
@@ -77,9 +113,16 @@ enum Instruction {
     StoreReference(usize, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
+    SetObjectMethod(Register, KeyOperand, FunctionCode, crate::ast::MethodKind),
+    SpreadObject(Register, Register),
     NewArray(Register),
     SetArrayElement(Register, usize, Register),
     SetArrayLength(Register, usize),
+    AppendArrayElement(Register, Register, Option<Register>),
+    AppendArraySpread(Register, Register, Register),
+    SetArrayLengthFrom(Register, Register),
+    CaptureSpread(usize, Register),
+    TemplateAppend(Register, Vec<u16>, Option<Register>),
     Declare(String, Register, VarKind),
     Unary(Register, UnOp, Register),
     Binary(Register, BinOp, Register, Register),
@@ -99,8 +142,9 @@ enum Instruction {
     Complete(Register),
     Return(Register),
     MakeFunction(Register, FunctionCode),
-    Call(Register, Register, Register, Vec<Register>),
-    Construct(Register, Register, Vec<Register>),
+    MakeClass(Register, ClassCode),
+    Call(Register, Register, Register, Vec<CallArgument>),
+    Construct(Register, Register, Vec<CallArgument>),
     Throw(Register),
     Yield(Register, Register),
     YieldDelegate(Register, Register),
@@ -120,6 +164,7 @@ struct CompiledFunction {
     is_generator: bool,
     is_async: bool,
     strict: bool,
+    is_method: bool,
 }
 
 #[derive(Debug)]
@@ -134,6 +179,7 @@ pub struct Program {
     code: Vec<Instruction>,
     registers: usize,
     references: usize,
+    spread_slots: usize,
     hoisted: Vec<String>,
     functions: Vec<HoistedFunction>,
     is_function: bool,
@@ -145,6 +191,7 @@ pub struct Program {
 struct VmFrame {
     registers: Vec<JsValue>,
     references: Vec<Option<Reference>>,
+    spreads: Vec<Option<Vec<JsValue>>>,
     scopes: Vec<EnvHandle>,
     env: EnvHandle,
     pc: usize,
@@ -249,6 +296,7 @@ impl Program {
         let mut frame = Box::new(VmFrame {
             registers: vec![JsValue::Undefined; self.registers],
             references: (0..self.references).map(|_| None).collect(),
+            spreads: (0..self.spread_slots).map(|_| None).collect(),
             scopes: Vec::new(),
             env,
             pc: 0,
@@ -294,6 +342,7 @@ impl Program {
         let VmFrame {
             registers,
             references,
+            spreads,
             scopes,
             env,
             pc,
@@ -318,6 +367,7 @@ impl Program {
                 match op {
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
+                    Instruction::RegExp(dst, regex) => registers[*dst] = i.make_regexp(regex.clone())?,
                     Instruction::ToKey(register) => {
                         registers[*register] = match i.to_property_key(&registers[*register])? {
                             PropertyKey::String(key) => JsValue::Str(key),
@@ -390,7 +440,44 @@ impl Program {
                     Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
                     Instruction::SetObjectProperty(object, key, src) => {
                         let key = key.resolve(&registers)?;
-                        i.set_prop(&registers[*object], key, registers[*src].clone())?;
+                        let JsValue::Object(target) = &registers[*object] else { unreachable!() };
+                        target.borrow_mut().define(&key, Property::data(registers[*src].clone()))
+                            .map_err(|_| Throw::type_error("could not define object property"))?;
+                    }
+                    Instruction::SetObjectMethod(object, key, code, kind) => {
+                        let key = key.resolve(&registers)?;
+                        let JsValue::Object(target) = &registers[*object] else { unreachable!() };
+                        let method = code.instantiate(i, env);
+                        let JsValue::Object(callable) = &method else { unreachable!() };
+                        callable.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
+                        if matches!(kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
+                            let mut property = target.borrow().own_prop(&key).cloned()
+                                .filter(|property| property.getter.is_some() || property.setter.is_some())
+                                .unwrap_or(Property {
+                                    value: JsValue::Undefined, writable: false,
+                                    enumerable: true, configurable: true,
+                                    getter: None, setter: None,
+                                });
+                            if *kind == crate::ast::MethodKind::Get {
+                                property.getter = Some(method.clone());
+                            } else {
+                                property.setter = Some(method.clone());
+                            }
+                            target.borrow_mut().define(&key, property)
+                                .map_err(|_| Throw::type_error("could not define object accessor"))?;
+                        } else {
+                            target.borrow_mut().define(&key, Property::data(method))
+                                .map_err(|_| Throw::type_error("could not define object property"))?;
+                        }
+                    }
+                    Instruction::SpreadObject(target, source) => {
+                        let source = registers[*source].clone();
+                        let JsValue::Object(target) = &registers[*target] else { unreachable!() };
+                        for key in i.enumerable_property_keys(&source)? {
+                            let value = i.get_prop(&source, &key)?;
+                            target.borrow_mut().define(&key, Property::data(value))
+                                .map_err(|_| Throw::type_error("could not define object property"))?;
+                        }
                     }
                     Instruction::NewArray(dst) => {
                         let mut array = JsObject::array();
@@ -406,6 +493,37 @@ impl Program {
                     }
                     Instruction::SetArrayLength(array, len) => {
                         i.set_prop(&registers[*array], "length", JsValue::num(*len as f64))?;
+                    }
+                    Instruction::AppendArrayElement(array, index, source) => {
+                        let JsValue::Num(next) = &registers[*index] else { unreachable!() };
+                        let next = *next as usize;
+                        if let Some(source) = source {
+                            i.set_prop(&registers[*array], next.to_string(), registers[*source].clone())?;
+                        }
+                        registers[*index] = JsValue::num((next + 1) as f64);
+                    }
+                    Instruction::AppendArraySpread(array, index, source) => {
+                        let JsValue::Num(next) = &registers[*index] else { unreachable!() };
+                        let mut next = *next as usize;
+                        for value in i.iterate(&registers[*source])? {
+                            i.set_prop(&registers[*array], next.to_string(), value)?;
+                            next += 1;
+                        }
+                        registers[*index] = JsValue::num(next as f64);
+                    }
+                    Instruction::SetArrayLengthFrom(array, index) => {
+                        i.set_prop(&registers[*array], "length", registers[*index].clone())?;
+                    }
+                    Instruction::CaptureSpread(slot, source) => {
+                        spreads[*slot] = Some(i.iterate(&registers[*source])?);
+                    }
+                    Instruction::TemplateAppend(dst, quasi, expression) => {
+                        let mut units = registers[*dst].as_str().expect("template accumulator").units().to_vec();
+                        units.extend_from_slice(quasi);
+                        if let Some(expression) = expression {
+                            units.extend_from_slice(i.to_js_string(&registers[*expression])?.units());
+                        }
+                        registers[*dst] = JsValue::str_units(units);
                     }
                     Instruction::Declare(name, src, kind) => match kind {
                         VarKind::Var => {
@@ -511,13 +629,46 @@ impl Program {
                     Instruction::MakeFunction(dst, code) => {
                         registers[*dst] = code.instantiate(i, &env);
                     }
+                    Instruction::MakeClass(dst, class) => {
+                        let constructor = class.constructor.instantiate(i, &env);
+                        let JsValue::Object(callable) = &constructor else { unreachable!() };
+                        let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
+                            return Err(Throw::type_error("class constructor has no prototype"));
+                        };
+                        prototype.borrow_mut().set_own("constructor", constructor.clone());
+                        callable.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
+                        for method in &class.methods {
+                            let key = method.key.resolve(&registers)?;
+                            let value = method.code.instantiate(i, &env);
+                            let JsValue::Object(function) = &value else { unreachable!() };
+                            function.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
+                            if matches!(method.kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
+                                let mut property = prototype.borrow().own_prop(&key).cloned()
+                                    .unwrap_or(Property {
+                                        value: JsValue::Undefined, writable: false,
+                                        enumerable: false, configurable: true,
+                                        getter: None, setter: None,
+                                    });
+                                if method.kind == crate::ast::MethodKind::Get {
+                                    property.getter = Some(value.clone());
+                                } else {
+                                    property.setter = Some(value.clone());
+                                }
+                                prototype.borrow_mut().define(&key, property)
+                                    .map_err(|_| Throw::type_error("could not define class accessor"))?;
+                            } else {
+                                i.set_prop(&JsValue::Object(prototype.clone()), &key, value)?;
+                            }
+                        }
+                        registers[*dst] = constructor;
+                    }
                     Instruction::Call(dst, callee, this, arguments) => {
-                        let args = arguments.iter().map(|r| registers[*r].clone()).collect();
+                        let args = expand_arguments(&registers, spreads, arguments)?;
                         registers[*dst] =
                             i.call_value(&registers[*callee], registers[*this].clone(), args)?;
                     }
                     Instruction::Construct(dst, callee, arguments) => {
-                        let args = arguments.iter().map(|r| registers[*r].clone()).collect();
+                        let args = expand_arguments(&registers, spreads, arguments)?;
                         registers[*dst] = i.construct(&registers[*callee], args)?;
                     }
                     Instruction::Throw(src) => {
@@ -698,13 +849,13 @@ impl FunctionCode {
         });
         object.strict_function = self.0.strict;
         let handle = Obj(Rc::new(RefCell::new(object)));
-        if self.0.is_generator || self.0.is_async {
+        if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
         handle
             .borrow_mut()
             .set_own("name", JsValue::str(name.as_str()));
-        if !self.0.is_arrow && !self.0.is_async {
+        if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {

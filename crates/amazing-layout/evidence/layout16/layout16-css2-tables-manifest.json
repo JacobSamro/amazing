@@ -1,0 +1,41 @@
+﻿{
+    "schema":  1,
+    "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection":  {
+                      "kind":  "sha256-path-stratified",
+                      "per_category":  120
+                  },
+    "sparse_paths":  [
+                         "css/CSS2"
+                     ],
+    "tests":  [
+                  {
+                      "id":  "CSS2__tables__border-collapse-005.html",
+                      "test":  "css/CSS2/tables/border-collapse-005.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__collapsing-border-model-012.html",
+                      "test":  "css/CSS2/tables/collapsing-border-model-012.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__border-collapse-empty-row.html",
+                      "test":  "css/CSS2/tables/border-collapse-empty-row.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__border-collapse-006.html",
+                      "test":  "css/CSS2/tables/border-collapse-006.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__collapsing-border-model-011.html",
+                      "test":  "css/CSS2/tables/collapsing-border-model-011.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__collapsing-border-model-014.html",
+                      "test":  "css/CSS2/tables/collapsing-border-model-014.html"
+                  },
+                  {
+                      "id":  "CSS2__tables__collapsing-border-model-013.html",
+                      "test":  "css/CSS2/tables/collapsing-border-model-013.html"
+                  }
+              ]
+}

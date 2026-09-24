@@ -320,12 +320,18 @@ LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_har
 # HTML-25: iframe getters/insertion hooks (additive) across bindings, driver, scheduler, WPT runner.
 LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-bindings/src/interfaces.rs", "crates/amazing-bindings/src/host.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
 # RC-21: additive responsive/lazy/decode wiring in loaders; move amazing-image into the root workspace.
-LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing/Cargo.toml", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/page.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/main.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/render.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs", "Cargo.toml", "Cargo.lock", "crates/amazing-shell-gpui/Cargo.lock"])
+LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing/Cargo.toml", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/page.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/main.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/render.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs", "Cargo.toml", "Cargo.lock", "crates/amazing-shell-gpui/Cargo.lock"])
 # IPC-10: adapter dependency and module line.
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/main.rs", "Cargo.lock"])
 # Structured serialize/deserialize (HTML StructuredSerializeInternal) lives in one amazing-js module.
 # JS-11: class generator/async-generator methods and parameter patterns need VM compiler entry points.
 LANE_GRANTS.setdefault("js-lang", []).extend(["crates/amazing-js/src/vm/compiler.rs", "crates/amazing-js/src/vm/mod.rs"])
+# IPC-10: headless navigation controller shared by the GUI and the WPT harness.
+LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/src/navigator.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
+# HTML-26: forms move to html for the duration of the ticket.
+LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-dom/src/forms.rs", "crates/amazing-bindings/src/form_bindings.rs"])
+# COMP-13b: document viewport scrolling moves from the GPUI outer div to the compositor root scroller.
+LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/Cargo.lock", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
@@ -446,9 +452,15 @@ def owned_paths(lane: str) -> list[str]:
 # Every lane runs the same model. A bare `codex --yolo` inherits whatever the
 # local default happens to be, so a restart could silently move a lane onto a
 # different model or effort -- two lanes had already drifted this way.
-AGENT_MODEL = "gpt-6-sol"
-AGENT_EFFORT = "medium"
-AGENT_LAUNCH = f'codex --yolo -m {AGENT_MODEL} -c model_reasoning_effort="{AGENT_EFFORT}"'
+# 2026-09-24: the fleet moved from Codex (gpt-6-sol medium) to OpenCode running
+# DeepSeek V4.1 Flash. `--auto` is OpenCode's equivalent of `codex --yolo`.
+AGENT_MODEL = "opencode-go/deepseek-v4.1-flash"
+AGENT_EFFORT = "default"  # model offers low/high/max only; default sits between
+# What the OpenCode mode line prints for AGENT_MODEL; used to spot model drift.
+AGENT_MODEL_LABEL = "DeepSeek V4.1 Flash"
+AGENT_LAUNCH = f"opencode --auto -m {AGENT_MODEL}"
+# Process names a live agent pane runs under (Codex kept for panes not yet moved).
+AGENT_COMMANDS = ("opencode", "node", "codex")
 
 # Context below this fraction means the agent must checkpoint and be restarted
 # before it loses the thread mid-ticket.
@@ -458,8 +470,12 @@ STALL_MINUTES = 20
 
 # Codex composer placeholder; present exactly when the input box is empty.
 IDLE_MARKER = "Ask Codex to do anything"
+# OpenCode shows "esc interrupt" in its footer while a turn runs and
+# "ctrl+p commands" in every frame; idle means the latter without the former.
+OC_BUSY = "esc interrupt"
+OC_FOOTER = "ctrl+p commands"
 # Shown by the TUI while a turn is running.
-BUSY_MARKERS = ("Esc to interrupt", "esc to interrupt", "Working", "Thinking")
+BUSY_MARKERS = ("Esc to interrupt", "esc to interrupt", "esc interrupt", "Working", "Thinking")
 
 SPINNER = re.compile(r"[⠀-⣿]")
 # Banner box art, but NOT U+2514 -- the TUI uses that elbow to mark tool output.
@@ -494,6 +510,10 @@ NOISE = tuple(
 )
 
 CONTEXT_RE = re.compile(r"Context (\d+)%")
+# OpenCode prints tokens USED, e.g. "17.3K (2%)"; context left is 100 - that.
+OC_CONTEXT_RE = re.compile(r"[\d.]+[KM]? \((\d+)%\)")
+# OpenCode's mode line under the composer, e.g. "Build auto · DeepSeek V4.1 Flash".
+OC_MODE_RE = re.compile(r"^\s*┃\s+\S+ .*·")
 # The TUI marks agent messages with a bullet and tool output with an elbow.
 EVENT_RE = re.compile(r"^\s*[•●▶]\s+(.*)$")
 TOOL_RE = re.compile(r"^\s*└\s+(.*)$")
@@ -557,9 +577,9 @@ def discover(prefix: str = DEFAULT_SESSION_PREFIX) -> list[dict]:
             ["pgrep", "-P", pane_pid], capture_output=True, text=True
         ).stdout.split()
         is_codex = any(
-            "codex" in subprocess.run(
+            any(a in subprocess.run(
                 ["ps", "-o", "command=", "-p", pid], capture_output=True, text=True
-            ).stdout
+            ).stdout for a in ("codex", "opencode"))
             for pid in children
         )
         if is_codex:
@@ -636,14 +656,20 @@ def clean_lines(raw: str) -> list[str]:
 def state_of(raw: str) -> str:
     if any(m in raw for m in BUSY_MARKERS):
         return "busy"
-    if IDLE_MARKER in raw:
+    if IDLE_MARKER in raw or OC_FOOTER in raw or "Ask anything" in raw:
         return "idle"
     return "unknown"
 
 
 def context_pct(raw: str) -> str:
+    """Context LEFT, as "N%", for either agent TUI."""
     matches = CONTEXT_RE.findall(raw)
-    return f"{matches[-1]}%" if matches else "?"
+    if matches:
+        return f"{matches[-1]}%"
+    used = OC_CONTEXT_RE.findall(raw)
+    if used:
+        return f"{100 - int(used[-1])}%"
+    return "?"
 
 
 def composer_has_text(raw: str) -> bool:
@@ -653,6 +679,19 @@ def composer_has_text(raw: str) -> bool:
     composer, so the first caret line on screen is usually old transcript. The
     composer is always the last one.
     """
+    if OC_FOOTER in raw:
+        # OpenCode: the composer is the run of "┃" lines just above the mode line.
+        lines = raw.splitlines()
+        for i in range(len(lines) - 1, -1, -1):
+            if OC_MODE_RE.match(lines[i]):
+                j = i - 1
+                while j >= 0 and lines[j].lstrip().startswith("┃"):
+                    body = lines[j].strip().lstrip("┃").strip()
+                    if body and not body.startswith("Ask anything"):
+                        return True
+                    j -= 1
+                return False
+        return False
     body = None
     for line in raw.splitlines():
         stripped = SPINNER.sub("", line).strip()
@@ -1176,7 +1215,7 @@ def cmd_restart(args) -> int:
         shell = tmux(
             ["display-message", "-p", "-t", session, "#{pane_current_command}"]
         ).strip()
-        if shell not in ("node", "codex"):
+        if shell not in AGENT_COMMANDS:
             break
     else:
         print(f"{lane}: agent would not exit; left running")
@@ -1191,13 +1230,16 @@ def cmd_restart(args) -> int:
         tmux(["new-session", "-d", "-s", session, "-c", worktree], check=True)
         print(f"{lane}: recreated exited session", flush=True)
 
+    # Detached sessions default to a tiny window; OpenCode then drops its footer
+    # and mode line, which is what state detection reads. Give it a real size.
+    tmux(["resize-window", "-t", session, "-x", "200", "-y", "50"])
     tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && {AGENT_LAUNCH}"])
     tmux(["send-keys", "-t", session, "Enter"])
     deadline = time.time() + 45
     while time.time() < deadline:
         time.sleep(3)
         raw = capture_live(session)
-        if IDLE_MARKER in raw:
+        if IDLE_MARKER in raw or (OC_FOOTER in raw and OC_BUSY not in raw):
             cwd = pane_cwd(session)
             ok = os.path.realpath(cwd) == os.path.realpath(worktree)
             print(

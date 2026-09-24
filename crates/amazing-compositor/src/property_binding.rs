@@ -51,6 +51,11 @@ pub enum PropertyBindingError {
 }
 
 impl Compositor {
+    pub fn scroll_owner(&self, id: ScrollId) -> Option<NodePropertyKey> {
+        self.property_bindings.iter().find_map(|(&key, &target)| {
+            (target == BoundPropertyNode::Scroll(id)).then_some(key)
+        })
+    }
     /// Install the paint view's owner mapping. A live scene cannot silently
     /// retarget a DOM node to a different property node.
     pub fn bind_property_nodes(

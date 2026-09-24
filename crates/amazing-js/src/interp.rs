@@ -3946,5 +3946,6 @@ include!("builtins_temporal_epoch.rs");
 include!("builtins_std_string.rs");
 include!("builtins_std_number_math.rs");
 include!("builtins_std_json_global.rs");
+include!("structured_clone.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
