@@ -1285,3 +1285,27 @@ ExportDefaultExpression, ExportDefaultDeclaration}`;
 `ImportDeclaration { from, phase, bindings, attributes }`,
 `ImportBinding { imported, local }`, `ExportName { local, exported }`,
 and `ImportAttribute { key, value }`. `parse_module` is publicly exported.
+
+## JS-10 part 2 — synchronous ES modules
+
+Fixed base `7c61b9fcc33078685d2e552e648f2e486f93492b`, module code
+`af57d53a8e2cf8883ece77e79f0ccb2f166ad7a4`. `module::ModuleLinker` exposes
+`link` and `evaluate` with a host `ModuleResolver`; imported bindings alias the
+exporter's cells, preserving live updates and TDZ through cycles. Module namespace
+objects use the `Exotic::ModuleNamespace` property path. The Test262 host and
+runner now execute synchronous module tests; dynamic `import()` and top-level
+await evaluation remain with js-vm.
+
+Pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, 53,872 sources,
+same input hash and 60-second timeout on venus-001: before **24,762 files /
+48,074 variants pass** (classification `a07a0061664bc09ba404c5358a9d66fbd249b3a115feb50ee67d21a567ce3421`),
+after **25,057 files / 48,370 variants pass** (classification
+`dd94095047cc6b5efb7088b561bad982cf7d7fb19cd7d13d8ef02ed07518a84d`).
+There are **295 file and 296 variant gains, zero passing losses**. Of 843 module
+variants, 295 pass, 286 fail, and 262 are explicitly unsupported for async
+evaluation. The only classic classification difference is a pre-existing long
+TypedArray test's strict variant moving from 60-second timeout to pass; all
+other classic status/reason pairs are identical. Windows win-002: amazing-js
+nextest **273 passed, 1 skipped**, workspace nextest **2,154 passed**, separate
+JS and workspace doctests passed. No new VM fallback arms were needed in this
+series.
