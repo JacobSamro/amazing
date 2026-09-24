@@ -12,6 +12,36 @@ pub enum NodeOrString {
 }
 
 impl Dom {
+    pub fn first_element_child(&self, parent: NodeIdx) -> Option<NodeIdx> {
+        self.children(parent).find(|child| matches!(self.get(*child).kind, NodeKind::Element { .. }))
+    }
+
+    pub fn last_element_child(&self, parent: NodeIdx) -> Option<NodeIdx> {
+        self.children(parent).filter(|child| matches!(self.get(*child).kind, NodeKind::Element { .. })).last()
+    }
+
+    pub fn child_element_count(&self, parent: NodeIdx) -> usize {
+        self.children(parent).filter(|child| matches!(self.get(*child).kind, NodeKind::Element { .. })).count()
+    }
+
+    pub fn previous_element_sibling(&self, node: NodeIdx) -> Option<NodeIdx> {
+        let mut sibling = self.get(node).prev_sibling;
+        while let Some(current) = sibling {
+            if matches!(self.get(current).kind, NodeKind::Element { .. }) { return sibling; }
+            sibling = self.get(current).prev_sibling;
+        }
+        None
+    }
+
+    pub fn next_element_sibling(&self, node: NodeIdx) -> Option<NodeIdx> {
+        let mut sibling = self.get(node).next_sibling;
+        while let Some(current) = sibling {
+            if matches!(self.get(current).kind, NodeKind::Element { .. }) { return sibling; }
+            sibling = self.get(current).next_sibling;
+        }
+        None
+    }
+
     fn convert_nodes(
         &mut self,
         document: NodeIdx,

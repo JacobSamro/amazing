@@ -1415,6 +1415,25 @@ fn html_collection_binding_and_legacy_hooks_are_live() {
 }
 
 #[test]
+fn parent_and_sibling_element_navigation_bindings_are_live() {
+    let mut h = Host::default();
+    install(&mut h).unwrap();
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    let text = h.dom.create_text(root, "x");
+    let a = h.dom.create_element(root, "a");
+    let b = h.dom.create_element(root, "b");
+    assert_eq!(call(&mut h, O::FirstElementChild, V::Node(root), &[]), V::Node(a));
+    assert_eq!(call(&mut h, O::LastElementChild, V::Node(root), &[]), V::Node(b));
+    assert_eq!(call(&mut h, O::ChildElementCount, V::Node(root), &[]), V::Number(2.));
+    assert_eq!(call(&mut h, O::NextElementSibling, V::Node(text), &[]), V::Node(a));
+    assert_eq!(call(&mut h, O::PreviousElementSibling, V::Node(b), &[]), V::Node(a));
+    h.dom.detach(a);
+    assert_eq!(call(&mut h, O::ChildElementCount, V::Node(root), &[]), V::Number(1.));
+    assert_eq!(call(&mut h, O::PreviousElementSibling, V::Node(b), &[]), V::Null);
+    assert_eq!(call(&mut h, O::FirstElementChild, V::Node(NodeIdx(0)), &[]), V::Node(root));
+}
+
+#[test]
 fn html_reflection_handles_strings_keywords_booleans_and_tabindex() {
     let mut h = Host::default();
     let node = h.dom.create_element(NodeIdx(0), "button");
