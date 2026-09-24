@@ -37,6 +37,20 @@ fn differential(source: &str, names: &[&str]) {
 }
 
 #[test]
+fn inline_cache_tracks_shape_and_descriptor_changes() {
+    for source in [
+        "var o={x:1}; var n=o.x; o.x=2; n+o.x",
+        "var o={x:1}; o.x; Object.defineProperty(o,'x',{value:7,writable:false}); o.x",
+        "var o={x:1}; o.x; Reflect.deleteProperty(o,'x'); o.x=8; o.x",
+        "var o={x:1}; o.x; Object.defineProperty(o,'x',{get:function(){return 9}}); o.x",
+        "var o={x:1}; o.x; o.x='abc'; o.x",
+        "var o={id:7}; o.id; o['[[DomNode]]']=1; o.id",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
 fn primitive_and_operator_differential_corpus() {
     for source in [
         "",

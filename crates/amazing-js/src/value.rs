@@ -785,6 +785,10 @@ pub struct PendingReaction {
 #[derive(Debug, Clone)]
 pub struct JsObject {
     props: Vec<(PropertyKey, Property)>,
+    /// Changes when the indexed layout or a property's descriptor changes.
+    pub(crate) shape_version: u64,
+    /// Object literals constructed by the VM can use ordinary-own-property caches.
+    pub(crate) vm_cacheable: bool,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
     /// Whether new own properties may be created.
@@ -819,6 +823,8 @@ impl JsObject {
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),
+            shape_version: 0,
+            vm_cacheable: false,
             proto: None,
             exotic: Exotic::Ordinary,
             extensible: true,
@@ -882,11 +888,37 @@ impl JsObject {
     pub fn define(&mut self, key: impl Into<PropertyKey>, prop: Property) -> Result<(), ()> {
         let key = key.into();
         if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == &key) {
+            if slot.1.writable != prop.writable || slot.1.enumerable != prop.enumerable
+                || slot.1.configurable != prop.configurable
+                || slot.1.getter.is_some() != prop.getter.is_some()
+                || slot.1.setter.is_some() != prop.setter.is_some() {
+                self.shape_version = self.shape_version.wrapping_add(1);
+            }
             slot.1 = prop;
         } else {
             self.props.push((key, prop));
+            self.shape_version = self.shape_version.wrapping_add(1);
         }
         Ok(())
+    }
+
+    /// Slot access for VM inline caches. The key check also protects against
+    /// a stale cache if a version ever wraps.
+    pub(crate) fn own_data_slot(&self, key: &PropertyKey, slot: usize) -> Option<&Property> {
+        let (actual, property) = self.props.get(slot)?;
+        (actual == key && property.getter.is_none() && property.setter.is_none())
+            .then_some(property)
+    }
+
+    pub(crate) fn own_slot_index(&self, key: &PropertyKey) -> Option<usize> {
+        self.props.iter().position(|(actual, _)| actual == key)
+    }
+
+    pub(crate) fn set_own_data_slot(&mut self, key: &PropertyKey, slot: usize, value: JsValue) -> bool {
+        let Some(property) = self.own_data_slot(key, slot) else { return false };
+        if !property.writable { return false; }
+        self.props[slot].1.value = value;
+        true
     }
 
     /// Shorthand for a full-rights data property.
@@ -914,6 +946,7 @@ impl JsObject {
                 return false;
             }
             self.props.remove(pos);
+            self.shape_version = self.shape_version.wrapping_add(1);
             true
         } else {
             true

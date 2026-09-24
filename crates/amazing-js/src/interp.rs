@@ -23,6 +23,8 @@ use crate::value::{
 
 #[path = "vm/mod.rs"]
 pub mod vm;
+#[path = "vm/eligibility.rs"]
+mod vm_eligibility;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ExecutionBackend {
@@ -1036,9 +1038,10 @@ impl Interpreter {
     pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
         (match backend {
             ExecutionBackend::TreeWalk => self.run_program(p),
-            ExecutionBackend::Bytecode => vm::compile(p)
+            ExecutionBackend::Bytecode if vm_eligibility::eligible(p) => vm::compile(p)
                 .map_err(|error| Throw::type_error(error.to_string()))?
                 .run(self, vm::DEFAULT_INSTRUCTION_LIMIT),
+            ExecutionBackend::Bytecode => Err(Throw::type_error("bytecode unsupported: direct eval or catch binding pattern")),
         }).map_err(|th| self.normalize_throw(th))
     }
 
@@ -1054,7 +1057,8 @@ impl Interpreter {
 
     fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let direct_eval_env = self.direct_eval_env.take();
-        if direct_eval_env.is_none() && std::env::var_os("AMAZING_JS_VM").is_some() {
+        if direct_eval_env.is_none() && vm_eligibility::eligible(p)
+            && std::env::var_os("AMAZING_JS_VM").is_some() {
             match vm::compile(p) {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }

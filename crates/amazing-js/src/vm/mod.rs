@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod compiler;
+mod fast_path;
 #[cfg(test)]
 mod tests;
 
@@ -13,6 +14,22 @@ use crate::tokens::{Numeric, Span};
 use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+thread_local! {
+    /// Reuse frame register storage across calls; values are cleared at return.
+    static REGISTER_POOL: RefCell<Vec<Vec<JsValue>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn take_registers(count: usize) -> Vec<JsValue> {
+    let mut registers = REGISTER_POOL.with(|pool| {
+        let mut pool = pool.borrow_mut();
+        pool.iter().position(|registers| registers.capacity() >= count)
+            .map(|index| pool.swap_remove(index))
+            .unwrap_or_default()
+    });
+    registers.resize(count, JsValue::Undefined);
+    registers
+}
 
 pub use compiler::compile;
 
@@ -190,6 +207,7 @@ pub struct Program {
 /// survive an instruction-boundary suspension with the other VM state.
 struct VmFrame {
     registers: Vec<JsValue>,
+    caches: Vec<Option<fast_path::InlineCache>>,
     references: Vec<Option<Reference>>,
     spreads: Vec<Option<Vec<JsValue>>>,
     scopes: Vec<EnvHandle>,
@@ -203,6 +221,18 @@ struct VmFrame {
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
     await_dst: Option<Register>,
+}
+
+impl Drop for VmFrame {
+    fn drop(&mut self) {
+        if self.registers.capacity() > 4096 { return; }
+        let mut registers = std::mem::take(&mut self.registers);
+        registers.clear();
+        let _ = REGISTER_POOL.try_with(|pool| {
+            let mut pool = pool.borrow_mut();
+            if pool.len() < 16 { pool.push(registers); }
+        });
+    }
 }
 
 struct DelegateState {
@@ -294,7 +324,8 @@ impl Program {
         fuel: usize,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
-            registers: vec![JsValue::Undefined; self.registers],
+            registers: take_registers(self.registers),
+            caches: (0..self.code.len()).map(|_| None).collect(),
             references: (0..self.references).map(|_| None).collect(),
             spreads: (0..self.spread_slots).map(|_| None).collect(),
             scopes: Vec::new(),
@@ -341,6 +372,7 @@ impl Program {
         }
         let VmFrame {
             registers,
+            caches,
             references,
             spreads,
             scopes,
@@ -410,12 +442,12 @@ impl Program {
                     },
                     Instruction::GetMember(dst, object, key) => {
                         let key = key.resolve(&registers)?;
-                        registers[*dst] = i.get_prop(&registers[*object], key)?;
+                        registers[*dst] = fast_path::get(i, &registers[*object], key, &mut caches[*pc - 1])?;
                     }
                     Instruction::ResolveMember(slot, dst, object, key) => {
                         let key = key.resolve(&registers)?;
                         let receiver = registers[*object].clone();
-                        registers[*dst] = i.get_prop(&receiver, key.clone())?;
+                        registers[*dst] = fast_path::get(i, &receiver, key.clone(), &mut caches[*pc - 1])?;
                         references[*slot] = Some(Reference::Property(receiver, key));
                     }
                     Instruction::StoreReference(slot, src) => {
@@ -426,7 +458,12 @@ impl Program {
                         if let Some(name) = reference_name(&reference) {
                             i.infer_function_name(&mut value, &name);
                         }
-                        i.put_reference(reference, value, &env)?;
+                        match reference {
+                            Reference::Property(receiver, key) => {
+                                fast_path::set(i, &receiver, key, value, &mut caches[*pc - 1])?;
+                            }
+                            other => i.put_reference(other, value, &env)?,
+                        }
                     }
                     Instruction::Update(dst, slot, old, op, prefix) => {
                         let reference = references[*slot]
@@ -437,7 +474,12 @@ impl Program {
                         i.put_reference(reference, next.clone(), &env)?;
                         registers[*dst] = if *prefix { next } else { previous };
                     }
-                    Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
+                    Instruction::NewObject(dst) => {
+                        registers[*dst] = i.object_value();
+                        if let JsValue::Object(object) = &registers[*dst] {
+                            object.borrow_mut().vm_cacheable = true;
+                        }
+                    }
                     Instruction::SetObjectProperty(object, key, src) => {
                         let key = key.resolve(&registers)?;
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
@@ -543,8 +585,10 @@ impl Program {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
                     Instruction::Binary(dst, op, left, right) => {
-                        registers[*dst] =
-                            i.binary(*op, registers[*left].clone(), registers[*right].clone())?;
+                        registers[*dst] = match fast_path::binary(*op, &registers[*left], &registers[*right]) {
+                            Some(value) => value,
+                            None => i.binary(*op, registers[*left].clone(), registers[*right].clone())?,
+                        };
                     }
                     Instruction::Move(dst, src) => registers[*dst] = registers[*src].clone(),
                     Instruction::Jump(target) => *pc = *target,
