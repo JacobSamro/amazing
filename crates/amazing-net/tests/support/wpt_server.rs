@@ -259,6 +259,28 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
     let xhr = path.starts_with("/xhr/resources/");
     let name = path.rsplit('/').next().unwrap_or("");
     let mut headers = vec![header("Content-Type", "text/plain")];
+    if fetch && name == "data.json" {
+        return reply(200, "OK", vec![header("Content-Type", "application/json")],
+            b"{\"key\": \"value\"}\n");
+    }
+    if fetch && name == "stash-put.py" {
+        headers.push(header("Access-Control-Allow-Origin", "*"));
+        if request.method == "OPTIONS" {
+            headers.push(header("Access-Control-Allow-Methods", "*"));
+            headers.push(header("Access-Control-Allow-Headers", "*"));
+        } else if let (Some(key), Some(value)) = (request.query("key"), request.query("value")) {
+            state.insert(key, value);
+        }
+        return reply(200, "OK", headers, b"done");
+    }
+    if fetch && name == "stash-take.py" {
+        let body = match request.query("key").and_then(|key| state.remove(&key)) {
+            Some(value) => format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\"")),
+            None => "null".into(),
+        };
+        return reply(200, "OK", vec![header("Content-Type", "application/json"),
+            header("Access-Control-Allow-Origin", "*")], body.as_bytes());
+    }
     if xhr && name == "inspect-headers.py" {
         let filter_value = request.query("filter_value").unwrap_or_default();
         let filter_name = request.query("filter_name").unwrap_or_default();

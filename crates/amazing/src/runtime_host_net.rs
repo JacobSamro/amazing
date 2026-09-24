@@ -68,13 +68,13 @@ impl RuntimeBindingHost<'_> {
     pub(crate) fn fetch_response_record(&self, value: &JsValue) -> Result<ApiResponse, Throw> {
         let record = self.fetch_record(value, FetchInterface::Response)?;
         let record = record.borrow();
-        let FetchObject::Response(response) = &*record else {
+        let FetchObject::Response(response, _) = &*record else {
             return Err(Throw::type_error("Expected Response"));
         };
         response.clone_response().map_err(|error| Throw::type_error(format!("{error:?}")))
     }
     pub(crate) fn fetch_response_new(&mut self, response: ApiResponse) -> Result<JsValue, Throw> {
-        self.fetch_allocate(FetchInterface::Response, FetchObject::Response(response))
+        self.fetch_allocate(FetchInterface::Response, FetchObject::Response(response, None))
     }
     fn schedule_fetch_pump(&mut self) -> Result<(), Throw> {
         if self.state.borrow().net.fetch_pump_scheduled { return Ok(()); }
@@ -120,7 +120,7 @@ impl RuntimeBindingHost<'_> {
             } else { result };
             match result {
                 Ok(response) => {
-                    let value = self.fetch_allocate(FetchInterface::Response, FetchObject::Response(response))?;
+                    let value = self.fetch_allocate(FetchInterface::Response, FetchObject::Response(response, Some(signal)))?;
                     binding_call(self.js, &resolve, &JsValue::Undefined, &[value])?;
                 }
                 Err(error) => {
@@ -346,6 +346,13 @@ impl FetchHost for RuntimeBindingHost<'_> {
         };
         let global = self.js.binding_global_object();
         binding_call(self.js, &fetch, &global, args).map(Some)
+    }
+    fn fetch_body_abort_rejection(&mut self, signal: AbortSignalId) -> Result<Option<JsValue>, Throw> {
+        let Some(reason) = self.fetch_signal_reason(signal) else { return Ok(None); };
+        let global = self.js.binding_global_object();
+        let promise = self.js.binding_get_property(&global, "Promise")?;
+        let reject = self.js.binding_get_property(&promise, "reject")?;
+        binding_call(self.js, &reject, &promise, &[reason]).map(Some)
     }
     fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<JsValue, Throw> {
         let started = self.state.borrow_mut().net.fetch_network.start(request, ClientContext::default());

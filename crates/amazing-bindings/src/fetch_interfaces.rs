@@ -139,7 +139,7 @@ pub enum FetchHeaders {
 pub enum FetchObject {
     Headers(FetchHeaders),
     Request(ApiRequest, AbortSignalId),
-    Response(ApiResponse),
+    Response(ApiResponse, Option<AbortSignalId>),
     Xhr(Xhr),
     XhrUpload(Rc<RefCell<FetchObject>>),
     ProgressEvent { kind: String, loaded: u64, total: u64, length_computable: bool },
@@ -180,6 +180,7 @@ pub trait FetchHost: BindingHost {
     fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<Self::Value, Self::Error>;
     /// Browser-local file pages retain their existing relative resource loader.
     fn fetch_local_file(&mut self, args: &[Self::Value]) -> Result<Option<Self::Value>, Self::Error>;
+    fn fetch_body_abort_rejection(&mut self, signal: AbortSignalId) -> Result<Option<Self::Value>, Self::Error>;
     fn fetch_promise(
         &mut self,
         result: Result<Self::Value, ApiError>,
@@ -538,7 +539,7 @@ fn read_headers(record: &Rc<RefCell<FetchObject>>) -> Result<ApiHeaders, ApiErro
             _ => Err(ApiError::InvalidHeaderName),
         },
         FetchObject::Headers(FetchHeaders::Response(parent)) => match &*parent.borrow() {
-            FetchObject::Response(response) => Ok(response.headers.clone()),
+            FetchObject::Response(response, _) => Ok(response.headers.clone()),
             _ => Err(ApiError::InvalidHeaderName),
         },
         _ => Err(ApiError::InvalidHeaderName),
@@ -552,7 +553,7 @@ fn write_headers(record: &Rc<RefCell<FetchObject>>, headers: ApiHeaders) -> Resu
             _ => return Err(ApiError::InvalidHeaderName),
         },
         FetchObject::Headers(FetchHeaders::Response(parent)) => match &mut *parent.borrow_mut() {
-            FetchObject::Response(response) => response.headers = headers,
+            FetchObject::Response(response, _) => response.headers = headers,
             _ => return Err(ApiError::InvalidHeaderName),
         },
         _ => return Err(ApiError::InvalidHeaderName),
@@ -737,11 +738,20 @@ fn body<H: FetchHost>(
     let record = host
         .fetch_record(receiver, FetchInterface::Request)
         .or_else(|_| host.fetch_record(receiver, FetchInterface::Response))?;
+    let signal = match &*record.borrow() {
+        FetchObject::Response(_, signal) => *signal,
+        _ => None,
+    };
+    if let Some(signal) = signal {
+        if let Some(rejection) = host.fetch_body_abort_rejection(signal)? {
+            return Ok(rejection);
+        }
+    }
     let result = {
         let mut object = record.borrow_mut();
         let body = match &mut *object {
             FetchObject::Request(request, _) => &mut request.body,
-            FetchObject::Response(response) => &mut response.body,
+            FetchObject::Response(response, _) => &mut response.body,
             _ => return Err(host.fetch_type_error("Expected Body")),
         };
         match op {
@@ -901,6 +911,13 @@ pub fn invoke<H: FetchHost>(
             let (request, signal) = match request(host, args) {
                 Ok(request) => request, Err(error) => return host.fetch_reject_throw(error),
             };
+            if let Some(input) = args.first() {
+                if let Ok(record) = host.fetch_record(input, FetchInterface::Request) {
+                    if let FetchObject::Request(source, _) = &mut *record.borrow_mut() {
+                        source.body.mark_disturbed();
+                    }
+                }
+            }
             host.fetch_start(request, signal)
         }
         O::RequestClone
@@ -1002,11 +1019,11 @@ pub fn invoke<H: FetchHost>(
                 .flatten();
             let init = response_init(host, args.get(1))?;
             let value = ApiResponse::new(body, init).map_err(|e| error(host, e))?;
-            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value))
+            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, None))
         }
         O::ResponseError => host.fetch_allocate(
             FetchInterface::Response,
-            FetchObject::Response(ApiResponse::error()),
+            FetchObject::Response(ApiResponse::error(), None),
         ),
         O::ResponseRedirect => {
             let target = arg_units(host, args, 0)?;
@@ -1018,7 +1035,7 @@ pub fn invoke<H: FetchHost>(
             let base = host.fetch_base()?;
             let response =
                 ApiResponse::redirect(&target, status, &base).map_err(|e| error(host, e))?;
-            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(response))
+            host.fetch_allocate(FetchInterface::Response, FetchObject::Response(response, None))
         }
         O::ResponseClone
         | O::ResponseType
@@ -1032,13 +1049,13 @@ pub fn invoke<H: FetchHost>(
         | O::ResponseBodyUsed => {
             let record = host.fetch_record(&receiver, FetchInterface::Response)?;
             let object = record.borrow();
-            let FetchObject::Response(response) = &*object else {
+            let FetchObject::Response(response, signal) = &*object else {
                 return Err(host.fetch_type_error("Expected Response"));
             };
             match op {
                 O::ResponseClone => {
                     let value = response.clone_response().map_err(|e| error(host, e))?;
-                    host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value))
+                    host.fetch_allocate(FetchInterface::Response, FetchObject::Response(value, *signal))
                 }
                 O::ResponseType => string(
                     host,

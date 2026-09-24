@@ -61,3 +61,42 @@ xhr.send("hello");
 HTML
 AMAZING_WPT_SHIM_ADDR="${base#http://}" \
   "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" xhr_upload.html 800 600 5000
+cat > "$root/fetch_json.html" <<'HTML'
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("Fetch JSON from the selected WPT resource shim");
+fetch("http://web-platform.test/fetch/api/resources/data.json")
+  .then(function(response) {
+    assert_equals(response.status, 200);
+    return response.json();
+  })
+  .then(function(value) {
+    assert_equals(value.key, "value");
+    t.done();
+    done();
+  });
+</script>
+HTML
+AMAZING_WPT_SHIM_ADDR="${base#http://}" \
+  "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" fetch_json.html 800 600 5000
+cat > "$root/fetch_abort_body.html" <<'HTML'
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("Response body rejects after its Fetch signal aborts");
+var controller = new AbortController();
+fetch("http://web-platform.test/fetch/api/resources/data.json", { signal: controller.signal })
+  .then(function(response) {
+    controller.abort();
+    return response.text();
+  })
+  .then(function() { throw new Error("body unexpectedly resolved"); }, function(error) {
+    assert_equals(error.name, "AbortError");
+    t.done();
+    done();
+  });
+</script>
+HTML
+AMAZING_WPT_SHIM_ADDR="${base#http://}" \
+  "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" fetch_abort_body.html 800 600 5000
