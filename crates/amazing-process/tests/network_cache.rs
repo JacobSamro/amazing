@@ -207,6 +207,9 @@ fn network_child_serves_disk_cache_after_restart() {
     let context = NetworkContext {
         origin: WireOrigin::Tuple(origin.clone()),
         cookie_site: WireCookieSite::NoClient(()),
+        top_level_origin: None,
+        ancestor_origins: Vec::new(),
+        sandbox_flags: 0,
         now_unix: 1_780_000_000,
         restricts_mixed_content: false,
         image_set_initiator: false,

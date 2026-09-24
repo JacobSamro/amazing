@@ -5,6 +5,7 @@
 pub mod api;
 pub mod cache;
 pub mod cookies;
+pub mod hsts;
 mod cors;
 pub mod csp;
 pub mod data_url;
@@ -45,6 +46,7 @@ pub enum FetchError {
     BodyNotReplayable,
     BadPort,
     MixedContent,
+    FrameEmbedding,
     CrossOriginResourcePolicy,
     MimeType,
     Nosniff,

@@ -12,6 +12,7 @@ fn context(u: &HttpUrl) -> CookieAccess<'_> {
         http_api: true,
         top_level_navigation: false,
         method: "GET",
+        partition_key: None,
     }
 }
 fn only<'a, P: RegistrableDomain>(s: &'a mut CookieStore<P>, now: i64) -> &'a Cookie {
@@ -36,6 +37,43 @@ impl RegistrableDomain for Domains {
 }
 fn store() -> CookieStore<Domains> {
     CookieStore::new(Domains, CookieLimits::default()).unwrap()
+}
+#[test]
+fn chips_is_secure_and_partitioned_by_schemeful_top_level_site() {
+    let u = url("https://example.test/");
+    let mut a = context(&u);
+    a.partition_key = Some(url("https://top.test/").origin().site(&Domains));
+    let mut b = context(&u);
+    b.partition_key = Some(url("https://other.test/").origin().site(&Domains));
+    let mut jar = store();
+    jar.set_cookie(b"id=global; SameSite=None; Secure", &a, 1).unwrap();
+    jar.set_cookie(b"id=top; SameSite=None; Secure; Partitioned", &a, 2).unwrap();
+    jar.set_cookie(b"id=other; SameSite=None; Secure; Partitioned", &b, 3).unwrap();
+    assert_eq!(jar.cookie_header(&a, 4).unwrap(), b"id=global; id=top");
+    assert_eq!(jar.cookie_header(&b, 4).unwrap(), b"id=global; id=other");
+    let no_key = context(&u);
+    assert_eq!(jar.cookie_header(&no_key, 4).unwrap(), b"id=global");
+    assert_eq!(jar.set_cookie(b"x=1; Secure; Partitioned", &no_key, 5), Err(CookieError::Partition));
+    assert_eq!(jar.set_cookie(b"x=1; Partitioned", &a, 5), Err(CookieError::Partition));
+}
+#[test]
+fn persistent_snapshot_restores_partition_key_but_not_session_cookie() {
+    let u = url("https://example.test/");
+    let mut access = context(&u);
+    access.partition_key = Some(url("https://top.test/").origin().site(&Domains));
+    let mut original = store();
+    original.set_cookie(b"session=gone", &access, 10).unwrap();
+    original.set_cookie(b"chip=kept; Secure; SameSite=None; Partitioned; Max-Age=100", &access, 10).unwrap();
+    let bytes = original.snapshot(11).unwrap();
+    let mut restored = store();
+    restored.restore_snapshot(&bytes, 11).unwrap();
+    assert_eq!(restored.cookie_header(&access, 12).unwrap(), b"chip=kept");
+    let no_partition = context(&u);
+    assert!(restored.cookie_header(&no_partition, 12).unwrap().is_empty());
+    assert!(restored.cookie_header(&access, 110).unwrap().is_empty());
+    let mut invalid = bytes;
+    invalid[0] ^= 1;
+    assert_eq!(restored.restore_snapshot(&invalid, 12), Err(CookieError::Snapshot));
 }
 #[test]
 fn parsing_trims_only_space_and_tab_preserves_quotes_equals_and_octets() {
