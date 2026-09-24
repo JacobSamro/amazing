@@ -320,10 +320,14 @@ LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_har
 # HTML-25: iframe getters/insertion hooks (additive) across bindings, driver, scheduler, WPT runner.
 LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-bindings/src/interfaces.rs", "crates/amazing-bindings/src/host.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
 # RC-21: additive responsive/lazy/decode wiring in loaders; move amazing-image into the root workspace.
-LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/page.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/main.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/render.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs", "Cargo.toml", "Cargo.lock", "crates/amazing-shell-gpui/Cargo.lock"])
+LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing/Cargo.toml", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/page.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/main.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/render.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs", "Cargo.toml", "Cargo.lock", "crates/amazing-shell-gpui/Cargo.lock"])
 # IPC-10: adapter dependency and module line.
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/main.rs", "Cargo.lock"])
 # Structured serialize/deserialize (HTML StructuredSerializeInternal) lives in one amazing-js module.
+# JS-11: class generator/async-generator methods and parameter patterns need VM compiler entry points.
+LANE_GRANTS.setdefault("js-lang", []).extend(["crates/amazing-js/src/vm/compiler.rs", "crates/amazing-js/src/vm/mod.rs"])
+# IPC-10: headless navigation controller shared by the GUI and the WPT harness.
+LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/src/navigator.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as

@@ -2,6 +2,15 @@
 use crate::{Dom, DomError, NodeIdx, NodeKind};
 use std::collections::VecDeque;
 
+/// A relevant image or source attribute changed. The embedding drains this
+/// queue and asks its image loader to update the affected image data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageRelevantMutation {
+    pub node: NodeIdx,
+    pub generation: u64,
+    pub attribute: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ObserverId(usize);
 impl ObserverId {
@@ -199,6 +208,9 @@ impl MutationObservers {
     }
 }
 impl Dom {
+    pub fn take_image_relevant_mutations(&mut self) -> Vec<ImageRelevantMutation> {
+        std::mem::take(&mut self.image_mutations)
+    }
     pub fn observer_callback(&self, observer: ObserverId) -> Option<u64> {
         self.mutations.observers.get(observer.0).map(|entry| entry.callback)
     }
@@ -474,6 +486,18 @@ impl Dom {
         old: Option<String>,
     ) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
+        if namespace.is_none() {
+            let tag = self.local_name(target).unwrap_or("");
+            let relevant = match tag {
+                "img" => matches!(name, "src" | "srcset" | "width" | "sizes" | "crossorigin" | "referrerpolicy"),
+                "source" => matches!(name, "srcset" | "sizes" | "type" | "media" | "width" | "height"),
+                _ => false,
+            };
+            if relevant && self.namespace(target) == Some(crate::Namespace::Html) {
+                self.image_mutations.push(ImageRelevantMutation { node: target,
+                    generation: self.node_generation(target).unwrap_or(0), attribute: name.into() });
+            }
+        }
         let new_value = self.get_attribute_ns(target, namespace, name)
             .map(|value| value.encode_utf16().collect());
         let new_tokens = self.selector_tokens(target);

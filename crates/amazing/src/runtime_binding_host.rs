@@ -38,6 +38,9 @@ use self::compositor::{CanvasObject, CanvasTarget};
 #[path = "runtime_host_compositor.rs"] mod compositor;
 #[path = "runtime_host_html.rs"] pub(crate) mod html;
 
+#[path = "runtime_host_dom_bindings.rs"]
+mod dom_bindings;
+
 #[derive(Clone, Copy)]
 enum NativeEntry {
     Canvas(CanvasTarget, Member),
@@ -46,7 +49,6 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
-    WindowStorageListener(bool),
     IFrameContentDocument,
     IFrameSrcGet,
     IFrameSrcSet,
@@ -85,12 +87,10 @@ struct BindingState {
     document_referrer: Option<String>,
     web_objects: Vec<WebObject>,
     font_sets: HashMap<NodeIdx, u64>,
+    window_event_target_slot: u64,
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
-    storage_listeners: Vec<JsValue>,
-    window_add_listener: Option<JsValue>,
-    window_remove_listener: Option<JsValue>,
     frames: html::FrameRuntime,
 }
 
@@ -348,6 +348,9 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn interface_for(&self, key: PlatformKey, brand: InterfaceBrand) -> Result<Interface, Throw> {
+        if brand == InterfaceBrand::EVENT {
+            return self.dom_event_interface(key);
+        }
         if brand == InterfaceBrand::NODE {
             let node = self
                 .node_from_platform_key(key)
@@ -377,6 +380,7 @@ impl RuntimeBindingHost<'_> {
         Ok(match brand {
             InterfaceBrand::RANGE => Interface::Range,
             InterfaceBrand::STATIC_RANGE => Interface::StaticRange,
+            InterfaceBrand::SELECTION => Interface::Selection,
             InterfaceBrand::TRAVERSAL => Interface::NodeIterator,
             InterfaceBrand::NODE_ITERATOR => Interface::NodeIterator,
             InterfaceBrand::TREE_WALKER => Interface::TreeWalker,
@@ -423,6 +427,12 @@ pub(crate) fn install(
     host: Rc<RefCell<BrowserDomHost>>,
 ) -> Result<RuntimeBindings, Throw> {
     let arena = Rc::as_ptr(&host) as u64;
+    let window_event_target_slot = {
+        let mut host = host.borrow_mut();
+        let slot = host.dom.create_event_target();
+        host.dom.set_window_event_target(slot).expect("new Window event target slot");
+        slot
+    };
     let state = Rc::new(RefCell::new(BindingState {
         canvas_text_system: None,
         canvas_dirty: HashSet::new(),
@@ -446,12 +456,10 @@ pub(crate) fn install(
         document_referrer: None,
         web_objects: Vec::new(),
         font_sets: HashMap::new(),
+        window_event_target_slot,
         storage: None,
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
-        storage_listeners: Vec::new(),
-        window_add_listener: None,
-        window_remove_listener: None,
         frames: html::FrameRuntime::default(),
     }));
     let for_dispatch = state.clone();
@@ -479,7 +487,6 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
-            NativeEntry::WindowStorageListener(add) => adapter.window_storage_listener(add, this, &args),
             NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
             NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
             NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
@@ -491,6 +498,8 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    adapter.install_window_event_target()?;
+    adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
@@ -506,17 +515,6 @@ pub(crate) fn install(
     }
     let window = adapter.js.binding_global_object();
     adapter.js.binding_install_put_forwards(&window, "location", "href")?;
-    let add = adapter.js.binding_get_property(&window, "addEventListener")?;
-    let remove = adapter.js.binding_get_property(&window, "removeEventListener")?;
-    {
-        let mut state = adapter.state.borrow_mut();
-        state.window_add_listener = Some(add);
-        state.window_remove_listener = Some(remove);
-    }
-    let add = adapter.native("addEventListener", 2, NativeEntry::WindowStorageListener(true), HostCallPolicy::CallOnly);
-    let remove = adapter.native("removeEventListener", 2, NativeEntry::WindowStorageListener(false), HostCallPolicy::CallOnly);
-    adapter.js.binding_define_data_property(&window, "addEventListener", add, BindingPropertyFlags::METHOD)?;
-    adapter.js.binding_define_data_property(&window, "removeEventListener", remove, BindingPropertyFlags::METHOD)?;
     let document = adapter.wrap_node(NodeIdx(0))?;
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical
@@ -817,6 +815,12 @@ impl BindingHost for RuntimeBindingHost<'_> {
             generation: handle.generation,
         };
         (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
+    }
+    fn window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
+        self.dom_window_event_target_slot(value)
+    }
+    fn window_event_target_value(&self, slot: u64) -> Option<JsValue> {
+        self.dom_window_event_target_value(slot)
     }
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey {
         PlatformKey {

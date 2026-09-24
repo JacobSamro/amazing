@@ -68,3 +68,24 @@ The measurement includes a fresh tile raster and reference CPU presentation
 but excludes the separate parity paint, GPUI upload/presentation, network and
 JavaScript. Every measured frame matched full-painter RGBA pixels. The trace
 CSV and summary are under `crates/amazing-compositor/evidence/comp7/`.
+
+## COMP-13 compositor scroll handoff
+
+The compositor scroll controller accepts wheel, trackpad and touch pan deltas,
+keyboard commands, scrollbar fractions, direct scrollTo targets, and resolved
+smooth targets. It clamps offsets to layout's scroll extents, bubbles deltas to
+scrollable ancestors, samples smooth and decaying momentum motion at vsync,
+and coalesces asynchronous scroll events per scroll node. The driver adapter
+returns a cached frame with no style, layout or paint-view call; an uncached
+tile or stale owner binding requires the full rendering path. Existing
+property-tree positioning applies fixed and sticky constraints to both input
+and animated frames.
+
+The DOM owner mapping gives each queued scroll event a node generation before
+main-thread dispatch. Cancelable wheel/touch input must be gated against the
+DOM event path's resolved passive flags; unknown listener state uses the
+main-thread path. Dom-bindings owns the read-only path query, and
+integrator-assist owns the input/vsync and event-task hooks. The later pinned
+`css/css-scroll-snap` WPT selection will validate snap details after those
+driver hooks land; the current controller uses the existing layout-supplied
+snap points and `settle_scroll` API.

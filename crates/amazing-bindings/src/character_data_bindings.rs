@@ -5,7 +5,7 @@ use amazing_dom::{DomError, NodeIdx};
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::CharacterDataSubstring | O::CharacterDataAppend
         | O::CharacterDataInsert | O::CharacterDataDelete
-        | O::CharacterDataReplace | O::TextSplit)
+        | O::CharacterDataReplace | O::TextSplit | O::TextWholeText)
 }
 
 fn unsigned<H: BindingHost>(host: &mut H, value: Option<&H::Value>) -> Result<usize, H::Error> {
@@ -26,11 +26,25 @@ pub(crate) fn invoke<H: BindingHost>(
     let node: NodeIdx = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected CharacterData"))?;
     host.with_dom(|dom| {
         if node.0 as usize >= dom.node_count() { return Err(DomError::InvalidNode); }
-        if dom.character_data(node).is_none() || (op == O::TextSplit && !dom.is_text(node)) {
+        if dom.character_data(node).is_none() || (matches!(op, O::TextSplit | O::TextWholeText) && !dom.is_text(node)) {
             return Err(DomError::TypeError);
         }
         Ok(())
     })?;
+    if op == O::TextWholeText {
+        let units = host.with_dom(|dom| {
+            let Some(parent) = dom.get(node).parent else { return Ok(dom.character_data_utf16(node).unwrap()); };
+            let siblings: Vec<_> = dom.children(parent).collect();
+            let position = siblings.iter().position(|sibling| *sibling == node).unwrap();
+            let mut first = position;
+            while first > 0 && dom.is_text(siblings[first - 1]) { first -= 1; }
+            let mut end = position + 1;
+            while end < siblings.len() && dom.is_text(siblings[end]) { end += 1; }
+            Ok(siblings[first..end].iter().flat_map(|sibling|
+                dom.character_data_utf16(*sibling).unwrap()).collect())
+        })?;
+        return host.string(&units);
+    }
     let offset = match op {
         O::CharacterDataAppend => None,
         _ => Some(unsigned(host, args.first())?),

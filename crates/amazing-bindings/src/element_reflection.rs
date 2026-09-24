@@ -3,7 +3,7 @@ use crate::{host::{InterfaceBrand, Operation as O, UrlReflection}, html_reflecti
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, ColSpan, RowSpan, TokenList }
+enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
 #[derive(Clone, Copy)]
 struct Spec { attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -24,6 +24,13 @@ fn spec(op: O) -> Option<Spec> {
         O::ImageWidth | O::ImageSetWidth => ("width", &["img"], K::Unsigned),
         O::ImageHeight | O::ImageSetHeight => ("height", &["img"], K::Unsigned),
         O::ImageLoading | O::ImageSetLoading => ("loading", &["img"], K::Loading),
+        O::ImageSrcset | O::ImageSetSrcset => ("srcset", &["img"], K::String),
+        O::ImageSizes | O::ImageSetSizes => ("sizes", &["img"], K::String),
+        O::ImageDecoding | O::ImageSetDecoding => ("decoding", &["img"], K::Decoding),
+        O::SourceType | O::SourceSetType => ("type", &["source"], K::String),
+        O::SourceMedia | O::SourceSetMedia => ("media", &["source"], K::String),
+        O::SourceSrcset | O::SourceSetSrcset => ("srcset", &["source"], K::String),
+        O::SourceSizes | O::SourceSetSizes => ("sizes", &["source"], K::String),
         O::InputType | O::InputSetType => ("type", &["input"], K::InputType),
         O::ElementName | O::ElementSetName => ("name", &["input", "meta"], K::String),
         O::ElementDisabled | O::ElementSetDisabled => ("disabled", &["input", "link"], K::Boolean),
@@ -44,7 +51,9 @@ fn spec(op: O) -> Option<Spec> {
     };
     let setter = matches!(op, O::ElementSetHref | O::ElementSetTarget | O::ElementSetRel
         | O::ElementSetDownload | O::ElementSetSrc | O::ImageSetAlt | O::ImageSetWidth
-        | O::ImageSetHeight | O::ImageSetLoading | O::InputSetType | O::ElementSetName
+        | O::ImageSetHeight | O::ImageSetLoading | O::ImageSetSrcset | O::ImageSetSizes
+        | O::ImageSetDecoding | O::SourceSetType | O::SourceSetMedia | O::SourceSetSrcset
+        | O::SourceSetSizes | O::InputSetType | O::ElementSetName
         | O::ElementSetDisabled | O::InputSetPlaceholder | O::ResourceSetType
         | O::ScriptSetAsync | O::ScriptSetDefer | O::LinkSetMedia | O::MetaSetContent
         | O::MetaSetHttpEquiv | O::MetaSetCharset | O::CellSetColSpan
@@ -124,6 +133,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::InputType => host.string(&input_type(value.as_deref().unwrap_or_default())),
         Kind::Loading => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
             &["eager", "lazy"]).unwrap_or_else(|| "eager".encode_utf16().collect())),
+        Kind::Decoding => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
+            &["sync", "async", "auto"]).unwrap_or_else(|| "auto".encode_utf16().collect())),
         Kind::String => host.string(&value.unwrap_or_default()),
         Kind::TokenList => unreachable!(),
     }

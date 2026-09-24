@@ -70,6 +70,8 @@ const NODE: &[Member] = &[
     method("isDefaultNamespace", O::NodeIsDefaultNamespace, 1),
     method("normalize", O::NodeNormalize, 0),
     method("isSameNode", O::NodeIsSameNode, 1),
+    method("isEqualNode", O::NodeIsEqualNode, 1),
+    method("compareDocumentPosition", O::NodeCompareDocumentPosition, 1),
 ];
 const EVENT_TARGET: &[Member] = &[
     method("addEventListener", O::AddEventListener, 2),
@@ -112,6 +114,45 @@ const CUSTOM_EVENT: &[Member] = &[
     getter("detail", O::CustomEventDetail),
     method("initCustomEvent", O::CustomEventInit, 1),
 ];
+const UI_EVENT: &[Member] = &[
+    getter("view", O::EventExtra("view")),
+    getter("detail", O::EventExtra("detail")),
+];
+const FOCUS_EVENT: &[Member] = &[getter("relatedTarget", O::EventExtra("relatedTarget"))];
+const MOUSE_EVENT: &[Member] = &[
+    getter("ctrlKey", O::EventExtra("ctrlKey")),
+    getter("shiftKey", O::EventExtra("shiftKey")),
+    getter("altKey", O::EventExtra("altKey")),
+    getter("metaKey", O::EventExtra("metaKey")),
+    getter("screenX", O::EventExtra("screenX")),
+    getter("screenY", O::EventExtra("screenY")),
+    getter("clientX", O::EventExtra("clientX")),
+    getter("clientY", O::EventExtra("clientY")),
+    getter("button", O::EventExtra("button")),
+    getter("buttons", O::EventExtra("buttons")),
+    getter("relatedTarget", O::EventExtra("relatedTarget")),
+];
+const WHEEL_EVENT: &[Member] = &[
+    getter("deltaX", O::EventExtra("deltaX")),
+    getter("deltaY", O::EventExtra("deltaY")),
+    getter("deltaZ", O::EventExtra("deltaZ")),
+    getter("deltaMode", O::EventExtra("deltaMode")),
+];
+const KEYBOARD_EVENT: &[Member] = &[
+    getter("ctrlKey", O::EventExtra("ctrlKey")),
+    getter("shiftKey", O::EventExtra("shiftKey")),
+    getter("altKey", O::EventExtra("altKey")),
+    getter("metaKey", O::EventExtra("metaKey")),
+    getter("key", O::EventExtra("key")),
+    getter("code", O::EventExtra("code")),
+    getter("location", O::EventExtra("location")),
+    getter("repeat", O::EventExtra("repeat")),
+    getter("isComposing", O::EventExtra("isComposing")),
+    getter("charCode", O::EventExtra("charCode")),
+    getter("keyCode", O::EventExtra("keyCode")),
+    getter("which", O::EventExtra("which")),
+];
+const COMPOSITION_EVENT: &[Member] = &[getter("data", O::EventExtra("data"))];
 const MUTATION_OBSERVER: &[Member] = &[
     method("observe", O::MutationObserve, 2),
     method("disconnect", O::MutationDisconnect, 0),
@@ -184,6 +225,7 @@ const DOCUMENT: &[Member] = &[
     getter("contentType", O::DocumentContentType),
     getter("compatMode", O::DocumentCompatMode), getter("referrer", O::DocumentReferrer),
     method("getElementById", O::DocumentGetElementById, 1),
+    method("getSelection", O::GetSelection, 0),
     method("getElementsByName", O::DocumentGetElementsByName, 1),
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
@@ -389,6 +431,22 @@ const RANGE: &[Member] = &[
     method("comparePoint", O::RangeComparePoint, 2),
     method("toString", O::RangeStringifier, 0),
 ];
+const SELECTION: &[Member] = &[
+    getter("anchorNode", O::SelectionAnchorNode),
+    getter("anchorOffset", O::SelectionAnchorOffset),
+    getter("focusNode", O::SelectionFocusNode),
+    getter("focusOffset", O::SelectionFocusOffset),
+    getter("isCollapsed", O::SelectionIsCollapsed),
+    getter("rangeCount", O::SelectionRangeCount),
+    method("getRangeAt", O::SelectionGetRangeAt, 1),
+    method("addRange", O::SelectionAddRange, 1),
+    method("removeRange", O::SelectionRemoveRange, 1),
+    method("removeAllRanges", O::SelectionRemoveAllRanges, 0),
+    method("empty", O::SelectionRemoveAllRanges, 0),
+    method("collapse", O::SelectionCollapse, 1),
+    method("selectAllChildren", O::SelectionSelectAllChildren, 1),
+    method("toString", O::SelectionToString, 0),
+];
 const ELEMENT: &[Member] = &[
     getter("namespaceURI", O::ElementNamespaceURI),
     getter("prefix", O::ElementPrefix),
@@ -474,6 +532,7 @@ const SLOT: &[Member] = &[
 ];
 const TEXT: &[Member] = &[
     getter("assignedSlot", O::TextAssignedSlot),
+    getter("wholeText", O::TextWholeText),
     method("splitText", O::TextSplit, 1),
 ];
 const HTML_ELEMENT: &[Member] = &[
@@ -496,10 +555,24 @@ const HYPERLINK: &[Member] = &[
 ];
 const IMAGE: &[Member] = &[
     getter("src", O::ElementSrc), setter("src", O::ElementSetSrc),
+    getter("srcset", O::ImageSrcset), setter("srcset", O::ImageSetSrcset),
+    getter("sizes", O::ImageSizes), setter("sizes", O::ImageSetSizes),
+    getter("currentSrc", O::ImageCurrentSrc),
+    getter("decoding", O::ImageDecoding), setter("decoding", O::ImageSetDecoding),
+    getter("complete", O::ImageComplete),
+    getter("naturalWidth", O::ImageNaturalWidth),
+    getter("naturalHeight", O::ImageNaturalHeight),
+    method("decode", O::ImageDecode, 0),
     getter("alt", O::ImageAlt), setter("alt", O::ImageSetAlt),
     getter("width", O::ImageWidth), setter("width", O::ImageSetWidth),
     getter("height", O::ImageHeight), setter("height", O::ImageSetHeight),
     getter("loading", O::ImageLoading), setter("loading", O::ImageSetLoading),
+];
+const SOURCE: &[Member] = &[
+    getter("type", O::SourceType), setter("type", O::SourceSetType),
+    getter("media", O::SourceMedia), setter("media", O::SourceSetMedia),
+    getter("srcset", O::SourceSrcset), setter("srcset", O::SourceSetSrcset),
+    getter("sizes", O::SourceSizes), setter("sizes", O::SourceSetSizes),
 ];
 const INPUT: &[Member] = &[
     form_get("accept", F::Accept), form_set("accept", F::Accept),
@@ -789,6 +862,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: LI },
     D { interface: I::HTMLDListElement, name: "HTMLDListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDivElement, name: "HTMLDivElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSpanElement, name: "HTMLSpanElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: HYPERLINK },
     D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: IMAGE },
     D { interface: I::HTMLBRElement, name: "HTMLBRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -818,7 +892,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLVideoElement, name: "HTMLVideoElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
     D { interface: I::HTMLAudioElement, name: "HTMLAudioElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
-    D { interface: I::HTMLSourceElement, name: "HTMLSourceElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSourceElement, name: "HTMLSourceElement", parent: Some(I::HTMLElement), constructor: None, members: SOURCE },
     D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
@@ -911,6 +985,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::RangeConstructor),
         members: RANGE,
     },
+    D { interface: I::Selection, name: "Selection", parent: None, constructor: None, members: SELECTION },
     D {
         interface: I::DOMImplementation,
         name: "DOMImplementation",
@@ -965,6 +1040,18 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::CustomEventConstructor),
         members: CUSTOM_EVENT,
     },
+    D { interface: I::UIEvent, name: "UIEvent", parent: Some(I::Event),
+        constructor: Some(O::UIEventConstructor), members: UI_EVENT },
+    D { interface: I::FocusEvent, name: "FocusEvent", parent: Some(I::UIEvent),
+        constructor: Some(O::FocusEventConstructor), members: FOCUS_EVENT },
+    D { interface: I::MouseEvent, name: "MouseEvent", parent: Some(I::UIEvent),
+        constructor: Some(O::MouseEventConstructor), members: MOUSE_EVENT },
+    D { interface: I::WheelEvent, name: "WheelEvent", parent: Some(I::MouseEvent),
+        constructor: Some(O::WheelEventConstructor), members: WHEEL_EVENT },
+    D { interface: I::KeyboardEvent, name: "KeyboardEvent", parent: Some(I::UIEvent),
+        constructor: Some(O::KeyboardEventConstructor), members: KEYBOARD_EVENT },
+    D { interface: I::CompositionEvent, name: "CompositionEvent", parent: Some(I::UIEvent),
+        constructor: Some(O::CompositionEventConstructor), members: COMPOSITION_EVENT },
     D {
         interface: I::MutationObserver,
         name: "MutationObserver",
@@ -1013,6 +1100,7 @@ pub fn html_element_interface(local: &str) -> I {
         "li" => I::HTMLLIElement,
         "dl" => I::HTMLDListElement,
         "div" => I::HTMLDivElement,
+        "span" => I::HTMLSpanElement,
         "a" => I::HTMLAnchorElement,
         "img" => I::HTMLImageElement,
         "br" => I::HTMLBRElement,
@@ -1057,7 +1145,7 @@ pub fn html_element_interface(local: &str) -> I {
         "area" => I::HTMLAreaElement,
         "picture" => I::HTMLPictureElement,
         "menu" => I::HTMLMenuElement,
-        "article" | "aside" | "b" | "bdi" | "bdo" | "big" | "center" | "cite" | "code" | "dd" | "dfn" | "dt" | "em" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "i" | "kbd" | "main" | "mark" | "nav" | "nobr" | "noembed" | "noframes" | "noscript" | "plaintext" | "rb" | "rp" | "rt" | "rtc" | "ruby" | "s" | "samp" | "search" | "section" | "small" | "span" | "strike" | "strong" | "sub" | "sup" | "tt" | "u" | "var" | "wbr" | "address" | "abbr" | "acronym" | "basefont" => I::HTMLElement,
+        "article" | "aside" | "b" | "bdi" | "bdo" | "big" | "center" | "cite" | "code" | "dd" | "dfn" | "dt" | "em" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "i" | "kbd" | "main" | "mark" | "nav" | "nobr" | "noembed" | "noframes" | "noscript" | "plaintext" | "rb" | "rp" | "rt" | "rtc" | "ruby" | "s" | "samp" | "search" | "section" | "small" | "strike" | "strong" | "sub" | "sup" | "tt" | "u" | "var" | "wbr" | "address" | "abbr" | "acronym" | "basefont" => I::HTMLElement,
         name if name.contains('-') => I::HTMLElement,
         _ => I::HTMLUnknownElement,
     }
