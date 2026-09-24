@@ -799,6 +799,8 @@ pub struct JsObject {
     pub(crate) lexical_new_target: Option<JsValue>,
     /// Engine-private brand and identity; never reflected as a JS property.
     pub(crate) host_identity: Option<HostIdentity>,
+    /// Annex B [[IsHTMLDDA]] internal slot, used by IsLooselyEqual.
+    pub(crate) is_html_dda: bool,
 }
 
 impl Default for JsObject {
@@ -821,6 +823,7 @@ impl JsObject {
             lexical_super_constructor: None,
             lexical_new_target: None,
             host_identity: None,
+            is_html_dda: false,
         }
     }
 

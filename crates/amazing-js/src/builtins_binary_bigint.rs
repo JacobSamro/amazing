@@ -321,8 +321,7 @@ impl Interpreter {
     fn install_bigint_builtins(&mut self) {
         let constructor = Self::native("BigInt", bigint_constructor, &self.function_proto);
         let JsValue::Object(function) = &constructor else { unreachable!() };
-        let JsValue::Object(prototype) = function.borrow().get_own("prototype").unwrap() else { unreachable!() };
-        prototype.borrow_mut().proto = Some(self.object_proto.clone());
+        let prototype = self.bigint_proto.clone();
         binary_configure_constructor(function, "BigInt", 1, &prototype);
         let _ = prototype.borrow_mut().define("constructor", binary_writable_property(constructor.clone()));
         let _ = prototype.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),

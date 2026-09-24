@@ -3,13 +3,13 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         Some(value @ JsValue::Object(_)) => value,
         Some(JsValue::Num(number)) => {
             let mut object = JsObject::ordinary();
-            object.proto = Some(i.object_proto.clone());
+            object.proto = Some(i.number_proto.clone());
             object.set_own("[[NumberData]]", JsValue::Num(number));
             JsValue::object(object)
         }
         Some(JsValue::Bool(boolean)) => {
             let mut object = JsObject::ordinary();
-            object.proto = Some(i.object_proto.clone());
+            object.proto = Some(i.boolean_proto.clone());
             object.set_own("[[BooleanData]]", JsValue::Bool(boolean));
             JsValue::object(object)
         }
@@ -21,9 +21,7 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         }
         Some(JsValue::BigInt(value)) => {
             let mut object = JsObject::ordinary();
-            object.proto = i.global_env.resolve("BigInt")
-                .and_then(|constructor| i.get_prop(&constructor, "prototype").ok())
-                .and_then(|prototype| if let JsValue::Object(object) = prototype { Some(object) } else { None });
+            object.proto = Some(i.bigint_proto.clone());
             object.set_own("[[BigIntData]]", JsValue::BigInt(value));
             JsValue::object(object)
         }
@@ -1195,7 +1193,11 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
     } else {
         crate::parse_script(&source)
     }.map_err(|error| Throw::syntax_error(error.to_string()))?;
-    i.run_program(&program)
+    let previous = i.in_eval;
+    i.in_eval = true;
+    let result = i.run_program(&program);
+    i.in_eval = previous;
+    result
 }
 
 fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -3317,6 +3319,22 @@ fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result
     } else {
         Ok(value)
     }
+}
+fn boolean_receiver(this: JsValue) -> Result<bool, Throw> {
+    match this {
+        JsValue::Bool(value) => Ok(value),
+        JsValue::Object(object) => match object.borrow().get_own("[[BooleanData]]") {
+            Some(JsValue::Bool(value)) => Ok(value),
+            _ => Err(Throw::type_error("incompatible Boolean receiver")),
+        },
+        _ => Err(Throw::type_error("incompatible Boolean receiver")),
+    }
+}
+fn native_boolean_to_string(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::str(if boolean_receiver(this)? { "true" } else { "false" }))
+}
+fn native_boolean_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::Bool(boolean_receiver(this)?))
 }
 fn native_is_nan(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::Bool(
