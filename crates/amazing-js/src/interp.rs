@@ -3302,6 +3302,12 @@ impl Interpreter {
                 }
             }
             JsValue::Symbol(_) => self.get_prop_receiver(&JsValue::Object(self.symbol_proto.clone()), key, receiver),
+            JsValue::Num(_) => {
+                let prototype = self.global_env.resolve("Number")
+                    .and_then(|constructor| self.get_prop(&constructor, "prototype").ok());
+                if let Some(prototype) = prototype { self.get_prop_receiver(&prototype, key, receiver) }
+                else { Ok(JsValue::Undefined) }
+            }
             JsValue::BigInt(_) => {
                 let prototype = self.global_env.resolve("BigInt")
                     .and_then(|constructor| self.get_prop(&constructor, "prototype").ok());
@@ -3888,6 +3894,17 @@ include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
+include!("builtins_intl_data.rs");
+include!("builtins_intl.rs");
+include!("builtins_intl_number.rs");
+include!("builtins_intl_plural.rs");
+include!("builtins_intl_datetime.rs");
+include!("builtins_intl_relative_list.rs");
+include!("builtins_intl_collator.rs");
+include!("builtins_intl_segmenter.rs");
+include!("builtins_intl_names.rs");
+include!("builtins_intl_display.rs");
+include!("builtins_intl_locale_methods.rs");
 include!("builtins_temporal.rs");
 include!("builtins_temporal_arithmetic.rs");
 include!("builtins_temporal_epoch.rs");

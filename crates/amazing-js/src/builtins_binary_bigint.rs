@@ -426,8 +426,13 @@ fn bigint_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     }
     Ok(JsValue::str(value.to_radix_string(radix.trunc() as u32)))
 }
-fn bigint_to_locale_string(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::str(bigint_this(&this)?.to_radix_string(10)))
+fn bigint_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = bigint_this(&this)?;
+    let locales = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let formatter = intl_construct_service(i, "NumberFormat", locales, options)?;
+    let format = i.get_prop(&formatter, "format")?;
+    i.call_value(&format, JsValue::Undefined, vec![JsValue::BigInt(value)])
 }
 fn bigint_width(i: &mut Interpreter, args: &[JsValue], signed: bool) -> Result<JsValue, Throw> {
     let bits = binary_index(i, args.first().unwrap_or(&JsValue::Undefined))?;
