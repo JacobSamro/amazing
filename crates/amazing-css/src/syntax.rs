@@ -461,14 +461,14 @@ pub fn serialize(tokens: &[Token]) -> String {
             out.push(' ');
         }
         match tok {
-            Token::Ident(s) => out.push_str(s),
+            Token::Ident(s) => write_ident(&mut out, s),
             // Hex colors arrive here from declaration values: keep the '#'.
             Token::Hash(s) => {
                 out.push('#');
                 out.push_str(s);
             },
             // The paired OpenParen token supplies the '('.
-            Token::Function(s) => out.push_str(s),
+            Token::Function(s) => write_ident(&mut out, s),
             Token::Url { raw, .. } => { out.push_str("url("); out.push_str(raw); out.push(')'); },
             Token::BadUrl => out.push_str("url(\""),
             Token::AtKeyword(s) => {
@@ -512,6 +512,22 @@ pub fn serialize(tokens: &[Token]) -> String {
         }
     }
     out.trim_end().to_string()
+}
+
+/// Re-escape decoded identifier characters that would change tokenization.
+fn write_ident(out: &mut String, ident: &str) {
+    for (index, ch) in ident.chars().enumerate() {
+        if ch.is_ascii_digit() && (index == 0 || index == 1 && ident.starts_with('-'))
+            || ch.is_control()
+        {
+            out.push_str(&format!("\\{:x} ", ch as u32));
+        } else if is_ident_char(ch) {
+            out.push(ch);
+        } else {
+            out.push('\\');
+            out.push(ch);
+        }
+    }
 }
 
 fn fmt_num(n: f64) -> String {
@@ -635,5 +651,13 @@ mod tests {
         let tokens = tokenize(css);
         assert_eq!(tokens, vec![Token::Url { value: "a)b".into(), raw: r"a\)b".into() }]);
         assert_eq!(serialize(&tokens), css);
+    }
+
+    #[test]
+    fn escaped_identifier_keeps_its_token_boundary_when_serialized() {
+        for css in [r":lang(\*-FR)", r".\31 foo", r".name\+part"] {
+            let tokens = tokenize(css);
+            assert_eq!(tokenize(&serialize(&tokens)), tokens, "{css}");
+        }
     }
 }

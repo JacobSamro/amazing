@@ -328,6 +328,14 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
                     collect_compound(nested, effect, index);
                 }
             }
+            Simple::ComplexNegation(args) | Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => {
+                index.has_relational = true;
+                for selector in args {
+                    for nested in &selector.compounds {
+                        collect_compound(nested, effect, index);
+                    }
+                }
+            }
             Simple::Has(_) => index.has_relational = true,
             Simple::NthChildOf { selectors, .. } => {
                 index.has_structural = true;
