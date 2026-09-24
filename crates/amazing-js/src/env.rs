@@ -170,6 +170,21 @@ impl EnvHandle {
             .declare_raw(name, value, true, false)
     }
 
+    /// VarDeclarationInstantiation leaves an existing var/function value in
+    /// place. An existing lexical binding is still a declaration conflict.
+    pub fn hoist_var(&self, name: &str) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        if let Some(existing) = env.vars.get(name) {
+            if existing.borrow().lexical {
+                return Err(Throw::syntax_error(format!(
+                    "identifier '{name}' has already been declared"
+                )));
+            }
+            return Ok(());
+        }
+        env.declare_raw(name, JsValue::Undefined, true, false)
+    }
+
     /// `let`/`const` declaration.
     pub fn declare_lexical(
         &self,

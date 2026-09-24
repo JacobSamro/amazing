@@ -92,6 +92,67 @@ fn primitive_and_operator_differential_corpus() {
 }
 
 #[test]
+fn loose_equality_matches_the_tree_walker_and_spec_cases() {
+    for (source, expected) in [
+        ("301 == '301'", true),
+        ("' 0x10 ' == 16", true),
+        ("0 == ''", true),
+        ("0 == 'not a number'", false),
+        ("0 / 0 == 'NaN'", false),
+        ("null == undefined", true),
+        ("null == 0", false),
+        ("false == '0'", true),
+        ("true == BigInt(1)", true),
+        ("BigInt(1) == '1'", true),
+        ("BigInt(1) == '1.0'", false),
+        ("BigInt('9007199254740993') == 9007199254740992", false),
+        ("BigInt(1) == 1.5", false),
+        ("Symbol('x') == 'Symbol(x)'", false),
+        ("({valueOf:function(){return 301;}}) == '301'", true),
+        ("[301] == 301", true),
+        ("var x = {}; x == x", true),
+        ("({}) == ({})", false),
+        ("301 != '301'", false),
+    ] {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let actual = Interpreter::new().run_script_with_backend(source, backend).unwrap();
+            assert_eq!(actual, JsValue::Bool(expected), "{source} with {backend:?}");
+        }
+    }
+}
+
+#[test]
+fn getv_uses_intrinsic_prototypes_and_primitive_receivers() {
+    for source in [
+        "(5).toString(16) === '5'",
+        "Number = undefined; (31).toString(16) === '1f'",
+        "Boolean = undefined; true.toString() === 'true' && false.valueOf() === false",
+        "var b = BigInt(15); BigInt = undefined; b.toString(16) === 'f'",
+        "var s = Symbol('x'); Symbol = undefined; s.description === 'x'",
+        "Object.defineProperty(Number.prototype, 'self', {get:function(){return this.valueOf();}}); (5).self === 5",
+    ] {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let actual = Interpreter::new().run_script_with_backend(source, backend);
+            assert_eq!(actual.unwrap(), JsValue::Bool(true), "{source} with {backend:?}");
+        }
+    }
+}
+
+#[test]
+fn classic_scripts_preserve_var_and_function_bindings_on_redeclaration() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        let mut interpreter = Interpreter::new();
+        interpreter.run_script_with_backend("var dbname = 'first'; function openDb() { return 1; }", backend).unwrap();
+        interpreter.run_script_with_backend("var dbname; var openDb;", backend).unwrap();
+        assert_eq!(interpreter.run_script_with_backend("dbname + ':' + openDb()", backend).unwrap(), JsValue::str("first:1"));
+        interpreter.run_script_with_backend("var dbname = 'second';", backend).unwrap();
+        assert_eq!(interpreter.run_script_with_backend("dbname", backend).unwrap(), JsValue::str("second"));
+        interpreter.run_script_with_backend("let lexicalName = 1;", backend).unwrap();
+        assert!(interpreter.run_script_with_backend("var lexicalName;", backend).is_err());
+    }
+}
+
+#[test]
 fn bindings_branches_loops_and_completion_match() {
     for source in [
         "var sum = 0; var i = 0; while (i < 100) { sum = sum + i; i++; } sum;",

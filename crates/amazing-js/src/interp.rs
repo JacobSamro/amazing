@@ -210,6 +210,9 @@ pub struct Interpreter {
     pub function_proto: Obj,
     pub array_proto: Obj,
     pub string_proto: Obj,
+    pub number_proto: Obj,
+    pub boolean_proto: Obj,
+    pub bigint_proto: Obj,
     pub symbol_proto: Obj,
     pub map_proto: Obj,
     pub set_proto: Obj,
@@ -235,6 +238,7 @@ pub struct Interpreter {
     frames: Vec<CallFrame>,
     strict_eval_context: bool,
     direct_eval_call: bool,
+    in_eval: bool,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
     timers: Vec<TimerJob>,
@@ -264,6 +268,23 @@ impl Interpreter {
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
             o.set_own("[[StringData]]", JsValue::str(""));
+            o
+        })));
+        let number_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o.set_own("[[NumberData]]", JsValue::num(0.0));
+            o
+        })));
+        let boolean_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o.set_own("[[BooleanData]]", JsValue::Bool(false));
+            o
+        })));
+        let bigint_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
             o
         })));
         let symbol_proto = Obj(Rc::new(RefCell::new({
@@ -320,6 +341,9 @@ impl Interpreter {
             function_proto,
             array_proto,
             string_proto,
+            number_proto,
+            boolean_proto,
+            bigint_proto,
             symbol_proto,
             map_proto,
             set_proto,
@@ -345,6 +369,7 @@ impl Interpreter {
             frames: Vec::new(),
             strict_eval_context: false,
             direct_eval_call: false,
+            in_eval: false,
             dom_host: None,
             dom_listeners: Vec::new(),
             timers: Vec::new(),
@@ -1133,7 +1158,13 @@ impl Interpreter {
 
     fn hoist_binding(&self, binding: &Binding, env: &EnvHandle) -> Result<(), Throw> {
         match binding {
-            Binding::Ident(identifier) => env.declare_var(&identifier.name, JsValue::Undefined)?,
+            Binding::Ident(identifier) => {
+                if self.in_eval {
+                    env.declare_var(&identifier.name, JsValue::Undefined)?;
+                } else {
+                    env.hoist_var(&identifier.name)?;
+                }
+            }
             Binding::Array(elements) => {
                 for element in elements.iter().flatten() {
                     self.hoist_binding(element, env)?;
@@ -1248,6 +1279,9 @@ impl Interpreter {
             }
             StmtKind::Var(d) => {
                 for x in &d.decls {
+                    if d.kind == ast::VarKind::Var && x.init.is_none() {
+                        continue;
+                    }
                     let v = x
                         .init
                         .as_ref()
@@ -3302,19 +3336,10 @@ impl Interpreter {
                 }
             }
             JsValue::Symbol(_) => self.get_prop_receiver(&JsValue::Object(self.symbol_proto.clone()), key, receiver),
-            JsValue::Num(_) => {
-                let prototype = self.global_env.resolve("Number")
-                    .and_then(|constructor| self.get_prop(&constructor, "prototype").ok());
-                if let Some(prototype) = prototype { self.get_prop_receiver(&prototype, key, receiver) }
-                else { Ok(JsValue::Undefined) }
-            }
-            JsValue::BigInt(_) => {
-                let prototype = self.global_env.resolve("BigInt")
-                    .and_then(|constructor| self.get_prop(&constructor, "prototype").ok());
-                if let Some(prototype) = prototype { self.get_prop_receiver(&prototype, key, receiver) }
-                else { Ok(JsValue::Undefined) }
-            }
-            _ => Ok(JsValue::Undefined),
+            JsValue::Num(_) => self.get_prop_receiver(&JsValue::Object(self.number_proto.clone()), key, receiver),
+            JsValue::Bool(_) => self.get_prop_receiver(&JsValue::Object(self.boolean_proto.clone()), key, receiver),
+            JsValue::BigInt(_) => self.get_prop_receiver(&JsValue::Object(self.bigint_proto.clone()), key, receiver),
+            JsValue::Null | JsValue::Undefined => Ok(JsValue::Undefined),
         }
     }
     fn set_prop(&mut self, v: &JsValue, key: impl Into<PropertyKey>, x: JsValue) -> Result<(), Throw> {
@@ -3770,15 +3795,14 @@ impl Interpreter {
     fn loose_eq(&mut self, a: &JsValue, b: &JsValue) -> Result<bool, Throw> {
         use JsValue::*;
         Ok(match (a, b) {
-            (Undefined, Null) | (Null, Undefined) | (Undefined, Undefined) | (Null, Null) => true,
-            (Num(x), Num(y)) => x == y,
-            (BigInt(x), BigInt(y)) => x == y,
-            (BigInt(x), Num(y)) | (Num(y), BigInt(x)) =>
-                Self::compare_bigint_number(x, *y) == Some(std::cmp::Ordering::Equal),
+            (Undefined, Undefined) | (Null, Null) => true,
+            (Bool(_), Bool(_)) | (Num(_), Num(_)) | (BigInt(_), BigInt(_))
+            | (Str(_), Str(_)) | (Symbol(_), Symbol(_)) | (Object(_), Object(_)) => self.strict_eq(a, b),
+            (Undefined, Null) | (Null, Undefined) => true,
+            (Num(_), Str(_)) => self.loose_eq(a, &Num(b.to_number()?))?,
+            (Str(_), Num(_)) => self.loose_eq(&Num(a.to_number()?), b)?,
             (BigInt(x), Str(y)) | (Str(y), BigInt(x)) =>
                 BinaryBigInt::parse_string(&y.to_utf8_lossy()).is_some_and(|parsed| x.as_ref() == &parsed),
-            (Str(x), Str(y)) => x == y,
-            (Symbol(x), Symbol(y)) => x == y,
             (Bool(_), _) => {
                 let n = a.to_number()?;
                 self.loose_eq(&Num(n), b)?
@@ -3795,7 +3819,10 @@ impl Interpreter {
                 let p = self.primitive(a.clone())?;
                 self.loose_eq(&p, b)?
             }
-            (Object(x), Object(y)) => Rc::ptr_eq(&x.0, &y.0),
+            (BigInt(x), Num(y)) | (Num(y), BigInt(x)) =>
+                Self::compare_bigint_number(x, *y) == Some(std::cmp::Ordering::Equal),
+            (Null | Undefined, Object(object)) | (Object(object), Null | Undefined) =>
+                object.borrow().is_html_dda,
             _ => false,
         })
     }
