@@ -1,6 +1,7 @@
 use amazing_css::selectors::PseudoElement;
 use amazing_css::{
-    compute, parse_stylesheet, recompute_roots, MutationKind, RenderMutation, StyleInvalidator,
+    compute, parse_stylesheet, recompute_roots, AttributeStyleUpdate, MutationKind, RenderMutation,
+    CachedBoxSize, StyleChangeKind, StyleInvalidator,
 };
 use amazing_dom::{Dom, NodeIdx};
 
@@ -170,4 +171,93 @@ fn root_font_change_recomputes_rem_from_initial_root_basis() {
     let delta = recompute_roots(&dom, &old, roots);
     assert_eq!(delta.styles.get(child).unwrap().used_length_px("width"), Some(40.0));
     invalidator.compare_to_full(&dom, &delta.styles).unwrap();
+}
+
+#[test]
+fn classified_attribute_update_covers_class_style_inheritance_and_rebuild() {
+    let (mut dom, sheet, first, child, _) = fixture(
+        ".paint { color:red } .rebuild { display:none }",
+    );
+    let invalidator = StyleInvalidator::new(&[sheet.clone()], 1);
+    let old = compute(&dom, &[sheet]);
+    dom.set_attribute(first, "class", "paint").unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "class", None, Some("paint"), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::PaintOnly);
+    assert_eq!(update.change_kind(child), StyleChangeKind::PaintOnly);
+    let AttributeStyleUpdate::Recomputed(delta) = update else { panic!("class changed selector matches") };
+    assert!(!delta.full_rebuild);
+    invalidator.compare_to_full(&dom, &delta.styles).unwrap();
+
+    dom.set_attribute(first, "class", "rebuild").unwrap();
+    let update = invalidator.update_attribute(&dom, &delta.styles, first, "class", Some("paint"), Some("rebuild"), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::Rebuild);
+
+    dom.set_attribute(first, "class", "").unwrap();
+    let width_sheet = parse_stylesheet(".wide { width:20px }");
+    let invalidator = StyleInvalidator::new(&[width_sheet.clone()], 1);
+    let old = compute(&dom, &[width_sheet]);
+    dom.set_attribute(first, "class", "wide").unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "class", Some(""), Some("wide"), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::Layout);
+}
+
+#[test]
+fn compositor_values_need_stable_inline_winner_and_no_selector_dependency() {
+    let (mut dom, sheet, _, _, first) = fixture("div { color:blue }");
+    dom.set_attribute(first, "style", "opacity:.4; transform:translate(2px, 3px)").unwrap();
+    let invalidator = StyleInvalidator::new(&[sheet.clone()], 1);
+    let mut old = compute(&dom, &[sheet]);
+    let new_style = "opacity:.6; transform:translate(4px, 3px)";
+    dom.set_attribute(first, "style", new_style).unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "style",
+        Some("opacity:.4; transform:translate(2px, 3px)"), Some(new_style), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::CompositorOnly);
+    let AttributeStyleUpdate::CompositorOnly(values) = update else { panic!("expected value-only delta") };
+    assert_eq!(values.opacity, Some(0.6));
+    assert_eq!(values.transform_matrix.as_ref().map(|matrix| (matrix[0][3], matrix[1][3])), Some((4.0, 3.0)));
+    assert!(values.apply_to_styles(&mut old));
+    assert_eq!(old.get(first).unwrap().get("opacity"), Some("0.6"));
+    assert_eq!(old.get(first).unwrap().get("transform"), Some("translate(4px,3px)"));
+    let next_style = "opacity:.7; transform:translate(6px, 3px)";
+    dom.set_attribute(first, "style", next_style).unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "style", Some(new_style), Some(next_style), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::CompositorOnly);
+
+    let old = compute(&dom, &[parse_stylesheet("")]);
+    dom.set_attribute(first, "style", "opacity:1; transform:none").unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "style", Some(next_style),
+        Some("opacity:1; transform:none"), 1);
+    assert_eq!(update.change_kind(first), StyleChangeKind::Rebuild);
+
+    let dependent = parse_stylesheet("[style] { color:red }");
+    let invalidator = StyleInvalidator::new(&[dependent.clone()], 1);
+    dom.set_attribute(first, "style", "opacity:.4; transform:none").unwrap();
+    let old = compute(&dom, &[dependent]);
+    dom.set_attribute(first, "style", "opacity:.5; transform:none").unwrap();
+    let update = invalidator.update_attribute(&dom, &old, first, "style",
+        Some("opacity:.4; transform:none"), Some("opacity:.5; transform:none"), 1);
+    assert!(matches!(update, AttributeStyleUpdate::Recomputed(_)));
+}
+
+#[test]
+fn transform_matrix_uses_cached_box_for_origin_and_percentages() {
+    let (mut dom, sheet, _, _, node) = fixture("");
+    let old_style = "transform:rotate(0deg)";
+    let new_style = "transform:translate(10%, 0px) rotate(90deg) scale(2)";
+    dom.set_attribute(node, "style", old_style).unwrap();
+    let invalidator = StyleInvalidator::new(&[sheet.clone()], 1);
+    let old = compute(&dom, &[sheet]);
+    dom.set_attribute(node, "style", new_style).unwrap();
+    let fallback = invalidator.update_attribute(&dom, &old, node, "style", Some(old_style), Some(new_style), 1);
+    assert_eq!(fallback.change_kind(node), StyleChangeKind::Layout);
+
+    let update = invalidator.update_attribute_with_box(&dom, &old, node, "style", Some(old_style),
+        Some(new_style), 1, Some(CachedBoxSize { width: 100.0, height: 40.0 }));
+    assert_eq!(update.change_kind(node), StyleChangeKind::CompositorOnly);
+    let AttributeStyleUpdate::CompositorOnly(delta) = update else { panic!("expected matrix") };
+    let matrix = delta.transform_matrix.unwrap();
+    let x = matrix[0][0] * 50.0 + matrix[0][1] * 20.0 + matrix[0][3];
+    let y = matrix[1][0] * 50.0 + matrix[1][1] * 20.0 + matrix[1][3];
+    assert!((x - 60.0).abs() < 0.001);
+    assert!((y - 20.0).abs() < 0.001);
 }
