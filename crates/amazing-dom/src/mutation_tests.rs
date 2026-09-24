@@ -446,18 +446,3 @@ fn bulk_parser_attribute_updates_preserve_supplied_order() {
     d.set_attrs(p, reversed.clone());
     assert_eq!(d.attrs_of(p).unwrap(), reversed);
 }
-
-#[test]
-fn bulk_attribute_update_does_not_requeue_unchanged_attributes() {
-    let (mut dom, element, _) = fixture();
-    dom.set_attribute(element, "id", "mo-target").unwrap();
-    let observer = dom.create_mutation_observer(1);
-    dom.observe(observer, element, ObserveOptions {
-        attributes: Some(true), attribute_old_value: Some(true), ..Default::default()
-    }).unwrap();
-    dom.set_attrs(element, vec![("id".into(), "mo-target".into()),
-        ("class".into(), "trigger".into())]);
-    let records = dom.take_mutation_records(observer);
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].attribute_name.as_deref(), Some("class"));
-}

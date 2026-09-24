@@ -414,16 +414,13 @@ impl Dom {
             return;
         }
         let old = self.attrs_of(idx).unwrap().to_vec();
-        for (name, _) in &old {
-            if !attrs.iter().any(|(n, _)| n == name) {
-                self.remove_attribute(idx, name).expect("element");
+        for (name, _) in old {
+            if !attrs.iter().any(|(n, _)| *n == name) {
+                self.remove_attribute(idx, &name).expect("element");
             }
         }
         for (name, value) in &attrs {
-            if !old.iter().any(|(previous_name, previous_value)|
-                previous_name == name && previous_value == value) {
-                self.set_attribute(idx, name, value).expect("element");
-            }
+            self.set_attribute(idx, name, value).expect("element");
         }
         // Preserve the parser primitive's exact supplied ordering. Checked
         // Element attribute operations above retain their insertion order.
