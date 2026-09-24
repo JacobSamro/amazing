@@ -34,11 +34,21 @@ const INTERFACES: &[VersionRange] = &[
     },
     VersionRange {
         interface: 10,
-        min: 2,
-        max: 2,
+        min: 3,
+        max: 3,
     },
     VersionRange {
         interface: 11,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 12,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 13,
         min: 1,
         max: 1,
     },
@@ -61,6 +71,7 @@ pub enum Role {
     Network,
     Gpu,
     Utility,
+    Storage,
 }
 impl Role {
     pub fn name(self) -> &'static str {
@@ -70,6 +81,7 @@ impl Role {
             Self::Network => "network",
             Self::Gpu => "gpu",
             Self::Utility => "utility",
+            Self::Storage => "storage",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -79,6 +91,7 @@ impl Role {
             "network" => Some(Self::Network),
             "gpu" => Some(Self::Gpu),
             "utility" => Some(Self::Utility),
+            "storage" => Some(Self::Storage),
             _ => None,
         }
     }
@@ -194,13 +207,15 @@ pub fn bootstrap_child(
     mut capabilities: Capabilities,
     bind: impl FnOnce(&Arc<Connection>, &Capabilities, Option<HandleChannel>) -> Result<(), Error>,
 ) -> Result<Arc<Connection>, Error> {
-    let frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows)) {
+    let frame_channel = if matches!(role, Role::Renderer | Role::Utility)
+        && cfg!(any(target_os = "linux", windows))
+    {
         Some(HandleChannel::from_child_env()?)
     } else {
         None
     };
     let mut input = std::io::stdin();
-    let mut output = std::io::stdout();
+    let output = std::io::stdout();
     let mut parent = recv_boot(&mut input)?;
     verify(&parent, Role::Browser)?;
     if let Some(channel) = &frame_channel {
@@ -215,7 +230,7 @@ pub fn bootstrap_child(
     let sandbox_requested = std::env::var_os("AMAZING_RENDERER_SANDBOX").is_some();
     std::env::remove_var("AMAZING_RENDERER_SANDBOX");
     if sandbox_requested {
-        if role != Role::Renderer {
+        if !matches!(role, Role::Renderer | Role::Utility) {
             return Err(Error::Role);
         }
         #[cfg(target_os = "linux")]
@@ -313,11 +328,11 @@ pub struct ProcessHost {
     last_pong: Instant,
     restarts: u32,
     policy: RestartPolicy,
-    sandboxed_renderer: bool,
+    sandboxed: bool,
     frame_channel: Mutex<Option<HandleChannel>>,
     frame_budget: Arc<Mutex<FrameBudget>>,
 }
-/// A browser mapping charged to the renderer until the browser drops its view.
+/// A browser mapping charged to the source process until the browser drops it.
 pub struct BrowserFrame {
     view: FrameView,
     budget: Arc<Mutex<FrameBudget>>,
@@ -329,6 +344,22 @@ impl BrowserFrame {
     }
     pub fn metadata(&self) -> FrameMetadata {
         self.view.metadata()
+    }
+}
+/// Decoded utility output borrows an immutable shared mapping and excludes
+/// transport padding from its public bytes.
+pub struct BrowserDecoded {
+    frame: BrowserFrame,
+    payload_len: usize,
+    pub kind: u8,
+    pub width: u32,
+    pub height: u32,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+impl BrowserDecoded {
+    pub fn bytes(&self) -> &[u8] {
+        &self.frame.bytes()[..self.payload_len]
     }
 }
 impl Drop for BrowserFrame {
@@ -354,12 +385,21 @@ impl ProcessHost {
     ) -> Result<Self, Error> {
         Self::spawn_inner(exe, Role::Renderer, capabilities, policy, true)
     }
+    /// Untrusted decoder process: no network or file authority, with a
+    /// dedicated shared-output capability and no ordinary-process fallback.
+    pub fn spawn_sandboxed_utility(
+        exe: &std::path::Path,
+        capabilities: Capabilities,
+        policy: RestartPolicy,
+    ) -> Result<Self, Error> {
+        Self::spawn_inner(exe, Role::Utility, capabilities, policy, true)
+    }
     fn spawn_inner(
         exe: &std::path::Path,
         role: Role,
         mut capabilities: Capabilities,
         policy: RestartPolicy,
-        sandboxed_renderer: bool,
+        sandboxed: bool,
     ) -> Result<Self, Error> {
         let mut command = Command::new(exe);
         command
@@ -368,10 +408,11 @@ impl ProcessHost {
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         command.env_remove("AMAZING_RENDERER_SANDBOX");
-        if sandboxed_renderer {
+        if sandboxed {
             command.env("AMAZING_RENDERER_SANDBOX", "1");
         }
-        let mut frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows))
+        let mut frame_channel = if matches!(role, Role::Renderer | Role::Utility)
+            && cfg!(any(target_os = "linux", windows))
         {
             Some(HandleChannel::prepare_child(&mut command)?)
         } else {
@@ -383,11 +424,13 @@ impl ProcessHost {
                 .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
         }
         #[cfg(windows)]
-        let mut child = if sandboxed_renderer {
+        let mut child = if sandboxed {
             let nonce = frame_channel.as_ref().ok_or(Error::Role)?.nonce_hex();
-            HostedChild::Sandboxed(amazing_ipc_platform::spawn_renderer_appcontainer(
-                exe, &nonce,
-            )?)
+            HostedChild::Sandboxed(if role == Role::Utility {
+                amazing_ipc_platform::spawn_utility_appcontainer(exe, &nonce)?
+            } else {
+                amazing_ipc_platform::spawn_renderer_appcontainer(exe, &nonce)?
+            })
         } else {
             HostedChild::Standard(command.spawn()?)
         };
@@ -438,7 +481,7 @@ impl ProcessHost {
             last_pong: Instant::now(),
             restarts: 0,
             policy,
-            sandboxed_renderer,
+            sandboxed,
             frame_channel: Mutex::new(frame_channel),
             frame_budget: Arc::new(Mutex::new(FrameBudget::new())),
         };
@@ -513,6 +556,130 @@ impl ProcessHost {
             generation: metadata.generation,
         })
     }
+    /// Map decoded bytes only from the launched utility child, after its
+    /// demand-driven publication. Any side-channel failure closes the pipe.
+    pub fn receive_decoded(&self, ready: &protocol::DecodedReady) -> Result<BrowserDecoded, Error> {
+        if self.role != Role::Utility {
+            return Err(Error::Role);
+        }
+        let metadata = ready.shared.metadata()?;
+        let payload_len = ready.payload_len as usize;
+        if payload_len == 0 || payload_len > metadata.byte_len as usize {
+            return Err(Error::Limit);
+        }
+        match ready.kind {
+            utility::IMAGE
+                if (ready.width as usize)
+                    .checked_mul(ready.height as usize)
+                    .and_then(|n| n.checked_mul(4))
+                    != Some(payload_len) =>
+            {
+                return Err(Error::Limit)
+            }
+            utility::AUDIO
+                if ready.channels == 0
+                    || ready.sample_rate == 0
+                    || payload_len % (ready.channels as usize * 2) != 0 =>
+            {
+                return Err(Error::Limit)
+            }
+            utility::FONT | utility::IMAGE | utility::AUDIO => (),
+            _ => return Err(Error::Role),
+        }
+        let mut channel_guard = self.frame_channel.lock().unwrap();
+        let channel = channel_guard.as_ref().ok_or(Error::Role)?;
+        let mut budget = self.frame_budget.lock().unwrap();
+        budget.reserve(metadata.generation, metadata.byte_len as usize)?;
+        let proxy = protocol::UtilityProxy::new(self.connection.clone(), Duration::from_secs(5));
+        let request = protocol::AcquireFrame {
+            generation: metadata.generation,
+        };
+        match proxy.acquire(request.clone()) {
+            Ok(protocol::AcquireResult::Transferred(())) => (),
+            Ok(protocol::AcquireResult::Superseded(latest)) => {
+                budget.release(metadata.generation);
+                return Err(Error::Superseded(latest));
+            }
+            Ok(protocol::AcquireResult::Busy(())) => {
+                budget.release(metadata.generation);
+                return Err(Error::Busy);
+            }
+            Err(error) => {
+                budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
+                return Err(error.into());
+            }
+        }
+        let view = match channel.receive(metadata, self.child.id()) {
+            Ok(view) => view,
+            Err(error) => {
+                budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
+                return Err(error.into());
+            }
+        };
+        if !matches!(proxy.received(request), Ok(true)) {
+            budget.release(metadata.generation);
+            channel_guard.take();
+            self.connection.close();
+            return Err(Error::Dead);
+        }
+        if !matches!(
+            proxy.release(protocol::ReleaseFrame {
+                generation: metadata.generation
+            }),
+            Ok(true)
+        ) {
+            budget.release(metadata.generation);
+            channel_guard.take();
+            self.connection.close();
+            return Err(Error::Dead);
+        }
+        budget.protect(metadata.generation);
+        drop(budget);
+        Ok(BrowserDecoded {
+            frame: BrowserFrame {
+                view,
+                budget: self.frame_budget.clone(),
+                generation: metadata.generation,
+            },
+            payload_len,
+            kind: ready.kind,
+            width: ready.width,
+            height: ready.height,
+            sample_rate: ready.sample_rate,
+            channels: ready.channels,
+        })
+    }
+    /// The browser's fail-closed decoder entry point. A timeout, child crash,
+    /// malformed result, or mapping failure tears down this one utility child.
+    pub fn decode_untrusted(
+        &mut self,
+        kind: u8,
+        bytes: &[u8],
+        timeout: Duration,
+    ) -> Result<BrowserDecoded, Error> {
+        if self.role != Role::Utility || !self.sandboxed {
+            return Err(Error::Role);
+        }
+        if timeout.is_zero() || bytes.is_empty() || bytes.len() > codec::MAX_FRAME - 4096 {
+            return Err(Error::Limit);
+        }
+        let proxy = protocol::UtilityProxy::new(self.connection.clone(), timeout);
+        let result = proxy
+            .decode(protocol::DecodeRequest {
+                kind,
+                bytes: codec::ByteBuf(bytes.to_vec()),
+            })
+            .map_err(Error::from)
+            .and_then(|ready| self.receive_decoded(&ready));
+        if result.is_err() {
+            let _ = self.kill();
+        }
+        result
+    }
     pub fn crashed(&mut self) -> Result<bool, Error> {
         Ok(self.child.try_wait()? || self.connection.is_closed())
     }
@@ -544,13 +711,7 @@ impl ProcessHost {
         if self.restarts >= max_restarts {
             return Ok(false);
         };
-        let next = Self::spawn_inner(
-            exe,
-            self.role,
-            capabilities,
-            self.policy,
-            self.sandboxed_renderer,
-        )?;
+        let next = Self::spawn_inner(exe, self.role, capabilities, self.policy, self.sandboxed)?;
         let count = self.restarts + 1;
         *self = next;
         self.restarts = count;
@@ -665,6 +826,8 @@ pub mod network;
 pub mod network_v2;
 pub mod protocol;
 pub mod renderer;
+pub mod storage;
+pub mod utility;
 
 /// Browser-side liveness observer. A crash is emitted once per renderer host.
 pub struct RendererMonitor {

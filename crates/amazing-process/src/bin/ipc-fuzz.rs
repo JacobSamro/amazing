@@ -65,6 +65,11 @@ const DECODERS: &[Target] = decoder_targets![
     NetworkComplete,
     NetworkReply,
     GpuFrame,
+    DecodeRequest,
+    DecodedReady,
+    StoragePartition,
+    StorageEntry,
+    StoragePut,
 ];
 fn snapshot_decode(bytes: &[u8]) -> u64 {
     match amazing_process::gpu_snapshot_wire::decode_snapshot(bytes) {
@@ -73,6 +78,29 @@ fn snapshot_decode(bytes: &[u8]) -> u64 {
         }
         Err(error) => decode_error(error),
     }
+}
+fn utility_payloads(bytes: &[u8]) -> u64 {
+    if bytes.len() > codec::MAX_FRAME - 4096 {
+        return 3;
+    }
+    let image = if bytes.iter().copied().find(|b| !b.is_ascii_whitespace()) == Some(b'<') {
+        amazing_svg::decode(bytes, amazing_svg::DecodeLimits::default()).is_ok()
+    } else {
+        amazing_media::decode_image(bytes).is_ok()
+    };
+    let audio = amazing_media::decode_wav(bytes).is_ok();
+    let font = match bytes.get(..4) {
+        Some(b"wOFF") => Some(amazing_text_provider::FontFormat::Woff),
+        Some(b"wOF2") => Some(amazing_text_provider::FontFormat::Woff2),
+        Some(b"OTTO") | Some(b"true") | Some([0, 1, 0, 0]) => {
+            Some(amazing_text_provider::FontFormat::OpenType)
+        }
+        _ => None,
+    };
+    let font = font.is_some_and(|format| {
+        amazing_text_provider::decode_web_font_to_sfnt(format, bytes).is_ok()
+    });
+    u64::from(image) | (u64::from(audio) << 1) | (u64::from(font) << 2)
 }
 fn requests(
     bytes: &[u8],
@@ -109,13 +137,19 @@ fn network(bytes: &[u8]) -> u64 {
     requests(bytes, NetworkProxy::validate_request, 3)
 }
 fn network_v2(bytes: &[u8]) -> u64 {
-    requests(bytes, NetworkProxyV2::validate_request, 4)
+    requests(bytes, NetworkProxyV2::validate_request, 5)
 }
 fn events(bytes: &[u8]) -> u64 {
     requests(bytes, BrowserEventsProxy::validate_request, 1)
 }
 fn gpu(bytes: &[u8]) -> u64 {
     requests(bytes, GpuProxy::validate_request, 1)
+}
+fn utility(bytes: &[u8]) -> u64 {
+    requests(bytes, UtilityProxy::validate_request, 4)
+}
+fn storage(bytes: &[u8]) -> u64 {
+    requests(bytes, StorageProxy::validate_request, 4)
 }
 fn demo_echo(bytes: &[u8]) -> u64 {
     requests(bytes, DemoEchoProxy::validate_request, 1)
@@ -136,6 +170,8 @@ const DISPATCHERS: &[Target] = &[
     ("NetworkRequestsV2", network_v2),
     ("BrowserEvents", events),
     ("GpuPresentation", gpu),
+    ("UtilityDecoder", utility),
+    ("StorageService", storage),
     ("DemoEcho", demo_echo),
     ("SandboxProbe", sandbox_probe),
     ("Ping", ping),
@@ -156,7 +192,7 @@ const SEEDS: &[&str] = &[
     include_str!("../../fuzz/corpus/packet.hex"),
 ];
 fn valid_seeds() -> Vec<Vec<u8>> {
-    vec![
+    let mut seeds = vec![
         codec::encode(&Packet {
             interface: 11,
             id: 1,
@@ -189,6 +225,24 @@ fn valid_seeds() -> Vec<Vec<u8>> {
             snapshot: codec::ByteBuf(vec![1, 0]),
         })
         .unwrap(),
+        codec::encode(&DecodeRequest {
+            kind: amazing_process::utility::IMAGE,
+            bytes: codec::ByteBuf(b"P6\n1 1\n255\n\x10\x20\x30".to_vec()),
+        })
+        .unwrap(),
+        codec::encode(&StoragePut {
+            entry: StorageEntry {
+                partition: StoragePartition {
+                    origin: "https://a.test".into(),
+                    top_level_site: "https://a.test".into(),
+                    bucket: "default".into(),
+                },
+                namespace: "local".into(),
+                key: codec::ByteBuf(b"key".to_vec()),
+            },
+            value: codec::ByteBuf(b"value".to_vec()),
+        })
+        .unwrap(),
         amazing_process::gpu_snapshot_wire::encode_snapshot(
             &amazing_compositor::CompositorFrameSnapshot {
                 version: amazing_compositor::SNAPSHOT_VERSION,
@@ -207,7 +261,11 @@ fn valid_seeds() -> Vec<Vec<u8>> {
             },
         )
         .unwrap(),
-    ]
+    ];
+    seeds.push(include_bytes!("../../tests/fixtures/synthetic-a.ttf").to_vec());
+    seeds.push(b"P6\n1 1\n255\n\x10\x20\x30".to_vec());
+    seeds.push(b"RIFF\x26\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x11\x2b\x00\x00\x11\x2b\x00\x00\x01\x00\x08\x00data\x02\x00\x00\x00\x00\xff".to_vec());
+    seeds
 }
 fn next(state: &mut u64) -> u64 {
     *state ^= *state << 13;
@@ -297,6 +355,10 @@ fn main() {
             .chain(std::iter::once((
                 "CompositorFrameSnapshot",
                 snapshot_decode as fn(&[u8]) -> u64,
+            )))
+            .chain(std::iter::once((
+                "UtilityPayloads",
+                utility_payloads as fn(&[u8]) -> u64,
             )))
             .collect(),
         "dispatchers" => DISPATCHERS.to_vec(),
