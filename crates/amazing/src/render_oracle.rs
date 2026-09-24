@@ -3,7 +3,7 @@
 //! The driver retains CSS, layout and compositor state across rendering updates.
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
-use amazing_compositor::{Compositor, PaintDelta, PaintItemKey, PaintViewSource, Presenter, ReferenceCpuPresenter};
+use amazing_compositor::{Compositor, PaintDelta, PaintItemKey, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, classify_pixel_parity};
 use amazing_css::{AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
@@ -162,6 +162,13 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    pub(crate) fn pixel_parity(&self, candidate: &Surface, full: &Surface) -> PixelParity {
+        self.session.as_ref().map_or_else(
+            || PixelParity { losses: 1, ..PixelParity::default() },
+            |session| classify_pixel_parity(&session.presenter, candidate, full),
+        )
+    }
+
     /// The rendering update offers a retained scene the journal before any
     /// style, layout or paint work. A rejected classification follows the
     /// ordinary full rendering path with the same journal intact.

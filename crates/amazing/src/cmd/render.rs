@@ -451,10 +451,19 @@ fn paint_host_surface_with_updates(
             Ok(candidate) => {
                 eprintln!("amazing oracle: frame uploads={} dirtied_tiles={}",
                     candidate.uploads, candidate.dirtied_tiles);
-                if let Some(first) = crate::render_oracle::first_pixel_mismatch(&candidate.pixels, &full) {
-                    crate::render_oracle::parity_loss(&format!("pixel ({}, {}): candidate {:?}, full {:?}", first.x, first.y, first.candidate, first.full), Some(&candidate.pixels), &full);
+                let parity = coordinator.pixel_parity(&candidate.pixels, &full);
+                if parity.losses > 0 {
+                    let detail = parity.first_loss.map_or_else(
+                        || format!("pixel parity lost {} pixels or frame dimensions differ", parity.losses),
+                        |first| format!("pixel ({}, {}): candidate {:?}, full {:?}; losses={}",
+                            first.x, first.y, first.candidate, first.full, parity.losses),
+                    );
+                    crate::render_oracle::parity_loss(&detail, Some(&candidate.pixels), &full);
                     coordinator.reset_scene();
                 } else {
+                    if parity.layer_rounding > 0 {
+                        crate::render_oracle::layer_rounding(parity.layer_rounding as usize);
+                    }
                     crate::render_oracle::matched(full.width, full.height);
                     return Ok(candidate.pixels);
                 }
