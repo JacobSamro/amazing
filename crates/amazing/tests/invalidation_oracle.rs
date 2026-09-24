@@ -10,6 +10,7 @@ fn assert_oracle_parity(name: &str, html_source: &str) {
     let run = |oracle: bool, output: &std::path::Path| {
         let mut command = Command::new(env!("CARGO_BIN_EXE_amazing"));
         command.args(["render-wpt", html.to_str().unwrap(), output.to_str().unwrap(), "512", "512"]);
+        command.env("AMAZING_STORAGE_DIR", dir.join("storage"));
         if oracle { command.env("AMAZING_INVALIDATION_ORACLE", "1"); }
         command.output().unwrap()
     };
@@ -19,6 +20,8 @@ fn assert_oracle_parity(name: &str, html_source: &str) {
     assert!(oracle.status.success(), "{}", String::from_utf8_lossy(&oracle.stderr));
     assert_eq!(std::fs::read(&direct_image).unwrap(), std::fs::read(&oracle_image).unwrap());
     assert!(String::from_utf8_lossy(&oracle.stderr).contains("compositor/full pixel parity"),
+        "{}", String::from_utf8_lossy(&oracle.stderr));
+    assert!(String::from_utf8_lossy(&oracle.stderr).contains("full_fallback=false"),
         "{}", String::from_utf8_lossy(&oracle.stderr));
     std::fs::remove_dir_all(dir).unwrap();
 }
