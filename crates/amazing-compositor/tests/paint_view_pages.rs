@@ -1,6 +1,6 @@
 use amazing_compositor::{
     baked_paint_view_compositor, paint_view_metadata, CompositingReasons, Compositor, PaintChunk,
-    PaintViewRasterMode, PaintViewSource, Positioning, Presenter, Rect, ReferenceCpuPresenter,
+    BoundProperty, BoundPropertyNode, PaintViewRasterMode, PaintViewSource, Positioning, Presenter, Rect, ReferenceCpuPresenter,
     ScrollId, StickyConstraint,
 };
 use amazing_paint::controls::NoControls;
@@ -16,6 +16,32 @@ const REFTEST_COLORS: &str =
     include_str!("../../../tests/wpt-replaced-content/rc6-fixtures/inherited-variable.html");
 const LONG_ARTICLE: &str = r#"<body><header>Long article</header><main><h1>Chapter one</h1><p>Text wraps through a narrow column of paragraphs.</p><p>More text follows beneath the fold.</p><p>And more lines continue for scrolling.</p><p>Final paragraph at the bottom.</p></main></body>"#;
 const EFFECTS_PAGE: &str = r#"<body><div class='fixed'>Fixed</div><section class='scroller'><div class='moving'>Move</div><div class='fade'>Fade</div><p>Overflow content</p><p>More overflow content</p></section></body>"#;
+
+#[test]
+fn paint_view_owner_mapping_binds_dom_properties_to_tree_nodes() {
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='outer'><div class='inner'></div></div></body>",
+        "body{margin:0}.outer{width:30px;height:30px;overflow:scroll;transform:translate(2px,3px);opacity:.5}.inner{width:10px;height:10px;background:blue}",
+        48., &text,
+    );
+    let view = DisplayListView::with_node_generations(
+        &root, 48, 48, &text, &NoImages, &NoControls, &|_| Some(7),
+    );
+    let source = PaintViewSource::new(&view);
+    let bindings = source.property_bindings().expect("stable paint owners");
+    assert_eq!(bindings.len(), 3);
+    let owner = bindings[0].0.node;
+    assert!(bindings.iter().all(|(key, _)| key.node == owner && key.generation == 7));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Transform && matches!(target, BoundPropertyNode::Transform(_))));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Opacity && matches!(target, BoundPropertyNode::Opacity(_))));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Scroll && matches!(target, BoundPropertyNode::Scroll(_))));
+    let mut compositor = source.compositor(48, 48).unwrap();
+    compositor.bind_property_nodes(&bindings).unwrap();
+}
 
 fn compare(name: &str, html: &str, css: &str) {
     let text = FallbackTextSystem::new();
@@ -98,6 +124,29 @@ fn effects_scroller_512_matches_full_painter_at_opacity_edge() {
             &root, SIZE, SIZE, &text, &NoImages, &NoControls,
         );
         assert_eq!(actual.pixels, expected.pixels, "{name} 512x512 opacity parity");
+    }
+}
+
+#[test]
+fn nested_opacity_matches_full_painter() {
+    const SIZE: u32 = 64;
+    let text = FallbackTextSystem::new();
+    let html = "<body><div class='outer'><div class='inner'></div></div></body>";
+    for (outer, inner) in [(0.5, 0.5), (0.3, 0.5), (0.5, 0.3),
+        (0.7, 0.5), (0.5, 0.7), (0.25, 0.75), (0.6, 0.6)] {
+        let css = format!("body{{margin:0;background:white}}.outer{{width:20px;height:20px;opacity:{outer}}}.inner{{width:20px;height:20px;background:rgb(0 128 0);opacity:{inner}}}");
+        let root = amazing_layout::layout_document_with_text(html, &css, SIZE as f32, &text);
+        let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        assert!(view.effects().len() >= 3, "nested effects must survive the view");
+        let source = PaintViewSource::new(&view);
+        assert_eq!(source.mode(), PaintViewRasterMode::RawLocal);
+        let mut compositor = source.compositor(SIZE, SIZE).unwrap();
+        let frame = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        assert_eq!(actual.pixels, expected.pixels, "nested opacity {outer} × {inner}: compositor {:?}, paint {:?}",
+            actual.get_pixel(5, 5), expected.get_pixel(5, 5));
     }
 }
 
