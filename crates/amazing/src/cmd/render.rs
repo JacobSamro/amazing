@@ -405,7 +405,7 @@ fn paint_host_surface_with_updates(
             }));
         let layout_divergence = crate::render_oracle::first_layout_mismatch(coordinator.layout_root(), &root);
         let candidate = coordinator.compositor_candidate(
-            &dom.dom, &root, width.max(1.0) as u32, page_height,
+            &dom.dom, width.max(1.0) as u32, page_height,
             &page_text.provider, &paint, paint_update.as_ref(),
         );
         let work = coordinator.last_work();

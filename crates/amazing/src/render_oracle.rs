@@ -394,13 +394,13 @@ impl RenderCoordinator {
 pub(crate) fn compositor_candidate(
     &mut self,
     dom: &Dom,
-    root: &LayoutBox,
     width: u32,
     height: u32,
     text: &dyn TextSystem,
     paint: &PagePaint<'_>,
     paint_update: Option<&PaintViewUpdate>,
 ) -> Result<CandidateFrame, String> {
+    let root = self.layout.as_ref().expect("oracle layout initialized").root();
     let view = DisplayListView::with_dom_generations(root, width, height, text, paint, &NoControls, dom);
     let paint = PaintSnapshot::from_view(&view);
     let source = PaintViewSource::new(&view);
