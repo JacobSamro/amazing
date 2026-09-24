@@ -323,6 +323,8 @@ LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-bindings/src/interfac
 LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/page.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/main.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/render.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs", "Cargo.toml", "Cargo.lock", "crates/amazing-shell-gpui/Cargo.lock"])
 # IPC-10: adapter dependency and module line.
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/main.rs", "Cargo.lock"])
+# Structured serialize/deserialize (HTML StructuredSerializeInternal) lives in one amazing-js module.
+LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
