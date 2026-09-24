@@ -432,14 +432,23 @@ pub(crate) fn first_layout_mismatch(candidate: &LayoutBox, full: &LayoutBox) -> 
 }
 
 fn layout_box_size(root: &LayoutBox, node: NodeIdx) -> Option<CachedBoxSize> {
-    if root.node == Some(node) {
-        return Some(CachedBoxSize { width: root.border_box.w, height: root.border_box.h });
+    fn visit(box_: &LayoutBox, node: NodeIdx, found: &mut Option<CachedBoxSize>, ambiguous: &mut bool) {
+        if box_.node == Some(node) {
+            if found.is_some() { *ambiguous = true; }
+            else { *found = Some(CachedBoxSize { width: box_.border_box.w, height: box_.border_box.h }); }
+        }
+        let children = match &box_.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children.as_slice(),
+            _ => &[],
+        };
+        for child in children.iter().chain(&box_.positioned) {
+            visit(child, node, found, ambiguous);
+        }
     }
-    let children = match &root.flow {
-        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children.as_slice(),
-        _ => &[],
-    };
-    children.iter().chain(&root.positioned).find_map(|child| layout_box_size(child, node))
+    let mut found = None;
+    let mut ambiguous = false;
+    visit(root, node, &mut found, &mut ambiguous);
+    (!ambiguous).then_some(found).flatten()
 }
 
 #[derive(Clone)]
