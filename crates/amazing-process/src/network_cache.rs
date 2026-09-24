@@ -7,13 +7,17 @@ use amazing_fetch::HeaderList;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime};
 
 const MAGIC: &[u8; 8] = b"AMHC0001";
 const MAX_FILE: u64 = 32 * 1024 * 1024;
 const MAX_FIELD: usize = 8 * 1024 * 1024;
+static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 pub struct DiskCache {
     path: PathBuf,
+    temp: PathBuf,
 }
 
 impl DiskCache {
@@ -22,8 +26,11 @@ impl DiskCache {
     pub fn open(dir: impl AsRef<Path>, limits: CacheLimits) -> io::Result<(CacheStore, Self)> {
         let dir = dir.as_ref();
         fs::create_dir_all(dir)?;
+        discard_stale_temps(dir);
+        let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
         let disk = Self {
             path: dir.join("http-cache-v1.bin"),
+            temp: dir.join(format!("http-cache-v1.{}.{id}.tmp", std::process::id())),
         };
         let storage = match File::open(&disk.path) {
             Ok(file) => match read_snapshot(file) {
@@ -48,17 +55,44 @@ impl DiskCache {
     /// one. Failed writes leave the previous cache available on restart.
     pub fn save(&self, store: &CacheStore) -> io::Result<()> {
         let bytes = encode(store)?;
-        let temp = self.path.with_extension("tmp");
         let result = (|| {
-            let mut file = File::create(&temp)?;
+            let mut file = File::create(&self.temp)?;
             file.write_all(&bytes)?;
             file.sync_all()?;
-            fs::rename(&temp, &self.path)
+            fs::rename(&self.temp, &self.path)
         })();
         if result.is_err() {
-            let _ = fs::remove_file(&temp);
+            let _ = fs::remove_file(&self.temp);
         }
         result
+    }
+}
+
+impl Drop for DiskCache {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.temp);
+    }
+}
+
+fn discard_stale_temps(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with("http-cache-v1.") || !name.ends_with(".tmp") {
+            continue;
+        }
+        let old = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+            .is_some_and(|age| age > Duration::from_secs(60));
+        if old {
+            let _ = fs::remove_file(entry.path());
+        }
     }
 }
 

@@ -231,3 +231,37 @@ fn network_child_serves_disk_cache_after_restart() {
     }
     fs::remove_dir_all(path).unwrap();
 }
+
+#[test]
+fn simultaneous_network_children_leave_a_valid_snapshot() {
+    let path = dir("simultaneous");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let mut threads = Vec::new();
+    for id in 0..2 {
+        let path = path.clone();
+        let barrier = barrier.clone();
+        threads.push(std::thread::spawn(move || {
+            let (mut cache, disk) = DiskCache::open(&path, CacheLimits::default()).unwrap();
+            let uri = format!("https://example.test/{id}");
+            let empty = headers(&[]);
+            cache
+                .store(
+                    &request(&uri, &empty),
+                    response(b"body", &[("Cache-Control", "max-age=60")]),
+                    100,
+                    100,
+                )
+                .unwrap();
+            barrier.wait();
+            disk.save(&cache)
+        }));
+    }
+    let results: Vec<_> = threads
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect();
+    assert!(results.iter().any(Result::is_ok));
+    let (loaded, _) = DiskCache::open(&path, CacheLimits::default()).unwrap();
+    assert_eq!(loaded.len(), 1);
+    fs::remove_dir_all(path).unwrap();
+}
