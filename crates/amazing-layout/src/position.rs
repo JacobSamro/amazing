@@ -49,23 +49,28 @@ pub(crate) fn layout_positioned(
         w: viewport_width.max(0.0),
         h: viewport_height.max(0.0),
     };
-    position_subtree(root, viewport, viewport, viewport, fonts, text);
+    position_subtree(root, viewport, viewport, true, viewport, fonts, text);
 }
 
 fn position_subtree(
     box_: &mut LayoutBox,
     viewport: Rect,
     normal_containing_block: Rect,
+    normal_cb_height_definite: bool,
     inherited_positioned_cb: Rect,
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
 ) {
     if position_kind(box_) == PositionKind::Relative {
-        let (dx, dy) = relative_offset(box_, normal_containing_block, text);
+        let (dx, dy) = relative_offset(box_, normal_containing_block, normal_cb_height_definite, text);
         shift_box(box_, dx, dy);
     }
 
     let own_padding_box = padding_box(box_);
+    let own_height_definite = box_.style.get("height").is_some_and(|height| {
+        !height.eq_ignore_ascii_case("auto")
+            && (!height.contains('%') || normal_cb_height_definite)
+    });
     let descendant_positioned_cb = match position_kind(box_) {
         PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed => own_padding_box,
         PositionKind::Static | PositionKind::Sticky => inherited_positioned_cb,
@@ -78,6 +83,7 @@ fn position_subtree(
                     child,
                     viewport,
                     own_padding_box,
+                    own_height_definite,
                     descendant_positioned_cb,
                     fonts,
                     text,
@@ -117,7 +123,7 @@ fn position_subtree(
             continue;
         }
         if child.inline_atomic {
-            position_subtree(child, viewport, own_padding_box, descendant_positioned_cb, fonts, text);
+            position_subtree(child, viewport, own_padding_box, own_height_definite, descendant_positioned_cb, fonts, text);
             continue;
         }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
@@ -155,6 +161,7 @@ fn position_subtree(
             child,
             viewport,
             containing_block,
+            true,
             padding_box(child),
             fonts,
             text,
@@ -193,11 +200,16 @@ fn resolve_inset(box_: &LayoutBox, property: &str, base: f32,
         .resolve(Some(base))
 }
 
-fn relative_offset(box_: &LayoutBox, containing_block: Rect, text: Option<&dyn TextSystem>) -> (f32, f32) {
+fn relative_offset(box_: &LayoutBox, containing_block: Rect, cb_height_definite: bool, text: Option<&dyn TextSystem>) -> (f32, f32) {
     let left = resolve_inset(box_, "left", containing_block.w, text);
     let right = resolve_inset(box_, "right", containing_block.w, text);
-    let top = resolve_inset(box_, "top", containing_block.h, text);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
+    let vertical = |property| {
+        let length = values::style_length_percentage_with_units(&box_.style, property, font_units(box_, text))?;
+        if length.has_percentage && !cb_height_definite { return None; }
+        length.resolve(Some(containing_block.h))
+    };
+    let top = vertical("top");
+    let bottom = vertical("bottom");
     let rtl = box_
         .style
         .get("direction")
@@ -648,7 +660,7 @@ mod tests {
     fn percentage_relative_and_absolute_insets_use_containing_block_axes() {
         let (dom, root) = layout(
             "<body><div id=relative><div id=absolute></div></div></body>",
-            "body{margin:0} #relative{position:relative;left:10%;top:25%;width:200px;height:100px} #absolute{position:absolute;left:50%;top:50%;width:20px;height:20px}",
+            "body{margin:0;height:100px} #relative{position:relative;left:10%;top:25%;width:200px;height:100px} #absolute{position:absolute;left:50%;top:50%;width:20px;height:20px}",
             200.0,
             400.0,
         );
@@ -658,6 +670,22 @@ mod tests {
         close(relative.border_box.y, 25.0);
         close(absolute.border_box.x, 120.0);
         close(absolute.border_box.y, 75.0);
+    }
+
+    #[test]
+    fn percentage_relative_top_with_auto_containing_height_is_auto() {
+        let (dom, root) = layout(
+            "<body><div id=fixed><div id=one></div></div><div id=auto><div id=two></div></div></body>",
+            "body{margin:0} #fixed{height:100px} #one,#two{height:10px;position:relative;top:calc(25px + 50%)}",
+            200.0,
+            400.0,
+        );
+        let fixed = find_id(&root, &dom, "fixed").unwrap();
+        let one = find_id(&root, &dom, "one").unwrap();
+        let auto = find_id(&root, &dom, "auto").unwrap();
+        let two = find_id(&root, &dom, "two").unwrap();
+        close(one.border_box.y - fixed.content_box.y, 75.0);
+        close(two.border_box.y - auto.content_box.y, 0.0);
     }
 
     #[test]

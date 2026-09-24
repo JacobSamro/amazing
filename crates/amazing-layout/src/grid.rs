@@ -1984,10 +1984,19 @@ pub(crate) fn layout_grid_lanes(
     fonts: &FontSource,
 ) -> f32 {
     let spec = GridSpec::of(container, None, font_px, content_w, definite_height);
+    let fill_reverse = container.get("grid-lanes-direction")
+        .is_some_and(|value| value.split_whitespace().any(|token| token.eq_ignore_ascii_case("fill-reverse")));
     let row_lanes = spec.cols.is_empty() && !spec.rows.is_empty();
     if row_lanes {
-        return layout_row_lanes(items, &spec, content_x, content_y, content_w,
+        let height = layout_row_lanes(items, &spec, content_x, content_y, content_w,
             definite_height, font_px, container, fonts);
+        if fill_reverse {
+            for item in items.iter_mut() {
+                let mirrored = content_x + content_w - (item.border_box.x - content_x) - item.border_box.w;
+                crate::flex::translate(item, mirrored - item.border_box.x, 0.0);
+            }
+        }
+        return height;
     }
     let raw = items.iter().map(|it| parse_placement(&it.style, spec.cols.len(),
         spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
@@ -2080,9 +2089,16 @@ pub(crate) fn layout_grid_lanes(
         // the entire waterfall, never distribute free space between its items.
         let (lead, _) = pack_pair(spec.align_content, height - natural_height, 1);
         if lead != 0.0 {
-            for item in items {
+            for item in items.iter_mut() {
                 crate::flex::translate(item, 0.0, lead);
             }
+        }
+    }
+    if fill_reverse {
+        let extent = definite_height.unwrap_or(natural_height);
+        for item in items.iter_mut() {
+            let mirrored = content_y + extent - (item.border_box.y - content_y) - item.border_box.h;
+            crate::flex::translate(item, 0.0, mirrored - item.border_box.y);
         }
     }
     natural_height
@@ -2814,6 +2830,17 @@ mod tests {
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 30.0, 20.0));
         assert!(rect_eq(items[1].border_box, 0.0, 20.0, 10.0, 20.0));
         assert!(rect_eq(items[2].border_box, 15.0, 20.0, 10.0, 20.0));
+    }
+
+    #[test]
+    fn grid_lanes_fill_reverse_mirrors_the_stacking_axis() {
+        let root = crate::layout_document(
+            "<body><div></div><div></div></body>",
+            "body{display:grid-lanes;margin:0;grid-lanes-direction:row fill-reverse;grid-template-rows:20px 20px;width:100px}body>div{width:20px}",
+            100.0, &FontSource::fallback(),
+        );
+        let Flow::Grid(items) = &root.flow else { panic!("lanes missing") };
+        assert!(items.iter().all(|item| item.border_box.x >= 80.0));
     }
 
     #[test]
