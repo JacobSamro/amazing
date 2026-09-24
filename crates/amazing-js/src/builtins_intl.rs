@@ -272,6 +272,8 @@ fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
         "collation" => vec![],
         "currency" => INTL_SUPPORTED_CURRENCIES.to_vec(),
         "numberingSystem" => vec!["arab", "deva", "latn"],
+        // Expand this list when Temporal.ZonedDateTime accepts the shared IANA
+        // resolver too: Test262 constructs a ZonedDateTime for every listed ID.
         "timeZone" => vec!["UTC"],
         "unit" => vec!["bit", "byte", "celsius", "day", "degree", "foot", "gallon", "gram",
             "hour", "kilogram", "kilometer", "liter", "meter", "mile", "millimeter",

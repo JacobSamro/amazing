@@ -7,10 +7,10 @@ struct IntlSegmenterState { locale: String, granularity: String }
 struct IntlSegment { text: String, index: usize, end: usize, word_like: bool }
 
 #[derive(Clone)]
-struct IntlSegmentsState { input: String, pieces: Vec<IntlSegment> }
+struct IntlSegmentsState { input: String, granularity: String, pieces: Vec<IntlSegment> }
 
 #[derive(Clone)]
-struct IntlSegmentIteratorState { input: String, pieces: Vec<IntlSegment>, cursor: Rc<RefCell<usize>> }
+struct IntlSegmentIteratorState { input: String, granularity: String, pieces: Vec<IntlSegment>, cursor: Rc<RefCell<usize>> }
 
 impl Interpreter {
     fn install_intl_segmenter(&mut self, namespace: &Obj) {
@@ -67,7 +67,7 @@ fn intl_segmenter_segment(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     intl_method(i, &object, "containing", 1, intl_segments_containing);
     let iterator = Interpreter::native("[Symbol.iterator]", intl_segments_iterator, &i.function_proto);
     object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), binary_writable_property(iterator)).unwrap();
-    intl_register(&object, IntlState::Segments(IntlSegmentsState { input, pieces }));
+    intl_register(&object, IntlState::Segments(IntlSegmentsState { input, granularity: state.granularity, pieces }));
     Ok(JsValue::Object(object))
 }
 
@@ -150,7 +150,7 @@ fn intl_segments_containing(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     let Some(piece) = state.pieces.iter().find(|piece| piece.index <= index as usize && (index as usize) < piece.end) else {
         return Ok(JsValue::Undefined);
     };
-    intl_segment_record(i, piece, &state.input, true)
+    intl_segment_record(i, piece, &state.input, state.granularity == "word")
 }
 
 fn intl_segments_iterator(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -165,7 +165,7 @@ fn intl_segments_iterator(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -
     iterator.borrow_mut().define(WellKnownSymbol::Iterator.symbol(),
         binary_writable_property(Interpreter::native("[Symbol.iterator]", intl_segment_iterator_self, &i.function_proto))).unwrap();
     intl_register(&iterator, IntlState::SegmentIterator(IntlSegmentIteratorState {
-        input: state.input, pieces: state.pieces, cursor: Rc::new(RefCell::new(0)),
+        input: state.input, granularity: state.granularity, pieces: state.pieces, cursor: Rc::new(RefCell::new(0)),
     }));
     Ok(JsValue::Object(iterator))
 }
@@ -187,7 +187,7 @@ fn intl_segment_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue
     let result = i.object_value();
     if let Some(piece) = state.pieces.get(index) {
         *state.cursor.borrow_mut() = index + 1;
-        let value = intl_segment_record(i, piece, &state.input, true)?;
+        let value = intl_segment_record(i, piece, &state.input, state.granularity == "word")?;
         i.set_prop(&result, "value", value)?;
         i.set_prop(&result, "done", JsValue::Bool(false))?;
     } else {

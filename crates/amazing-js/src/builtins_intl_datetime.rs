@@ -6,7 +6,6 @@ struct IntlDateState {
     calendar: String,
     numbering_system: String,
     time_zone: String,
-    offset_minutes: i32,
     date_style: Option<String>,
     time_style: Option<String>,
     weekday: Option<String>,
@@ -39,23 +38,8 @@ fn intl_date_state(this: &JsValue) -> Result<IntlDateState, Throw> {
     }
 }
 
-fn intl_timezone(text: &str) -> Result<(String, i32), Throw> {
-    if ["UTC", "Etc/UTC", "Etc/GMT", "GMT"].iter().any(|name| name.eq_ignore_ascii_case(text)) {
-        return Ok(("UTC".into(), 0));
-    }
-    let sign = match text.as_bytes().first() {
-        Some(b'+') => 1, Some(b'-') => -1,
-        _ => return Err(Throw::range_error("unsupported time zone")),
-    };
-    let digits = text[1..].replace(':', "");
-    if ![2, 4].contains(&digits.len()) || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(Throw::range_error("invalid fixed-offset time zone"));
-    }
-    let hour = digits[..2].parse::<i32>().unwrap();
-    let minute = if digits.len() == 4 { digits[2..].parse::<i32>().unwrap() } else { 0 };
-    if hour > 23 || minute > 59 { return Err(Throw::range_error("invalid fixed-offset time zone")); }
-    let offset = sign * (hour * 60 + minute);
-    Ok((format!("{}{hour:02}:{minute:02}", if sign > 0 { '+' } else { '-' }), offset))
+fn intl_timezone(text: &str) -> Result<String, Throw> {
+    tz_canonicalize(text).ok_or_else(|| Throw::range_error("invalid time zone"))
 }
 
 impl Interpreter {
@@ -85,11 +69,21 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         .unwrap_or_else(|| i.object_value());
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let calendar = intl_string_option(i, &options, "calendar", &[], "gregory")?;
-    if calendar != "gregory" { return Err(Throw::range_error("unsupported calendar")); }
+    let calendar_option = intl_string_option(i, &options, "calendar", &[], "gregory")?;
+    if !(3..=8).contains(&calendar_option.len())
+        || !calendar_option.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(Throw::range_error("invalid calendar"));
+    }
+    // A well-formed but unavailable calendar falls back to the locale default.
+    let calendar = if calendar_option == "gregorian" { "gregory".into() }
+        else if calendar_option == "iso8601" { calendar_option } else { "gregory".into() };
     let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
+    if !(3..=8).contains(&numbering_system.len())
+        || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(Throw::range_error("invalid numbering system"));
+    }
     let time_zone_option = intl_string_option(i, &options, "timeZone", &[], "UTC")?;
-    let (time_zone, offset_minutes) = intl_timezone(&time_zone_option)?;
+    let time_zone = intl_timezone(&time_zone_option)?;
     let date_style = intl_optional_string(i, &options, "dateStyle", &["full", "long", "medium", "short"])?;
     let time_style = intl_optional_string(i, &options, "timeStyle", &["full", "long", "medium", "short"])?;
     let weekday = intl_optional_string(i, &options, "weekday", &["narrow", "short", "long"])?;
@@ -109,6 +103,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if (date_style.is_some() || time_style.is_some())
         && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
             hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().any(|field| field.is_some())
+            || (date_style.is_some() || time_style.is_some()) && fractional_second_digits.is_some()
     {
         return Err(Throw::type_error("dateStyle/timeStyle conflicts with components"));
     }
@@ -119,7 +114,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         if hour12.to_boolean() { "h12" } else { "h23" }.to_string()
     } else { hour_cycle_option.unwrap_or_else(|| default_cycle.into()) };
     let state = IntlDateState {
-        locale, calendar, numbering_system, time_zone, offset_minutes,
+        locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle,
     };
@@ -141,9 +136,9 @@ struct IntlCivilDate {
     hour: u32, minute: u32, second: u32, millisecond: u32,
 }
 
-fn intl_civil_date(milliseconds: f64, offset_minutes: i32) -> Option<IntlCivilDate> {
+fn intl_civil_date(milliseconds: f64, offset_seconds: i64) -> Option<IntlCivilDate> {
     if !milliseconds.is_finite() || milliseconds.abs() > 8.64e15 { return None; }
-    let local = milliseconds.trunc() as i64 + offset_minutes as i64 * 60_000;
+    let local = milliseconds.trunc() as i64 + offset_seconds * 1_000;
     let days = local.div_euclid(86_400_000);
     let day_ms = local.rem_euclid(86_400_000);
     // Civil-from-days with the Unix epoch offset (Gregorian calendar).
@@ -186,7 +181,13 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
         || state.month.is_some() || state.day.is_some();
     let has_time = state.hour.is_some() || state.minute.is_some() || state.second.is_some()
         || state.day_period.is_some() || state.fractional_second_digits.is_some();
-    if !has_date && !has_time { return data.date[3].to_string(); }
+    if !has_date && !has_time {
+        let mut default = state.clone();
+        default.year = Some("numeric".into());
+        default.month = Some("numeric".into());
+        default.day = Some("numeric".into());
+        return intl_date_pattern(&default);
+    }
     let mut date = String::new();
     if let Some(weekday) = &state.weekday {
         date.push_str(if weekday == "long" { "EEEE, " } else { "EEE, " });
@@ -227,7 +228,9 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
 }
 
 fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static str, String)> {
-    let Some(date) = intl_civil_date(milliseconds, state.offset_minutes) else {
+    let offset_seconds = (tz_offset_ns(&state.time_zone, milliseconds.trunc() as i128 * 1_000_000)
+        / 1_000_000_000) as i64;
+    let Some(date) = intl_civil_date(milliseconds, offset_seconds) else {
         return vec![("literal", "Invalid Date".into())];
     };
     let pattern = intl_date_pattern(state);
@@ -264,7 +267,7 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
                 let hour = if ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
                     let hour = date.hour % 12;
                     if state.hour_cycle == "h12" && hour == 0 { 12 } else { hour }
-                } else { date.hour };
+                } else if state.hour_cycle == "h24" && date.hour == 0 { 24 } else { date.hour };
                 ("hour", if count == 2 { format!("{hour:02}") } else { hour.to_string() })
             }
             'm' => ("minute", if count == 2 { format!("{:02}", date.minute) } else { date.minute.to_string() }),
@@ -272,9 +275,12 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
             'S' => ("fractionalSecond", format!("{:03}", date.millisecond)[..count.min(3)].to_string()),
             'a' | 'b' | 'B' => ("dayPeriod", if date.hour < 12 { data.am.to_string() } else { data.pm.to_string() }),
             'G' => ("era", if date.year > 0 { "AD".into() } else { "BC".into() }),
-            'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", if state.offset_minutes == 0 {
+            'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", if offset_seconds == 0 {
                 "UTC".into()
-            } else { format!("GMT{}", state.time_zone) }),
+            } else {
+                let minutes = offset_seconds.unsigned_abs() / 60;
+                format!("GMT{}{:02}:{:02}", if offset_seconds < 0 { '-' } else { '+' }, minutes / 60, minutes % 60)
+            }),
             _ => ("literal", ch.to_string().repeat(count)),
         };
         parts.push((kind, if ["year", "month", "day", "hour", "minute", "second", "fractionalSecond"].contains(&kind) {
@@ -374,5 +380,12 @@ mod intl_date_tests {
         let mut i = Interpreter::new();
         let value = i.run_script("let a=new Intl.DateTimeFormat('en',{dateStyle:'short',timeZone:'UTC'}).format(0); let b=new Intl.DateTimeFormat('en',{timeStyle:'short',timeZone:'+05:30'}).format(0); a+'|'+b").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "1/1/70|5:30 AM");
+    }
+
+    #[test]
+    fn iana_zone_observes_dst_transition() {
+        let mut i = Interpreter::new();
+        let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hourCycle:'h23'}); d.format(1710053940000)+'|'+d.format(1710054000000)").unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "1:59|3:00");
     }
 }

@@ -132,3 +132,44 @@ and broader locale data. `Temporal` and `DurationFormat` Intl cases are
 outside this ticket's implementation. The regex class-compilation resource
 limit affecting two language-tag tests is routed to js-lang in the lane's
 `questions.md`.
+
+## JSB-4 — Intl depth and pinned IANA time zones (in progress)
+
+The current branch adds decimal tie and increment rounding, scientific and
+engineering notation, compact notation for the bounded locales, DateTimeFormat
+option validation and defaults, DisplayNames code validation, and correct
+Segmenter `isWordLike` property presence. Its DateTimeFormat accepts IANA zone
+IDs and computes offsets per instant, including DST and historical seconds.
+
+`scripts/generate_intl_tzdata.py` consumes the official IANA
+`tzdata2026d.tar.gz` archive, SHA-256
+`0cb2aa8e333c3dc049badc42a0c61f21987b8cd44e107fa900bad764aacc7767`.
+It invokes `zic` with the explicit 1800–2500 range and packs 597 zone/link
+names into `builtins_intl_tzdata.bin` (2,237,090 bytes, SHA-256
+`0bd177c49e4a83cf96d3c85be7c159fc12e50f479642782df18cfe17ade66744`).
+The `tz_canonicalize`, `tz_offset_ns`, `tz_possible_epoch_ns`, and transition
+queries are shared nanosecond APIs for js-stdlib's Temporal implementation.
+The API has exact instants for ordinary wall times, gaps, and folds. Zone rules
+outside the generated 1800–2500 interval currently use the first/last stored
+offset and need a future extension for distant Temporal instants.
+
+The pinned Linux Test262 selection moved from 720 to 751 passing `intl402/`
+files, with zero lost passing files. The full 53,872-file Linux comparison on
+JSB-3 base `3494c85` moved from 25,601 to 25,632 passing files: 31 gained,
+zero lost files. One previously passing strict variant of the unrelated
+`staging/sm/TypedArray/sort_modifications.js` test exceeded the 60-second
+limit during both high-load full runs; isolated 120-second runs passed both
+variants. The authoritative win-001 full Test262 comparison used input SHA-256
+`a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`
+and moved from 25,601 to 25,632 passing files, with **31 gained and zero lost
+passing files or variants**. The exact final-source rerun had the same
+classification SHA-256 as the first run:
+`c39a42a25e4604dd9dac4db96ed08ba3b0be96541331663ae55292d93b06f537`.
+Win-002 nextest passed amazing-js 283/283 (one skipped) and workspace
+2,124/2,124 (five skipped); doctests passed 1/1 and 2/2.
+
+`Intl.supportedValuesOf("timeZone")` still enumerates UTC only. Enumerating
+all canonical IANA IDs before js-stdlib migrates Temporal.ZonedDateTime lost
+three previously passing Test262 files, which construct a ZonedDateTime for
+every enumerated ID. The full list can be exposed after that integration and
+must be gated together with it.

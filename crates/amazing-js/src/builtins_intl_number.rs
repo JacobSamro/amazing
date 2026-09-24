@@ -135,8 +135,8 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let min_integer = intl_integer_option(i, &options, "minimumIntegerDigits", 1, 21, 1)?;
     let currency_digits = currency.as_ref().and_then(|code| INTL_CURRENCY_DATA.iter()
         .find(|entry| entry.code == code)).map_or(2, |entry| entry.digits);
-    let default_fraction = if style == "currency" { currency_digits } else { 0 };
-    let default_max = if style == "currency" { currency_digits } else if style == "percent" { 0 } else { 3 };
+    let default_fraction = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else { 0 };
+    let default_max = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else if style == "percent" { 0 } else { 3 };
     let min_fraction = intl_integer_option(i, &options, "minimumFractionDigits", 0, 100, default_fraction)?;
     let max_fraction = intl_integer_option(i, &options, "maximumFractionDigits", 0, 100, default_max.max(min_fraction))?;
     if min_fraction > max_fraction { return Err(Throw::range_error("minimumFractionDigits exceeds maximumFractionDigits")); }
@@ -297,6 +297,40 @@ fn intl_round_scaled(value: f64, mode: &str) -> f64 {
     }
 }
 
+// ECMA-402 rounds the decimal representation of a Number. Multiplying the
+// binary float by a power of ten first changes ties such as 1.015 into 1.01499.
+fn intl_round_decimal(value: f64, negative: bool, fraction_digits: usize,
+    increment: usize, mode: &str) -> Option<String> {
+    if fraction_digits > 35 { return None; }
+    let decimal = value.to_string();
+    let (whole, fraction) = decimal.split_once('.').unwrap_or((&decimal, ""));
+    if !whole.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) { return None; }
+    let coefficient = whole.bytes().chain(fraction.bytes()).try_fold(0u128, |number, byte| {
+        number.checked_mul(10)?.checked_add((byte - b'0') as u128)
+    })?;
+    let numerator = coefficient.checked_mul(10u128.checked_pow(fraction_digits as u32)?)?;
+    let denominator = (increment as u128).checked_mul(10u128.checked_pow(fraction.len() as u32)?)?;
+    let quotient = numerator / denominator;
+    let remainder = numerator % denominator;
+    let above_half = remainder > denominator - remainder;
+    let tie = remainder == denominator - remainder;
+    let increase = match mode {
+        "ceil" => !negative && remainder != 0,
+        "floor" => negative && remainder != 0,
+        "expand" => remainder != 0,
+        "trunc" => false,
+        "halfCeil" => above_half || (tie && !negative),
+        "halfFloor" => above_half || (tie && negative),
+        "halfTrunc" => above_half,
+        "halfEven" => above_half || (tie && quotient % 2 == 1),
+        _ => above_half || tie,
+    };
+    let units = quotient.checked_add(u128::from(increase))?.checked_mul(increment as u128)?;
+    if fraction_digits == 0 { return Some(units.to_string()); }
+    let scale = 10u128.pow(fraction_digits as u32);
+    Some(format!("{}.{:0width$}", units / scale, units % scale, width = fraction_digits))
+}
+
 fn intl_localize_digits(source: &str, numbering: &str) -> String {
     let zero = match numbering { "arab" => '٠', "deva" => '०', _ => return source.to_string() };
     source.chars().map(|ch| if let Some(digit) = ch.to_digit(10) {
@@ -310,9 +344,27 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     let negative = input.is_sign_negative();
     let mut value = input.abs();
     if state.style == "percent" { value *= 100.0; }
+    let mut exponent = 0i32;
+    if (state.notation == "scientific" || state.notation == "engineering") && value.is_finite() && value != 0.0 {
+        let order = value.log10().floor() as i32;
+        exponent = if state.notation == "engineering" { order.div_euclid(3) * 3 } else { order };
+        value = if exponent < -308 {
+            value * 1e308 * 10f64.powi(-exponent - 308)
+        } else { value / 10f64.powi(exponent) };
+    }
     let mut compact_suffix = "";
     if state.notation == "compact" && value.is_finite() {
-        let (scale, suffix) = if value >= 1e12 { (1e12, "T") } else if value >= 1e9 { (1e9, "B") }
+        let east_asian = ["ja", "zh-Hans"].contains(&state.locale.as_str());
+        let (scale, suffix) = if east_asian {
+            if value >= 1e12 { (1e12, "兆") } else if value >= 1e8 { (1e8, "億") }
+            else if value >= 1e4 { (1e4, "万") } else { (1.0, "") }
+        } else if state.locale == "de" && state.compact_display == "short" {
+            if value >= 1e12 { (1e12, " Bio.") } else if value >= 1e9 { (1e9, " Mrd.") }
+            else if value >= 1e6 { (1e6, " Mio.") } else if value >= 1e3 { (1e3, " Tsd.") } else { (1.0, "") }
+        } else if state.compact_display == "long" {
+            if value >= 1e12 { (1e12, " trillion") } else if value >= 1e9 { (1e9, " billion") }
+            else if value >= 1e6 { (1e6, " million") } else if value >= 1e3 { (1e3, " thousand") } else { (1.0, "") }
+        } else if value >= 1e12 { (1e12, "T") } else if value >= 1e9 { (1e9, "B") }
             else if value >= 1e6 { (1e6, "M") } else if value >= 1e3 { (1e3, "K") } else { (1.0, "") };
         value /= scale;
         compact_suffix = suffix;
@@ -323,17 +375,25 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     } else if value.is_infinite() {
         number_parts.push(("infinity", data.infinity.to_string()));
     } else {
-        let max_fraction = if let Some(max_significant) = state.max_significant {
-            let digits_before = if value == 0.0 { 1 } else { value.log10().floor() as i32 + 1 };
-            (max_significant as i32 - digits_before).clamp(0, 100) as usize
+        let digits_before = if value == 0.0 { 1 } else { value.log10().floor() as i32 + 1 };
+        let min_fraction = state.min_significant.map_or(state.min_fraction, |digits| {
+            (digits as i32 - digits_before).max(0) as usize
+        });
+        let compact_defaults = state.notation == "compact" && state.min_fraction == 0
+            && state.max_fraction == 0 && state.min_significant.is_none() && state.max_significant.is_none();
+        let max_fraction = if compact_defaults {
+            (2 - digits_before).max(0) as usize
+        } else if let Some(max_significant) = state.max_significant {
+            (max_significant as i32 - digits_before).clamp(min_fraction as i32, 100) as usize
         } else { state.max_fraction };
         let scale = 10f64.powi(max_fraction.min(100) as i32);
         let increment = state.rounding_increment as f64;
         let signed = if negative { -value } else { value };
         let rounded = intl_round_scaled(signed * scale / increment, &state.rounding_mode).abs() * increment / scale;
-        let mut digits = format!("{:.*}", max_fraction.min(100), rounded);
+        let mut digits = intl_round_decimal(value, negative, max_fraction, state.rounding_increment,
+            &state.rounding_mode).unwrap_or_else(|| format!("{:.*}", max_fraction.min(100), rounded));
         if let Some(dot) = digits.find('.') {
-            while digits.len() > dot + 1 + state.min_fraction && digits.ends_with('0') { digits.pop(); }
+            while digits.len() > dot + 1 + min_fraction && digits.ends_with('0') { digits.pop(); }
             if digits.ends_with('.') { digits.pop(); }
         }
         if state.trailing_zero_display == "stripIfInteger" && rounded.fract() == 0.0 {
@@ -341,7 +401,8 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         }
         let (integer, fraction) = digits.split_once('.').unwrap_or((&digits, ""));
         let padded = format!("{:0>width$}", integer, width = state.min_integer);
-        let grouped = state.use_grouping != "false" && padded.len() >= 4
+        let grouped = state.notation == "standard" || state.notation == "compact";
+        let grouped = grouped && state.use_grouping != "false" && padded.len() >= 4
             && (state.use_grouping != "min2" || padded.len() >= 5);
         if grouped {
             let indian = data.decimal_pattern.contains("#,##,##");
@@ -367,6 +428,11 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
             number_parts.push(("fraction", intl_localize_digits(fraction, &state.numbering_system)));
         }
         if !compact_suffix.is_empty() { number_parts.push(("compact", compact_suffix.to_string())); }
+        if state.notation == "scientific" || state.notation == "engineering" {
+            number_parts.push(("exponentSeparator", "E".into()));
+            if exponent < 0 { number_parts.push(("exponentMinusSign", data.minus.into())); }
+            number_parts.push(("exponentInteger", intl_localize_digits(&exponent.unsigned_abs().to_string(), &state.numbering_system)));
+        }
     }
     let sign = match state.sign_display.as_str() {
         "never" => None,
@@ -485,5 +551,14 @@ mod intl_number_tests {
         assert_eq!(eval("let f = new Intl.NumberFormat('en', {minimumFractionDigits:2}).format; f(1234)"), "1,234.00");
         assert_eq!(eval("new Intl.NumberFormat('en').formatToParts(1234.5).map(p=>p.type+':'+p.value).join('|')"),
             "integer:1|group:,|integer:234|decimal:.|fraction:5");
+    }
+
+    #[test]
+    fn decimal_ties_and_rounding_increments() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,maximumFractionDigits:2}).format(1.015)"), "1.02");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:2,roundingIncrement:10}).format(1.15)"), "1.20");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumSignificantDigits:3,maximumSignificantDigits:5}).format(0)"), "0.00");
+        assert_eq!(eval("new Intl.NumberFormat('en',{notation:'engineering'}).format(0.000345)"), "345E-6");
+        assert_eq!(eval("new Intl.NumberFormat('en',{notation:'scientific'}).format(543211.1)"), "5.432E5");
     }
 }

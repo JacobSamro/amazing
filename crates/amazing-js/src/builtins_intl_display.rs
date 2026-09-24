@@ -31,13 +31,13 @@ fn intl_display_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     };
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DisplayNames options")); }
     let _matcher = intl_string_option(i, options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let style = intl_string_option(i, options, "style", &["long", "short", "narrow"], "long")?;
     let type_value = i.get_prop(options, "type")?;
     if type_value.is_undefined() { return Err(Throw::type_error("DisplayNames type is required")); }
     let kind = i.to_string(&type_value)?;
     if !["language", "region", "script", "currency", "calendar", "dateTimeField"].contains(&kind.as_str()) {
         return Err(Throw::range_error("invalid DisplayNames type"));
     }
-    let style = intl_string_option(i, options, "style", &["long", "short", "narrow"], "long")?;
     let fallback = intl_string_option(i, options, "fallback", &["code", "none"], "code")?;
     let language_display = intl_string_option(i, options, "languageDisplay", &["dialect", "standard"], "dialect")?;
     intl_register(&object, IntlState::DisplayNames(IntlDisplayState {
@@ -63,8 +63,9 @@ fn intl_display_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
             || (value.len() == 3 && value.bytes().all(|b| b.is_ascii_digit())) => value.to_ascii_uppercase(),
         "script" if value.len() == 4 && value.bytes().all(|b| b.is_ascii_alphabetic()) => intl_title(&value),
         "currency" if value.len() == 3 && value.bytes().all(|b| b.is_ascii_alphabetic()) => value.to_ascii_uppercase(),
-        "calendar" if (3..=8).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_alphanumeric()) => value.to_ascii_lowercase(),
-        "dateTimeField" if ["era", "year", "quarter", "month", "week", "weekday", "day",
+        "calendar" if value.split('-').all(|part| (3..=8).contains(&part.len())
+            && part.bytes().all(|b| b.is_ascii_alphanumeric())) => value.to_ascii_lowercase(),
+        "dateTimeField" if ["era", "year", "quarter", "month", "weekOfYear", "weekday", "day",
             "dayPeriod", "hour", "minute", "second", "timeZoneName"].contains(&value.as_str()) => value,
         _ => return Err(Throw::range_error("invalid DisplayNames code")),
     };
