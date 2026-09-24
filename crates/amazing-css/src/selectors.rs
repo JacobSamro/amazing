@@ -810,6 +810,13 @@ impl<'t> SelParser<'t> {
                     text.push_str(&s);
                     true
                 }
+                // CSS Syntax tokenizes a separated sign (`2n - 2`) as an
+                // identifier, while an adjacent sign is a delimiter or part
+                // of the following number.
+                Token::Ident(s) if matches!(s.as_str(), "+" | "-") => {
+                    text.push_str(&s);
+                    true
+                }
                 Token::Number(n) => {
                     // The tokenizer folds the sign into the number (`2n+1`
                     // arrives as Dimension "2n" then Number +1), so an
@@ -1519,6 +1526,31 @@ mod tests {
                 index == 1 || index == 5,
                 "p {index}"
             );
+        }
+    }
+
+    #[test]
+    fn nth_last_child_of_nested_nth_last_child() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let paragraphs: Vec<_> = (0..12)
+            .map(|index| {
+                let paragraph = dom.create_element(body, "p");
+                if index % 2 == 1 {
+                    dom.set_attrs(paragraph, vec![("class".into(), "target".into())]);
+                }
+                paragraph
+            })
+            .collect();
+        assert!(parse_selector(":nth-last-child(n of .target)").is_some());
+        assert!(parse_selector(":nth-last-child(2n - 2 of .target)").is_some());
+        assert!(parse_selector(":nth-child(2n + 2 of .target)").is_some());
+        let selector = parse_selector(
+            ":nth-last-child(2n - 2 of :nth-last-child(n of .target))",
+        ).expect("nested nth syntax");
+        for (index, paragraph) in paragraphs.into_iter().enumerate() {
+            assert_eq!(matches(&dom, paragraph, &selector), [1, 5, 9].contains(&index), "p {index}");
         }
     }
 
