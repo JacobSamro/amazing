@@ -749,3 +749,11 @@ Final locked win-002 gates passed: `amazing` nextest **155/155** (3 skipped),
 workspace nextest **2,097/2,097** (5 skipped), and workspace doctests **2/2**.
 The three source hashes matched the win-002 gate tree. The driver package has
 no library target for a separate doctest run.
+
+## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
+`data:image/svg+xml` with the bounded SVG decoder, including percent-encoded
+and base64 data URL bodies handled by Fetch. Raster data URLs continue through
+the media decoder. A page test proves a data-SVG `list-style-image` enters the
+URL cache, exposes its intrinsic size, and paints red pixels.

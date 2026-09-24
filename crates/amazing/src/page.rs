@@ -245,9 +245,27 @@ pub(crate) fn load_page_media(
         if !attempted.insert(url.to_owned()) {
             return;
         }
-        match load_resource(url, 16 * 1024 * 1024)
-            .and_then(|bytes| amazing_media::decode_image(&bytes).map_err(|error| error.to_string()))
-        {
+        let image = if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+            amazing_net::ParsedUrl::parse(url)
+                .map_err(|error| format!("{error:?}"))
+                .and_then(|parsed| amazing_fetch::process_data_url(&parsed)
+                    .ok_or_else(|| "invalid data URL".to_owned()))
+                .and_then(|data| {
+                    if data.body.len() > 16 * 1024 * 1024 {
+                        return Err("resource size limit".to_owned());
+                    }
+                    if data.mime_type.type_ == "image" && data.mime_type.subtype == "svg+xml" {
+                        amazing_svg::decode(&data.body, amazing_svg::DecodeLimits::default())
+                            .map_err(|error| error.to_string())
+                    } else {
+                        amazing_media::decode_image(&data.body).map_err(|error| error.to_string())
+                    }
+                })
+        } else {
+            load_resource(url, 16 * 1024 * 1024)
+                .and_then(|bytes| amazing_media::decode_image(&bytes).map_err(|error| error.to_string()))
+        };
+        match image {
             Ok(image) => { media.decoded.insert(url.to_owned(), image); }
             Err(error) => media.warnings.push(format!("image {url:?}: {error}")),
         }
@@ -488,5 +506,34 @@ mod tests {
             (fragment.content_box.x + 1.0) as u32,
             (fragment.content_box.y + 1.0) as u32,
         ), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn data_svg_marker_uses_generated_image_cache_and_paints() {
+        let url = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%222%22%20height=%222%22%3E%3Crect%20width=%222%22%20height=%222%22%20fill=%22red%22/%3E%3C/svg%3E";
+        let dom = amazing_html::parse("<body><ul><li>item</li></ul></body>");
+        let sheet = amazing_css::parse_stylesheet(&format!(
+            "body {{ margin: 0 }} li {{ list-style-position: inside; list-style-image: url('{url}') }}"
+        ));
+        let styled = amazing_css::compute(&dom, std::slice::from_ref(&sheet));
+        let media = load_page_media(&dom, "https://example.test/page", &styled);
+        assert!(media.warnings.is_empty(), "{:?}", media.warnings);
+        assert_eq!(media.decoded.len(), 1);
+        let image = amazing_paint::ImageProvider::image_by_url(&media, url).unwrap();
+        assert_eq!((image.width, image.height), (2, 2));
+        assert_eq!(&image.pixels[..4], &[255, 0, 0, 255]);
+        let li = (0..dom.node_count()).map(|index| amazing_dom::NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("li")).unwrap();
+        assert_eq!(styled.generated_content(li, amazing_css::selectors::PseudoElement::Marker).unwrap().runs,
+            vec![amazing_css::generated::ContentRun::Image(url.to_owned())]);
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+            &dom, &[sheet], 100.0, Some(100.0), &text, &media,
+        );
+        assert_eq!(media.intrinsic_size_by_url(url).unwrap().width, 2.0);
+        let paint = PagePaint { media: &media, dom: &dom, styles: &styled };
+        let surface = amazing_paint::paint_document_with_text_resources(&layout, 100, 100, &text, &paint);
+        assert!(surface.pixels.chunks_exact(4).any(|pixel| pixel == [255, 0, 0, 255]),
+            "list marker did not paint");
     }
 }
