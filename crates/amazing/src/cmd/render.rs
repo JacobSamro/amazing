@@ -739,7 +739,7 @@ mod oracle_trace_tests {
             direct_host.borrow_mut().dom.set_attribute(direct_node, "class", &class).unwrap();
             let direct = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), css, &animated, true, None).unwrap();
             direct_us.push(start.elapsed().as_micros());
-            let parity = coordinator.pixel_parity(&candidate.pixels, &direct.pixels);
+            let parity = coordinator.pixel_parity(&candidate, &direct);
             assert_eq!(parity.losses, 0, "{name} frame {index}: {:?}", parity.first_loss);
             if name != "effects-class" {
                 assert_eq!(parity.layer_rounding, 0, "{name} frame {index}");
