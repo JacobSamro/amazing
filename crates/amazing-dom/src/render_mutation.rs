@@ -1,6 +1,6 @@
 //! Engine-internal mutation journal for incremental rendering.
 //! Entries are independent of script-visible MutationObserver records.
-use crate::{Dom, DomError, NodeIdx, NodeKind};
+use crate::{Dom, NodeIdx, NodeKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NodeGeneration {
@@ -81,9 +81,10 @@ pub struct RenderMutation {
 }
 
 impl Dom {
-    pub fn node_generation(&self, node: NodeIdx) -> Result<NodeGeneration, DomError> {
-        self.check_node(node)?;
-        Ok(NodeGeneration { node, generation: self.node_generations[node.0 as usize] })
+    /// Returns the current generation of a live arena slot.
+    pub fn node_generation(&self, node: NodeIdx) -> Option<u64> {
+        self.node_slot_live.get(node.0 as usize).copied().filter(|live| *live)
+            .map(|_| self.node_generations[node.0 as usize])
     }
 
     pub fn render_mutation_epoch(&self) -> u64 { self.render_epoch }
@@ -229,6 +230,29 @@ mod tests {
         assert!(dom.take_render_mutations(dom.render_mutation_epoch()).iter().any(|entry|
             entry.target.node == slot && matches!(entry.kind,
                 RenderMutationKind::SlotAssignment { .. })));
-        assert_ne!(dom.node_generation(host).unwrap(), dom.node_generation(slot).unwrap());
+        assert_eq!(dom.node_generation(host), Some(1));
+        assert_eq!(dom.node_generation(slot), Some(1));
+    }
+
+    #[test]
+    fn recycled_slot_has_new_generation_and_old_journal_identity_is_stable() {
+        let mut dom = Dom::new();
+        let node = dom.alloc_unattached(NodeKind::Element {
+            name: "old".into(), attrs: Vec::new(), namespace: crate::Namespace::Html,
+        });
+        let first = dom.node_generation(node).unwrap();
+        dom.record_render_full(node, "old node");
+        dom.retire_unreachable_node(node).unwrap();
+        assert_eq!(dom.node_generation(node), None);
+        let replacement = dom.alloc_unattached(NodeKind::Element {
+            name: "new".into(), attrs: Vec::new(), namespace: crate::Namespace::Html,
+        });
+        assert_eq!(replacement, node);
+        assert_eq!(dom.node_generation(node), Some(first + 1));
+        let entries = dom.take_render_mutations(dom.render_mutation_epoch());
+        assert_eq!(entries[0].target, NodeGeneration { node, generation: first });
+        dom.record_render_full(replacement, "new node");
+        let entries = dom.take_render_mutations(dom.render_mutation_epoch());
+        assert_eq!(entries[0].target, NodeGeneration { node, generation: first + 1 });
     }
 }
