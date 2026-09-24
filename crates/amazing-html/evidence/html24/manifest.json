@@ -1,0 +1,109 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "fixed_base": "7c61b9fcc33078685d2e552e648f2e486f93492b",
+  "selection_rule": "All #data cases in the 15 named, previously unselected complete .dat files in listed order; frozen before parser edits.",
+  "normalization": "HTML-23 typed tree probe: drop one section-delimiter LF from input; HTML parse API performs CRLF/CR conversion; expected | indentation produces typed depth/name/value rows with sorted attributes, including expanded foreign attributes rendered as `prefix local-name`; expected PI closes by ?>; ignore parse errors; unsupported modes/expected rows/context contracts stay unsupported; parser panic is crash.",
+  "contexts": {
+    "document": 346,
+    "html": 1
+  },
+  "modes": {
+    "default": 327,
+    "script-off": 19,
+    "script-on": 1
+  },
+  "sources": [
+    {
+      "path": "html/syntax/parsing/resources/tests20.dat",
+      "sha256": "07f7661690c4cd7cc0bbb0f1b9c1e1d65135e07c4dde8bbf106692f687e7d33d",
+      "bytes": 13524,
+      "cases": 64
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests7.dat",
+      "sha256": "aeb9569589c809b1a563c0b163173e8cf980a6a4028cb7c210f19c181b56999a",
+      "bytes": 7339,
+      "cases": 34
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests9.dat",
+      "sha256": "857820f088506a6d20ea6acefbf19c0a6c4de87a39b24988878066397516b36f",
+      "bytes": 10391,
+      "cases": 27
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests25.dat",
+      "sha256": "f2e08fda6d15a08faf9ff0001ec38560d942069cee6b4e264aeedbbacde7da8d",
+      "bytes": 3586,
+      "cases": 26
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests3.dat",
+      "sha256": "c4b4d8e0ea3d978c49d1e6a985d427164858b71ec980153c4526ed0c398f43b9",
+      "bytes": 4601,
+      "cases": 24
+    },
+    {
+      "path": "html/syntax/parsing/resources/ruby.dat",
+      "sha256": "5ae76ac4570d40e6648066798dd3ff729231bec98d3e010fdd67e0257f23a742",
+      "bytes": 4471,
+      "cases": 21
+    },
+    {
+      "path": "html/syntax/parsing/resources/noscript01.dat",
+      "sha256": "e82449304a6371c14ed490384b6d814b7b1eeb1022dbc5caa2045fc8400655d7",
+      "bytes": 4619,
+      "cases": 18
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests26.dat",
+      "sha256": "d55d24dfca2444fba759d59346cbab21f7e70340dbb14e2c7af8da3d44abd4ab",
+      "bytes": 8865,
+      "cases": 20
+    },
+    {
+      "path": "html/syntax/parsing/resources/menuitem-element.dat",
+      "sha256": "08e5e25f38bbc181c840ce5c5203b2566dc03129aeaf105ca2311645d40aae4d",
+      "bytes": 4015,
+      "cases": 20
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests5.dat",
+      "sha256": "bf80b927082290541781844906abdcb72f091488f7a11e8b7d9ac00076dd4fce",
+      "bytes": 3160,
+      "cases": 17
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests15.dat",
+      "sha256": "ef784ece74cbd760da3a6947aaf4478810246b73c753f25a04be4d11dd806b2d",
+      "bytes": 3649,
+      "cases": 14
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests17.dat",
+      "sha256": "0567680775f58a5b2ad24e234f41d53f68fb2fc3ef7809bebaec0920e2f13c89",
+      "bytes": 2819,
+      "cases": 13
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests11.dat",
+      "sha256": "276190e2a7b97e8fcf3bd863a4b4b5346b555a8336c00143cb1d0e8956b94a07",
+      "bytes": 17679,
+      "cases": 13
+    },
+    {
+      "path": "html/syntax/parsing/resources/void-in-phrasing.dat",
+      "sha256": "c8855173aca8ecbd218abc26db34a631393ce0285fffebffdaf69b8bdd6224e9",
+      "bytes": 1890,
+      "cases": 13
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests21.dat",
+      "sha256": "b1a67420c79a5131002fefc987084ffb6b6094a3a74b272c6f545a47df06452c",
+      "bytes": 5092,
+      "cases": 23
+    }
+  ],
+  "total_cases": 347,
+  "retention": "HTML-21, HTML-22, HTML-23 complete selections under their existing probes."
+}

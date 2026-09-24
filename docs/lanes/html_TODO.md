@@ -639,3 +639,13 @@ Two stable before rounds measured **347 pass / 19 fail / 7 unsupported / 0 crash
 `parse_fragment` now accepts any ordinary HTML element context, including `span`; it initializes RCDATA, RAWTEXT, script data or plaintext from the context and uses the virtual context when resetting insertion mode. The name-only API cannot express a foreign namespace or context ancestors/form pointer. Focused owned tests cover ordinary and raw-text contexts plus table-mode restoration. Product adoption remains with DOM bindings; no DOM or driver code changed.
 
 Final fixed-base win-002 gate: `amazing-html` nextest **160/160**, separate doctest **1/1**; workspace nextest **2,109/2,109 with 5 skipped**, separate doctests **2/2**. The 47-file source/fixture/lock audit matched before and after. All Windows per-case rows and raw hashes matched the two Linux after rounds. The earlier `amazing-process` crash-reaping test failure was rerun and passed; both logs are retained in the HTML-23 evidence.
+
+## HTML-24 — foreign end-tag recovery and next bounded html5lib tranche
+
+Fixed local dev base `7c61b9fcc33078685d2e552e648f2e486f93492b` contains merged HTML-23. At pinned WPT revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12`, the HTML lane froze 347 `#data` cases from 15 complete, previously unselected files. `crates/amazing-html/evidence/html24/manifest.json` records all source hashes and context/mode counts. The HTML-24 probe's mechanical normalization includes expanded foreign attributes; this was frozen before parser edits. This remains a ported html5lib-derived corpus, not unmodified WPT harness credit.
+
+Two stable baseline rounds measured **313 pass / 11 fail / 20 unsupported / 3 crash**. Two stable after rounds measured **317 / 7 / 20 / 3**: four fail-to-pass, 313 retained passes, zero losses. The three keygen crashes and scripting-mode unsupported cases keep their classifications. An unmatched `</p>` or `</br>` in SVG/MathML now leaves foreign content before in-body recovery; other unmatched foreign end tags leave that subtree open. Two focused owned tests cover gains and retention.
+
+HTML-21 retention stayed **489 / 11 / 0 / 1**, HTML-22 improved **303 / 11 / 75 / 0** to **305 / 9 / 75 / 0** with two foreign-fragment gains, and HTML-23 stayed **355 / 11 / 7 / 0**. Full per-case classifications, raw hashes and transition tables are under `evidence/html24/`.
+
+Final fixed-base win-002 gate: `amazing-html` nextest **162/162**, separate doctest **1/1**; workspace nextest **2,149/2,149 with 5 skipped**, separate doctests **2/2**. The 64-file source/fixture/lock audit matched before and after. Two Windows after rounds for the new and all three retention selections matched Linux per-case classifications and raw hashes.
