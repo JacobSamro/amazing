@@ -15,6 +15,10 @@ use crate::display_list::{build_display_list, Affine, PaintCommand};
 use crate::paint::{self, ImageProvider};
 use crate::surface::Surface;
 
+#[path = "display_list_delta.rs"]
+mod delta;
+pub use delta::{PaintFallbackReason, PaintItemChange, PaintResourceKey, PaintViewDelta, PaintViewUpdate};
+
 /// An RGBA8 destination for rasterized paint items.
 pub type RgbaSurface = Surface;
 
@@ -69,11 +73,44 @@ impl PaintBounds {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaintItemKind {
     Decorations,
     Content,
     Control,
+}
+
+/// Identity supplied by the DOM journal. The generation must change when an
+/// arena slot is reused; a document-wide mutation counter is not sufficient.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PaintNodeKey {
+    pub node: NodeIdx,
+    pub generation: u64,
+}
+
+/// A paint item keeps its identity when unrelated siblings are rebuilt.
+/// `ordinal` distinguishes multiple boxes of the same phase for one node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StablePaintItemKey {
+    pub node: PaintNodeKey,
+    pub phase: PaintItemKind,
+    pub ordinal: u32,
+}
+
+impl StablePaintItemKey {
+    /// Deterministic 64-bit adapter for the compositor's `PaintItemKey(u64)`.
+    /// The update seam checks for collisions before publishing a delta.
+    pub fn compositor_id(self) -> u64 {
+        let mut hash = 0xcbf29ce484222325u64;
+        for byte in self.node.node.0.to_le_bytes().into_iter()
+            .chain(self.node.generation.to_le_bytes())
+            .chain([self.phase as u8])
+            .chain(self.ordinal.to_le_bytes())
+        {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+        }
+        hash
+    }
 }
 
 /// Parent IDs are zero for the root state. IDs index the corresponding node
@@ -98,6 +135,9 @@ pub struct CompositingHints {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaintItem {
     pub index: usize,
+    /// `None` requires a full rebuild: the adapter did not provide an
+    /// unambiguous DOM generation for this item's originating node.
+    pub key: Option<StablePaintItemKey>,
     pub kind: PaintItemKind,
     /// Conservative bounds before the item's property transform. Items whose
     /// ink may escape their box use the viewport as a safe bound.
@@ -154,6 +194,8 @@ pub struct DisplayListView<'a> {
     commands: Vec<PaintCommand<'a>>,
     item_commands: Vec<usize>,
     items: Vec<PaintItem>,
+    node_generations: HashMap<NodeIdx, u64>,
+    ambiguous_generation: bool,
     transforms: Vec<TransformNode>,
     clips: Vec<ClipNode>,
     effects: Vec<EffectNode>,
@@ -202,6 +244,55 @@ impl<'a> DisplayListView<'a> {
         is_video: &dyn Fn(NodeIdx) -> bool,
         scroll_offset: &dyn Fn(NodeIdx) -> Option<(f32, f32)>,
     ) -> Self {
+        Self::with_node_generations_and_scroll_offsets(
+            root, width, height, text, images, controls, is_video, scroll_offset, &|_| None,
+        )
+    }
+
+    /// The embedding adapter supplies per-node arena generations from its
+    /// frozen DOM epoch. Missing generations deliberately prevent deltas.
+    pub fn with_node_generations(
+        root: &'a LayoutBox,
+        width: u32,
+        height: u32,
+        text: &'a dyn TextSystem,
+        images: &'a dyn ImageProvider,
+        controls: &'a dyn ControlProvider,
+        generation: &dyn Fn(NodeIdx) -> Option<u64>,
+    ) -> Self {
+        Self::with_node_generations_and_scroll_offsets(
+            root, width, height, text, images, controls, &|_| false, &|_| None, generation,
+        )
+    }
+
+    /// Convenience for the retained DOM journal's arena generations. A
+    /// retired or unknown node returns `None` and forces the safe full path.
+    pub fn with_dom_generations(
+        root: &'a LayoutBox,
+        width: u32,
+        height: u32,
+        text: &'a dyn TextSystem,
+        images: &'a dyn ImageProvider,
+        controls: &'a dyn ControlProvider,
+        dom: &amazing_dom::Dom,
+    ) -> Self {
+        Self::with_node_generations(
+            root, width, height, text, images, controls, &|node| dom.node_generation(node),
+        )
+    }
+
+    /// Combined adapter entry point for retained scroll state and identity.
+    pub fn with_node_generations_and_scroll_offsets(
+        root: &'a LayoutBox,
+        width: u32,
+        height: u32,
+        text: &'a dyn TextSystem,
+        images: &'a dyn ImageProvider,
+        controls: &'a dyn ControlProvider,
+        is_video: &dyn Fn(NodeIdx) -> bool,
+        scroll_offset: &dyn Fn(NodeIdx) -> Option<(f32, f32)>,
+        generation: &dyn Fn(NodeIdx) -> Option<u64>,
+    ) -> Self {
         let commands = build_display_list(root);
         let mut containing_blocks = HashMap::new();
         collect_containing_blocks(root, PaintBounds::viewport(width, height), &mut containing_blocks);
@@ -209,6 +300,8 @@ impl<'a> DisplayListView<'a> {
             commands,
             item_commands: Vec::new(),
             items: Vec::new(),
+            node_generations: HashMap::new(),
+            ambiguous_generation: false,
             transforms: vec![TransformNode {
                 parent: 0,
                 matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
@@ -236,6 +329,7 @@ impl<'a> DisplayListView<'a> {
         let mut state = PropertyState::default();
         let mut group_stack = Vec::new();
         let mut clip_stack = Vec::new();
+        let mut ordinals = HashMap::new();
         for command_index in 0..view.commands.len() {
             let mut item = None;
             match &view.commands[command_index] {
@@ -292,6 +386,7 @@ impl<'a> DisplayListView<'a> {
                 PaintCommand::PaintDecorations(box_, _) => {
                     item = Some((
                         command_index,
+                        box_.node,
                         PaintItemKind::Decorations,
                         if box_.style.get("box-shadow").is_some() {
                             PaintBounds::viewport(width, height)
@@ -306,6 +401,7 @@ impl<'a> DisplayListView<'a> {
                 PaintCommand::PaintContent(box_) => {
                     item = Some((
                         command_index,
+                        box_.node,
                         PaintItemKind::Content,
                         content_ink_bounds(box_, width, height),
                         state,
@@ -316,6 +412,7 @@ impl<'a> DisplayListView<'a> {
                 PaintCommand::PaintControl(control) => {
                     item = Some((
                         command_index,
+                        control.geometry.node,
                         PaintItemKind::Control,
                         PaintBounds::from_layout(control.geometry.border_box),
                         state,
@@ -324,8 +421,29 @@ impl<'a> DisplayListView<'a> {
                     ))
                 }
             }
-            if let Some((command_index, kind, bounds, properties, hints, sticky)) = item {
-                view.push_item(command_index, kind, bounds, properties, hints, sticky);
+            if let Some((command_index, node, kind, bounds, properties, hints, sticky)) = item {
+                let key = node.and_then(|node| generation(node).map(|generation| {
+                    if view.node_generations.insert(node, generation).is_some_and(|old| old != generation) {
+                        view.ambiguous_generation = true;
+                    }
+                    let node = PaintNodeKey { node, generation };
+                    let ordinal = ordinals.entry((node, kind)).or_insert(0u32);
+                    let key = StablePaintItemKey { node, phase: kind, ordinal: *ordinal };
+                    *ordinal = ordinal.saturating_add(1);
+                    key
+                }));
+                view.push_item(command_index, key, kind, bounds, properties, hints, sticky);
+            }
+        }
+        for command in &view.commands {
+            if let PaintCommand::PaintContent(box_) = command {
+                for fragment in box_.styled_replaced_fragments() {
+                    if let Some(value) = generation(fragment.node) {
+                        if view.node_generations.insert(fragment.node, value).is_some_and(|old| old != value) {
+                            view.ambiguous_generation = true;
+                        }
+                    }
+                }
             }
         }
         view
@@ -334,6 +452,7 @@ impl<'a> DisplayListView<'a> {
     fn push_item(
         &mut self,
         command_index: usize,
+        key: Option<StablePaintItemKey>,
         kind: PaintItemKind,
         local_bounds: PaintBounds,
         properties: PropertyState,
@@ -343,6 +462,7 @@ impl<'a> DisplayListView<'a> {
         self.item_commands.push(command_index);
         self.items.push(PaintItem {
             index: self.items.len(),
+            key,
             kind,
             local_bounds,
             properties,
@@ -618,3 +738,7 @@ fn hints(box_: &LayoutBox, is_video: &dyn Fn(NodeIdx) -> bool) -> CompositingHin
 #[cfg(test)]
 #[path = "display_list_view_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "display_list_delta_tests.rs"]
+mod delta_tests;

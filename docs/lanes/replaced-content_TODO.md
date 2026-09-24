@@ -894,3 +894,42 @@ pseudo content needs the routed CSS parser seam before it reaches paint.
 Layout's no-intrinsic-size fallback makes gradient markers 300×150 until its
 marker sizing rule is supplied; the driver also needs its data-SVG reference
 resource. These cross-lane follow-ups are in the replaced-content questions.
+
+## RC-19 — stable paint item keys and conservative display-list deltas
+
+Paint items now carry an optional stable key `(DOM NodeIdx, arena generation,
+paint phase, local ordinal)`. `DisplayListView::with_dom_generations` uses
+`Dom::node_generation` from the fixed base; older constructors remain the full
+paint oracle and deliberately cannot publish a delta without generations. The
+64-bit compositor adapter hash is checked for duplicates and collisions.
+
+`old.update(&new)` compares bounded, freshly constructed
+views at one frozen epoch. It returns changed keys and contiguous item ranges,
+old/new local ink bounds expanded one pixel, and retired URL/generated/replaced
+resource identities. It compares each item raster against the full painter and
+falls back explicitly for order changes, unknown/reused generation, property
+state changes, unseparable effect groups, unsafe bounds, raster failures and
+large views. The first implementation is a correctness seam, not yet an
+incremental builder: it may raster each item across the full viewport and caps
+comparison at 512 items / 1,048,576 pixels. The caller keeps the fresh full
+view for presentation when the result is `RequiresFullRebuild`. The compositor
+must still validate chunk containment before accepting old/new bounds.
+
+Paint exports the integer source-over helper and `quantize_opacity` adopted by
+the compositor in the paired merge. Half-opacity over opaque white rounds to
+127 under the documented premultiplied rule. The fixed RC-19 delta base is
+pushed `5860d66`, which also contains the DOM generation resolver, per-test
+storage isolation and the granted driver assertion updates. The refreshed
+win-001 tree matched 14/14 audited source, fixture, test and lockfile hashes
+and the pinned WPT revision. The synthetic mutation tests assert three delta
+updates, ten explicit full fallbacks and one DOM resolver case; details are
+retained in `tests/wpt-replaced-content/rc19/mutation-results.json`. On the
+fixed base, win-002 paint passed 118/118, workspace passed 2223/2223 with five
+skipped, and workspace doctests passed 2/2. The retained 51-case WPT pair is
+recorded separately in `tests/wpt-replaced-content/rc19/final-comparison.json`:
+focused 10/2, SVG 26/8 plus the known reference-script crash, and
+gradient/scroll 2/2 in both rounds. There were no pass losses. SVG
+`non-scaling-stroke-010` changed from mismatch to pass, and the gradient marker
+remains a mismatch with fewer differing pixels (18,864 to 3,072). Those two
+cases alone changed actual/diff hashes across the newer merged base; every
+reference hash and both rounds agree.
