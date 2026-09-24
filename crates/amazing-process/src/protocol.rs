@@ -117,6 +117,26 @@ interface! {pub interface StorageService(13) => StorageProxy, StorageReceiver {
     fn checkpoint(request:()) -> bool = 4;
 }}
 
+// Browser-minted document tokens and epochs gate every lifecycle transition.
+// The renderer reports the observable HTML event order in its acknowledgment.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryFreeze {document:u64, epoch:u64, deadline_ms:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryRestore {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryDiscard {document:u64, epoch:u64}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum HistoryLifecycleEvent {
+    PageHidePersisted(())=1, VisibilityHidden(())=2,
+    VisibilityVisible(())=3, PageShowPersisted(())=4
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryAck {
+    document:u64, epoch:u64, quiescent:bool, events:Vec<HistoryLifecycleEvent>
+}}
+interface! {pub interface HistoryLifecycle(14) => HistoryProxy, HistoryReceiver {
+    fn activate(request:HistoryActivate) -> bool = 1;
+    fn freeze(request:HistoryFreeze) -> HistoryAck = 2;
+    fn restore(request:HistoryRestore) -> HistoryAck = 3;
+    fn discard(request:HistoryDiscard) -> bool = 4;
+}}
+
 impl Frame {
     pub fn validate(&self) -> Result<(), amazing_ipc::Error> {
         let len = usize::try_from(self.width)
