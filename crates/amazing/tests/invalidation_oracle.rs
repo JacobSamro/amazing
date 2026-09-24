@@ -1,6 +1,6 @@
 use std::process::Command;
 
-fn assert_oracle_parity(name: &str, html_source: &str) {
+fn assert_oracle_result(name: &str, html_source: &str, expect_pixel_parity: bool) {
     let dir = std::env::temp_dir().join(format!("amazing-invalidation-oracle-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let html = dir.join("page.html");
@@ -19,8 +19,13 @@ fn assert_oracle_parity(name: &str, html_source: &str) {
     assert!(direct.status.success(), "{}", String::from_utf8_lossy(&direct.stderr));
     assert!(oracle.status.success(), "{}", String::from_utf8_lossy(&oracle.stderr));
     assert_eq!(std::fs::read(&direct_image).unwrap(), std::fs::read(&oracle_image).unwrap());
-    assert!(String::from_utf8_lossy(&oracle.stderr).contains("compositor/full pixel parity"),
-        "{}", String::from_utf8_lossy(&oracle.stderr));
+    let diagnostic = String::from_utf8_lossy(&oracle.stderr);
+    if expect_pixel_parity {
+        assert!(diagnostic.contains("compositor/full pixel parity"), "{diagnostic}");
+    } else {
+        assert!(diagnostic.contains("parity loss: pixel") && diagnostic.contains("presenting full"),
+            "{diagnostic}");
+    }
     assert!(String::from_utf8_lossy(&oracle.stderr).contains("full_fallback=false"),
         "{}", String::from_utf8_lossy(&oracle.stderr));
     std::fs::remove_dir_all(dir).unwrap();
@@ -28,10 +33,10 @@ fn assert_oracle_parity(name: &str, html_source: &str) {
 
 #[test]
 fn diagnostic_frame_matches_full_render_after_testrendered_mutation() {
-    assert_oracle_parity("reflow", "<!doctype html><style>body{margin:0}.changed{background:#008000;width:48px;height:32px}</style><body><div id=box></div><script>document.addEventListener('TestRendered',()=>document.querySelector('#box').setAttribute('class','changed'))</script>");
+    assert_oracle_result("reflow", "<!doctype html><style>body{margin:0}.changed{background:#008000;width:48px;height:32px}</style><body><div id=box></div><script>document.addEventListener('TestRendered',()=>document.querySelector('#box').setAttribute('class','changed'))</script>", true);
 }
 
 #[test]
 fn diagnostic_frame_matches_full_render_for_effects_scroller() {
-    assert_oracle_parity("effects", "<!doctype html><style>body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.scroller.changed{width:280px}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}</style><body><div class=fixed>Fixed</div><section class=scroller><div class=moving>Move</div><div class=fade>Fade</div><p>Overflow content</p><p>More overflow content</p></section><script>document.addEventListener('TestRendered',()=>document.querySelector('section').setAttribute('class','scroller changed'))</script>");
+    assert_oracle_result("effects", "<!doctype html><style>body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.scroller.changed{width:280px}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}</style><body><div class=fixed>Fixed</div><section class=scroller><div class=moving>Move</div><div class=fade>Fade</div><p>Overflow content</p><p>More overflow content</p></section><script>document.addEventListener('TestRendered',()=>document.querySelector('section').setAttribute('class','scroller changed'))</script>", !cfg!(windows));
 }
