@@ -1,6 +1,6 @@
 use amazing_compositor::{
     baked_paint_view_compositor, paint_view_metadata, CompositingReasons, Compositor, PaintChunk,
-    PaintViewRasterMode, PaintViewSource, Positioning, Presenter, Rect, ReferenceCpuPresenter,
+    BoundProperty, BoundPropertyNode, PaintViewRasterMode, PaintViewSource, Positioning, Presenter, Rect, ReferenceCpuPresenter,
     ScrollId, StickyConstraint,
 };
 use amazing_paint::controls::NoControls;
@@ -16,6 +16,32 @@ const REFTEST_COLORS: &str =
     include_str!("../../../tests/wpt-replaced-content/rc6-fixtures/inherited-variable.html");
 const LONG_ARTICLE: &str = r#"<body><header>Long article</header><main><h1>Chapter one</h1><p>Text wraps through a narrow column of paragraphs.</p><p>More text follows beneath the fold.</p><p>And more lines continue for scrolling.</p><p>Final paragraph at the bottom.</p></main></body>"#;
 const EFFECTS_PAGE: &str = r#"<body><div class='fixed'>Fixed</div><section class='scroller'><div class='moving'>Move</div><div class='fade'>Fade</div><p>Overflow content</p><p>More overflow content</p></section></body>"#;
+
+#[test]
+fn paint_view_owner_mapping_binds_dom_properties_to_tree_nodes() {
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='outer'><div class='inner'></div></div></body>",
+        "body{margin:0}.outer{width:30px;height:30px;overflow:scroll;transform:translate(2px,3px);opacity:.5}.inner{width:10px;height:10px;background:blue}",
+        48., &text,
+    );
+    let view = DisplayListView::with_node_generations(
+        &root, 48, 48, &text, &NoImages, &NoControls, &|_| Some(7),
+    );
+    let source = PaintViewSource::new(&view);
+    let bindings = source.property_bindings().expect("stable paint owners");
+    assert_eq!(bindings.len(), 3);
+    let owner = bindings[0].0.node;
+    assert!(bindings.iter().all(|(key, _)| key.node == owner && key.generation == 7));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Transform && matches!(target, BoundPropertyNode::Transform(_))));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Opacity && matches!(target, BoundPropertyNode::Opacity(_))));
+    assert!(bindings.iter().any(|(key, target)|
+        key.property == BoundProperty::Scroll && matches!(target, BoundPropertyNode::Scroll(_))));
+    let mut compositor = source.compositor(48, 48).unwrap();
+    compositor.bind_property_nodes(&bindings).unwrap();
+}
 
 fn compare(name: &str, html: &str, css: &str) {
     let text = FallbackTextSystem::new();

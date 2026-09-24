@@ -1,7 +1,129 @@
-//! Canvas-specific runtime adapter and retained JS objects.
+//! Canvas runtime objects and the driver's retained compositor adapter.
 use super::*;
 use amazing_bindings::canvas_interfaces::{self, MemberKind as CanvasMemberKind};
 use amazing_canvas::{self as canvas, FillRule, ImageData as CanvasImageData, PaintStyle, Path2D, Transform};
+use amazing_compositor::{BoundPropertyChange, BoundPropertyNode, Compositor, CompositorFrame,
+    DrawQuad, NodePropertyKey, PaintViewRasterMode, PropertyBindingError, Rect, SceneError,
+    SolidColorQuad, BlendMode};
+
+/// Driver-owned scene held across rendering updates. CSS supplies already
+/// classified property values; a miss sends the update through full rendering.
+pub(crate) struct RetainedPropertyScene {
+    compositor: Compositor,
+    width: u32,
+    height: u32,
+    raw_local: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PropertySceneError {
+    StaleNode,
+    Binding(PropertyBindingError),
+    NeedsPaint(SceneError),
+}
+
+impl RetainedPropertyScene {
+    pub(crate) fn new(
+        dom: &Dom,
+        mut compositor: Compositor,
+        bindings: &[(NodePropertyKey, BoundPropertyNode)],
+        mode: PaintViewRasterMode,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, PropertySceneError> {
+        for &(key, _) in bindings {
+            if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        compositor.bind_property_nodes(bindings).map_err(PropertySceneError::Binding)?;
+        Ok(Self { compositor, width, height, raw_local: mode == PaintViewRasterMode::RawLocal })
+    }
+
+    /// Returns a frame without style computation, layout, paint-view creation,
+    /// or a paint source. The caller rebuilds the scene on any error.
+    pub(crate) fn apply_property_only(
+        &mut self,
+        dom: &Dom,
+        changes: &[BoundPropertyChange],
+    ) -> Result<CompositorFrame, PropertySceneError> {
+        for change in changes {
+            if dom.node_generation(NodeIdx(change.key.node)) != Some(change.key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        self.compositor.apply_bound_property_changes(changes)
+            .map_err(PropertySceneError::Binding)?;
+        let mut frame = self.compositor.build_cached_frame(self.width, self.height)
+            .map_err(PropertySceneError::NeedsPaint)?;
+        if self.raw_local {
+            let viewport = Rect::new(0., 0., self.width as f32, self.height as f32);
+            frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+                rect: viewport, color: [255; 4], clip_rect: viewport,
+                opacity: 1., blend: BlendMode::Normal,
+            }));
+        }
+        Ok(frame)
+    }
+
+    pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+}
+
+#[cfg(test)]
+mod property_scene_tests {
+    use super::*;
+    use amazing_compositor::{BoundProperty, BoundPropertyValue, CompositingReasons,
+        EffectId, PaintChunk, Presenter, PropertyTreeState, PropertyTrees, ReferenceCpuPresenter};
+    use amazing_paint::Surface;
+    use std::cell::Cell;
+
+    #[test]
+    fn preclassified_opacity_class_mutation_skips_upstream_fallback() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        dom.set_attribute(element, "class", "opaque").unwrap();
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 1., BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(32, 32);
+        source.clear([0, 128, 0, 255]);
+        let first = compositor.build_frame(&source, 32, 32).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let key = NodePropertyKey {
+            node: element.0, generation, property: BoundProperty::Opacity,
+        };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal,
+            32, 32).unwrap();
+
+        // This is the driver's rendering-update boundary after CSS has
+        // classified the class diff as a value-only opacity change.
+        dom.set_attribute(element, "class", "faded").unwrap();
+        let style_calls = Cell::new(0);
+        let layout_calls = Cell::new(0);
+        let paint_view_calls = Cell::new(0);
+        let frame = scene.apply_property_only(&dom, &[BoundPropertyChange {
+            key, value: BoundPropertyValue::Opacity(0.5),
+        }]).unwrap_or_else(|_| {
+            style_calls.set(style_calls.get() + 1);
+            layout_calls.set(layout_calls.get() + 1);
+            paint_view_calls.set(paint_view_calls.get() + 1);
+            panic!("property-only class mutation unexpectedly needed full rendering")
+        });
+        let pixels = presenter.present(&frame).unwrap();
+        assert_eq!(pixels.get_pixel(0, 0), Some([127, 191, 127, 255]));
+        assert!(frame.resources.uploads.is_empty());
+        assert_eq!(scene.compositor().dirty_tiles(), 0);
+        assert_eq!((style_calls.get(), layout_calls.get(), paint_view_calls.get()), (0, 0, 0));
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum CanvasTarget { Element, Context, Path, Gradient, Pattern, ImageData, TextMetrics }

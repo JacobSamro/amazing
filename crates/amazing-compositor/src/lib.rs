@@ -7,6 +7,7 @@ mod frame;
 mod hit;
 mod paint_delta;
 mod paint_view;
+mod property_binding;
 mod property;
 mod quad;
 mod snapshot;
@@ -15,6 +16,7 @@ pub use animation::*;
 pub use hit::*;
 pub use paint_delta::*;
 pub use paint_view::*;
+pub use property_binding::*;
 pub use property::*;
 pub use quad::*;
 pub use snapshot::*;
@@ -137,6 +139,7 @@ pub enum SceneError {
     UnorderedRanges,
     NonFiniteBounds,
     TooManyTiles,
+    MissingCachedTile,
 }
 impl std::fmt::Display for SceneError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -170,6 +173,7 @@ pub struct Compositor {
     chunks: Vec<PaintChunk>,
     item_count: usize,
     paint_item_keys: Option<HashMap<PaintItemKey, usize>>,
+    property_bindings: HashMap<NodePropertyKey, BoundPropertyNode>,
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
     last_frame: FrameStats,
@@ -238,6 +242,7 @@ impl Compositor {
             chunks,
             item_count,
             paint_item_keys: None,
+            property_bindings: HashMap::new(),
             layers,
             tiles: HashMap::new(),
             last_frame: FrameStats::default(),
