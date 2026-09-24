@@ -981,7 +981,8 @@ fn processing_instruction_and_range_point_queries_preserve_units() {
     let pi = call(&mut h, O::CreateProcessingInstruction, V::Node(xml),
         &[str_value("p"), V::String(vec![0xD800])]);
     assert_eq!(call(&mut h, O::NodeType, pi.clone(), &[]), V::Number(7.));
-    assert_eq!(call(&mut h, O::Data, pi, &[]), V::String(vec![0xD800]));
+    assert_eq!(call(&mut h, O::Data, pi.clone(), &[]), V::String(vec![0xD800]));
+    assert_eq!(call(&mut h, O::ProcessingInstructionTarget, pi, &[]), str_value("p"));
     let text = node(call(&mut h, O::CreateText, V::Node(xml), &[str_value("abcd")]));
     let range = call(&mut h, O::RangeConstructor, V::Undefined, &[]);
     call(&mut h, O::RangeSetStart, range.clone(), &[V::Node(text), V::Number(1.)]);
