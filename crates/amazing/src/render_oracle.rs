@@ -159,6 +159,7 @@ impl RenderCoordinator {
         let delta = StyleDelta {
             styles: styled.clone(),
             changed: candidate.changed,
+            change_kinds: BTreeMap::new(),
             recalculated: Vec::new(),
             full_rebuild: candidate.full_fallback || style_divergence
                 || first_style_mismatch(dom, &candidate.styles, styled).is_some(),
