@@ -14,7 +14,7 @@ fn node_result(node: Option<NodeIdx>) -> ResultValue {
     node.map_or(ResultValue::Null, ResultValue::Node)
 }
 fn valid(dom: &Dom, node: NodeIdx) -> Result<(), DomError> {
-    if (node.0 as usize) < dom.node_count() {
+    if dom.node_generation(node).is_some() {
         Ok(())
     } else {
         Err(DomError::InvalidNode)
@@ -28,6 +28,13 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
         O::Append | O::Prepend | O::ReplaceChildren => matches!(
             kind,
             NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
+        ),
+        O::FirstElementChild | O::LastElementChild | O::ChildElementCount => matches!(
+            kind, NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
+        ),
+        O::PreviousElementSibling | O::NextElementSibling => matches!(
+            kind, NodeKind::Element { .. } | NodeKind::Text { .. } | NodeKind::CDATASection { .. }
+                | NodeKind::Comment { .. } | NodeKind::ProcessingInstruction { .. }
         ),
         O::Before | O::After | O::ReplaceWith | O::Remove => {
             !matches!(kind, NodeKind::Document | NodeKind::DocumentFragment)
@@ -482,6 +489,11 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             O::PreviousSibling => node_result(dom.get(target).prev_sibling),
             O::NextSibling => node_result(dom.get(target).next_sibling),
             O::ChildNodes => R::Children(target),
+            O::FirstElementChild => node_result(dom.first_element_child(target)),
+            O::LastElementChild => node_result(dom.last_element_child(target)),
+            O::ChildElementCount => R::Number(dom.child_element_count(target) as f64),
+            O::PreviousElementSibling => node_result(dom.previous_element_sibling(target)),
+            O::NextElementSibling => node_result(dom.next_element_sibling(target)),
             O::TemplateContent => R::Node(dom.ensure_template_contents(target)?),
             O::HasChildNodes => R::Boolean(dom.get(target).first_child.is_some()),
             O::IsConnected => R::Boolean(dom.is_connected(target)),

@@ -13,6 +13,34 @@ fn nodes(ids: &[NodeIdx]) -> Vec<NodeOrString> {
 }
 
 #[test]
+fn element_navigation_skips_non_elements_and_tracks_tree_mutations() {
+    let mut dom = Dom::new();
+    let parent = dom.create_element(NodeIdx(0), "div");
+    let text = dom.create_text(parent, "x");
+    let svg = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/2000/svg"), "svg").unwrap();
+    dom.pre_insert(svg, parent, None).unwrap();
+    let middle = dom.create_text(parent, "y");
+    let html = dom.create_element(parent, "span");
+    assert_eq!(dom.first_element_child(parent), Some(svg));
+    assert_eq!(dom.last_element_child(parent), Some(html));
+    assert_eq!(dom.child_element_count(parent), 2);
+    assert_eq!(dom.previous_element_sibling(html), Some(svg));
+    assert_eq!(dom.next_element_sibling(svg), Some(html));
+    assert_eq!(dom.previous_element_sibling(middle), Some(svg));
+    assert_eq!(dom.next_element_sibling(text), Some(svg));
+    assert_eq!(dom.previous_element_sibling(svg), None);
+    assert_eq!(dom.next_element_sibling(html), None);
+    dom.detach(svg);
+    assert_eq!(dom.child_element_count(parent), 1);
+    assert_eq!(dom.first_element_child(parent), Some(html));
+    assert_eq!(dom.previous_element_sibling(middle), None);
+    dom.detach(html);
+    assert_eq!(dom.child_element_count(parent), 0);
+    assert_eq!(dom.first_element_child(parent), None);
+    assert_eq!(dom.last_element_child(parent), None);
+}
+
+#[test]
 fn append_and_prepend_move_duplicates_and_preserve_identity() {
     let mut dom = Dom::new();
     let parent = element(&mut dom, NodeIdx(0));
