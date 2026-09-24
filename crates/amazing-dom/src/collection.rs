@@ -57,6 +57,9 @@ impl Dom {
             (c.root, c.filter.clone(), c.generation)
         };
         if generation != self.mutation_generation {
+            let document = self.owner_document(root).unwrap_or(root);
+            let html_document = self.document_metadata(document)?
+                .map_or(true, |metadata| metadata.content_type == "text/html");
             let nodes: Vec<_> = match filter {
                 CollectionFilter::Children => self.children(root).collect(),
                 _ => self.tree_order(root).into_iter().skip(1).collect(),
@@ -66,10 +69,9 @@ impl Dom {
                 match &filter {
                     CollectionFilter::Children => true,
                     CollectionFilter::TagName(query) => query == &vec![b'*' as u16] || {
-                        let actual: Vec<_> = name.encode_utf16().collect();
-                        if *namespace == Namespace::Html {
-                            actual.iter().map(|unit| if (65..=90).contains(unit) { unit + 32 } else { *unit }).collect::<Vec<_>>() ==
-                                query.iter().map(|unit| if (65..=90).contains(unit) { unit + 32 } else { *unit }).collect::<Vec<_>>()
+                        let actual: Vec<_> = self.qualified_name(*node).unwrap().encode_utf16().collect();
+                        if html_document && *namespace == Namespace::Html {
+                            actual == query.iter().map(|unit| if (65..=90).contains(unit) { unit + 32 } else { *unit }).collect::<Vec<_>>()
                         } else { &actual == query }
                     },
                     CollectionFilter::TagNameNs(uri, local) => {
@@ -143,6 +145,22 @@ impl Dom {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tag_name_uses_qualified_name_and_html_document_case_rules() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "div");
+        let upper = dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "I").unwrap();
+        let prefixed = dom.create_element_ns_in(NodeIdx(0), Some("urn:test"), "te:ST").unwrap();
+        dom.pre_insert(upper, root, None).unwrap();
+        dom.pre_insert(prefixed, root, None).unwrap();
+        let query = |dom: &mut Dom, name: &str| {
+            let slot = dom.collection(root, CollectionFilter::TagName(name.encode_utf16().collect())).unwrap();
+            (0..dom.collection_length(slot).unwrap()).map(|index| dom.collection_item(slot, index).unwrap().unwrap()).collect::<Vec<_>>()
+        };
+        assert!(query(&mut dom, "I").is_empty());
+        assert_eq!(query(&mut dom, "te:ST"), vec![prefixed]);
+        assert!(query(&mut dom, "ST").is_empty());
+    }
     #[test]
     fn live_collection_reuses_identity_and_invalidates_only_on_mutation() {
         let mut dom = Dom::new();

@@ -28,6 +28,9 @@ use amazing_js::{
 
 use crate::dom_host::BrowserDomHost;
 
+#[path = "runtime_host_dom_bindings.rs"]
+mod dom_bindings;
+
 #[derive(Clone, Copy)]
 enum NativeEntry {
     Operation(Operation),
@@ -63,6 +66,7 @@ struct BindingState {
     document_referrer: Option<String>,
     web_objects: Vec<WebObject>,
     font_sets: HashMap<NodeIdx, u64>,
+    window_event_target_slot: u64,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -318,6 +322,9 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn interface_for(&self, key: PlatformKey, brand: InterfaceBrand) -> Result<Interface, Throw> {
+        if brand == InterfaceBrand::EVENT {
+            return self.dom_event_interface(key);
+        }
         if brand == InterfaceBrand::NODE {
             let node = self
                 .node_from_platform_key(key)
@@ -347,6 +354,7 @@ impl RuntimeBindingHost<'_> {
         Ok(match brand {
             InterfaceBrand::RANGE => Interface::Range,
             InterfaceBrand::STATIC_RANGE => Interface::StaticRange,
+            InterfaceBrand::SELECTION => Interface::Selection,
             InterfaceBrand::TRAVERSAL => Interface::NodeIterator,
             InterfaceBrand::NODE_ITERATOR => Interface::NodeIterator,
             InterfaceBrand::TREE_WALKER => Interface::TreeWalker,
@@ -393,6 +401,12 @@ pub(crate) fn install(
     host: Rc<RefCell<BrowserDomHost>>,
 ) -> Result<RuntimeBindings, Throw> {
     let arena = Rc::as_ptr(&host) as u64;
+    let window_event_target_slot = {
+        let mut host = host.borrow_mut();
+        let slot = host.dom.create_event_target();
+        host.dom.set_window_event_target(slot).expect("new Window event target slot");
+        slot
+    };
     let state = Rc::new(RefCell::new(BindingState {
         host,
         arena,
@@ -411,6 +425,7 @@ pub(crate) fn install(
         document_referrer: None,
         web_objects: Vec::new(),
         font_sets: HashMap::new(),
+        window_event_target_slot,
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -442,6 +457,8 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    adapter.install_window_event_target()?;
+    adapter.install_selection_global()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;
@@ -751,6 +768,12 @@ impl BindingHost for RuntimeBindingHost<'_> {
             generation: handle.generation,
         };
         (key.arena == self.state.borrow().arena && key.generation == 1).then_some(key)
+    }
+    fn window_event_target_slot(&self, value: &JsValue) -> Option<u64> {
+        self.dom_window_event_target_slot(value)
+    }
+    fn window_event_target_value(&self, slot: u64) -> Option<JsValue> {
+        self.dom_window_event_target_value(slot)
     }
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey {
         PlatformKey {

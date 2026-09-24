@@ -5,6 +5,15 @@ pub use amazing_dom::events::CallbackId;
 /// only this token; the driver maps it to a value outside a DOM borrow.
 pub type RootId = CallbackId;
 
+/// Snapshot supplied by the embedding's image loader for HTMLImageElement.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ImageLoaderState {
+    pub current_src: Vec<u16>,
+    pub complete: bool,
+    pub natural_width: u32,
+    pub natural_height: u32,
+}
+
 /// Result of an optional installation capability. `NotSupported` leaves the
 /// rest of the interface usable and is recorded by the installer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +71,7 @@ impl InterfaceBrand {
     pub const DOM_PARSER: Self = Self(33);
     pub const LOCATION: Self = Self(34);
     pub const DOM_STRING_LIST: Self = Self(35);
+    pub const SELECTION: Self = Self(36);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -99,6 +109,7 @@ pub enum Interface {
     HTMLLIElement,
     HTMLDListElement,
     HTMLDivElement,
+    HTMLSpanElement,
     HTMLAnchorElement,
     HTMLImageElement,
     HTMLBRElement,
@@ -153,6 +164,7 @@ pub enum Interface {
     AbstractRange,
     StaticRange,
     Range,
+    Selection,
     DOMImplementation,
     NodeFilter,
     NodeList,
@@ -160,6 +172,12 @@ pub enum Interface {
     TreeWalker,
     Event,
     CustomEvent,
+    UIEvent,
+    FocusEvent,
+    MouseEvent,
+    WheelEvent,
+    KeyboardEvent,
+    CompositionEvent,
     MutationObserver,
     MutationRecord,
     DOMException,
@@ -247,6 +265,11 @@ pub enum Operation {
     LinkSizes, LinkSetSizes, ElementDownload, ElementSetDownload,
     ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
     ImageHeight, ImageSetHeight, ImageLoading, ImageSetLoading,
+    ImageSrcset, ImageSetSrcset, ImageSizes, ImageSetSizes, ImageCurrentSrc,
+    ImageDecoding, ImageSetDecoding, ImageComplete, ImageNaturalWidth,
+    ImageNaturalHeight, ImageDecode, SourceType, SourceSetType,
+    SourceMedia, SourceSetMedia, SourceSrcset, SourceSetSrcset,
+    SourceSizes, SourceSetSizes,
     InputType, InputSetType, ElementName, ElementSetName, ElementDisabled, ElementSetDisabled,
     InputPlaceholder, InputSetPlaceholder, ResourceType, ResourceSetType,
     ScriptAsync, ScriptSetAsync, ScriptDefer, ScriptSetDefer,
@@ -424,6 +447,8 @@ pub enum Operation {
     NodeIsDefaultNamespace,
     NodeNormalize,
     NodeIsSameNode,
+    NodeIsEqualNode,
+    NodeCompareDocumentPosition,
     ElementNamespaceURI,
     ElementPrefix,
     ElementLocalName,
@@ -456,6 +481,7 @@ pub enum Operation {
     CharacterDataDelete,
     CharacterDataReplace,
     TextSplit,
+    TextWholeText,
     RangeConstructor,
     StaticRangeConstructor,
     CreateRange,
@@ -486,6 +512,11 @@ pub enum Operation {
     RangeIsPointInRange,
     RangeComparePoint,
     RangeStringifier,
+    GetSelection, SelectionAnchorNode, SelectionAnchorOffset,
+    SelectionFocusNode, SelectionFocusOffset, SelectionIsCollapsed,
+    SelectionRangeCount, SelectionGetRangeAt, SelectionAddRange,
+    SelectionRemoveRange, SelectionRemoveAllRanges, SelectionCollapse,
+    SelectionSelectAllChildren, SelectionToString,
     DocumentImplementation,
     ImplementationCreateDocumentType,
     ImplementationCreateDocument,
@@ -543,6 +574,13 @@ pub enum Operation {
     DispatchEvent,
     EventConstructor,
     CustomEventConstructor,
+    UIEventConstructor,
+    FocusEventConstructor,
+    MouseEventConstructor,
+    WheelEventConstructor,
+    KeyboardEventConstructor,
+    CompositionEventConstructor,
+    EventExtra(&'static str),
     CustomEventDetail,
     CustomEventInit,
     CreateEvent,
@@ -778,6 +816,9 @@ pub trait BindingHost: Sized {
     ) -> Result<Self::Value, Self::Error>;
     /// Returns None for an incompatible brand, stale generation or other realm.
     fn platform_object(&self, value: &Self::Value, brand: InterfaceBrand) -> Option<PlatformKey>;
+    /// The embedding's Window is an EventTarget with a stable external slot.
+    fn window_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
+    fn window_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
     /// Nodes share one private brand; their exact interface is read from Dom.
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey;
     fn node_from_platform_key(&self, key: PlatformKey) -> Option<NodeIdx>;
@@ -941,6 +982,14 @@ pub trait BindingHost: Sized {
     }
     fn blob_stream(&mut self, _bytes: Vec<u8>) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn image_loader_state(&mut self, _node: NodeIdx) -> Result<Option<ImageLoaderState>, Self::Error> {
+        Ok(None)
+    }
+    /// The loader settles `promise` when decoding completes. An embedding
+    /// without image loading returns NotSupported for a rejected promise.
+    fn image_decode(&mut self, _node: NodeIdx, _promise: &Self::Value) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
     }
     fn font_face_set(&mut self, _document: NodeIdx) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
