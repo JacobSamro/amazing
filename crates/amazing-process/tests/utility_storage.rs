@@ -82,6 +82,67 @@ fn utility_shared_image_and_audio_match_public_decoders() {
 }
 
 #[test]
+fn utility_image_corpus_decodes_bounded_web_formats_and_exif_orientation() {
+    let mut host = utility();
+    let proxy = UtilityProxy::new(host.connection.clone(), Duration::from_secs(5));
+    let corpus: &[(&str, &[u8])] = &[
+        (
+            "PNG",
+            include_bytes!("fixtures/utility-images/two-pixels.png"),
+        ),
+        (
+            "JPEG",
+            include_bytes!("fixtures/utility-images/two-pixels.jpg"),
+        ),
+        (
+            "GIF",
+            include_bytes!("fixtures/utility-images/two-pixels.gif"),
+        ),
+        (
+            "WebP",
+            include_bytes!("fixtures/utility-images/two-pixels.webp"),
+        ),
+        (
+            "BMP",
+            include_bytes!("fixtures/utility-images/two-pixels.bmp"),
+        ),
+        (
+            "PPM",
+            include_bytes!("fixtures/utility-images/two-pixels.ppm"),
+        ),
+        (
+            "EXIF rotation",
+            include_bytes!("../../amazing-image/tests/fixtures/exif-orientation-6-ru.jpg"),
+        ),
+    ];
+    for (format, bytes) in corpus {
+        let expected = amazing_image::decode_with_orientation(bytes, Default::default(), true)
+            .unwrap_or_else(|error| panic!("{format}: {error}"));
+        let ready = proxy
+            .decode(DecodeRequest {
+                kind: 1,
+                bytes: ByteBuf(bytes.to_vec()),
+            })
+            .unwrap_or_else(|error| panic!("{format}: {error:?}"));
+        let mapped = host.receive_decoded(&ready).unwrap();
+        assert_eq!(
+            (mapped.width, mapped.height),
+            (expected.width, expected.height),
+            "{format}"
+        );
+        assert_eq!(mapped.bytes(), expected.pixels, "{format}");
+        drop(mapped);
+    }
+    assert!(proxy
+        .decode(DecodeRequest {
+            kind: 1,
+            bytes: ByteBuf(b"not an image".to_vec()),
+        })
+        .is_err());
+    host.kill().unwrap();
+}
+
+#[test]
 fn utility_sfnt_matches_public_text_provider_decoder() {
     let mut host = utility();
     let proxy = UtilityProxy::new(host.connection.clone(), Duration::from_secs(5));

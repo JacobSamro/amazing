@@ -63,3 +63,30 @@ fn class_edits_with_selector_or_cascade_dependencies_recompute() {
         assert!(matches!(update, AttributeStyleUpdate::Recomputed(_)), "{css}");
     }
 }
+
+#[test]
+fn fixed_implicit_style_scope_keeps_class_edit_on_compositor_path() {
+    let (mut dom, mut sheet, node) = fixture("@scope { .base {opacity:.4} .dim {opacity:.6} }", "base");
+    sheet.scope_root = dom.get(node).parent;
+    let invalidator = StyleInvalidator::new(&[sheet.clone()], 9);
+    let styles = compute(&dom, &[sheet]);
+    dom.set_attribute(node, "class", "dim").unwrap();
+    let update = invalidator.update_attribute(&dom, &styles, node, "class", Some("base"), Some("dim"), 9);
+    let AttributeStyleUpdate::CompositorOnly(delta) = update else { panic!("fixed owner scope recomputed") };
+    assert_eq!(delta.opacity, Some(0.6));
+}
+
+#[test]
+fn edited_class_in_scope_start_or_end_recomputes() {
+    for css in [
+        "@scope (.base) { .base {opacity:.4} } .dim {opacity:.6}",
+        "@scope (html) to (.dim) { .base {opacity:.4} .dim {opacity:.6} }",
+    ] {
+        let (mut dom, sheet, node) = fixture(css, "base");
+        let invalidator = StyleInvalidator::new(&[sheet.clone()], 9);
+        let styles = compute(&dom, &[sheet]);
+        dom.set_attribute(node, "class", "dim").unwrap();
+        assert!(matches!(invalidator.update_attribute(&dom, &styles, node, "class", Some("base"), Some("dim"), 9),
+            AttributeStyleUpdate::Recomputed(_)), "{css}");
+    }
+}
