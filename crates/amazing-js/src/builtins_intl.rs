@@ -334,9 +334,7 @@ fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
         "currency" => INTL_SUPPORTED_CURRENCIES.to_vec(),
         "numberingSystem" => vec!["arab", "deva", "latn"],
         "timeZone" => tz_supported_ids(),
-        "unit" => vec!["bit", "byte", "celsius", "day", "degree", "foot", "gallon", "gram",
-            "hour", "kilogram", "kilometer", "liter", "meter", "mile", "millimeter",
-            "minute", "month", "percent", "second", "week", "year"],
+        "unit" => INTL_SIMPLE_UNITS.to_vec(),
         _ => return Err(Throw::range_error("unsupported Intl value key")),
     };
     intl_array(i, values.into_iter().map(JsValue::str))

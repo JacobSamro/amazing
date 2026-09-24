@@ -52,7 +52,9 @@ fn tz_zone(id: &str) -> Option<&'static TzZone> {
 
 fn tz_supported_ids() -> Vec<&'static str> {
     let mut ids: Vec<_> = tz_zones().iter().filter(|zone| zone.name == zone.canonical)
-        .map(|zone| zone.name.as_str()).collect();
+        .map(|zone| zone.name.as_str())
+        .filter(|name| !["Etc/GMT", "Etc/UTC"].contains(name)).collect();
+    if !ids.contains(&"UTC") { ids.push("UTC"); }
     ids.sort_unstable();
     ids
 }
