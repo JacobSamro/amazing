@@ -18,6 +18,13 @@ use crate::runtime_binding_host::compositor::RetainedPropertyScene;
 
 static PARITY_LOSSES: AtomicU64 = AtomicU64::new(0);
 static FULL_FALLBACKS: AtomicU64 = AtomicU64::new(0);
+static LAYER_ROUNDING_PIXELS: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) fn layer_rounding(pixels: usize) {
+    let total = LAYER_ROUNDING_PIXELS.fetch_add(pixels as u64, Ordering::Relaxed) + pixels as u64;
+    eprintln!("amazing oracle: layer-rounding pixels={pixels} total_layer_rounding_pixels={total}; parity_losses={} full_fallbacks={}",
+        PARITY_LOSSES.load(Ordering::Relaxed), FULL_FALLBACKS.load(Ordering::Relaxed));
+}
 
 pub(crate) fn parity_loss(detail: &str, candidate: Option<&Surface>, full: &Surface) {
     let losses = PARITY_LOSSES.fetch_add(1, Ordering::Relaxed) + 1;
@@ -110,6 +117,13 @@ enum RetainedScene {
 }
 
 impl RetainedScene {
+    fn compositor(&self) -> &Compositor {
+        match self {
+            Self::Plain(compositor) => compositor,
+            Self::Property(scene) => scene.compositor(),
+        }
+    }
+
     fn compositor_mut(&mut self) -> &mut Compositor {
         match self {
             Self::Plain(compositor) => compositor,
