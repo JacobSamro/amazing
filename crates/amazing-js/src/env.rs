@@ -247,7 +247,7 @@ impl EnvHandle {
     pub fn hoist_var(&self, name: &str) -> Result<(), Throw> {
         let mut env = self.0.borrow_mut();
         if let Some(existing) = env.vars.get(name) {
-            if existing.borrow().lexical {
+            if existing.0.borrow().lexical {
                 return Err(Throw::syntax_error(format!(
                     "identifier '{name}' has already been declared"
                 )));
