@@ -1537,3 +1537,28 @@ values, accepted RFC token punctuation on HTTP/1.1, and let author Accept and
 User-Agent replace transport defaults. Linux baseline 164/198; after 198/198.
 See `crates/amazing-fetch/tests/wpt/xhr_request_headers/PROVENANCE.md` for
 selection limits and pending JS runner adoption.
+
+### NET-30 — cookie profile, HSTS, mixed content, child navigation
+
+Fixed base `5ac342c4`; implementation `04f01ee6`. The network process now
+owns a PSL-backed cookie jar with schemeful CHIPS partitions, persistent
+cookies on disk, and a `document_cookie` IPC method that applies script
+visibility and HttpOnly rules. Dynamic HSTS policies persist on disk beside a
+pinned 94,778-entry Chromium preload snapshot. HSTS upgrades precede Fetch
+policy and apply to redirect targets. Mixed-content media autoupgrade covers
+CORS requests while public IP literals remain blocked.
+
+The browser-only `ApiRequest::child_navigation` and
+`NetworkService::start_child_navigation` use the top-level site for cookies and
+partitioning. The V2 `frame` navigation requires parent and ancestor origins,
+keeps manual redirects in one epoch, and checks the final response's enforced
+`frame-ancestors` or X-Frame-Options before exposing its head. The driver API
+and commit SHA were sent to html and ipc through their `questions.md` files.
+
+Windows exact-head gate on win-002: 273/273 scoped fetch/process tests and
+2,362/2,362 workspace tests; workspace doctests green. Pinned WPT
+`cookies/` native HTTP selection: 192/192. The complete pinned
+`mixed-content/tentative/autoupgrades/` directory contributes nine native
+request-policy expectations, all passing. These native selections do not run
+the WPT JavaScript harness. The driver-side `Document.cookie` binding awaits
+the held NET-26 runtime host and is routed in `.agents/net/questions.md`.
