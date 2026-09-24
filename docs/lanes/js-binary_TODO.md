@@ -82,3 +82,53 @@ fast paths are routed to js-vm in `.agents/js-binary/questions.md`.
 The VM delegates binary operators to `Interpreter::binary`, but its unary
 Neg and BitNot instructions use Number fast paths in `vm/mod.rs`. Route that
 hook through js-vm; this lane does not edit `vm/`.
+
+## JSB-3 — Intl from pinned CLDR data
+
+Fixed base: `d9b253e78e040cb243671871975f9c04db86c2fd`. Implementation:
+`0aafabc004287268bfaeb837195e00ca4257cab7` (including the earlier
+BufferSource host binding). The checked-in `scripts/generate_intl_data.py`
+consumes Unicode CLDR JSON 48.2.0, archive SHA-256
+`4f28298550dea43439986cd9ffb0a69cb73ba7d0b34a3c474760905ce8ce9e70`.
+Regeneration on venus-003 produced byte-identical tables. The locale set is
+`en`, `en-GB`, `de`, `fr`, `es`, `ja`, `zh-Hans`, `ar`, `hi`, and `ru`, with
+English data as the fallback.
+
+The new Intl namespace includes locale canonicalization and `Intl.Locale`,
+NumberFormat, PluralRules, Gregorian DateTimeFormat, RelativeTimeFormat,
+ListFormat, Collator, Segmenter, and DisplayNames. It also installs
+locale-sensitive methods on String, Number, BigInt, Date, and Array. The
+Test262 host now advertises `intl402`.
+
+On pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`
+and Linux input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`,
+the fixed base had 24,762 pass / 24,307 fail / 22 timeout / 4,487
+unsupported / 294 skipped files. JSB-3 had 25,601 pass / 26,815 fail /
+22 timeout / 1,140 unsupported / 294 skipped: **839 gained passes and zero
+lost passing files or variants**. `intl402/` had 720 pass / 2,627 fail /
+10 unsupported files. Two repeated selections had identical file and variant
+classifications, SHA-256
+`60c12f029ba4f6f5ce4d6902d5f1f6a11457f0ebfb5198f3a5796860bb4980c4`.
+The Test262 runner self-test passed.
+
+The authoritative Windows run on win-001 used the same 53,872-file revision,
+with input SHA-256
+`a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`.
+The fixed base had 24,762 pass / 24,308 fail / 22 timeout / 4,486
+unsupported / 294 skipped files; JSB-3 had 25,601 pass / 26,816 fail /
+22 timeout / 1,139 unsupported / 294 skipped. The Windows comparison also
+found **839 gained passes, zero lost passing files, and zero lost passing
+variants**. Base and after classification SHA-256 values were
+`cd3d6418cd2b3417515fbcac83345ee68128cd9866d9a1186b0db8b7b17fa523`
+and `c48b86dd1264ee7ea949a251af77d9ba63e4854c3938bf6e13e0298fcd18b770`.
+On win-002, amazing-js nextest passed 280/280 (one skipped) and its doctest
+passed 1/1; workspace nextest passed 2,121/2,121 (five skipped) and
+workspace doctests passed 2/2.
+
+Remaining ECMA-402 gaps include IANA time zones, full Unicode collation
+tailoring and segmentation rules, NumberFormat option/range corner cases,
+and broader locale data. `Temporal` and `DurationFormat` Intl cases are
+outside this ticket's implementation. The regex class-compilation resource
+limit affecting two language-tag tests is routed to js-lang in the lane's
+`questions.md`.
