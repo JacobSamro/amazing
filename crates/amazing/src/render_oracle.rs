@@ -4,7 +4,7 @@
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
 use amazing_compositor::{Compositor, PaintDelta, PaintItemKey, PaintViewSource, Presenter, ReferenceCpuPresenter};
-use amazing_css::{MutationKind, RenderMutation as StyleMutation, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_css::{AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
 use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
@@ -103,15 +103,6 @@ struct RetainedCompositorSession {
     presenter: ReferenceCpuPresenter,
 }
 
-enum PropertyOnlyClassification {
-    FullRendering,
-}
-
-fn classify_css_value_deltas(_journal: &[RenderMutation]) -> PropertyOnlyClassification {
-    // CSS-13 will replace this conservative classifier with resolved values.
-    PropertyOnlyClassification::FullRendering
-}
-
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct FrameWork {
     pub(crate) style_rebuild_calls: usize,
@@ -132,6 +123,7 @@ pub(crate) struct StyleCandidate {
     pub(crate) recalculated: usize,
     pub(crate) full_fallback: bool,
     pub(crate) changed: BTreeMap<NodeIdx, Vec<String>>,
+    pub(crate) change_kinds: BTreeMap<NodeIdx, StyleChangeKind>,
     pub(crate) inputs: InputChanges,
 }
 
@@ -142,18 +134,46 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 
 impl RenderCoordinator {
     /// The rendering update offers a retained scene the journal before any
-    /// style, layout or paint work. The CSS value classifier currently takes
-    /// the conservative full-rendering branch; a classified property batch
-    /// will be sent through the runtime compositor adapter here.
+    /// style, layout or paint work. A rejected classification follows the
+    /// ordinary full rendering path with the same journal intact.
     pub(crate) fn try_property_only(
         &mut self,
-        _dom: &Dom,
-        _sheets: &[Stylesheet],
-        _viewport: (u32, u32),
+        dom: &Dom,
+        sheets: &[Stylesheet],
+        viewport: (u32, u32),
         journal: &[RenderMutation],
     ) -> Option<Surface> {
-        match classify_css_value_deltas(journal) {
-            PropertyOnlyClassification::FullRendering => None,
+        let _delta = self.classify_css_value_deltas(dom, sheets, viewport, journal)?;
+        // A classified value still needs COMP-11's validated cached-frame
+        // adapter before the full pipeline can be skipped.
+        None
+    }
+
+    fn classify_css_value_deltas(&self, dom: &Dom, sheets: &[Stylesheet],
+        viewport: (u32, u32), journal: &[RenderMutation]) -> Option<CompositorStyleDelta> {
+        if self.session.is_none() || self.sheets != sheets || self.viewport != viewport {
+            return None;
+        }
+        let [entry] = journal else { return None; };
+        if dom.node_generation(entry.target.node) != Some(entry.target.generation)
+            || self.generations.get(entry.target.node.0 as usize) != Some(&entry.target.generation)
+        { return None; }
+        let RenderMutationKind::Attribute { namespace_uri: None, local_name, old_value, new_value, .. } = &entry.kind
+            else { return None; };
+        // CSS-13's fast classifier currently resolves inline style edits. A
+        // class edit returns Recomputed, so leave it for the normal candidate
+        // path without doing that style work twice.
+        if local_name != "style" { return None; }
+        let old = old_value.as_ref().map(|value| String::from_utf16(value)).transpose().ok()?;
+        let new = new_value.as_ref().map(|value| String::from_utf16(value)).transpose().ok()?;
+        let box_size = self.layout.as_ref().and_then(|layout| layout_box_size(layout.root(), entry.target.node));
+        let result = self.invalidator.as_ref()?.update_attribute_with_box(
+            dom, self.previous.as_ref()?, entry.target.node, local_name,
+            old.as_deref(), new.as_deref(), self.stylesheet_epoch, box_size,
+        );
+        match result {
+            AttributeStyleUpdate::CompositorOnly(delta) => Some(delta),
+            AttributeStyleUpdate::Recomputed(_) => None,
         }
     }
 
@@ -195,6 +215,7 @@ impl RenderCoordinator {
         let delta = StyleDelta {
             styles: styled.clone(),
             changed: candidate.changed,
+            change_kinds: candidate.change_kinds,
             recalculated: Vec::new(),
             full_rebuild: candidate.full_fallback || style_divergence
                 || first_style_mismatch(dom, &candidate.styles, styled).is_some(),
@@ -255,7 +276,7 @@ impl RenderCoordinator {
             return StyleCandidate {
                 styles: amazing_css::compute(dom, sheets), mutations,
                 recalculated: dom.node_count(), full_fallback: true,
-                changed: BTreeMap::new(), inputs,
+                changed: BTreeMap::new(), change_kinds: BTreeMap::new(), inputs,
             };
         }
         let changes = journal.iter().map(|entry| self.to_style_mutation(entry)).collect::<Vec<_>>();
@@ -267,6 +288,7 @@ impl RenderCoordinator {
             recalculated: delta.recalculated.len(),
             full_fallback: delta.full_rebuild,
             changed: delta.changed,
+            change_kinds: delta.change_kinds,
             inputs,
         }
     }
@@ -377,6 +399,17 @@ pub(crate) fn first_layout_mismatch(candidate: &LayoutBox, full: &LayoutBox) -> 
         Some(format!("{label}: remaining geometry or fragments"))
     }
     walk(candidate, full, "root")
+}
+
+fn layout_box_size(root: &LayoutBox, node: NodeIdx) -> Option<CachedBoxSize> {
+    if root.node == Some(node) {
+        return Some(CachedBoxSize { width: root.border_box.w, height: root.border_box.h });
+    }
+    let children = match &root.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children.as_slice(),
+        _ => &[],
+    };
+    children.iter().chain(&root.positioned).find_map(|child| layout_box_size(child, node))
 }
 
 #[derive(Clone)]
