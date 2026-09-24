@@ -164,9 +164,23 @@ impl AttributeStyleUpdate {
 
 /// Match the pre-mutation class set without cloning or mutating the DOM.
 /// Unsupported selector forms return `None`, which forces recomputation.
-fn class_override_matches(dom: &Dom, node: NodeIdx, selector: &Selector, old: Option<&str>) -> Option<bool> {
+fn class_override_matches(dom: &Dom, node: NodeIdx, selector: &Selector, old: Option<&str>, scope: Option<NodeIdx>) -> Option<bool> {
     if selector.pseudo_element().is_some() { return Some(false); }
-    class_match_at(dom, node, node, selector, selector.compounds.len().checked_sub(1)?, old)
+    class_match_at(dom, node, node, selector, selector.compounds.len().checked_sub(1)?, old, scope)
+}
+
+fn old_class_rule_match(rule: &CompiledRule, dom: &Dom, node: NodeIdx, old: Option<&str>)
+    -> Option<Option<(crate::selectors::Specificity, usize)>> {
+    let mut best = None;
+    for (scope, proximity) in rule.scope_roots(dom, node)? {
+        for (selector, specificity) in &rule.selectors {
+            if class_override_matches(dom, node, selector, old, scope)?
+                && best.is_none_or(|(s, p)| *specificity > s || (*specificity == s && proximity < p)) {
+                best = Some((*specificity, proximity));
+            }
+        }
+    }
+    Some(best)
 }
 
 fn selector_mentions_class(selector: &Selector, old: Option<&str>, new: Option<&str>) -> bool {
@@ -185,8 +199,8 @@ fn selector_mentions_class(selector: &Selector, old: Option<&str>, new: Option<&
     selector.compounds.iter().any(|compound| compound_has(compound, &contains))
 }
 
-fn class_match_at(dom: &Dom, target: NodeIdx, node: NodeIdx, selector: &Selector, pos: usize, old: Option<&str>) -> Option<bool> {
-    if !class_compound_matches(dom, target, node, &selector.compounds[pos], old)? { return Some(false); }
+fn class_match_at(dom: &Dom, target: NodeIdx, node: NodeIdx, selector: &Selector, pos: usize, old: Option<&str>, scope: Option<NodeIdx>) -> Option<bool> {
+    if !class_compound_matches(dom, target, node, &selector.compounds[pos], old, scope)? { return Some(false); }
     if pos == 0 { return Some(true); }
     let previous = match selector.combinators[pos - 1] {
         Combinator::Child => dom.get(node).parent.into_iter().filter(|parent| dom.name(*parent).is_some()).collect::<Vec<_>>(),
@@ -213,20 +227,21 @@ fn class_match_at(dom: &Dom, target: NodeIdx, node: NodeIdx, selector: &Selector
         }
     };
     for candidate in previous {
-        if class_match_at(dom, target, candidate, selector, pos - 1, old)? { return Some(true); }
+        if class_match_at(dom, target, candidate, selector, pos - 1, old, scope)? { return Some(true); }
     }
     Some(false)
 }
 
-fn class_compound_matches(dom: &Dom, target: NodeIdx, node: NodeIdx, compound: &Compound, old: Option<&str>) -> Option<bool> {
+fn class_compound_matches(dom: &Dom, target: NodeIdx, node: NodeIdx, compound: &Compound, old: Option<&str>, scope: Option<NodeIdx>) -> Option<bool> {
     for simple in &compound.simple {
         let yes = match simple {
             Simple::Class(class) if node == target => old.unwrap_or("").split_ascii_whitespace().any(|part| part == class),
             Simple::Attr { name, .. } if name == "class" => return None,
-            Simple::Negation(args) => !args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
-            Simple::Matches(args) | Simple::Where(args) => args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
-            Simple::ComplexNegation(args) => !args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
-            Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::Pseudo(Pseudo::Scope) if scope.is_some() => scope == Some(node),
+            Simple::Negation(args) => !args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old, scope)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::Matches(args) | Simple::Where(args) => args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old, scope)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::ComplexNegation(args) => !args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old, scope)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old, scope)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
             Simple::Has(_) | Simple::NthChildOf { .. } => return None,
             _ => crate::selectors::matches_simple(dom, node, simple),
         };
@@ -374,12 +389,14 @@ impl StyleInvalidator {
             .any(|set| set.descendants || set.following_siblings) {
             return None;
         }
-        // attr(class), scoped selectors and special cascade origins can change
-        // other computed data even when the selector's own declarations look safe.
+        // attr(class) and special cascade origins can change other computed
+        // data even when the selector's own declarations look safe.
         if self.context.ua_rules.iter().chain(&self.context.author_rules).any(|rule| {
-            !rule.is_unscoped() || rule.decls.iter().any(|d| d.value.to_ascii_lowercase().contains("attr("))
+            rule.decls.iter().any(|d| d.value.to_ascii_lowercase().contains("attr("))
         }) { return None; }
         for rule in self.context.ua_rules.iter().chain(&self.context.author_rules) {
+            if rule.scope_depends_on(|selector| selector_mentions_class(selector, old, new)) { return None; }
+            if rule.scope_roots(dom, node)?.iter().any(|(root, _)| *root == Some(node)) { return None; }
             for (selector, _) in &rule.selectors {
                 if selector.pseudo_element().is_some() {
                     // A class edit can change generated content or a pseudo style.
@@ -387,34 +404,28 @@ impl StyleInvalidator {
                     if selector_mentions_class(selector, old, new) { return None; }
                     continue;
                 }
-                if rule.ua && class_override_matches(dom, node, selector, old)?
-                    != crate::selectors::matches(dom, node, selector) { return None; }
             }
+            if rule.ua && old_class_rule_match(rule, dom, node, old)? != rule.matching(dom, node, None) { return None; }
         }
-        let mut old_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, &Declaration)> = BTreeMap::new();
-        let mut new_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, &Declaration)> = BTreeMap::new();
+        let mut old_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, usize, &Declaration)> = BTreeMap::new();
+        let mut new_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, usize, &Declaration)> = BTreeMap::new();
         let mut changed = BTreeSet::new();
         for (order, rule) in self.context.author_rules.iter().enumerate() {
-            let before = rule.selectors.iter().filter_map(|(selector, specificity)| {
-                class_override_matches(dom, node, selector, old).and_then(|yes| yes.then_some(*specificity))
-            }).max();
-            let after = rule.matching(dom, node, None).map(|(specificity, _)| specificity);
-            // Unsupported selector forms must take the ordinary recompute path.
-            if rule.selectors.iter().any(|(selector, _)| class_override_matches(dom, node, selector, old).is_none()) {
-                return None;
-            }
+            let before = old_class_rule_match(rule, dom, node, old)?;
+            let after = rule.matching(dom, node, None);
             if before != after {
                 for declaration in &rule.decls {
                     changed.insert(declaration.property.as_str());
                 }
             }
-            for (spec, winners) in [(before, &mut old_winners), (after, &mut new_winners)] {
-                let Some(spec) = spec else { continue; };
+            for (match_result, winners) in [(before, &mut old_winners), (after, &mut new_winners)] {
+                let Some((spec, proximity)) = match_result else { continue; };
                 for declaration in &rule.decls {
                     let key = declaration.property.as_str();
-                    let rank = (spec, order);
-                    if winners.get(key).is_none_or(|(s, o, _)| rank >= (*s, *o)) {
-                        winners.insert(key, (spec, order, declaration));
+                    if winners.get(key).is_none_or(|(s, p, o, _)| spec > *s
+                        || (spec == *s && proximity < *p)
+                        || (spec == *s && proximity == *p && order >= *o)) {
+                        winners.insert(key, (spec, proximity, order, declaration));
                     }
                 }
             }
@@ -432,8 +443,8 @@ impl StyleInvalidator {
         let mut transform_css = None;
         for property in changed {
             if property == "all" { return None; }
-            let old_declaration = old_winners.get(property).map(|(_, _, d)| *d);
-            let new_declaration = new_winners.get(property).map(|(_, _, d)| *d);
+            let old_declaration = old_winners.get(property).map(|(_, _, _, d)| *d);
+            let new_declaration = new_winners.get(property).map(|(_, _, _, d)| *d);
             if !matches!(property, "opacity" | "transform") {
                 if old_declaration.map(|d| (d.value.as_str(), d.important))
                     != new_declaration.map(|d| (d.value.as_str(), d.important)) {

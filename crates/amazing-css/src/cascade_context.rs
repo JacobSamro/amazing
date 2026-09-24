@@ -149,8 +149,9 @@ fn compile_scope(scope: &Scope, nested: bool) -> Option<CompiledScope> {
 }
 
 impl CompiledRule {
-    pub(super) fn is_unscoped(&self) -> bool {
-        self.scopes.is_empty() && self.owner.is_none()
+    pub(super) fn scope_depends_on(&self, predicate: impl Fn(&Selector) -> bool) -> bool {
+        self.scopes.iter().any(|scope| scope.start.iter().chain(&scope.end)
+            .flatten().any(&predicate))
     }
 
     pub(super) fn targets(&self, pseudo: PseudoElement) -> bool {
@@ -169,14 +170,23 @@ impl CompiledRule {
             Some(kind) => matches_pseudo_in_scope(dom, el, sel, kind, scope),
             None => matches_in_scope(dom, el, sel, scope),
         };
-        if self.scopes.is_empty() {
-            return self
-                .selectors
-                .iter()
-                .filter(|(s, _)| matches_target(s, None))
-                .map(|(_, spec)| (*spec, usize::MAX))
-                .max();
+        let mut best = None;
+        for (root, proximity) in self.scope_roots(dom, el)? {
+            for (selector, spec) in &self.selectors {
+                if matches_target(selector, root)
+                    && best.is_none_or(|(s, p)| *spec > s || (*spec == s && proximity < p))
+                {
+                    best = Some((*spec, proximity));
+                }
+            }
         }
+        best
+    }
+
+    /// Active scope roots after applying all start and end limits. A class
+    /// edit whose scope selectors do not depend on that class retains this set.
+    pub(super) fn scope_roots(&self, dom: &Dom, el: NodeIdx) -> Option<Vec<(Option<NodeIdx>, usize)>> {
+        if self.scopes.is_empty() { return Some(vec![(None, usize::MAX)]); }
         let mut ancestors = vec![];
         let mut node = Some(el);
         while let Some(n) = node {
@@ -220,17 +230,7 @@ impl CompiledRule {
             }
             instances = next;
         }
-        let mut best = None;
-        for root in instances.into_iter().flatten() {
-            let proximity = ancestors.iter().position(|n| *n == root)?;
-            for (selector, spec) in &self.selectors {
-                if matches_target(selector, Some(root))
-                    && best.is_none_or(|(s, p)| *spec > s || (*spec == s && proximity < p))
-                {
-                    best = Some((*spec, proximity));
-                }
-            }
-        }
-        best
+        Some(instances.into_iter().flatten().filter_map(|root|
+            ancestors.iter().position(|n| *n == root).map(|distance| (Some(root), distance))).collect())
     }
 }
