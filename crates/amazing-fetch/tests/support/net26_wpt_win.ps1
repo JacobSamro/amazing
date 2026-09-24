@@ -1,5 +1,5 @@
 # Pinned installed-runner diagnostic for NET-26 on win-001.
-param([string[]]$Tests = @(
+param([int]$TimeoutMs = 10000, [string[]]$Tests = @(
   'fetch/api/headers/headers-basic.any.js',
   'fetch/api/headers/headers-casing.any.js',
   'fetch/api/headers/headers-combine.any.js',
@@ -69,7 +69,7 @@ try {
   "SHIM $env:AMAZING_WPT_SHIM_ADDR"
   foreach ($test in $Tests) {
     "TEST $test"
-    & $browserExe wpt-harness $root $test 800 600 10000
+    & $browserExe wpt-harness $root $test 800 600 $TimeoutMs
     "EXIT $LASTEXITCODE"
   }
   'NET26-WPT-DONE'

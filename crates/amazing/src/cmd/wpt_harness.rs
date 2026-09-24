@@ -288,7 +288,23 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
             ));
         }
     }
-    String::from_utf8(bytes).map_err(|e| e.to_string())
+    let mut text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
+    if !scaffold && path.file_name().is_some_and(|name|
+        name.to_string_lossy().contains(".sub.")) {
+        for (placeholder, value) in [
+            ("{{host}}", "web-platform.test"),
+            ("{{ports[http][0]}}", "80"),
+            ("{{ports[http][1]}}", "8001"),
+            ("{{ports[https][0]}}", "443"),
+            ("{{ports[https][1]}}", "8443"),
+            ("{{domains[www2]}}", "www2.web-platform.test"),
+            ("{{hosts[alt][]}}", "not-web-platform.test"),
+            ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
+        ] {
+            text = text.replace(placeholder, value);
+        }
+    }
+    Ok(text)
 }
 /// Window variant of WPT AnyHtmlHandler at revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
 /// Template and metadata rules: tools/serve/serve.py AnyHtmlHandler and

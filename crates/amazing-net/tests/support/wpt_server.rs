@@ -429,10 +429,9 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
                     "x-did-preflight",
                     if preflight.is_some() { "1" } else { "0" },
                 ));
-                headers.push(header(
-                    "x-control-request-headers",
-                    preflight.cloned().unwrap_or_default(),
-                ));
+                if let Some(value) = preflight.filter(|value| !value.is_empty()) {
+                    headers.push(header("x-control-request-headers", value));
+                }
                 headers.push(header("x-origin", request.header("origin").unwrap_or("")));
                 reply(200, "OK", headers, b"")
             }

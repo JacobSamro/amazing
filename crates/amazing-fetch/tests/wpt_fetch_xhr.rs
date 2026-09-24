@@ -280,6 +280,35 @@ fn fetch_cors_preflight_and_credentials_from_wpt() {
     }
     m.done();
 }
+
+#[test]
+fn concurrent_preflight_requests_finish() {
+    let same = WptServer::new();
+    let cross = WptServer::new();
+    let base = base(&same);
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let mut pending = Vec::new();
+    for index in 0..22 {
+        let url = cross.url(&format!(
+            "/fetch/api/resources/preflight.py?token=parallel{index}&allow_methods=DELETE"
+        ));
+        let mut init = ApiRequestInit::default();
+        init.method = Some(u("DELETE"));
+        pending.push(service.start(request(&base, &url, init), ClientContext::default()).unwrap());
+    }
+    let start = Instant::now();
+    for tick in 0..10_000 {
+        for event in service.step(8192, start + Duration::from_millis(tick)) {
+            if let ServiceEvent::Finished { id, result } = event {
+                assert!(result.is_ok(), "preflight {id:?}: {result:?}");
+                pending.retain(|waiting| *waiting != id);
+            }
+        }
+        if pending.is_empty() { return; }
+        thread::sleep(Duration::from_millis(1));
+    }
+    panic!("preflight requests did not finish: {pending:?}");
+}
 #[test]
 fn fetch_body_abort_and_header_guards_from_wpt() {
     // fetch/api/abort/general.any.js, body/ and headers/ network-visible subset.
