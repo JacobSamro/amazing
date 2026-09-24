@@ -237,6 +237,16 @@ fn removal_repairs_first_middle_last_and_only_child() {
     }
 }
 #[test]
+fn replace_checks_old_child_membership_before_new_node_hierarchy() {
+    let mut dom = Dom::new();
+    let parent = dom.create_element(NodeIdx(0), "parent");
+    let detached = element(&mut dom, "detached");
+    let invalid_for_element = dt(&mut dom);
+    assert_eq!(dom.replace(detached, invalid_for_element, parent), Err(DomError::NotFoundError));
+    assert_eq!(dom.get(detached).parent, None);
+}
+
+#[test]
 fn replace_self_keeps_identity_and_records_adoption_removal() {
     let mut d = Dom::new();
     let p = d.create_element(NodeIdx(0), "p");

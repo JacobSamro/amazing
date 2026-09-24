@@ -107,7 +107,7 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
          removeEventListener.call(null, 'load', one); \
          typeof hit"
     ).unwrap(), amazing_js::value::JsValue::str("number"));
-    scheduler.js.dispatch_dom_event(0, "load").unwrap();
+    scheduler.dispatch_dom_event(0, "load").unwrap();
     assert_eq!(scheduler.run_script("hit").unwrap(), amazing_js::value::JsValue::num(10.0));
     assert_eq!(scheduler.run_script(
         "let rejected = false; try { addEventListener.call({}, 'load', one); } catch (error) { rejected = true; } rejected"

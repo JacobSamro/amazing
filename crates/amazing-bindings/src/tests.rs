@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FormAttribute as F, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
+use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FormAttribute as F, FragmentContext, FragmentParser, HostCallPolicy, ImageLoaderState, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
 use amazing_dom::NodeKind;
 use amazing_fetch::api::{Blob, BlobPart, File, FormData};
 use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
@@ -59,6 +59,8 @@ struct Host {
     web: Vec<WebMock>,
     fonts: Option<V>,
     font_ready: Option<V>,
+    image_state: Option<ImageLoaderState>,
+    image_decode_requested: Vec<NodeIdx>,
 }
 impl Host {
     fn web_push(&mut self, object: WebMock, brand: InterfaceBrand) -> V {
@@ -263,6 +265,16 @@ impl BindingHost for Host {
     }
     fn dom_exception_value(&mut self, error: DomError) -> Result<V, String> {
         Ok(str_value(&error.to_string()))
+    }
+    fn image_loader_state(&mut self, _node: NodeIdx) -> Result<Option<ImageLoaderState>, String> {
+        Ok(self.image_state.clone())
+    }
+    fn image_decode(&mut self, node: NodeIdx, promise: &V) -> Result<OptionalHookInstall, String> {
+        self.image_decode_requested.push(node);
+        if self.image_state.is_some() {
+            self.resolve_promise(promise, V::Undefined)?;
+            Ok(OptionalHookInstall::Installed)
+        } else { Ok(OptionalHookInstall::NotSupported) }
     }
     fn report_custom_element_exception(&mut self, error: String) -> Result<(), String> {
         self.custom_element_errors.push(error);
@@ -632,10 +644,34 @@ fn document_implementation_is_same_object_and_builds_document_fixture() {
     assert_eq!(children.len(), 2);
     assert!(matches!(h.dom.get(children[0]).kind, NodeKind::DocumentType { .. }));
     assert_eq!(h.dom.name(children[1]), Some("html"));
+    let no_title = node(call(&mut h, O::ImplementationCreateHTMLDocument, implementation.clone(), &[V::Undefined]));
+    let html = h.dom.document_element(no_title).unwrap().unwrap();
+    let head = h.dom.children(html).next().unwrap();
+    assert_eq!(h.dom.children(head).count(), 0);
     let custom = node(call(&mut h, O::ImplementationCreateDocument, implementation, &[str_value("urn:test"), str_value("p:root"), V::Null]));
     let root = h.dom.children(custom).next().unwrap();
     assert_eq!(h.dom.qualified_name(root).as_deref(), Some("p:root"));
     assert_eq!(h.dom.namespace_uri(root), Some("urn:test"));
+}
+
+#[test]
+fn create_document_null_name_omits_root_and_namespace_sets_mime_type() {
+    let mut h = Host::default();
+    let implementation = call(&mut h, O::DocumentImplementation, V::Node(NodeIdx(0)), &[]);
+    for (uri, mime) in [
+        ("http://www.w3.org/1999/xhtml", "application/xhtml+xml"),
+        ("http://www.w3.org/2000/svg", "image/svg+xml"),
+        ("urn:other", "application/xml"),
+    ] {
+        let doc = node(call(&mut h, O::ImplementationCreateDocument, implementation.clone(),
+            &[str_value(uri), V::Null]));
+        assert_eq!(h.dom.document_element(doc).unwrap(), None);
+        assert_eq!(h.dom.document_metadata(doc).unwrap().unwrap().content_type, mime);
+    }
+    let undefined = node(call(&mut h, O::ImplementationCreateDocument, implementation.clone(),
+        &[V::Null, V::Undefined]));
+    assert_eq!(h.dom.name(h.dom.document_element(undefined).unwrap().unwrap()), Some("undefined"));
+    assert!(invoke(&mut h, O::ImplementationCreateDocument, implementation, &[]).is_err());
 }
 
 #[test]
@@ -717,6 +753,46 @@ fn event_target_dispatches_outside_borrow_and_releases_once_listener() {
     assert_eq!(call(&mut h, O::EventDefaultPrevented, event.clone(), &[]), V::Bool(true));
     assert_eq!(call(&mut h, O::DispatchEvent, target, &[event]), V::Bool(false));
     assert_eq!(h.calls, [7]);
+}
+
+#[test]
+fn passive_listener_option_preserves_absent_versus_explicit_false() {
+    let mut h = Host::default();
+    let omitted = V::Dictionary(vec![("passive", V::Undefined)]);
+    let explicit = V::Dictionary(vec![("passive", V::Bool(false))]);
+    assert_eq!(crate::event_bindings::passive_option(&mut h, Some(&omitted)).unwrap(), None);
+    assert_eq!(crate::event_bindings::passive_option(&mut h, Some(&explicit)).unwrap(), Some(false));
+}
+
+#[test]
+fn image_and_source_reflection_uses_loader_state_and_decode_promise() {
+    let mut h = Host::default();
+    let root = element(&mut h);
+    let image = h.dom.create_element(root, "img");
+    let source = h.dom.create_element(root, "source");
+    assert_eq!(call(&mut h, O::ImageComplete, V::Node(image), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ImageDecoding, V::Node(image), &[]), str_value("auto"));
+    call(&mut h, O::ImageSetDecoding, V::Node(image), &[str_value("ASYNC")]);
+    assert_eq!(call(&mut h, O::ImageDecoding, V::Node(image), &[]), str_value("async"));
+    call(&mut h, O::ImageSetSrcset, V::Node(image), &[str_value("a.png 1x, b.png 2x")]);
+    assert_eq!(call(&mut h, O::ImageSrcset, V::Node(image), &[]), str_value("a.png 1x, b.png 2x"));
+    assert_eq!(call(&mut h, O::ImageComplete, V::Node(image), &[]), V::Bool(false));
+    call(&mut h, O::SourceSetMedia, V::Node(source), &[str_value("(min-width: 40em)")]);
+    call(&mut h, O::SourceSetSrcset, V::Node(source), &[str_value("wide.png")]);
+    assert_eq!(call(&mut h, O::SourceMedia, V::Node(source), &[]), str_value("(min-width: 40em)"));
+    assert_eq!(call(&mut h, O::SourceSrcset, V::Node(source), &[]), str_value("wide.png"));
+    h.image_state = Some(ImageLoaderState {
+        current_src: "https://example.test/b.png".encode_utf16().collect(),
+        complete: true, natural_width: 640, natural_height: 480,
+    });
+    assert_eq!(call(&mut h, O::ImageCurrentSrc, V::Node(image), &[]), str_value("https://example.test/b.png"));
+    assert_eq!(call(&mut h, O::ImageComplete, V::Node(image), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ImageNaturalWidth, V::Node(image), &[]), V::Number(640.));
+    assert_eq!(call(&mut h, O::ImageNaturalHeight, V::Node(image), &[]), V::Number(480.));
+    let promise = call(&mut h, O::ImageDecode, V::Node(image), &[]);
+    assert_eq!(promise, V::Promise(0));
+    assert_eq!(h.promises[0].1, Some(V::Undefined));
+    assert_eq!(h.image_decode_requested, [image]);
 }
 
 #[test]
@@ -817,7 +893,31 @@ fn custom_event_detail_is_rooted_and_replaced_without_dom_borrow() {
     assert_eq!(invoke(&mut h, O::CustomEventDetail, plain, &[]),
         Err("TypeError: Expected a CustomEvent".into()));
     let legacy = call(&mut h, O::CreateEvent, V::Node(NodeIdx(0)), &[str_value("CustomEvent")]);
-    assert_eq!(call(&mut h, O::CustomEventDetail, legacy, &[]), V::Null);
+    assert_eq!(call(&mut h, O::CustomEventDetail, legacy.clone(), &[]), V::Null);
+    let target = call(&mut h, O::EventTargetConstructor, V::Undefined, &[]);
+    assert_eq!(invoke(&mut h, O::DispatchEvent, target.clone(), &[legacy.clone()]),
+        Err("InvalidStateError".into()));
+    call(&mut h, O::CustomEventInit, legacy.clone(), &[str_value("ready")]);
+    assert_eq!(call(&mut h, O::DispatchEvent, target, &[legacy]), V::Bool(true));
+}
+
+#[test]
+fn event_subclass_constructors_preserve_dictionary_fields_and_defaults() {
+    let mut h = Host::default();
+    let mouse = call(&mut h, O::MouseEventConstructor, V::Undefined, &[
+        str_value("click"), V::Dictionary(vec![
+            ("bubbles", V::Bool(true)), ("clientX", V::Number(40.)),
+            ("ctrlKey", V::Bool(true)), ("button", V::Number(1.)),
+        ]),
+    ]);
+    assert_eq!(call(&mut h, O::EventBubbles, mouse.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::EventExtra("clientX"), mouse.clone(), &[]), V::Number(40.));
+    assert_eq!(call(&mut h, O::EventExtra("ctrlKey"), mouse.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::EventExtra("button"), mouse.clone(), &[]), V::Number(1.));
+    assert_eq!(call(&mut h, O::EventExtra("relatedTarget"), mouse, &[]), V::Null);
+    let keyboard = call(&mut h, O::KeyboardEventConstructor, V::Undefined, &[str_value("keydown")]);
+    assert_eq!(call(&mut h, O::EventExtra("key"), keyboard.clone(), &[]), str_value(""));
+    assert_eq!(call(&mut h, O::EventExtra("repeat"), keyboard, &[]), V::Bool(false));
 }
 
 #[test]
@@ -1237,6 +1337,66 @@ fn text_content_excludes_comments_and_setter_replaces_children() {
 }
 
 #[test]
+fn whole_text_joins_adjacent_text_and_cdata_until_a_non_text_sibling() {
+    let mut h = Host::default();
+    let parent = element(&mut h);
+    let first = node(call(&mut h, O::CreateText, V::Node(NodeIdx(0)), &[str_value("one")]));
+    let cdata = h.dom.create_node_in(NodeIdx(0), NodeKind::CDATASection { data: "two".into() }).unwrap();
+    let third = node(call(&mut h, O::CreateText, V::Node(NodeIdx(0)), &[str_value("three")]));
+    h.dom.pre_insert(first, parent, None).unwrap();
+    h.dom.pre_insert(cdata, parent, None).unwrap();
+    h.dom.pre_insert(third, parent, None).unwrap();
+    assert_eq!(call(&mut h, O::TextWholeText, V::Node(third), &[]), str_value("onetwothree"));
+    let comment = h.dom.create_node_in(NodeIdx(0), NodeKind::Comment { data: String::new() }).unwrap();
+    h.dom.pre_insert(comment, parent, Some(third)).unwrap();
+    assert_eq!(call(&mut h, O::TextWholeText, V::Node(third), &[]), str_value("three"));
+}
+
+#[test]
+fn is_equal_node_compares_data_attributes_and_descendants() {
+    let mut h = Host::default();
+    let first = element(&mut h);
+    h.dom.set_attribute(first, "id", "same").unwrap();
+    h.dom.create_text(first, "child");
+    let second = h.dom.clone_node(first, true).unwrap();
+    assert_eq!(call(&mut h, O::NodeIsEqualNode, V::Node(first), &[V::Node(second)]), V::Bool(true));
+    assert_eq!(call(&mut h, O::NodeIsEqualNode, V::Node(first), &[V::Null]), V::Bool(false));
+    h.dom.set_attribute(second, "id", "different").unwrap();
+    assert_eq!(call(&mut h, O::NodeIsEqualNode, V::Node(first), &[V::Node(second)]), V::Bool(false));
+}
+
+#[test]
+fn compare_document_position_exposes_dom_tree_order() {
+    let mut h = Host::default();
+    let parent = element(&mut h);
+    let first = h.dom.create_element(parent, "a");
+    let second = h.dom.create_element(parent, "b");
+    assert_eq!(call(&mut h, O::NodeCompareDocumentPosition, V::Node(first), &[V::Node(second)]),
+        V::Number(4.));
+    assert_eq!(call(&mut h, O::NodeCompareDocumentPosition, V::Node(parent), &[V::Node(first)]),
+        V::Number(20.));
+}
+
+#[test]
+fn selection_uses_the_same_live_range_after_text_mutation() {
+    let mut h = Host::default();
+    let root = element(&mut h);
+    let text = h.dom.create_text(root, "abc");
+    let range = call(&mut h, O::CreateRange, V::Node(NodeIdx(0)), &[]);
+    call(&mut h, O::RangeSetStart, range.clone(), &[V::Node(text), V::Number(1.)]);
+    call(&mut h, O::RangeSetEnd, range.clone(), &[V::Node(text), V::Number(3.)]);
+    let selection = call(&mut h, O::GetSelection, V::Node(NodeIdx(0)), &[]);
+    assert_eq!(call(&mut h, O::SelectionRangeCount, selection.clone(), &[]), V::Number(0.));
+    call(&mut h, O::SelectionAddRange, selection.clone(), &[range.clone()]);
+    assert_eq!(call(&mut h, O::SelectionGetRangeAt, selection.clone(), &[V::Number(0.)]), range);
+    h.dom.replace_character_data(text, 0, 0, &['x' as u16]).unwrap();
+    assert_eq!(call(&mut h, O::SelectionAnchorOffset, selection.clone(), &[]), V::Number(2.));
+    assert_eq!(call(&mut h, O::SelectionFocusOffset, selection.clone(), &[]), V::Number(4.));
+    call(&mut h, O::SelectionRemoveAllRanges, selection.clone(), &[]);
+    assert_eq!(call(&mut h, O::SelectionRangeCount, selection, &[]), V::Number(0.));
+}
+
+#[test]
 fn node_name_casing_depends_on_namespace_and_owner_document() {
     let mut h = Host::default();
     let html = element(&mut h);
@@ -1523,6 +1683,7 @@ fn html_reflection_handles_strings_keywords_booleans_and_tabindex() {
 fn html_element_interface_lookup_has_specialized_and_unknown_fallbacks() {
     assert_eq!(html_element_interface("button"), Interface::HTMLButtonElement);
     assert_eq!(html_element_interface("h3"), Interface::HTMLHeadingElement);
+    assert_eq!(html_element_interface("span"), Interface::HTMLSpanElement);
     assert_eq!(html_element_interface("section"), Interface::HTMLElement);
     assert_eq!(html_element_interface("my-widget"), Interface::HTMLElement);
     assert_eq!(html_element_interface("someunknown"), Interface::HTMLUnknownElement);

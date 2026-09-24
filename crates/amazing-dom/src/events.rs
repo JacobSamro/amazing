@@ -44,9 +44,18 @@ pub enum DispatchOrigin {
     Script,
     UserAgent,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventClass { Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition }
+
+#[derive(Clone, Debug)]
+pub enum EventExtra { Boolean(bool), Number(f64), String(Vec<u16>), Root(Option<CallbackId>) }
+
 #[derive(Debug, Clone)]
 pub struct Event {
     event_type: String,
+    initialized: bool,
+    class: EventClass,
+    extras: std::collections::HashMap<&'static str, EventExtra>,
     custom: bool,
     custom_detail: Option<CallbackId>,
     init: EventInit,
@@ -71,6 +80,9 @@ impl Event {
     pub fn new(event_type: impl Into<String>, init: EventInit, timestamp: Duration) -> Self {
         Self {
             event_type: event_type.into(),
+            initialized: true,
+            class: EventClass::Event,
+            extras: std::collections::HashMap::new(),
             custom: false,
             custom_detail: None,
             init,
@@ -93,10 +105,17 @@ impl Event {
     pub fn event_type(&self) -> &str {
         &self.event_type
     }
+    pub fn class(&self) -> EventClass { self.class }
+    pub fn set_class(&mut self, class: EventClass) { self.class = class; }
+    pub fn extra(&self, name: &'static str) -> Option<&EventExtra> { self.extras.get(name) }
+    pub fn set_extra(&mut self, name: &'static str, value: EventExtra) { self.extras.insert(name, value); }
+    /// Legacy `Document.createEvent()` leaves this flag unset until initEvent.
+    pub fn mark_uninitialized(&mut self) { self.initialized = false; }
     /// A CustomEvent keeps only an opaque driver-owned value root.
     pub fn new_custom(event_type: impl Into<String>, init: EventInit, timestamp: Duration, detail: Option<CallbackId>) -> Self {
         let mut event = Self::new(event_type, init, timestamp);
         event.custom = true;
+        event.class = EventClass::Custom;
         event.custom_detail = detail;
         event
     }
@@ -185,6 +204,7 @@ impl Event {
             return;
         }
         self.event_type = event_type.into();
+        self.initialized = true;
         self.init.bubbles = bubbles;
         self.init.cancelable = cancelable;
         self.stop = false;
@@ -213,6 +233,9 @@ impl EventTree for Dom {
             EventTarget::Node(node) => {
                 if let Some(slot) = self.find_slot(node, false) { return Some(EventTarget::Node(slot)); }
                 if let Some(parent) = self.get(node).parent { return Some(EventTarget::Node(parent)); }
+                if matches!(self.get(node).kind, NodeKind::Document) && node == crate::NodeIdx(0) {
+                    return self.window_event_target().map(EventTarget::External);
+                }
                 let root = self.shadow_data(node)?;
                 let originated_inside = event.target().is_some_and(|target|
                     matches!(target, EventTarget::Node(original) if self.root(original) == node));
@@ -237,8 +260,9 @@ impl EventTree for Dom {
         if !["touchstart", "touchmove", "wheel", "mousewheel"].contains(&event_type) {
             return false;
         }
-        let EventTarget::Node(node) = target else {
-            return false;
+        let node = match target {
+            EventTarget::Node(node) => node,
+            EventTarget::External(slot) => return self.window_event_target() == Some(slot),
         };
         if matches!(self.get(node).kind, NodeKind::Document) {
             return true;
@@ -258,6 +282,24 @@ impl EventTree for Dom {
         })
     }
 }
+impl Dom {
+    /// Whether a cancelable input event could meet a non-passive listener on
+    /// this target's composed dispatch path, including Document and Window.
+    /// Callers must also invalidate their cached path after tree mutations.
+    pub fn has_blocking_listener(&self, target: EventTarget, types: &[&str]) -> bool {
+        let mut event = Event::new("", EventInit { composed: true, ..EventInit::default() }, Duration::ZERO);
+        event.target = Some(target);
+        let mut current = Some(target);
+        let mut seen = Vec::new();
+        while let Some(at) = current {
+            if seen.contains(&at) { break; }
+            seen.push(at);
+            if self.events.has_blocking_listener(at, types) { return true; }
+            current = self.event_parent(at, &event);
+        }
+        false
+    }
+}
 #[derive(Debug)]
 struct Listener {
     id: ListenerId,
@@ -272,6 +314,7 @@ struct Listener {
 pub struct EventTargets {
     listeners: Vec<Listener>,
     next_listener: u64,
+    listener_generation: u64,
     events: Vec<Event>,
 }
 #[derive(Clone, Debug)]
@@ -319,6 +362,15 @@ pub struct EventInvocation {
     pub once: bool,
 }
 impl EventTargets {
+    /// Changes whenever the effective listener set changes. A compositor can
+    /// cache scroll-blocking answers until this value or the DOM path changes.
+    pub fn listener_generation(&self) -> u64 { self.listener_generation }
+
+    pub fn has_blocking_listener(&self, target: EventTarget, types: &[&str]) -> bool {
+        self.listeners.iter().any(|listener| listener.target == target
+            && !listener.passive && types.contains(&listener.event_type.as_str()))
+    }
+
     pub fn listener_callbacks(&self, target: EventTarget, event_type: &str, capture: bool) -> Vec<CallbackId> {
         self.listeners.iter().filter(|listener| listener.target == target
             && listener.event_type == event_type && listener.capture == capture)
@@ -368,6 +420,7 @@ impl EventTargets {
                 .passive
                 .unwrap_or_else(|| tree.default_passive(target, event_type)),
         });
+        self.listener_generation = self.listener_generation.wrapping_add(1);
         Some(id)
     }
     pub fn remove_listener(
@@ -386,13 +439,24 @@ impl EventTargets {
             if matches { removed.push(l.callback); }
             !matches
         });
+        if !removed.is_empty() {
+            self.listener_generation = self.listener_generation.wrapping_add(1);
+        }
         removed
     }
     pub fn remove_listener_id(&mut self, id: ListenerId) {
+        let before = self.listeners.len();
         self.listeners.retain(|l| l.id != id);
+        if self.listeners.len() != before {
+            self.listener_generation = self.listener_generation.wrapping_add(1);
+        }
     }
     pub fn remove_all_listeners(&mut self, target: EventTarget) {
+        let before = self.listeners.len();
         self.listeners.retain(|l| l.target != target);
+        if self.listeners.len() != before {
+            self.listener_generation = self.listener_generation.wrapping_add(1);
+        }
     }
     pub fn begin_dispatch(
         &mut self,
@@ -402,7 +466,7 @@ impl EventTargets {
         origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
         let mut event = self.events.get(id.0).ok_or(DomError::InvalidStateError)?.clone();
-        if event.dispatching {
+        if event.dispatching || !event.initialized {
             return Err(DomError::InvalidStateError);
         }
         // EventTree needs the original target when deciding whether a

@@ -34,6 +34,7 @@ mod node_mixins;
 pub use node_mixins::NodeOrString;
 pub use namespace::{AttributeRef, NamespaceId};
 pub mod range;
+pub mod selection;
 pub mod traversal;
 mod tree;
 pub use tree::{DocumentPosition, DomError};
@@ -123,8 +124,10 @@ pub struct Dom {
     mutations: mutation::MutationObservers,
     ranges: Vec<Option<range::AbstractRange>>,
     static_ranges: Vec<Option<range::StaticRange>>,
+    selections: Vec<(NodeIdx, Option<range::Range>)>,
     events: events::EventTargets,
     external_event_targets: u64,
+    window_event_target: Option<u64>,
     mutation_records: Vec<mutation::RegisteredRecord>,
     static_node_lists: Vec<Vec<NodeIdx>>,
     collections: Vec<collection::LiveCollection>,
@@ -138,6 +141,7 @@ pub struct Dom {
     free_node_slots: Vec<NodeIdx>,
     render_epoch: u64,
     render_mutations: Vec<render_mutation::RenderMutation>,
+    image_mutations: Vec<mutation::ImageRelevantMutation>,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     shadow_roots: Vec<shadow::ShadowRootData>,
@@ -170,6 +174,12 @@ impl Dom {
         slot
     }
     pub fn has_event_target(&self, slot: u64) -> bool { slot < self.external_event_targets }
+    pub fn set_window_event_target(&mut self, slot: u64) -> Result<(), DomError> {
+        if !self.has_event_target(slot) { return Err(DomError::InvalidStateError); }
+        self.window_event_target = Some(slot);
+        Ok(())
+    }
+    pub fn window_event_target(&self) -> Option<u64> { self.window_event_target }
 
     pub fn new() -> Self {
         let mut dom = Self {
@@ -178,8 +188,10 @@ impl Dom {
             mutations: mutation::MutationObservers::default(),
             ranges: Vec::new(),
             static_ranges: Vec::new(),
+            selections: Vec::new(),
             events: events::EventTargets::default(),
             external_event_targets: 0,
+            window_event_target: None,
             mutation_records: Vec::new(),
             static_node_lists: Vec::new(),
             collections: Vec::new(),
@@ -193,6 +205,7 @@ impl Dom {
             free_node_slots: Vec::new(),
             render_epoch: 0,
             render_mutations: Vec::new(),
+            image_mutations: Vec::new(),
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             shadow_roots: Vec::new(),

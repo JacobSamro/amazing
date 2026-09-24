@@ -411,6 +411,19 @@ fn expanded_attributes_clone_and_notify_by_local_name() {
     );
 }
 #[test]
+fn processing_instruction_target_uses_xml_name_characters() {
+    let mut dom = crate::Dom::new();
+    let document = crate::NodeIdx(0);
+    for target in ["xml:fail", "A\u{b7}A", "a0"] {
+        assert!(dom.create_processing_instruction_in(document, target, &[b'x' as u16]).is_ok(), "{target:?}");
+    }
+    for target in ["\u{b7}A", "\u{d7}A", "A\u{d7}", "xml", "Xml", "0"] {
+        assert_eq!(dom.create_processing_instruction_in(document, target, &[b'x' as u16]),
+            Err(crate::DomError::InvalidCharacterError), "{target:?}");
+    }
+}
+
+#[test]
 fn wpt_doctype_name_allows_empty_and_punctuation_but_rejects_ascii_whitespace_and_gt() {
     let mut dom = crate::Dom::new();
     let document = crate::NodeIdx(0);
