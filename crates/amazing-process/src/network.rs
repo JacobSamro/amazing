@@ -168,11 +168,14 @@ pub fn serve_network(connection: &Arc<Connection>) {
 /// browser main calls this before starting UI or renderer work; all Fetch
 /// state stays in this child until the authenticated IPC connection closes.
 pub fn run_network_child() -> Result<(), crate::Error> {
-    let (connection, _, _) = crate::bootstrap_child(
+    let connection = crate::bootstrap_child(
         crate::Role::Network,
         crate::Capabilities(BTreeMap::from([("network".into(), "1".into())])),
+        |connection, _, _| {
+            serve_network(connection);
+            Ok(())
+        },
     )?;
-    serve_network(&connection);
     while !connection.is_closed() {
         std::thread::sleep(Duration::from_millis(10));
     }
