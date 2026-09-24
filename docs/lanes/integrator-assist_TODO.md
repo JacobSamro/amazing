@@ -778,3 +778,16 @@ the shared profile was corrupt. On fixed local `dev` base `544d7e8`, 50 new
 full-workspace parallel Linux cycles selected and passed both tests, and each
 workspace run exited 0 with **2,154 passed / 5 skipped**. The per-cycle summary
 is under `crates/amazing/tests/driver_flakes/evidence/`.
+
+## IA-STORAGE-EVENTS — cross-document localStorage delivery (2026-09-24)
+
+On fixed local `dev` base `f676798`, a successful localStorage mutation queues
+one `storage` task on each other live document in the same profile and storage
+key. The receiving scheduler admits its inbox after pre-existing JS requests,
+and delivers a `storage` event to window listeners and `onstorage` with exact
+UTF-16 key and values, source URL, and the receiving document's Storage
+wrapper. Equal-value writes and the source document emit no event. A driver
+test covers set, remove, clear, same-origin filtering, task timing, and listener
+removal. Session storage remains per arena: a browsing-context-group seam from
+storage is needed before sessionStorage can share data and notify related
+documents.

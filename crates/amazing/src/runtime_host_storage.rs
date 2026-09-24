@@ -42,6 +42,13 @@ pub(super) struct StorageRuntime {
 thread_local! {
     static SHARED_WEB_STORAGE: RefCell<HashMap<PathBuf,Weak<RefCell<PersistentWebStorage>>>>=RefCell::new(HashMap::new());
     static SHARED_INDEXED_DB: RefCell<HashMap<PathBuf,Weak<RefCell<IndexedDb>>>>=RefCell::new(HashMap::new());
+    static STORAGE_DOCUMENTS: RefCell<HashMap<PathBuf,Vec<Weak<RefCell<BindingState>>>>>=RefCell::new(HashMap::new());
+}
+
+#[derive(Clone)]
+pub(super) struct StorageEventDelivery {
+    change: StorageChange,
+    url: String,
 }
 
 enum StorageObject {
@@ -67,7 +74,7 @@ enum StorageJob {
     DatabaseVersionChange { connection: u64, old: u64, new: Option<u64> },
     DispatchListener { slot: usize, event: JsValue, callbacks: VecDeque<JsValue> },
     TransactionComplete { transaction: usize },
-    StorageEvent(StorageChange),
+    StorageEvent(StorageEventDelivery),
 }
 
 enum StoreResult {
@@ -81,6 +88,19 @@ enum StoreResult {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn schedule_storage_events(&self, js: &mut Interpreter) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        loop {
+            let delivery = adapter.state.borrow_mut().storage_inbox.pop_front();
+            let Some(delivery) = delivery else { break };
+            if let Err(error) = adapter.storage_schedule(StorageJob::StorageEvent(delivery.clone())) {
+                adapter.state.borrow_mut().storage_inbox.push_front(delivery);
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// IndexedDB transactions stop accepting new requests after the task's
     /// microtask checkpoint. Request event dispatch reactivates its transaction.
     pub(crate) fn storage_deactivate_transactions(&self) {
@@ -94,6 +114,62 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn window_storage_listener(&mut self, add: bool, this: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let window = self.js.binding_global_object();
+        let name = self.storage_string(args.first().unwrap_or(&JsValue::Undefined))?;
+        if name != "storage" {
+            let original = {
+                let state = self.state.borrow();
+                if add { state.window_add_listener.clone() } else { state.window_remove_listener.clone() }
+            }.ok_or_else(|| Throw::type_error("window event listener unavailable"))?;
+            return self.js.binding_call(&original, this, args.to_vec());
+        }
+        if !self.js.binding_same_value(&this, &window) && !matches!(this, JsValue::Undefined | JsValue::Null) {
+            return Err(Throw::type_error("Storage listener receiver must be window"));
+        }
+        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        if !self.js.binding_is_callable(&callback) {
+            return Err(Throw::type_error("event listener must be callable"));
+        }
+        if add {
+            let existing = self.state.borrow().storage_listeners.iter()
+                .any(|value| self.js.binding_same_value(value, &callback));
+            if !existing { self.state.borrow_mut().storage_listeners.push(callback); }
+        } else {
+            self.state.borrow_mut().storage_listeners.retain(|value|
+                !self.js.binding_same_value(value, &callback));
+        }
+        Ok(JsValue::Undefined)
+    }
+
+    fn dispatch_storage_event(&mut self, delivery: StorageEventDelivery) -> Result<(), Throw> {
+        let window = self.js.binding_global_object();
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str("storage")])?;
+        let units = |value: Option<Vec<u16>>| value.map_or(JsValue::Null,
+            |units| JsValue::str(JsString::from_units(units)));
+        for (name, value) in [
+            ("key", units(delivery.change.key)),
+            ("oldValue", units(delivery.change.old_value)),
+            ("newValue", units(delivery.change.new_value)),
+            ("url", JsValue::str(delivery.url)),
+            ("storageArea", self.js.binding_get_property(&window, "localStorage")?),
+            ("target", window.clone()),
+            ("currentTarget", window.clone()),
+        ] {
+            self.js.binding_define_data_property(&event, name, value, BindingPropertyFlags::METHOD)?;
+        }
+        let listeners = self.state.borrow().storage_listeners.clone();
+        for listener in listeners {
+            let _ = self.js.binding_call(&listener, window.clone(), vec![event.clone()]);
+        }
+        let handler = self.js.binding_get_property(&window, "onstorage")?;
+        if self.js.binding_is_callable(&handler) {
+            let _ = self.js.binding_call(&handler, window, vec![event]);
+        }
+        Ok(())
+    }
+
     pub(super) fn storage_lexical_areas(&mut self) -> Result<(JsValue, JsValue), Throw> {
         let local=self.storage_allocate(SI::Storage,StorageObject::Area{session:false})?;
         let session=self.storage_allocate(SI::Storage,StorageObject::Area{session:true})?;
@@ -184,6 +260,12 @@ impl RuntimeBindingHost<'_> {
             .map_err(|e|Throw::type_error(format!("Cache open: {e:?}")))?)
             .map_err(|e|Throw::type_error(format!("Cache decode: {e:?}")))?;
         self.state.borrow_mut().storage=Some(StorageRuntime {web,idb,cache,objects:Vec::new(),wrappers:HashMap::new(),pending:VecDeque::new(),blocked_opens:VecDeque::new(),blocked_deletes:VecDeque::new(),tick_scheduled:false,_test_root:test_root});
+        STORAGE_DOCUMENTS.with(|documents| {
+            let mut documents = documents.borrow_mut();
+            let peers = documents.entry(path).or_default();
+            peers.retain(|peer| peer.upgrade().is_some());
+            peers.push(Rc::downgrade(&self.state));
+        });
         Ok(())
     }
     fn storage_key(&self) -> Result<StorageKey, Throw> {
@@ -297,7 +379,7 @@ impl RuntimeBindingHost<'_> {
             let web=self.state.borrow().storage.as_ref().expect("storage initialized").web.clone();
             let mut web=web.borrow_mut();
             if session {
-                let area=web.session(id,key);
+                let area=web.session(id,key.clone());
                 match (name,value){(Some(name),Some(value))=>area.set(name,value,id).map_err(|e|format!("{e:?}")),
                     (Some(name),None)=>Ok(area.remove(&name,id)),(None,_)=>Ok(area.clear(id))}
             } else {
@@ -308,7 +390,27 @@ impl RuntimeBindingHost<'_> {
             }
         };
         match result {
-            Ok(Some(_change))=>{},
+            Ok(Some(change)) if !session=>{
+                let url=self.state.borrow().document_url.clone().unwrap_or_default();
+                let path=self.state.borrow().storage.as_ref().unwrap()._test_root.as_ref()
+                    .map(|root|root.path.clone()).unwrap_or_else(Self::storage_profile_path);
+                STORAGE_DOCUMENTS.with(|documents| {
+                    let mut documents=documents.borrow_mut();
+                    if let Some(peers)=documents.get_mut(&path) {
+                        peers.retain(|peer| peer.upgrade().is_some());
+                        for peer in peers.iter().filter_map(Weak::upgrade) {
+                            let recipient_url=peer.borrow().document_url.clone();
+                            if peer.borrow().arena==change.source ||
+                                !recipient_url.as_deref().is_some_and(|recipient|
+                                    Self::storage_key_for_url(recipient).ok().as_ref()==Some(&key)) {continue}
+                            peer.borrow_mut().storage_inbox.push_back(StorageEventDelivery {
+                                change: change.clone(), url: url.clone(),
+                            });
+                        }
+                    }
+                });
+            },
+            Ok(Some(_))=>{},
             Ok(None)=>{},
             Err(error) if error.contains("QuotaExceeded")=>return Err(self.storage_dom_error("QuotaExceededError","Storage quota exceeded")),
             Err(error)=>return Err(Throw::type_error(format!("Storage failure: {error}"))),
@@ -1011,7 +1113,7 @@ impl RuntimeBindingHost<'_> {
                         match result {Ok(())=>self.storage_dispatch(transaction,"complete",None,None)?,Err(_)=>self.storage_dispatch(transaction,"abort",None,None)?}
                     }
                 },
-                StorageJob::StorageEvent(_)=>{},
+                StorageJob::StorageEvent(delivery)=>self.dispatch_storage_event(delivery)?,
             }
         }
         let more={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();!storage.pending.is_empty()&&!storage.tick_scheduled};
@@ -1189,6 +1291,44 @@ mod storage_binding_tests {
         first.set_location_url(&origin);second.set_location_url(&origin);
         first.run_script("localStorage.setItem('shared','value')").unwrap();
         assert_eq!(second.run_script("localStorage.getItem('shared')").unwrap(),JsValue::str("value"));
+    }
+
+    #[test]
+    fn local_storage_events_run_on_other_same_origin_document_tasks() {
+        let _shared=SharedTestStorage::new();
+        let mut source=scheduler();let mut peer=scheduler();let mut other=scheduler();
+        let origin=format!("https://events-{}.example.test/",std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        source.set_location_url(format!("{origin}source"));
+        peer.set_location_url(format!("{origin}peer"));
+        other.set_location_url("https://unrelated.example.test/");
+        for scheduler in [&mut source,&mut peer,&mut other] {
+            scheduler.run_script("var events=[]; var propertyEvents=[]; var listener=function(e){events.push([e.key,e.oldValue,e.newValue,e.url,e.storageArea===localStorage,e.target===window])}; window.addEventListener('storage',listener); window.onstorage=function(e){propertyEvents.push(e.key)};").unwrap();
+        }
+        source.run_script("localStorage.setItem('name','first')").unwrap();
+        assert_eq!(source.run_script("events.length").unwrap(),JsValue::num(0.0));
+        assert_eq!(peer.run_script("events.length").unwrap(),JsValue::num(0.0));
+        peer.pump_at(Duration::from_millis(1),false).unwrap();
+        other.pump_at(Duration::from_millis(1),false).unwrap();
+        assert_eq!(peer.run_script("JSON.stringify(events)").unwrap(),
+            JsValue::str(format!("[[\"name\",null,\"first\",\"{origin}source\",true,true]]")));
+        assert_eq!(other.run_script("events.length").unwrap(),JsValue::num(0.0));
+        assert_eq!(peer.run_script("propertyEvents[0]").unwrap(),JsValue::str("name"));
+        source.run_script("localStorage.setItem('name','first')").unwrap();
+        peer.pump_at(Duration::from_millis(2),false).unwrap();
+        assert_eq!(peer.run_script("events.length").unwrap(),JsValue::num(1.0));
+        source.run_script("localStorage.removeItem('name')").unwrap();
+        peer.pump_at(Duration::from_millis(3),false).unwrap();
+        assert_eq!(peer.run_script("JSON.stringify(events[1].slice(0,3))").unwrap(),
+            JsValue::str("[\"name\",\"first\",null]"));
+        source.run_script("localStorage.setItem('again','value'); localStorage.clear()").unwrap();
+        peer.pump_at(Duration::from_millis(4),false).unwrap();
+        assert_eq!(peer.run_script("JSON.stringify(events[3].slice(0,3))").unwrap(),
+            JsValue::str("[null,null,null]"));
+        peer.run_script("window.removeEventListener('storage',listener); window.onstorage=null").unwrap();
+        source.run_script("localStorage.setItem('last','value')").unwrap();
+        peer.pump_at(Duration::from_millis(5),false).unwrap();
+        assert_eq!(peer.run_script("events.length").unwrap(),JsValue::num(4.0));
     }
 
     #[test]
