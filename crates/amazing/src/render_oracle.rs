@@ -204,10 +204,7 @@ impl RenderCoordinator {
         { return None; }
         let RenderMutationKind::Attribute { namespace_uri: None, local_name, old_value, new_value, .. } = &entry.kind
             else { return None; };
-        // CSS-13's fast classifier currently resolves inline style edits. A
-        // class edit returns Recomputed, so leave it for the normal candidate
-        // path without doing that style work twice.
-        if local_name != "style" { return None; }
+        if !matches!(local_name.as_str(), "style" | "class") { return None; }
         let old = old_value.as_ref().map(|value| String::from_utf16(value)).transpose().ok()?;
         let new = new_value.as_ref().map(|value| String::from_utf16(value)).transpose().ok()?;
         let box_size = self.layout.as_ref().and_then(|layout| layout_box_size(layout.root(), entry.target.node));
