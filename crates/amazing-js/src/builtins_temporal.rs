@@ -281,10 +281,11 @@ fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
 
 fn std_temporal_now_in_zone(i: &mut Interpreter, args: Vec<JsValue>) -> Result<[i64; 10], Throw> {
     let zone = std_reflect_arg(&args, 0);
-    let minutes = if zone.is_undefined() { 0 }
-        else { std_temporal_fixed_offset(&i.to_string(&zone)?)? };
+    let zone = if zone.is_undefined() { "UTC".to_string() }
+        else { std_epoch_zone_value(i, &zone)? };
     let mut fields = std_temporal_now_fields();
-    let shifted = std_temporal_epoch_ns(&fields) + minutes as i128 * 60 * STD_TEMPORAL_NS_SECOND;
+    let epoch_ns = std_temporal_epoch_ns(&fields);
+    let shifted = epoch_ns + tz_offset_ns(&zone, epoch_ns);
     std_temporal_set_epoch_ns(&mut fields, shifted)?;
     Ok(fields)
 }
@@ -373,9 +374,30 @@ fn std_temporal_day_of_week(epoch_day: i64) -> i64 { (epoch_day + 3).rem_euclid(
 
 fn std_temporal_iso_calendar(i: &mut Interpreter, value: &JsValue) -> Result<(), Throw> {
     if value.is_undefined() { return Ok(()); }
+    if std_temporal_record(value, None).is_ok_and(|record| matches!(record.kind,
+        StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime
+        | StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay))
+        || std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)).is_ok() {
+        return Ok(());
+    }
+    if !matches!(value, JsValue::Str(_)) {
+        return Err(Throw::type_error("Temporal calendar must be a string or Temporal object"));
+    }
     let name = i.to_string(value)?;
     if name.eq_ignore_ascii_case("iso8601") { Ok(()) }
     else { Err(Throw::range_error("only iso8601 calendar is supported")) }
+}
+
+fn std_temporal_calendar_from_value(i: &mut Interpreter, value: &JsValue) -> Result<(), Throw> {
+    if std_temporal_iso_calendar(i, value).is_ok() { return Ok(()); }
+    if let JsValue::Str(name) = value {
+        if [StdTemporalKind::PlainDate, StdTemporalKind::PlainDateTime,
+            StdTemporalKind::PlainYearMonth, StdTemporalKind::PlainMonthDay]
+            .iter().any(|kind| std_temporal_parse(*kind, &name.to_utf8_lossy()).is_ok()) {
+            return Ok(());
+        }
+    }
+    std_temporal_iso_calendar(i, value)
 }
 
 fn std_temporal_week_start(year: i64) -> i64 {
@@ -481,7 +503,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
     let mut fields = [0; 10];
     if !matches!(kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
         let calendar = i.get_prop(value, "calendar")?;
-        std_temporal_iso_calendar(i, &calendar)?;
+        std_temporal_calendar_from_value(i, &calendar)?;
     }
     if kind == StdTemporalKind::Duration {
         let mut present = false;
@@ -546,17 +568,27 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
 fn std_temporal_parse_date(text: &str, require_day: bool) -> Result<(i64, i64, i64, &str), Throw> {
     let year_end = if text.starts_with('+') || text.starts_with('-') { 7 } else { 4 };
     let invalid = || Throw::range_error("invalid ISO date string");
-    if text.len() < year_end + 3 || text.as_bytes().get(year_end) != Some(&b'-') {
+    if text.len() < year_end + 2 { return Err(invalid()); }
+    if text.starts_with("-000000") { return Err(invalid()); }
+    let year_text = text.get(..year_end).ok_or_else(invalid)?;
+    if !year_text.trim_start_matches(['+', '-']).bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(invalid());
     }
-    if text.starts_with("-000000") { return Err(invalid()); }
-    let year = text.get(..year_end).and_then(|part| part.parse::<i64>().ok()).ok_or_else(invalid)?;
-    let month = text.get(year_end + 1..year_end + 3).and_then(|part| part.parse::<i64>().ok()).ok_or_else(invalid)?;
-    let mut tail = text.get(year_end + 3..).ok_or_else(invalid)?;
-    let day = if let Some(rest) = tail.strip_prefix('-') {
-        let value = rest.get(..2).and_then(|part| part.parse::<i64>().ok()).ok_or_else(invalid)?;
-        tail = rest.get(2..).ok_or_else(invalid)?;
-        value
+    let year = year_text.parse::<i64>().map_err(|_| invalid())?;
+    let rest = text.get(year_end..).ok_or_else(invalid)?;
+    let (rest, extended) = if let Some(rest) = rest.strip_prefix('-') { (rest, true) }
+        else { (rest, false) };
+    let month_text = rest.get(..2).ok_or_else(invalid)?;
+    if !month_text.bytes().all(|byte| byte.is_ascii_digit()) { return Err(invalid()); }
+    let month = month_text.parse::<i64>().map_err(|_| invalid())?;
+    let mut tail = rest.get(2..).ok_or_else(invalid)?;
+    let day_text = if extended { tail.strip_prefix('-').and_then(|rest| rest.get(..2)) }
+        else if tail.as_bytes().first().is_some_and(u8::is_ascii_digit) { tail.get(..2) }
+        else { None };
+    let day = if let Some(day_text) = day_text {
+        if !day_text.bytes().all(|byte| byte.is_ascii_digit()) { return Err(invalid()); }
+        tail = &tail[if extended { 3 } else { 2 }..];
+        day_text.parse::<i64>().map_err(|_| invalid())?
     } else if require_day { return Err(invalid()); } else { 1 };
     Ok((year, month, day, tail))
 }
@@ -564,28 +596,37 @@ fn std_temporal_parse_date(text: &str, require_day: bool) -> Result<(i64, i64, i
 fn std_temporal_parse_time(text: &str, fields: &mut [i64; 10]) -> Result<(), Throw> {
     let invalid = || Throw::range_error("invalid ISO time string");
     let text = text.strip_prefix('T').unwrap_or(text);
-    let (hour, rest) = text.split_once(':').ok_or_else(invalid)?;
+    let hour = text.get(..2).ok_or_else(invalid)?;
+    if !hour.bytes().all(|b| b.is_ascii_digit()) { return Err(invalid()); }
     fields[3] = hour.parse().map_err(|_| invalid())?;
+    let mut rest = text.get(2..).ok_or_else(invalid)?;
+    if rest.is_empty() { return Ok(()); }
+    let separated = rest.starts_with(':');
+    if separated { rest = &rest[1..]; }
     let minute = rest.get(..2).ok_or_else(invalid)?;
+    if !minute.bytes().all(|b| b.is_ascii_digit()) { return Err(invalid()); }
     fields[4] = minute.parse().map_err(|_| invalid())?;
-    let rest = rest.get(2..).ok_or_else(invalid)?;
-    if let Some(rest) = rest.strip_prefix(':') {
-        let seconds = rest.get(..2).ok_or_else(invalid)?;
-        let second = seconds.parse::<i64>().map_err(|_| invalid())?;
-        if second > 60 { return Err(invalid()); }
-        fields[5] = second.min(59);
-        let tail = rest.get(2..).ok_or_else(invalid)?;
-        if let Some(fraction) = tail.strip_prefix('.').or_else(|| tail.strip_prefix(',')) {
-            if fraction.is_empty() || fraction.len() > 9 || !fraction.bytes().all(|c| c.is_ascii_digit()) {
-                return Err(invalid());
-            }
-            let mut digits = fraction.to_string();
-            while digits.len() < 9 { digits.push('0'); }
-            let nanoseconds = digits.parse::<i64>().map_err(|_| invalid())?;
-            fields[6] = nanoseconds / 1_000_000;
-            fields[7] = (nanoseconds / 1_000) % 1_000;
-            fields[8] = nanoseconds % 1_000;
-        } else if !tail.is_empty() { return Err(invalid()); }
+    rest = rest.get(2..).ok_or_else(invalid)?;
+    if rest.is_empty() { return Ok(()); }
+    if separated {
+        rest = rest.strip_prefix(':').ok_or_else(invalid)?;
+    } else if rest.starts_with(':') { return Err(invalid()); }
+    let second = rest.get(..2).ok_or_else(invalid)?;
+    if !second.bytes().all(|b| b.is_ascii_digit()) { return Err(invalid()); }
+    let second = second.parse::<i64>().map_err(|_| invalid())?;
+    if second > 60 { return Err(invalid()); }
+    fields[5] = second.min(59);
+    rest = rest.get(2..).ok_or_else(invalid)?;
+    if let Some(fraction) = rest.strip_prefix('.').or_else(|| rest.strip_prefix(',')) {
+        if fraction.is_empty() || fraction.len() > 9 || !fraction.bytes().all(|c| c.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        let mut digits = fraction.to_string();
+        while digits.len() < 9 { digits.push('0'); }
+        let nanoseconds = digits.parse::<i64>().map_err(|_| invalid())?;
+        fields[6] = nanoseconds / 1_000_000;
+        fields[7] = (nanoseconds / 1_000) % 1_000;
+        fields[8] = nanoseconds % 1_000;
     } else if !rest.is_empty() { return Err(invalid()); }
     Ok(())
 }
@@ -596,6 +637,7 @@ fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool), Throw> {
     let body = &text[..first];
     let mut tail = &text[first..];
     let mut calendar = false;
+    let mut critical_calendar = false;
     let mut time_zone = false;
     while !tail.is_empty() {
         let rest = tail.strip_prefix('[').ok_or_else(invalid)?;
@@ -604,15 +646,17 @@ fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool), Throw> {
         tail = &rest[end + 1..];
         let annotation = value.strip_prefix('!').unwrap_or(value);
         if let Some(name) = annotation.strip_prefix("u-ca=") {
-            if !name.eq_ignore_ascii_case("iso8601") || calendar {
+            if (!calendar && !name.eq_ignore_ascii_case("iso8601"))
+                || (calendar && (critical_calendar || value.starts_with('!'))) {
                 return Err(invalid());
             }
             calendar = true;
-        } else if annotation.contains('=') {
-            if value.starts_with('!') || annotation.bytes().any(|c| c.is_ascii_uppercase()) {
+            critical_calendar = value.starts_with('!');
+        } else if let Some((key, _)) = annotation.split_once('=') {
+            if value.starts_with('!') || key.bytes().any(|c| c.is_ascii_uppercase()) {
                 return Err(invalid());
             }
-        } else if time_zone || value.starts_with('!') || value.is_empty() {
+        } else if time_zone || annotation.is_empty() {
             return Err(invalid());
         } else { time_zone = true; }
     }
@@ -628,6 +672,14 @@ fn std_temporal_time_prefix(text: &str) -> &str {
         }
     }
     &text[..end]
+}
+
+fn std_temporal_validate_time_offset(text: &str) -> Result<(), Throw> {
+    let suffix = &text[std_temporal_time_prefix(text).len()..];
+    if suffix.is_empty() { return Ok(()); }
+    if suffix.eq_ignore_ascii_case("z") { return Ok(()); }
+    std_epoch_parse_offset(suffix)?;
+    Ok(())
 }
 
 fn std_temporal_parse_duration(text: &str) -> Result<[i64; 10], Throw> {
@@ -679,12 +731,14 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
     if kind == StdTemporalKind::Duration { return std_temporal_parse_duration(text); }
     let invalid = || Throw::range_error("invalid Temporal string");
     let (text, _calendar) = std_temporal_parse_annotations(text)?;
+    if text.ends_with('Z') || text.ends_with('z') { return Err(invalid()); }
     let mut values = [0; 10];
     match kind {
         StdTemporalKind::PlainTime => {
             let time = if let Some((_, time)) = text.split_once('T').or_else(|| text.split_once('t')).or_else(|| text.split_once(' ')) {
                 time
             } else { text };
+            std_temporal_validate_time_offset(time)?;
             std_temporal_parse_time(std_temporal_time_prefix(time), &mut values)?;
         }
         StdTemporalKind::PlainMonthDay if text.starts_with("--") || text.len() == 5 => {
@@ -697,18 +751,25 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
         _ => {
             let (year, month, day, tail) = std_temporal_parse_date(text,
                 !matches!(kind, StdTemporalKind::PlainYearMonth))?;
+            if kind == StdTemporalKind::PlainYearMonth && !(1..=std_temporal_days_in_month(year, month)).contains(&day) {
+                return Err(invalid());
+            }
             values[0] = year; values[1] = month; values[2] = day;
+            if kind == StdTemporalKind::PlainYearMonth { values[2] = 1; }
             if kind == StdTemporalKind::PlainMonthDay { values[0] = 0; values[9] = 1972; }
             if kind == StdTemporalKind::PlainDateTime {
                 let time = tail.strip_prefix('T').or_else(|| tail.strip_prefix('t')).or_else(|| tail.strip_prefix(' ')).ok_or_else(invalid)?;
+                std_temporal_validate_time_offset(time)?;
                 std_temporal_parse_time(std_temporal_time_prefix(time), &mut values)?;
             } else if !tail.is_empty() && !matches!(kind, StdTemporalKind::PlainDate) {
                 if !tail.starts_with('T') && !tail.starts_with('t') && !tail.starts_with(' ') { return Err(invalid()); }
                 let mut ignored = [0; 10];
+                std_temporal_validate_time_offset(&tail[1..])?;
                 std_temporal_parse_time(std_temporal_time_prefix(&tail[1..]), &mut ignored)?;
             } else if !tail.is_empty() {
                 let time = tail.strip_prefix('T').or_else(|| tail.strip_prefix('t')).or_else(|| tail.strip_prefix(' ')).ok_or_else(invalid)?;
                 let mut ignored = [0; 10];
+                std_temporal_validate_time_offset(time)?;
                 std_temporal_parse_time(std_temporal_time_prefix(time), &mut ignored)?;
             }
         }
@@ -831,9 +892,7 @@ fn std_temporal_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
         StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay) {
         return Err(Throw::type_error("incompatible Temporal receiver"));
     }
-    if i.to_string(&std_reflect_arg(&args, 0))? != "iso8601" {
-        return Err(Throw::range_error("only iso8601 calendar is supported"));
-    }
+    std_temporal_calendar_from_value(i, &std_reflect_arg(&args, 0))?;
     std_temporal_make(i, data.kind, data.fields)
 }
 

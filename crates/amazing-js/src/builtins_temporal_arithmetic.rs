@@ -187,15 +187,24 @@ fn std_temporal_rounding_options(i: &mut Interpreter, option: &JsValue,
     let increment = std_temporal_number(i, increment, Some(1))?;
     let mode = std_temporal_option_string(i, option, "roundingMode")?
         .unwrap_or_else(|| mode_default.to_string());
+    if !std_temporal_round_mode_valid(&mode) {
+        return Err(Throw::range_error("invalid roundingMode"));
+    }
     let maximum = match smallest.as_str() {
         "hour" => 24, "minute" | "second" => 60,
         "millisecond" | "microsecond" | "nanosecond" => 1_000,
         _ => i64::MAX,
     };
-    if increment < 1 || increment >= maximum || (maximum != i64::MAX && maximum % increment != 0) {
+    if increment < 1 || increment > 1_000_000_000 || increment >= maximum
+        || (maximum != i64::MAX && maximum % increment != 0) {
         return Err(Throw::range_error("invalid roundingIncrement"));
     }
     Ok((smallest, increment, mode))
+}
+
+fn std_temporal_round_mode_valid(mode: &str) -> bool {
+    matches!(mode, "ceil" | "floor" | "expand" | "trunc" | "halfCeil"
+        | "halfFloor" | "halfExpand" | "halfTrunc" | "halfEven")
 }
 
 fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], largest: &str) -> Result<[i64; 10], Throw> {
@@ -238,10 +247,41 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         if data.kind == StdTemporalKind::PlainYearMonth { "month" } else { "day" }
     } else { "nanosecond" };
     let (smallest, increment, mode) = std_temporal_rounding_options(i, &options, smallest_default, "trunc")?;
+    if data.kind == StdTemporalKind::PlainYearMonth {
+        let largest = std_temporal_largest_unit(i, &options, "year")?;
+        if !matches!(largest.as_str(), "year" | "month")
+            || !matches!(smallest.as_str(), "year" | "month")
+            || (largest == "month" && smallest == "year") {
+            return Err(Throw::range_error("invalid PlainYearMonth difference units"));
+        }
+        for fields in [&data.fields, &other] {
+            if !(-100_000_000..=100_000_000).contains(&std_temporal_epoch_day(fields[0], fields[1], 1)) {
+                return Err(Throw::range_error("PlainYearMonth difference outside date range"));
+            }
+        }
+        let months = (other[0] - data.fields[0]) as i128 * 12 + (other[1] - data.fields[1]) as i128;
+        let months = if since { -months } else { months };
+        let step = increment as i128 * if smallest == "year" { 12 } else { 1 };
+        let rounded = std_temporal_round_integer(months, step, &mode)?;
+        let mut fields = [0; 10];
+        if largest == "year" {
+            fields[0] = (rounded / 12) as i64;
+            fields[1] = (rounded % 12) as i64;
+        } else { fields[1] = rounded as i64; }
+        return std_temporal_make(i, StdTemporalKind::Duration, fields);
+    }
     let mut result = match data.kind {
         StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth => {
-            let default = if data.kind == StdTemporalKind::PlainYearMonth { "month" } else { "day" };
+            let default = if data.kind == StdTemporalKind::PlainYearMonth { "year" } else { "day" };
             let largest = std_temporal_largest_unit(i, &options, default)?;
+            if data.kind == StdTemporalKind::PlainYearMonth
+                && !matches!(largest.as_str(), "year" | "month") {
+                return Err(Throw::range_error("invalid largestUnit for PlainYearMonth"));
+            }
+            if data.kind == StdTemporalKind::PlainYearMonth
+                && !matches!(smallest.as_str(), "year" | "month") {
+                return Err(Throw::range_error("invalid smallestUnit for PlainYearMonth"));
+            }
             if matches!(smallest.as_str(), "day" | "week") && matches!(largest.as_str(), "day" | "week") {
                 let days = std_temporal_epoch_day(other[0], other[1], other[2])
                     - std_temporal_epoch_day(data.fields[0], data.fields[1], data.fields[2]);
@@ -452,6 +492,9 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
             .unwrap_or_else(|| "halfExpand".to_string());
         (increment, mode)
     } else { (1, "halfExpand".to_string()) };
+    if !std_temporal_round_mode_valid(&mode) {
+        return Err(Throw::range_error("invalid roundingMode"));
+    }
     if increment < 1 || increment > 1_000_000_000 {
         return Err(Throw::range_error("invalid roundingIncrement"));
     }

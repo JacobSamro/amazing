@@ -180,3 +180,25 @@ transition queries, day lengths, and zone-aware date arithmetic.
 
 Linux `amazing-js` nextest passed 283/283 tests with one skipped; its doctest
 passed 1/1. The final Windows workspace gate is recorded in the lane report.
+
+## JSS-next checkpoint: Temporal and Iterator
+
+Fixed base: local `dev` `18a54d31c350c99a96e24dd72b6c49cdfe0e118c`.
+The three largest owned failing Test262 built-ins directories on that base were
+Temporal (1,284 failures), Iterator (437), and String (298). Temporal parsing,
+calendar conversion, IANA offset parsing, and PlainYearMonth differences now
+cover more ISO forms and enforce the tested range and rounding rules. Iterator
+adds `includes`, `chunks`, `windows`, `zip`, and `zipKeyed` with lazy state,
+argument validation, and iterator closing.
+
+Pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`:
+
+| Full Linux comparison | Pass | Fail | Timeout | Unsupported | Skipped | New passing variants | Lost variants |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed base | 26,206 | 26,791 | 22 | 559 | 294 | — | — |
+| After Temporal | 26,545 | 26,452 | 22 | 559 | 294 | 678 | 0 |
+| After Iterator | 26,615 | 26,382 | 22 | 559 | 294 | 140 | 0 |
+
+String and the requested win-002 gate remain for JSS-next after the priority
+structured-clone insert. These Linux measurements are cluster comparisons,
+not the final Windows gate.
