@@ -230,7 +230,10 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
         time.push('.');
         time.push_str(&"S".repeat(digits));
     }
-    if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
+    if state.day_period.is_some() {
+        if !time.is_empty() { time.push(' '); }
+        time.push('B');
+    } else if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
         time.push_str(" a");
     }
     if !date.is_empty() && !time.is_empty() { format!("{date}, {time}") }
@@ -283,7 +286,12 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
             'm' => ("minute", if count == 2 { format!("{:02}", date.minute) } else { date.minute.to_string() }),
             's' => ("second", if count == 2 { format!("{:02}", date.second) } else { date.second.to_string() }),
             'S' => ("fractionalSecond", format!("{:03}", date.millisecond)[..count.min(3)].to_string()),
-            'a' | 'b' | 'B' => ("dayPeriod", if date.hour < 12 { data.am.to_string() } else { data.pm.to_string() }),
+            'a' | 'b' => ("dayPeriod", if date.hour < 12 { data.am.to_string() } else { data.pm.to_string() }),
+            'B' => ("dayPeriod", match state.day_period.as_deref() {
+                Some("narrow") => data.day_period_narrow[date.hour as usize],
+                Some("short") => data.day_period_short[date.hour as usize],
+                _ => data.day_period_long[date.hour as usize],
+            }.to_string()),
             'G' => ("era", if date.year > 0 { "AD".into() } else { "BC".into() }),
             'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", if offset_seconds == 0 {
                 "UTC".into()
@@ -341,20 +349,56 @@ fn intl_date_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
 
 fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_date_state(&this)?;
-    if args.len() < 2 { return Err(Throw::type_error("formatRange requires two dates")); }
+    if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
+        return Err(Throw::type_error("formatRange requires two dates"));
+    }
     let start = intl_date_value(i, args.first())?;
     let end = intl_date_value(i, args.get(1))?;
     if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
-    let format = |value| intl_render_date(&state, value).into_iter().map(|(_, text)| text).collect::<String>();
-    let left = format(start);
-    let right = format(end);
-    Ok(JsValue::str(if left == right { left } else { format!("{left} – {right}") }))
+    let parts = intl_date_range_parts(&state, start, end);
+    Ok(JsValue::str(parts.iter().map(|(_, value, _)| value.as_str()).collect::<String>()))
 }
 
 fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let value = intl_date_format_range(i, this, args)?;
-    let value = i.to_string(&value)?;
-    intl_parts_array(i, vec![("literal", value)])
+    let state = intl_date_state(&this)?;
+    if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
+        return Err(Throw::type_error("formatRangeToParts requires two dates"));
+    }
+    let start = intl_date_value(i, args.first())?;
+    let end = intl_date_value(i, args.get(1))?;
+    if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
+    let mut values = Vec::new();
+    for (kind, value, source) in intl_date_range_parts(&state, start, end) {
+        let part = i.object_value();
+        i.set_prop(&part, "type", JsValue::str(kind))?;
+        i.set_prop(&part, "value", JsValue::str(value))?;
+        i.set_prop(&part, "source", JsValue::str(source))?;
+        values.push(part);
+    }
+    intl_array(i, values)
+}
+
+fn intl_date_range_parts(state: &IntlDateState, start: f64, end: f64) -> Vec<(&'static str, String, &'static str)> {
+    let left = intl_render_date(state, start);
+    let right = intl_render_date(state, end);
+    if left == right {
+        return left.into_iter().map(|(kind, value)| (kind, value, "shared")).collect();
+    }
+    let textual_month = ["long", "short", "narrow"].contains(&state.month.as_deref().unwrap_or(""));
+    let mut prefix = 0;
+    let mut suffix = 0;
+    if textual_month {
+        while prefix < left.len().min(right.len()) && left[prefix] == right[prefix] { prefix += 1; }
+        while suffix < left.len().min(right.len()) - prefix
+            && left[left.len() - suffix - 1] == right[right.len() - suffix - 1] { suffix += 1; }
+    }
+    let mut parts = Vec::new();
+    parts.extend(left[..prefix].iter().cloned().map(|(kind, value)| (kind, value, "shared")));
+    parts.extend(left[prefix..left.len() - suffix].iter().cloned().map(|(kind, value)| (kind, value, "startRange")));
+    parts.push(("literal", " – ".into(), "shared"));
+    parts.extend(right[prefix..right.len() - suffix].iter().cloned().map(|(kind, value)| (kind, value, "endRange")));
+    parts.extend(left[left.len() - suffix..].iter().cloned().map(|(kind, value)| (kind, value, "shared")));
+    parts
 }
 
 fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -397,5 +441,12 @@ mod intl_date_tests {
         let mut i = Interpreter::new();
         let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hourCycle:'h23'}); d.format(1710053940000)+'|'+d.format(1710054000000)").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "1:59|3:00");
+    }
+
+    #[test]
+    fn range_parts_mark_shared_and_distinct_fields() {
+        let mut i = Interpreter::new();
+        let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'UTC',year:'numeric',month:'short',day:'numeric'}); d.formatRangeToParts(1546473600000,1546646400000).map(p=>p.type+':'+p.source).join('|')").unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "month:shared|literal:shared|day:startRange|literal:shared|day:endRange|literal:shared|year:shared");
     }
 }

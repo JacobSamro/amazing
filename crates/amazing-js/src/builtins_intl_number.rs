@@ -366,6 +366,7 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     let data = intl_data(&state.locale);
     let mut parts = Vec::new();
     let negative = input.is_sign_negative();
+    let mut rounded_zero = input == 0.0;
     let mut value = input.abs();
     if state.style == "percent" { value *= 100.0; }
     let mut exponent = 0i32;
@@ -418,6 +419,7 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         let increment = state.rounding_increment as f64;
         let signed = if negative { -value } else { value };
         let rounded = intl_round_scaled(signed * scale / increment, &state.rounding_mode).abs() * increment / scale;
+        rounded_zero = rounded == 0.0;
         let mut digits = intl_round_decimal(value, negative, max_fraction, state.rounding_increment,
             &state.rounding_mode).unwrap_or_else(|| format!("{:.*}", max_fraction.min(100), rounded));
         if let Some(dot) = digits.find('.') {
@@ -465,12 +467,16 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     let sign = match state.sign_display.as_str() {
         "never" => None,
         "always" => Some(if negative { ("minusSign", data.minus) } else { ("plusSign", data.plus) }),
-        "exceptZero" if input == 0.0 => None,
-        "negative" if input == 0.0 => None,
+        "exceptZero" if rounded_zero => None,
+        "negative" if rounded_zero => None,
         _ if negative => Some(("minusSign", data.minus)),
         _ => None,
     };
-    if let Some((kind, value)) = sign { parts.push((kind, value.to_string())); }
+    let accounting = state.style == "currency" && state.currency_sign == "accounting"
+        && data.currency_accounting_pattern.split(';').nth(1).is_some_and(|pattern| pattern.contains('('))
+        && sign.is_some_and(|(kind, _)| kind == "minusSign");
+    if accounting { parts.push(("literal", "(".into())); }
+    else if let Some((kind, value)) = sign { parts.push((kind, value.to_string())); }
     let currency = state.currency.as_ref().and_then(|code| INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code));
     let currency_text = state.currency.as_ref().map(|code| {
         let index = INTL_NUMBER_DATA.iter().position(|data| data.locale == state.locale).unwrap_or(0);
@@ -503,6 +509,7 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         parts.push(("literal", " ".into()));
         parts.push(("unit", state.unit.clone().unwrap_or_default()));
     }
+    if accounting { parts.push(("literal", ")".into())); }
     let text = parts.iter().map(|(_, value)| value.as_str()).collect();
     (text, parts)
 }
@@ -595,5 +602,12 @@ mod intl_number_tests {
         assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'morePrecision',maximumSignificantDigits:2,maximumFractionDigits:2}).format(1.23)"), "1.23");
         assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'lessPrecision',maximumSignificantDigits:2,maximumFractionDigits:2}).format(1.23)"), "1.2");
         assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'morePrecision',minimumSignificantDigits:3,minimumFractionDigits:2}).format(1)"), "1.00");
+    }
+
+    #[test]
+    fn sign_display_uses_rounded_result_and_accounting_pattern() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'exceptZero'}).format(-0.0001)"), "0");
+        assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'negative'}).format(-0)"), "0");
+        assert_eq!(eval("new Intl.NumberFormat('en',{style:'currency',currency:'USD',currencySign:'accounting'}).format(-987)"), "($987.00)");
     }
 }

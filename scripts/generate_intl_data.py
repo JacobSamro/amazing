@@ -52,7 +52,7 @@ def main() -> None:
         "    decimal: &'static str, group: &'static str, plus: &'static str, minus: &'static str,",
         "    percent: &'static str, nan: &'static str, infinity: &'static str,",
         "    decimal_pattern: &'static str, percent_pattern: &'static str,",
-        "    currency_pattern: &'static str, minimum_grouping: usize,",
+        "    currency_pattern: &'static str, currency_accounting_pattern: &'static str, minimum_grouping: usize,",
         "}",
         "const INTL_NUMBER_DATA: &[IntlNumberData] = &[",
     ]
@@ -80,6 +80,7 @@ def main() -> None:
             + ", decimal_pattern: " + rust_string(fields[9])
             + ", percent_pattern: " + rust_string(fields[10])
             + ", currency_pattern: " + rust_string(fields[11])
+            + ", currency_accounting_pattern: " + rust_string(main_data[f"currencyFormats-numberSystem-{numbering}"].get("accounting", fields[11]))
             + ", minimum_grouping: " + str(int(main_data.get("minimumGroupingDigits", "1")))
             + " },"
         )
@@ -89,16 +90,32 @@ def main() -> None:
         "struct IntlDateData { locale: &'static str, date: [&'static str; 4], time: [&'static str; 4],",
         "    date_time: [&'static str; 4], months_wide: [&'static str; 12], months_abbr: [&'static str; 12],",
         "    weekdays_wide: [&'static str; 7], weekdays_abbr: [&'static str; 7],",
-        "    am: &'static str, pm: &'static str,",
+        "    am: &'static str, pm: &'static str, day_period_long: [&'static str; 24],",
+        "    day_period_short: [&'static str; 24], day_period_narrow: [&'static str; 24],",
         "}",
         "const INTL_DATE_DATA: &[IntlDateData] = &[",
     ]
     array = lambda values: "[" + ", ".join(map(rust_string, values)) + "]"
+    period_rules = cldr("cldr-core/supplemental/dayPeriods.json")["supplemental"]["dayPeriodRuleSet"]
     for locale in LOCALES:
         date_data = cldr(f"cldr-dates-full/main/{locale}/ca-gregorian.json")["main"][locale]["dates"]["calendars"]["gregorian"]
         months = date_data["months"]["format"]
         days = date_data["days"]["format"]
         periods = date_data["dayPeriods"]["format"]["wide"]
+        rules = period_rules.get(locale, period_rules.get(locale.split("-")[0], period_rules["en"]))
+        def period_at(hour: int) -> str:
+            if hour == 12 and "noon" in rules:
+                return "noon"
+            for name, rule in rules.items():
+                if "_from" not in rule:
+                    continue
+                start = int(rule["_from"].split(":")[0])
+                end = int(rule["_before"].split(":")[0])
+                if start <= hour < end or (start > end and (hour >= start or hour < end)):
+                    return name
+            return "am" if hour < 12 else "pm"
+        period_keys = [period_at(hour) for hour in range(24)]
+        period_names = date_data["dayPeriods"]["format"]
         styles = ("full", "long", "medium", "short")
         weekdays = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
         lines.append(
@@ -110,7 +127,10 @@ def main() -> None:
             f"months_abbr: {array(months['abbreviated'][str(n)] for n in range(1, 13))}, "
             f"weekdays_wide: {array(days['wide'][day] for day in weekdays)}, "
             f"weekdays_abbr: {array(days['abbreviated'][day] for day in weekdays)}, "
-            f"am: {rust_string(periods['am'])}, pm: {rust_string(periods['pm'])} }},"
+            f"am: {rust_string(periods['am'])}, pm: {rust_string(periods['pm'])}, "
+            f"day_period_long: {array(period_names['wide'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))}, "
+            f"day_period_short: {array(period_names['abbreviated'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))}, "
+            f"day_period_narrow: {array(period_names['narrow'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))} }},"
         )
     lines.append("];")
 

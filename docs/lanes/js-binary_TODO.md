@@ -195,3 +195,62 @@ DateTimeFormat range contraction and source-tagged parts, broader locale data,
 and Temporal adoption of the shared IANA resolver before the time-zone list can
 be published. The current generated TZif rules cover 1800–2500; dates beyond
 that interval still need POSIX-tail handling.
+
+## JSB-5 checkpoint — Intl constructor depth (2026-09-24)
+
+The pinned JSB-4 Windows baseline is `/tmp/jsb4b-win-final-source.json` on the
+Mac and `C:\Users\server\target\js-binary\jsb4b-final-source.json` on
+win-001. It has 25,645/53,872 passing Test262 files and 764/3,357 passing
+`intl402/` files. Input SHA-256 is
+`a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`;
+classification SHA-256 is
+`5742efeff8c21c1b29d7e0fb6bce871067d0218ccc9602c9a92478ae86876062`.
+Pinned Test262 revision: `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+Grouped failures by named constructor: DateTimeFormat 140, NumberFormat 102,
+Locale 88, then the smaller PluralRules, RelativeTimeFormat, ListFormat,
+Segmenter, DisplayNames, and Collator groups. The three largest named groups
+have 330 failures. All nine named groups together have about 455 failures;
+the requested 1,000 new passes requires including Temporal's 1,957 failures.
+The question of expanding JSB-5 to Temporal was sent to the user and remains
+open. This checkpoint works on the three largest named groups.
+
+Implemented so far: CLDR 48.2.0 locale supplemental data and generated likely
+subtags, week/time/calendar/numbering/zone data; Intl.Locale info methods and
+maximize/minimize; NumberFormat rounded-zero sign display and accounting
+patterns; DateTimeFormat range parts, textual month contraction, and flexible
+day-period data; canonical IANA `supportedValuesOf("timeZone")`; shared
+Array.prototype.find/every/sort needed by these Test262 cases. The pinned
+CLDR archive is `/tmp/cldr-json-48.2.0.tar.gz`, SHA-256
+`4f28298550dea43439986cd9ffb0a69cb73ba7d0b34a3c474760905ce8ce9e70`.
+Generators: `scripts/generate_intl_data.py` and
+`scripts/generate_intl_locale_data.py`. All generated source files are below
+4,000 lines.
+
+Linux `amazing-js` nextest passed 286/286 (one skipped). Latest targeted
+Test262 results on venus-001 are
+`~/amazing/out/js-binary-jsb5c-{DateTimeFormat,NumberFormat,Locale}.json`:
+DateTimeFormat 103→105 (+2), NumberFormat 146→161 (+15), Locale 79→145 (+66),
+with zero lost passing files within those directories. These are targeted
+Linux iterations, **not** a full zero-loss or Windows gate. DateTimeFormat
+still has 138 failures, NumberFormat 87, Locale 22. Diagnostics are in those
+JSON files. DateTimeFormat day-period cases still reject noon/afternoon/evening
+names; range cases encounter the runtime's date-string parsing limitation.
+NumberFormat unit, compact, range, BigInt, and sign cases remain. Locale still
+needs region validation, tag canonicalization, and region-priority data fixes.
+
+Iteration commands:
+
+```sh
+bash scripts/linux-run.sh js-binary --no-slot -- 'cargo nextest run -p amazing-js --locked --status-level fail --final-status-level fail'
+bash scripts/linux-run.sh js-binary --no-slot -- 'cargo build -p amazing-js --example test262_host --release --locked; for cluster in DateTimeFormat NumberFormat Locale; do python3 scripts/test262.py "$TEST262_ROOT" --binary "$CARGO_TARGET_DIR/release/examples/test262_host" --only "intl402/$cluster/" --jobs "$JOBS" --timeout 60 --output "$HOME/amazing/out/js-binary-jsb5c-$cluster.json"; done'
+```
+
+Next: integrate js-stdlib Temporal IANA commit
+`3d974620f2b9a8ca9dd5b503e241211daf086aa8` before the full corpus gate;
+that commit makes the expanded time-zone list viable. Preserve js-lang's
+`test262_host.rs` unified Capabilities implementation (`fba1f027`). Finish
+the three constructor clusters, run full pinned Test262 zero-loss on Linux,
+then the required Windows nextest/doctest and corpus gates. No JSB-5 full
+gate has run yet. This is a work-in-progress commit for restart, not ticket
+completion.

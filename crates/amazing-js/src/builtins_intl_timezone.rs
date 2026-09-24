@@ -50,6 +50,13 @@ fn tz_zone(id: &str) -> Option<&'static TzZone> {
     else { zones.iter().find(|zone| zone.name == entry.canonical) }
 }
 
+fn tz_supported_ids() -> Vec<&'static str> {
+    let mut ids: Vec<_> = tz_zones().iter().filter(|zone| zone.name == zone.canonical)
+        .map(|zone| zone.name.as_str()).collect();
+    ids.sort_unstable();
+    ids
+}
+
 fn tz_fixed_offset_seconds(id: &str) -> Option<i32> {
     let bytes = id.as_bytes();
     let sign = match bytes.first()? { b'+' => 1, b'-' => -1, _ => return None };
