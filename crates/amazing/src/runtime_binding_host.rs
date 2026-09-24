@@ -36,6 +36,7 @@ use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
 #[path = "runtime_host_compositor.rs"] mod compositor;
+#[path = "runtime_host_html.rs"] pub(crate) mod html;
 
 #[derive(Clone, Copy)]
 enum NativeEntry {
@@ -46,6 +47,9 @@ enum NativeEntry {
     Storage(SI, &'static str, SM),
     StorageTick,
     WindowStorageListener(bool),
+    IFrameContentDocument,
+    IFrameSrcGet,
+    IFrameSrcSet,
 }
 
 enum WebObject {
@@ -87,6 +91,7 @@ struct BindingState {
     storage_listeners: Vec<JsValue>,
     window_add_listener: Option<JsValue>,
     window_remove_listener: Option<JsValue>,
+    frames: html::FrameRuntime,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -109,6 +114,7 @@ impl RuntimeBindings {
 
     pub(crate) fn set_document_url(&self, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
+        self.navigate_iframes();
     }
 
     pub(crate) fn set_document_metadata(&self, character_set: &str, content_type: &str, referrer: &str) {
@@ -446,6 +452,7 @@ pub(crate) fn install(
         storage_listeners: Vec::new(),
         window_add_listener: None,
         window_remove_listener: None,
+        frames: html::FrameRuntime::default(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -461,7 +468,7 @@ pub(crate) fn install(
         };
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
-            NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
+            NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -473,6 +480,9 @@ pub(crate) fn install(
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
             NativeEntry::WindowStorageListener(add) => adapter.window_storage_listener(add, this, &args),
+            NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
+            NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
+            NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -483,6 +493,7 @@ pub(crate) fn install(
     install_interfaces(&mut adapter)?;
     adapter.install_storage_interfaces()?;
     adapter.install_canvas()?;
+    adapter.install_iframe_members()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;

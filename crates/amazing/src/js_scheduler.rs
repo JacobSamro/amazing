@@ -61,6 +61,24 @@ impl DriverScheduler {
         self.js.set_location_url(&url);
         self.bindings.set_document_url(&url);
     }
+    pub(crate) fn set_frame_resource_resolver(&mut self,
+        resolver: Rc<dyn Fn(&str) -> Option<String>>) {
+        self.bindings.set_frame_resource_resolver(resolver);
+    }
+    pub(crate) fn set_child_navigation_hook(&mut self,
+        hook: crate::runtime_binding_host::html::ChildNavigationHook) {
+        self.bindings.set_child_navigation_hook(hook);
+    }
+    pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
+        for (frame, document) in self.bindings.take_iframe_loads() {
+            if let Some(document) = document {
+                self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
+                self.dispatch_dom_event(document.0, "load")?;
+            }
+            self.dispatch_dom_event(frame.0, "load")?;
+        }
+        Ok(())
+    }
     pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
         self.bindings.set_document_metadata(character_set, content_type, referrer);
     }
@@ -240,6 +258,7 @@ impl DriverScheduler {
     /// all newly emitted requests have been admitted.
     pub(crate) fn pump_at(&mut self, now: Duration, render: bool) -> Result<bool, Throw> {
         self.drain_outbox()?;
+        self.dispatch_pending_iframe_loads()?;
         self.now = self.now.max(now);
         self.loop_.advance_to(self.now).map_err(loop_error)?;
         if render { self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?; }

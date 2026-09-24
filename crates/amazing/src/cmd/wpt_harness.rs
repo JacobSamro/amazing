@@ -290,6 +290,32 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
     }
     String::from_utf8(bytes).map_err(|e| e.to_string())
 }
+
+struct FrameFixtureScratch(PathBuf);
+impl Drop for FrameFixtureScratch {
+    fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+}
+
+fn frame_resource(root: &Path, scratch: &Path, url: &str) -> Option<String> {
+    let relative = url.strip_prefix("http://web-platform.test/")?
+        .split(['?', '#']).next()?;
+    let path = Path::new(relative);
+    if path.components().any(|part| !matches!(part, std::path::Component::Normal(_))) {
+        return None;
+    }
+    let original = Command::new("git").arg("-C").arg(root)
+        .args(["show", &format!("{REVISION}:{relative}")]).output().ok()?;
+    if !original.status.success() { return None; }
+    let checked_out = root.join(path);
+    if checked_out.is_file() {
+        return (std::fs::read(&checked_out).ok()? == original.stdout)
+            .then(|| checked_out.to_string_lossy().into_owned());
+    }
+    let staged = scratch.join(path);
+    std::fs::create_dir_all(staged.parent()?).ok()?;
+    std::fs::write(&staged, original.stdout).ok()?;
+    Some(staged.to_string_lossy().into_owned())
+}
 /// Window variant of WPT AnyHtmlHandler at revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
 /// Template and metadata rules: tools/serve/serve.py AnyHtmlHandler and
 /// tools/manifest/sourcefile.py read_script_metadata/parse_variants.
@@ -370,6 +396,13 @@ fn execute(options: &Options) -> Result<(), String> {
     collect_scripts(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut scripts)?;
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
+    let frame_scratch = FrameFixtureScratch(std::env::temp_dir()
+        .join(format!("amazing-wpt-frames-{}", std::process::id())));
+    let frame_root = root.clone();
+    let scratch_root = frame_scratch.0.clone();
+    scheduler.set_frame_resource_resolver(Rc::new(move |url| {
+        frame_resource(&frame_root, &scratch_root, url)
+    }));
     scheduler.js.set_viewport_size(options.width, options.height);
     scheduler.set_location_url(format!("http://web-platform.test/{}", options.test));
     // This runner reads a UTF-8 HTML source directly as its top-level page.
@@ -435,6 +468,7 @@ fn execute(options: &Options) -> Result<(), String> {
     if !installed {
         return Err("no harness script loaded".into());
     }
+    scheduler.dispatch_pending_iframe_loads().map_err(|error| error.describe())?;
     for event in ["DOMContentLoaded", "load"] {
         scheduler.dispatch_dom_event(0, event).map_err(|e| e.describe())?;
     }
