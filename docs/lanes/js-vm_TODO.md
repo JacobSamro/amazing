@@ -207,3 +207,14 @@ focused replay at 120 seconds passed both variants. The v3 paired host SHA-256
 was `31388346`, corpus input SHA-256 `91109b82`; VM compiled
 26,784/40,173 eligible files (66.6716%). Linux amazing-js nextest passed 242
 tests (one skipped). No orphaned `js-vm` host remained after the full run.
+
+A complete release-host replay of the same 53,872-file corpus at commit
+`acbe795b` resolved the timing-sensitive loss. The baseline passed 21,256 files
+and 41,451 variants; VM plus fallback passed 21,428 files and 41,765 variants.
+The paired comparison lost zero files and variants, gaining 172 files and 314
+variants. Compared with the earlier series-1 VM report, the new VM gained eight
+files and 16 variants, with zero losses. Both release modes used corpus input
+SHA-256 `91109b82` and host SHA-256 `fdadb9e6`. The VM compiled
+26,790/40,182 eligible files (66.6716%). Reports are on venus-001 under
+`~/amazing/out/jsvm5-orphan-v4-release-{base,vm,compare,prior-vm-compare}`.
+The release run left no orphaned js-vm host processes.
