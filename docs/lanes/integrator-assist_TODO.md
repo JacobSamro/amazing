@@ -778,3 +778,18 @@ the shared profile was corrupt. On fixed local `dev` base `544d7e8`, 50 new
 full-workspace parallel Linux cycles selected and passed both tests, and each
 workspace run exited 0 with **2,154 passed / 5 skipped**. The per-cycle summary
 is under `crates/amazing/tests/driver_flakes/evidence/`.
+
+## IA-ANIMATIONS-2 — CSS sampled style adoption (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the animation scene now serializes
+compositor samples into `AnimatedValues`, preserves animation and transition
+origins while a transition runs, and removes the transition origin after its
+end/cancel event. The driver passes those values to
+`compute_with_animations` for the rendering style and media/paint resources.
+The existing stylesheet-based layout entry point and its sampled box-style
+application remain until LAYOUT-14 item 8 provides `layout_styled_document`.
+`PropertyUpdate` currently omits an origin field, so the driver classifies
+samples by the compositor's documented animation-before-transition order and
+transition lifecycle events; a compositor origin field would remove that
+inference. Tests cover animation and transition cascade sources and retained
+precedence.
