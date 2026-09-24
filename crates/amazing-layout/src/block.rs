@@ -39,6 +39,7 @@ pub fn layout_root_in_viewport(
         viewport_width,
         viewport_height.unwrap_or(page_height),
         fonts,
+        None,
     );
     page_height
 }
@@ -68,10 +69,8 @@ pub(crate) fn layout_root_with_text(
         width,
         height.unwrap_or(root.border_box.y + root.border_box.h),
         &fonts,
+        Some(text),
     );
-    for child in &mut root.positioned {
-        crate::apply_shaped_text(child, text);
-    }
 }
 
 /// Parent-side context for the first/last-child margin approximation.
@@ -138,6 +137,15 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     )
 }
 
+pub(crate) fn layout_block_with_text(
+    b: &mut LayoutBox, x: f32, y: f32, cbw: f32,
+    fonts: &FontSource, text: &dyn amazing_text::TextSystem,
+) -> f32 {
+    layout_block_in_context(
+        b, x, y, cbw, fonts, &mut FloatContext::default(), Some(text), true,
+    )
+}
+
 pub(crate) fn layout_table_content(b: &mut LayoutBox, x:f32, y:f32, width:f32,
     fonts:&FontSource, text:Option<&dyn amazing_text::TextSystem>) -> f32 {
     layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,true)
@@ -158,6 +166,12 @@ fn layout_block_in_context(
         return crate::table::layout(b, x, y, cbw, fonts, text, 0.0);
     }
     let font_px = b.font_size;
+    let font_units = values::FontRelativeUnits::from_text_system(
+        text,
+        b.font_metric_style.as_ref(),
+        b.root_font_metric_style.as_ref(),
+        font_px,
+    );
     if let Some(svg) = &b.svg_sizing {
         b.replaced_size = Some(svg.used_size(
             &b.style,
@@ -166,8 +180,8 @@ fn layout_block_in_context(
             b.containing_block_height,
         ));
     }
-    b.margin = values::resolve_margins(&b.style, font_px, cbw);
-    b.padding = values::resolve_padding(&b.style, font_px, cbw);
+    b.margin = values::resolve_margins_with_units(&b.style, font_units, cbw);
+    b.padding = values::resolve_padding_with_units(&b.style, font_units, cbw);
     b.border = values::resolve_borders(&b.style, font_px);
 
     // The collapse context describes THIS box as a parent; it can only be
@@ -198,7 +212,7 @@ fn layout_block_in_context(
 
     // --- §10.3.3 horizontal constraint ---------------------------------
     let mut content_w;
-    match values::resolve_extent_with_ch(&b.style, "width", font_px, fonts.measure("0", font_px), Some(cbw)) {
+    match values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)) {
         MaybeLen::Px(w) => {
             let fixed = bl + pl + w + pr + br_;
             if floating || b.inline_atomic {
@@ -232,9 +246,16 @@ fn layout_block_in_context(
             content_w = w;
         }
         MaybeLen::Auto => {
+            let vertical_flex = matches!(b.flow, Flow::Flex(_))
+                && b.style.get("writing-mode").is_some_and(|mode| {
+                    mode.eq_ignore_ascii_case("vertical-rl")
+                        || mode.eq_ignore_ascii_case("vertical-lr")
+                        || mode.eq_ignore_ascii_case("sideways-rl")
+                        || mode.eq_ignore_ascii_case("sideways-lr")
+                });
             if let Some(size) = b.replaced_size {
                 content_w = size.width;
-            } else if floating || (b.inline_atomic && is_inline_block(&b.style)) {
+            } else if floating || vertical_flex || (b.inline_atomic && is_inline_block(&b.style)) {
                 let chrome = bl + pl + pr + br_;
                 let available =
                     (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
@@ -259,9 +280,9 @@ fn layout_block_in_context(
             }
         }
     }
-    let min_width = values::style_length_percentage(&b.style, "min-width", font_px, font_px * 0.6)
+    let min_width = values::style_length_percentage_with_units(&b.style, "min-width", font_units)
         .and_then(|value| value.resolve(Some(cbw))).unwrap_or(0.0).max(0.0);
-    let max_width = values::style_length_percentage(&b.style, "max-width", font_px, font_px * 0.6)
+    let max_width = values::style_length_percentage_with_units(&b.style, "max-width", font_units)
         .and_then(|value| value.resolve(Some(cbw)));
     content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
@@ -272,12 +293,18 @@ fn layout_block_in_context(
     let content_x = border_x + bl + pl;
     let content_y = border_y + bt + pt(b);
 
-    let def_h = specified_height(b, font_px);
+    let constraint_style = b.style.clone();
+    let containing_block_height = b.containing_block_height;
+    let height_constraint = |property| values::style_length_percentage_with_units(&constraint_style, property, font_units)
+        .and_then(|length| length.resolve(containing_block_height))
+        .map(|height| height.max(0.0));
+    let def_h = values::style_length_percentage_with_units(&b.style, "height", font_units)
+        .and_then(|length| length.resolve(b.containing_block_height));
     let inline_basis = def_h.map(|h| {
         constrain_height(
             h,
-            size_constraint(b, "min-height", font_px).unwrap_or(0.0),
-            size_constraint(b, "max-height", font_px),
+            height_constraint("min-height").unwrap_or(0.0),
+            height_constraint("max-height"),
         )
     });
     // Anonymous blocks inherit the host strut, including an explicit zero
@@ -401,8 +428,8 @@ fn layout_block_in_context(
         }
     });
     let fixed_height = def_h.or(replaced_height);
-    let min_height = size_constraint(b, "min-height", font_px).unwrap_or(0.0);
-    let max_height = size_constraint(b, "max-height", font_px);
+    let min_height = height_constraint("min-height").unwrap_or(0.0);
+    let max_height = height_constraint("max-height");
     let final_h = if let Some(height) = fixed_height {
         constrain_height(height, min_height, max_height)
     } else if ctx.bottom_separated || content.trailing_clearance {
@@ -528,6 +555,11 @@ fn last_in_flow_baseline(box_: &LayoutBox) -> Option<f32> {
     if let Flow::Blocks(children) = &box_.flow {
         return children.iter().rev()
             .filter(|child| floats::side(&child.style).is_none())
+            .filter(|child| {
+                let vertical = |box_: &LayoutBox| box_.style.get("writing-mode")
+                    .is_some_and(|mode| !mode.eq_ignore_ascii_case("horizontal-tb"));
+                vertical(child) == vertical(box_)
+            })
             .find_map(last_in_flow_baseline);
     }
     None
@@ -745,6 +777,25 @@ mod tests {
     use super::*;
     use crate::font::FontSource;
     use amazing_dom::Dom;
+
+    #[test]
+    fn inline_block_last_baseline_skips_orthogonal_child() {
+        let mut parent = LayoutBox::new(None, crate::Display::Block, ComputedStyle::default(), 16.0, 20.0);
+        let mut horizontal = LayoutBox::new(None, crate::Display::Block, ComputedStyle::default(), 16.0, 20.0);
+        horizontal.lines.push(crate::LineBox {
+            y_top: 0.0, height: 20.0, baseline: 15.0,
+            words: Vec::new(), glyphs: Vec::new(), decorations: Vec::new(), replaced: Vec::new(),
+        });
+        let mut vertical_style = ComputedStyle::default();
+        vertical_style.set("writing-mode", "vertical-rl");
+        let mut vertical = LayoutBox::new(None, crate::Display::Block, vertical_style, 16.0, 20.0);
+        vertical.lines.push(crate::LineBox {
+            y_top: 20.0, height: 20.0, baseline: 35.0,
+            words: Vec::new(), glyphs: Vec::new(), decorations: Vec::new(), replaced: Vec::new(),
+        });
+        parent.flow = Flow::Blocks(vec![horizontal, vertical]);
+        assert_eq!(last_in_flow_baseline(&parent), Some(15.0));
+    }
 
     #[test]
     fn calc_height_constraint_needs_a_definite_percentage_basis() {

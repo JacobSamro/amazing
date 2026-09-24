@@ -403,12 +403,37 @@ struct InlinePaintInfo {
 struct ShapedContext {
     text: String,
     spans: Vec<TextSpan>,
+    spacing: Vec<SpacingSpan>,
     sources: Vec<SourceMapping>,
     bidi_scopes: Vec<amazing_text::BidiScope>,
     colors: HashMap<u32, String>,
     paint_info: HashMap<u32, InlinePaintInfo>,
     atomics: HashMap<usize, AtomicInline>,
     base_direction: amazing_text::Direction,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SpacingSpan {
+    start: usize,
+    end: usize,
+    letter: f32,
+    word: crate::values::LengthPercentage,
+    font_size: f32,
+}
+
+fn spacing_at(spans: &[SpacingSpan], offset: usize) -> (f32, crate::values::LengthPercentage, f32) {
+    spans.iter().find(|span| span.start <= offset && offset < span.end)
+        .map_or((0.0, crate::values::LengthPercentage::default(), 0.0),
+            |span| (span.letter, span.word, span.font_size))
+}
+
+fn separator_spacing(text: &str, range: Range<usize>, spans: &[SpacingSpan]) -> f32 {
+    text[range.clone()].char_indices().filter(|(_, ch)| *ch == ' ' || *ch == '\u{00a0}')
+        .map(|(offset, _)| {
+            let (letter, word, font_size) = spacing_at(spans, range.start + offset);
+            // One gap on either side of each surviving word separator.
+            2.0 * letter + word.resolve(Some(font_size)).unwrap_or(0.0)
+        }).sum()
 }
 
 #[derive(Clone)]
@@ -440,6 +465,31 @@ enum ShapedUnit {
     },
 }
 
+/// A line break can only precede a run whose internal provider boundaries are
+/// unbreakable. Look ahead before placing its first unit, so an opening
+/// bracket and following atomic text move to the next line together.
+fn unbreakable_run_widths(units: &[ShapedUnit]) -> Vec<f32> {
+    let mut needed = vec![0.0; units.len()];
+    for index in (0..units.len()).rev() {
+        let (width, break_after) = match &units[index] {
+            ShapedUnit::Word(word) => (word.width, word.break_after),
+            ShapedUnit::Replaced { size, break_after, .. } => (size.width, *break_after),
+            ShapedUnit::Ruby(ruby) => (ruby.width, ruby.break_after),
+            ShapedUnit::Combined { shaped, break_after, .. } => (shaped.width, *break_after),
+            ShapedUnit::Break => continue,
+        };
+        let continuation = if break_after { 0.0 } else {
+            match units.get(index + 1) {
+                Some(ShapedUnit::Word(next)) => next.space_before + needed[index + 1],
+                Some(ShapedUnit::Break) | None => 0.0,
+                Some(_) => needed[index + 1],
+            }
+        };
+        needed[index] = width + continuation;
+    }
+    needed
+}
+
 /// Shapes paragraph chunks before wrapping, then constructs word summaries,
 /// positioned glyphs, and line boxes from the same advances.
 pub(crate) struct InlineContainingBlock {
@@ -454,6 +504,7 @@ pub(crate) fn layout_lines_shaped(
     containing: InlineContainingBlock,
     strut: &Strut,
     base_direction: amazing_text::Direction,
+    container_writing_mode: amazing_text::WritingMode,
     text_system: &dyn TextSystem,
     floats: &crate::floats::FloatContext,
     soft_wrap: bool,
@@ -475,7 +526,7 @@ pub(crate) fn layout_lines_shaped(
             },
             _ => None,
         })
-        .unwrap_or(amazing_text::WritingMode::HorizontalTb);
+        .unwrap_or(container_writing_mode);
     let vertical_flow = writing_mode.is_vertical_flow();
 
     let atomic_baselines = atomic_baselines(items);
@@ -559,7 +610,9 @@ pub(crate) fn layout_lines_shaped(
                 },
                 amazing_text::WritingMode::VerticalLr
                 | amazing_text::WritingMode::SidewaysLr => {
-                    content_x + strut.vertical_descent + column_offset
+                    // The provider's upright glyph origin sits a horizontal
+                    // descent to the left of the line's content edge.
+                    content_x + strut.descent + column_offset
                 },
                 amazing_text::WritingMode::HorizontalTb => content_x,
             };
@@ -603,7 +656,8 @@ pub(crate) fn layout_lines_shaped(
             line_y.set(y);
         }
     };
-    for unit in units {
+    let needed = unbreakable_run_widths(&units);
+    for (unit_index, unit) in units.into_iter().enumerate() {
         let has_content = !words.is_empty() || !replaced.is_empty();
         match unit {
             ShapedUnit::Break => {
@@ -639,7 +693,8 @@ pub(crate) fn layout_lines_shaped(
                 if has_content
                     && soft_wrap
                     && may_break_after
-                    && cursor + spacing + word.width + break_width > inline_end.get() + FIT_TOLERANCE_PX
+                    && cursor + spacing + needed[unit_index].max(word.width + break_width)
+                        > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -707,7 +762,7 @@ pub(crate) fn layout_lines_shaped(
                 if has_content
                     && soft_wrap
                     && may_break_after
-                    && cursor + size.width > inline_end.get() + FIT_TOLERANCE_PX
+                    && cursor + needed[unit_index] > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -749,7 +804,7 @@ pub(crate) fn layout_lines_shaped(
                 if has_content
                     && soft_wrap
                     && may_break_after
-                    && cursor + ruby.width > inline_end.get() + FIT_TOLERANCE_PX
+                    && cursor + needed[unit_index] > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -797,7 +852,7 @@ pub(crate) fn layout_lines_shaped(
                 if has_content
                     && soft_wrap
                     && may_break_after
-                    && cursor + combined.width > inline_end.get() + FIT_TOLERANCE_PX
+                    && cursor + needed[unit_index] > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -971,6 +1026,7 @@ fn reshape_visual_line(
         .first()
         .is_some_and(|span| span.style.writing_mode.is_vertical_flow());
     let mut pen = start_x;
+    let mut previous_letter: Option<f32> = None;
     let mut active_source = None;
     let mut decoration_start = pen;
     let mut replaced_by_node = HashMap::<(u32, Option<u64>), usize>::new();
@@ -1033,6 +1089,10 @@ fn reshape_visual_line(
             if character.is_some_and(is_invisible_text_control) {
                 continue;
             }
+            let (letter, word_spacing, font_size) = spacing_at(&context.spacing, glyph.cluster.start);
+            if let Some(previous) = previous_letter {
+                pen += (previous + letter) * 0.5;
+            }
             glyphs.push(GlyphFrag {
                 node: NodeIdx(run.source),
                 font: run.font,
@@ -1070,7 +1130,12 @@ fn reshape_visual_line(
                     .cloned()
                     .unwrap_or_else(|| "black".into()),
             });
-            pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
+            let advance = inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
+            pen += advance;
+            if matches!(character, Some(' ' | '\u{00a0}')) {
+                pen += word_spacing.resolve(Some(font_size)).unwrap_or(0.0);
+            }
+            previous_letter = Some(letter);
         }
     }
     finish_visual_decoration(
@@ -1661,6 +1726,7 @@ fn shape_chunk(
 ) -> Option<Vec<ShapedUnit>> {
     let mut paragraph_text = String::new();
     let mut spans = Vec::new();
+    let mut spacing = Vec::new();
     let mut sources = Vec::new();
     let mut bidi_scopes = Vec::new();
     let mut bidi_scope_stack = Vec::new();
@@ -1755,6 +1821,12 @@ fn shape_chunk(
             } if style.text_combine == amazing_text::TextCombine::All
                 && style.writing_mode.is_vertical_flow() =>
             {
+                let collapse = matches!(style.white_space,
+                    amazing_text::WhiteSpace::Normal
+                        | amazing_text::WhiteSpace::NoWrap
+                        | amazing_text::WhiteSpace::PreLine);
+                let (combined_text, combined_mappings) =
+                    trim_combined_edge_spaces(text, source_mappings, collapse);
                 let start = paragraph_text.len();
                 paragraph_text.push('\u{fffc}');
                 let end = paragraph_text.len();
@@ -1764,7 +1836,7 @@ fn shape_chunk(
                     style: style.as_ref().clone(),
                     boundary_before: ShapingBoundary::Hard,
                 });
-                sources.extend(source_mappings.iter().map(|mapping| SourceMapping {
+                sources.extend(combined_mappings.iter().map(|mapping| SourceMapping {
                     text_range: start..end,
                     source: node.0,
                     source_range: mapping.source_range.clone(),
@@ -1773,8 +1845,8 @@ fn shape_chunk(
                     start,
                     AtomicInline::Combined(shape_combined_text(
                         *node,
-                        text,
-                        source_mappings,
+                        combined_text,
+                        &combined_mappings,
                         *font_size,
                         style,
                         color,
@@ -1792,7 +1864,10 @@ fn shape_chunk(
             node,
             text,
             source_mappings,
+            font_size,
             style,
+            letter_spacing,
+            word_spacing,
             color,
             background_color,
             inline_padding,
@@ -1852,6 +1927,8 @@ fn shape_chunk(
             style: style.as_ref().clone(),
             boundary_before: stronger_boundary(previous_after, *boundary_before),
         });
+        spacing.push(SpacingSpan { start, end, letter: *letter_spacing,
+            word: *word_spacing, font_size: *font_size });
         colors.insert(node.0, color.clone());
         paint_info.insert(
             node.0,
@@ -1892,6 +1969,7 @@ fn shape_chunk(
     let context = Rc::new(ShapedContext {
         text: paragraph_text.clone(),
         spans: spans.clone(),
+        spacing: spacing.clone(),
         sources: sources.clone(),
         bidi_scopes: bidi_scopes.clone(),
         colors: colors.clone(),
@@ -1938,6 +2016,7 @@ fn shape_chunk(
         let mut font_size = spans[0].style.size;
         let mut active_source = None;
         let mut decoration_start = 0.0;
+        let mut previous_letter = None;
         // Whitespace belongs to the span that supplied it, not the next word.
         // Drop a collapsible prefix at line start, retaining preformatted gaps.
         let preserved_start = spans
@@ -1996,6 +2075,10 @@ fn shape_chunk(
                         pen += info.padding.left;
                     }
                 }
+                let (letter, word_spacing, font_size) = spacing_at(&spacing, glyph.cluster.start);
+                if let Some(previous) = previous_letter {
+                    pen += (previous + letter) * 0.5;
+                }
                 glyphs.push(GlyphFrag {
                         node: NodeIdx(run.source),
                         font: run.font,
@@ -2036,7 +2119,12 @@ fn shape_chunk(
                             .cloned()
                             .unwrap_or_else(|| "black".into()),
                 });
-                pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
+                let advance = inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
+                pen += advance;
+                if matches!(paragraph_text[glyph.cluster.clone()].chars().next(), Some(' ' | '\u{00a0}')) {
+                    pen += word_spacing.resolve(Some(font_size)).unwrap_or(0.0);
+                }
+                previous_letter = Some(letter);
             }
         }
         finish_source_decoration(
@@ -2057,7 +2145,8 @@ fn shape_chunk(
             text: paragraph_text[range.clone()].to_owned(),
             width: pen,
             font_size,
-            space_before: advance_in_range(&shaped, previous_end..range.start),
+            space_before: advance_in_range(&shaped, previous_end..range.start)
+                + separator_spacing(&paragraph_text, previous_end..range.start, &spacing),
             glyphs,
             decorations,
             range: preserved_start..range.end,
@@ -2071,6 +2160,25 @@ fn shape_chunk(
         previous_end = range.end;
     }
     Some(units)
+}
+
+fn trim_combined_edge_spaces<'a>(text: &'a str,
+    mappings: &[crate::TextSourceMapping], collapse: bool,
+) -> (&'a str, Vec<crate::TextSourceMapping>) {
+    if !collapse { return (text, mappings.to_vec()); }
+    let start = text.len() - text.trim_start_matches(' ').len();
+    let end = text.trim_end_matches(' ').len().max(start);
+    let trimmed = &text[start..end];
+    let mappings = mappings.iter().filter_map(|mapping| {
+        let begin = mapping.text_range.start.max(start);
+        let finish = mapping.text_range.end.min(end);
+        (begin < finish).then(|| crate::TextSourceMapping {
+            text_range: begin - start..finish - start,
+            source: mapping.source,
+            source_range: mapping.source_range.clone(),
+        })
+    }).collect();
+    (trimmed, mappings)
 }
 
 fn finish_source_decoration(
@@ -2414,12 +2522,102 @@ mod tests {
                 .collect(),
             font_size: 16.0,
             style: Box::new(amazing_text::TextStyle::default()),
+            letter_spacing: 0.0,
+            word_spacing: crate::values::LengthPercentage::default(),
             color: "black".into(),
             background_color: "transparent".into(),
             inline_padding: crate::values::Sides::default(),
             boundary_before: amazing_text::ShapingBoundary::Continue,
             boundary_after: amazing_text::ShapingBoundary::Continue,
         }
+    }
+
+    #[test]
+    fn shaped_letter_spacing_has_no_trailing_gap() {
+        let mut item = text("abc");
+        let InlineNode::Text { letter_spacing, .. } = &mut item else { unreachable!() };
+        *letter_spacing = 3.0;
+        let provider = amazing_text::FallbackTextSystem::new();
+        let base = shape_chunk(&[&text("abc")], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let spaced = shape_chunk(&[&item], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let (ShapedUnit::Word(base), ShapedUnit::Word(spaced)) = (&base[0], &spaced[0]) else { panic!("want words") };
+        assert!((spaced.width - base.width - 6.0).abs() < 0.01);
+        assert!((spaced.glyphs[1].x - base.glyphs[1].x - 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn shaped_word_spacing_adds_to_the_surviving_separator() {
+        let mut item = text("a b");
+        let InlineNode::Text { word_spacing, .. } = &mut item else { unreachable!() };
+        word_spacing.px = 5.0;
+        let provider = amazing_text::FallbackTextSystem::new();
+        let base = shape_chunk(&[&text("a b")], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let spaced = shape_chunk(&[&item], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let (ShapedUnit::Word(base), ShapedUnit::Word(spaced)) = (&base[1], &spaced[1]) else { panic!("want words") };
+        assert!((spaced.space_before - base.space_before - 5.0).abs() < 0.01);
+        let InlineNode::Text { word_spacing, .. } = &mut item else { unreachable!() };
+        word_spacing.px = 0.0;
+        word_spacing.percentage = 50.0;
+        word_spacing.has_percentage = true;
+        let percent = shape_chunk(&[&item], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let ShapedUnit::Word(percent) = &percent[1] else { panic!("want word") };
+        assert!((percent.space_before - base.space_before - 8.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn unbreakable_opening_bracket_and_atomic_wrap_together() {
+        let mut before = text("A 「");
+        let mut combined = text("12");
+        for item in [&mut before, &mut combined] {
+            let InlineNode::Text { style, .. } = item else { unreachable!() };
+            style.writing_mode = amazing_text::WritingMode::VerticalRl;
+        }
+        let InlineNode::Text { style, .. } = &mut combined else { unreachable!() };
+        style.text_combine = amazing_text::TextCombine::All;
+        let provider = amazing_text::FallbackTextSystem::new();
+        let lines = layout_lines_shaped(
+            &[before, combined],
+            InlineContainingBlock { x: 0.0, y: 0.0, width: 100.0, height: 32.0 },
+            &strut(), amazing_text::Direction::LeftToRight,
+            amazing_text::WritingMode::VerticalRl, &provider,
+            &crate::floats::FloatContext::default(), true,
+        ).unwrap();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].words.iter().all(|word| !word.text.contains('「')));
+        assert!(lines[1].words.iter().any(|word| word.text.contains('「')));
+        assert!(lines[1].words.iter().any(|word| word.text == "12"));
+    }
+
+    #[test]
+    fn combined_text_trims_collapsible_edges_but_keeps_middle_space() {
+        let mut item = text("  5 6  ");
+        let InlineNode::Text { style, .. } = &mut item else { unreachable!() };
+        style.writing_mode = amazing_text::WritingMode::VerticalRl;
+        style.text_combine = amazing_text::TextCombine::All;
+        let provider = amazing_text::FallbackTextSystem::new();
+        let units = shape_chunk(&[&item], amazing_text::Direction::LeftToRight, &provider).unwrap();
+        let [ShapedUnit::Combined { shaped, .. }] = units.as_slice() else { panic!("want combined") };
+        assert_eq!(shaped.text, "5 6");
+    }
+
+    #[test]
+    fn atomic_only_vertical_line_uses_containing_block_writing_mode() {
+        let item = InlineNode::Atomic {
+            node: NodeIdx(1),
+            size: IntrinsicSize { width: 20.0, height: 20.0 },
+            baseline_offset: 20.0,
+            vertical_align: "baseline".to_owned(),
+        };
+        let lines = layout_lines_shaped(
+            &[item],
+            InlineContainingBlock { x: 10.0, y: 0.0, width: 100.0, height: 100.0 },
+            &strut(), amazing_text::Direction::LeftToRight,
+            amazing_text::WritingMode::VerticalRl,
+            &amazing_text::FallbackTextSystem::new(),
+            &crate::floats::FloatContext::default(), true,
+        ).unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].replaced[0].x > 80.0);
     }
 
     fn strut() -> Strut {

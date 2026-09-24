@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "ticket-cases",
+    "case_count": 1
+  },
+  "sparse_paths": [
+    "css/css-writing-modes",
+    "css/css-ruby",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+      "test": "css/css-writing-modes/baseline-with-orthogonal-flow-001.html"
+    }
+  ]
+}
