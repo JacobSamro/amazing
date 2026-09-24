@@ -7,6 +7,7 @@ Each cycle used a fresh workspace storage root; each named render test also gave
 Full logs: venus-001:~/amazing/out/ia-driver-flakes-50-full/1.log through 50.log
 Earlier IPC stress logs under venus-001:~/amazing/out/ipc-ping-50-complete/ had both named tests fail in all 50 cycles with shared-profile `IndexedDB open: Corrupt` errors (the timeout case then exited 1 instead of 3). Their other workspace failures belong to the storage lane.
 Result: 50/50 full-workspace exits 0; both named driver tests executed and passed in all 50 cycles (100/100 test executions).
+Additional check on the host's pre-existing shared default storage profile (no `AMAZING_STORAGE_DIR` override): the two named tests passed 2/2 at source commit 3f440de, nextest run b6917b3c-5cbe-4cf4-8512-142db7e994fa.
 
 Cycle  Workspace summary
 01 Summary [  23.065s] 2154 tests run: 2154 passed, 5 skipped
