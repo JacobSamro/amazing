@@ -2,7 +2,7 @@
 //! `enter`, which transfers the complete ordered outbox before another entry.
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
-use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TimerId};
+use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TaskSource, TimerId};
 use amazing_dom::abort::AbortSignalId;
 use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
@@ -17,6 +17,7 @@ enum Payload {
     Callback(SchedulingToken),
     Mutation,
     AbortTimeout(AbortSignalId, u64),
+    FormSelection(u32),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -68,6 +69,10 @@ impl DriverScheduler {
     pub(crate) fn set_child_navigation_hook(&mut self,
         hook: crate::runtime_binding_host::html::ChildNavigationHook) {
         self.bindings.set_child_navigation_hook(hook);
+    }
+    pub(crate) fn set_form_navigation_hook(&mut self,
+        hook: crate::runtime_binding_host::html::FormNavigationHook) {
+        self.bindings.set_form_navigation_hook(hook);
     }
     pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
         for (frame, document) in self.bindings.take_iframe_loads() {
@@ -150,6 +155,11 @@ impl DriverScheduler {
         }
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
+        }
+        for node in self.bindings.take_form_selection_events() {
+            let callback = self.own(Payload::FormSelection(node.0))?;
+            self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
+                .map_err(loop_error)?;
         }
         Ok(())
     }
@@ -250,6 +260,10 @@ impl DriverScheduler {
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.fire_abort_timeout(js, signal))
             }
+            Payload::FormSelection(node) => {
+                self.payloads.remove(&callback.0);
+                self.dispatch_dom_event(node, "select")
+            }
         }
     }
 
@@ -329,6 +343,15 @@ mod tests {
         assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(false)));
         driver.pump_at(Duration::ZERO, false).unwrap();
         assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn nested_animation_frames_then_timeout_settle_a_promise() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.settled = false; new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))).then(() => { settled = true; });").unwrap();
+        for frame in 0..10 {
+            driver.pump_at(Duration::from_millis(frame * 16), true).unwrap();
+        }
+        assert!(matches!(driver.run_script("settled").unwrap(), JsValue::Bool(true)));
     }
 
     #[test]

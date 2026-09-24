@@ -6,12 +6,16 @@ use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 pub struct ControlState {
     value: Option<Vec<u16>>,
     dirty_value: bool,
+    user_edited: bool,
     checked: Option<bool>,
     dirty_checked: bool,
     selected: Option<bool>,
     dirty_selected: bool,
     custom_error: Vec<u16>,
     selection: Option<(u32, u32, SelectionDirection)>,
+    last_type: Option<&'static str>,
+    constructing_entry_list: bool,
+    firing_submission_events: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SelectionDirection {
@@ -262,6 +266,17 @@ fn date_shape(value: &str, kind: &str) -> bool {
         _ => false,
     }
 }
+fn value_mode_for_type(kind: &str) -> ValueMode {
+    match kind {
+        "hidden" | "submit" | "image" | "reset" | "button" => ValueMode::Default,
+        "checkbox" | "radio" => ValueMode::DefaultOn,
+        "file" => ValueMode::Filename,
+        _ => ValueMode::Value,
+    }
+}
+fn selects_text(kind: &str) -> bool {
+    matches!(kind, "text" | "search" | "tel" | "url" | "password")
+}
 pub fn sanitize_input(
     kind: &str,
     value: &[u16],
@@ -427,12 +442,7 @@ impl Dom {
             .unwrap_or("text"))
     }
     pub fn input_value_mode(&self, node: NodeIdx) -> Result<ValueMode, DomError> {
-        Ok(match self.input_type(node)? {
-            "hidden" | "submit" | "image" | "reset" | "button" => ValueMode::Default,
-            "checkbox" | "radio" => ValueMode::DefaultOn,
-            "file" => ValueMode::Filename,
-            _ => ValueMode::Value,
-        })
+        Ok(value_mode_for_type(self.input_type(node)?))
     }
     pub fn input_value(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         let kind = self.input_type(node)?;
@@ -455,6 +465,8 @@ impl Dom {
         })
     }
     pub fn set_input_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
+        let kind = self.input_type(node)?;
+        self.form_state_mut(node).last_type = Some(kind);
         match self.input_value_mode(node)? {
             ValueMode::Default | ValueMode::DefaultOn => {
                 if !self.has(node, "value") {
@@ -476,10 +488,12 @@ impl Dom {
                     self.attr(node, "max"),
                     self.attr(node, "step"),
                 );
+                let changed = self.input_value(node)? != sanitized;
                 let state = self.form_state_mut(node);
                 state.value = Some(sanitized);
                 state.dirty_value = true;
-                state.selection = None;
+                state.user_edited = false;
+                if changed { state.selection = None; }
                 self.record_render_full(node, "input value state");
                 Ok(())
             }
@@ -510,6 +524,53 @@ impl Dom {
         }
         let value = temporal_string(kind, number).ok_or(DomError::TypeError)?;
         self.set_input_value(node, units(&value))
+    }
+    pub fn step_input(&mut self, node: NodeIdx, count: i32) -> Result<(), DomError> {
+        let kind = self.input_type(node)?;
+        if !matches!(kind, "number" | "range" | "date" | "month" | "week" | "time" | "datetime-local")
+            || self.attr(node, "step") == Some("any")
+        {
+            return Err(DomError::InvalidStateError);
+        }
+        let scale = match kind {
+            "date" => 86_400_000.,
+            "week" => 604_800_000.,
+            "time" | "datetime-local" => 1000.,
+            _ => 1.,
+        };
+        let default_step = if matches!(kind, "time" | "datetime-local") { 60. } else { 1. };
+        let step = self.attr(node, "step").and_then(valid_number)
+            .filter(|value| *value > 0.).unwrap_or(default_step) * scale;
+        let minimum = self.attr(node, "min").and_then(|value| temporal_number(kind, value));
+        let maximum = self.attr(node, "max").and_then(|value| temporal_number(kind, value));
+        let base = minimum.or_else(|| self.attr(node, "value")
+            .and_then(|value| temporal_number(kind, value)))
+            .unwrap_or(if kind == "week" { -259_200_000. } else { 0. });
+        let current = self.input_value_as_number(node)?;
+        if current.is_finite()
+            && ((count < 0 && minimum.is_some_and(|minimum| current < minimum))
+                || (count > 0 && maximum.is_some_and(|maximum| current > maximum))) {
+            return Ok(());
+        }
+        let mut result = if current.is_finite() {
+            let quotient = (current - base) / step;
+            if count > 0 && (quotient - quotient.ceil()).abs() > 1e-9 {
+                base + (quotient.ceil() + f64::from(count - 1)) * step
+            } else if count < 0 && (quotient - quotient.floor()).abs() > 1e-9 {
+                base + (quotient.floor() + f64::from(count + 1)) * step
+            } else {
+                current + f64::from(count) * step
+            }
+        } else {
+            base + f64::from(count) * step
+        };
+        if let Some(minimum) = minimum {
+            if result < minimum { result = minimum; }
+        }
+        if let Some(maximum) = maximum {
+            if result > maximum { result = maximum; }
+        }
+        self.set_input_value_as_number(node, result)
     }
     pub fn input_value_as_date_ms(&self, node: NodeIdx) -> Result<Option<f64>, DomError> {
         let kind = self.input_type(node)?;
@@ -578,6 +639,40 @@ impl Dom {
         }
         if !self.html_tag(node, "input") {
             return;
+        }
+        if name == "type" {
+            let new_type = self.input_type(node).unwrap_or("text");
+            let previous = self.form_state(node).and_then(|state| state.last_type);
+            if let Some(previous) = previous.filter(|previous| *previous != new_type) {
+                let previous_state = self.form_state(node).cloned().unwrap_or_default();
+                let old_mode = value_mode_for_type(previous);
+                let new_mode = value_mode_for_type(new_type);
+                let old_value = match old_mode {
+                    ValueMode::Value => previous_state.value.unwrap_or_else(||
+                        self.attribute_utf16(node, "value").unwrap_or_default()),
+                    ValueMode::DefaultOn => self.attribute_utf16(node, "value")
+                        .unwrap_or_else(|| units("on")),
+                    ValueMode::Default => self.attribute_utf16(node, "value").unwrap_or_default(),
+                    ValueMode::Filename => Vec::new(),
+                };
+                if old_mode == ValueMode::Value
+                    && matches!(new_mode, ValueMode::Default | ValueMode::DefaultOn) {
+                    let value = String::from_utf16_lossy(&old_value);
+                    let _ = self.set_attribute(node, "value", &value);
+                }
+                let new_value = if new_mode == ValueMode::Value {
+                    Some(sanitize_input(new_type, &old_value, self.attr(node, "min"),
+                        self.attr(node, "max"), self.attr(node, "step")))
+                } else { None };
+                let state = self.form_state_mut(node);
+                state.value = new_value;
+                if selects_text(new_type) && !selects_text(previous) {
+                    state.selection = Some((0, 0, SelectionDirection::None));
+                } else if !selects_text(new_type) || old_value != state.value.clone().unwrap_or_default() {
+                    state.selection = None;
+                }
+            }
+            self.form_state_mut(node).last_type = Some(new_type);
         }
         if name == "checked" {
             if let Some(state) = self
@@ -652,6 +747,10 @@ impl Dom {
                     return first;
                 }
             }
+            // Connected controls use the explicit ID, including a missing or
+            // empty ID. In a detached subtree, reset association uses the
+            // nearest ancestor form until insertion into a document.
+            if self.is_connected(node) { return None; }
         }
         let mut parent = self.get(node).parent;
         while let Some(current) = parent {
@@ -674,6 +773,8 @@ impl Dom {
             .into_iter()
             .filter(|node| {
                 self.form_owner(*node) == Some(form)
+                    && !(self.html_tag(*node, "input")
+                        && self.input_type(*node).ok() == Some("image"))
                     && [
                         "input", "button", "select", "textarea", "fieldset", "output", "object",
                     ]
@@ -681,6 +782,34 @@ impl Dom {
                     .any(|tag| self.html_tag(*node, tag))
             })
             .collect())
+    }
+    pub fn form_entry_list_construction_started(&self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        Ok(self.form_state(form).is_some_and(|state| state.constructing_entry_list))
+    }
+    pub fn begin_form_entry_list(&mut self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        let state = self.form_state_mut(form);
+        if state.constructing_entry_list { return Ok(false); }
+        state.constructing_entry_list = true;
+        Ok(true)
+    }
+    pub fn end_form_entry_list(&mut self, form: NodeIdx) -> Result<(), DomError> {
+        self.require_tag(form, &["form"])?;
+        self.form_state_mut(form).constructing_entry_list = false;
+        Ok(())
+    }
+    pub fn begin_form_submission_events(&mut self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        let state = self.form_state_mut(form);
+        if state.firing_submission_events { return Ok(false); }
+        state.firing_submission_events = true;
+        Ok(true)
+    }
+    pub fn end_form_submission_events(&mut self, form: NodeIdx) -> Result<(), DomError> {
+        self.require_tag(form, &["form"])?;
+        self.form_state_mut(form).firing_submission_events = false;
+        Ok(())
     }
     pub fn radio_list(&mut self, form: NodeIdx, name: Vec<u16>) -> Result<usize, DomError> {
         self.require_tag(form, &["form"])?;
@@ -725,9 +854,12 @@ impl Dom {
     }
     pub fn set_textarea_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
         self.require_tag(node, &["textarea"])?;
+        let changed = self.textarea_value(node)? != normalize_newlines(&value);
         let state = self.form_state_mut(node);
         state.value = Some(value);
         state.dirty_value = true;
+        state.user_edited = false;
+        if changed { state.selection = None; }
         self.record_render_full(node, "textarea value state");
         Ok(())
     }
@@ -864,11 +996,9 @@ impl Dom {
         } else {
             self.textarea_value(node)?.len()
         } as u32;
-        Ok(self.form_state(node).and_then(|s| s.selection).unwrap_or((
-            len,
-            len,
-            SelectionDirection::None,
-        )))
+        Ok(self.form_state(node).and_then(|s| s.selection)
+            .map(|(start, end, direction)| (start.min(len), end.min(len), direction))
+            .unwrap_or((len, len, SelectionDirection::None)))
     }
     pub fn set_selection(
         &mut self,
@@ -890,6 +1020,52 @@ impl Dom {
             Some((start.min(end).min(len), end.min(len), direction));
         self.record_render_full(node, "selection state");
         Ok(())
+    }
+    pub fn set_range_text(
+        &mut self,
+        node: NodeIdx,
+        replacement: Vec<u16>,
+        range: Option<(u32, u32)>,
+        mode: &str,
+    ) -> Result<(), DomError> {
+        let (old_start, old_end, old_direction) = self.selection(node)?;
+        let (start, end) = range.unwrap_or((old_start, old_end));
+        if start > end {
+            return Err(DomError::IndexSizeError);
+        }
+        let mut value = if self.html_tag(node, "input") {
+            self.input_value(node)?
+        } else {
+            self.textarea_value(node)?
+        };
+        let start = start.min(value.len() as u32) as usize;
+        let end = end.min(value.len() as u32) as usize;
+        let old_length = end - start;
+        let new_length = replacement.len();
+        value.splice(start..end, replacement);
+        if self.html_tag(node, "input") {
+            self.set_input_value(node, value)?;
+        } else {
+            self.set_textarea_value(node, value)?;
+        }
+        let (selection_start, selection_end, direction) = match mode {
+            "select" => (start as u32, (start + new_length) as u32, SelectionDirection::None),
+            "start" => (start as u32, start as u32, SelectionDirection::None),
+            "end" => ((start + new_length) as u32, (start + new_length) as u32, SelectionDirection::None),
+            _ => {
+                let adjust = |position: u32| {
+                    if position as usize > end {
+                        (position as i64 + new_length as i64 - old_length as i64).max(0) as u32
+                    } else if position as usize > start {
+                        (start + new_length) as u32
+                    } else {
+                        position
+                    }
+                };
+                (adjust(old_start), adjust(old_end), old_direction)
+            }
+        };
+        self.set_selection(node, selection_start, selection_end, direction)
     }
     pub fn selection_applicable(&self, node: NodeIdx) -> Result<bool, DomError> {
         self.require_tag(node, &["input", "textarea"])?;
@@ -1082,7 +1258,9 @@ impl Dom {
                 }
             }
             let length = value.len();
-            if self.form_state(node).is_some_and(|state| state.dirty_value) {
+            // Length constraints apply only after a user edit. Setting `.value`
+            // from script makes it dirty but is not interactive editing.
+            if self.form_state(node).is_some_and(|state| state.user_edited) {
                 v.too_long = self
                     .attr(node, "maxlength")
                     .and_then(|v| v.parse::<usize>().ok())
@@ -1173,7 +1351,7 @@ mod tests {
         dom.set_attribute(input, "value", "default").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("script"));
         dom.set_attribute(input, "type", "checkbox").unwrap();
-        assert_eq!(dom.input_value(input).unwrap(), units("default"));
+        assert_eq!(dom.input_value(input).unwrap(), units("script"));
         dom.remove_attribute(input, "value").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("on"));
         dom.set_attribute(input, "type", "file").unwrap();
@@ -1276,7 +1454,7 @@ mod tests {
         assert!(dom.input_checked(b).unwrap());
     }
     #[test]
-    fn form_owner_uses_first_matching_id_then_ancestor_fallback() {
+    fn form_owner_uses_first_matching_id_without_ancestor_fallback() {
         let mut dom = Dom::new();
         let blocker = dom.create_element(NodeIdx(0), "div");
         dom.set_attribute(blocker, "id", "target").unwrap();
@@ -1284,12 +1462,78 @@ mod tests {
         dom.set_attribute(form, "id", "target").unwrap();
         let input = dom.create_element(form, "input");
         dom.set_attribute(input, "form", "target").unwrap();
-        assert_eq!(dom.form_owner(input), Some(form));
+        assert_eq!(dom.form_owner(input), None);
         dom.detach(input);
         assert_eq!(dom.form_owner(input), None);
         dom.pre_insert(input, form, None).unwrap();
         dom.set_attribute(blocker, "id", "other").unwrap();
         assert_eq!(dom.form_owner(input), Some(form));
+        dom.set_attribute(input, "form", "missing").unwrap();
+        assert_eq!(dom.form_owner(input), None);
+        dom.remove_attribute(input, "form").unwrap();
+        assert_eq!(dom.form_owner(input), Some(form));
+        let detached_form = dom.create_element(NodeIdx(0), "form");
+        dom.detach(detached_form);
+        let detached_input = dom.create_element(detached_form, "input");
+        dom.set_attribute(detached_input, "form", "missing").unwrap();
+        assert_eq!(dom.form_owner(detached_input), Some(detached_form));
+    }
+    #[test]
+    fn set_range_text_uses_utf16_offsets_and_preserves_selection() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_input_value(input, units("a😀bc")).unwrap();
+        dom.set_selection(input, 3, 5, SelectionDirection::Forward).unwrap();
+        dom.set_range_text(input, units("Z"), Some((1, 3)), "preserve").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("aZbc"));
+        assert_eq!(dom.selection(input).unwrap(), (2, 4, SelectionDirection::Forward));
+        assert_eq!(dom.set_range_text(input, units(""), Some((3, 2)), "select"),
+            Err(DomError::IndexSizeError));
+    }
+    #[test]
+    fn step_input_obeys_step_base_and_rejects_non_steppable_controls() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "number").unwrap();
+        dom.set_attribute(input, "min", "0.5").unwrap();
+        dom.set_attribute(input, "step", "2").unwrap();
+        dom.set_input_value(input, units("1")).unwrap();
+        dom.step_input(input, 1).unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("2.5"));
+        dom.step_input(input, -1).unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("0.5"));
+        dom.set_attribute(input, "type", "text").unwrap();
+        assert_eq!(dom.step_input(input, 1), Err(DomError::InvalidStateError));
+    }
+    #[test]
+    fn input_type_changes_transfer_value_and_selection_state() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "hidden").unwrap();
+        dom.set_input_value(input, units("  a\rb  ")).unwrap();
+        dom.set_attribute(input, "type", "text").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("  ab  "));
+        assert_eq!(dom.selection(input).unwrap(), (0, 0, SelectionDirection::None));
+        dom.set_selection(input, 1, 3, SelectionDirection::Backward).unwrap();
+        dom.set_attribute(input, "type", "search").unwrap();
+        assert_eq!(dom.selection(input).unwrap(), (1, 3, SelectionDirection::Backward));
+        dom.set_attribute(input, "type", "file").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), Vec::<u16>::new());
+    }
+    #[test]
+    fn form_construction_and_submission_flags_block_reentry() {
+        let mut dom = Dom::new();
+        let form = dom.create_element(NodeIdx(0), "form");
+        assert!(dom.begin_form_entry_list(form).unwrap());
+        assert!(!dom.begin_form_entry_list(form).unwrap());
+        assert!(dom.form_entry_list_construction_started(form).unwrap());
+        dom.end_form_entry_list(form).unwrap();
+        assert!(dom.begin_form_entry_list(form).unwrap());
+        dom.end_form_entry_list(form).unwrap();
+        assert!(dom.begin_form_submission_events(form).unwrap());
+        assert!(!dom.begin_form_submission_events(form).unwrap());
+        dom.end_form_submission_events(form).unwrap();
+        assert!(dom.begin_form_submission_events(form).unwrap());
     }
     #[test]
     fn reparenting_a_checked_radio_reconciles_its_new_group() {

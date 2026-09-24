@@ -16,6 +16,7 @@ use amazing_bindings::{
 };
 use amazing_dom::{Dom, DomError, NodeIdx, NodeKind, Namespace, abort::AbortSignalId};
 use amazing_bindings::{Blob, BlobPart, File, FormData};
+use amazing_bindings::host::FormNavigationRequest;
 use amazing_bindings::storage_interfaces::{StorageInterface as SI, MemberKind as SM};
 use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
 use amazing_js::value::Exotic;
@@ -92,6 +93,7 @@ struct BindingState {
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
     frames: html::FrameRuntime,
+    pending_form_selection_events: Vec<NodeIdx>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -106,6 +108,9 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn take_form_selection_events(&self) -> Vec<NodeIdx> {
+        std::mem::take(&mut self.state.borrow_mut().pending_form_selection_events)
+    }
     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
         content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
@@ -461,6 +466,7 @@ pub(crate) fn install(
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
         frames: html::FrameRuntime::default(),
+        pending_form_selection_events: Vec::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -1150,6 +1156,49 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.js.binding_location_navigate(url, replace);
         self.state.borrow_mut().document_url = Some(url.to_owned());
         Ok(())
+    }
+    fn form_selection_changed(&mut self, node: NodeIdx) -> Result<(), Throw> {
+        let mut state = self.state.borrow_mut();
+        if !state.pending_form_selection_events.contains(&node) {
+            state.pending_form_selection_events.push(node);
+        }
+        Ok(())
+    }
+    fn form_submit_event(&mut self, form: NodeIdx, submitter: Option<NodeIdx>) -> Result<bool, Throw> {
+        let prototype = self.js.binding_object_prototype();
+        let options = self.create_object(Some(&prototype))?;
+        self.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        self.js.binding_define_data_property(&options, "cancelable", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str("submit"), options])?;
+        let submitter = match submitter {
+            Some(node) => self.wrap_node(node)?,
+            None => JsValue::Null,
+        };
+        self.js.binding_define_data_property(&event, "submitter", submitter,
+            BindingPropertyFlags::METHOD)?;
+        let target = self.wrap_node(form)?;
+        let allowed = invoke(self, Operation::DispatchEvent, target, &[event])?;
+        Ok(matches!(allowed, JsValue::Bool(true)))
+    }
+    fn form_data_event(&mut self, form: NodeIdx, data: FormData) -> Result<FormData, Throw> {
+        let form_data = self.form_data_new(data)?;
+        let prototype = self.js.binding_object_prototype();
+        let options = self.create_object(Some(&prototype))?;
+        self.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str("formdata"), options])?;
+        self.js.binding_define_data_property(&event, "formData", form_data.clone(),
+            BindingPropertyFlags::METHOD)?;
+        let target = self.wrap_node(form)?;
+        invoke(self, Operation::DispatchEvent, target, &[event])?;
+        self.form_data_record(&form_data)
+    }
+    fn form_navigate(&mut self, request: FormNavigationRequest) -> Result<(), Throw> {
+        self.navigate_form(request)
     }
     fn location_reload(&mut self) -> Result<(), Throw> {
         self.js.binding_location_reload();

@@ -578,7 +578,7 @@ const INPUT: &[Member] = &[
     form_get("accept", F::Accept), form_set("accept", F::Accept),
     form_get("alpha", F::Alpha), form_set("alpha", F::Alpha),
     form_get("alt", F::Alt), form_set("alt", F::Alt),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("formAction", F::FormAction), form_set("formAction", F::FormAction),
     form_get("formEnctype", F::FormEnctype), form_set("formEnctype", F::FormEnctype),
@@ -609,10 +609,12 @@ const INPUT: &[Member] = &[
     getter("defaultChecked", O::InputDefaultChecked), setter("defaultChecked", O::InputSetDefaultChecked),
     getter("valueAsNumber", O::InputValueAsNumber), setter("valueAsNumber", O::InputSetValueAsNumber),
     getter("valueAsDate", O::InputValueAsDate), setter("valueAsDate", O::InputSetValueAsDate),
+    method("stepUp", O::InputStepUp, 0), method("stepDown", O::InputStepDown, 0),
     getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
@@ -621,7 +623,7 @@ const INPUT: &[Member] = &[
 const FORM: &[Member] = &[
     form_get("acceptCharset", F::AcceptCharset), form_set("acceptCharset", F::AcceptCharset),
     form_get("action", F::Action), form_set("action", F::Action),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("enctype", F::Enctype), form_set("enctype", F::Enctype),
     form_get("encoding", F::Encoding), form_set("encoding", F::Encoding),
     form_get("method", F::Method), form_set("method", F::Method),
@@ -631,6 +633,7 @@ const FORM: &[Member] = &[
     form_get("rel", F::Rel), form_set("rel", F::Rel),
     form_get("relList", F::RelList), form_set("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
+    method("submit", O::FormSubmit, 0), method("requestSubmit", O::FormRequestSubmit, 0),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
 ];
@@ -670,7 +673,7 @@ const BUTTON: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const TEXTAREA: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("cols", F::Cols), form_set("cols", F::Cols),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
@@ -688,13 +691,14 @@ const TEXTAREA: &[Member] = &[
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const SELECT: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
     form_get("name", F::Name), form_set("name", F::Name),
     form_get("required", F::Required), form_set("required", F::Required),
@@ -789,7 +793,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
     D { interface: I::Blob, name: "Blob", parent: None, constructor: Some(O::BlobConstructor), members: BLOB },
     D { interface: I::File, name: "File", parent: Some(I::Blob), constructor: Some(O::FileConstructor), members: FILE },
-    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataConstructor), members: FORM_DATA },
+    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataFormConstructor), members: FORM_DATA },
     D {
         interface: I::EventTarget,
         name: "EventTarget",

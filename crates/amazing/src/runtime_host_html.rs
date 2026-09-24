@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) type FrameResourceResolver = Rc<dyn Fn(&str) -> Option<String>>;
 pub(crate) type ChildNavigationHook = Rc<dyn Fn(ChildNavigation)>;
+pub(crate) type FormNavigationHook = Rc<dyn Fn(FormNavigationRequest)>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ChildNavigation {
@@ -33,6 +34,7 @@ pub(super) struct FrameRuntime {
     pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>)>,
     resolver: Option<FrameResourceResolver>,
     navigation_hook: Option<ChildNavigationHook>,
+    form_navigation_hook: Option<FormNavigationHook>,
 }
 
 fn same_origin(parent: &str, child: &str) -> bool {
@@ -140,6 +142,11 @@ fn fetch_child_document(logical_url: &str, parent_url: &str,
 }
 
 impl RuntimeBindings {
+    /// IPC-10 installs this when its navigator can consume method, body,
+    /// enctype and target together. The current interpreter entry accepts URL only.
+    pub(crate) fn set_form_navigation_hook(&self, hook: FormNavigationHook) {
+        self.state.borrow_mut().frames.form_navigation_hook = Some(hook);
+    }
     pub(crate) fn set_frame_resource_resolver(&self, resolver: FrameResourceResolver) {
         self.state.borrow_mut().frames.resolver = Some(resolver);
     }
@@ -218,6 +225,21 @@ impl RuntimeBindings {
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
         }
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    pub(super) fn navigate_form(&mut self, request: FormNavigationRequest) -> Result<(), Throw> {
+        let hook = self.state.borrow().frames.form_navigation_hook.clone();
+        if let Some(hook) = hook {
+            hook(request);
+        } else {
+            // Current top-level navigation entry; IPC-10 replaces this URL-only
+            // fallback with the structured request above for POST and targets.
+            self.js.binding_location_navigate(&request.url, false);
+            self.state.borrow_mut().document_url = Some(request.url);
+        }
+        Ok(())
     }
 }
 
