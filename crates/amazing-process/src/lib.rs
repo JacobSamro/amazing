@@ -1,8 +1,8 @@
 //! Process hosting, bootstrap, liveness and site assignment.
 #![forbid(unsafe_code)]
 use amazing_ipc::codec::{self, Decoder, Encoder, Wire};
-use amazing_ipc::{Connection, StdioTransport};
 use amazing_ipc::version::{negotiate, VersionRange};
+use amazing_ipc::{Connection, StdioTransport};
 use amazing_ipc_platform::{FrameBudget, FrameMetadata, FrameView, HandleChannel};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -12,14 +12,46 @@ use std::time::{Duration, Instant};
 
 pub const BOOTSTRAP_VERSION: u16 = 2;
 const INTERFACES: &[VersionRange] = &[
-    VersionRange { interface: 0, min: 1, max: 1 },
-    VersionRange { interface: 7, min: 1, max: 1 },
-    VersionRange { interface: 8, min: 1, max: 1 },
-    VersionRange { interface: 9, min: 1, max: 1 },
-    VersionRange { interface: 10, min: 2, max: 2 },
-    VersionRange { interface: 11, min: 1, max: 1 },
-    VersionRange { interface: 17, min: 1, max: 1 },
-    VersionRange { interface: 18, min: 1, max: 1 },
+    VersionRange {
+        interface: 0,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 7,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 8,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 9,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 10,
+        min: 2,
+        max: 2,
+    },
+    VersionRange {
+        interface: 11,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 17,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
+        interface: 18,
+        min: 1,
+        max: 1,
+    },
 ];
 const FRAME_NONCE_CAPABILITY: &str = "__frame_nonce";
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -154,11 +186,14 @@ fn verify(h: &Handshake, role: Role) -> Result<(), Error> {
     }
     Ok(())
 }
-/// Child entry point called after parsing --type=<role> from argv.
+/// Child entry point called after parsing --type=<role> from argv. The bind
+/// callback installs every role handler before the bootstrap acknowledgment
+/// makes this connection visible to the browser.
 pub fn bootstrap_child(
     role: Role,
     mut capabilities: Capabilities,
-) -> Result<(Arc<Connection>, Capabilities, Option<HandleChannel>), Error> {
+    bind: impl FnOnce(&Arc<Connection>, &Capabilities, Option<HandleChannel>) -> Result<(), Error>,
+) -> Result<Arc<Connection>, Error> {
     let frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows)) {
         Some(HandleChannel::from_child_env()?)
     } else {
@@ -190,8 +225,13 @@ pub fn bootstrap_child(
         amazing_ipc_platform::enter_renderer_sandbox(frame_fd)?;
     }
     let versions = negotiate(INTERFACES, &parent.interfaces)?;
+    let connection = Connection::with_versions(StdioTransport::new(input, output), versions);
+    bind(&connection, &parent.capabilities, frame_channel)?;
+    connection.bind(0, Ping);
+    // The browser cannot issue a request until it reads this acknowledgment.
+    // Every role handler, including Ping, is bound before that happens.
     send_boot(
-        &mut output,
+        &mut std::io::stdout(),
         &Handshake {
             version: BOOTSTRAP_VERSION,
             role: role.name().into(),
@@ -199,8 +239,7 @@ pub fn bootstrap_child(
             interfaces: INTERFACES.to_vec(),
         },
     )?;
-    let connection = Connection::with_versions(StdioTransport::new(input, output), versions);
-    Ok((connection, parent.capabilities, frame_channel))
+    Ok(connection)
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestartPolicy {
@@ -407,21 +446,11 @@ impl ProcessHost {
         Ok(host)
     }
     fn wait_ready(&mut self, timeout: Duration) -> Result<(), Error> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
+        match self.ping(timeout) {
+            Ok(()) => Ok(()),
+            Err(error) => {
                 let _ = self.kill();
-                return Err(Error::Ipc(amazing_ipc::Error::Timeout));
-            }
-            match self.ping(remaining) {
-                Ok(()) => return Ok(()),
-                Err(Error::Ipc(amazing_ipc::Error::Remote(message)))
-                    if message == "UnknownInterface" => std::thread::yield_now(),
-                Err(error) => {
-                    let _ = self.kill();
-                    return Err(error);
-                }
+                Err(error)
             }
         }
     }
@@ -630,12 +659,12 @@ pub struct SandboxPolicy {
     pub allow_gpu: bool,
 }
 
+pub mod gpu;
+pub mod gpu_snapshot_wire;
 pub mod network;
 pub mod network_v2;
 pub mod protocol;
 pub mod renderer;
-pub mod gpu;
-pub mod gpu_snapshot_wire;
 
 /// Browser-side liveness observer. A crash is emitted once per renderer host.
 pub struct RendererMonitor {

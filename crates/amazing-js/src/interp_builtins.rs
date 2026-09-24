@@ -2999,9 +2999,7 @@ fn native_string_to_well_formed(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
     Ok(JsValue::str(string_this_units(i, this)?.to_well_formed()))
 }
 fn native_string_locale_compare(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let left = string_this_units(i, this)?;
-    let right = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::num(match left.units().cmp(right.units()) { std::cmp::Ordering::Less => -1.0, std::cmp::Ordering::Equal => 0.0, std::cmp::Ordering::Greater => 1.0 }))
+    intl_string_locale_compare(i, this, args)
 }
 fn native_string_normalize(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;

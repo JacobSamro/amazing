@@ -26,10 +26,13 @@ fn constructed_document_has_xml_metadata_without_a_browsing_context() {
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
     assert_eq!(scheduler.run_script(
-        "let doc = new Document(); [doc.URL, doc.documentURI, doc.contentType, \
-         doc.characterSet, doc.compatMode, doc.location].join('|')"
+        "let doc = new Document(); let xml = document.implementation.createDocument(null, 'root', null); \
+         [doc instanceof Node, doc instanceof Document, doc instanceof XMLDocument, \
+         xml instanceof XMLDocument, Object.getPrototypeOf(doc) === Document.prototype, \
+         doc.URL, doc.documentURI, doc.contentType, doc.characterSet, doc.charset, \
+         doc.inputEncoding, doc.compatMode, doc.location].join('|')"
     ).unwrap(), amazing_js::value::JsValue::str(
-        "about:blank|about:blank|application/xml|UTF-8|CSS1Compat|"));
+        "true|true|false|true|true|about:blank|about:blank|application/xml|UTF-8|UTF-8|UTF-8|CSS1Compat|"));
 }
 
 #[test]

@@ -968,6 +968,8 @@ pub trait BindingHost: Sized {
         Err(DomError::NotSupportedError)
     }
     fn current_document(&self) -> NodeIdx;
+    /// Record the interface identity of `new Document()` before its wrapper is made.
+    fn mark_constructed_document(&mut self, _document: NodeIdx) {}
     fn with_dom<R>(
         &mut self,
         callback: impl FnOnce(&mut Dom) -> Result<R, DomError>,

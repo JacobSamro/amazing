@@ -153,6 +153,13 @@ after each function.
   its failure clusters without waiting. Report at the end, with one ticket
   per commit series.
 
+**Driver adapter per lane (2026-09-24).** `crates/amazing/src/runtime_binding_host.rs` is shared by
+every lane that installs JS bindings, and big additions there caused repeated merge conflicts. Put your
+adapter in your own file, `crates/amazing/src/runtime_host_<lane>.rs` (a separate `impl RuntimeBindingHost`
+block plus your state types; that file is yours), and keep the shared file to ONE `mod` line, one installer
+call and at most a few state fields or hook lines. Existing large blocks move out when their lane next
+touches them.
+
 **nextest does not run doctests.** This workspace has them (`amazing-js`,
 `amazing-html`), and nextest silently reports success without them, so a lane
 that switches and forgets the `--doc` line loses that coverage without any

@@ -255,25 +255,8 @@ fn composite_group(
 }
 
 fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
-    let source_alpha = source[3] as f32 / 255.0 * opacity.clamp(0.0, 1.0);
-    let destination_alpha = destination[3] as f32 / 255.0;
-    let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
-    if output_alpha <= 0.0 {
-        return [0, 0, 0, 0];
-    }
-    let channel = |index: usize| {
-        ((source[index] as f32 * source_alpha
-            + destination[index] as f32 * destination_alpha * (1.0 - source_alpha))
-            / output_alpha)
-            .round()
-            .clamp(0.0, 255.0) as u8
-    };
-    [
-        channel(0),
-        channel(1),
-        channel(2),
-        (output_alpha * 255.0).round().clamp(0.0, 255.0) as u8,
-    ]
+    let opacity = crate::quantize_opacity(opacity);
+    crate::blend_source_over(source, destination, opacity)
 }
 
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
