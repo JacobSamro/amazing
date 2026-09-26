@@ -803,3 +803,42 @@ fn compiled_method_and_generator_boundaries_preserve_eval_strictness_and_names()
         assert_eq!(interpreter.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
     }
 }
+
+#[test]
+fn async_iterator_close_preserves_body_throw_over_every_close_failure() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for close in [
+            "get return() { throw closeError; }",
+            "return: true",
+            "return() { throw closeError; }",
+            "return() { return Promise.reject(closeError); }",
+            "return() { return Promise.resolve(1); }",
+        ] {
+            for completion in ["throw bodyError", "return 1"] {
+                let mut interpreter = Interpreter::new();
+                let source = format!(r#"
+                    var bodyError = {{origin: 'body'}}, closeError = {{origin: 'close'}};
+                    var observed, settled = false, iterations = 0;
+                    var iterable = {{[Symbol.asyncIterator]() {{
+                        return {{next() {{ return {{value: 1, done: false}}; }}, {close}}};
+                    }}}};
+                    async function work() {{
+                        for await (const value of iterable) {{ iterations++; {completion}; }}
+                    }}
+                    work().then(function(value) {{ observed = value; settled = true; }},
+                        function(error) {{ observed = error; settled = true; }});
+                "#);
+                interpreter.run_script_with_backend(&source, backend).unwrap();
+                let expected = if completion.starts_with("throw") {
+                    "settled && iterations === 1 && observed === bodyError"
+                } else if close == "return: true" || close.contains("Promise.resolve(1)") {
+                    "settled && iterations === 1 && observed instanceof TypeError"
+                } else {
+                    "settled && iterations === 1 && observed === closeError"
+                };
+                assert_eq!(interpreter.run_script(expected).unwrap(), JsValue::Bool(true),
+                    "{backend:?}: {completion}: {close}");
+            }
+        }
+    }
+}

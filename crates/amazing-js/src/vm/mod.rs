@@ -276,6 +276,7 @@ struct TryHandler {
     caught: Option<JsValue>,
     pending: Option<Abrupt>,
     saved_completion: Option<JsValue>,
+    iterator_close: bool,
 }
 
 impl Program {
@@ -601,6 +602,7 @@ impl Program {
                         caught: None,
                         pending: None,
                         saved_completion: None,
+                        iterator_close: false,
                     }),
                     Instruction::EnterCatch(name) => {
                         let handler = try_stack
@@ -816,6 +818,11 @@ impl Program {
                         registers[*dst] = i.get_prop(&registers[*source], "value")?;
                     }
                     Instruction::AsyncIteratorClose(dst, slot) => {
+                        // AsyncIteratorClose preserves a pending throw over any
+                        // return-method failure, including a later await rejection.
+                        if let Some(handler) = try_stack.last_mut() {
+                            handler.iterator_close = true;
+                        }
                         registers[*dst] = match async_iterators[*slot].as_ref()
                             .ok_or_else(|| Throw::type_error("missing async iterator frame"))? {
                             AsyncIteratorState::Values { .. }
@@ -893,7 +900,7 @@ fn route_abrupt(
     env: &mut EnvHandle,
     pc: &mut usize,
     i: &Interpreter,
-    abrupt: Abrupt,
+    mut abrupt: Abrupt,
 ) -> Result<Option<JsValue>, Throw> {
     loop {
         let Some(handler) = try_stack.last_mut() else {
@@ -920,6 +927,9 @@ fn route_abrupt(
                 *pc = finally;
                 return Ok(None);
             }
+        }
+        if handler.iterator_close && matches!(handler.pending, Some(Abrupt::Throw(_))) {
+            abrupt = handler.pending.take().unwrap();
         }
         try_stack.pop();
     }
