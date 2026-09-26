@@ -597,6 +597,38 @@ mod tests {
                 );
             }
         }
+        // color() relative forms convert the source into the target space and
+        // use that space's channel keywords.
+        assert_eq!(
+            parse_css_color("color(from red srgb r g b)"),
+            Some([255, 0, 0, 255])
+        );
+        assert_eq!(
+            parse_css_color("color(from red srgb r g b / 0.5)"),
+            Some([255, 0, 0, 128])
+        );
+        for (css, source) in [
+            ("color(from #336699 srgb-linear r g b)", "#336699"),
+            ("color(from #336699 display-p3 r g b)", "#336699"),
+            ("color(from #336699 display-p3-linear r g b)", "#336699"),
+            ("color(from #336699 a98-rgb r g b)", "#336699"),
+            ("color(from #336699 prophoto-rgb r g b)", "#336699"),
+            ("color(from #336699 rec2020 r g b)", "#336699"),
+            ("color(from #336699 xyz-d65 x y z)", "#336699"),
+            ("color(from #336699 xyz-d50 x y z)", "#336699"),
+        ] {
+            let got = parse_css_color(css).unwrap_or_else(|| panic!("{css}"));
+            let want = parse_css_color(source).unwrap();
+            for channel in 0..4 {
+                assert!(
+                    (got[channel] as i32 - want[channel] as i32).abs() <= 1,
+                    "{css} channel {channel}: {got:?} vs {want:?}"
+                );
+            }
+        }
+        assert_eq!(parse_css_color("color(from red r g b)"), None);
+        assert_eq!(parse_css_color("color(from red bogus r g b)"), None);
+        assert_eq!(parse_css_color("color(from currentcolor srgb r g b)"), None);
         // A `currentcolor` source stays for the computed-value seam; malformed
         // sources and channel lists are rejected.
         assert_eq!(parse_css_color("rgb(from currentcolor r g b)"), None);

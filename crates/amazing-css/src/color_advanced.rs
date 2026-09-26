@@ -113,41 +113,106 @@ pub(super) fn predefined_rgb(inner: &str) -> Option<[u8; 4]> {
     let channels = [0, 1, 2].map(|i| {
         percentage(&values[i]).map(|n| n / 100.0).or_else(|| finite(&values[i]))
     });
-    let channels = [channels[0]?, channels[1]?, channels[2]?];
-    if space == "srgb" { return Some(rgba(channels, a)); }
+    color_space_rgba(&space, [channels[0]?, channels[1]?, channels[2]?], a)
+}
+
+// Predefined `color()` space matrices (CSS Color 4 §19 sample code).
+const P3_TO_XYZ: [[f64; 3]; 3] = [
+    [608311.0 / 1250200.0, 189793.0 / 714400.0, 198249.0 / 1000160.0],
+    [35783.0 / 156275.0, 247089.0 / 357200.0, 198249.0 / 2500400.0],
+    [0.0, 32229.0 / 714400.0, 5220557.0 / 5000800.0],
+];
+const XYZ_TO_P3: [[f64; 3]; 3] = [
+    [2.493496911941425, -0.9313836179191239, -0.40271078445071684],
+    [-0.8294889695615747, 1.7626640603183463, 0.023624685841943577],
+    [0.03584583024378447, -0.07617238926804182, 0.9568845240076872],
+];
+const A98_TO_XYZ: [[f64; 3]; 3] = [
+    [573536.0 / 994567.0, 263643.0 / 1420810.0, 187206.0 / 994567.0],
+    [591459.0 / 1989134.0, 6239551.0 / 9945670.0, 374412.0 / 4972835.0],
+    [53769.0 / 1989134.0, 351524.0 / 4972835.0, 4929758.0 / 4972835.0],
+];
+const XYZ_TO_A98: [[f64; 3]; 3] = [
+    [2.041587903810746, -0.5650069742788594, -0.3447313507783295],
+    [-0.9692436362808797, 1.87596750150772, 0.04155505740717561],
+    [0.01344428063203101, -0.1183623922310182, 1.015174994391205],
+];
+const PROPHOTO_TO_XYZ: [[f64; 3]; 3] = [
+    [0.79776664490064230, 0.13518129740053308, 0.03134773412839220],
+    [0.28807482881940130, 0.71183523424187300, 0.00008993693872564],
+    [0.0, 0.0, 0.82510460251046020],
+];
+const XYZ_TO_PROPHOTO: [[f64; 3]; 3] = [
+    [1.3457989731028281, -0.25558010007997534, -0.05110628506753401],
+    [-0.5446224939028347, 1.5082327413132781, 0.02053603239147973],
+    [0.0, 0.0, 1.2119675456389454],
+];
+const REC2020_TO_XYZ: [[f64; 3]; 3] = [
+    [63426534.0 / 99577255.0, 20160776.0 / 139408157.0, 47086771.0 / 278816314.0],
+    [26158966.0 / 99577255.0, 472592308.0 / 697040785.0, 8267143.0 / 139408157.0],
+    [0.0, 19567812.0 / 697040785.0, 295819943.0 / 278816314.0],
+];
+const XYZ_TO_REC2020: [[f64; 3]; 3] = [
+    [1.716651187971268, -0.355670783776392, -0.253366281373660],
+    [-0.666684351832489, 1.616481236634939, 0.0157685458139111],
+    [0.017639857445311, -0.042770613257809, 0.942103121235474],
+];
+const D65_TO_D50: [[f64; 3]; 3] = [
+    [1.0479298208405488, 0.022946793341019088, -0.05019222954313557],
+    [0.029627815688159344, 0.990434484573249, -0.01707382502938514],
+    [-0.009243058152591178, 0.015055144896577895, 0.7518742899580008],
+];
+
+/// Convert numeric `color(<space> c1 c2 c3)` channels into RGBA.
+fn color_space_rgba(space: &str, channels: [f64; 3], alpha: u8) -> Option<[u8; 4]> {
+    if space == "srgb" { return Some(rgba(channels, alpha)); }
     if space == "srgb-linear" {
-        return Some(rgba(channels.map(srgb_encode), a));
+        return Some(rgba(channels.map(srgb_encode), alpha));
     }
-    let xyz = match space.as_str() {
+    let xyz = match space {
         "xyz" | "xyz-d65" => channels,
         "xyz-d50" => d50_to_d65(channels),
-        "display-p3" | "display-p3-linear" => matrix([
-            [608311.0 / 1250200.0, 189793.0 / 714400.0, 198249.0 / 1000160.0],
-            [35783.0 / 156275.0, 247089.0 / 357200.0, 198249.0 / 2500400.0],
-            [0.0, 32229.0 / 714400.0, 5220557.0 / 5000800.0],
-        ], if space == "display-p3" { channels.map(srgb_decode) } else { channels }),
-        "a98-rgb" => matrix([
-            [573536.0 / 994567.0, 263643.0 / 1420810.0, 187206.0 / 994567.0],
-            [591459.0 / 1989134.0, 6239551.0 / 9945670.0, 374412.0 / 4972835.0],
-            [53769.0 / 1989134.0, 351524.0 / 4972835.0, 4929758.0 / 4972835.0],
-        ], channels.map(|value| value.signum() * value.abs().powf(563.0 / 256.0))),
-        "rec2020" => matrix([
-            [63426534.0 / 99577255.0, 20160776.0 / 139408157.0, 47086771.0 / 278816314.0],
-            [26158966.0 / 99577255.0, 472592308.0 / 697040785.0, 8267143.0 / 139408157.0],
-            [0.0, 19567812.0 / 697040785.0, 295819943.0 / 278816314.0],
-        ], channels.map(rec2020_decode)),
-        "prophoto-rgb" => d50_to_d65(matrix([
-            [0.79776664490064230, 0.13518129740053308, 0.03134773412839220],
-            [0.28807482881940130, 0.71183523424187300, 0.00008993693872564],
-            [0.0, 0.0, 0.82510460251046020],
-        ], channels.map(|value| if value.abs() <= 16.0 / 512.0 {
-            value / 16.0
-        } else {
-            value.signum() * value.abs().powf(1.8)
-        }))),
+        "display-p3" | "display-p3-linear" => matrix(
+            P3_TO_XYZ,
+            if space == "display-p3" { channels.map(srgb_decode) } else { channels },
+        ),
+        "a98-rgb" => matrix(
+            A98_TO_XYZ,
+            channels.map(|value| value.signum() * value.abs().powf(563.0 / 256.0)),
+        ),
+        "rec2020" => matrix(REC2020_TO_XYZ, channels.map(rec2020_decode)),
+        "prophoto-rgb" => d50_to_d65(matrix(
+            PROPHOTO_TO_XYZ,
+            channels.map(|value| {
+                if value.abs() <= 16.0 / 512.0 { value / 16.0 }
+                else { value.signum() * value.abs().powf(1.8) }
+            }),
+        )),
         _ => return None,
     };
-    Some(rgba(xyz_to_srgb(xyz), a))
+    Some(rgba(xyz_to_srgb(xyz), alpha))
+}
+
+/// The source color's coordinates in a predefined `color()` space, used by the
+/// relative-color producer.
+fn rgba_to_color_space(space: &str, rgb: [u8; 4]) -> Option<[f64; 3]> {
+    Some(match space {
+        "srgb" => [0, 1, 2].map(|i| rgb[i] as f64 / 255.0),
+        "srgb-linear" => [0, 1, 2].map(|i| srgb_decode(rgb[i] as f64 / 255.0)),
+        "display-p3" => matrix(XYZ_TO_P3, srgb_to_xyz_d65(rgb)).map(srgb_encode),
+        "display-p3-linear" => matrix(XYZ_TO_P3, srgb_to_xyz_d65(rgb)),
+        "a98-rgb" => matrix(XYZ_TO_A98, srgb_to_xyz_d65(rgb))
+            .map(|value| value.signum() * value.abs().powf(256.0 / 563.0)),
+        "prophoto-rgb" => matrix(XYZ_TO_PROPHOTO, matrix(D65_TO_D50, srgb_to_xyz_d65(rgb)))
+            .map(|value| {
+                if value.abs() <= 16.0 / 512.0 { value * 16.0 }
+                else { value.signum() * value.abs().powf(1.0 / 1.8) }
+            }),
+        "rec2020" => matrix(XYZ_TO_REC2020, srgb_to_xyz_d65(rgb)).map(rec2020_encode),
+        "xyz" | "xyz-d65" => srgb_to_xyz_d65(rgb),
+        "xyz-d50" => matrix(D65_TO_D50, srgb_to_xyz_d65(rgb)),
+        _ => return None,
+    })
 }
 
 fn rec2020_decode(value: f64) -> f64 {
@@ -157,6 +222,16 @@ fn rec2020_decode(value: f64) -> f64 {
         value / 4.5
     } else {
         value.signum() * ((value.abs() + ALPHA - 1.0) / ALPHA).powf(1.0 / 0.45)
+    }
+}
+
+fn rec2020_encode(value: f64) -> f64 {
+    const ALPHA: f64 = 1.09929682680944;
+    const BETA: f64 = 0.018053968510807;
+    if value.abs() < BETA {
+        value * 4.5
+    } else {
+        value.signum() * (ALPHA * value.abs().powf(0.45) - (ALPHA - 1.0))
     }
 }
 
@@ -459,6 +534,9 @@ pub(super) fn has_from(inner: &str) -> bool {
 /// the computed-value seam resolves against the element's own `color`.
 pub(super) fn relative(function: &str, inner: &str, depth: usize) -> Option<[u8; 4]> {
     let function = function.to_ascii_lowercase();
+    if function == "color" {
+        return relative_color_space(inner, depth);
+    }
     let (source, channels, alpha_text) = relative_parts(inner, depth)?;
     let keywords = source_keywords(&function, source)?;
     let channel = |index: usize| channel_value(&function, index, channels[index], &keywords);
@@ -491,6 +569,43 @@ pub(super) fn relative(function: &str, inner: &str, depth: usize) -> Option<[u8;
         ),
         _ => return None,
     })
+}
+
+/// `color(from <color> <space> <c1> <c2> <c3> / <alpha>)`. The channel
+/// keywords are the target space's own axes (`r g b`, or `x y z` for XYZ); the
+/// source is converted into that space first.
+fn relative_color_space(inner: &str, depth: usize) -> Option<[u8; 4]> {
+    let rest = inner.trim_start().get(4..)?.trim_start();
+    let (source_text, after) = split_source(rest)?;
+    if source_text.eq_ignore_ascii_case("currentcolor") {
+        return None;
+    }
+    let source = super::parse_css_color_depth(source_text, depth + 1)?;
+    let (channels_text, alpha_text) = split_alpha(after)?;
+    let words = top_level_words(channels_text);
+    let [space, c1, c2, c3] = words.as_slice() else { return None };
+    let space = space.to_ascii_lowercase();
+    let base = rgba_to_color_space(&space, source)?;
+    let names: [&'static str; 3] = if matches!(space.as_str(), "xyz" | "xyz-d50" | "xyz-d65") {
+        ["x", "y", "z"]
+    } else {
+        ["r", "g", "b"]
+    };
+    let keywords: Vec<(&'static str, f64)> = vec![
+        (names[0], base[0]),
+        (names[1], base[1]),
+        (names[2], base[2]),
+    ];
+    let channels = [
+        number_channel(c1, &keywords, 1.0, 1.0)?,
+        number_channel(c2, &keywords, 1.0, 1.0)?,
+        number_channel(c3, &keywords, 1.0, 1.0)?,
+    ];
+    let alpha = match alpha_text {
+        Some(text) => alpha_channel(text, &keywords, source[3])?,
+        None => source[3],
+    };
+    color_space_rgba(&space, channels, alpha)
 }
 
 /// Splits `from <color> <channels> [ / <alpha> ]`.

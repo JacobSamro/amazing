@@ -466,6 +466,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                 // unsupported grammar, not an invalid declaration that revives
                 // a lower-ranked fallback. This keeps the staged seam honest.
                 match significant(&tokenize(css)).as_slice() {
+                    [Token::Function(name), ..] if name.eq_ignore_ascii_case("light-dark") => {
+                        crate::computed::valid_light_dark(css).then_some(V::Unparsed)
+                    }
                     [Token::Function(name), ..]
                         if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") =>
                     {
@@ -494,6 +497,26 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                         }),
                 }
             };
+        }
+        "color-scheme" => {
+            let tokens: Vec<&str> = s.split_ascii_whitespace().collect();
+            let valid = match tokens.as_slice() {
+                ["normal"] => true,
+                [] => false,
+                _ => {
+                    let (mut only, mut light, mut dark, mut ok) = (0u8, 0u8, 0u8, true);
+                    for token in &tokens {
+                        match *token {
+                            "only" => only += 1,
+                            "light" => light += 1,
+                            "dark" => dark += 1,
+                            _ => { ok = false; break; }
+                        }
+                    }
+                    ok && only <= 1 && light <= 1 && dark <= 1 && light + dark >= 1
+                }
+            };
+            return valid.then_some(V::Unparsed);
         }
         "opacity" => return number(css).map(|n| V::Number(n.clamp(0.0, 1.0))),
         "flex-grow" | "flex-shrink" => {
@@ -833,6 +856,25 @@ mod tests {
             parse("color", "rgb(from currentcolor r g b)"),
             Some(ComputedValue::Unparsed)
         ));
+    }
+    #[test]
+    fn relative_currentcolor_color_space_rebinds_on_inheritance() {
+        // CSS-22: general `color(from currentcolor <space> ...)` forms (not
+        // just the identity `r g b` copy) resolve through the same
+        // computed-value seam as the other relative-color functions.
+        let parent = style(
+            None,
+            &[
+                ("color", "red"),
+                ("background-color", "color(from currentcolor srgb calc(r / 2) g b)"),
+            ],
+        );
+        assert_eq!(parent.get("background-color"), Some("#800000ff"));
+        let child = style(
+            Some(&parent),
+            &[("color", "blue"), ("background-color", "inherit")],
+        );
+        assert_eq!(child.get("background-color"), Some("#0000ffff"));
     }
     #[test]
     fn ruby_one_grammars_and_display_values() {

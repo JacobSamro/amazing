@@ -7,7 +7,10 @@ fn unsupported_color_spaces_preserve_the_existing_cascade_winner() {
     let element = dom.create_element(NodeIdx(0), "div");
     for color in [
         "darkred",
-        "color(from currentcolor xyz x y z)",
+        // CSS-22 added `xyz`/predefined-RGB reverse conversions for relative
+        // `color()`; a custom-ident color space (unimplemented) still hits
+        // the preserved-unsupported-grammar path.
+        "color(from currentcolor --custom-space x y z)",
     ] {
         let sheet = parse_stylesheet(&format!(
             "div {{ background-color: red; background-color: {color}; }}"
