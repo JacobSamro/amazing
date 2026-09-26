@@ -141,6 +141,8 @@ impl RuntimeBindingHost<'_> {
             EventClass::PopState => Interface::PopStateEvent,
             EventClass::PageTransition => Interface::PageTransitionEvent,
             EventClass::BeforeUnload => Interface::BeforeUnloadEvent,
+            EventClass::Error => Interface::ErrorEvent,
+            EventClass::PromiseRejection => Interface::PromiseRejectionEvent,
 
         })
     }
@@ -167,6 +169,59 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_event_payloads_preserve_identity_defaults_and_conversion_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'error event check ' + step; }
+            check(ErrorEvent.length === 1 && PromiseRejectionEvent.length === 2);
+            const empty = new ErrorEvent('error');
+            check(empty instanceof Event && empty instanceof ErrorEvent);
+            check(empty.message === '' && empty.filename === '' && empty.lineno === 0 && empty.colno === 0);
+            check(empty.error === undefined && !empty.bubbles && !empty.cancelable && !empty.isTrusted);
+            const payload = {};
+            const event = new ErrorEvent('\uD800', {message: '\uD800', filename: '\uD800',
+                error: payload, lineno: -1, colno: 4294967297, cancelable: true});
+            check(event.type === '\uD800' && event.message === '\uD800' && event.filename === '\uFFFD');
+            check(event.error === payload && event.lineno === 4294967295 && event.colno === 1);
+            check(new ErrorEvent('x', {error: null}).error === null);
+            check(new ErrorEvent('x', {error: false}).error === false);
+            check(Object.is(new ErrorEvent('x', {colno: -0.5}).colno, 0));
+            const order = [];
+            const dict = {};
+            for (const name of ['bubbles', 'cancelable', 'composed', 'colno', 'error', 'filename', 'lineno', 'message']) {
+                Object.defineProperty(dict, name, {get() { order.push(name); return undefined; }});
+            }
+            new ErrorEvent('x', dict);
+            check(order.join(',') === 'bubbles,cancelable,composed,colno,error,filename,lineno,message');
+            const promise = {}; // The IDL requires an object, not a Promise brand.
+            const rejection = new PromiseRejectionEvent('unhandledrejection', {promise, reason: payload});
+            check(rejection instanceof Event && rejection.promise === promise && rejection.reason === payload);
+            check(new PromiseRejectionEvent('x', {promise}).reason === undefined);
+            check(new PromiseRejectionEvent('x', {promise, reason: null}).reason === null);
+            for (const dict of [undefined, null, {}, {promise: null}, {promise: 1}]) {
+                let rejected = false;
+                try { new PromiseRejectionEvent('x', dict); } catch (e) { rejected = e instanceof TypeError; }
+                check(rejected);
+            }
+            let brand = false;
+            try { Object.getOwnPropertyDescriptor(ErrorEvent.prototype, 'error').get.call(rejection); }
+            catch (e) { brand = e instanceof TypeError; }
+            check(brand);
+            const target = new EventTarget(); let seen;
+            target.addEventListener('\uD800', e => { seen = e; e.preventDefault(); });
+            check(target.dispatchEvent(event) === false && seen === event && seen.error === payload);
+            event.initEvent('again', false, false); check(event.error === payload && event.message === '\uD800');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
 
     #[test]
     fn obsolete_reflection_converts_types_preserves_aliases_and_checks_receiver_interfaces() {

@@ -1337,6 +1337,14 @@ pub static INTERFACES: &[D] = &[
             getter("state", O::PopStateState), getter("hasUAVisualTransition", O::PopStateHasUAVisualTransition)] },
     D { interface: I::PageTransitionEvent, name: "PageTransitionEvent", parent: Some(I::Event),
         constructor: Some(O::PageTransitionEventConstructor), members: &[getter("persisted", O::PageTransitionPersisted)] },
+    D { interface: I::ErrorEvent, name: "ErrorEvent", parent: Some(I::Event),
+        constructor: Some(O::ErrorEventConstructor), members: &[
+            getter("message", O::ErrorEventGet("message")), getter("filename", O::ErrorEventGet("filename")),
+            getter("lineno", O::ErrorEventGet("lineno")), getter("colno", O::ErrorEventGet("colno")),
+            getter("error", O::ErrorEventGet("error"))] },
+    D { interface: I::PromiseRejectionEvent, name: "PromiseRejectionEvent", parent: Some(I::Event),
+        constructor: Some(O::PromiseRejectionEventConstructor), members: &[
+            getter("promise", O::PromiseRejectionEventGet("promise")), getter("reason", O::PromiseRejectionEventGet("reason"))] },
     D { interface: I::BeforeUnloadEvent, name: "BeforeUnloadEvent", parent: Some(I::Event),
         constructor: None, members: &[getter("returnValue", O::BeforeUnloadReturnValue),
             setter("returnValue", O::BeforeUnloadSetReturnValue)] },

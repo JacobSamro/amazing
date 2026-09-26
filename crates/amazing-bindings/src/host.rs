@@ -190,6 +190,8 @@ pub enum Interface {
     PopStateEvent,
     PageTransitionEvent,
     BeforeUnloadEvent,
+    ErrorEvent,
+    PromiseRejectionEvent,
     MessageEvent,
     MutationObserver,
     MutationRecord,
@@ -225,6 +227,10 @@ pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsi
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    ErrorEventConstructor,
+    PromiseRejectionEventConstructor,
+    ErrorEventGet(&'static str),
+    PromiseRejectionEventGet(&'static str),
     LegacyReflectGet(Interface, &'static str, LegacyReflectionKind),
     LegacyReflectSet(Interface, &'static str, LegacyReflectionKind),
     FormAttributeGet(FormAttribute), FormAttributeSet(FormAttribute),

@@ -1015,9 +1015,10 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let prototype = self.js.binding_create_object(Some(&parent))?;
         let constructor = match definition.constructor {
             Some(operation) => {
-                let length = if matches!(
+                let length = if operation == Operation::PromiseRejectionEventConstructor { 2 } else if matches!(
                     operation,
                     Operation::EventConstructor
+                        | Operation::ErrorEventConstructor
                         | Operation::ProcessingInstructionConstructor
                         | Operation::HashChangeEventConstructor
                         | Operation::PopStateEventConstructor

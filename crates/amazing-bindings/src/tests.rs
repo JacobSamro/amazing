@@ -2563,3 +2563,6 @@ mod tests_navigation_events;
 
 #[path = "tests_event_types.rs"]
 mod tests_event_types;
+
+#[path = "tests_error_events.rs"]
+mod error_events;
