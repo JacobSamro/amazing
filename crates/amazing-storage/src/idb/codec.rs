@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::{self, Reader};
+use amazing_js::{SerializedAtom as Atom, SerializedBoxKind as BoxKind, SerializedHostValue, SerializedNode as Node, SerializedValue};
 
 fn n(out: &mut Vec<u8>, n: u32) {
     out.extend_from_slice(&n.to_le_bytes());
@@ -61,6 +62,8 @@ fn decode_key(r: &mut Reader<'_>, depth: u8) -> Result<Key> {
 }
 fn encode_value(out: &mut Vec<u8>, value: &StructuredValue) {
     match value {
+        StructuredValue::Graph { wire, .. } => { out.push(10); encode_graph(out, wire); },
+        StructuredValue::Hole => out.push(9),
         StructuredValue::Undefined => out.push(8),
         StructuredValue::Null => out.push(0),
         StructuredValue::Bool(v) => {
@@ -105,6 +108,8 @@ fn decode_value(r: &mut Reader<'_>, depth: u8) -> Result<StructuredValue> {
         return Err(Error::Data);
     }
     Ok(match read_byte(r)? {
+        10 => { let wire = decode_graph(r)?; let view = Box::new(super::graph::view(&wire)); StructuredValue::Graph { wire, view } },
+        9 => StructuredValue::Hole,
         8 => StructuredValue::Undefined,
         0 => StructuredValue::Null,
         1 => StructuredValue::Bool(read_byte(r)? != 0),
@@ -136,6 +141,138 @@ fn decode_value(r: &mut Reader<'_>, depth: u8) -> Result<StructuredValue> {
         }
         _ => return Err(Error::Data),
     })
+}
+fn count(out: &mut Vec<u8>, value: usize) { out.extend_from_slice(&(value as u64).to_le_bytes()); }
+fn read_count(r: &mut Reader<'_>) -> Result<usize> {
+    usize::try_from(read_u64(r)?).map_err(|_| Error::Data)
+}
+fn flag(out: &mut Vec<u8>, value: bool) { out.push(u8::from(value)); }
+fn read_flag(r: &mut Reader<'_>) -> Result<bool> {
+    match read_byte(r)? { 0 => Ok(false), 1 => Ok(true), _ => Err(Error::Data) }
+}
+fn units(out: &mut Vec<u8>, value: &[u16]) {
+    n(out, value.len() as u32);
+    for unit in value { out.extend_from_slice(&unit.to_le_bytes()); }
+}
+fn read_units(r: &mut Reader<'_>) -> Result<Vec<u16>> {
+    let len = read_u32(r)? as usize;
+    if len > 10_000_000 { return Err(Error::Data); }
+    let mut result = Vec::with_capacity(len);
+    for _ in 0..len { result.push(u16::from_le_bytes(r.take(2).map_err(|_| Error::Data)?.try_into().unwrap())); }
+    Ok(result)
+}
+fn atom(out: &mut Vec<u8>, value: &Atom) {
+    match value {
+        Atom::Undefined => out.push(0), Atom::Null => out.push(1),
+        Atom::Boolean(value) => { out.push(2); flag(out, *value); },
+        Atom::Number(value) => { out.push(3); out.extend_from_slice(&value.to_bits().to_le_bytes()); },
+        Atom::BigInt { negative, limbs } => { out.push(4); flag(out, *negative); n(out, limbs.len() as u32); for limb in limbs { n(out, *limb); } },
+        Atom::String(value) => { out.push(5); units(out, value); },
+        Atom::Reference(index) => { out.push(6); count(out, *index); },
+    }
+}
+fn read_atom(r: &mut Reader<'_>) -> Result<Atom> {
+    Ok(match read_byte(r)? {
+        0 => Atom::Undefined, 1 => Atom::Null, 2 => Atom::Boolean(read_flag(r)?),
+        3 => Atom::Number(f64::from_bits(read_u64(r)?)),
+        4 => { let negative = read_flag(r)?; let len = read_u32(r)?; if len > 1_000_000 { return Err(Error::Data); }
+            let mut limbs = Vec::new(); for _ in 0..len { limbs.push(read_u32(r)?); } Atom::BigInt { negative, limbs } },
+        5 => Atom::String(read_units(r)?), 6 => Atom::Reference(read_count(r)?),
+        _ => return Err(Error::Data),
+    })
+}
+fn properties(out: &mut Vec<u8>, values: &[(Vec<u16>, Atom)]) {
+    n(out, values.len() as u32);
+    for (name, value) in values { units(out, name); atom(out, value); }
+}
+fn read_properties(r: &mut Reader<'_>) -> Result<Vec<(Vec<u16>, Atom)>> {
+    let len = read_u32(r)?; if len > 1_000_000 { return Err(Error::Data); }
+    let mut result = Vec::new();
+    for _ in 0..len { result.push((read_units(r)?, read_atom(r)?)); }
+    Ok(result)
+}
+fn encode_graph(out: &mut Vec<u8>, value: &SerializedValue) {
+    atom(out, &value.root);
+    n(out, value.nodes.len() as u32);
+    for node in &value.nodes {
+        match node {
+            Node::Object { properties: values } => { out.push(0); properties(out, values); },
+            Node::Array { length, properties: values } => { out.push(1); count(out, *length); properties(out, values); },
+            Node::Boxed { kind, value } => { out.push(2); out.push(match kind { BoxKind::Boolean => 0, BoxKind::Number => 1, BoxKind::BigInt => 2, BoxKind::String => 3 }); atom(out, value); },
+            Node::Date(value) => { out.push(3); out.extend_from_slice(&value.to_bits().to_le_bytes()); },
+            Node::RegExp { pattern, flags } => { out.push(4); units(out, pattern); string(out, flags); },
+            Node::ArrayBuffer { bytes, max_byte_length, resizable } => { out.push(5); core::bytes(out, bytes); count(out, *max_byte_length); flag(out, *resizable); },
+            Node::ArrayBufferView { buffer, byte_offset, byte_length, kind } => { out.push(6); count(out, *buffer); count(out, *byte_offset); flag(out, byte_length.is_some()); if let Some(value) = byte_length { count(out, *value); } flag(out, kind.is_some()); if let Some(value) = kind { string(out, value); } },
+            Node::Map(values) => { out.push(7); n(out, values.len() as u32); for (key, value) in values { atom(out, key); atom(out, value); } },
+            Node::Set(values) => { out.push(8); n(out, values.len() as u32); for value in values { atom(out, value); } },
+            Node::Error { name, message, cause } => { out.push(9); string(out, name); flag(out, message.is_some()); if let Some(value) = message { units(out, value); } flag(out, cause.is_some()); if let Some(value) = cause { atom(out, value); } },
+            Node::Host(value) => { out.push(10); string(out, &value.type_name); core::bytes(out, &value.bytes); },
+        }
+    }
+}
+fn decode_graph(r: &mut Reader<'_>) -> Result<SerializedValue> {
+    let root = read_atom(r)?;
+    let len = read_u32(r)?; if len > 1_000_000 { return Err(Error::Data); }
+    let mut nodes = Vec::new();
+    for _ in 0..len {
+        nodes.push(match read_byte(r)? {
+            0 => Node::Object { properties: read_properties(r)? },
+            1 => Node::Array { length: read_count(r)?, properties: read_properties(r)? },
+            2 => { let kind = match read_byte(r)? { 0 => BoxKind::Boolean, 1 => BoxKind::Number, 2 => BoxKind::BigInt, 3 => BoxKind::String, _ => return Err(Error::Data) }; Node::Boxed { kind, value: read_atom(r)? } },
+            3 => Node::Date(f64::from_bits(read_u64(r)?)),
+            4 => Node::RegExp { pattern: read_units(r)?, flags: read_string(r)? },
+            5 => Node::ArrayBuffer { bytes: read_bytes(r)?, max_byte_length: read_count(r)?, resizable: read_flag(r)? },
+            6 => { let buffer = read_count(r)?; let byte_offset = read_count(r)?; let byte_length = read_flag(r)?.then(|| read_count(r)).transpose()?; let kind = read_flag(r)?.then(|| read_string(r)).transpose()?; Node::ArrayBufferView { buffer, byte_offset, byte_length, kind } },
+            7 => { let len = read_u32(r)?; if len > 1_000_000 { return Err(Error::Data); } let mut values = Vec::new(); for _ in 0..len { values.push((read_atom(r)?, read_atom(r)?)); } Node::Map(values) },
+            8 => { let len = read_u32(r)?; if len > 1_000_000 { return Err(Error::Data); } let mut values = Vec::new(); for _ in 0..len { values.push(read_atom(r)?); } Node::Set(values) },
+            9 => { let name = read_string(r)?; let message = read_flag(r)?.then(|| read_units(r)).transpose()?; let cause = read_flag(r)?.then(|| read_atom(r)).transpose()?; Node::Error { name, message, cause } },
+            10 => Node::Host(SerializedHostValue { type_name: read_string(r)?, bytes: read_bytes(r)? }),
+            _ => return Err(Error::Data),
+        });
+    }
+    let valid = |atom: &Atom| !matches!(atom, Atom::Reference(index) if *index >= nodes.len());
+    if !valid(&root) { return Err(Error::Data); }
+    for node in &nodes {
+        let atoms: Vec<&Atom> = match node {
+            Node::Object { properties } | Node::Array { properties, .. } => properties.iter().map(|(_, value)| value).collect(),
+            Node::Boxed { value, .. } => vec![value], Node::Map(values) => values.iter().flat_map(|(a,b)| [a,b]).collect(),
+            Node::Set(values) => values.iter().collect(), Node::Error { cause: Some(value), .. } => vec![value],
+            _ => Vec::new(),
+        };
+        if atoms.iter().any(|atom| !valid(atom)) { return Err(Error::Data); }
+        if let Node::ArrayBufferView { buffer, .. } = node { if *buffer >= nodes.len() { return Err(Error::Data); } }
+    }
+    Ok(SerializedValue { root, nodes })
+}
+#[cfg(test)]
+mod graph_tests {
+    use super::*;
+
+    #[test]
+    fn persisted_graph_round_trips_cycles_and_shared_references() {
+        let wire = SerializedValue {
+            root: Atom::Reference(0),
+            nodes: vec![
+                Node::Object { properties: vec![
+                    ("self".encode_utf16().collect(), Atom::Reference(0)),
+                    ("left".encode_utf16().collect(), Atom::Reference(1)),
+                    ("right".encode_utf16().collect(), Atom::Reference(1)),
+                ] },
+                Node::Object { properties: vec![("value".encode_utf16().collect(), Atom::Number(7.0))] },
+            ],
+        };
+        let value = StructuredValue::Graph { view: Box::new(super::super::graph::view(&wire)), wire };
+        let mut bytes = Vec::new();
+        encode_value(&mut bytes, &value);
+        let decoded = decode_value(&mut Reader::new(&bytes), 0).unwrap();
+        let StructuredValue::Graph { wire, view } = decoded else { panic!("graph lost on disk"); };
+        assert!(matches!(wire.root, Atom::Reference(0)));
+        let Node::Object { properties } = &wire.nodes[0] else { panic!("root lost"); };
+        assert!(matches!(properties[0].1, Atom::Reference(0)));
+        assert!(matches!(properties[1].1, Atom::Reference(1)));
+        assert!(matches!(properties[2].1, Atom::Reference(1)));
+        assert!(matches!(view.as_ref(), StructuredValue::Object(_)));
+    }
 }
 fn encode_path(out: &mut Vec<u8>, path: &KeyPath) {
     match path {

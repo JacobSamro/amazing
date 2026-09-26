@@ -1,11 +1,15 @@
 //! Pure IndexedDB engine. Script promises and event dispatch remain in bindings.
-use crate::core::{BucketKey, DiskStore, EntryKey, Error as StorageError, StorageKey};
+use crate::core::{BucketKey, DiskStore, EntryKey, Error as StorageError};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 mod codec;
+mod graph;
+pub fn graph_view(wire: &amazing_js::SerializedValue) -> StructuredValue { graph::view(wire) }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum StructuredValue {
+    Graph { wire: amazing_js::SerializedValue, view: Box<StructuredValue> },
+    Hole,
     Undefined,
     Null,
     Bool(bool),
@@ -15,6 +19,19 @@ pub enum StructuredValue {
     Binary(Vec<u8>),
     Array(Vec<Self>),
     Object(BTreeMap<String, Self>),
+}
+impl PartialEq for StructuredValue {
+    fn eq(&self, other: &Self) -> bool {
+        use StructuredValue::*;
+        match (self, other) {
+            (Graph { wire: a, .. }, Graph { wire: b, .. }) => format!("{a:?}") == format!("{b:?}"),
+            (Hole, Hole) | (Undefined, Undefined) | (Null, Null) => true,
+            (Bool(a), Bool(b)) => a == b, (Number(a), Number(b)) | (Date(a), Date(b)) => a == b,
+            (String(a), String(b)) => a == b, (Binary(a), Binary(b)) => a == b,
+            (Array(a), Array(b)) => a == b, (Object(a), Object(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum Key {
@@ -41,12 +58,14 @@ impl Key {
     }
     pub fn from_value(value: &StructuredValue) -> Result<Self> {
         match value {
+            StructuredValue::Graph { view, .. } => Self::from_value(view),
             StructuredValue::Number(n) => Self::number(*n),
             StructuredValue::Date(n) => Self::date(*n),
             StructuredValue::String(s) => Ok(Self::String(s.clone())),
             StructuredValue::Binary(b) => Ok(Self::Binary(b.clone())),
             StructuredValue::Array(a) => Ok(Self::Array(
-                a.iter().map(Self::from_value).collect::<Result<_>>()?,
+                a.iter().filter(|value| !matches!(value, StructuredValue::Hole))
+                    .map(Self::from_value).collect::<Result<_>>()?,
             )),
             _ => Err(Error::Data),
         }
@@ -148,20 +167,29 @@ pub enum KeyPath {
     Single(String),
     Compound(Vec<String>),
 }
-fn property<'a>(value: &'a StructuredValue, path: &str) -> Option<&'a StructuredValue> {
+fn property(value: &StructuredValue, path: &str) -> Option<StructuredValue> {
     if path.is_empty() {
-        return Some(value);
+        return Some(value.clone());
     }
-    let mut current = value;
+    let mut current = value.clone();
     for component in path.split('.') {
-        current = match current {
-            StructuredValue::Object(map) => map.get(component)?,
+        current = match &current {
+            StructuredValue::Graph { view, .. } => property(view, component)?,
+            StructuredValue::Object(map) => map.get(component)?.clone(),
+            StructuredValue::String(value) if component == "length" =>
+                StructuredValue::Number(value.encode_utf16().count() as f64),
+            StructuredValue::Array(value) if component == "length" =>
+                StructuredValue::Number(value.len() as f64),
             _ => return None,
         };
     }
     Some(current)
 }
 fn assign(value: &mut StructuredValue, path: &str, key: &Key) -> Result<()> {
+    if let StructuredValue::Graph { wire, view } = value {
+        assign(view, path, key)?;
+        return graph::assign_key(wire, path, key);
+    }
     let mut parts = path.split('.').peekable();
     let mut current = value;
     while let Some(part) = parts.next() {
@@ -189,14 +217,14 @@ fn key_value(key: &Key) -> StructuredValue {
 }
 fn extract(value: &StructuredValue, path: &KeyPath) -> Result<Option<Key>> {
     match path {
-        KeyPath::Single(p) => property(value, p).map(Key::from_value).transpose(),
+        KeyPath::Single(p) => property(value, p).as_ref().map(Key::from_value).transpose(),
         KeyPath::Compound(paths) => {
             let mut keys = Vec::new();
             for p in paths {
                 let Some(v) = property(value, p) else {
                     return Ok(None);
                 };
-                keys.push(Key::from_value(v)?);
+                keys.push(Key::from_value(&v)?);
             }
             Ok(Some(Key::Array(keys)))
         }
@@ -480,12 +508,12 @@ impl Cursor {
         from_index: bool,
     ) -> Self {
         entries.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
-        if matches!(direction, Direction::Prev | Direction::PrevUnique) {
-            entries.reverse();
-        }
         if matches!(direction, Direction::NextUnique | Direction::PrevUnique) {
             let mut seen = BTreeSet::new();
             entries.retain(|e| seen.insert(e.0.clone()));
+        }
+        if matches!(direction, Direction::Prev | Direction::PrevUnique) {
+            entries.reverse();
         }
         Self {
             records: entries
@@ -624,9 +652,10 @@ pub enum Mode {
     ReadWrite,
     VersionChange,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Durability {
     Strict,
+    #[default]
     Relaxed,
     Default,
 }
@@ -681,7 +710,7 @@ impl Transaction {
 #[derive(Clone, Debug)]
 pub struct Connection {
     pub id: u64,
-    pub key: StorageKey,
+    pub key: BucketKey,
     pub name: String,
     pub version: u64,
     pub close_pending: bool,
@@ -714,25 +743,25 @@ pub struct OpenResult {
 }
 #[derive(Default)]
 pub struct IndexedDb {
-    databases: BTreeMap<(StorageKey, String), Database>,
+    databases: BTreeMap<(BucketKey, String), Database>,
     connections: BTreeMap<u64, Connection>,
     next_id: u64,
     active: Vec<(u64, u64, Mode, BTreeSet<String>)>,
-    pending: VecDeque<(StorageKey, String, u64)>,
+    pending: VecDeque<(BucketKey, String, u64)>,
     pending_upgrade: BTreeMap<u64, u64>,
     events: VecDeque<OpenEvent>,
     disk: Option<DiskStore>,
 }
 impl IndexedDb {
-    pub fn databases(&self,key:&StorageKey)->Vec<(String,u64)> {
+    pub fn databases(&self,key:&BucketKey)->Vec<(String,u64)> {
         self.databases.iter().filter(|((storage,_),_)|storage==key)
             .map(|((_,name),db)|(name.clone(),db.version)).collect()
     }
-    pub fn delete_database(&mut self,key:&StorageKey,name:&str)->Result<u64> {
+    pub fn delete_database(&mut self,key:&BucketKey,name:&str)->Result<u64> {
         if self.connections.values().any(|connection|&connection.key==key&&connection.name==name){return Err(Error::Blocked)}
         let old=self.databases.get(&(key.clone(),name.to_owned())).map_or(0,|db|db.version);
         if let Some(disk)=&mut self.disk {
-            let entry=EntryKey {bucket:BucketKey::new(key.clone(),"default"),namespace:"idb".into(),key:name.as_bytes().to_vec()};
+            let entry=EntryKey {bucket:key.clone(),namespace:"idb".into(),key:name.as_bytes().to_vec()};
             disk.delete(&entry).map_err(Error::from)?;
         }
         self.databases.remove(&(key.clone(),name.to_owned()));Ok(old)
@@ -743,15 +772,15 @@ impl IndexedDb {
             let name = String::from_utf8(key.key).map_err(|_| Error::Data)?;
             engine
                 .databases
-                .insert((key.bucket.storage, name), codec::decode(&data)?);
+                .insert((key.bucket, name), codec::decode(&data)?);
         }
         engine.disk = Some(disk);
         Ok(engine)
     }
-    fn persist(&mut self, key: &StorageKey, name: &str, db: &Database) -> Result<()> {
+    fn persist(&mut self, key: &BucketKey, name: &str, db: &Database) -> Result<()> {
         if let Some(disk) = &mut self.disk {
             let entry = EntryKey {
-                bucket: BucketKey::new(key.clone(), "default"),
+                bucket: key.clone(),
                 namespace: "idb".into(),
                 key: name.as_bytes().to_vec(),
             };
@@ -759,15 +788,15 @@ impl IndexedDb {
         }
         Ok(())
     }
-    pub fn database(&self, key: &StorageKey, name: &str) -> Option<&Database> {
+    pub fn database(&self, key: &BucketKey, name: &str) -> Option<&Database> {
         self.databases.get(&(key.clone(), name.to_owned()))
     }
-    pub fn database_mut(&mut self, key: &StorageKey, name: &str) -> Option<&mut Database> {
+    pub fn database_mut(&mut self, key: &BucketKey, name: &str) -> Option<&mut Database> {
         self.databases.get_mut(&(key.clone(), name.to_owned()))
     }
     pub fn open(
         &mut self,
-        key: StorageKey,
+        key: BucketKey,
         name: impl Into<String>,
         version: Option<u64>,
     ) -> Result<OpenResult> {

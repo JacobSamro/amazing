@@ -278,15 +278,32 @@ fn render_wpt_surface_after_first_paint(
         if !root_has_reftest_wait(&host)? {
             break;
         }
-        scheduler.pump_at(Duration::from_millis(frame * 16), true)
-            .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
         sampled_at = (frame * 16) as f64;
-        let handoff_events = {
-            let dom = host.borrow();
+        // The compositor ticks once per frame from the EventLoop's post-rAF
+        // render step, so the retained property scene samples the same virtual
+        // clock the harness advances and stays aligned with the page's rAF
+        // mutations. Events are dispatched after the loop step releases.
+        let mut handoff_events = Vec::new();
+        {
+            let dom_host = host.clone();
+            let oracle_ref = &mut oracle;
             let (timeline, animated) = animations.handoff_state_mut();
-            oracle.on_vsync(&dom.dom, timeline, animated, sampled_at)
-                .map(|(_, events)| events).unwrap_or_default()
-        };
+            scheduler.pump_at_with_render(
+                Duration::from_millis(frame * 16),
+                true,
+                |phase, timestamp| {
+                    if phase != amazing_dom::event_loop::RenderPhase::AfterAnimationFrames {
+                        return;
+                    }
+                    let at = timestamp.as_secs_f64() * 1000.;
+                    let dom = dom_host.borrow();
+                    if let Some((_, events)) = oracle_ref.on_vsync(&dom.dom, timeline, animated, at) {
+                        handoff_events.extend(events);
+                    }
+                },
+            )
+            .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
+        }
         for event in handoff_events {
             use amazing_compositor::CssAnimationEventKind as Kind;
             use amazing_css::animation::AnimationMainThreadEventKind as MainKind;

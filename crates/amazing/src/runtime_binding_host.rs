@@ -52,6 +52,7 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    StorageLockSettled(u64, bool),
 }
 
 enum WebObject {
@@ -86,6 +87,7 @@ struct BindingState {
     document_content_type: Option<String>,
     document_referrer: Option<String>,
     web_objects: Vec<WebObject>,
+    web_object_handles: HashMap<usize, usize>,
     font_sets: HashMap<NodeIdx, u64>,
     window_event_target_slot: u64,
     storage: Option<StorageRuntime>,
@@ -458,6 +460,7 @@ pub(crate) fn install(
         document_content_type: None,
         document_referrer: None,
         web_objects: Vec::new(),
+        web_object_handles: HashMap::new(),
         font_sets: HashMap::new(),
         window_event_target_slot,
         storage: None,
@@ -491,6 +494,7 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -544,7 +548,11 @@ impl RuntimeBindingHost<'_> {
             slot
         };
         let arena = self.state.borrow().arena;
-        self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)
+        let value = self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)?;
+        if let JsValue::Object(object) = &value {
+            self.state.borrow_mut().web_object_handles.insert(Rc::as_ptr(&object.0) as usize, slot as usize);
+        }
+        Ok(value)
     }
     fn web_slot(&self, value: &JsValue, brand: InterfaceBrand) -> Result<usize, Throw> {
         let key = self.platform_object(value, brand)
