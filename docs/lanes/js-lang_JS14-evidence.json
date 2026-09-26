@@ -1,0 +1,148 @@
+{
+  "ticket": "JS-14",
+  "source_commit": "04f896835ea42b6c4001673307d07518339cc722",
+  "base_commit": "bbe7bec9d8a4846fdf43277dbd4c2db7d89f0ab0",
+  "platform": "Linux Boat",
+  "api": "Interpreter::compile_event_handler(name, parameters, body, scope_chain)",
+  "scope_order": [
+    "document",
+    "optional form",
+    "element"
+  ],
+  "coverage": [
+    "FunctionBody grammar and independent strictness",
+    "live scope precedence and local parameters",
+    "accessors and Symbol.unscopables",
+    "identifier call receiver in interpreter and VM",
+    "closures and direct eval",
+    "nonconstructible callable metadata",
+    "global property deletion versus declared bindings",
+    "plain and destructuring scoped-name stores do not invoke a getter, including nested bytecode generators",
+    "FunctionBody rejects Script/Module hashbang prefixes"
+  ],
+  "workspace_gate": {
+    "source_commit": "04f896835ea42b6c4001673307d07518339cc722",
+    "platform": "Linux Boat",
+    "target": "$HOME/amazing/target-js-lang-86c44031",
+    "nextest_passed": 2750,
+    "nextest_skipped": 10,
+    "nextest_seconds": 57.146,
+    "owned_nextest_passed": 369,
+    "owned_nextest_skipped": 1,
+    "owned_doctests_passed": 1,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "corpus": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "filter": "",
+    "limit": 0,
+    "elapsed_seconds": 764.903
+  },
+  "comparison": {
+    "before": {
+      "classification_sha256": "2fa7c99b01be3de4c290c3f4a21e8f0903b5d200f5c7769bb6e6108ba39a7b57",
+      "host_sha256": "c19bf3d878593c3857aec16c86b0f6fe893c18214ad994700f46a89642106a1c"
+    },
+    "after": {
+      "classification_sha256": "33391817b044086b55a71812139ff54058ddbb033bfd115e0111834fb3219486",
+      "host_sha256": "6b610b00f0525ebbe01ecc4d4b177b446be709831845b94186bc8111411d24eb"
+    },
+    "file_passes": [
+      40096,
+      40132
+    ],
+    "variant_passes": [
+      77919,
+      77958
+    ],
+    "file_gains": 36,
+    "variant_gains": 39,
+    "file_losses": [],
+    "variant_losses": [],
+    "gains_by_directory": {
+      "language/expressions/delete": 12,
+      "language/statements/function": 3,
+      "language/types/reference": 3,
+      "language/expressions/grouping": 2,
+      "language/statements/for-await-of": 2,
+      "staging/sm/eval": 2,
+      "staging/sm/regress": 2,
+      "built-ins/Infinity/S15.1.1.2_A3_T2.js": 1,
+      "built-ins/NaN/S15.1.1.1_A3_T2.js": 1,
+      "built-ins/undefined/S15.1.1.3_A3_T2.js": 1,
+      "language/arguments-object/non-strict-arguments-object-is-immutable.js": 1,
+      "language/expressions/assignment": 1,
+      "language/global-code/S10.4.1_A1_T2.js": 1,
+      "language/statements/try": 1,
+      "staging/sm/Proxy": 1,
+      "staging/sm/TypedArray": 1,
+      "staging/sm/expressions": 1
+    }
+  },
+  "capabilities_unchanged": true,
+  "gained_files": [
+    "built-ins/Infinity/S15.1.1.2_A3_T2.js",
+    "built-ins/NaN/S15.1.1.1_A3_T2.js",
+    "built-ins/undefined/S15.1.1.3_A3_T2.js",
+    "language/arguments-object/non-strict-arguments-object-is-immutable.js",
+    "language/expressions/assignment/11.13.1-4-1.js",
+    "language/expressions/delete/11.4.1-3-1.js",
+    "language/expressions/delete/11.4.1-4.a-13.js",
+    "language/expressions/delete/11.4.1-4.a-16.js",
+    "language/expressions/delete/11.4.1-4.a-4.js",
+    "language/expressions/delete/11.4.1-4.a-7.js",
+    "language/expressions/delete/11.4.1-5-1.js",
+    "language/expressions/delete/11.4.1-5-2.js",
+    "language/expressions/delete/11.4.1-5-3.js",
+    "language/expressions/delete/S11.4.1_A2.2_T1.js",
+    "language/expressions/delete/S11.4.1_A3.3_T1.js",
+    "language/expressions/delete/S11.4.1_A3.3_T4.js",
+    "language/expressions/delete/S11.4.1_A3.3_T6.js",
+    "language/expressions/grouping/S11.1.6_A2_T2.js",
+    "language/expressions/grouping/S11.1.6_A3_T6.js",
+    "language/global-code/S10.4.1_A1_T2.js",
+    "language/statements/for-await-of/iterator-close-throw-get-method-abrupt.js",
+    "language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js",
+    "language/statements/function/S13_A11_T1.js",
+    "language/statements/function/S13_A12_T1.js",
+    "language/statements/function/S13_A12_T2.js",
+    "language/statements/try/S12.14_A4.js",
+    "language/types/reference/S8.7.1_A2.js",
+    "language/types/reference/S8.7_A5_T1.js",
+    "language/types/reference/S8.7_A5_T2.js",
+    "staging/sm/Proxy/regress-bug1037770.js",
+    "staging/sm/TypedArray/sort_modifications.js",
+    "staging/sm/eval/exhaustive-fun-normalcaller-indirect-normalcode.js",
+    "staging/sm/eval/exhaustive-fun-strictcaller-indirect-normalcode.js",
+    "staging/sm/expressions/delete-constant-folded-and-or.js",
+    "staging/sm/regress/regress-551763-2.js",
+    "staging/sm/regress/regress-569306.js"
+  ],
+  "co_validated_async_close_repair": [
+    "language/statements/for-await-of/iterator-close-throw-get-method-abrupt.js",
+    "language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js"
+  ],
+  "gains_previously_at_deadline": [
+    "staging/sm/TypedArray/sort_modifications.js"
+  ],
+  "validated_source_sha256": {
+    "crates/amazing-js/src/env.rs": "a89e4ee698a5eb4b2a32bf2f318b92892edd055a1144563433b52ab7b013fcff",
+    "crates/amazing-js/src/interp.rs": "55b7fe467ed17f6ca2ee254be4db0bf8ea515a81e6cbc825daee2858cb9bc484",
+    "crates/amazing-js/src/interp_event_handler.rs": "b17613ce340c74012a13d511c2163508330ed6b7cb54aec85469cdaf016ba558",
+    "crates/amazing-js/src/parser.rs": "9c3ff7fc7d82e3ce83143277897c85fe2897f1f0880d90f294df5b458d99f9c1",
+    "crates/amazing-js/src/parser_event_handler.rs": "8ae6a07f4d030083e2d2fdd547e6de4daff57adc9e120bc551640725962e2cf9",
+    "crates/amazing-js/src/vm/compiler.rs": "46fc0641be14ee9181d3229e5ba3cbe34853ed5ca2f55f06fb4d351a4b57f654",
+    "crates/amazing-js/src/vm/mod.rs": "89ad626c387e8a31b6649e4983d9fcab02764cba113271f35d6c76a184d496c6",
+    "crates/amazing-js/src/vm/tests.rs": "511558bf90047c4dc6584a16d660c109b29c007b6387a416f9d37b9abbb76860"
+  },
+  "known_limitations": [
+    "Runtime has no per-function ScriptOrModule metadata; relative dynamic import unsupported. Handler captures realm global and supplied objects only."
+  ],
+  "evidence_note": "Full comparisons include the separately committed async-close merge repair and deadline recoveries. API behavior is directly covered by owned tests; no DOM registry or WPT result is claimed."
+}

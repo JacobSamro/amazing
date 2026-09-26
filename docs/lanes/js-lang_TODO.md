@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-14 — event-handler compilation and live object environments**.
+Frontier: **JS-15 — Annex B RegExp grammar**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1449,3 +1449,31 @@ Next, user-routed JS-14: public event-handler FunctionBody compiler with live
 object environments ordered document → optional form → element. The caller
 keeps lazy compilation, event registration and forwarding. RegExp Annex B and
 named-capture parsing remain queued after this cross-lane dependency.
+
+
+## JS-14 — public event-handler compilation and live object environments
+
+Source `04f89683` exposes `Interpreter::compile_event_handler(name, parameters,
+body, scope_chain)` and `parser::parse_event_handler`. The body has an independent
+FunctionBody goal; scope objects are supplied outermost first (document, optional
+form, element). The function is nonconstructible, uses its own `this`, and starts
+non-strict unless its directive prologue enables strictness. Window handlers use
+an empty scope slice; Window onerror accepts its five named parameters.
+
+Live object lookup, accessors, unscopables, nested closures, identifier-call
+receivers, deletion and setter-only assignments work through interpreter and VM
+paths. Direct parsing prevents wrapper injection and rejects hashbang prefixes.
+DOM retains lazy compilation, listener registration and event-return semantics.
+The runtime has no per-function ScriptOrModule field or dynamic import execution;
+the required null provenance is documented for that future implementation.
+
+Final Linux source `04f89683`, fresh dedicated target: **2,750 workspace passed,
+10 skipped**, **369 owned passed / 1 skipped**, **4 workspace doctests** (1 owned).
+Pinned full Test262: **40,096 → 40,132 passing files**, **77,919 → 77,958 variants**,
+**zero lost file or variant passes**. This comparison also includes the separately
+committed async-close repair and deadline recoveries, listed in the evidence;
+it is not an isolated count of new HTML API cases.
+
+[Interface](js-lang_JS14-interface.md) · [Evidence](js-lang_JS14-evidence.json).
+Next: Annex B decimal/octal and identity escapes, legacy class-range fallbacks,
+and quantified lookahead/group boundaries; then Unicode property escape tables.
