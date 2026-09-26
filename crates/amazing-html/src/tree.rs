@@ -179,6 +179,99 @@ pub struct TreeBuilder {
     allow_declarative_shadow_roots: bool,
     fragment: bool,
     fragment_context: Option<String>,
+    /// HTML-31: set by `text_mode`'s `</script>` handling when the just-closed
+    /// script is a classic, parser-blocking script during full-document (not
+    /// fragment) parsing. `ResumableParser::run` stops tokenizing the instant
+    /// this is set so the driver can run the script against the DOM as
+    /// constructed so far, exactly per §13.2.6.2's "insertion point" rules.
+    pending_script: Option<NodeIdx>,
+    /// HTML-31: every `defer`/`async`/module script closed since the last
+    /// drain, in document order. These never pause tokenization; the driver
+    /// runs them after `Eof` (see `ScriptMode`'s own doc comment).
+    script_events: Vec<(NodeIdx, ScriptMode)>,
+}
+
+/// HTML-31: how a just-closed classic (or module) `<script>` element should
+/// run, mirroring the WHATWG "prepare the script element" classification
+/// closely enough for this engine's synchronous, single-threaded driver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptMode {
+    /// No `async`, and no (`defer` with a `src`)/`type=module`: the real
+    /// parser-blocking case. `ResumableParser::run` pauses tokenization right
+    /// after this script's closing tag so the driver can run it synchronously
+    /// against the DOM built so far, then resume.
+    Blocking,
+    /// `defer` with a `src`, or `type=module` without `async`: runs after the
+    /// parser reaches `Eof`, in document order, before `DOMContentLoaded`.
+    /// Never pauses tokenization.
+    Deferred,
+    /// `async` present (with or without `src`): runs "as soon as possible",
+    /// not guaranteed to preserve document order. This driver has no true
+    /// concurrent fetch/parse to race against, so it runs async scripts
+    /// immediately after `Eof` too, ahead of `DOMContentLoaded`. Never pauses
+    /// tokenization.
+    Async,
+}
+
+/// A `<script>` is classic JavaScript or a module only when its `type` is
+/// absent, empty, a JavaScript MIME type, or exactly `module`; data blocks
+/// (`application/ld+json`, `importmap`, ...) never execute and never pause
+/// the parser. Returns `Some(is_module)`.
+fn classic_or_module_script_type(attrs: &[(String, String)]) -> Option<bool> {
+    let raw = attrs.iter().find(|(name, _)| name.eq_ignore_ascii_case("type")).map(|(_, v)| v.as_str());
+    // Per spec, "the script block's type string" is the `type` attribute's
+    // value stripped of leading/trailing ASCII whitespace ONLY (tab, LF, FF,
+    // CR, space -- notably not U+000B VERTICAL TAB, and not any other
+    // Unicode whitespace), matched verbatim (no MIME `;parameter` stripping)
+    // against the legacy JavaScript type list. `str::trim()` trims every
+    // Unicode-whitespace codepoint and `.split(';')` discards parameters,
+    // both of which wrongly accepted types like "text/javascript;charset=x"
+    // or "text/javascript\u{00A0}" that WPT's script-type-and-language-with-
+    // params.html/script-type-whitespace.html expect to be rejected.
+    let value = strip_ascii_whitespace(raw.unwrap_or("")).to_ascii_lowercase();
+    if value.is_empty()
+        || matches!(
+            value.as_str(),
+            "text/javascript"
+                | "application/javascript"
+                | "application/ecmascript"
+                | "text/ecmascript"
+                | "application/x-javascript"
+                | "text/x-javascript"
+                | "text/jscript"
+                | "text/livescript"
+        )
+    {
+        Some(false)
+    } else if value == "module" {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// Classifies a just-closed `<script>` element's run mode from its attributes,
+/// or `None` if it is not an executable classic/module script at all (data
+/// block, unrecognized `type`).
+fn classify_script(attrs: &[(String, String)]) -> Option<ScriptMode> {
+    let is_module = classic_or_module_script_type(attrs)?;
+    let has = |target: &str| attrs.iter().any(|(name, _)| name.eq_ignore_ascii_case(target));
+    if has("async") {
+        Some(ScriptMode::Async)
+    } else if is_module || (has("defer") && has("src")) {
+        Some(ScriptMode::Deferred)
+    } else {
+        Some(ScriptMode::Blocking)
+    }
+}
+
+/// HTML's "ASCII whitespace": tab, LF, FF, CR, space -- deliberately not
+/// `char::is_whitespace()` (which also strips U+00A0, U+1680, U+3000, ...)
+/// and deliberately not U+000B VERTICAL TAB, which HTML's own definition
+/// excludes even though `char::is_ascii_whitespace()` would also work here
+/// (kept spelled out so the exact spec set is visible at the call site).
+pub fn strip_ascii_whitespace(s: &str) -> &str {
+    s.trim_matches(|c: char| matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' '))
 }
 
 impl Default for TreeBuilder {
@@ -208,6 +301,8 @@ impl TreeBuilder {
             allow_declarative_shadow_roots: true,
             fragment: false,
             fragment_context: None,
+            pending_script: None,
+            script_events: Vec::new(),
         }
     }
 
@@ -217,6 +312,40 @@ impl TreeBuilder {
         builder.dom = dom;
         builder.custom_element_host = Some(host);
         builder
+    }
+
+    /// HTML-31: starts a document parse building directly into an existing,
+    /// otherwise-fresh `Dom` (as produced by `Dom::new()`), so a caller that
+    /// owns the DOM other code already runs against (a JS host's arena) can
+    /// hand it in and later reclaim the exact same value via `into_dom`/
+    /// `dom_mut` -- see `ResumableParser::swap_dom`.
+    pub(crate) fn from_dom(dom: Dom) -> Self {
+        let mut builder = Self::new();
+        builder.dom = dom;
+        builder
+    }
+
+    /// HTML-31: the DOM under construction, mutably -- used only by
+    /// `ResumableParser::swap_dom` to hand the live tree to a script and take
+    /// it back, never to reach in and mutate tree-construction state
+    /// directly.
+    pub(crate) fn dom_mut(&mut self) -> &mut Dom {
+        &mut self.dom
+    }
+
+    /// HTML-31: takes the parser-blocking script (if any) that `text_mode`
+    /// just recorded when processing the last token. `ResumableParser::run`
+    /// checks this after every single token fed and stops immediately when
+    /// it is `Some`, before tokenizing anything past that script's closing
+    /// tag.
+    pub(crate) fn take_pending_script(&mut self) -> Option<NodeIdx> {
+        self.pending_script.take()
+    }
+
+    /// HTML-31: drains every `defer`/`async`/module script recorded since the
+    /// last drain, in document order.
+    pub(crate) fn take_script_events(&mut self) -> Vec<(NodeIdx, ScriptMode)> {
+        std::mem::take(&mut self.script_events)
     }
 
     /// Processes ONE token.
@@ -654,6 +783,29 @@ impl TreeBuilder {
                         .name(node)
                         .is_some_and(|local| local.eq_ignore_ascii_case(&name))
                     {
+                        // HTML-31: an SVG `<script>` (MathML has no script
+                        // element) is never tokenized as rawtext/script-data
+                        // -- per spec, foreign content's "in foreign
+                        // content" insertion mode has no special case for
+                        // `<script>` at all, so it is tokenized as ordinary
+                        // markup and closes here, through this generic
+                        // stack-popping match, never through `text_mode`'s
+                        // script handling above. Run the same classify/pause
+                        // decision here so an SVG script actually executes
+                        // (WPT's execution-timing/131.html: "scheduler:
+                        // inline svg script").
+                        if !self.fragment
+                            && self.template_modes.is_empty()
+                            && name.eq_ignore_ascii_case("script")
+                            && self.dom.namespace(node) == Some(Namespace::Svg)
+                        {
+                            let attrs = self.dom.attrs_of(node).map(<[_]>::to_vec).unwrap_or_default();
+                            match classify_script(&attrs) {
+                                Some(ScriptMode::Blocking) => self.pending_script = Some(node),
+                                Some(mode) => self.script_events.push((node, mode)),
+                                None => {},
+                            }
+                        }
                         self.open.truncate(position);
                         return;
                     }
@@ -2078,8 +2230,34 @@ impl TreeBuilder {
                     .map(|c| self.dom.name(c) == Some(name.as_str()))
                     .unwrap_or(false);
                 if closes {
+                    let node = self.current().unwrap();
                     self.open.pop();
                     self.mode = self.orig_mode;
+                    // HTML-31: only a full-document parse (never a fragment
+                    // parse -- scripts never execute there, per spec), never
+                    // while any number of `<template>` contents are
+                    // currently open (a script parsed into template content
+                    // is never "inserted into a document" the way the spec's
+                    // script-execution algorithm requires -- it sits inert
+                    // until the template is later cloned/used, same as
+                    // real browsers; `template_modes` is non-empty exactly
+                    // while building into template content, including
+                    // nested templates), and only for a `<script>` closing
+                    // tag in the HTML or SVG namespace (both have real
+                    // script elements that execute per spec; MathML does
+                    // not).
+                    if !self.fragment
+                        && self.template_modes.is_empty()
+                        && name == "script"
+                        && matches!(self.dom.namespace(node), Some(Namespace::Html) | Some(Namespace::Svg))
+                    {
+                        let attrs = self.dom.attrs_of(node).map(<[_]>::to_vec).unwrap_or_default();
+                        match classify_script(&attrs) {
+                            Some(ScriptMode::Blocking) => self.pending_script = Some(node),
+                            Some(mode) => self.script_events.push((node, mode)),
+                            None => {},
+                        }
+                    }
                 }
             },
             Token::Eof => {
@@ -2648,7 +2826,9 @@ impl TreeBuilder {
 }
 
 /// Convenience: tokenize `src` and run tree construction to completion.
-fn feed_with_tokenizer_feedback(
+/// `pub(crate)`: also used by `resumable::ResumableParser`'s own token-at-a-
+/// time driving loop.
+pub(crate) fn feed_with_tokenizer_feedback(
     builder: &mut TreeBuilder,
     tokenizer: &mut Tokenizer,
     tok: Token,

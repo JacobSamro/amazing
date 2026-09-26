@@ -20,9 +20,16 @@ pub(crate) struct PageScript {
 /// both are skipped instead of being parsed as classic scripts. Executing a
 /// data block or a module as classic JS produced spurious parse errors on real
 /// pages.
-fn is_classic_javascript_type(raw: Option<&str>) -> bool {
+pub(crate) fn is_classic_javascript_type(raw: Option<&str>) -> bool {
     let Some(raw) = raw else { return true };
-    let value = raw.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    // Matches `amazing_html::tree`'s own `classic_or_module_script_type`
+    // exactly (HTML-31 fix): the spec's "script block's type string" strips
+    // only leading/trailing ASCII whitespace, never `;parameter`s and never
+    // non-ASCII whitespace -- `raw.split(';').next()` and `str::trim()`
+    // (Unicode-whitespace-aware) both wrongly accepted types this crate's
+    // own `is_classic_javascript_type` must reject, e.g.
+    // "text/javascript;charset=utf-8" or "text/javascript\u{00A0}".
+    let value = amazing_html::strip_ascii_whitespace(raw).to_ascii_lowercase();
     value.is_empty()
         || matches!(
             value.as_str(),
@@ -37,38 +44,130 @@ fn is_classic_javascript_type(raw: Option<&str>) -> bool {
         )
 }
 
+/// Builds a `PageScript` for one already-known `<script>` node (classic type
+/// only -- data blocks like `application/ld+json` and modules are excluded
+/// here; a module script is handled through its own `ScriptMode::Deferred`
+/// path instead, see `run_interleaved_parse`), or `None` if it is not a
+/// classic script or has neither a `src` nor non-whitespace inline text.
+/// Shared by `collect_script_text`'s full-tree walk (non-interleaved callers:
+/// iframes, and any full-DOM fallback) and HTML-31's interleaved drivers,
+/// which already know each script's `NodeIdx` from `ResumableParser`'s own
+/// pause/deferred signals and need no tree walk at all.
+pub(crate) fn script_source_from_node(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+) -> Option<PageScript> {
+    let attrs = dom.attrs_of(node).unwrap_or(&[]);
+    let script_type = attrs
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("type"))
+        .map(|(_, value)| value.as_str());
+    if !is_classic_javascript_type(script_type) {
+        return None;
+    }
+    let mut source = String::new();
+    for child in dom.children(node) {
+        if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+            source.push_str(data);
+        }
+    }
+    let src = attrs
+        .iter()
+        .find(|(name, _)| name == "src")
+        .map(|(_, value)| value.clone());
+    if src.is_some() || !source.trim().is_empty() {
+        Some(PageScript { node, src, body: source })
+    } else {
+        None
+    }
+}
+
 pub(crate) fn collect_script_text(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
     scripts: &mut Vec<PageScript>,
 ) {
     if dom.name(node) == Some("script") {
-        let attrs = dom.attrs_of(node).unwrap_or(&[]);
-        let script_type = attrs
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("type"))
-            .map(|(_, value)| value.as_str());
-        if !is_classic_javascript_type(script_type) {
-            return;
-        }
-        let mut source = String::new();
-        for child in dom.children(node) {
-            if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
-                source.push_str(data);
-            }
-        }
-        let src = attrs
-            .iter()
-            .find(|(name, _)| name == "src")
-            .map(|(_, value)| value.clone());
-        if src.is_some() || !source.trim().is_empty() {
-            scripts.push(PageScript { node, src, body: source });
+        if let Some(script) = script_source_from_node(dom, node) {
+            scripts.push(script);
         }
         return;
     }
     for child in dom.children(node) {
         collect_script_text(dom, child, scripts);
     }
+}
+
+/// HTML-31: drives a script-interleaved parse of `html` into `host`'s
+/// existing `Dom` (swapped out to a fresh `Dom` for the parser to build into,
+/// and swapped back before every script and before this returns -- see
+/// `amazing_html::ResumableParser::swap_dom`), calling `run_script` for every
+/// classic, parser-blocking script right after tree construction pauses at
+/// it. The DOM `run_script` observes/mutates is exactly what has been parsed
+/// so far, matching a real browser -- not the finished document, which is
+/// the whole point (this is the fix for the architectural gap
+/// `dom/nodes/MutationObserver-document.html` exposed: a script's own
+/// `document.write` also inserts at the real tokenizer position now, via
+/// `RuntimeBindings::register_active_parser` + `document_write`'s check for
+/// it, not a DOM splice).
+///
+/// `defer`/`async`/module scripts never pause construction; this returns
+/// them, as `PageScript`s, in document order, once the whole document
+/// reaches EOF, for the caller to run after (deferred: in order, before
+/// `DOMContentLoaded`; this driver has no real concurrent fetch to race an
+/// async script against, so it runs those the same way, immediately after
+/// deferred ones, still ahead of `DOMContentLoaded`).
+///
+/// `run_script` returning `Err` stops the interleaved parse early (the
+/// remaining source is left unparsed, like `document.close()` truncating a
+/// real one) and this returns that `Err` without any deferred scripts; a
+/// caller that wants to keep going after a script error (the lenient
+/// real-page path) should swallow its own errors inside `run_script` and
+/// always return `Ok(())`.
+pub(crate) fn run_interleaved_parse(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    scheduler: &mut crate::js_scheduler::DriverScheduler,
+    html: &str,
+    mut run_script: impl FnMut(&mut crate::js_scheduler::DriverScheduler, &PageScript) -> Result<(), String>,
+) -> Result<Vec<PageScript>, String> {
+    let taken = std::mem::take(&mut host.borrow_mut().dom);
+    let parser = Rc::new(RefCell::new(amazing_html::ResumableParser::new(taken)));
+    parser.borrow_mut().push_source(html);
+    scheduler.register_active_parser(0, parser.clone());
+    let mut deferred_events = Vec::new();
+    let outcome: Result<(), String> = loop {
+        let signal = parser.borrow_mut().run();
+        deferred_events.extend(parser.borrow_mut().take_deferred_or_async());
+        match signal {
+            amazing_html::ParseSignal::Eof => break Ok(()),
+            amazing_html::ParseSignal::Script(node) => {
+                parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
+                let script = script_source_from_node(&host.borrow().dom, node);
+                let result = match script {
+                    Some(script) => run_script(scheduler, &script),
+                    // Slipped past `tree.rs`'s own classic/module MIME check
+                    // some other way (defensive; not expected in practice).
+                    None => Ok(()),
+                };
+                parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
+                if let Err(error) = result {
+                    break Err(error);
+                }
+            }
+        }
+    };
+    // Every `Script` branch above ends by swapping the real tree back into
+    // the parser before checking its `run_script` result, so this always
+    // hands the final (or, on an early error, partial) tree back to
+    // `host.dom` exactly once, whichever way the loop exited.
+    parser.borrow_mut().swap_dom(&mut host.borrow_mut().dom);
+    scheduler.unregister_active_parser(0);
+    outcome?;
+    let dom_ref = host.borrow();
+    Ok(deferred_events
+        .into_iter()
+        .filter_map(|(node, _mode)| script_source_from_node(&dom_ref.dom, node))
+        .collect())
 }
 
 pub(crate) fn collect_inline_handlers(
@@ -527,7 +626,7 @@ mod tests {
         assert!(is_classic_javascript_type(None));
         assert!(is_classic_javascript_type(Some("")));
         assert!(is_classic_javascript_type(Some("text/javascript")));
-        assert!(is_classic_javascript_type(Some("TEXT/JavaScript; charset=utf-8")));
+        assert!(is_classic_javascript_type(Some("TEXT/JavaScript")));
         assert!(is_classic_javascript_type(Some("application/javascript")));
         for data in [
             "module",
@@ -537,6 +636,15 @@ mod tests {
             "importmap",
             "text/html",
             "speculationrules",
+            // HTML-31: per spec the "script block's type string" is matched
+            // verbatim against the legacy JS type list -- no `;parameter`
+            // stripping (WPT's script-type-and-language-with-params.html:
+            // "A script with a charset param in its type should not run")
+            // and no non-ASCII whitespace stripping (script-type-
+            // whitespace.html covers several Unicode blank codepoints, one
+            // of which is exercised here).
+            "TEXT/JavaScript; charset=utf-8",
+            "text/javascript\u{00A0}",
         ] {
             assert!(
                 !is_classic_javascript_type(Some(data)),

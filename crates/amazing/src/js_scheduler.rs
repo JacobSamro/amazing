@@ -134,6 +134,14 @@ impl DriverScheduler {
     pub(crate) fn end_document_parsing(&mut self, document: u32) {
         self.bindings.end_document_parsing(amazing_dom::NodeIdx(document));
     }
+    /// HTML-31: see `RuntimeBindings::register_active_parser`.
+    pub(crate) fn register_active_parser(&mut self, document: u32, parser: Rc<RefCell<amazing_html::ResumableParser>>) {
+        self.bindings.register_active_parser(amazing_dom::NodeIdx(document), parser);
+    }
+    /// HTML-31: see `RuntimeBindings::unregister_active_parser`.
+    pub(crate) fn unregister_active_parser(&mut self, document: u32) {
+        self.bindings.unregister_active_parser(amazing_dom::NodeIdx(document));
+    }
     pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
         self.bindings.set_document_metadata(character_set, content_type, referrer);
     }

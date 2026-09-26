@@ -163,6 +163,35 @@ fn end_document_parsing_state(state: &Rc<RefCell<BindingState>>, document: NodeI
     state.borrow_mut().write_insertion_points.remove(&document);
 }
 
+/// HTML-31: marks `document` as being built by a live, script-interleaved
+/// `amazing_html::ResumableParser` -- `document_write` checks this first and,
+/// when present, inserts into the real tokenizer (`ResumableParser::write`)
+/// instead of `write_into_document`'s DOM-splice fallback. Also opens the
+/// same placeholder `write_insertion_points` entry `begin_document_parsing_
+/// state` does, purely so `document.open()`'s existing "already active"
+/// no-op guard keeps working unchanged for this document too.
+fn register_active_parser_state(
+    state: &Rc<RefCell<BindingState>>,
+    document: NodeIdx,
+    parser: Rc<RefCell<amazing_html::ResumableParser>>,
+) {
+    let mut state_ref = state.borrow_mut();
+    state_ref.write_insertion_points.entry(document).or_insert((document, None));
+    state_ref.active_parsers.insert(document, parser);
+}
+
+/// Ends `document`'s interleaved-parser window, removing both maps
+/// `register_active_parser_state` populated. A later `document.write()`
+/// call finds no active parser at all and implicitly reopens the document
+/// (`write_into_document`'s existing fallback) -- correct per spec: once
+/// parsing reaches EOF, even a same-tick `DOMContentLoaded`/`load` listener's
+/// own `write()` call is a full-document replace, not an append.
+fn unregister_active_parser_state(state: &Rc<RefCell<BindingState>>, document: NodeIdx) {
+    let mut state_ref = state.borrow_mut();
+    state_ref.active_parsers.remove(&document);
+    state_ref.write_insertion_points.remove(&document);
+}
+
 /// Fetch an external classic script for a child document: resolved against
 /// the child's own URL (not the top document's), through the pinned fixture
 /// resolver when one is set, otherwise a real network fetch. `None` means
@@ -325,6 +354,21 @@ impl RuntimeBindings {
     /// Ends `document`'s parser-active window; see `begin_document_parsing`.
     pub(crate) fn end_document_parsing(&self, document: NodeIdx) {
         end_document_parsing_state(&self.state, document);
+    }
+    /// HTML-31: registers `document`'s live, script-interleaved parser so
+    /// `document.write`/`writeln` calls from a script it pauses at insert
+    /// into the real tokenizer instead of splicing a parsed fragment into
+    /// the DOM. Callers driving an interleaved parse (`cmd/wpt_harness.rs`'s
+    /// `execute_page`, `cmd/js.rs`'s two real-page paths) call this once
+    /// instead of `begin_document_parsing` (it opens the same placeholder
+    /// write-insertion-point entry), and `unregister_active_parser` once
+    /// parsing reaches `Eof`, before running any deferred/async scripts.
+    pub(crate) fn register_active_parser(&self, document: NodeIdx, parser: Rc<RefCell<amazing_html::ResumableParser>>) {
+        register_active_parser_state(&self.state, document, parser);
+    }
+    /// Ends `document`'s interleaved-parser window; see `register_active_parser`.
+    pub(crate) fn unregister_active_parser(&self, document: NodeIdx) {
+        unregister_active_parser_state(&self.state, document);
     }
 
     /// Everything about a frame's just-committed navigation that must be
@@ -702,6 +746,17 @@ impl RuntimeBindingHost<'_> {
             text.push_str(&String::from_utf16_lossy(&units));
         }
         if newline { text.push('\n'); }
+        // HTML-31: a live, script-interleaved parser for this document
+        // inserts real input-stream text at its own paused cursor -- the
+        // actual WHATWG "insertion point" -- instead of `write_into_
+        // document`'s DOM-fragment splice, which remains the fallback for
+        // every document that never had one (iframes, and any top-level
+        // document once its own interleaved parse has reached `Eof`).
+        let parser = self.state.borrow().active_parsers.get(&document).cloned();
+        if let Some(parser) = parser {
+            parser.borrow_mut().write(&text);
+            return Ok(JsValue::Undefined);
+        }
         self.write_into_document(document, &text)?;
         Ok(JsValue::Undefined)
     }
@@ -1428,5 +1483,112 @@ mod tests {
         scheduler.run_script("document.write('hello')").unwrap();
         assert_eq!(scheduler.run_script("document.body.textContent").unwrap(), JsValue::str("hello"));
         assert_eq!(scheduler.run_script("document.getElementById('original')").unwrap(), JsValue::Null);
+    }
+
+    /// HTML-31: unlike `prepare_page_scripts`'s tests above (which start from
+    /// an already-fully-parsed DOM, since that function's own callers parse
+    /// upfront), this drives the real, script-interleaved parser
+    /// (`crate::cmd::js::run_interleaved_parse`, wired into
+    /// `cmd/wpt_harness.rs::execute_page` for the measured WPT corpora) --
+    /// so a script's own later siblings genuinely do not exist yet when it
+    /// runs, matching a real browser and fixing the architectural gap
+    /// `dom/nodes/MutationObserver-document.html` exposed.
+    #[test]
+    fn interleaved_parse_runs_a_script_against_the_dom_built_so_far_not_the_finished_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_dom::Dom::new(), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        let mut seen_before_later_sibling_exists = None;
+        crate::cmd::js::run_interleaved_parse(
+            &host, &mut scheduler,
+            "<body><div id=a></div><script>var probe = 1;</script><div id=b></div></body>",
+            |scheduler, script| {
+                seen_before_later_sibling_exists = Some(
+                    scheduler.run_script("document.getElementById('b') === null").unwrap()
+                );
+                scheduler.run_script(&script.body).map_err(|e| e.describe())?;
+                Ok(())
+            },
+        ).unwrap();
+        assert_eq!(seen_before_later_sibling_exists, Some(JsValue::Bool(true)));
+        // The full document is there once the interleaved parse returns.
+        assert_eq!(scheduler.run_script("document.getElementById('b') !== null").unwrap(), JsValue::Bool(true));
+    }
+
+    /// The real per-spec behavior HTML-29 approximated with a DOM splice:
+    /// `document.write` while paused at a blocking script inserts into the
+    /// input stream at the real tokenizer position, so the written markup
+    /// (and any further source after the script) both get tokenized and
+    /// built the normal way, in the right order.
+    #[test]
+    fn interleaved_parse_document_write_inserts_at_the_real_tokenizer_position() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_dom::Dom::new(), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        crate::cmd::js::run_interleaved_parse(
+            &host, &mut scheduler,
+            "<body><div id=a></div><script>document.write('<div id=written></div>')</script><div id=b></div></body>",
+            |scheduler, script| { scheduler.run_script(&script.body).map_err(|e| e.describe())?; Ok(()) },
+        ).unwrap();
+        assert_eq!(
+            scheduler.run_script("Array.from(document.body.children).map(e => e.id).join(',')").unwrap(),
+            JsValue::str("a,,written,b"),
+        );
+    }
+
+    /// `defer` only exempts a script with a `src` from blocking (per spec it
+    /// is ignored on an inline script, which still blocks like any other);
+    /// `async` exempts either. Neither ever pauses construction; both run
+    /// after the whole document reaches `Eof`, in document order -- unlike
+    /// the blocking script above, which runs synchronously, mid-parse.
+    #[test]
+    fn interleaved_parse_defer_and_async_scripts_run_after_eof_in_document_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_dom::Dom::new(), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        let mut ran = Vec::new();
+        // Only the parser-blocking script pauses construction and runs
+        // through this closure; `defer`/`async` scripts are returned instead
+        // (see below), never invoking it -- exactly the assertion this test
+        // makes.
+        let deferred = crate::cmd::js::run_interleaved_parse(
+            &host, &mut scheduler,
+            "<body><script src=deferred.js defer></script>\
+             <script src=async.js async></script>\
+             <script>1</script></body>",
+            |_scheduler, script| {
+                ran.push(script.src.clone().unwrap_or_else(|| "blocking".to_owned()));
+                Ok(())
+            },
+        ).unwrap();
+        for script in &deferred {
+            ran.push(script.src.clone().unwrap_or_else(|| "blocking".to_owned()));
+        }
+        assert_eq!(ran, vec!["blocking", "deferred.js", "async.js"]);
+    }
+
+    /// An inline script's own `defer` attribute is ignored (no `src`): it
+    /// still pauses construction like any other classic script, unlike the
+    /// external `defer`/`async` cases above.
+    #[test]
+    fn interleaved_parse_inline_defer_without_src_still_blocks() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_dom::Dom::new(), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host.clone(), JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        let mut ran = Vec::new();
+        crate::cmd::js::run_interleaved_parse(
+            &host, &mut scheduler,
+            "<body><script defer>1</script></body>",
+            |_scheduler, script| { ran.push(script.body.clone()); Ok(()) },
+        ).unwrap();
+        assert_eq!(ran, vec!["1"], "inline defer (no src) must block like an ordinary script");
     }
 }
