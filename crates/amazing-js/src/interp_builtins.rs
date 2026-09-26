@@ -2469,7 +2469,15 @@ fn native_object_to_string(
             Exotic::RegExp(_) => "RegExp",
             Exotic::Error => "Error",
             Exotic::Promise(_) => "Promise",
-            _ => if o.borrow().func.is_some() { "Function" } else { "Object" },
+            _ => {
+                let o = o.borrow();
+                if o.func.is_some() { "Function" }
+                else if o.get_own("[[StringData]]").is_some() { "String" }
+                else if o.get_own("[[NumberData]]").is_some() { "Number" }
+                else if o.get_own("[[BooleanData]]").is_some() { "Boolean" }
+                else if o.get_own("[[BigIntData]]").is_some() { "BigInt" }
+                else { "Object" }
+            },
         },
     };
     if matches!(this, JsValue::Undefined | JsValue::Null) {
@@ -2699,41 +2707,176 @@ fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Some(value) => JsValue::str(i.to_js_string(value)?),
     };
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().define("[[StringData]]", symbol_data(value, true, true)).unwrap();
+        let JsValue::Str(units) = &value else { unreachable!() };
+        string_exotic_install(object, units);
         Ok(this)
     } else {
         Ok(value)
     }
+}
+
+// A String exotic object exposes an own non-writable, non-configurable `length`
+// and an own non-writable, non-enumerable index property per code unit, over
+// its [[StringData]]. The [[StringData]] slot itself stays a primitive string so
+// JSON, structured clone and array-like helpers keep reading it unchanged.
+fn string_exotic_install(object: &Obj, units: &crate::value::JsString) {
+    let length = Property {
+        value: JsValue::num(units.len() as f64),
+        writable: false, enumerable: false, configurable: false,
+        getter: None, setter: None,
+    };
+    let mut o = object.borrow_mut();
+    for (index, unit) in units.units().iter().enumerate() {
+        o.define(&index.to_string(), Property {
+            value: JsValue::str_units(vec![*unit]),
+            writable: false, enumerable: true, configurable: false,
+            getter: None, setter: None,
+        }).unwrap();
+    }
+    o.define("length", length).unwrap();
+    o.define("[[StringData]]", Property {
+        value: JsValue::Str(units.clone()),
+        writable: false, enumerable: false, configurable: false,
+        getter: None, setter: None,
+    }).unwrap();
 }
 fn native_string_split(
     i: &mut Interpreter,
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = string_this_units(i, this)?;
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("String method called on null or undefined"));
+    }
     let separator = args.first().cloned().unwrap_or(JsValue::Undefined);
-    let parts: Vec<crate::value::JsString> = if separator.is_undefined() {
-        vec![source]
-    } else {
-        let separator = i.to_js_string(&separator)?;
-        if separator.is_empty() {
-            source.units().iter().map(|u| crate::value::JsString::from_units(vec![*u])).collect()
-        } else {
-            let mut result = Vec::new();
-            let mut start = 0;
-            while start + separator.len() <= source.len() {
-                let Some(offset) = source.units()[start..].windows(separator.len())
-                    .position(|part| part == separator.units()) else { break; };
-                let end = start + offset;
-                result.push(crate::value::JsString::from_units(source.units()[start..end].to_vec()));
-                start = end + separator.len();
+    // Step 2: an object separator's @@split method takes precedence, if present.
+    if !separator.is_null() && !separator.is_undefined() {
+        let splitter = i.get_prop(&separator, WellKnownSymbol::Split.symbol())?;
+        if !splitter.is_null() && !splitter.is_undefined() {
+            if callable_function(&splitter).is_none() {
+                return Err(Throw::type_error("@@split is not a function"));
             }
-            result.push(crate::value::JsString::from_units(source.units()[start..].to_vec()));
-            result
+            let limit = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+            return i.call_value(&splitter, separator, vec![this, limit]);
         }
+    }
+    let source = string_this_units(i, this)?;
+    let lim = match args.get(1) {
+        Some(value) if !value.is_undefined() => i.to_uint32(value)? as usize,
+        _ => u32::MAX as usize,
     };
-    let values = parts.into_iter().map(JsValue::str).collect();
+    // A RegExp separator is handled by @@split before ToString(separator).
+    if let Some(regex) = regexp_data(&separator) {
+        if lim == 0 {
+            return array_values(i, Vec::new());
+        }
+        let units = regexp_units(&source)?;
+        let values = regexp_split_units(&regex, &units, lim)?;
+        return array_values(i, values);
+    }
+    // ToString(separator) precedes the limit check, so a throwing separator
+    // toString wins even when limit is 0.
+    let r = match separator.is_undefined() {
+        true => None,
+        false => Some(i.to_js_string(&separator)?),
+    };
+    if lim == 0 {
+        return array_values(i, Vec::new());
+    }
+    let Some(r) = r else {
+        return array_values(i, vec![JsValue::str(source)]);
+    };
+    if r.is_empty() {
+        let mut values = Vec::new();
+        for unit in source.units() {
+            if values.len() == lim { break; }
+            values.push(JsValue::str_units(vec![*unit]));
+        }
+        return array_values(i, values);
+    }
+    if source.is_empty() {
+        return array_values(i, vec![JsValue::str(source)]);
+    }
+    string_split_by(i, &source, &r, lim)
+}
+
+// SplitMatch over a string separator: emit the text between matches, bounded by
+// lim.
+fn string_split_by(
+    i: &mut Interpreter,
+    source: &crate::value::JsString,
+    separator: &crate::value::JsString,
+    lim: usize,
+) -> Result<JsValue, Throw> {
+    let units = source.units();
+    let separator = separator.units();
+    let size = units.len();
+    let mut values = Vec::new();
+    let mut p = 0;
+    let mut q = 0;
+    while q < size {
+        if q + separator.len() <= size && units[q..q + separator.len()] == *separator {
+            values.push(JsValue::str_units(units[p..q].to_vec()));
+            if values.len() == lim { return array_values(i, values); }
+            p = q + separator.len();
+            q = p;
+        } else {
+            q += 1;
+        }
+    }
+    values.push(JsValue::str_units(units[p..size].to_vec()));
     array_values(i, values)
+}
+
+// RegExp.prototype[@@split] with lim already coerced. Matching is anchored at q
+// by rejecting any match that starts later; advance_index handles empty matches.
+fn regexp_split_units(
+    regex: &Rc<amazing_regex::Regex>,
+    units: &[u16],
+    lim: usize,
+) -> Result<Vec<JsValue>, Throw> {
+    let size = units.len();
+    let mut values = Vec::new();
+    if lim == 0 {
+        return Ok(values);
+    }
+    if size == 0 {
+        if regex.exec_utf16(units, 0).map_err(regexp_error)?.is_some() {
+            return Ok(values);
+        }
+        values.push(JsValue::str_units(units.to_vec()));
+        return Ok(values);
+    }
+    let unicode = regex.flags().unicode;
+    let mut p = 0;
+    let mut q = 0;
+    while q < size {
+        let matched = match regex.exec_utf16(units, q).map_err(regexp_error)? {
+            Some(m) if m.range.start == q => m,
+            _ => {
+                q = amazing_regex::advance_index(units, q, unicode);
+                continue;
+            }
+        };
+        let end = matched.range.end.min(size);
+        if end == p {
+            q = amazing_regex::advance_index(units, q, unicode);
+            continue;
+        }
+        values.push(JsValue::str_units(units[p..q].to_vec()));
+        if values.len() == lim { return Ok(values); }
+        p = end;
+        for capture in matched.captures.iter().skip(1) {
+            values.push(match capture {
+                Some(range) => JsValue::str_units(units[range.clone()].to_vec()),
+                None => JsValue::Undefined,
+            });
+            if values.len() == lim { return Ok(values); }
+        }
+        q = p;
+    }
+    values.push(JsValue::str_units(units[p..size].to_vec()));
+    Ok(values)
 }
 
 fn string_this_units(i: &mut Interpreter, this: JsValue) -> Result<crate::value::JsString, Throw> {
@@ -2764,15 +2907,27 @@ fn string_position(i: &mut Interpreter, value: Option<&JsValue>, default: f64, l
     else { Ok(n.trunc() as usize) }
 }
 
+// ToIntegerOrInfinity: NaN and -0 become +0, infinities are preserved.
+fn to_integer_or_infinity(i: &mut Interpreter, value: &JsValue) -> Result<f64, Throw> {
+    let n = i.to_number(value)?;
+    if n.is_nan() { Ok(0.0) } else if n.is_infinite() { Ok(n) } else { Ok(n.trunc()) }
+}
+
+// An out-of-range string index (negative or past the end) yields None; callers
+// map that to "" / NaN / undefined as their spec requires.
+fn string_index(i: &mut Interpreter, value: &JsValue, len: usize) -> Result<Option<usize>, Throw> {
+    let n = to_integer_or_infinity(i, value)?;
+    if n < 0.0 || n >= len as f64 { Ok(None) } else { Ok(Some(n as usize)) }
+}
+
 fn native_string_trim(
     i: &mut Interpreter,
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let space = |unit: u16| char::from_u32(unit as u32).is_some_and(|ch| ch.is_whitespace());
-    let start = source.units().iter().position(|unit| !space(*unit)).unwrap_or(source.len());
-    let end = source.units().iter().rposition(|unit| !space(*unit)).map_or(start, |i| i + 1);
+    let start = source.units().iter().position(|unit| !std_string_space(*unit)).unwrap_or(source.len());
+    let end = source.units().iter().rposition(|unit| !std_string_space(*unit)).map_or(start, |i| i + 1);
     Ok(JsValue::str_units(source.units()[start..end].to_vec()))
 }
 
@@ -2782,21 +2937,29 @@ fn native_string_char_at(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let index = string_position(i, args.first(), 0.0, source.len())?;
-    Ok(source.units().get(index).map(|u| JsValue::str_units(vec![*u]))
-        .unwrap_or_else(|| JsValue::str("")))
+    let position = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let Some(index) = string_index(i, &position, source.len())? else {
+        return Ok(JsValue::str(""));
+    };
+    Ok(JsValue::str_units(vec![source.units()[index]]))
 }
 
 fn native_string_char_code_at(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let index = string_position(i, args.first(), 0.0, source.len())?;
-    Ok(JsValue::num(source.units().get(index).map_or(f64::NAN, |u| *u as f64)))
+    let position = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let Some(index) = string_index(i, &position, source.len())? else {
+        return Ok(JsValue::num(f64::NAN));
+    };
+    Ok(JsValue::num(source.units()[index] as f64))
 }
 
 fn native_string_code_point_at(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let index = string_position(i, args.first(), 0.0, source.len())?;
-    let Some(&first) = source.units().get(index) else { return Ok(JsValue::Undefined); };
+    let position = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let Some(index) = string_index(i, &position, source.len())? else {
+        return Ok(JsValue::Undefined);
+    };
+    let first = source.units()[index];
     let point = if (0xd800..=0xdbff).contains(&first) {
         match source.units().get(index + 1) {
             Some(&second) if (0xdc00..=0xdfff).contains(&second) =>
@@ -2910,8 +3073,21 @@ fn native_string_includes(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let needle = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(needle.is_empty() || source.units().windows(needle.len()).any(|part| part == needle.units())))
+    let search_value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if std_is_regexp(i, &search_value)? {
+        return Err(Throw::type_error("searchString must not be a RegExp"));
+    }
+    let needle = i.to_js_string(&search_value)?;
+    let len = source.len();
+    let position = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let start = to_integer_or_infinity(i, &position)?.clamp(0.0, len as f64) as usize;
+    if needle.is_empty() {
+        return Ok(JsValue::Bool(true));
+    }
+    if needle.len() > len - start {
+        return Ok(JsValue::Bool(false));
+    }
+    Ok(JsValue::Bool(source.units()[start..].windows(needle.len()).any(|part| part == needle.units())))
 }
 
 fn native_string_replace(
@@ -2920,28 +3096,30 @@ fn native_string_replace(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    if args.first().is_some_and(|v| regexp_data(v).is_some()) {
+    let search_value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if regexp_data(&search_value).is_some() {
         return regexp_replace(i, &source, &args);
     }
-    let search = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    if search_value.is_object() {
+        let replacer = i.get_prop(&search_value, WellKnownSymbol::Replace.symbol())?;
+        if !replacer.is_null() && !replacer.is_undefined() {
+            if callable_function(&replacer).is_none() {
+                return Err(Throw::type_error("@@replace is not a function"));
+            }
+            let replace_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+            return i.call_value(&replacer, search_value, vec![JsValue::str(source), replace_value]);
+        }
+    }
+    let search = i.to_js_string(&search_value)?;
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let position = if search.is_empty() { Some(0) } else {
         source.units().windows(search.len()).position(|part| part == search.units())
     };
     if let Some(position) = position {
-        let replacement = if callable_function(&replacement).is_some() {
-            let result = i.call_value(
-                &replacement,
-                JsValue::Undefined,
-                vec![JsValue::str(search.clone())],
-            )?;
-            i.to_js_string(&result)?
-        } else {
-            i.to_js_string(&replacement)?
-        };
-        let mut output = Vec::with_capacity(source.len() + replacement.len());
+        let replaced = std_string_replacement(i, &replacement, &source, &search, position)?;
+        let mut output = Vec::with_capacity(source.len() + replaced.len());
         output.extend_from_slice(&source.units()[..position]);
-        output.extend_from_slice(replacement.units());
+        output.extend_from_slice(&replaced);
         output.extend_from_slice(&source.units()[position + search.len()..]);
         Ok(JsValue::str_units(output))
     } else {
@@ -2955,8 +3133,19 @@ fn native_string_starts_with(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let search = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(source.units().starts_with(search.units())))
+    let search_value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if std_is_regexp(i, &search_value)? {
+        return Err(Throw::type_error("searchString must not be a RegExp"));
+    }
+    let search = i.to_js_string(&search_value)?;
+    let len = source.len();
+    let position = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let start = to_integer_or_infinity(i, &position)?.clamp(0.0, len as f64) as usize;
+    if search.is_empty() {
+        return Ok(JsValue::Bool(true));
+    }
+    let end = start + search.len();
+    Ok(JsValue::Bool(end <= len && source.units()[start..end] == *search.units()))
 }
 
 fn native_string_ends_with(
@@ -2965,8 +3154,24 @@ fn native_string_ends_with(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let search = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(source.units().ends_with(search.units())))
+    let search_value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if std_is_regexp(i, &search_value)? {
+        return Err(Throw::type_error("searchString must not be a RegExp"));
+    }
+    let search = i.to_js_string(&search_value)?;
+    let len = source.len();
+    let pos = match args.get(1) {
+        Some(value) if !value.is_undefined() => to_integer_or_infinity(i, value)?,
+        _ => len as f64,
+    };
+    let end = pos.clamp(0.0, len as f64) as usize;
+    if search.is_empty() {
+        return Ok(JsValue::Bool(true));
+    }
+    let Some(start) = end.checked_sub(search.len()) else {
+        return Ok(JsValue::Bool(false));
+    };
+    Ok(JsValue::Bool(source.units()[start..end] == *search.units()))
 }
 
 fn array_callback(

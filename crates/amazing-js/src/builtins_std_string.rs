@@ -224,12 +224,46 @@ fn std_string_replacement(i: &mut Interpreter, replacement: &JsValue,
     }
     Ok(out)
 }
+fn std_is_regexp(i: &mut Interpreter, value: &JsValue) -> Result<bool, Throw> {
+    if !value.is_object() { return Ok(false); }
+    let matcher = i.get_prop(value, WellKnownSymbol::Match.symbol())?;
+    if !matcher.is_undefined() { return Ok(matcher.to_boolean()); }
+    Ok(regexp_data(value).is_some())
+}
+
 fn std_string_replace_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let source = std_string_receiver(i, this)?;
+    if this.is_null() || this.is_undefined() { return Err(Throw::type_error("String receiver is null or undefined")); }
     let search_value = std_reflect_arg(&args, 0);
-    if let Some(regex) = regexp_data(&search_value) {
-        if !regex.flags().global { return Err(Throw::type_error("replaceAll requires a global RegExp")); }
-        return regexp_replace(i, &source, &args);
+    // IsRegExp reads @@match before this is coerced to a string, so an abrupt
+    // @@match getter wins over a throwing receiver toString.
+    let is_regexp = if search_value.is_null() || search_value.is_undefined() {
+        false
+    } else {
+        std_is_regexp(i, &search_value)?
+    };
+    let internal_regexp = regexp_data(&search_value);
+    // Step 2.b validates flags and globality before step 3 coerces this.
+    if is_regexp {
+        let flags = i.get_prop(&search_value, "flags")?;
+        if flags.is_null() || flags.is_undefined() {
+            return Err(Throw::type_error("replaceAll requires RegExp flags"));
+        }
+        if !i.to_string(&flags)?.contains('g')
+            || internal_regexp.as_ref().is_some_and(|regex| !regex.flags().global)
+        {
+            return Err(Throw::type_error("replaceAll requires a global RegExp"));
+        }
+    }
+    let source = std_string_receiver(i, this)?;
+    if is_regexp {
+        if internal_regexp.is_some() {
+            return regexp_replace(i, &source, &args);
+        }
+        let replacer = i.get_prop(&search_value, WellKnownSymbol::Replace.symbol())?;
+        if callable_function(&replacer).is_none() {
+            return Err(Throw::type_error("replaceAll requires a global RegExp"));
+        }
+        return i.call_value(&replacer, search_value, vec![JsValue::str(source), std_reflect_arg(&args, 1)]);
     }
     let search = i.to_js_string(&search_value)?;
     let replacement = std_reflect_arg(&args, 1);
@@ -255,20 +289,53 @@ fn std_string_replace_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     Ok(JsValue::str_units(out))
 }
 fn std_string_match_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let source = std_string_receiver(i, this)?;
+    if this.is_null() || this.is_undefined() { return Err(Throw::type_error("String receiver is null or undefined")); }
     let value = std_reflect_arg(&args, 0);
-    let regex = if let Some(regex) = regexp_data(&value) {
-        let flags = i.get_prop(&value, "flags")?;
-        if flags.is_null() || flags.is_undefined() {
-            return Err(Throw::type_error("matchAll requires RegExp flags"));
+    if value.is_object() {
+        if std_is_regexp(i, &value)? {
+            let flags = i.get_prop(&value, "flags")?;
+            if flags.is_null() || flags.is_undefined() {
+                return Err(Throw::type_error("matchAll requires RegExp flags"));
+            }
+            if !i.to_string(&flags)?.contains('g') {
+                return Err(Throw::type_error("matchAll requires a global RegExp"));
+            }
         }
-        if !i.to_string(&flags)?.contains('g') || !regex.flags().global {
-            return Err(Throw::type_error("matchAll requires a global RegExp"));
+        let matcher = i.get_prop(&value, WellKnownSymbol::MatchAll.symbol())?;
+        if !matcher.is_null() && !matcher.is_undefined() {
+            if callable_function(&matcher).is_none() {
+                return Err(Throw::type_error("@@matchAll is not a function"));
+            }
+            let source = std_string_receiver(i, this)?;
+            return i.call_value(&matcher, value, vec![JsValue::str(source)]);
         }
+    }
+    let source = std_string_receiver(i, this)?;
+    let regex = if regexp_data(&value).is_some() {
         value
-    } else { native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])? };
-    let matches = native_string_match(i, JsValue::str(source), vec![regex])?;
-    let array = if matches.is_null() { array_values(i, vec![])? } else { matches };
+    } else {
+        native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])?
+    };
+    // Collect RegExp match records ([captures…, index, input, groups]) rather
+    // than the matched substrings, and advance over empty matches so the
+    // global lastIndex cannot stall.
+    let units = regexp_units(&source)?;
+    let regex_inner = regexp_data(&regex).unwrap();
+    let mut values = Vec::new();
+    loop {
+        let matched = regexp_match(i, &regex, &source)?;
+        let Some(matched) = matched else { break };
+        if values.len() >= 100_000 { return Err(Throw::range_error("matchAll collection limit")); }
+        let empty = matched.range.is_empty();
+        values.push(regexp_result(i, &source, matched)?);
+        if empty {
+            let last_token = i.get_prop(&regex, "lastIndex")?;
+            let last = i.to_number(&last_token)?;
+            let next = amazing_regex::advance_index(&units, last.max(0.0) as usize, regex_inner.flags().unicode);
+            i.set_prop(&regex, "lastIndex", JsValue::num(next as f64))?;
+        }
+    }
+    let array = array_values(i, values)?;
     native_array_iterator_values(i, array, vec![])
 }
 
