@@ -1,3 +1,4 @@
+use amazing_dom::legacy_document::LegacyColor as LC;
 use crate::host::{
     BindingHost, FormAttribute as F, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
 };
@@ -117,9 +118,11 @@ const CUSTOM_EVENT: &[Member] = &[
 const UI_EVENT: &[Member] = &[
     getter("view", O::EventExtra("view")),
     getter("detail", O::EventExtra("detail")),
+    getter("which", O::EventExtra("which")),
 ];
 const FOCUS_EVENT: &[Member] = &[getter("relatedTarget", O::EventExtra("relatedTarget"))];
 const MOUSE_EVENT: &[Member] = &[
+    method("getModifierState", O::MouseGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -137,8 +140,10 @@ const WHEEL_EVENT: &[Member] = &[
     getter("deltaY", O::EventExtra("deltaY")),
     getter("deltaZ", O::EventExtra("deltaZ")),
     getter("deltaMode", O::EventExtra("deltaMode")),
+    getter("momentum", O::EventExtra("momentum")),
 ];
 const KEYBOARD_EVENT: &[Member] = &[
+    method("getModifierState", O::KeyboardGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -150,7 +155,6 @@ const KEYBOARD_EVENT: &[Member] = &[
     getter("isComposing", O::EventExtra("isComposing")),
     getter("charCode", O::EventExtra("charCode")),
     getter("keyCode", O::EventExtra("keyCode")),
-    getter("which", O::EventExtra("which")),
 ];
 const MESSAGE_EVENT: &[Member] = &[
     getter("data", O::MessageEventGet("data")),
@@ -219,6 +223,14 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("fgColor", O::DocumentLegacyColorGet(LC::Text)), setter("fgColor", O::DocumentLegacyColorSet(LC::Text)),
+    getter("bgColor", O::DocumentLegacyColorGet(LC::Background)), setter("bgColor", O::DocumentLegacyColorSet(LC::Background)),
+    getter("linkColor", O::DocumentLegacyColorGet(LC::Link)), setter("linkColor", O::DocumentLegacyColorSet(LC::Link)),
+    getter("vlinkColor", O::DocumentLegacyColorGet(LC::VisitedLink)), setter("vlinkColor", O::DocumentLegacyColorSet(LC::VisitedLink)),
+    getter("alinkColor", O::DocumentLegacyColorGet(LC::ActiveLink)), setter("alinkColor", O::DocumentLegacyColorSet(LC::ActiveLink)),
+    method("clear", O::DocumentLegacyNoop, 0),
+    method("captureEvents", O::DocumentLegacyNoop, 0),
+    method("releaseEvents", O::DocumentLegacyNoop, 0),
     method("moveBefore", O::MoveBefore, 2),
     getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
@@ -228,6 +240,7 @@ const DOCUMENT: &[Member] = &[
     getter("documentElement", O::DocumentElement),
     getter("doctype", O::DocumentDoctype),
     getter("readyState", O::DocumentReadyState),
+    getter("defaultView", O::DocumentDefaultView),
     getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
     getter("characterSet", O::DocumentCharacterSet),
     getter("charset", O::DocumentCharacterSet), getter("inputEncoding", O::DocumentCharacterSet),
@@ -239,6 +252,8 @@ const DOCUMENT: &[Member] = &[
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
     getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
+    getter("embeds", O::DocumentEmbeds), getter("plugins", O::DocumentEmbeds),
+    getter("anchors", O::DocumentAnchors), getter("applets", O::DocumentApplets),
     getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
     getter("activeElement", O::DocumentActiveElement),
     method("hasFocus", O::DocumentHasFocus, 0),
@@ -547,7 +562,15 @@ const TEXT: &[Member] = &[
     getter("wholeText", O::TextWholeText),
     method("splitText", O::TextSplit, 1),
 ];
+const HTML_BODY: &[Member] = &[
+    getter("text", O::BodyLegacyColorGet(LC::Text)), setter("text", O::BodyLegacyColorSet(LC::Text)),
+    getter("bgColor", O::BodyLegacyColorGet(LC::Background)), setter("bgColor", O::BodyLegacyColorSet(LC::Background)),
+    getter("link", O::BodyLegacyColorGet(LC::Link)), setter("link", O::BodyLegacyColorSet(LC::Link)),
+    getter("vLink", O::BodyLegacyColorGet(LC::VisitedLink)), setter("vLink", O::BodyLegacyColorSet(LC::VisitedLink)),
+    getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
+];
 const HTML_ELEMENT: &[Member] = &[
+    getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),
     method("blur", O::ElementBlur, 0),
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
@@ -883,7 +906,31 @@ pub static INTERFACES: &[D] = &[
     },
     D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
     D { interface: I::SVGElement, name: "SVGElement", parent: Some(I::Element), constructor: None,
-        members: &[method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::MathMLElement, name: "MathMLElement", parent: Some(I::Element), constructor: None,
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::HTMLDirectoryElement, name: "HTMLDirectoryElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("compact", O::DirectoryCompact), setter("compact", O::DirectoryCompactSet)
+    ] },
+    D { interface: I::HTMLFontElement, name: "HTMLFontElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("color", O::FontColor), setter("color", O::FontColorSet),
+        getter("face", O::FontFace), setter("face", O::FontFaceSet),
+        getter("size", O::FontSize), setter("size", O::FontSizeSet)
+    ] },
+    D { interface: I::HTMLFrameElement, name: "HTMLFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("name", O::FrameName), setter("name", O::FrameNameSet),
+        getter("scrolling", O::FrameScrolling), setter("scrolling", O::FrameScrollingSet),
+        getter("src", O::FrameSrc), setter("src", O::FrameSrcSet),
+        getter("frameBorder", O::FrameBorder), setter("frameBorder", O::FrameBorderSet),
+        getter("longDesc", O::FrameLongDesc), setter("longDesc", O::FrameLongDescSet),
+        getter("noResize", O::FrameNoResize), setter("noResize", O::FrameNoResizeSet),
+        getter("marginHeight", O::FrameMarginHeight), setter("marginHeight", O::FrameMarginHeightSet),
+        getter("marginWidth", O::FrameMarginWidth), setter("marginWidth", O::FrameMarginWidthSet)
+    ] },
+    D { interface: I::HTMLFrameSetElement, name: "HTMLFrameSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("cols", O::FrameSetCols), setter("cols", O::FrameSetColsSet),
+        getter("rows", O::FrameSetRows), setter("rows", O::FrameSetRowsSet)
+    ] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -892,7 +939,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: LINK },
     D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: META },
     D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: HTML_BODY },
     D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -1002,8 +1049,16 @@ pub static INTERFACES: &[D] = &[
         interface: I::ProcessingInstruction,
         name: "ProcessingInstruction",
         parent: Some(I::CharacterData),
-        constructor: None,
-        members: &[getter("target", O::ProcessingInstructionTarget)],
+        constructor: Some(O::ProcessingInstructionConstructor),
+        members: &[getter("target", O::ProcessingInstructionTarget),
+            method("hasAttributes", O::PiHasAttributes, 0),
+            method("getAttributeNames", O::PiGetAttributeNames, 0),
+            method("getAttribute", O::PiGetAttribute, 1),
+            method("setAttribute", O::PiSetAttribute, 2),
+            method("removeAttribute", O::PiRemoveAttribute, 1),
+            method("toggleAttribute", O::PiToggleAttribute, 1),
+            method("hasAttribute", O::PiHasAttribute, 1),
+        ],
     },
     D {
         interface: I::AbstractRange,
@@ -1026,6 +1081,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::RangeConstructor),
         members: RANGE,
     },
+    D { interface: I::DOMStringMap, name: "DOMStringMap", parent: None, constructor: None, members: &[] },
     D { interface: I::Selection, name: "Selection", parent: None, constructor: None, members: SELECTION },
     D {
         interface: I::DOMImplementation,
@@ -1178,6 +1234,10 @@ pub fn html_element_interface(local: &str) -> I {
         "script" => I::HTMLScriptElement,
         "template" => I::HTMLTemplateElement,
         "slot" => I::HTMLSlotElement,
+        "dir" => I::HTMLDirectoryElement,
+        "font" => I::HTMLFontElement,
+        "frame" => I::HTMLFrameElement,
+        "frameset" => I::HTMLFrameSetElement,
         "iframe" => I::HTMLIFrameElement,
         "embed" => I::HTMLEmbedElement,
         "object" => I::HTMLObjectElement,
@@ -1289,6 +1349,12 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,
         named_setter: None, named_deleter: None, override_builtins: false,
         unenumerable_names: false,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::DOM_STRING_MAP, LegacyPlatformHooks {
+        supported_index_count: O::DatasetIndexCount, supported_names: Some(O::DatasetSupportedNames),
+        indexed_getter: O::DatasetIndexedGet, indexed_setter: None,
+        named_getter: Some(O::DatasetGet), named_setter: Some(O::DatasetSet), named_deleter: Some(O::DatasetDelete),
+        override_builtins: true, unenumerable_names: false,
     })?;
     host.define_iterable(I::NodeList, IterableKind::Values)?;
     host.define_iterable(I::DOMTokenList, IterableKind::Values)?;

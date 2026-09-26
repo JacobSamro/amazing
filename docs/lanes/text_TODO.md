@@ -355,3 +355,40 @@ opportunities. The residual failure is layout break selection / float
 shrink-to-fit.
 
 
+
+## TEXT-14: axis-correct kerning features
+
+CSS Fonts 4 §5.2.1 makes `kern` the horizontal-axis and `vkrn` the
+vertical-axis kerning feature, but an explicitly requested HarfBuzz buffer
+feature runs in either buffer direction. Layout maps `font-kerning: normal` to
+kern=1 plus vkrn=1 in both orientations
+(`amazing-layout/src/font_features.rs`), so a horizontal run shaped with the
+wrong-axis feature and regressed `font-kerning-02`. The provider now filters
+both the `@font-face` descriptor features and the explicit `TextStyle.features`
+to the tag matching the actual shaping buffer direction
+(`uses_vertical_metrics() && orientation == Upright` → TopToBottom). An explicit
+`kern`/`vkrn` off value still disables its own axis; an on value no longer leaks
+onto the other axis. Commit `0e4afdd0`.
+
+Evidence: `crates/amazing-text-provider/evidence/text14-gate-summary.json`,
+`text14-kern-before.json` and `text14-kern-after.json`, at the pinned WPT
+revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, measured on the text lane
+Boat sandbox under Linux/fontconfig/freetype. The five pinned kerning cases —
+every kerning case in the 40-case expanded selection — moved **3 pass / 2
+mismatch → 5 pass / 0 mismatch**: `font-kerning-02` (horizontal) and `-03`
+(vertical upright) each gained, while `-01`, `-04` and `-05` retained their
+exact actual/reference PPM SHA-256. The before mismatches were exactly 345
+differing pixels in the `.high` line. The provider and text crate nextest gate
+is 68/68 (one skipped); workspace nextest is 2736 passed, 10 skipped, 0 failed;
+workspace doctests are 4 passed, 0 failed.
+
+The full 15/40/48-case pixel selections cannot run on the Boat sandbox: there is
+no WPT checkout and no PowerShell, so only a focused `render-wpt` subset with a
+lane-local comparator was possible. The shared-runner / WPT-provisioning gap is
+filed in `.agents/text/questions.md`. With the two kerning cases closed, no
+remaining mismatch in the pinned text selections has an established text-owned
+cause: the retained font-face, flow, vertical and vertical/ruby failures are
+layout-owned per the TEXT-7..13 routes, and the PUA/emoji cases are environment
+ones. The lane has asked the orchestrator for its next ticket, proposing
+`font-optical-sizing: auto` (`opsz`) and a `font-variant-caps/-numeric/-position`
+feature contract as provider-local candidates.

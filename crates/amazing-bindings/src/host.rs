@@ -83,6 +83,7 @@ impl InterfaceBrand {
     pub const DOM_STRING_LIST: Self = Self(35);
     pub const SELECTION: Self = Self(36);
     pub const SELECTED_OPTIONS: Self = Self(37);
+    pub const DOM_STRING_MAP: Self = Self(38);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -93,6 +94,7 @@ pub enum Interface {
     Attr,
     NamedNodeMap,
     DOMTokenList,
+    DOMStringMap,
     Location,
     DOMStringList,
     Document,
@@ -103,6 +105,7 @@ pub enum Interface {
     Element,
     HTMLElement,
     SVGElement,
+    MathMLElement,
     HTMLHtmlElement,
     HTMLHeadElement,
     HTMLTitleElement,
@@ -168,6 +171,10 @@ pub enum Interface {
     HTMLPictureElement,
     HTMLMenuElement,
     HTMLUnknownElement,
+    HTMLDirectoryElement,
+    HTMLFontElement,
+    HTMLFrameElement,
+    HTMLFrameSetElement,
     HTMLCollection,
     CharacterData,
     Text,
@@ -303,6 +310,39 @@ pub enum Operation {
     CellColSpan, CellSetColSpan, CellRowSpan, CellSetRowSpan,
     OListStart, OListSetStart, OListReversed, OListSetReversed,
     LIValue, LISetValue,
+    DirectoryCompact,
+    DirectoryCompactSet,
+    FontColor,
+    FontColorSet,
+    FontFace,
+    FontFaceSet,
+    FontSize,
+    FontSizeSet,
+    FrameSetCols,
+    FrameSetColsSet,
+    FrameSetRows,
+    FrameSetRowsSet,
+    FrameName,
+    FrameNameSet,
+    FrameScrolling,
+    FrameScrollingSet,
+    FrameSrc,
+    FrameSrcSet,
+    FrameBorder,
+    FrameBorderSet,
+    FrameLongDesc,
+    FrameLongDescSet,
+    FrameNoResize,
+    FrameNoResizeSet,
+    FrameMarginHeight,
+    FrameMarginHeightSet,
+    FrameMarginWidth,
+    FrameMarginWidthSet,
+    DocumentLegacyColorGet(amazing_dom::legacy_document::LegacyColor),
+    DocumentLegacyColorSet(amazing_dom::legacy_document::LegacyColor),
+    BodyLegacyColorGet(amazing_dom::legacy_document::LegacyColor),
+    BodyLegacyColorSet(amazing_dom::legacy_document::LegacyColor),
+    DocumentLegacyNoop, WindowLegacyNoop,
     DocumentTitle,
     DocumentSetTitle,
     DocumentHead,
@@ -311,6 +351,7 @@ pub enum Operation {
     DocumentElement,
     DocumentDoctype,
     DocumentReadyState,
+    DocumentDefaultView,
     DocumentURL,
     DocumentURI,
     DocumentCharacterSet,
@@ -324,6 +365,7 @@ pub enum Operation {
     DocumentImportNode,
     DocumentForms,
     DocumentImages,
+    DocumentEmbeds, DocumentAnchors, DocumentApplets,
     DocumentLinks,
     DocumentScripts,
     DocumentActiveElement,
@@ -486,6 +528,15 @@ pub enum Operation {
     DocumentTypePublicId,
     DocumentTypeSystemId,
     ProcessingInstructionTarget,
+    ProcessingInstructionConstructor,
+    PiHasAttributes,
+    PiGetAttributeNames,
+    PiGetAttribute,
+    PiSetAttribute,
+    PiRemoveAttribute,
+    PiToggleAttribute,
+    PiHasAttribute,
+
     NodeValue,
     SetNodeValue,
     TextContent,
@@ -541,6 +592,8 @@ pub enum Operation {
     RangeIsPointInRange,
     RangeComparePoint,
     RangeStringifier,
+    ElementDataset, DatasetGet, DatasetSet, DatasetDelete, DatasetIndexedGet,
+    DatasetIndexCount, DatasetSupportedNames,
     GetSelection, SelectionAnchorNode, SelectionAnchorOffset,
     SelectionFocusNode, SelectionFocusOffset, SelectionIsCollapsed,
     SelectionRangeCount, SelectionGetRangeAt, SelectionAddRange,
@@ -613,6 +666,8 @@ pub enum Operation {
     MessageEventGet(&'static str),
     MessageEventInit,
     EventExtra(&'static str),
+    MouseGetModifierState,
+    KeyboardGetModifierState,
     CustomEventDetail,
     CustomEventInit,
     CreateEvent,
@@ -690,6 +745,11 @@ pub enum DocumentField { URL, DocumentURI, CharacterSet, ContentType, CompatMode
 
 /// Browsing-context data comes from the driver, not guesses from the DOM tree.
 pub trait DocumentHost: BindingHost {
+    /// The document's associated WindowProxy, or None for an inert document.
+    /// Child-realm embedders supply the proxy belonging to that document.
+    fn document_default_view(&mut self, _document: NodeIdx) -> Result<Option<Self::Value>, Self::Error> {
+        self.with_dom::<Option<Self::Value>>(|_| Err(DomError::NotSupportedError))
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField)
         -> Result<Vec<u16>, Self::Error>;
     fn active_element(&mut self, document: NodeIdx) -> Result<Option<NodeIdx>, Self::Error>;
@@ -916,6 +976,10 @@ pub trait BindingHost: Sized {
         Ok(OptionalHookInstall::NotSupported)
     }
     fn is_constructor(&mut self, _value: &Self::Value) -> Result<bool, Self::Error> {
+        self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Classify the WebIDL object branch without invoking user code.
+    fn is_object_value(&mut self, _value: &Self::Value) -> Result<bool, Self::Error> {
         self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
     }
     fn require_object(&mut self, _value: &Self::Value) -> Result<(), Self::Error> {

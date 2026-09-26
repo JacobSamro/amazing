@@ -1,51 +1,9 @@
 // Generic Array.prototype operations. Each method reads through the receiver's
 // ordinary property path so inherited indices and host hooks remain visible.
 
-fn array_receiver(i: &Interpreter, this: JsValue) -> Result<JsValue, Throw> {
-    match this {
-        JsValue::Null | JsValue::Undefined => Err(Throw::type_error(
-            "Array method called on null or undefined",
-        )),
-        JsValue::Object(_) => Ok(this),
-        JsValue::Str(text) => {
-            let mut object = JsObject::ordinary();
-            object.proto = Some(i.string_proto.clone());
-            for (index, unit) in text.units().iter().enumerate() {
-                object
-                    .define(
-                        index.to_string(),
-                        Property {
-                            value: JsValue::str_units(vec![*unit]),
-                            writable: false,
-                            enumerable: true,
-                            configurable: false,
-                            getter: None,
-                            setter: None,
-                        },
-                    )
-                    .unwrap();
-            }
-            object
-                .define(
-                    "length",
-                    Property {
-                        value: JsValue::num(text.len() as f64),
-                        writable: false,
-                        enumerable: false,
-                        configurable: false,
-                        getter: None,
-                        setter: None,
-                    },
-                )
-                .unwrap();
-            Ok(JsValue::object(object))
-        }
-        _ => {
-            let mut object = JsObject::ordinary();
-            object.proto = Some(i.object_proto.clone());
-            Ok(JsValue::object(object))
-        }
-    }
+fn array_receiver(i: &mut Interpreter, this: JsValue) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() { return Err(Throw::type_error("Array method called on null or undefined")); }
+    native_object(i, JsValue::Undefined, vec![this])
 }
 
 fn array_like_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Throw> {
@@ -61,18 +19,10 @@ fn array_like_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Thr
 // Searches can start close to the end of a very large sparse array-like object.
 // Their scan bound is applied after fromIndex has selected the range to visit.
 fn array_search_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Throw> {
-    if let JsValue::Object(handle) = object {
-        if let Some(JsValue::Str(text)) = handle.borrow().get_own("[[StringData]]") {
-            return Ok(text.len());
-        }
-    }
     let value = i.get_prop(object, "length")?;
     let number = i.to_number(&value)?;
-    let length = if number.is_nan() || number <= 0.0 {
-        0.0
-    } else {
-        number.trunc().min(9_007_199_254_740_991.0)
-    };
+    let length = if number.is_nan() || number <= 0.0 { 0.0 }
+        else { number.trunc().min(9_007_199_254_740_991.0) };
     Ok(length as usize)
 }
 
@@ -95,38 +45,21 @@ fn array_index(
 }
 
 fn array_has(i: &mut Interpreter, object: &JsValue, index: usize) -> Result<bool, Throw> {
-    let JsValue::Object(handle) = object else {
-        return Ok(false);
-    };
-    if let Some(JsValue::Str(text)) = handle.borrow().get_own("[[StringData]]") {
-        if index < text.len() { return Ok(true); }
-    }
-    if let Some(descriptor) = binary_index_descriptor(handle, &PropertyKey::from(index.to_string())) {
+    let JsValue::Object(handle) = object else { return Err(Throw::type_error("array receiver is not an object")); };
+    let key = index.to_string();
+    if let Some(descriptor) = binary_index_descriptor(handle, &PropertyKey::from(key.clone())) {
         return Ok(descriptor.is_some());
     }
-    i.legacy_has_property(handle, index.to_string())
+    i.legacy_has_property(handle, key)
 }
 
 fn array_get_index(i: &mut Interpreter, object: &JsValue, index: usize) -> Result<JsValue, Throw> {
-    if let JsValue::Object(handle) = object {
-        if let Some(JsValue::Str(text)) = handle.borrow().get_own("[[StringData]]") {
-            if let Some(unit) = text.units().get(index) {
-                return Ok(JsValue::str_units(vec![*unit]));
-            }
-        }
-    }
     i.get_prop(object, index.to_string())
 }
 
 fn array_delete(i: &mut Interpreter, object: &JsValue, index: usize) -> Result<(), Throw> {
-    let JsValue::Object(handle) = object else {
-        return Err(Throw::type_error("array receiver is not an object"));
-    };
-    let key = index.to_string();
-    let deleted = i
-        .legacy_delete(handle, &key)?
-        .unwrap_or_else(|| handle.borrow_mut().delete_own(key));
-    if !deleted {
+    if !std_reflect_delete_property(i, JsValue::Undefined,
+        vec![object.clone(), JsValue::str(index.to_string())])?.to_boolean() {
         return Err(Throw::type_error("cannot delete array element"));
     }
     Ok(())
@@ -169,33 +102,29 @@ fn array_prepare_length_change(object: &Obj, new_length: u32) -> bool {
 }
 
 fn array_species_create(i: &mut Interpreter, source: &JsValue, length: usize) -> Result<JsValue, Throw> {
+    fn default_result(i: &Interpreter, length: usize) -> Result<JsValue, Throw> {
+        if length > u32::MAX as usize { return Err(Throw::range_error("invalid array length")); }
+        Ok(array_result(i, length))
+    }
     if !matches!(source, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Array)) {
-        return Ok(array_result(i, length));
+        return default_result(i, length);
     }
     let constructor = i.get_prop(source, "constructor")?;
-    if constructor.is_undefined() { return Ok(array_result(i, length)); }
-    let JsValue::Object(_) = constructor else {
-        return Err(Throw::type_error("array constructor is not an object"));
-    };
+    if constructor.is_undefined() { return default_result(i, length); }
+    let JsValue::Object(function) = &constructor else { return Err(Throw::type_error("array constructor is not an object")); };
+    let realm = function.borrow().realm;
+    if realm.is_some_and(|realm| realm != i.host_realm && i.realms.get(&realm)
+        .and_then(|state| state.intrinsic_constructors.get("Array"))
+        .is_some_and(|(array, _)| Rc::ptr_eq(&array.0, &function.0))) {
+        return default_result(i, length);
+    }
     let species = i.get_prop(&constructor, WellKnownSymbol::Species.symbol())?;
-    if species.is_null() || species.is_undefined() { return Ok(array_result(i, length)); }
+    if species.is_null() || species.is_undefined() { return default_result(i, length); }
     i.construct(&species, vec![JsValue::num(length as f64)])
 }
 
 fn array_create_data_properties(i: &mut Interpreter, target: &JsValue, values: Vec<JsValue>) -> Result<(), Throw> {
-    let JsValue::Object(object) = target else {
-        return Err(Throw::type_error("array species constructor did not return an object"));
-    };
-    for (index, value) in values.into_iter().enumerate() {
-        let mut descriptor = JsObject::ordinary();
-        descriptor.set_own("value", value);
-        descriptor.set_own("writable", JsValue::Bool(true));
-        descriptor.set_own("enumerable", JsValue::Bool(true));
-        descriptor.set_own("configurable", JsValue::Bool(true));
-        if !i.define_own_property(object, &PropertyKey::from(index.to_string()), &JsValue::object(descriptor))? {
-            return Err(Throw::type_error("cannot create array species element"));
-        }
-    }
+    for (index, value) in values.into_iter().enumerate() { array_create_data_property(i, target, index, value)?; }
     Ok(())
 }
 
@@ -286,13 +215,13 @@ fn array_sorted(
     if copy {
         let result = array_result(i, length);
         for (index, value) in values.into_iter().enumerate() {
-            i.set_prop(&result, index.to_string(), value)?;
+            array_create_data_property(i, &result, index, value)?;
         }
         Ok(result)
     } else {
         let count = values.len();
         for (index, value) in values.into_iter().enumerate() {
-            i.set_prop(&object, index.to_string(), value)?;
+            array_set(i, &object, index.to_string(), value)?;
         }
         for index in count..length {
             array_delete(i, &object, index)?;
@@ -412,7 +341,7 @@ fn native_array_copy_within(
             let destination = target + offset;
             if array_has(i, &object, source)? {
                 let value = i.get_prop(&object, source.to_string())?;
-                i.set_prop(&object, destination.to_string(), value)?;
+                array_set(i, &object, destination.to_string(), value)?;
             } else {
                 array_delete(i, &object, destination)?;
             }
@@ -423,7 +352,7 @@ fn native_array_copy_within(
             let destination = target + offset;
             if array_has(i, &object, source)? {
                 let value = i.get_prop(&object, source.to_string())?;
-                i.set_prop(&object, destination.to_string(), value)?;
+                array_set(i, &object, destination.to_string(), value)?;
             } else {
                 array_delete(i, &object, destination)?;
             }
@@ -443,7 +372,7 @@ fn native_array_fill(
     let end = array_index(i, args.get(2), length, length as f64)?;
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
     for index in start..end {
-        i.set_prop(&object, index.to_string(), value.clone())?;
+        array_set(i, &object, index.to_string(), value.clone())?;
     }
     Ok(object)
 }
@@ -620,11 +549,11 @@ fn native_array_reverse(
             None
         };
         match upper_value {
-            Some(value) => i.set_prop(&object, lower.to_string(), value)?,
+            Some(value) => array_set(i, &object, lower.to_string(), value)?,
             None => array_delete(i, &object, lower)?,
         }
         match lower_value {
-            Some(value) => i.set_prop(&object, upper.to_string(), value)?,
+            Some(value) => array_set(i, &object, upper.to_string(), value)?,
             None => array_delete(i, &object, upper)?,
         }
     }
@@ -639,20 +568,20 @@ fn native_array_shift(
     let object = array_receiver(i, this)?;
     let length = array_like_length(i, &object)?;
     if length == 0 {
-        i.set_prop(&object, "length", JsValue::num(0.0))?;
+        array_set(i, &object, "length", JsValue::num(0.0))?;
         return Ok(JsValue::Undefined);
     }
     let first = i.get_prop(&object, "0")?;
     for index in 1..length {
         if array_has(i, &object, index)? {
             let value = i.get_prop(&object, index.to_string())?;
-            i.set_prop(&object, (index - 1).to_string(), value)?;
+            array_set(i, &object, (index - 1).to_string(), value)?;
         } else {
             array_delete(i, &object, index - 1)?;
         }
     }
     array_delete(i, &object, length - 1)?;
-    i.set_prop(&object, "length", JsValue::num((length - 1) as f64))?;
+    array_set(i, &object, "length", JsValue::num((length - 1) as f64))?;
     Ok(first)
 }
 
@@ -688,15 +617,15 @@ fn native_array_unshift(
     for index in (0..length).rev() {
         if array_has(i, &object, index)? {
             let value = i.get_prop(&object, index.to_string())?;
-            i.set_prop(&object, (index + count).to_string(), value)?;
+            array_set(i, &object, (index + count).to_string(), value)?;
         } else {
             array_delete(i, &object, index + count)?;
         }
     }
     for (index, value) in args.into_iter().enumerate() {
-        i.set_prop(&object, index.to_string(), value)?;
+        array_set(i, &object, index.to_string(), value)?;
     }
-    i.set_prop(&object, "length", JsValue::num(new_length as f64))?;
+    array_set(i, &object, "length", JsValue::num(new_length as f64))?;
     Ok(JsValue::num(new_length as f64))
 }
 
@@ -710,7 +639,7 @@ fn native_array_to_reversed(
     let result = array_result(i, length);
     for index in 0..length {
         let value = i.get_prop(&object, (length - index - 1).to_string())?;
-        i.set_prop(&result, index.to_string(), value)?;
+        array_create_data_property(i, &result, index, value)?;
     }
     Ok(result)
 }
@@ -745,14 +674,14 @@ fn native_array_to_spliced(
     let result = array_result(i, new_length);
     for index in 0..start {
         let value = i.get_prop(&object, index.to_string())?;
-        i.set_prop(&result, index.to_string(), value)?;
+        array_create_data_property(i, &result, index, value)?;
     }
     for (offset, value) in args.into_iter().skip(2).enumerate() {
-        i.set_prop(&result, (start + offset).to_string(), value)?;
+        array_create_data_property(i, &result, (start + offset), value)?;
     }
     for index in start + skip..length {
         let value = i.get_prop(&object, index.to_string())?;
-        i.set_prop(&result, (index - skip + inserted).to_string(), value)?;
+        array_create_data_property(i, &result, (index - skip + inserted), value)?;
     }
     Ok(result)
 }
@@ -782,7 +711,7 @@ fn native_array_with(
         } else {
             i.get_prop(&object, position.to_string())?
         };
-        i.set_prop(&result, position.to_string(), value)?;
+        array_create_data_property(i, &result, position, value)?;
     }
     Ok(result)
 }

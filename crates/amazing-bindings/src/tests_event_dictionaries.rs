@@ -29,7 +29,7 @@ fn event_dictionary_conversion_is_ordered_and_ui_detail_is_a_signed_long() {
         let event = call(&mut h, O::UIEventConstructor, V::Undefined, &[str_value("event"),
             V::Dictionary(vec![("detail", V::Number(input))])]);
         assert_eq!(call(&mut h, O::EventExtra("detail"), event, &[]), V::Number(output));
-        assert_eq!(h.property_reads, ["bubbles", "cancelable", "composed", "detail", "view"]);
+        assert_eq!(h.property_reads, ["bubbles", "cancelable", "composed", "detail", "view", "which"]);
     }
     for op in [O::EventConstructor, O::CustomEventConstructor, O::UIEventConstructor] {
         assert!(invoke(&mut h, op, V::Undefined, &[str_value("event"), V::Bool(true)]).is_err());

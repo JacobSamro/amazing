@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "selection": "text14-pinned-font-kerning",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "binary": "/home/user/amazing/targets/text/debug/amazing",
+  "counts": {
+    "pass": 3,
+    "mismatch": 2,
+    "total": 5
+  },
+  "tests": [
+    {
+      "id": "css-fonts__font-kerning-01.html",
+      "classification": "pass",
+      "actual_sha256": "6877080d1df439906013c32d33bf4aff25243fe1f04c9d40789e44866f3dcc02",
+      "reference_sha256": "6877080d1df439906013c32d33bf4aff25243fe1f04c9d40789e44866f3dcc02",
+      "differing_pixels": 0
+    },
+    {
+      "id": "css-fonts__font-kerning-02.html",
+      "classification": "mismatch",
+      "actual_sha256": "843bc447440683942d38c6d15d8ce1251eaf406bfebe82230d609c8be924f389",
+      "reference_sha256": "b89c050884fb6ea87ca970afd17fa864b53c007a8701dcfb6801aaee7708af89",
+      "differing_pixels": 345,
+      "differing_bbox": [
+        41,
+        98,
+        69,
+        126
+      ],
+      "differing_row_bands": [
+        [
+          98,
+          126,
+          345
+        ]
+      ]
+    },
+    {
+      "id": "css-fonts__font-kerning-03.html",
+      "classification": "mismatch",
+      "actual_sha256": "a6be3db474fb99d6955eba69e7e21324a5e0da674909f6a64f26bd8c16d2ec88",
+      "reference_sha256": "8cde398f287bc08e0f109fc57928ac0ac42f100bff6d50583832583329a939e0",
+      "differing_pixels": 345,
+      "differing_bbox": [
+        761,
+        39,
+        789,
+        67
+      ],
+      "differing_row_bands": [
+        [
+          39,
+          67,
+          345
+        ]
+      ]
+    },
+    {
+      "id": "css-fonts__font-kerning-04.html",
+      "classification": "pass",
+      "actual_sha256": "c2468feff254a35488f668d180820edc80ad7ac90d1b851a9572862cda409dd6",
+      "reference_sha256": "c2468feff254a35488f668d180820edc80ad7ac90d1b851a9572862cda409dd6",
+      "differing_pixels": 0
+    },
+    {
+      "id": "css-fonts__font-kerning-05.html",
+      "classification": "pass",
+      "actual_sha256": "cdb6822a01212d16adc7dca756f81a1b58ff3816f8e6b7d28a67e677219bb1ac",
+      "reference_sha256": "cdb6822a01212d16adc7dca756f81a1b58ff3816f8e6b7d28a67e677219bb1ac",
+      "differing_pixels": 0
+    }
+  ]
+}
