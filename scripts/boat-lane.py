@@ -72,6 +72,7 @@ POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 POOL_TYPE = {
     "pool-js-a": "large", "pool-js-vm": "large", "pool-js-b": "large",
     "pool-js-date": "large", "pool-js-lib": "large", "pool-layout": "large",
+    "pool-dom": "large",  # 76% busy, 41% overlap across three lanes (2026-09-26)
 }
 
 
