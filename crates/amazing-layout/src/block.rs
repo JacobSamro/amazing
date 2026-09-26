@@ -280,10 +280,49 @@ fn layout_block_in_context(
             }
         }
     }
+    if let Some(source) = b.style.get("width")
+        && let Some(keyword) = values::calc_size_basis(source)
+    {
+        let chrome = bl + pl + pr + br_;
+        let basis = match keyword {
+            "auto" => Some(values::preferred_aspect_ratio(&b.style)
+                .and_then(|ratio| values::style_length_percentage_with_units(&b.style, "height", font_units)
+                    .and_then(|height| height.resolve(b.containing_block_height))
+                    .map(|height| height * ratio))
+                .unwrap_or(content_w)),
+            "fit-content" => Some(content_w),
+            "min-content" => Some((crate::flex::min_content_width(b, fonts) - chrome).max(0.0)),
+            "max-content" => Some((crate::flex::max_content_width(b, fonts) - chrome).max(0.0)),
+            _ => None,
+        };
+        if let Some(basis) = basis
+            && let Some(width) = values::used_calc_size_with_basis(&b.style, source, font_units, basis, Some(cbw))
+        {
+            content_w = width.max(0.0);
+        }
+    }
+    let calc_size_width_limit = |property| {
+        let source = b.style.get(property)?;
+        let chrome = bl + pl + pr + br_;
+        let intrinsic = |minimum| if crate::grid::is_grid_lanes(&b.style) {
+            crate::grid::intrinsic_lanes_width(b, fonts, minimum)
+        } else if minimum {
+            crate::flex::min_content_width(b, fonts)
+        } else {
+            crate::flex::max_content_width(b, fonts)
+        };
+        let basis = match values::calc_size_basis(source)? {
+            "auto" | "min-content" => (intrinsic(true) - chrome).max(0.0),
+            "max-content" => (intrinsic(false) - chrome).max(0.0),
+            _ => return None,
+        };
+        values::used_calc_size_with_basis(&b.style, source, font_units, basis, Some(cbw))
+    };
     let min_width = values::style_length_percentage_with_units(&b.style, "min-width", font_units)
-        .and_then(|value| value.resolve(Some(cbw))).unwrap_or(0.0).max(0.0);
+        .and_then(|value| value.resolve(Some(cbw))).or_else(|| calc_size_width_limit("min-width"))
+        .unwrap_or(0.0).max(0.0);
     let max_width = values::style_length_percentage_with_units(&b.style, "max-width", font_units)
-        .and_then(|value| value.resolve(Some(cbw)));
+        .and_then(|value| value.resolve(Some(cbw))).or_else(|| calc_size_width_limit("max-width"));
     content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
     // Margin edges: the box's border box starts after its own margins.
@@ -334,6 +373,7 @@ fn layout_block_in_context(
     }
 
     // --- children ------------------------------------------------------
+    let mut grid_tracks: Option<crate::grid::GridTracks> = None;
     let mut content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
             content_end: crate::flex::layout_flex(
@@ -342,8 +382,8 @@ fn layout_block_in_context(
             trailing: CollapsedMargin::default(),
             trailing_clearance: false,
         },
-        Flow::Grid(children) => StackResult {
-            content_end: if crate::grid::is_grid_lanes(&b.style) {
+        Flow::Grid(children) => {
+            let (content_end, tracks) = if crate::grid::is_grid_lanes(&b.style) {
                 crate::grid::layout_grid_lanes(
                     children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
                 )
@@ -352,9 +392,13 @@ fn layout_block_in_context(
                     children, &b.style, b.grid_subgrid.as_ref(), font_px,
                     content_x, content_y, content_w, def_h, fonts,
                 )
-            },
-            trailing: CollapsedMargin::default(),
-            trailing_clearance: false,
+            };
+            grid_tracks = Some(tracks);
+            StackResult {
+                content_end,
+                trailing: CollapsedMargin::default(),
+                trailing_clearance: false,
+            }
         },
         Flow::Blocks(children) if !children.is_empty() => stack_blocks(
             children, content_x, content_y, content_w, ctx, fonts, floats, text,
@@ -390,6 +434,7 @@ fn layout_block_in_context(
         _ => StackResult::default(),
     };
 
+    b.grid_tracks = grid_tracks;
     b.float_context = floats.clone();
     if let Some(text) = text {
         b.content_box = Rect {
@@ -427,9 +472,21 @@ fn layout_block_in_context(
             size.height
         }
     });
-    let fixed_height = def_h.or(replaced_height);
-    let min_height = height_constraint("min-height").unwrap_or(0.0);
-    let max_height = height_constraint("max-height");
+    let intrinsic_height = content.content_end.max(float_extent).max(0.0);
+    let calc_height = |property| {
+        let source = b.style.get(property)?;
+        match values::calc_size_basis(source)? {
+            "auto" | "min-content" | "max-content" | "fit-content" =>
+                values::used_calc_size_with_basis(
+                    &b.style, source, font_units, intrinsic_height,
+                    b.containing_block_height,
+                ),
+            _ => None,
+        }
+    };
+    let fixed_height = def_h.or_else(|| calc_height("height")).or(replaced_height);
+    let min_height = height_constraint("min-height").or_else(|| calc_height("min-height")).unwrap_or(0.0);
+    let max_height = height_constraint("max-height").or_else(|| calc_height("max-height"));
     let final_h = if let Some(height) = fixed_height {
         constrain_height(height, min_height, max_height)
     } else if ctx.bottom_separated || content.trailing_clearance {

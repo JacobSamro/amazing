@@ -72,6 +72,7 @@ POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 POOL_TYPE = {
     "pool-js-a": "large", "pool-js-vm": "large", "pool-js-b": "large",
     "pool-js-date": "large", "pool-js-lib": "large", "pool-layout": "large",
+    "pool-dom": "large",  # 76% busy, 41% overlap across three lanes (2026-09-26)
 }
 
 
@@ -124,11 +125,23 @@ def save_map(m: dict) -> None:
     MAP.write_text(json.dumps(m, indent=2) + "\n")
 
 
+def endpoint(d: dict) -> str | None:
+    """host:port for ssh. Bare-metal sandboxes publish sshEndpoint; Hetzner ones
+    publish none but answer on their IPv4 address, port 22 (2026-09-26)."""
+    if d.get("sshEndpoint"):
+        return d["sshEndpoint"]
+    ip = d.get("ip") or ""
+    if ip and ":" not in ip:
+        return f"{ip}:22"
+    return None
+
+
 def wait_ready(sid: str, limit: int = 300) -> dict:
     deadline = time.time() + limit
     while time.time() < deadline:
         d = info(sid)
-        if d.get("state") in READY and d.get("sshEndpoint"):
+        if d.get("state") in READY and endpoint(d):
+            d["sshEndpoint"] = endpoint(d)
             if d.get("machineProvider") != "baremetal":
                 print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
                       "(2-4x slower than bare metal)", file=sys.stderr)

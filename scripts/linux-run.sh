@@ -113,7 +113,7 @@ if [ "$HOST" = boat ]; then
   ok=0
   for attempt in 1 2 3; do
     if [ "$attempt" = 1 ]; then how=ensure; else how=heal; sleep 10; fi
-    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$REPO/scripts/boat-lane.py" "$how" "$LANE") || continue
+    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$MAIN/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes

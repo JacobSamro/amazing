@@ -10,14 +10,15 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    AxNode, BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
-    EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
-    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
+    AxNode, BoxModel, ConsoleEvent, Cookie, CpuProfile, CpuProfileNode, DeviceMetrics,
+    DevToolsHost, DevToolsSession, DomSnapshotDocument, DomSnapshotNode, DomStorageId,
+    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern,
+    FrameInfo, FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
     InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule,
     MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
-    NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad, Rect, RemoteObject,
-    ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, SecurityState, TargetEvent,
-    TargetEventKind, TargetInfo, TouchEvent, Viewport,
+    NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor, Quad, Rect,
+    RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, ScriptInfo,
+    ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use std::collections::HashMap;
 use crate::json::Json;
@@ -146,6 +147,70 @@ pub struct MockScript {
     pub ax_children: HashMap<String, Vec<AxNode>>,
     /// Result returned by `Accessibility.queryAXTree`.
     pub ax_query_result: Vec<AxNode>,
+    /// Queued `Accessibility.nodesUpdated` batches.
+    pub ax_updates: VecDeque<AxNode>,
+    /// Last `Debugger.enable`/`disable` call.
+    pub debugger_enabled: Option<bool>,
+    /// Locations returned by every `Debugger.setBreakpointByUrl` call.
+    pub breakpoint_locations: Vec<ScriptLocation>,
+    /// `breakpointId` counter for `Debugger.setBreakpointByUrl`.
+    pub next_breakpoint_id: u64,
+    /// `Debugger.removeBreakpoint` calls, in order.
+    pub removed_breakpoints: Vec<String>,
+    /// Count of `Debugger.pause`/`resume`/`stepInto`/`stepOver`/`stepOut`
+    /// calls, in that field order.
+    pub debugger_pause_calls: u32,
+    pub debugger_resume_calls: u32,
+    pub step_into_calls: u32,
+    pub step_over_calls: u32,
+    pub step_out_calls: u32,
+    /// Result returned by `Debugger.evaluateOnCallFrame`.
+    pub call_frame_eval_value: EvaluateResult,
+    /// Source text returned by `Debugger.getScriptSource`.
+    pub script_source: String,
+    /// Queued `Debugger.scriptParsed` events.
+    pub scripts_parsed: VecDeque<ScriptInfo>,
+    /// Queued `Debugger.paused` events.
+    pub debugger_paused_events: VecDeque<PausedEvent>,
+    /// Last `Profiler.enable`/`disable` call.
+    pub profiler_enabled: Option<bool>,
+    /// Last `Profiler.setSamplingInterval` value.
+    pub sampling_interval: Option<u32>,
+    /// Count of `Profiler.start` calls.
+    pub profiling_starts: u32,
+    /// Result returned by `Profiler.stop`.
+    pub cpu_profile: CpuProfile,
+    /// Last `HeapProfiler.enable`/`disable` call.
+    pub heap_profiler_enabled: Option<bool>,
+    /// Chunks returned by `HeapProfiler.takeHeapSnapshot`.
+    pub heap_snapshot_chunks: Vec<String>,
+    /// Count of `HeapProfiler.collectGarbage` calls.
+    pub garbage_collections: u32,
+    /// Value returned by `HeapProfiler.getHeapObjectId`.
+    pub heap_object_id: String,
+    /// Value returned by `HeapProfiler.getObjectByHeapObjectId`.
+    pub heap_object_lookup: RemoteObject,
+    /// Documents returned by `DOMSnapshot.captureSnapshot`.
+    pub dom_snapshot: Vec<DomSnapshotDocument>,
+    /// Cookie jar returned by `Storage.getCookies`; replaced wholesale by
+    /// `Storage.setCookies`, emptied by `Storage.clearCookies`.
+    pub cookies: Vec<Cookie>,
+    /// `localStorage`/`sessionStorage` items, keyed by security origin
+    /// (`DOMStorage.getDOMStorageItems` et al.).
+    pub dom_storage: HashMap<String, Vec<(String, String)>>,
+    /// IndexedDB database names, keyed by security origin
+    /// (`IndexedDB.requestDatabaseNames`).
+    pub indexed_databases: HashMap<String, Vec<String>>,
+    /// Count of `IndexedDB.deleteDatabase` calls.
+    pub deleted_databases: Vec<(String, String)>,
+    /// Categories returned by `Tracing.getCategories`.
+    pub tracing_categories: Vec<String>,
+    /// Categories passed to the last `Tracing.start` call.
+    pub last_trace_categories: Vec<String>,
+    /// Count of `Tracing.end` (`stop_tracing`) calls.
+    pub tracing_stops: u32,
+    /// Trace Event Format entries returned by the next `Tracing.end`.
+    pub trace_events: Vec<Json>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -306,6 +371,119 @@ impl Default for MockScript {
                 node: Some(EngineNodeId(6)),
                 ..AxNode::default()
             }],
+            ax_updates: VecDeque::new(),
+            debugger_enabled: None,
+            breakpoint_locations: vec![ScriptLocation {
+                script_id: "script-1".into(),
+                line_number: 10,
+                column_number: None,
+            }],
+            next_breakpoint_id: 0,
+            removed_breakpoints: Vec::new(),
+            debugger_pause_calls: 0,
+            debugger_resume_calls: 0,
+            step_into_calls: 0,
+            step_over_calls: 0,
+            step_out_calls: 0,
+            call_frame_eval_value: EvaluateResult::value(RemoteObject::number(42.0)),
+            script_source: "function f() { return 42; }".into(),
+            scripts_parsed: VecDeque::new(),
+            debugger_paused_events: VecDeque::new(),
+            profiler_enabled: None,
+            sampling_interval: None,
+            profiling_starts: 0,
+            cpu_profile: CpuProfile {
+                nodes: vec![CpuProfileNode {
+                    id: 1,
+                    function_name: "f".into(),
+                    script_id: "script-1".into(),
+                    url: "https://a/x.js".into(),
+                    line_number: 3,
+                    hit_count: 5,
+                    children: Vec::new(),
+                }],
+                start_time: 0.0,
+                end_time: 100.0,
+                samples: vec![1, 1],
+                time_deltas: vec![0, 50],
+            },
+            heap_profiler_enabled: None,
+            heap_snapshot_chunks: vec!["{\"snapshot\":1}".into()],
+            garbage_collections: 0,
+            heap_object_id: "heap-1".into(),
+            heap_object_lookup: RemoteObject::number(9.0),
+            dom_snapshot: vec![DomSnapshotDocument {
+                document_url: "about:blank".into(),
+                base_url: "about:blank".into(),
+                nodes: vec![
+                    DomSnapshotNode {
+                        node_type: 9,
+                        node_name: "#document".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(1),
+                        attributes: Vec::new(),
+                        children: vec![1],
+                    },
+                    DomSnapshotNode {
+                        node_type: 1,
+                        node_name: "BODY".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(3),
+                        attributes: Vec::new(),
+                        children: vec![2],
+                    },
+                    DomSnapshotNode {
+                        node_type: 1,
+                        node_name: "DIV".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(4),
+                        attributes: vec![("id".into(), "main".into())],
+                        children: vec![3],
+                    },
+                    DomSnapshotNode {
+                        node_type: 3,
+                        node_name: "#text".into(),
+                        node_value: "Hello".into(),
+                        backend_node_id: EngineNodeId(6),
+                        attributes: Vec::new(),
+                        children: Vec::new(),
+                    },
+                ],
+            }],
+            cookies: vec![Cookie {
+                name: "sid".into(),
+                value: "abc123".into(),
+                domain: "example.com".into(),
+                path: "/".into(),
+                expires: -1.0,
+                http_only: true,
+                secure: true,
+                same_site: "Lax".into(),
+            }],
+            dom_storage: {
+                let mut storage = HashMap::new();
+                storage.insert(
+                    "https://example.com".to_string(),
+                    vec![("theme".to_string(), "dark".to_string())],
+                );
+                storage
+            },
+            indexed_databases: {
+                let mut databases = HashMap::new();
+                databases.insert(
+                    "https://example.com".to_string(),
+                    vec!["app-db".to_string()],
+                );
+                databases
+            },
+            deleted_databases: Vec::new(),
+            tracing_categories: vec!["devtools.timeline".into(), "v8".into()],
+            last_trace_categories: Vec::new(),
+            tracing_stops: 0,
+            trace_events: vec![Json::Object(vec![(
+                "name".to_string(),
+                Json::String("paint".into()),
+            )])],
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -471,6 +649,21 @@ impl MockScript {
     /// Queues a `Security.securityStateChanged` change.
     pub fn push_security_state(&mut self, state: SecurityState) {
         self.security_states.push_back(state);
+    }
+
+    /// Queues a `Debugger.scriptParsed` event.
+    pub fn push_script_parsed(&mut self, script: ScriptInfo) {
+        self.scripts_parsed.push_back(script);
+    }
+
+    /// Queues a `Debugger.paused` event.
+    pub fn push_debugger_paused(&mut self, event: PausedEvent) {
+        self.debugger_paused_events.push_back(event);
+    }
+
+    /// Queues an `Accessibility.nodesUpdated` node.
+    pub fn push_ax_update(&mut self, node: AxNode) {
+        self.ax_updates.push_back(node);
     }
 }
 
@@ -1139,6 +1332,258 @@ impl DevToolsSession for MockSession {
         _role: Option<&str>,
     ) -> Result<Vec<AxNode>, HostError> {
         Ok(self.script.lock().unwrap().ax_query_result.clone())
+    }
+
+    fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
+        self.script.lock().unwrap().ax_updates.drain(..).collect()
+    }
+
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_breakpoint_by_url(
+        &mut self,
+        _url: &str,
+        _line_number: u32,
+        _column_number: Option<u32>,
+        _condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.next_breakpoint_id += 1;
+        let id = format!("bp-{}", script.next_breakpoint_id);
+        let locations = script.breakpoint_locations.clone();
+        Ok((id, locations))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .removed_breakpoints
+            .push(breakpoint_id.to_string());
+        Ok(())
+    }
+
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_pause_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_resume_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_into(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_into_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_over_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_out(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_out_calls += 1;
+        Ok(())
+    }
+
+    fn evaluate_on_call_frame(
+        &mut self,
+        _call_frame_id: &str,
+        _expression: &str,
+    ) -> Result<EvaluateResult, HostError> {
+        Ok(self.script.lock().unwrap().call_frame_eval_value.clone())
+    }
+
+    fn get_script_source(&mut self, _script_id: &str) -> Result<String, HostError> {
+        Ok(self.script.lock().unwrap().script_source.clone())
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        self.script.lock().unwrap().scripts_parsed.drain(..).collect()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        self.script
+            .lock()
+            .unwrap()
+            .debugger_paused_events
+            .drain(..)
+            .collect()
+    }
+
+    fn profiler_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().profiler_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_sampling_interval(&mut self, microseconds: u32) -> Result<(), HostError> {
+        self.script.lock().unwrap().sampling_interval = Some(microseconds);
+        Ok(())
+    }
+
+    fn start_profiling(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().profiling_starts += 1;
+        Ok(())
+    }
+
+    fn stop_profiling(&mut self) -> Result<CpuProfile, HostError> {
+        Ok(self.script.lock().unwrap().cpu_profile.clone())
+    }
+
+    fn heap_profiler_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().heap_profiler_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn take_heap_snapshot(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(self.script.lock().unwrap().heap_snapshot_chunks.clone())
+    }
+
+    fn collect_garbage(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().garbage_collections += 1;
+        Ok(())
+    }
+
+    fn get_heap_object_id(&mut self, _object_id: &str) -> Result<String, HostError> {
+        Ok(self.script.lock().unwrap().heap_object_id.clone())
+    }
+
+    fn get_object_by_heap_object_id(
+        &mut self,
+        _heap_object_id: &str,
+        _object_group: Option<&str>,
+    ) -> Result<RemoteObject, HostError> {
+        Ok(self.script.lock().unwrap().heap_object_lookup.clone())
+    }
+
+    fn capture_dom_snapshot(
+        &mut self,
+        _computed_styles: &[String],
+    ) -> Result<Vec<DomSnapshotDocument>, HostError> {
+        Ok(self.script.lock().unwrap().dom_snapshot.clone())
+    }
+
+    fn get_cookies(&mut self) -> Result<Vec<Cookie>, HostError> {
+        Ok(self.script.lock().unwrap().cookies.clone())
+    }
+
+    fn set_cookies(&mut self, cookies: &[Cookie]) -> Result<(), HostError> {
+        self.script.lock().unwrap().cookies = cookies.to_vec();
+        Ok(())
+    }
+
+    fn clear_cookies(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().cookies.clear();
+        Ok(())
+    }
+
+    fn get_dom_storage_items(
+        &mut self,
+        storage_id: &DomStorageId,
+    ) -> Result<Vec<(String, String)>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .dom_storage
+            .get(&storage_id.security_origin)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn set_dom_storage_item(
+        &mut self,
+        storage_id: &DomStorageId,
+        key: &str,
+        value: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        let items = script.dom_storage.entry(storage_id.security_origin.clone()).or_default();
+        if let Some(entry) = items.iter_mut().find(|(existing, _)| existing == key) {
+            entry.1 = value.to_string();
+        } else {
+            items.push((key.to_string(), value.to_string()));
+        }
+        Ok(())
+    }
+
+    fn remove_dom_storage_item(
+        &mut self,
+        storage_id: &DomStorageId,
+        key: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        if let Some(items) = script.dom_storage.get_mut(&storage_id.security_origin) {
+            items.retain(|(existing, _)| existing != key);
+        }
+        Ok(())
+    }
+
+    fn clear_dom_storage(&mut self, storage_id: &DomStorageId) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .dom_storage
+            .insert(storage_id.security_origin.clone(), Vec::new());
+        Ok(())
+    }
+
+    fn request_database_names(&mut self, security_origin: &str) -> Result<Vec<String>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .indexed_databases
+            .get(security_origin)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn clear_object_store(
+        &mut self,
+        _security_origin: &str,
+        _database_name: &str,
+        _object_store_name: &str,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    fn delete_database(
+        &mut self,
+        security_origin: &str,
+        database_name: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        if let Some(names) = script.indexed_databases.get_mut(security_origin) {
+            names.retain(|name| name != database_name);
+        }
+        script
+            .deleted_databases
+            .push((security_origin.to_string(), database_name.to_string()));
+        Ok(())
+    }
+
+    fn tracing_categories(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(self.script.lock().unwrap().tracing_categories.clone())
+    }
+
+    fn start_tracing(&mut self, categories: &[String]) -> Result<(), HostError> {
+        self.script.lock().unwrap().last_trace_categories = categories.to_vec();
+        Ok(())
+    }
+
+    fn stop_tracing(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().tracing_stops += 1;
+        Ok(())
+    }
+
+    fn drain_trace_events(&mut self) -> Vec<Json> {
+        std::mem::take(&mut self.script.lock().unwrap().trace_events)
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {

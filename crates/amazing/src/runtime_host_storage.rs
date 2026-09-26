@@ -1153,8 +1153,8 @@ impl RuntimeBindingHost<'_> {
                 return Ok(JsValue::Undefined)}
             let state=self.state.borrow();if let StorageObject::Transaction{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
         }
-        let (connection,mode,names,active)={let state=self.state.borrow();let StorageObject::Transaction{connection,mode,scope,value,queued,..}=&state.storage.as_ref().unwrap().objects[slot] else{unreachable!()};
-            (*connection,*mode,scope.clone(),value.as_ref().is_some_and(IdbTransaction::is_active)||*queued)};
+        let (connection,mode,names,active,live)={let state=self.state.borrow();let StorageObject::Transaction{connection,mode,scope,value,queued,active_for_requests,..}=&state.storage.as_ref().unwrap().objects[slot] else{unreachable!()};
+            (*connection,*mode,scope.clone(),value.as_ref().is_some_and(IdbTransaction::is_active)||*queued,*active_for_requests)};
         match member {
             "mode"=>Ok(JsValue::str(match mode{Mode::ReadOnly=>"readonly",Mode::ReadWrite=>"readwrite",Mode::VersionChange=>"versionchange"})),
             "durability"=>Ok(JsValue::str("default")),"error"=>Ok(JsValue::Null),
@@ -1176,7 +1176,7 @@ impl RuntimeBindingHost<'_> {
                 };
                 if !found {return Err(self.storage_dom_error("NotFoundError","Object store not found"))}
                 self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction:slot,name,key_path_value:None})},
-            "abort"=>{if !active{return Err(self.storage_dom_error("InvalidStateError","Transaction has finished"))}
+            "abort"=>{if !active||!live{return Err(self.storage_dom_error("InvalidStateError","Transaction has finished or is committing"))}
                 let mut state=self.state.borrow_mut();if let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[slot]{tx.abort();}Ok(JsValue::Undefined)},
             "commit"=>Ok(JsValue::Undefined),
             _=>Err(Throw::type_error("Unknown IDBTransaction member")),
@@ -1583,7 +1583,13 @@ impl RuntimeBindingHost<'_> {
                 let length=self.js.binding_get_property(value,"length")?;
                 let count=self.js.binding_to_number(&length)? as usize;
                 if count>100_000{return Err(self.storage_dom_error("DataError","Key is too long"))}
-                let mut items=Vec::new();for index in 0..count {let item=self.js.binding_get_property(value,&index.to_string())?;items.push(self.storage_to_key(&item)?)}
+                // Key conversion reads own elements only: a hole contributes no
+                // key, and an inherited accessor at that index must not run.
+                let mut items=Vec::new();for index in 0..count {
+                    let name=index.to_string();
+                    if self.js.binding_get_own_property(value,&name)?.is_none(){continue}
+                    let item=self.js.binding_get_property(value,&name)?;items.push(self.storage_to_key(&item)?)
+                }
                 Ok(Key::Array(items))
             },
             JsValue::Object(_) if self.storage_binary_bytes(value)?.is_some()=>Ok(Key::Binary(self.storage_binary_bytes(value)?.unwrap())),
@@ -1792,6 +1798,50 @@ mod storage_binding_tests {
         ] {
             assert_eq!(scheduler.run_script(script).unwrap_or_else(|e| panic!("{script}: {}",e.describe())),JsValue::num(expected));
         }
+    }
+
+    #[test]
+    fn indexeddb_array_key_conversion_reads_own_elements_only() {
+        let mut scheduler=scheduler();
+        // A hole at index 50 must not run an inherited accessor, and the lone
+        // own element at 99 must still convert; the array key then compares equal.
+        let value=scheduler.run_script("var calls=0; Object.defineProperty(Object.prototype,'50',{enumerable:true,configurable:true,get:function(){calls++;return 'foo';}}); var array=[]; array[99]=1; var cmp=indexedDB.cmp(array,array); delete Object.prototype['50']; calls+':'+cmp").unwrap_or_else(|error|panic!("{}",error.describe()));
+        assert_eq!(value,JsValue::str("0:0"));
+    }
+
+    #[test]
+    fn indexeddb_clone_invokes_key_path_getters_once() {
+        let mut scheduler=scheduler();
+        // WPT clone-before-keypath-eval shape: an accessor-backed key path must
+        // be evaluated against the structured clone, so the source getter runs
+        // exactly once and put() does not throw.
+        scheduler.run_script("function Probe(){this.id_count=0;this.prop_count=0;Object.defineProperties(this,{id:{enumerable:true,get:function(){++this.id_count;return 1000+this.id_count;}},prop:{enumerable:true,get:function(){++this.prop_count;return 2000+this.prop_count;}}});} \
+            var result='pending'; var rq=indexedDB.open('clone-kp',1); \
+            rq.onupgradeneeded=function(){rq.result.createObjectStore('store',{keyPath:'id'});}; \
+            rq.onsuccess=function(){try{var tx=rq.result.transaction('store','readwrite');var o=new Probe();tx.objectStore('store').put(o);result=o.id_count+','+o.prop_count;}catch(e){result='throw:'+e.name+':'+e.message;}};").unwrap();
+        for step in 1..20 {
+            scheduler.pump_at(Duration::from_millis(step*10),false).unwrap();
+            if scheduler.run_script("result").unwrap()!=JsValue::str("pending") {break}
+        }
+        assert_eq!(scheduler.run_script("result").unwrap(),JsValue::str("1,1"));
+    }
+
+    #[test]
+    fn indexeddb_cursor_advance_under_realtime_pump() {
+        let mut scheduler=scheduler();
+        // Mirrors the WPT harness loop: pump_now with a real clock and a 1 ms
+        // sleep, with no explicit pump_at deadline. index cursor over five
+        // records, advance(2) per success.
+        scheduler.run_script("var out=[]; var rq=indexedDB.open('advance-realtime',1); \
+            rq.onupgradeneeded=function(){var s=rq.result.createObjectStore('t');s.createIndex('i','');s.add('cupcake',5);s.add('pancake',3);s.add('pie',1);s.add('pie',4);s.add('taco',2);}; \
+            rq.onsuccess=function(){var c=rq.result.transaction('t','readonly').objectStore('t').index('i').openCursor(); \
+            c.onsuccess=function(e){var cur=e.target.result;if(!cur){out.push('end');return;}out.push(String(cur.primaryKey));cur.advance(2);};};").unwrap();
+        for _ in 0..300 {
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(1));
+            if scheduler.run_script("out.length").unwrap()==JsValue::num(4.0) {break}
+        }
+        assert_eq!(scheduler.run_script("out.join(',')").unwrap(),JsValue::str("5,1,2,end"));
     }
 
     #[test]

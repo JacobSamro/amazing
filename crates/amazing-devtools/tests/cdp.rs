@@ -1073,3 +1073,335 @@ fn page_endpoint_reports_the_accessibility_tree() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_supports_breakpoints_stepping_and_call_frame_eval() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Debugger.enable", empty());
+    assert_eq!(host.script().lock().unwrap().debugger_enabled, Some(true));
+
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        obj! { "lineNumber" => n(10.0), "url" => s("https://a/x.js") },
+    );
+    assert_eq!(
+        breakpoint.get("breakpointId").unwrap().as_str(),
+        Some("bp-1")
+    );
+    let locations = breakpoint.get("locations").unwrap().as_array().unwrap();
+    assert_eq!(locations.len(), 1);
+    assert_eq!(
+        locations[0].get("scriptId").unwrap().as_str(),
+        Some("script-1")
+    );
+
+    client.result("Debugger.removeBreakpoint", obj! { "breakpointId" => s("bp-1") });
+
+    client.result("Debugger.pause", empty());
+    client.result("Debugger.stepInto", empty());
+    client.result("Debugger.stepOver", empty());
+    client.result("Debugger.stepOut", empty());
+
+    client.result("Debugger.resume", empty());
+    client.wait_event("Debugger.resumed");
+
+    let eval = client.result(
+        "Debugger.evaluateOnCallFrame",
+        obj! { "callFrameId" => s("cf-1"), "expression" => s("x") },
+    );
+    assert_eq!(
+        eval.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(42.0)
+    );
+
+    let source = client.result(
+        "Debugger.getScriptSource",
+        obj! { "scriptId" => s("script-1") },
+    );
+    assert_eq!(
+        source.get("scriptSource").unwrap().as_str(),
+        Some("function f() { return 42; }")
+    );
+
+    {
+        let script = host.script();
+        let mut script = script.lock().unwrap();
+        assert_eq!(script.removed_breakpoints, ["bp-1"]);
+        assert_eq!(script.debugger_pause_calls, 1);
+        assert_eq!(script.debugger_resume_calls, 1);
+        assert_eq!(script.step_into_calls, 1);
+        assert_eq!(script.step_over_calls, 1);
+        assert_eq!(script.step_out_calls, 1);
+        script.push_script_parsed(amazing_devtools::host::ScriptInfo {
+            script_id: "script-2".into(),
+            url: "https://a/y.js".into(),
+            start_line: 0,
+            start_column: 0,
+            end_line: 5,
+            end_column: 0,
+            hash: "abc".into(),
+        });
+    }
+
+    let script_parsed = client.wait_event("Debugger.scriptParsed");
+    assert_eq!(
+        script_parsed
+            .get("params")
+            .unwrap()
+            .get("url")
+            .unwrap()
+            .as_str(),
+        Some("https://a/y.js")
+    );
+
+    client.result("Debugger.disable", empty());
+    assert_eq!(host.script().lock().unwrap().debugger_enabled, Some(false));
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_profiles_cpu_and_heap() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Profiler.enable", empty());
+    client.result("Profiler.setSamplingInterval", obj! { "interval" => n(200.0) });
+    client.result("Profiler.start", empty());
+    let stop = client.result("Profiler.stop", empty());
+    let profile = stop.get("profile").unwrap();
+    let nodes = profile.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(
+        nodes[0]
+            .get("callFrame")
+            .unwrap()
+            .get("functionName")
+            .unwrap()
+            .as_str(),
+        Some("f")
+    );
+    assert_eq!(profile.get("samples").unwrap().as_array().unwrap().len(), 2);
+
+    client.result("HeapProfiler.enable", empty());
+    let snapshot = client.command("HeapProfiler.takeHeapSnapshot", empty(), None);
+    assert_eq!(snapshot.get("result").unwrap(), &empty());
+    let chunk = client.wait_event("HeapProfiler.addHeapSnapshotChunk");
+    assert_eq!(
+        chunk.get("params").unwrap().get("chunk").unwrap().as_str(),
+        Some("{\"snapshot\":1}")
+    );
+    client.wait_event("HeapProfiler.reportHeapSnapshotProgress");
+
+    client.result("HeapProfiler.collectGarbage", empty());
+    let heap_id = client.result(
+        "HeapProfiler.getHeapObjectId",
+        obj! { "objectId" => s("obj-1") },
+    );
+    assert_eq!(
+        heap_id.get("heapSnapshotObjectId").unwrap().as_str(),
+        Some("heap-1")
+    );
+    let resolved = client.result(
+        "HeapProfiler.getObjectByHeapObjectId",
+        obj! { "objectId" => s("heap-1") },
+    );
+    assert_eq!(
+        resolved.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(9.0)
+    );
+
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        assert_eq!(script.profiler_enabled, Some(true));
+        assert_eq!(script.sampling_interval, Some(200));
+        assert_eq!(script.profiling_starts, 1);
+        assert_eq!(script.heap_profiler_enabled, Some(true));
+        assert_eq!(script.garbage_collections, 1);
+    }
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_captures_a_dom_snapshot() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let snapshot = client.result(
+        "DOMSnapshot.captureSnapshot",
+        obj! { "computedStyles" => Json::Array(Vec::new()) },
+    );
+    let documents = snapshot.get("documents").unwrap().as_array().unwrap();
+    assert_eq!(documents.len(), 1);
+    let nodes = documents[0].get("nodes").unwrap();
+    let node_type = nodes.get("nodeType").unwrap().as_array().unwrap();
+    assert_eq!(node_type.len(), 4);
+    let parent_index = nodes.get("parentIndex").unwrap().as_array().unwrap();
+    assert_eq!(parent_index[0].as_f64(), Some(-1.0));
+    assert_eq!(parent_index[1].as_f64(), Some(0.0));
+    assert_eq!(parent_index[3].as_f64(), Some(2.0));
+
+    let strings = snapshot.get("strings").unwrap().as_array().unwrap();
+    let node_name = nodes.get("nodeName").unwrap().as_array().unwrap();
+    let text_name_index = node_name[3].as_f64().unwrap() as usize;
+    assert_eq!(strings[text_name_index].as_str(), Some("#text"));
+    let node_value = nodes.get("nodeValue").unwrap().as_array().unwrap();
+    let text_value_index = node_value[3].as_f64().unwrap() as usize;
+    assert_eq!(strings[text_value_index].as_str(), Some("Hello"));
+
+    let backend = nodes.get("backendNodeId").unwrap().as_array().unwrap();
+    assert_eq!(backend[3].as_f64(), Some(6.0));
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_lists_and_clears_cookies_storage_and_indexed_db() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let cookies = client.result("Storage.getCookies", empty());
+    let cookie_list = cookies.get("cookies").unwrap().as_array().unwrap();
+    assert_eq!(cookie_list[0].get("name").unwrap().as_str(), Some("sid"));
+    assert_eq!(cookie_list[0].get("httpOnly").unwrap().as_bool(), Some(true));
+
+    client.result(
+        "Storage.setCookies",
+        obj! { "cookies" => Json::Array(vec![obj! { "name" => s("a"), "value" => s("b") }]) },
+    );
+    assert_eq!(host.script().lock().unwrap().cookies[0].name, "a");
+
+    client.result("Storage.clearCookies", empty());
+    assert!(host.script().lock().unwrap().cookies.is_empty());
+
+    client.result("DOMStorage.enable", empty());
+    let storage_id = obj! {
+        "securityOrigin" => s("https://example.com"),
+        "isLocalStorage" => Json::Bool(true),
+    };
+    let items = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    let entries = items.get("entries").unwrap().as_array().unwrap();
+    assert_eq!(entries[0].as_array().unwrap()[0].as_str(), Some("theme"));
+
+    client.result(
+        "DOMStorage.setDOMStorageItem",
+        obj! { "storageId" => storage_id.clone(), "key" => s("lang"), "value" => s("en") },
+    );
+    let updated = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    assert_eq!(updated.get("entries").unwrap().as_array().unwrap().len(), 2);
+
+    client.result(
+        "DOMStorage.removeDOMStorageItem",
+        obj! { "storageId" => storage_id.clone(), "key" => s("theme") },
+    );
+    let after_remove = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    assert_eq!(after_remove.get("entries").unwrap().as_array().unwrap().len(), 1);
+
+    client.result("DOMStorage.clear", obj! { "storageId" => storage_id.clone() });
+    let after_clear = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id },
+    );
+    assert!(after_clear.get("entries").unwrap().as_array().unwrap().is_empty());
+
+    client.result("IndexedDB.enable", empty());
+    let names = client.result(
+        "IndexedDB.requestDatabaseNames",
+        obj! { "securityOrigin" => s("https://example.com") },
+    );
+    assert_eq!(
+        names.get("databaseNames").unwrap().as_array().unwrap()[0].as_str(),
+        Some("app-db")
+    );
+
+    client.result(
+        "IndexedDB.deleteDatabase",
+        obj! { "securityOrigin" => s("https://example.com"), "databaseName" => s("app-db") },
+    );
+    let names_after = client.result(
+        "IndexedDB.requestDatabaseNames",
+        obj! { "securityOrigin" => s("https://example.com") },
+    );
+    assert!(names_after.get("databaseNames").unwrap().as_array().unwrap().is_empty());
+    assert_eq!(
+        host.script().lock().unwrap().deleted_databases,
+        [("https://example.com".to_string(), "app-db".to_string())]
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_traces_categories_start_and_end() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let categories = client.result("Tracing.getCategories", empty());
+    assert_eq!(
+        categories.get("categories").unwrap().as_array().unwrap().len(),
+        2
+    );
+
+    client.result(
+        "Tracing.start",
+        obj! { "categories" => s("devtools.timeline,v8") },
+    );
+    assert_eq!(
+        host.script().lock().unwrap().last_trace_categories,
+        ["devtools.timeline", "v8"]
+    );
+
+    client.result("Tracing.end", empty());
+    let collected = client.wait_event("Tracing.dataCollected");
+    let value = collected.get("params").unwrap().get("value").unwrap().as_array().unwrap();
+    assert_eq!(value[0].get("name").unwrap().as_str(), Some("paint"));
+    client.wait_event("Tracing.tracingComplete");
+    assert_eq!(host.script().lock().unwrap().tracing_stops, 1);
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_pushes_accessibility_node_updates() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Accessibility.enable", empty());
+
+    host.script().lock().unwrap().push_ax_update(amazing_devtools::host::AxNode {
+        ax_node_id: "ax-3".into(),
+        role: Some("StaticText".into()),
+        name: Some("Updated".into()),
+        node: Some(amazing_devtools::host::EngineNodeId(6)),
+        ..Default::default()
+    });
+
+    let updated = client.wait_event("Accessibility.nodesUpdated");
+    let nodes = updated.get("params").unwrap().get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].get("nodeId").unwrap().as_str(), Some("ax-3"));
+    assert_eq!(
+        nodes[0].get("name").unwrap().get("value").unwrap().as_str(),
+        Some("Updated")
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+}

@@ -60,7 +60,7 @@ impl Sexpr {
 /// Parse a whole source text into a sequence of top-level s-expressions.
 pub fn parse(source: &str) -> Result<Vec<Sexpr>> {
     let bytes = source.as_bytes();
-    let mut p = Parser { bytes, pos: 0 };
+    let mut p = Parser { bytes, pos: 0, prev_word_or_str_end: None };
     let mut out = Vec::new();
     loop {
         p.skip_trivia()?;
@@ -75,6 +75,11 @@ pub fn parse(source: &str) -> Result<Vec<Sexpr>> {
 struct Parser<'a> {
     bytes: &'a [u8],
     pos: usize,
+    /// End offset of the last atom or string token emitted, used to detect
+    /// a string literal glued directly onto a preceding word or string with
+    /// no separating white space or comment (`data"a"`, `"a""b"`), which the
+    /// text-format lexer rejects even though the boundary is unambiguous.
+    prev_word_or_str_end: Option<usize>,
 }
 
 impl Parser<'_> {
@@ -125,6 +130,12 @@ impl Parser<'_> {
         if self.pos >= self.bytes.len() {
             return Err(WasmError::malformed("unexpected end of input"));
         }
+        // A string glued directly onto the previous word/string token with no
+        // intervening white space or comment is malformed, even though the
+        // `"` makes the boundary unambiguous (`data"a"`, `$l"a"`, `"a""b"`).
+        if self.bytes[self.pos] == b'"' && self.prev_word_or_str_end == Some(self.pos) {
+            return Err(WasmError::malformed("a string literal must be separated by white space"));
+        }
         match self.bytes[self.pos] {
             b'(' => {
                 self.pos += 1;
@@ -140,14 +151,25 @@ impl Parser<'_> {
                     }
                     items.push(self.parse_expr()?);
                 }
+                self.prev_word_or_str_end = None;
                 Ok(Sexpr::List(items))
             }
             b')' => Err(WasmError::malformed("unexpected )")),
+            // A lone `;` (not `;;` or `(;`, both consumed by `skip_trivia`)
+            // never starts a valid token; reject explicitly rather than
+            // let `parse_atom` return an empty atom and spin in place.
+            b';' => Err(WasmError::malformed("unexpected ;")),
             b'"' => {
                 self.pos += 1;
-                Ok(Sexpr::Str(self.parse_string()?))
+                let s = self.parse_string()?;
+                self.prev_word_or_str_end = Some(self.pos);
+                Ok(Sexpr::Str(s))
             }
-            _ => Ok(Sexpr::Atom(self.parse_atom())),
+            _ => {
+                let a = self.parse_atom();
+                self.prev_word_or_str_end = Some(self.pos);
+                Ok(Sexpr::Atom(a))
+            }
         }
     }
 
@@ -155,7 +177,11 @@ impl Parser<'_> {
         let start = self.pos;
         while self.pos < self.bytes.len() {
             match self.bytes[self.pos] {
-                b' ' | b'\t' | b'\n' | b'\r' | b'(' | b')' | b'"' => break,
+                // `;` is never part of a keyword/id/number token: it only
+                // ever appears as `;;` (line comment) or inside `(; ;)`
+                // (block comment), neither of which requires white space
+                // before it (`func;;bla` must lex as `func` then a comment).
+                b' ' | b'\t' | b'\n' | b'\r' | b'(' | b')' | b'"' | b';' => break,
                 _ => self.pos += 1,
             }
         }

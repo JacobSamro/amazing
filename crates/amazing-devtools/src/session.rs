@@ -53,6 +53,9 @@ pub struct EnabledDomains {
     pub fetch: bool,
     pub security: bool,
     pub accessibility: bool,
+    pub debugger: bool,
+    pub dom_storage: bool,
+    pub indexed_db: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -165,6 +168,20 @@ impl SessionState {
                 events.push(domains::security::state_changed(&state));
             }
         }
+        if enabled.accessibility {
+            let updated = self.dev.drain_ax_nodes_updated();
+            if !updated.is_empty() {
+                events.push(domains::accessibility::nodes_updated(&updated));
+            }
+        }
+        if enabled.debugger {
+            for script in self.dev.drain_scripts_parsed() {
+                events.push(domains::debugger::script_parsed(&script));
+            }
+            for paused in self.dev.drain_debugger_paused() {
+                events.push(domains::debugger::paused(&paused));
+            }
+        }
         events
     }
 }
@@ -190,6 +207,14 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Log" => domains::log::dispatch(session, request),
         "Fetch" => domains::fetch::dispatch(session, request),
         "Accessibility" => domains::accessibility::dispatch(session, request),
+        "Debugger" => domains::debugger::dispatch(session, request),
+        "Profiler" => domains::profiler::dispatch(session, request),
+        "HeapProfiler" => domains::heap_profiler::dispatch(session, request),
+        "DOMSnapshot" => domains::dom_snapshot::dispatch(session, request),
+        "Storage" => domains::storage::dispatch(session, request),
+        "DOMStorage" => domains::dom_storage::dispatch(session, request),
+        "IndexedDB" => domains::indexed_db::dispatch(session, request),
+        "Tracing" => domains::tracing::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }
