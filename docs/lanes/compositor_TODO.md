@@ -336,3 +336,79 @@ Still open: `app-dashboard`'s `BakedFallback` reason on img-only content;
 pages that always fall back (`border-collapse` tables, form controls) have
 no retained tiled path and so no frame-time story beyond "full repaint every
 frame."
+
+### COMP-18 wire the compositor into the live GPUI shell's frame loop
+
+`engine_viewport.rs`'s pre-existing `scroll_input` tail (build a frame from
+current property state via `Compositor::build_cached_frame`, falling back to
+a full `DisplayListView`/`EngineCompositor::update` rebuild only on
+`MissingCachedTile`, then present into the retained `scroll_frame`) is now
+shared, via a new `rebuild_retained_frame`, with two new public methods:
+`animate_transform`/`animate_opacity`. These are the shell's entry points for
+`transform`/`opacity` CSS animations to update the live viewport without a
+full repaint, matching what `scroll_input` already did for scroll -- ready
+for the `ia-animations` driver to call once it exists; nothing in this
+codebase drives real CSS transitions yet, so no other file needed to change.
+
+Also fixed `compositor_presenter.rs`'s `single_tile_opacity_and_rect_clip_
+stay_on_gpui_tile_path` test the shell and a11y lanes flagged
+(`left: 0.5019608, right: 0.5`): the reference painter's `blend_source_over`
+always quantizes opacity to 8 bits even for a single, non-nested effect
+group, and `PropertyTrees::opacity` already preserves that rounding for
+pixel parity -- the test's literal `0.5` expectation was the bug, not the
+compositor. Fixed to assert against `quantize_opacity(0.5) as f32 / 255.`.
+
+A new `shell_viewport_frame_time_trace` test proves tile reuse end to end
+through the real shell API (not the compositor crate directly): on 3
+real-page fixtures with the COMP-17 scaffold prepended, `scroll_input`/
+`animate_transform`/`animate_opacity` each get 8 timed steps, and after each
+step an untimed, direct `Compositor::build_cached_frame` recheck is asserted
+`Ok` -- per `quad.rs`, that call fails the instant any needed tile is
+missing or dirty, so an unconditional `Ok` on all 72 steps is a direct,
+zero-reraster proof for scroll, transform and opacity alike.
+
+Honest caveat, found by the same test: `direct_tiles=Some(false)` on every
+row. GPUI's presenter can only place tiles directly (skipping a full CPU
+recompose) for a single-pass, axis-aligned, `BlendMode::Normal` frame: the
+scaffold's own `transform`/`opacity` elements force an effect pass
+(`EffectPassBuilder`, COMP-16), which drops the *whole page* off that fast
+path, not just those elements. So while the compositor's raster/tile-cache
+layer never rerasters (proven above), the end-to-end
+`scroll_input`/`animate_*` wall time is currently dominated by
+`GpuiPresenter` falling back to `ReferenceCpuPresenter`'s full recompose --
+comparable in cost to a full repaint (see the measured table in
+`crates/amazing-shell-gpui/evidence/comp18/shell-frame-time.md`). Closing
+this needs a GPUI-native way to place a multi-pass/transformed frame -- the
+presenter-layer counterpart to COMP-16's matrix-aware compositing -- which is
+real, separate follow-up work, filed rather than silently left unmeasured.
+
+Measured on a fresh `git merge dev` (local `dev` had moved to touch
+`engine_viewport.rs`/`compositor_presenter.rs`/`paint_filters.rs` since this
+ticket started -- A11Y-11's accessibility-tree field and RC's polygon-clip
+import, both merged clean except one already-fixed duplicate of this
+ticket's own `compositor_presenter.rs` test fix, kept as dev's version):
+`amazing-shell-gpui` (excluded from the main workspace, gated on its own,
+required regenerating its own `Cargo.lock` for the new dependency set pulled
+in by the merge) **75/75 passed, 0 failed** via `cargo test --locked --bin
+amazing-shell`. No `amazing-compositor` source touched this ticket. Full
+workspace gate on the merged head: **3338 tests run, 3338 passed, 0 failed,
+17 skipped (3 slow)**, doctests 4 suites/4 passed/0 failed. Zero lost passes.
+
+Real-pages screenshot gate (`scripts/linux-shell-capture.sh compositor
+--real-pages`): **not** zero-mismatch on this ticket's build host
+(worker-2) -- 50 mismatch/2 excluded/0 crash -- but proven pre-existing and
+unrelated to this ticket's code, not a regression: (1) the checked-in
+baselines were captured on a Boat sandbox's specific Mesa/Xvfb/font stack,
+and worker-2 needed `xvfb`/`xdotool`/`imagemagick`/`mesa-vulkan-drivers`
+freshly installed just to run the capture at all, so a different
+software-rendering stack producing small, page-wide pixel drift is expected;
+(2) with this ticket's diff stashed out entirely (tree back at the
+pre-ticket `dev`-merge commit), `--real-pages --only news-section`
+reproduces the *exact same* `ae=19094` mismatch; (3) `--real-pages` only
+exercises each page's plain initial paint -- it never calls
+`scroll_input`/`animate_transform`/`animate_opacity`, so none of this
+ticket's changed code runs during the capture regardless. Filed as a
+cross-lane infrastructure gap in `questions.md` (any lane capturing
+`--real-pages` off a non-Boat host will see this same drift against the
+Boat-captured baselines). Full detail and the control-test method:
+`crates/amazing-shell-gpui/evidence/comp18/shell-frame-time.md`.
