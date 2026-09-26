@@ -2390,6 +2390,34 @@ impl Interpreter {
                     let window = JsValue::Object(self.global_obj.clone());
                     return self.set_prop(&window, "location", value);
                 }
+                // A `var`-like global binding (declared or built in, e.g.
+                // `undefined`/`NaN`/`Infinity`) is mirrored onto the global
+                // object; Env::assign_raw applies the write when the mirrored
+                // property is writable but otherwise silently no-ops it while
+                // still reporting success, so a non-writable global never
+                // throws even in strict mode. Route through the object's own
+                // [[Set]] (set_with_receiver), which already has correct
+                // per-property writable/accessor semantics, and apply PutValue's
+                // strict/sloppy handling of an unsuccessful [[Set]] exactly as
+                // Reference::Property does below.
+                if let Some(global) = env.global_binding_object(&name) {
+                    let key = PropertyKey::from(name.as_str());
+                    let receiver = JsValue::Object(global.clone());
+                    if self.set_with_receiver(&global, &key, value.clone(), receiver)? {
+                        // Keep the env-level binding cell's mirror in sync;
+                        // harmless no-op re-write since we just confirmed it
+                        // succeeded (reads of a global non-lexical binding go
+                        // through the object property directly, not this
+                        // cell, but other bindings still fall back to it).
+                        let _ = env.assign(&name, value);
+                        return Ok(());
+                    } else if !self.strict_eval_context {
+                        // PutValue ignores an unsuccessful [[Set]] for sloppy references.
+                        return Ok(());
+                    } else {
+                        return Err(Throw::type_error(format!("Cannot assign to read only property '{name}'")));
+                    }
+                }
                 if !env.assign(&name, value.clone())? {
                     self.global_env.declare_var(&name, value)?;
                 }
@@ -3878,7 +3906,13 @@ impl Interpreter {
             if Rc::ptr_eq(&o.0, &p.0) {
                 return Ok(JsValue::Bool(true));
             }
-            c = o.borrow().proto.clone()
+            // A Proxy (or WindowProxy) mid-chain must have its getPrototypeOf
+            // trap observed, same as the Get(b, "prototype") call above.
+            c = if let Some(result) = self.window_proxy_prototype(&o) {
+                match result? { JsValue::Object(p) => Some(p), _ => None }
+            } else if let Some(result) = self.proxy_get_prototype(&o) {
+                match result? { JsValue::Object(p) => Some(p), _ => None }
+            } else { o.borrow().proto.clone() };
         }
         Ok(JsValue::Bool(false))
     }
