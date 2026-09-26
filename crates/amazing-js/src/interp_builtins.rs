@@ -876,17 +876,9 @@ fn native_object_get_prototype_of(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    if let Some(JsValue::Object(object)) = args.first() {
-        if let Some(result) = i.window_proxy_prototype(object) { return result; }
-    }
     match args.first() {
         Some(JsValue::Symbol(_)) => Ok(JsValue::Object(i.symbol_proto.clone())),
-        Some(JsValue::Object(object)) => Ok(object
-            .borrow()
-            .proto
-            .clone()
-            .map(JsValue::Object)
-            .unwrap_or(JsValue::Null)),
+        Some(JsValue::Object(object)) => i.default_get_prototype(object),
         _ => Err(Throw::type_error("getPrototypeOf target is not an object")),
     }
 }
@@ -921,13 +913,7 @@ fn native_object_has_own(
         _ => return Err(Throw::type_error("hasOwn target is not an object")),
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    if let Some(result) = i.window_proxy_own_property(object, &key) { return Ok(JsValue::Bool(result?.is_some())); }
-    if let Some(own) = binary_index_descriptor(object, &key) { return Ok(JsValue::Bool(own.is_some())); }
-    let own = match key.as_string() {
-        Some(name) => i.legacy_own_property(object, name, false)?.is_some(),
-        None => object.borrow().own_prop(&key).is_some(),
-    };
-    Ok(JsValue::Bool(own))
+    Ok(JsValue::Bool(i.default_get_own_property(object, &key)?.is_some()))
 }
 
 fn native_array_is_array(
@@ -1100,6 +1086,12 @@ fn native_prevent_extensions(
     let target = args.first().cloned().unwrap_or(this);
     match target {
         JsValue::Object(object) => {
+            if matches!(object.borrow().exotic, Exotic::Proxy(_)) {
+                if !i.default_prevent_extensions(&object)? {
+                    return Err(Throw::type_error("cannot prevent extensions on this proxy"));
+                }
+                return Ok(JsValue::Object(object));
+            }
             if i.is_window_proxy(&object) || i.legacy_for(&object).is_some() { return Err(Throw::type_error("cannot prevent extensions on a legacy platform object")); }
             object.borrow_mut().extensible = false;
             Ok(JsValue::Object(object))
@@ -1116,7 +1108,7 @@ fn native_is_extensible(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     match args.first() {
-        Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.is_window_proxy(object) || i.legacy_for(object).is_some() || object.borrow().extensible)),
+        Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.default_is_extensible(object)?)),
         _ => Err(Throw::type_error("isExtensible target is not an object")),
     }
 }
@@ -2117,6 +2109,10 @@ fn native_object_get_own_property_descriptor(
     };
     if let Some(result) = i.window_proxy_own_property(object, &key) {
         return Ok(result?.map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
+    }
+    if matches!(object.borrow().exotic, Exotic::Proxy(_)) {
+        return Ok(i.default_get_own_property(object, &key)?
+            .map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
     }
     if let Some(property) = binary_index_descriptor(object, &key) {
         let Some(property) = property else { return Ok(JsValue::Undefined); };
@@ -3361,13 +3357,5 @@ fn native_property_is_enumerable(
 ) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("propertyIsEnumerable receiver is not an object")); };
     let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
-    if let Some(result) = i.window_proxy_own_property(&object, &key) {
-        return Ok(JsValue::Bool(result?.is_some_and(|p| p.enumerable)));
-    }
-    if let Some(property) = binary_index_descriptor(&object, &key) { return Ok(JsValue::Bool(property.is_some())); }
-    let property = match key.as_string() {
-        Some(name) => i.legacy_own_property(&object, name, false)?,
-        None => object.borrow().own_prop(&key).cloned(),
-    };
-    Ok(JsValue::Bool(property.is_some_and(|property| property.enumerable)))
+    Ok(JsValue::Bool(i.default_get_own_property(&object, &key)?.is_some_and(|property| property.enumerable)))
 }

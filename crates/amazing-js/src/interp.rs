@@ -5,7 +5,7 @@
 //! set of ES built-ins using only `std`. Modules, generators and a
 //! real asynchronous job queue remain explicit later milestones.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1957,6 +1957,11 @@ impl Interpreter {
                             if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
                             return Ok(JsValue::Bool(deleted));
                         }
+                        if let Some(result) = self.proxy_delete(&o, &k) {
+                            let deleted = result?;
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
+                            return Ok(JsValue::Bool(deleted));
+                        }
                         if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
                             if o.borrow().own_prop(&k).is_some() {
                                 return Err(Throw::type_error("module namespace export cannot be deleted"));
@@ -2145,6 +2150,7 @@ impl Interpreter {
                 match b {
                     JsValue::Object(o) => {
                         if let Some(result) = self.window_proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
+                        if let Some(result) = self.proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
                         Ok(JsValue::Bool(match k.as_string() {
                         _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
@@ -2248,7 +2254,7 @@ impl Interpreter {
         if let Some(value) = env.resolve(name) {
             return Ok(Some(value));
         }
-        let exists = self.global_obj.borrow().has_property(name);
+        let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
         if exists {
             let global = JsValue::Object(self.global_obj.clone());
             self.get_prop(&global, name).map(Some)
@@ -2271,7 +2277,7 @@ impl Interpreter {
                 }
                 if let Some(value) = env.resolve(&identifier.name) {
                     Ok((Reference::Binding(identifier.name.clone()), value))
-                } else if self.global_obj.borrow().has_property(&identifier.name) {
+                } else if self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(identifier.name.as_str()))? {
                     let global = JsValue::Object(self.global_obj.clone());
                     let value = self.get_prop(&global, &identifier.name)?;
                     Ok((Reference::Property(global, identifier.name.clone().into()), value))
@@ -2568,6 +2574,12 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("value is not callable")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return match new_target {
+                Some(nt) => self.proxy_construct(&o, args, nt),
+                None => self.proxy_call(&o, this, args),
+            };
+        }
         let fun = o
             .borrow()
             .func
@@ -2770,6 +2782,9 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("constructor is not an object")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return self.proxy_construct(&o, args, new_target);
+        }
         let fun = o
             .borrow()
             .func
@@ -3777,8 +3792,8 @@ impl Interpreter {
         let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
         if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
         if !a.is_object() { return Ok(JsValue::Bool(false)); }
-        let p = match r.borrow().get_own("prototype") {
-            Some(JsValue::Object(p)) => p,
+        let p = match self.get_prop(b, "prototype")? {
+            JsValue::Object(p) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
         };
         if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
@@ -3809,6 +3824,7 @@ include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
+include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
