@@ -14,7 +14,7 @@ continuous idleness it is stopped: Boat snapshots it first and billing ends; a
 
 Sandboxes whose name contains "keep" are never stopped.
 
-Usage: scripts/boat-idle-reaper.py [--idle-minutes 15] [--poll 60] [--dry-run]
+Usage: scripts/boat-idle-reaper.py [--idle-minutes 5] [--scarce-idle-minutes 15] [--poll 60] [--dry-run]
 """
 
 from __future__ import annotations
@@ -69,9 +69,23 @@ def is_busy(sandbox_id: str) -> bool | None:
     return load >= LOAD_BUSY or procs > 0
 
 
+START_RESERVE = 15  # keep this many hourly starts free for lanes and Test262 shards
+
+
+def starts_left_this_hour() -> int | None:
+    status = boat("billing", "status") or {}
+    try:
+        return int(status["limits"]["starts"]["hour"]["remaining"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--idle-minutes", type=float, default=15)
+    ap.add_argument("--idle-minutes", type=float, default=5)
+    # Every resume counts against Boat's 60 starts per hour. When few are left,
+    # stopping early just forces a resume that may be refused, so wait longer.
+    ap.add_argument("--scarce-idle-minutes", type=float, default=15)
     ap.add_argument("--poll", type=int, default=60)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -80,6 +94,10 @@ def main() -> int:
     log(f"reaper started: stop after {args.idle_minutes:g} idle minutes, poll {args.poll}s")
     while True:
         now = time.time()
+        left = starts_left_this_hour()
+        limit = args.idle_minutes
+        if left is not None and left < START_RESERVE:
+            limit = args.scarce_idle_minutes
         live = running_sandboxes()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
@@ -91,7 +109,7 @@ def main() -> int:
                 continue
             first = idle_since.setdefault(sid, now)
             idle_min = (now - first) / 60
-            if idle_min >= args.idle_minutes:
+            if idle_min >= limit:
                 log(f"STOP {sid} ({name}, {sb.get('type')}) idle {idle_min:.0f} min")
                 if not args.dry_run:
                     boat("stop", sid, timeout=120)

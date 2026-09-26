@@ -97,7 +97,7 @@ impl LengthPercentage {
         }
     }
 
-    fn nonnegative(self) -> bool {
+    pub fn is_nonnegative(self) -> bool {
         match self {
             Self::Px(n) | Self::Percentage(n) | Self::Relative(n, _) => n >= 0.0,
         }
@@ -266,6 +266,16 @@ pub enum ComputedValue {
     TextAlign(TextAlign),
     WritingMode(WritingMode),
     Transform(Vec<Transform>),
+    FilterList(crate::effects::FilterList),
+    BlendMode(crate::effects::BlendMode),
+    /// `isolation: isolate` is true; `auto` is false.
+    Isolation(bool),
+    MaskImage(Vec<String>),
+    MaskMode(crate::effects::MaskMode),
+    MaskType(crate::effects::MaskType),
+    MaskComposite(crate::effects::MaskComposite),
+    MaskBox(crate::effects::MaskBox),
+    ClipPath(crate::effects::ClipPath),
     /// Grammar outside this prototype. The original text is available via get().
     Unparsed,
 }
@@ -358,6 +368,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         ($ty:ident) => {
             return $ty::parse(css).map(V::$ty)
         };
+    }
+    if property == "clip-path" {
+        return crate::effects::parse_clip_path(css).map(V::ClipPath);
     }
     if crate::svg_presentation::is_svg_property(property) {
         return crate::svg_presentation::parse_property(property, css);
@@ -490,6 +503,42 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             };
         }
         "transform" => return transforms(css).map(V::Transform),
+        "filter" | "backdrop-filter" => {
+            return crate::effects::parse_filter_list(css).map(V::FilterList);
+        }
+        "mix-blend-mode" => {
+            return crate::effects::parse_blend_mode(css).map(V::BlendMode);
+        }
+        "isolation" => {
+            return crate::effects::parse_isolation(css).map(V::Isolation);
+        }
+        "mask-image" => {
+            return crate::effects::parse_mask_image(css).map(V::MaskImage);
+        }
+        "mask-mode" => {
+            return crate::effects::parse_mask_mode(css).map(V::MaskMode);
+        }
+        "mask-type" => {
+            return crate::effects::parse_mask_type(css).map(V::MaskType);
+        }
+        "mask-composite" => {
+            return crate::effects::parse_mask_composite(css).map(V::MaskComposite);
+        }
+        "mask-clip" => {
+            return crate::effects::parse_mask_box(css, true).map(V::MaskBox);
+        }
+        "mask-origin" => {
+            return crate::effects::parse_mask_box(css, false).map(V::MaskBox);
+        }
+        "mask-repeat" => {
+            return crate::effects::valid_repeat_list(css).then_some(V::Unparsed);
+        }
+        "mask-position" => {
+            return crate::effects::valid_position_list(css).then_some(V::Unparsed);
+        }
+        "mask-size" => {
+            return crate::effects::valid_size_list(css).then_some(V::Unparsed);
+        }
         "line-height" if number(css).is_some() => {
             return number(css).filter(|n| *n >= 0.0).map(V::Number);
         }
@@ -578,6 +627,14 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     {
         return Some(V::Unparsed);
     }
+    // CSS Values 5 calc-size() is valid in sizing contexts. The intrinsic
+    // `size` keyword stays unresolved for layout's used-value stage; the
+    // canonical text is retained through `get()` and `typed()`.
+    if size && crate::math::calc_size(css) {
+        return Some(V::LengthPercentageExpression(crate::syntax::serialize(
+            &tokenize(css),
+        )));
+    }
     if crate::math::length_percentage(css, !(border || property == "letter-spacing")) {
         return Some(V::LengthPercentageExpression(crate::syntax::serialize(
             &tokenize(css),
@@ -588,7 +645,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     {
         return None;
     }
-    if !(margin || inset || spacing || property == "text-indent") && !length.nonnegative() {
+    if !(margin || inset || spacing || property == "text-indent") && !length.is_nonnegative() {
         return None;
     }
     Some(V::LengthPercentage(length))
@@ -700,6 +757,49 @@ mod tests {
             assert!(matches!(parse("width", &calc),
                 Some(ComputedValue::LengthPercentageExpression(value)) if value == calc));
         }
+    }
+    #[test]
+    fn calc_size_is_preserved_for_layout() {
+        let canonical = |css: &str| crate::syntax::serialize(&tokenize(css));
+        for css in [
+            "calc-size(auto, size + 20px)",
+            "calc-size(min-content, size / 2)",
+            "calc-size(max-content, size)",
+            "calc-size(fit-content, size)",
+            "calc-size(fit-content(10px), size + 1px)",
+            "calc-size(any, 20px)",
+            "calc-size(50%, size + 10px)",
+            "calc-size(calc-size(auto, size), size + 10px)",
+        ] {
+            let expected = canonical(css);
+            for property in ["width", "min-width", "max-height", "flex-basis", "inline-size"] {
+                assert!(
+                    matches!(parse(property, css),
+                        Some(ComputedValue::LengthPercentageExpression(value)) if value == expected),
+                    "{property}: {css}"
+                );
+            }
+        }
+        // The computed declaration survives the validity gate so layout can
+        // evaluate the intrinsic basis at the used-value stage.
+        let style = style(None, &[("min-width", "calc-size(auto, size + 20px)")]);
+        assert_eq!(style.get("min-width"), Some("calc-size(auto, size + 20px)"));
+        assert!(matches!(style.typed("min-width"),
+            Some(ComputedValue::LengthPercentageExpression(_))));
+        // `any` forbids the `size` keyword; malformed arithmetic and trailing
+        // tokens are rejected; non-sizing properties do not accept the function.
+        for invalid in [
+            "calc-size(any, size)",
+            "calc-size(auto)",
+            "calc-size(auto size)",
+            "calc-size(auto, size + 20px) 5px",
+            "calc-size(bogus, 20px)",
+            "calc-size(auto, size +)",
+            "calc-size(auto, size + 1em +)",
+        ] {
+            assert!(parse("min-width", invalid).is_none(), "{invalid}");
+        }
+        assert!(parse("margin-top", "calc-size(auto, size + 20px)").is_none());
     }
     #[test]
     fn ruby_one_grammars_and_display_values() {
