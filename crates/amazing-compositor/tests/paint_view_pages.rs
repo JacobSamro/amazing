@@ -30,8 +30,18 @@ fn paint_view_owner_mapping_binds_dom_properties_to_tree_nodes() {
     );
     let source = PaintViewSource::new(&view);
     let bindings = source.property_bindings().expect("stable paint owners");
+    assert_eq!(bindings.len(), 4, "document scroll plus three outer properties");
+    let document = bindings.iter().find(|(_, target)|
+        *target == BoundPropertyNode::Scroll(ScrollId(1)))
+        .expect("document viewport scroll binding");
+    assert_eq!(document.0.node, root.node.expect("document layout owner").0);
+    assert_eq!(document.0.generation, 7);
+    assert_eq!(document.0.property, BoundProperty::Scroll);
+    assert!(!bindings.iter().any(|(_, target)|
+        *target == BoundPropertyNode::Scroll(ScrollId(0))), "synthetic root has no DOM owner");
     let owner = bindings.iter().find(|(key, _)| key.property == BoundProperty::Transform)
         .expect("outer transform binding").0.node;
+    assert_ne!(owner, document.0.node, "nested and document scroll owners stay distinct");
     let outer = bindings.iter().filter(|(key, _)| key.node == owner).collect::<Vec<_>>();
     assert_eq!(outer.len(), 3);
     assert!(outer.iter().all(|(key, _)| key.generation == 7));
