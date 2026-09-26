@@ -16,7 +16,7 @@ object.proto = Some(i.boolean_proto.clone());
         Some(JsValue::Str(string)) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.string_proto.clone());
-            object.define("[[StringData]]", symbol_data(JsValue::Str(string), true, true)).unwrap();
+            object.initialize_string_data(string);
             JsValue::object(object)
         }
         Some(JsValue::BigInt(value)) => {
@@ -2732,45 +2732,26 @@ fn native_string_from_char_code(
 }
 
 fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let constructing = i.current_new_target().is_some();
     let value = match a.first() {
         None => JsValue::str(""),
-        Some(JsValue::Symbol(symbol)) if !this.is_object() => JsValue::str_units(symbol.descriptive_units()),
+        Some(JsValue::Symbol(symbol)) if !constructing => JsValue::str_units(symbol.descriptive_units()),
         Some(value) => JsValue::str(i.to_js_string(value)?),
     };
-    if let JsValue::Object(object) = &this {
-        let JsValue::Str(units) = &value else { unreachable!() };
-        string_exotic_install(object, units);
+    if constructing {
+        let JsValue::Object(object) = &this else { unreachable!() };
+        let JsValue::Str(string) = value else { unreachable!() };
+        object.borrow_mut().initialize_string_data(string);
+        Ok(this)
+    } else {
+        Ok(value)
+    }
         Ok(this)
     } else {
         Ok(value)
     }
 }
 
-// A String exotic object exposes an own non-writable, non-configurable `length`
-// and an own non-writable, non-enumerable index property per code unit, over
-// its [[StringData]]. The [[StringData]] slot itself stays a primitive string so
-// JSON, structured clone and array-like helpers keep reading it unchanged.
-fn string_exotic_install(object: &Obj, units: &crate::value::JsString) {
-    let length = Property {
-        value: JsValue::num(units.len() as f64),
-        writable: false, enumerable: false, configurable: false,
-        getter: None, setter: None,
-    };
-    let mut o = object.borrow_mut();
-    for (index, unit) in units.units().iter().enumerate() {
-        o.define(&index.to_string(), Property {
-            value: JsValue::str_units(vec![*unit]),
-            writable: false, enumerable: true, configurable: false,
-            getter: None, setter: None,
-        }).unwrap();
-    }
-    o.define("length", length).unwrap();
-    o.define("[[StringData]]", Property {
-        value: JsValue::Str(units.clone()),
-        writable: false, enumerable: false, configurable: false,
-        getter: None, setter: None,
-    }).unwrap();
-}
 fn native_string_split(
     i: &mut Interpreter,
     this: JsValue,
