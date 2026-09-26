@@ -278,15 +278,32 @@ fn render_wpt_surface_after_first_paint(
         if !root_has_reftest_wait(&host)? {
             break;
         }
-        scheduler.pump_at(Duration::from_millis(frame * 16), true)
-            .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
         sampled_at = (frame * 16) as f64;
-        let handoff_events = {
-            let dom = host.borrow();
+        // The compositor ticks once per frame from the EventLoop's post-rAF
+        // render step, so the retained property scene samples the same virtual
+        // clock the harness advances and stays aligned with the page's rAF
+        // mutations. Events are dispatched after the loop step releases.
+        let mut handoff_events = Vec::new();
+        {
+            let dom_host = host.clone();
+            let oracle_ref = &mut oracle;
             let (timeline, animated) = animations.handoff_state_mut();
-            oracle.on_vsync(&dom.dom, timeline, animated, sampled_at)
-                .map(|(_, events)| events).unwrap_or_default()
-        };
+            scheduler.pump_at_with_render(
+                Duration::from_millis(frame * 16),
+                true,
+                |phase, timestamp| {
+                    if phase != amazing_dom::event_loop::RenderPhase::AfterAnimationFrames {
+                        return;
+                    }
+                    let at = timestamp.as_secs_f64() * 1000.;
+                    let dom = dom_host.borrow();
+                    if let Some((_, events)) = oracle_ref.on_vsync(&dom.dom, timeline, animated, at) {
+                        handoff_events.extend(events);
+                    }
+                },
+            )
+            .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
+        }
         for event in handoff_events {
             use amazing_compositor::CssAnimationEventKind as Kind;
             use amazing_css::animation::AnimationMainThreadEventKind as MainKind;
@@ -349,7 +366,7 @@ fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, Pag
         .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == "reftest-wait")))
 }
 
-fn paint_host_surface(
+pub(crate) fn paint_host_surface(
     host: &Rc<RefCell<BrowserDomHost>>,
     html_path: &str,
     width: f32,
@@ -450,7 +467,7 @@ fn paint_host_surface_with_updates(
     }
     let styled = amazing_css::compute_with_animations_and_environment(
         &dom.dom, &sheets, animated, &environment);
-    let media = load_page_media(&dom.dom, html_path, &styled);
+    let mut media = crate::page::load_page_media_in_viewport(&dom.dom, html_path, &styled, width, 1.0);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
@@ -458,7 +475,7 @@ fn paint_host_surface_with_updates(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_styled_document(
+    let mut root = amazing_layout::layout_styled_document(
         &dom.dom,
         &styled,
         &page_text.provider,
@@ -466,6 +483,14 @@ fn paint_host_surface_with_updates(
         width,
         fixed_height.map(|height| height as f32),
     );
+    if media.load_visible_lazy(&root, amazing_media::loading::ViewportRect {
+        x: 0.0, y: 0.0, width, height: fixed_height.unwrap_or(600) as f32,
+    }) > 0 {
+        root = amazing_layout::layout_styled_document(
+            &dom.dom, &styled, &page_text.provider, &media,
+            width, fixed_height.map(|height| height as f32),
+        );
+    }
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.

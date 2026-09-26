@@ -82,6 +82,14 @@ DEFAULT_SESSION_PREFIX = "termirust-amazing-"
 # files (ARCHITECTURE.md, README.md, todo.md, root Cargo.toml) belong to the
 # integrator alone and appear in no lane.
 LANE_PATHS = {
+    # 2026-09-26 fleet expansion: six more lanes split off existing areas or
+    # started on independent Stage 4/5 crates.
+    "js-date": ["crates/amazing-js/src/builtins_date"],
+    "js-intl": ["crates/amazing-js/src/builtins_intl"],
+    "layout-flexgrid": ["crates/amazing-layout/src/flex", "crates/amazing-layout/src/grid"],
+    "wasm": ["crates/amazing-wasm/"],
+    "a11y": ["crates/amazing-a11y/"],
+    "devtools": ["crates/amazing-devtools/"],
     # amazing-js is split between two lanes. js-lang owns the front half
     # (lexing, parsing, AST) and amazing-regex; js-runtime owns the execution
     # half. ast.rs is the contract: js-lang owns it and only adds to it.
@@ -315,6 +323,8 @@ LANE_GRANTS.setdefault("replaced-content", []).append("crates/amazing/tests/phas
 LANE_GRANTS["dom-bindings"].append("crates/amazing/src/dom_host.rs")
 # JSRT: one-line [[NumberData]] non-enumerable fix in js-stdlib's Number installer.
 LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/builtins_std_number_math.rs")
+# JSRT-9 realms (2026-09-26): narrow WindowProxy dispatch hooks in the object model and Reflect.
+LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing-js/src/builtins_std_object_model.rs", "crates/amazing-js/src/builtins_std_reflect.rs"])
 # JSRT: JsFunction gains a strict bit; mechanical initializer edits in two external files.
 LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-js/examples/test262_host.rs"])
 # HTML-25: iframe getters/insertion hooks (additive) across bindings, driver, scheduler, WPT runner.
@@ -334,6 +344,9 @@ LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-dom/src/forms.rs", "c
 LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/Cargo.lock", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs"])
 # IPC-11: one postMessage/BroadcastChannel drain hook in the driver scheduler.
 LANE_GRANTS.setdefault("ipc", []).append("crates/amazing/src/js_scheduler.rs")
+# 2026-09-26 new lanes: one additive installer line each.
+LANE_GRANTS.setdefault("js-date", []).append("crates/amazing-js/src/interp_install.rs")
+LANE_GRANTS.setdefault("js-intl", []).append("crates/amazing-js/src/interp_install.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as

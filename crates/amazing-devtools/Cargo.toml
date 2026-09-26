@@ -1,0 +1,9 @@
+[package]
+name = "amazing-devtools"
+description = "Chrome DevTools Protocol server: WebSocket/HTTP transport, CDP domains and the engine-facing seam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

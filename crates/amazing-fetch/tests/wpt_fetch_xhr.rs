@@ -280,6 +280,35 @@ fn fetch_cors_preflight_and_credentials_from_wpt() {
     }
     m.done();
 }
+
+#[test]
+fn concurrent_preflight_requests_finish() {
+    let same = WptServer::new();
+    let cross = WptServer::new();
+    let base = base(&same);
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let mut pending = Vec::new();
+    for index in 0..22 {
+        let url = cross.url(&format!(
+            "/fetch/api/resources/preflight.py?token=parallel{index}&allow_methods=DELETE"
+        ));
+        let mut init = ApiRequestInit::default();
+        init.method = Some(u("DELETE"));
+        pending.push(service.start(request(&base, &url, init), ClientContext::default()).unwrap());
+    }
+    let start = Instant::now();
+    for tick in 0..10_000 {
+        for event in service.step(8192, start + Duration::from_millis(tick)) {
+            if let ServiceEvent::Finished { id, result } = event {
+                assert!(result.is_ok(), "preflight {id:?}: {result:?}");
+                pending.retain(|waiting| *waiting != id);
+            }
+        }
+        if pending.is_empty() { return; }
+        thread::sleep(Duration::from_millis(1));
+    }
+    panic!("preflight requests did not finish: {pending:?}");
+}
 #[test]
 fn fetch_body_abort_and_header_guards_from_wpt() {
     // fetch/api/abort/general.any.js, body/ and headers/ network-visible subset.
@@ -480,6 +509,31 @@ fn xhr_states_events_response_type_and_redirect_from_wpt() {
         m.check(format!("xhr responseType {path}"), ok);
     }
     m.done();
+}
+
+#[test]
+fn xhr_redirect_rewrites_post_method_and_body_headers() {
+    let server = WptServer::new();
+    let base = base(&server);
+    for (status, expected_method, expected_content_type) in [
+        (301, "GET", "NO"),
+        (302, "GET", "NO"),
+        (303, "GET", "NO"),
+        (307, "POST", "application/x-pony"),
+    ] {
+        let mut xhr = Xhr::default();
+        let url = server.url(&format!("/xhr/resources/redirect.py?location=content.py&code={status}"));
+        xhr.open(&u("POST"), &u(&url), true, &base, base.origin().clone()).unwrap();
+        xhr.set_request_header(&u("Content-Type"), &u("application/x-pony")).unwrap();
+        xhr.send(None, 0).unwrap();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        xhr_run(&mut service, &mut xhr);
+        assert_eq!(xhr.status(), 200, "status {status}");
+        assert_eq!(xhr.get_response_header(&u("x-request-method")).unwrap().as_deref(),
+            Some(expected_method), "status {status}");
+        assert_eq!(xhr.get_response_header(&u("x-request-content-type")).unwrap().as_deref(),
+            Some(expected_content_type), "status {status}");
+    }
 }
 
 #[test]
