@@ -213,6 +213,16 @@ fn outer_cell_size(cell: &LayoutBox, size: f32, edges: f32) -> f32 {
     }
 }
 
+// CSS2 §17.6.1 distinguishes HTML table widths from CSS table boxes on
+// ordinary elements. Only the latter add content-box padding and borders.
+fn outer_table_width(b: &LayoutBox, size: f32, edges: f32) -> f32 {
+    if b.html_table_width || b.style.get("box-sizing") == Some("border-box") {
+        size
+    } else {
+        size + edges
+    }
+}
+
 fn column_width<'a>(b: &'a LayoutBox, path: &[usize]) -> &'a LayoutBox {
     let col = at(b, path);
     if path.len() == 2 && col.style.get("width").is_none_or(|w| w == "auto") {
@@ -554,8 +564,16 @@ fn constraints(
 }
 
 pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
+    intrinsic_with_text(b, fonts, None)
+}
+
+fn intrinsic_with_text(
+    b: &LayoutBox,
+    fonts: &FontSource,
+    text: Option<&dyn amazing_text::TextSystem>,
+) -> (f32, f32) {
     let g = Grid::new(b);
-    let (min, max) = constraints(b, &g, fonts, 0.0, None);
+    let (min, max) = constraints(b, &g, fonts, 0.0, text);
     let model_edges = if collapsed(b) {
         let edges =
             crate::table_decoration::Borders::new(b, &g).widths(0, 0, g.rows.len(), g.count);
@@ -569,7 +587,9 @@ pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
         } else {
             0.0
         };
-    let specified = length(b, "width", 0.0).unwrap_or(0.0);
+    let specified = length(b, "width", 0.0)
+        .map(|w| outer_table_width(b, w, model_edges))
+        .unwrap_or(0.0);
     (
         (min.iter().sum::<f32>() + edges).max(specified),
         (max.iter().sum::<f32>() + edges).max(specified),
@@ -606,7 +626,7 @@ pub(crate) fn layout(
     } else {
         0.0
     };
-    let specified = length(b, "width", cbw);
+    let specified = length(b, "width", cbw).map(|w| outer_table_width(b, w, edges));
     let fixed = specified.is_some()
         && b.style
             .get("table-layout")
@@ -622,8 +642,8 @@ pub(crate) fn layout(
         .filter(|c| role(c) == Role::Caption)
         .map(|c| crate::flex::min_content_width(c, fonts))
         .fold(0.0, f32::max);
-    // CSS table width denotes the border box. Intrinsic cell constraints
-    // include cell padding/borders, but exclude inter-cell border spacing.
+    // Intrinsic cell constraints include cell padding/borders, but exclude
+    // table padding, borders and inter-cell border spacing.
     let mn = min.iter().sum::<f32>() + edges + gaps;
     let mx = max.iter().sum::<f32>() + edges + gaps;
     let mut width = if fixed {
@@ -633,7 +653,11 @@ pub(crate) fn layout(
     }
     .max(capmin)
     .max(caption_min)
-    .max(length(b, "min-width", cbw).unwrap_or(0.0));
+    .max(
+        length(b, "min-width", cbw)
+            .map(|w| outer_table_width(b, w, edges))
+            .unwrap_or(0.0),
+    );
     let widths = if fixed {
         fixed_widths(b, &g, (width - edges - gaps).max(0.0), sx, borders.as_ref())
     } else {
@@ -733,8 +757,7 @@ pub(crate) fn layout(
         // nonnegative content width must not expand it into the next column.
         cell.border_box.w = w;
         let h = cell.border_box.h;
-        let baseline = first_baseline(cell).unwrap_or(cell.content_box.y + cell.content_box.h)
-            - cell.border_box.y;
+        let baseline = cell_baseline(cell) - cell.border_box.y;
         let align = cell.style.get("vertical-align").unwrap_or("baseline");
         if !matches!(align, "top" | "middle" | "bottom") {
             baselines[c.row] = baselines[c.row].max(baseline);
@@ -959,6 +982,19 @@ pub(crate) fn layout(
     b.lines.clear();
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
 }
+fn cell_baseline(cell: &LayoutBox) -> f32 {
+    first_baseline(cell).unwrap_or_else(|| {
+        // Without a line box, the cell synthesizes its baseline at the bottom
+        // content edge. Its specified minimum height still participates even
+        // though row-height excess is represented separately as padding.
+        cell.content_box.y
+            + cell
+                .content_box
+                .h
+                .max(length(cell, "height", 0.0).unwrap_or(0.0))
+    })
+}
+
 fn first_baseline(b: &LayoutBox) -> Option<f32> {
     b.lines
         .first()
@@ -1084,24 +1120,79 @@ fn content_widths(
     fonts: &FontSource,
     text: Option<&dyn amazing_text::TextSystem>,
 ) -> (f32, f32) {
-    if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
-        let mut items = items.clone();
-        crate::replaced::resolve(&mut items, 0.0, None);
-        let direction = if b.style.get("direction") == Some("rtl") {
-            amazing_text::Direction::RightToLeft
-        } else {
-            amazing_text::Direction::LeftToRight
-        };
-        if let Some(pair) = crate::inline::intrinsic_widths_shaped(&items, direction, text) {
-            return pair;
+    if let Flow::Inlines(items) = &b.flow {
+        let mut minimum_items = items.clone();
+        let mut maximum_items = items.clone();
+        for (minimum, maximum) in minimum_items.iter_mut().zip(&mut maximum_items) {
+            if let (
+                crate::InlineNode::Atomic {
+                    node,
+                    size: min_size,
+                    ..
+                },
+                crate::InlineNode::Atomic { size: max_size, .. },
+            ) = (minimum, maximum)
+                && let Some(atom) = b
+                    .positioned
+                    .iter()
+                    .find(|c| c.inline_atomic && c.node == Some(*node))
+            {
+                let (mn, mx) = if atom.table_wrapper {
+                    content_widths(atom, fonts, text)
+                } else {
+                    (
+                        crate::flex::min_content_width(atom, fonts),
+                        crate::flex::max_content_width(atom, fonts),
+                    )
+                };
+                min_size.width = mn;
+                max_size.width = mx;
+            }
         }
+        crate::replaced::resolve(&mut minimum_items, 0.0, None);
+        crate::replaced::resolve(&mut maximum_items, 0.0, None);
+        if let Some(text) = text {
+            let direction = if b.style.get("direction") == Some("rtl") {
+                amazing_text::Direction::RightToLeft
+            } else {
+                amazing_text::Direction::LeftToRight
+            };
+            if let Some(mn) =
+                crate::inline::intrinsic_widths_shaped(&minimum_items, direction, text)
+            {
+                if !b.positioned.iter().any(|child| child.inline_atomic) {
+                    return mn;
+                }
+                if let Some(mx) =
+                    crate::inline::intrinsic_widths_shaped(&maximum_items, direction, text)
+                {
+                    return (mn.0, mx.1);
+                }
+            }
+        }
+        let mut scratch = LayoutBox::new(
+            None,
+            crate::Display::Block,
+            b.style.clone(),
+            b.font_size,
+            b.line_height,
+        );
+        scratch.flow = Flow::Inlines(maximum_items);
+        let mx = crate::flex::max_content_inner_width(&scratch, fonts);
+        scratch.flow = Flow::Inlines(minimum_items);
+        let mn = if matches!(b.style.get("white-space"), Some("nowrap" | "pre")) {
+            mx
+        } else {
+            crate::flex::min_content_inner_width(&scratch, fonts)
+        };
+        return (mn, mx);
     }
     if let Flow::Blocks(c) = &b.flow {
         let mut mn = 0.0f32;
         let mut mx = 0.0f32;
         for child in c {
             let pair = if role(child) == Role::Table {
-                intrinsic(child, fonts)
+                intrinsic_with_text(child, fonts, text)
             } else {
                 content_widths(child, fonts, text)
             };
@@ -1119,4 +1210,32 @@ fn content_widths(
         crate::flex::min_content_inner_width(b, fonts)
     };
     (min, max)
+}
+
+/// The inline-table baseline belongs to its first row, not the caption or the
+/// last line of its last cell. Empty tables synthesize the bottom grid edge.
+pub(crate) fn inline_baseline(wrapper: &LayoutBox) -> f32 {
+    let table = at(wrapper, &[0]);
+    let grid = Grid::new(table);
+    let cells = || {
+        grid.cells
+            .iter()
+            .filter(|c| c.row == 0)
+            .map(|c| at(table, &c.path))
+    };
+    cells()
+        .filter(|cell| {
+            !matches!(
+                cell.style.get("vertical-align"),
+                Some("top" | "middle" | "bottom")
+            )
+        })
+        .map(cell_baseline)
+        .reduce(f32::max)
+        .or_else(|| {
+            cells()
+                .map(|cell| cell.content_box.y + cell.content_box.h)
+                .reduce(f32::max)
+        })
+        .unwrap_or(table.border_box.y + table.border_box.h)
 }

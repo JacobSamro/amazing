@@ -1422,7 +1422,7 @@ The last five gains keep fixed cell decoration inside tracks narrower than
 padding/borders. Three remaining fixed-width fixtures have blank PNG-swatch
 references; column geometry passes and image adoption is routed to its owner.
 
-## LAYOUT-20 — anonymous table repair (in progress)
+## LAYOUT-20 — anonymous table repair (done)
 
 Next whole area: CSS2.2 anonymous table generation, inline-parent grouping and
 whitespace. Full table corpus from LAYOUT-19 is the before selection (272/386),
@@ -1432,3 +1432,22 @@ hoists those cells into block flow before normalization. Fix grouping before
 inline flattening; preserve the inline-table wrapper and first-row baseline.
 Also cover the whitespace removal rules and explicit inline-table behavior.
 No result is claimed yet.
+
+
+LAYOUT-20 candidate4 completes the anonymous-table cluster: **71/71 pass**.
+The full table corpus moves **272 → 310 /386, 38 gains /zero losses**;
+layout nextest **327 pass /one skip**, zero docs. Repairs include inline-parent
+grouping and wrapper baselines, nested table intrinsic sizing, atomic whitespace
+line fitting, cell margin isolation, and CSS table content-box width accounting.
+Final Linux gate on fixed base `415fa342`: **2,780 workspace pass /10 skipped**
+in58.518s, **four doctests pass**; retained449 **280→280, zero gains/losses**.
+All render failure counters zero. Evidence: `crates/amazing-layout/evidence/layout20`.
+
+## LAYOUT-21 — ruby pairing and placement (in progress)
+
+The complete static css-ruby directory is now inventoried: **118 reftests**,
+25 script-dependent reftests excluded explicitly. Baseline measured with the
+LAYOUT-20 final binary: **33 passed /85 mismatched**, all renderer failures zero.
+Next bulk area covers segment/annotation-level pairing, nested ruby, ruby-position,
+ruby-align, and contextual overhang including vertical flow. The previous
+67-case selection and open LAYOUT-14 fixtures remain retained coverage.

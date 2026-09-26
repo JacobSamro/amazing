@@ -187,6 +187,8 @@ pub struct LayoutBox {
     pub(crate) svg_sizing: Option<svg::SvgSizing>,
     pub(crate) table_decoration: table_decoration::TableDecoration,
     pub(crate) table_wrapper: bool,
+    /// CSS2 HTML tables use the legacy border-edge width convention.
+    pub(crate) html_table_width: bool,
     pub(crate) table_colspan: usize,
     pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
@@ -237,6 +239,7 @@ impl LayoutBox {
             svg_sizing: None,
             table_decoration: Default::default(),
             table_wrapper: false,
+            html_table_width: false,
             table_colspan: 1,
             table_rowspan: 1,
             containing_block_height: None,

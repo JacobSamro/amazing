@@ -458,6 +458,8 @@ enum ShapedUnit {
         source_order: Option<u64>,
         break_after: bool,
         size: IntrinsicSize,
+        space_before: f32,
+        preserved_space_before: f32,
         range: Range<usize>,
         context: Rc<ShapedContext>,
     },
@@ -487,6 +489,7 @@ fn unbreakable_run_widths(units: &[ShapedUnit]) -> Vec<f32> {
             match units.get(index + 1) {
                 Some(ShapedUnit::Word(next)) => next.space_before + needed[index + 1],
                 Some(ShapedUnit::Ruby(next)) => next.space_before + needed[index + 1],
+                Some(ShapedUnit::Replaced { space_before, .. }) => space_before + needed[index + 1],
                 Some(ShapedUnit::Break) | None => 0.0,
                 Some(_) => needed[index + 1],
             }
@@ -759,16 +762,19 @@ pub(crate) fn layout_lines_shaped(
                 source_order,
                 break_after,
                 size,
+                space_before,
+                preserved_space_before,
                 range,
                 context,
             } => {
                 if !has_content {
                     prepare(&mut cursor, size.width, strut.line_height.max(size.height));
                 }
+                let mut spacing = if has_content { space_before } else { preserved_space_before };
                 if has_content
                     && soft_wrap
                     && may_break_after
-                    && cursor + needed[unit_index] > inline_end.get() + FIT_TOLERANCE_PX
+                    && cursor + spacing + needed[unit_index] > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -784,7 +790,9 @@ pub(crate) fn layout_lines_shaped(
                         &mut cursor,
                     );
                     prepare(&mut cursor, size.width, strut.line_height.max(size.height));
+                    spacing = preserved_space_before;
                 }
+                cursor += spacing;
                 replaced.push(ReplacedFrag {
                     node,
                     source_order,
@@ -2011,12 +2019,23 @@ fn shape_chunk(
             TextUnit::Word { range, break_kind } => (range, break_kind),
             TextUnit::Atomic { offset, atomic, break_after } => {
                 let end = offset + '\u{fffc}'.len_utf8();
+                let space_before = advance_in_range(&shaped, previous_end..offset)
+                    + separator_spacing(&paragraph_text, previous_end..offset, &spacing);
+                let preserved_start = spans.iter().find(|span| {
+                    span.range.end > previous_end && span.range.start < offset
+                        && matches!(span.style.white_space,
+                            amazing_text::WhiteSpace::Pre | amazing_text::WhiteSpace::PreWrap
+                                | amazing_text::WhiteSpace::BreakSpaces)
+                }).map(|span| span.range.start.max(previous_end)).unwrap_or(offset);
+                let preserved_space_before = advance_in_range(&shaped, preserved_start..offset);
                 match atomic {
                     AtomicInline::Replaced(node, size, source_order) => units.push(ShapedUnit::Replaced {
                         node,
                         size,
                         source_order,
                         break_after,
+                        space_before,
+                        preserved_space_before,
                         range: offset..end,
                         context: Rc::clone(&context),
                     }),
@@ -2811,7 +2830,11 @@ pub(crate) fn intrinsic_widths_shaped(
                 line += word.width + if line > 0.0 {word.space_before} else {word.preserved_space_before};
                 ruby_run = 0.0;
             }
-            ShapedUnit::Replaced { size, .. } => {minimum = minimum.max(size.width); line += size.width; ruby_run = 0.0;}
+            ShapedUnit::Replaced { size, space_before, preserved_space_before, .. } => {
+                minimum = minimum.max(size.width);
+                line += size.width + if line > 0.0 { space_before } else { preserved_space_before };
+                ruby_run = 0.0;
+            }
             ShapedUnit::Combined { shaped, .. } => {minimum = minimum.max(shaped.width); line += shaped.width; ruby_run = 0.0;}
             ShapedUnit::Ruby(ruby) => {
                 ruby_run += ruby.width; minimum = minimum.max(ruby_run); line += ruby.width;

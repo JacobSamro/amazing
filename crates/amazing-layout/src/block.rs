@@ -148,7 +148,7 @@ pub(crate) fn layout_block_with_text(
 
 pub(crate) fn layout_table_content(b: &mut LayoutBox, x:f32, y:f32, width:f32,
     fonts:&FontSource, text:Option<&dyn amazing_text::TextSystem>) -> f32 {
-    layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,true)
+    layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,false)
 }
 
 fn layout_block_in_context(
@@ -369,7 +369,7 @@ fn layout_block_in_context(
     // Atomic inline descendants have their own formatting context,
     // but their outer boxes take part in this box's line breaking.
     if matches!(b.flow, Flow::Inlines(_)) {
-        layout_atomic_inlines(b, content_w, fonts, text);
+        layout_atomic_inlines(b, content_x, content_y, content_w, fonts, text);
     }
 
     // --- children ------------------------------------------------------
@@ -527,10 +527,10 @@ fn layout_block_in_context(
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
 }
 
-fn layout_atomic_inlines(parent: &mut LayoutBox, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {
+fn layout_atomic_inlines(parent: &mut LayoutBox, x: f32, y: f32, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {
     for child in parent.positioned.iter_mut().filter(|child| child.inline_atomic) {
         let inline_block = is_inline_block(&child.style);
-        let outer_width = if inline_block {
+        let outer_width = if inline_block || child.table_wrapper {
             available
         } else if matches!(values::resolve_extent(&child.style, "width", child.font_size, available), MaybeLen::Auto) {
             let min = crate::flex::min_content_width(child, fonts);
@@ -539,7 +539,10 @@ fn layout_atomic_inlines(parent: &mut LayoutBox, available: f32, fonts: &FontSou
         } else {
             available
         };
-        layout_block_in_context(child, 0.0, 0.0, outer_width, fonts, &mut FloatContext::default(), text, false);
+        // Shape at the containing block origin. Placing a first atomic inline
+        // then needs no horizontal translation, retaining the same glyph
+        // coordinates as an equivalent block (including caption text).
+        layout_block_in_context(child, x, y, outer_width, fonts, &mut FloatContext::default(), text, false);
     }
     refresh_atomic_inline_metrics(parent);
 }
@@ -554,7 +557,9 @@ pub(crate) fn refresh_atomic_inline_metrics(parent: &mut LayoutBox) {
             matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
         }) {
             *size = crate::IntrinsicSize { width, height };
-            *baseline_offset = if is_inline_block(&child.style) {
+            *baseline_offset = if child.table_wrapper {
+                crate::table::inline_baseline(child) - child.border_box.y + margin.top.unwrap_or(0.0)
+            } else if is_inline_block(&child.style) {
                 inline_block_baseline(child) - child.border_box.y + margin.top.unwrap_or(0.0)
             } else {
                 height
@@ -574,7 +579,7 @@ pub(crate) fn place_atomic_inlines(parent: &mut LayoutBox) {
             crate::flex::first_baseline(child) - child.border_box.y
         };
         let x = fragment.x + child.margin.left.unwrap_or(0.0);
-        let y = if is_inline_block(&child.style) {
+        let y = if is_inline_block(&child.style) || child.table_wrapper {
             fragment.y + child.margin.top.unwrap_or(0.0)
         } else {
             line.baseline - baseline
@@ -779,10 +784,16 @@ fn stack_blocks(
 }
 
 fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
-    if !matches!(&block.flow, Flow::Empty) {
-        return false;
-    }
-    if establishes_bfc(&block.style) {
+    let empty_flow = match &block.flow {
+        Flow::Empty => true,
+        Flow::Blocks(children) => children.iter().all(|child| {
+            floats::side(&child.style).is_none()
+                && child.style.get("clear").is_none_or(|v| v == "none")
+                && can_collapse_through(child, containing_width)
+        }),
+        _ => false,
+    };
+    if !empty_flow || establishes_bfc(&block.style) {
         return false;
     }
     let padding = values::resolve_padding(&block.style, block.font_size, containing_width);

@@ -11,6 +11,7 @@
 //! the parent chain: display values and font sizes / line heights.
 
 use amazing_css::{ComputedStyle, StyledDom};
+
 use amazing_css::generated::ContentRun;
 use amazing_css::selectors::PseudoElement;
 use amazing_dom::{Dom, NodeIdx, NodeKind};
@@ -25,6 +26,9 @@ use crate::{
     Display, Flow, InlineNode, LayoutBox, NoReplacedElements, ReplacedElementProvider,
     RubyColumn, RubyText, TextSourceMapping,
 };
+
+#[path = "box_tree_table.rs"]
+mod table_inline;
 
 const MAX_RUBY_COLUMNS: usize = 65_536;
 const MAX_RUBY_TEXT_BYTES: usize = 8 * 1024 * 1024;
@@ -125,6 +129,7 @@ fn build_element(
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
     box_.font_metric_style = Some(text_style(dom, idx, &box_.style, font_size, false));
+    box_.html_table_width = dom.name(idx) == Some("table");
     if crate::svg::is_outer(dom, idx) {
         box_.svg_root = Some(idx);
         box_.svg_sizing = Some(crate::svg::SvgSizing::from_dom(dom, idx));
@@ -612,7 +617,7 @@ fn is_out_of_flow(style: &ComputedStyle) -> bool {
 }
 
 fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-grid-lanes" | "inline-block" | "inline flow-root"))
+    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-grid-lanes" | "inline-block" | "inline flow-root" | "inline-table"))
         && crate::floats::side(style).is_none()
 }
 
@@ -626,7 +631,16 @@ fn push_atomic_inline(
     inlines: &mut Vec<InlineNode>,
     positioned: &mut Vec<LayoutBox>,
 ) {
-    let mut box_ = build_element(dom, styled, child, parent_font, fonts, replaced);
+    let box_ = build_element(dom, styled, child, parent_font, fonts, replaced);
+    push_atomic_box(box_, child, inlines, positioned);
+}
+
+fn push_atomic_box(
+    mut box_: LayoutBox,
+    child: NodeIdx,
+    inlines: &mut Vec<InlineNode>,
+    positioned: &mut Vec<LayoutBox>,
+) {
     box_.inline_atomic = true;
     let vertical_align = box_.style.get("vertical-align").unwrap_or("baseline").to_owned();
     positioned.push(box_);
@@ -1863,7 +1877,18 @@ fn flatten_inline(
         );
     }
 
-    for entry in formatting_children(dom, styled, idx, font_size) {
+    let entries = formatting_children(dom, styled, idx, font_size);
+    let mut cursor = 0;
+    while cursor < entries.len() {
+        if let Some((end, table)) = table_inline::orphan_run(
+            dom, styled, &entries, cursor, &style, font_size, fonts, replaced,
+        ) {
+            push_atomic_box(table, entries[cursor].node, inlines, positioned_out);
+            cursor = end;
+            continue;
+        }
+        let entry = &entries[cursor];
+        cursor += 1;
         let child = entry.node;
         let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
         match &dom.get(child).kind {
