@@ -308,21 +308,24 @@ revision `3655e746`, input SHA-256
 
 - DataView 504 → 554 pass (55 → 5 fail): new-target receiver, mutability and
   out-of-bounds check ordering, locked `BYTES_PER_ELEMENT`, detached TypeError.
-- TypedArray 1,312 → 1,338 pass (131 → 105 fail): this-receiver construction,
+- TypedArray 1,312 → 1,375 pass (131 → 68 fail): this-receiver construction,
   `toLocaleString` element dispatch, callback callable checks, immutable/search
-  ordering.
-- TypedArrayConstructors 632 → 654 (82 → 60): `BYTES_PER_ELEMENT` attributes and
+  ordering, resizable-buffer iterators, `map` species ordering, `with` coercion
+  order, `from` detached result, `toString` identity.
+- TypedArrayConstructors 632 → 656 (82 → 58): `BYTES_PER_ELEMENT` attributes and
   this-receiver construction.
 - Atomics 214 → 245 (57 → 25): immutable-write ordering, `store` returns
   ToInteger, `pause`, `Symbol.toStringTag`, `waitAsync` result objects.
 - BigInt 76 pass / 0 fail; ArrayBuffer 215/5 and SharedArrayBuffer 101/2 already
   clean except ordering cases.
 
-Deltas: **+129 passing files** across the five binary directories, no losses.
-Commits `72e1a53e`, `5b31e5c1`, `b230e551`, `0542eb33` (the last batch —
-search-method detachment, slice species recheck, `with` coercion order, `from`
-detached result, `toString` identity — is being re-measured by the orchestrator's
-`jsb8-*` run).
+Deltas: **+168 passing files** across the five binary directories, no losses.
+Commits `72e1a53e`, `5b31e5c1`, `b230e551`, `0542eb33`, `4c4c03b2`. Linux gate
+at `4c4c03b2`: crate nextest 357/357 (one skipped) + doctest 1/1; workspace
+nextest 2,819/2,819 (ten skipped) + doctests 3/3 (`amazing-devtools`,
+`amazing-html`, `amazing-js`). Full pinned Test262 (input SHA-256 `91109b82`)
+32,044 → 32,329 pass files, zero lost passing files or variants versus the
+JSB-6 baseline.
 
 Remaining large clusters: TypedArray resizable-buffer iterator exhaustion
 (~8), `from`/`map` species ordering (~8), ArrayBuffer/SharedArrayBuffer
