@@ -794,3 +794,151 @@ sizing), `font-variant-emoji-1`. Flagged for the next `css-fonts` pass.
 Updated baseline: `crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json`,
 **18 pass / 14 mismatch -> 25 pass / 7 mismatch** (32 selected). Crate gate:
 `amazing`/`amazing-text-provider` nextest 357/357 (8 skipped).
+
+## TEXT-22: css-text triage, text-transform algorithm
+
+Coordinator ask: fix the largest css-text mismatch clusters in bulk using
+`scripts/wpt_render_cluster.py`/`scripts/linux-render-wpt.sh text css/css-text`
+(baseline 218 pass / 227 mismatch / 1 crash of 446 selected), routing
+layout-owned causes to `.agents/layout/questions.md`.
+
+**Fixed: `text-transform` was entirely unimplemented** (15 mismatches). The
+property parses/cascades in `amazing-css` but nothing ever transformed text
+content. Added `amazing_text::{TextTransform, TextTransformCase}` (case
+keyword plus independent `full_width`/`full_size_kana` bools, matching the
+CSS grammar `none | [capitalize|uppercase|lowercase] || full-width ||
+full-size-kana`) and a pure `amazing_text_provider::apply_text_transform`
+(`crates/amazing-text-provider/src/text_transform.rs`): uppercase/lowercase
+via `char::to_uppercase`/`to_lowercase` with the CSS-mandated Greek final
+sigma special case (lowercase Σ -> ς only at the end of a word, σ
+otherwise, computed via `icu_segmenter`'s word boundaries), capitalize
+(titlecase the first alphabetic character of each `icu_segmenter`
+`WordType::Letter` word, matching CSS's apostrophe-stays-in-word behavior),
+and full-width (ASCII printable range + U+FEE0, space -> U+3000).
+`full-size-kana` is a documented no-op -- no verified Unicode mapping table
+built, and no pinned case needs it yet.
+
+Deliberately did **not** add a `text_transform` field to `TextStyle`:
+`amazing-layout`'s `box_tree.rs::text_style` builds it via an exhaustive
+struct literal in a file this lane does not own, so a new required field
+would have broken that build. Layout resolves the CSS value itself (the
+same way it already resolves `white-space`/`hyphens`) and calls the new
+function on each DOM text run's source text, per the routing note in
+`.agents/layout/questions.md`.
+
+**Routed, not fixed** (all trace into `amazing-layout`'s paragraph-text
+construction, or into CSS properties `amazing-css` hasn't registered yet):
+`white-space` (78, largest in the subdir -- trailing-space-at-line-end
+handling, `break-spaces` scope, `text-wrap: balance` looks unimplemented,
+tab-stop mechanics), `word-space-transform` (20), `hyphens` (24, mostly
+vertical-writing-mode placement, float interaction, the unparsed
+`hyphenate-character` property, and per-language auto-hyphenation
+dictionaries -- a large unimplemented feature), `letter-spacing` (15),
+`tab-size`/`text-justify`/`text-autospace`/`hanging-punctuation` (8/7/5/4,
+not even registered as CSS properties), `writing-system` (4). Full detail
+in `.agents/layout/questions.md` and `.agents/css/questions.md`.
+`line-breaking` (6), `overflow-wrap` (3), `bidi` (2) not chased (budget).
+
+Render baseline for css-text unchanged (218/446) by design -- additive-only,
+pending layout wiring. Gate: crate nextest `amazing-text`+`amazing-text-provider`
+102/102 (2 skipped). Workspace nextest 3142/3142 passed (14 skipped),
+doctests clean. Commit `33538dae`.
+
+## TEXT-23: css-text-decor triage, text-emphasis mark table
+
+Coordinator ask: same method on css-text-decor (baseline 65 pass / 127
+mismatch of 192 selected).
+
+**Landed: `text_emphasis_mark`.** `text-emphasis` (CJK emphasis marks) is
+97 of 127 mismatches and entirely unimplemented anywhere (not parsed, not
+placed, not painted). `amazing_text_provider::text_emphasis_mark`
+(`crates/amazing-text-provider/src/text_emphasis.rs`) resolves an
+already-normalized `text-emphasis-style` computed value (e.g. `"filled
+circle"`, `"open"`, `"dot"`, `"sesame"`, `"none"`) to CSS Text Decoration
+3's suggested mark character, per its fixed fill x shape table (10
+combinations, plus bare-keyword defaults: bare fill defaults to `circle`,
+bare shape defaults to `filled`). The `<string>` form has no table entry by
+design -- the caller uses the string's first grapheme cluster directly.
+
+**Routed, not fixed:** the rest of `text-emphasis` (parsing in css,
+per-character mark placement including the ruby/emphasis conflict rule in
+layout, painting the mark glyph in paint) is real cross-crate new-feature
+work, routed to `.agents/layout/questions.md` and `.agents/paint/questions.md`.
+`text-decoration-*` (~17: skip-ink, inset, underline-offset, subelements,
+propagation) and `text-shadow` (~20) are layout/paint's box-model and
+glyph-effect code, not text-provider's.
+
+Render baseline for css-text-decor unchanged (65/192) by design. Gate:
+crate nextest clean. Workspace nextest 3148/3148 passed (14 skipped),
+doctests clean. Commit `02f0c58e`.
+
+## TEXT-24: css-ruby, whole area
+
+Coordinator ask: base on local dev `512912d5`, take a Linux render baseline
+with `scripts/linux-render-wpt.sh text css/css-ruby --baseline auto
+--compact`, implement ruby layout/paint support within owned crates, and
+route anything needed in `amazing-layout` to `questions.md` as a trait
+request.
+
+**Baseline:** 49 pass / 18 mismatch of 67 selected (the "23/67" figure the
+brief quoted was stale against a prior evidence snapshot; `--baseline auto`
+against the checked-in evidence showed `gained=26 lost=0` against this
+worktree's actual current state, i.e. other lanes' merged work already
+improved ruby well past that older number).
+
+**Finding: no missing capability in `amazing-text`/`amazing-text-provider`.**
+`amazing-layout`'s ruby code (`inline_ruby.rs`, `box_tree_ruby.rs`,
+`inline.rs`'s `apply_ruby_overhang`/`ruby_edge_space`) already calls
+`TextSystem::shape`/`shape_line` with full per-leaf `TextStyle` (including
+`direction`) and only needs a single independent-direction leaf per ruby
+base/annotation (which is exactly what `unicode-bidi: isolate` -- the CSS
+Ruby spec's default UA styling for `rb`/`rt` -- calls for), so
+`bidi_scopes: &[]` on those calls is correct as written, not a gap.
+Traced each of the 18 mismatches by reading the pinned WPT test source
+(`~/corpora/wpt/css/css-ruby/`) against `amazing-layout`'s own ruby code:
+
+- `ruby-overhang-spaces-{007,009,011,013,015,016,019}`,
+  `-align-{003,004}`, `-vertical-{004,005}` (11, the largest cluster):
+  `ruby_edge_space` (`crates/amazing-layout/src/inline.rs`) computes how
+  much of an adjacent whitespace run a wide ruby annotation may overhang;
+  the failing subset specifically combines tabs, ideographic spaces
+  (U+3000) and preserved end-of-line characters adjacent to the ruby,
+  where the already-passing majority of `ruby-overhang-spaces-*` use plain
+  ASCII spaces. `char::is_whitespace()` (used for the "full credit"
+  branch) already covers all three character classes, so the bug is more
+  likely in how the credit is walked/accumulated across a *run* of mixed
+  whitespace kinds, or in how `ruby.space_before`/`left_space`/`right_space`
+  combine at `apply_ruby_overhang`'s call site -- not something
+  text-provider's API surface is missing.
+- `break-within-bases/{nowrap,no-break-opportunity-at-end}` (2): line-break
+  opportunities inside a ruby base must stay suppressed except at true
+  base/annotation-pair boundaries; layout's own box tree owns which
+  offsets it asks `amazing-text-provider`'s `line_breaks` about, so this is
+  a box-tree-side bug, not a `line_breaks` gap.
+- `ruby-bidi-004`: verified against the WPT source that `dir=rtl`/
+  `unicode-bidi: isolate` should behave identically whether placed on the
+  outer `<ruby>`, an inner `<span>`, or the anonymous `<rb>` box.
+  `shape_line`/`bidi_analysis` already handle arbitrary per-leaf direction
+  correctly (established in TEXT-21); the mismatch is in
+  `box_tree_ruby.rs` not resolving the same `direction`/`unicode-bidi` for
+  an anonymous `<rb>` box as for an explicit one.
+- `ruby-intrinsic-isize-{001,003}`: min-content/max-content sizing across
+  multiple adjacent `<rb>` elements without an explicit pairing -- box
+  sizing, not shaping.
+- `interlinear-block-margin-box`, `ruby-text-collapse`
+  (`visibility: collapse`/`hidden` on `<rt>`): box generation/visibility,
+  not shaping.
+
+No trait request filed: every primitive ruby layout needs from
+`amazing-text-provider` (per-leaf shaping with an explicit direction,
+line-break opportunities, bidi analysis) already exists and is already
+used correctly by the call sites read above. Filed the above as a bug
+report (not a capability gap) to `.agents/layout/questions.md`, since
+misattributing it as a missing trait would send layout looking for the
+wrong kind of fix.
+
+No code change in `amazing-text`/`amazing-text-provider` this ticket.
+Render baseline for css-ruby unchanged (49/67). Gate: workspace nextest
+unchanged from TEXT-23's numbers (re-run to confirm zero losses after the
+`dev` merge to `512912d5`; see status.json for the exact count). Commit
+`<TEXT-24 sha>` (docs/lanes only).
