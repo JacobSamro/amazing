@@ -1188,3 +1188,92 @@ above); `objectGroup` tagging for `Runtime.getProperties`' own returned
 values (out of scope here, matching real CDP); breakpoint/step state and
 now object-group tags both not surviving a `Page.navigate` reload (unchanged
 scope note from CDP-21/23).
+
+## CDP-25 — the CDP Accessibility domain over A11Y-14's `AxTreeWatcher` — done
+
+Coordinator's ticket (base local `dev` at `e6ca3ffa`, merged CDP-24): "A11Y-14
+(now in dev, e6ca3ffa) added `AxTreeWatcher` in
+`crates/amazing/src/runtime_host_a11y.rs`: it holds the last-built tree plus
+a drainable change-event queue. Implement `Accessibility.enable/disable`,
+`getFullAXTree`, `getPartialAXTree`, `queryAXTree` and `getChildAXNodes`,
+plus the `nodesUpdated`/`loadComplete` events, driven by that watcher. Map
+roles, names and properties to CDP's AXNode shape, and add end-to-end
+WebSocket tests."
+
+- **Closed a standing cross-lane request**: `.agents/devtools/questions.md`
+  already carried the a11y lane's own wiring note for `drain_ax_nodes_updated`
+  (filed alongside CDP-15, unclaimed since — "nothing in this lane calls into
+  `runtime_host_devtools.rs`..."). This ticket implements exactly what it
+  describes: keep the last-built tree, diff on a checkpoint, drop `Removed`
+  events (real CDP's `nodesUpdated` has no removal concept), dedupe by
+  `AxNodeId` against the *current* tree rather than the event's own carried
+  values. Used A11Y-14's `AxTreeWatcher` directly rather than hand-rolling the
+  same bookkeeping, since it already exists for exactly this.
+- **`PageOwner::refresh_ax_tree`**: the one checkpoint seam every
+  `Accessibility.*` read now funnels through — computes style + the same
+  minimal `FallbackTextSystem`/`NoReplacedElements` layout `getFullAXTree`
+  already used, then calls `ax_watcher.record_checkpoint`. This driver has no
+  continuous mutation-observer hook of its own (see the module's "Known
+  limitations"), so a checkpoint — and therefore a diff, and therefore any
+  `nodesUpdated` event — only actually happens when a client asks to look at
+  the tree, the same on-demand-recomputed pattern every other piece of state
+  in this file already follows (style, layout, matched rules, hit-testing).
+  A deliberate, documented scoping choice, not an oversight.
+- **`getPartialAXTree`**: resolves the DOM node to its `AxNodeId`
+  (`AxTree::find_dom`), returns its subtree via `AxTree::walk` (preorder), and
+  — when `fetchRelatives` is set — prepends the ancestor chain root-first by
+  following each node's own `parent` link up to the root.
+- **`getChildAXNodes`**: parses the string `AXNodeId`, resolves it against the
+  fresh tree, and returns `AxTree::children`'s direct children — each already
+  carrying its own `childIds`, so a client can keep expanding without a
+  round trip per grandchild.
+- **`queryAXTree`**: filters `AxTree::walk`'s traversal — which conveniently
+  already treats `start: None` as "the whole tree," matching this method's own
+  "the whole tree when node is `None`" contract for free — by accessible name
+  (exact match) and/or role (case-insensitive; real CDP role strings are
+  already lowercase, so this only forgives a differently-cased client, not a
+  behavior change). Both filters apply together (AND), matching real CDP and
+  proven in the new test by combining them to disambiguate a heading from its
+  own static-text child, which shares its accessible name.
+- **`Accessibility.loadComplete`**: genuinely new protocol surface — added
+  `DevToolsSession::drain_ax_load_complete() -> Option<AxNode>` (`host.rs`),
+  `domains::accessibility::load_complete` (its `root` param is a single
+  `AXNode`, unlike every other Accessibility payload here), and a
+  `session.rs` poll hookup alongside `nodesUpdated`. Driver side:
+  `accessibility_enabled(true)` immediately builds/refreshes the tree and
+  queues its root — this driver's honest stand-in for real Chrome's
+  page-load-keyed signal, since it has no separate "page finished loading"
+  event of its own to fire this from instead (documented on
+  `PageOwner::ax_load_complete`'s field doc comment as a scoping choice, not
+  an accident).
+- Proof — two new end-to-end WebSocket tests:
+  - `end_to_end_accessibility_enable_full_partial_child_and_query_ax_tree`:
+    chains `enable` (asserting the queued `loadComplete`'s root carries a
+    real `AXNodeId`, observed on the next poll per this file's usual
+    queued-during-dispatch timing quirk) → `getFullAXTree` (a navigation
+    landmark, a named heading, a named button) → `getPartialAXTree` on the
+    button's real DOM node with `fetchRelatives: true` (at least one ancestor
+    plus the button itself) → `getChildAXNodes` on the root (same count as
+    `getFullAXTree`'s own root `childIds`) → `queryAXTree` by role alone
+    (case-insensitive `"BUTTON"`) and by role+name together.
+  - `end_to_end_accessibility_nodes_updated_reflects_a_mutation_between_two_reads`:
+    the first read after `enable` reports no update (nothing to diff against
+    yet); a real `Runtime.evaluate` mutation (retext a heading, remove a
+    button) between two reads produces a `nodesUpdated` event carrying the
+    heading's new name; the removed button never appears in it.
+
+Linux gate (single pass, per the ticket's implicit "gate once" — no repeat
+asked for): `cargo nextest run --workspace --locked --no-fail-fast` →
+3370/3370 passed, 17 skipped, 3 slow — no known-EPERM failures surfaced on
+this run's sandbox (unlike some earlier tickets'; IPC-12 is host-dependent,
+not a regression either way). `cargo test --workspace --locked --doc` → all
+green, including `amazing_a11y`/`amazing_devtools`/`amazing_html`/
+`amazing_js`'s real doctests.
+
+Boundary candidates for a future ticket: a real continuous mutation-observer
+hookup for `ax_watcher.record_checkpoint` (wiring it to the same
+`deliver_mutations` batch granularity `runtime_binding_host.rs` already
+coalesces DOM mutation callbacks to, rather than only on client demand);
+`Accessibility.getRootAXNode` (not in this ticket's list, and not yet in this
+crate's protocol layer either); `depth` on `getFullAXTree` still ignored
+(unchanged from before this ticket).
