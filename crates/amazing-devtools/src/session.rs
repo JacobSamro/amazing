@@ -94,6 +94,9 @@ pub struct SessionState {
     pub dev: Box<dyn DevToolsSession>,
     pub nodes: NodeIdMap,
     pub enabled: EnabledDomains,
+    /// `DOM.performSearch` results, keyed by the search id handed to the client.
+    pub searches: HashMap<String, Vec<EngineNodeId>>,
+    next_search: u64,
 }
 
 impl SessionState {
@@ -105,7 +108,17 @@ impl SessionState {
             dev,
             nodes: NodeIdMap::default(),
             enabled: EnabledDomains::default(),
+            searches: HashMap::new(),
+            next_search: 0,
         }
+    }
+
+    /// Stores a search result set and returns its id.
+    pub fn store_search(&mut self, results: Vec<EngineNodeId>) -> String {
+        self.next_search += 1;
+        let id = format!("search:{}", self.next_search);
+        self.searches.insert(id.clone(), results);
+        id
     }
 
     /// Emits events that have accumulated in the engine since the last poll,

@@ -16,7 +16,7 @@ object.proto = Some(i.boolean_proto.clone());
         Some(JsValue::Str(string)) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.string_proto.clone());
-            object.define("[[StringData]]", symbol_data(JsValue::Str(string), true, true)).unwrap();
+            object.initialize_string_data(string);
             JsValue::object(object)
         }
         Some(JsValue::BigInt(value)) => {
@@ -2724,13 +2724,16 @@ fn native_string_from_char_code(
 }
 
 fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let constructing = i.current_new_target().is_some();
     let value = match a.first() {
         None => JsValue::str(""),
-        Some(JsValue::Symbol(symbol)) if !this.is_object() => JsValue::str_units(symbol.descriptive_units()),
+        Some(JsValue::Symbol(symbol)) if !constructing => JsValue::str_units(symbol.descriptive_units()),
         Some(value) => JsValue::str(i.to_js_string(value)?),
     };
-    if let JsValue::Object(object) = &this {
-        object.borrow_mut().define("[[StringData]]", symbol_data(value, true, true)).unwrap();
+    if constructing {
+        let JsValue::Object(object) = &this else { unreachable!() };
+        let JsValue::Str(string) = value else { unreachable!() };
+        object.borrow_mut().initialize_string_data(string);
         Ok(this)
     } else {
         Ok(value)

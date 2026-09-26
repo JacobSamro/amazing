@@ -1602,3 +1602,63 @@ ReadableStream and connection-close semantics; `headers-basic` custom iterator
 needs generators; `cors-basic` different-protocol/port cases need HTTPS
 origins; `xhr/responsetype.any.js` and `headers-no-cors` need confirming.
 Routed in `.agents/net/questions.md`.
+
+### NET-26 final Linux gate
+
+Windows is deferred by the Linux-first rule (AGENTS.md 2026-09-26). Final head
+`38efd307`, the merge of local `dev` `4518bea7` (Linux-first AGENTS.md). The
+`runtime_binding_host.rs` conflict between net's `NetRuntime` field and dev's
+`messaging: MessagingRealm` field was resolved additively. Dev drift since the
+NET-26 base touched no net-owned crate.
+
+Gate on Boat sandbox `bx_cxad649k` via `scripts/linux-run.sh net`:
+`cargo nextest run --workspace --locked --no-fail-fast` then
+`cargo test --workspace --locked --doc`.
+
+| Gate | Result |
+|---|---:|
+| Workspace nextest | 2531 passed / 0 failed / 10 skipped |
+| Workspace doctests | 2 passed / 0 failed |
+| Lane net crates | 445 passed / 0 failed |
+| Lane + `amazing-bindings` + `amazing` | 728 passed / 0 failed / 4 skipped |
+
+Pinned 38-file `fetch/api` + `xhr` selection at `c2a2fce`, same selection before
+and after: **14/38 files and 290 subtests before → 33/38 files and 552 passing
+subtests after** (34 fail, 2 timeout, 0 error, 0 unsupported). The after value is
+identical to the pre-merge run, consistent with no net-owned drift. Residuals
+remain cross-lane: the js-runtime realm-hop promise adoption, js-vm generators,
+harness HTTPS origins for `cors-basic`, and dom-bindings' inert Document for
+`responseXML`. NET-26 ends at this binding/runner boundary.
+
+## NET-31 — synchronous XHR dispatcher isolation
+
+Fixed base `f517ff0a` (merge of local dev `11c43c04`). A synchronous XHR runs on
+the JS thread and must block the event loop, but the driver previously drove the
+shared `NetworkService` dispatcher inside its blocking loop. `Dispatcher::step`
+advances every in-flight connection, so the sync loop consumed and discarded the
+replies of pending asynchronous XHRs and fetches; any page mixing a sync XHR with
+an in-flight async request could leave the async one hung.
+
+`runtime_host_net::fetch_xhr_execute` now creates a private `Dispatcher` (same
+`StdResolver`, so the pinned WPT shim host routing still applies) for the
+blocking request, so asynchronous traffic keeps its events on the shared
+service. Regression test
+`crates/amazing/src/runtime_host_net.rs::tests::synchronous_xhr_keeps_pending_async_xhr_reply`
+starts an async `/slow` XHR, blocks on a `/fast` sync XHR while the async reply is
+due, and asserts the async request completes.
+
+Gate on the pooled Boat sandbox (`scripts/linux-run.sh net`), one call: workspace
+nextest **2704 passed / 0 failed / 10 skipped**, workspace doctests **4 passed /
+0 failed**, and the pinned 38-file `fetch/api` + `xhr` selection at `c2a2fce`:
+
+| Metric | Base (before) | After |
+|---|---:|---:|
+| Files pass | 33 / 38 | 34 / 38 |
+| Subtests pass | 552 | 573 |
+| Subtests fail | 34 | 34 |
+| Timeouts | 2 | 1 |
+
+`xhr/responsetype.any.js` changed from timeout after 29 subtests to **pass with
+50 subtests**. The remaining four non-passing files are the unchanged cross-lane
+residuals (js-runtime promise realm, js-vm generators, harness HTTPS origins,
+dom-bindings inert Document). NET-31 ends at this driver-isolation boundary.
