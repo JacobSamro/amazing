@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-13 — remaining parser early errors and grammar contexts**.
+Frontier: **JS-14 — event-handler compilation and live object environments**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1414,3 +1414,38 @@ records and gate logs are retained in lane scratch.
 Next: the measured frontier contains 64 front-end failures, including 15 missed
 parse-negative tests. JS-13 handles parser context, strictness and template
 escape errors; decorator and Annex B RegExp clusters remain separate areas.
+
+## JS-13 — callable grammar contexts and early errors
+
+Parser source `e0e9d64a`, fixed base `bbe7bec9`, integration repair `1de87f21`. Function and method
+parameter/body parsing now replaces enclosing Yield/Await/control contexts;
+function-body directives apply strict early errors during parsing. Assignment
+expressions own Yield parsing, argument expressions permit `in`, and contextual
+`await using`, `let yield`, labels and bare `async` for-of heads follow their
+productions. Tagged templates preserve invalid cooked entries through
+`TemplateLit.cooked_valid`; untagged templates reject them. Runtime consumers
+must turn invalid tagged cooked entries into `undefined`.
+
+Owned Linux nextest: **348 passed, 1 skipped**; doctests: **1 passed**.
+Full pinned Test262, 53,872 files / 102,918 variants: **39,953 → 39,999 passing
+files**, **77,691 → 77,762 passing variants**, **zero passing file or variant
+losses**. Input/runner hashes match; four workers and 60-second deadline.
+Of the 64 measured front-end failures, 32 now pass and four advance to runtime
+failures; remaining parser failures are 20 decorators and eight RegExp cases.
+The runtime merge activated the async-body VM bridge; repair `1de87f21`
+preserves the original loop-body throw across iterator return-method failures,
+including rejected awaits. Twenty backend/case combinations cover throw/return
+completion precedence.
+
+The retained pooled target was stale and its 2,740-test result was discarded.
+Final joint Linux gate at source `04f89683` (also includes JS-14): **2,750 passed,
+10 skipped**, **31 doctest suites / 4 passed**. Full Test262 from the parser-only
+head to this merged source: **39,999 → 40,132 files**, **77,762 → 77,958 variants**,
+zero losses. Those additional gains include incoming runtime and handler work;
+the parser-only improvement remains the 46 files / 71 variants reported above.
+Evidence: [js-lang_JS13-evidence.json](js-lang_JS13-evidence.json).
+
+Next, user-routed JS-14: public event-handler FunctionBody compiler with live
+object environments ordered document → optional form → element. The caller
+keeps lazy compilation, event registration and forwarding. RegExp Annex B and
+named-capture parsing remain queued after this cross-lane dependency.
