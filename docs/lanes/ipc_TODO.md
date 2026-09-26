@@ -82,8 +82,31 @@ Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
 - Message delivery is bounded per checkpoint so a self-posting handler cannot
   starve the event loop.
 - WPT `webmessaging/`: files 33→38 pass (from 27 before 11d), subtests 58→64
-  pass; zero regressions. Linux workspace 2704/2704 + 4/4 doctests.
+  pass; zero regressions.
+- **Re-gated 2026-09-26** at merged head `1c481bf0`: the original gate ran on
+  a pooled sandbox before per-lane `CARGO_TARGET_DIR`s existed (`86c44031`),
+  so it could have linked another lane's stale artifacts. Corrected gate:
+  Linux workspace 2806/2806 (10 skipped) + doctests, all passing, on
+  `/home/user/amazing/targets/ipc`. **Done**, confirmed on the corrected
+  target dir.
 - Raw `docs/lanes/ipc-11e-webmessaging/`; cumulative table in
+  `docs/lanes/ipc-11-evidence.md`.
+
+### 11f. Malformed messaging payload -> `messageerror`; structured-clone decode fuzzing
+
+- `messaging_deliver` fires `messageerror` (not a `Throw` that aborts the
+  checkpoint) when a peer's wire payload fails `state_wire::decode` or
+  `structured_deserialize`. Test-only hooks: `RuntimeBindings::queue_raw_message`
+  (`runtime_host_messaging.rs`), `DriverScheduler::test_bindings()`
+  (`js_scheduler.rs`).
+- `state_wire::decode` (used for both `history.state` and messaging payloads)
+  had no fuzz coverage — `ipc-fuzz` lives in `amazing-process` and can't reach
+  this driver-owned module. Added a 100,000-case deterministic mutation fuzz
+  and a 2,000-case random-bytes sweep in `navigator.rs`; zero panics.
+- Linux workspace 2808/2808 (10 skipped) + doctests, all passing. WPT
+  `webmessaging/` unchanged at 38 files / 64 subtests passing (some
+  fail/timeout/error reclassification from the fix; zero lost passes).
+- Evidence and the pooled-sandbox WPT sparse-checkout drift note in
   `docs/lanes/ipc-11-evidence.md`.
 
 ### 11c. Follow-ups
