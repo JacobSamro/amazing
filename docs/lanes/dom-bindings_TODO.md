@@ -1978,3 +1978,20 @@ Remaining relatedTarget fixture cases include net's XHR facade missing native
 EventTarget adoption, activation behavior, and a pinned-WPT/current-DOM early
 return discrepancy recorded in questions.md. Child realms/Range remain deferred.
 Continuing existing UI event modifier and numeric dictionary semantics.
+
+# DOM-B UI event modifiers ready
+
+Implementation `7e014f57`, fixed base `88f37385`. MouseEvent, WheelEvent and
+KeyboardEvent now retain all fourteen modifier flags and expose case-sensitive
+getModifierState. Numeric dictionary conversion applies the specified signed and
+unsigned widths, preserves fractional coordinates, rejects non-finite doubles,
+and includes inherited UIEvent.which and WheelEvent.momentum.
+
+Linux workspace **2758 passed /10 skipped**, doctests **4/4**. Complete
+**170-source dom/events + uievents/constructors** corpus: **360→376 passing
+assertions**, **260→244 failing**, **16 gains /zero lost passes**. Files:
+51→52 pass,37→36 fail,20 harness errors and62 timeouts unchanged.
+The modifier-state constructor fixture is now **16/16**.
+
+InputEvent target-range sequence conversion awaits a JS iterator/closing seam;
+iframe Range remains deferred. Continuing independent legacy element reflection.
