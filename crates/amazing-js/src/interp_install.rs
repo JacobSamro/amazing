@@ -1,5 +1,7 @@
 // Realm builtin installation and native function construction.
 
+include!("builtins_date.rs");
+
 impl Interpreter {
     fn native(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
         let mut o = JsObject::function(JsFunction {
@@ -321,6 +323,7 @@ impl Interpreter {
             "toString",
             Self::native("toString", native_date_to_string, &self.function_proto),
         );
+        self.install_date();
         let object_to_string = symbol_method(self, "toString", native_object_to_string);
         self.object_proto.borrow_mut().define("toString", symbol_data(object_to_string, true, true)).unwrap();
         let object_value_of = symbol_method(self, "valueOf", native_object_value_of);
