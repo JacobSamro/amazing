@@ -431,6 +431,18 @@ impl FontRelativeMetrics {
     }
 }
 
+/// CSS Fonts 4 §2.6 `font-size-adjust` metric basis. The single-value
+/// `<number>` syntax uses [`FontSizeAdjustMetric::ExHeight`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FontSizeAdjustMetric {
+    #[default]
+    ExHeight,
+    CapHeight,
+    ChWidth,
+    IcWidth,
+    IcHeight,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GlyphFlags {
     pub unsafe_to_break: bool,
@@ -596,6 +608,20 @@ pub trait TextSystem {
         let fallback = FontRelativeMetrics::fallback(style);
         self.metrics(style)
             .map_or(fallback, |metrics| fallback.with_font_metrics(metrics))
+    }
+    /// Used font size for CSS `font-size-adjust` with an `<metric> <number>`
+    /// basis. The provider resolves the requested metric against the first
+    /// available font and scales `style.size` by `aspect / font_metric_ratio`.
+    /// A zero aspect maps to a zero used size; a missing or non-positive font
+    /// metric, or a non-finite request, leaves `style.size` unchanged.
+    fn adjusted_font_size(
+        &self,
+        style: &TextStyle,
+        metric: FontSizeAdjustMetric,
+        aspect: f32,
+    ) -> f32 {
+        let _ = (metric, aspect);
+        style.size
     }
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError>;
     fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError>;
@@ -1277,6 +1303,22 @@ mod tests {
         assert_eq!(metrics.vertical_descent, 8.0);
         assert_eq!(metrics.vertical_leading, 0.0);
         assert!(!metrics.has_canonical_vertical_metrics);
+    }
+
+    #[test]
+    fn fallback_keeps_the_requested_size_for_font_size_adjust() {
+        let style = TextStyle {
+            size: 20.0,
+            ..TextStyle::default()
+        };
+        assert_eq!(
+            FallbackTextSystem::new().adjusted_font_size(
+                &style,
+                FontSizeAdjustMetric::CapHeight,
+                1.5
+            ),
+            20.0
+        );
     }
 
     #[test]
