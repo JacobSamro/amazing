@@ -1424,3 +1424,51 @@ The fixed-base baseline is **190 pass / 50 mismatch / 0 error / 0 unsupported**.
 ## Viewport computed values and resize invalidation
 
 `compute_with_environment(dom, sheets, &MediaEnvironment)` is the driver entry point. `compute()` supplies a default 800×600 CSS-pixel environment for existing callers. `vw`/`vh`/`vmin`/`vmax` and their `sv`/`lv`/`dv` variants become computed px before inheritance; the small, large, and dynamic sizes default to the layout viewport when absent. This resolves root `font-size: 100vw` before child `rem` values. `StyleInvalidator::new_with_environment` captures the prior environment; `collect_viewport_resize` selects nodes with matching viewport-dependent rules or viewport units in inline styles, and `recompute_roots` uses the new environment for those subtrees. The driver creates a fresh invalidator with the new environment after applying the delta. Container units remain future work.
+
+## COMP-15 — filter, blend, mask, and clip-path (2026-09-26)
+
+CSS now registers `filter`, `backdrop-filter`, `mix-blend-mode`, `isolation`,
+`mask-image`, `mask-mode`, `mask-repeat`, `mask-position`, `mask-clip`,
+`mask-origin`, `mask-size`, `mask-composite`, and `mask-type`, and parses
+`clip-path` shapes. `crates/amazing-css/src/effects.rs` holds the typed values:
+
+- `FilterList` resolves a `<filter-value-list>` to functions
+  (blur/brightness/contrast/drop-shadow/grayscale/hue-rotate/invert/opacity/
+  saturate/sepia/url). Number/percentage arguments are clamped to the property
+  range; `calc()` arguments are retained as `FilterFunction::Expression` text for
+  the compositor to fold. `drop-shadow` offsets/blur are lengths, not
+  percentages.
+- `BlendMode` covers the full Compositing and Blending 2 keyword set including
+  `plus-lighter`; `isolation` is a bool (`isolate` true).
+- `clip-path` parses `none`, `url()`, `<geometry-box>`,
+  `inset()`/`circle()`/`ellipse()`/`polygon()` (with optional `round <length>`
+  and fill-rule) and `path()` (with optional fill-rule), in either
+  `<shape> <box>` order.
+- `mask-image` is a comma list of `none`/`url()`/`<image>`; `mask-mode`,
+  `mask-type`, `mask-composite`, `mask-clip`/`mask-origin` are typed keyword
+  enums; `mask-repeat`/`mask-position`/`mask-size` are grammar-validated.
+- `clip-path` now routes through the effects parser instead of the SVG
+  presentation path (which only accepted `none`/`url()`); SVG consumers only
+  require a non-`Unparsed` typed value.
+
+Effect-only longhands classify as `StyleChangeKind::CompositorOnly` and
+`CompositorStyleDelta` carries them as `effects: Vec<(property, css)>`
+value-only updates through the CSS-13 delta path (`update_attribute`,
+`apply_to_styles`), so the compositor can apply filter/blend/mask/clip changes
+without a CSS recompute.
+
+Boundaries (not claimed): `xywh()` and `rect()` shapes (CSS Shapes 2) and
+`ray()` are unimplemented; `polygon(round ...)` is validated but not retained
+typed; GPU rasterization of filters/backdrop-filters/blend/masks and the
+compositor adoption of the `effects` field are the compositor lane's work. The
+engine's computed serialization places no space after commas in shape functions,
+which differs from the WPT canonical form but is the existing serializer policy.
+
+Evidence: Linux (Boat) CSS nextest **322/322**; workspace nextest **2489/2489**
+(10 skipped). WPT parsing selections pinned at revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` in
+`crates/amazing-css/evidence/css19-effects-manifest.json`; the valid/invalid
+declaration sets are encoded in `effects.rs` unit tests and
+`tests/css19_effects.rs`, because the DOM CSSOM/`getComputedStyle` path those
+harness files need is not implemented. Windows gate recorded in
+`.agents/css/report.md`.
