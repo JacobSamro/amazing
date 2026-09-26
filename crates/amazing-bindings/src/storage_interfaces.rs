@@ -17,6 +17,7 @@ pub enum StorageInterface {
     IDBCursorWithValue,
     IDBKeyRange,
     IDBVersionChangeEvent,
+    IDBRecord,
     CacheStorage,
     Cache,
     StorageManager,
@@ -81,13 +82,18 @@ pub const INTERFACES: &[Interface] = &[
     Interface { kind: StorageInterface::IDBObjectStore, name: "IDBObjectStore", parent: None, members: &[
         getter("name"), getter("keyPath"), getter("indexNames"), getter("transaction"), getter("autoIncrement"),
         method("add", 1), method("put", 1), method("get", 1), method("getAll", 0), method("getAllKeys", 0), method("getKey", 1),
+        method("getAllRecords", 0),
         method("count", 0), method("delete", 1), method("clear", 0), method("openCursor", 0),
         method("openKeyCursor", 0), method("createIndex", 2), method("index", 1), method("deleteIndex", 1),
     ]},
     Interface { kind: StorageInterface::IDBIndex, name: "IDBIndex", parent: None, members: &[
         getter("name"), getter("objectStore"), getter("keyPath"), getter("multiEntry"), getter("unique"),
         method("get", 1), method("getAll", 0), method("getAllKeys", 0), method("getKey", 1), method("count", 0),
+        method("getAllRecords", 0),
         method("openCursor", 0), method("openKeyCursor", 0),
+    ]},
+    Interface { kind: StorageInterface::IDBRecord, name: "IDBRecord", parent: None, members: &[
+        getter("key"), getter("primaryKey"), getter("value"),
     ]},
     Interface { kind: StorageInterface::IDBCursor, name: "IDBCursor", parent: None, members: &[
         getter("source"), getter("direction"), getter("key"), getter("primaryKey"), getter("request"),

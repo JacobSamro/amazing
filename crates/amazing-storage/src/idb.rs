@@ -535,6 +535,14 @@ impl Cursor {
     pub fn direction(&self) -> Direction {
         self.direction
     }
+    /// All records in this cursor's already direction-ordered, deduplicated
+    /// traversal order (see `Cursor::new`), truncated to `limit`. Used by
+    /// `getAll`/`getAllKeys`/`getAllRecords`, which return every matching
+    /// record at once instead of stepping through one at a time.
+    pub fn all(&self, limit: Option<usize>) -> &[CursorRecord] {
+        let end = limit.map_or(self.records.len(), |limit| limit.min(self.records.len()));
+        &self.records[..end]
+    }
     pub fn advance(&mut self, count: usize) -> Result<Option<&CursorRecord>> {
         if count == 0 {
             return Err(Error::Data);

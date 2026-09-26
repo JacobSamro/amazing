@@ -1,0 +1,170 @@
+{
+  "base": "47355c3c",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "file_count": 54,
+  "note": "STORE-9: widens STORE-7's fixed 32-file selection with the idbobjectstore_*/idbtransaction_*/idbkeyrange* files (idbobjectstore_keyPath.any.js and idbtransaction_abort.any.js were already present).",
+  "files": [
+    {
+      "file": "IndexedDB/clone-before-keypath-eval.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-advance.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-continue.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-continuePrimaryKey.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction-index.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction-objectstore.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor_delete_objectstore.any.js"
+    },
+    {
+      "file": "IndexedDB/idbcursor_update_objectstore.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex-multientry.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_count.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_get.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_getAll.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_getAllKeys.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_getKey.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_openCursor.any.js"
+    },
+    {
+      "file": "IndexedDB/idbindex_openKeyCursor.any.js"
+    },
+    {
+      "file": "IndexedDB/idbkeyrange-includes.any.js"
+    },
+    {
+      "file": "IndexedDB/idbkeyrange.any.js"
+    },
+    {
+      "file": "IndexedDB/idbkeyrange_incorrect.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_add.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_clear.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_count.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_createIndex.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_delete.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_deleteIndex.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_get.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getAll-options.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getAll.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getAllKeys-options.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getAllKeys.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getAllRecords.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_getKey.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_index.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_keyPath.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_openCursor.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_openCursor_invalid.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_openKeyCursor.any.js"
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_put.any.js"
+    },
+    {
+      "file": "IndexedDB/idbtransaction-oncomplete.any.js"
+    },
+    {
+      "file": "IndexedDB/idbtransaction_abort.any.js"
+    },
+    {
+      "file": "IndexedDB/idbtransaction_objectStoreNames.any.js"
+    },
+    {
+      "file": "IndexedDB/idbversionchangeevent.any.js"
+    },
+    {
+      "file": "IndexedDB/keypath-exceptions.any.js"
+    },
+    {
+      "file": "IndexedDB/keypath-special-identifiers.any.js"
+    },
+    {
+      "file": "IndexedDB/keypath.any.js"
+    },
+    {
+      "file": "IndexedDB/keypath_invalid.any.js"
+    },
+    {
+      "file": "IndexedDB/transaction-deactivation-timing.any.js"
+    },
+    {
+      "file": "IndexedDB/transaction-lifetime-empty.any.js"
+    },
+    {
+      "file": "IndexedDB/transaction-lifetime.any.js"
+    },
+    {
+      "file": "IndexedDB/transaction-requestqueue.any.js"
+    },
+    {
+      "file": "IndexedDB/transaction-scheduling-ordering.any.js"
+    },
+    {
+      "file": "IndexedDB/upgrade-transaction-lifecycle-committed.any.js"
+    },
+    {
+      "file": "IndexedDB/upgrade-transaction-lifecycle-user-aborted.any.js"
+    }
+  ]
+}
