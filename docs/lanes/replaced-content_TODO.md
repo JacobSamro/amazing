@@ -1555,3 +1555,69 @@ variants (hue-interpolation-method specific) remain unresolved in
 enum shape didn't change, only `from_css`'s parameter type — confirmed with
 a fresh `cargo build -p amazing-compositor --locked` plus its own test
 suite (paint_filters 4/4, paint_view_pages 10/10, parallel_tile_pages 1/1).
+
+## RC-32 — `outline` painting (2026-09-26)
+
+`outline` did not exist anywhere in the engine: no CSS registration, no
+paint consumption. Since `outline-*` was completely unregistered, any
+`outline: ...` declaration was silently dropped by cascade before ever
+reaching a `LayoutBox`'s style map — there was nothing for paint to be
+"assigned" without first closing that gap, so this ticket also carries a
+small, mechanical `amazing-css` addition (flagged to the css lane in
+`questions.md`, not a silent cross-lane edit): `outline-color`/
+`-style`/`-width`/`-offset` registered in `computed.rs`'s `PROPERTIES`
+table (initials `invert`/`none`/`medium`/`0`, none inherited, mirroring
+`border-*`'s own entries) plus an `outline` shorthand expansion
+(width/style/color, order-independent keywords, exactly `border`'s
+three-part grammar minus per-side replication — `outline` has no per-side
+longhands) and a `change_classification.rs` entry (`PaintOnly` for all
+four — unlike `border-*-style`/`-width`, outline never affects box
+geometry at all, so nothing here is ever `Layout`).
+
+**Painting** (`crates/amazing-paint/src/paint.rs`, new `paint_outline`,
+called from `paint_decorations` right after `paint_borders`): reads the
+same raw string style map `border`/`box-shadow` already read (`outline`
+has nothing resolved into `LayoutBox` fields — it never participates in
+box layout). The outline is a plain rectangular frame around the border
+box, inflated by `outline-offset` (can be negative, pulling the ring
+inward, even on top of the border) plus `outline-width` thick, reusing
+`paint_border_strip` for the four uniform-color strips (including its
+`double`-style handling for free). `outline-width` accepts `thin`/
+`medium`/`thick` (1/3/5px, same mapping as `border-width`) or a plain px
+length (`resolve_shadow_length`, already shared with `box-shadow`).
+`outline-color: currentcolor` resolves against the computed text color,
+same policy as `border-color`; `invert` (CSS UI 4's real initial value, for
+UAs that implement pixel inversion) also falls back to the computed color,
+since this painter has no XOR-invert compositing mode. `outline-style:
+auto` (the UA-defined focus ring) paints as `solid` — a documented
+simplification, no platform focus-ring appearance exists here. The ring
+never rounds its own corners to a `border-radius` (CSS UI 4 permits but
+does not require this); where a WPT test needs a rounded *visible* result
+it comes from `clip-path`'s own box-shaped mask (exactly RC-31's
+`marginBox`/`contentBox` cases), not from outline self-rounding.
+
+6 new focused tests (outward offset placement, none/zero-width no-op,
+negative offset pulling the ring onto the border, currentcolor +
+`medium` keyword, `double` style's two-strip split) plus the two
+pre-existing `amazing-css` coverage tests (`known_properties` /
+`change_classification`'s exhaustive-match tripwire, both updated for the
+four new longhands).
+
+Measured, Linux (`scripts/linux-render-wpt.sh replaced-content
+css/css-masking --baseline auto`): pass 55 -> 57, gained 19 (mostly
+`clip-path-marginBox-1b/1c/1d` and `clip-path-contentBox-1e`, RC-31's own
+flagged "needs outline" cluster, plus other outline-adjacent cases the
+baseline already carried as failing for the same reason). The baseline
+diff also reports 2 "lost" (`clip-path-path-interpolation-with-zoom`/
+`clip-path-shape-interpolation-with-zoom`, both animation-interpolation
+tests) -- verified via `git stash` (removing every RC-32 change and
+re-running against the exact same pre-RC-32 tree) that both were *already*
+mismatching before this ticket, so this is pre-existing checked-in-baseline
+drift unrelated to `outline`, not a regression RC-32 introduced. Neither
+test file contains the string "outline" anywhere.
+
+Linux gate: workspace nextest **3,191 passed / 0 failed / 14 skipped**;
+workspace doctests all `ok` (no failures); `amazing-css` **160 passed**
+(up from 154); `amazing-paint` **177 passed** (up from 172, +5 net: 6 new
+outline tests, no removals); `amazing-layout` **303 passed / 1 ignored**
+(untouched by this ticket, re-run for the `LayoutBox` field read).

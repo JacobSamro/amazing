@@ -821,6 +821,7 @@ fn paint_decorations(
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
+    paint_outline(surface, box_, text_color, clip);
     if let Some(node) = box_.svg_root {
         if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {
             paint_image(
@@ -1722,6 +1723,79 @@ fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip
             false,
             clip,
         );
+    }
+}
+
+/// RC-32: `outline` frames the border box from the *outside*, offset by
+/// `outline-offset` (which may be negative, pulling the ring inward, even
+/// on top of the border) and `outline-width` thick. Unlike `border` it has
+/// no per-side properties and never affects layout -- it is read straight
+/// from the raw style map like `border`/`box-shadow` already are, and
+/// reuses `paint_border_strip` for the four uniform-color strips (including
+/// its `double` handling). `outline-style: auto` (the UA-defined focus
+/// ring) is painted the same as `solid`, a documented simplification -- this
+/// painter has no concept of a platform focus-ring appearance. Not clipped
+/// to any rounded shape of its own (a plain rectangular frame): where a
+/// test needs a rounded *result*, that comes from `clip-path`'s own mask
+/// (e.g. `clip-path: margin-box` with `border-radius`), not from the
+/// outline rounding its own corners to match `border-radius` (CSS UI 4
+/// allows, but does not require, an outline that follows the border
+/// radius).
+fn paint_outline(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
+    let style = b.style.get("outline-style").unwrap_or("none");
+    if style.eq_ignore_ascii_case("none") {
+        return;
+    }
+    let width = b
+        .style
+        .get("outline-width")
+        .and_then(|value| resolve_outline_width(value))
+        .unwrap_or(3.0); // "medium", matching border-width's own default.
+    if width <= 0.0 {
+        return;
+    }
+    let offset = b
+        .style
+        .get("outline-offset")
+        .and_then(|value| resolve_shadow_length(value))
+        .unwrap_or(0.0);
+    let color = match b.style.get("outline-color") {
+        None => text_color,
+        // `invert` (also legal per CSS UI 4, XOR-inverting the pixels
+        // underneath) has no meaning for this painter's flat compositing;
+        // `currentcolor` and an absent/invalid color both fall back to the
+        // computed text color, the same policy `border-color` already uses.
+        Some(value) if value.eq_ignore_ascii_case("currentcolor") || value.eq_ignore_ascii_case("invert") => {
+            text_color
+        }
+        Some(value) => parse_css_color(value).unwrap_or(text_color),
+    };
+    let double = style.eq_ignore_ascii_case("double");
+    let bb = &b.border_box;
+    let inflate = offset + width;
+    let x = bb.x - inflate;
+    let y = bb.y - inflate;
+    let w = bb.w + 2.0 * inflate;
+    let h = bb.h + 2.0 * inflate;
+    if !(w > 0.0 && h > 0.0) {
+        return;
+    }
+    paint_border_strip(surface, [x, y, w, width], color, double, true, clip);
+    paint_border_strip(surface, [x, y + h - width, w, width], color, double, true, clip);
+    let middle = (h - 2.0 * width).max(0.0);
+    paint_border_strip(surface, [x, y + width, width, middle], color, double, false, clip);
+    paint_border_strip(surface, [x + w - width, y + width, width, middle], color, double, false, clip);
+}
+
+/// `outline-width` accepts the same `thin`/`medium`/`thick` keywords as
+/// `border-width` (same px mapping); otherwise it is a plain length, like
+/// `resolve_shadow_length` already handles for `box-shadow`.
+fn resolve_outline_width(value: &str) -> Option<f32> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "thin" => Some(1.0),
+        "medium" => Some(3.0),
+        "thick" => Some(5.0),
+        other => resolve_shadow_length(other),
     }
 }
 
@@ -2768,6 +2842,90 @@ mod tests {
         ]);
         let surf = paint_document(&b, 8, 8, &FontSource::fallback());
         assert_eq!(surf.get_pixel(2, 0), Some([128, 0, 128, 255]));
+    }
+
+    #[test]
+    fn outline_draws_outside_the_border_box_at_its_own_offset() {
+        // A 4x4 border box at (5,5), outline 2px solid red, offset 1px:
+        // the ring sits between (5-1-2=2) and (5-1=4) on each side.
+        let mut b = block(&[], 5.0, 5.0, 4.0, 4.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "red"),
+            ("outline-width", "2px"),
+            ("outline-offset", "1px"),
+        ]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(3, 3), Some([255, 0, 0, 255]), "outer ring pixel");
+        assert_eq!(surf.get_pixel(2, 2), Some([255, 0, 0, 255]), "corner of the ring");
+        assert_eq!(surf.get_pixel(4, 4), Some(WHITE), "gap between border box and ring (the offset)");
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE), "outside the ring entirely");
+        assert_eq!(surf.get_pixel(6, 6), Some(WHITE), "inside the border box, untouched");
+    }
+
+    #[test]
+    fn outline_none_or_zero_width_paints_nothing() {
+        let mut b = block(&[], 2.0, 2.0, 4.0, 4.0);
+        b.style = style(&[("outline-style", "none"), ("outline-color", "red"), ("outline-width", "9px")]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+
+        b.style = style(&[("outline-style", "solid"), ("outline-color", "red"), ("outline-width", "0px")]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+
+        // No outline-style at all defaults to `none`, same as the initial value.
+        let plain = block(&[("outline-color", "red"), ("outline-width", "9px")], 2.0, 2.0, 4.0, 4.0);
+        let surf = paint_document(&plain, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+    }
+
+    #[test]
+    fn outline_negative_offset_pulls_the_ring_inward_over_the_border() {
+        let mut b = block(&[], 4.0, 4.0, 8.0, 8.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "lime"),
+            ("outline-width", "2px"),
+            ("outline-offset", "-2px"),
+        ]);
+        let surf = paint_document(&b, 16, 16, &FontSource::fallback());
+        // offset -2, width 2: the ring's outer edge coincides with the
+        // border box's own edge (offset + width == 0), so it paints right
+        // on top of the box's own perimeter, leaving only the inner core
+        // (well past the 2px ring thickness on every side) untouched.
+        assert_eq!(surf.get_pixel(4, 4), Some([0, 255, 0, 255]), "top-left corner of the box");
+        assert_eq!(surf.get_pixel(11, 11), Some([0, 255, 0, 255]), "bottom-right corner of the box");
+        assert_eq!(surf.get_pixel(8, 8), Some(WHITE), "well inside the ring, untouched");
+    }
+
+    #[test]
+    fn outline_currentcolor_and_medium_keyword_resolve_like_border() {
+        let mut b = block(&[], 3.0, 3.0, 4.0, 4.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "currentcolor"),
+            ("outline-width", "medium"), // 3px, same mapping as border-width.
+            ("color", "blue"),
+        ]);
+        let surf = paint_document(&b, 16, 16, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(0, 0), Some([0, 0, 255, 255]));
+    }
+
+    #[test]
+    fn outline_double_style_paints_two_strips_like_double_border() {
+        let mut b = block(&[], 5.0, 5.0, 6.0, 6.0);
+        b.style = style(&[
+            ("outline-style", "double"),
+            ("outline-color", "black"),
+            ("outline-width", "3px"),
+        ]);
+        let surf = paint_document(&b, 20, 20, &FontSource::fallback());
+        // The 3px-thick top ring splits into two 1px strips with a 1px gap;
+        // outer edge at y=2 (5 - 3), so rows 2 and 4 are ink, row 3 is not.
+        assert_eq!(surf.get_pixel(6, 2), Some([0, 0, 0, 255]));
+        assert_eq!(surf.get_pixel(6, 3), Some(WHITE));
+        assert_eq!(surf.get_pixel(6, 4), Some([0, 0, 0, 255]));
     }
 
     #[test]
