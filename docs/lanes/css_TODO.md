@@ -1500,3 +1500,35 @@ limited range. Linux final gate (Boat, lane head `4c331292`): CSS crate
 **2/2**. The counter-styles WPT render after-run uses the Windows-only
 PowerShell runner, so it is deferred under the Linux-first rule; the formatting
 itself is proven by the spec-reference unit tests above.
+
+## CSS-20 — CSS Values 5 calc-size() preservation (LAYOUT-18)
+
+Commit `9bb410cd`. CSS accepts `calc-size( <calc-size-basis>, <calc-sum> )`
+([CSS Values 5 §11](https://drafts.csswg.org/css-values-5/#calc-size)) on the
+size longhands: `width`, `height`, `min-width`/`min-height`,
+`max-width`/`max-height`, `flex-basis`, and the logical `inline-size`/
+`block-size` family (mapped to the physical longhands before validation). The
+basis is a sizing keyword (`auto | min-content | max-content | fit-content |
+stretch | contain`), the `fit-content()` function variation, a `<calc-sum>`, a
+nested `calc-size()`, or `any`. The calculation is a `<calc-sum>` in which the
+`size` keyword names the basis; `size` is rejected when the basis is `any`.
+
+`crates/amazing-css/src/math.rs::calc_size` validates the grammar and the
+expression is retained unmodified as
+`ComputedValue::LengthPercentageExpression`, so `ComputedStyle::get` returns the
+canonical `calc-size(...)` text and `typed()` exposes the expression without
+resolving the intrinsic keyword at computed-value time. Layout owns the
+used-value evaluation (its own `calc-size()` parser and intrinsic basis
+handling). Malformed arithmetic, trailing tokens, a non-sizing property
+context, an unknown basis, and `size` under an `any` basis are rejected before
+cascade, so the declaration behaves as invalid rather than manufacturing a
+value.
+
+Boundary (not claimed): `calc-size()` nested inside another math function
+(`min(calc-size(...), 50px)`) is not accepted; only the top-level function is.
+Layout's other LAYOUT-18 seam, typed `attr()` inside math (`width:
+max(attr(data-test type(<length>)))`), was already implemented by CSS-15.
+
+Linux final gate (Boat sandbox, lane head `9bb410cd`): CSS crate **323/323**
+(adds `values::tests::calc_size_is_preserved_for_layout`), workspace nextest
+**2540/2540** (10 skipped), workspace doctests **2/2**, zero failures.

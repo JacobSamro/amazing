@@ -1,0 +1,919 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "sparse_paths": [
+    "html/semantics/embedded-content/the-img-element",
+    "html/resources",
+    "css/css-images",
+    "css/support",
+    "images",
+    "common",
+    "resources",
+    "service-workers/service-worker/resources"
+  ],
+  "tests": [
+    {
+      "id": "css/css-images/image-orientation/image-orientation-img-object-fit",
+      "test": "css/css-images/image-orientation/image-orientation-img-object-fit.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-001c",
+      "test": "css/css-images/object-fit-contain-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-001e",
+      "test": "css/css-images/object-fit-contain-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-001i",
+      "test": "css/css-images/object-fit-contain-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-001o",
+      "test": "css/css-images/object-fit-contain-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-001p",
+      "test": "css/css-images/object-fit-contain-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-002c",
+      "test": "css/css-images/object-fit-contain-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-002e",
+      "test": "css/css-images/object-fit-contain-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-002i",
+      "test": "css/css-images/object-fit-contain-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-002o",
+      "test": "css/css-images/object-fit-contain-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-png-002p",
+      "test": "css/css-images/object-fit-contain-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-001e",
+      "test": "css/css-images/object-fit-contain-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-001i",
+      "test": "css/css-images/object-fit-contain-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-001o",
+      "test": "css/css-images/object-fit-contain-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-001p",
+      "test": "css/css-images/object-fit-contain-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-002e",
+      "test": "css/css-images/object-fit-contain-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-002i",
+      "test": "css/css-images/object-fit-contain-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-002o",
+      "test": "css/css-images/object-fit-contain-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-002p",
+      "test": "css/css-images/object-fit-contain-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-003e",
+      "test": "css/css-images/object-fit-contain-svg-003e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-003i",
+      "test": "css/css-images/object-fit-contain-svg-003i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-003o",
+      "test": "css/css-images/object-fit-contain-svg-003o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-003p",
+      "test": "css/css-images/object-fit-contain-svg-003p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-004e",
+      "test": "css/css-images/object-fit-contain-svg-004e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-004i",
+      "test": "css/css-images/object-fit-contain-svg-004i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-004o",
+      "test": "css/css-images/object-fit-contain-svg-004o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-004p",
+      "test": "css/css-images/object-fit-contain-svg-004p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-005e",
+      "test": "css/css-images/object-fit-contain-svg-005e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-005i",
+      "test": "css/css-images/object-fit-contain-svg-005i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-005o",
+      "test": "css/css-images/object-fit-contain-svg-005o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-005p",
+      "test": "css/css-images/object-fit-contain-svg-005p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-006e",
+      "test": "css/css-images/object-fit-contain-svg-006e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-006i",
+      "test": "css/css-images/object-fit-contain-svg-006i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-006o",
+      "test": "css/css-images/object-fit-contain-svg-006o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-contain-svg-006p",
+      "test": "css/css-images/object-fit-contain-svg-006p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containcontainintrinsicsize-png-001c.tentative",
+      "test": "css/css-images/object-fit-containcontainintrinsicsize-png-001c.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containcontainintrinsicsize-png-001e.tentative",
+      "test": "css/css-images/object-fit-containcontainintrinsicsize-png-001e.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containcontainintrinsicsize-png-001i.tentative",
+      "test": "css/css-images/object-fit-containcontainintrinsicsize-png-001i.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containcontainintrinsicsize-png-001p.tentative",
+      "test": "css/css-images/object-fit-containcontainintrinsicsize-png-001p.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containsize-png-001c.tentative",
+      "test": "css/css-images/object-fit-containsize-png-001c.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containsize-png-001e.tentative",
+      "test": "css/css-images/object-fit-containsize-png-001e.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containsize-png-001i.tentative",
+      "test": "css/css-images/object-fit-containsize-png-001i.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-containsize-png-001p.tentative",
+      "test": "css/css-images/object-fit-containsize-png-001p.tentative.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-001c",
+      "test": "css/css-images/object-fit-cover-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-001e",
+      "test": "css/css-images/object-fit-cover-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-001i",
+      "test": "css/css-images/object-fit-cover-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-001o",
+      "test": "css/css-images/object-fit-cover-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-001p",
+      "test": "css/css-images/object-fit-cover-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-002c",
+      "test": "css/css-images/object-fit-cover-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-002e",
+      "test": "css/css-images/object-fit-cover-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-002i",
+      "test": "css/css-images/object-fit-cover-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-002o",
+      "test": "css/css-images/object-fit-cover-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-png-002p",
+      "test": "css/css-images/object-fit-cover-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-001e",
+      "test": "css/css-images/object-fit-cover-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-001i",
+      "test": "css/css-images/object-fit-cover-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-001o",
+      "test": "css/css-images/object-fit-cover-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-001p",
+      "test": "css/css-images/object-fit-cover-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-002e",
+      "test": "css/css-images/object-fit-cover-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-002i",
+      "test": "css/css-images/object-fit-cover-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-002o",
+      "test": "css/css-images/object-fit-cover-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-002p",
+      "test": "css/css-images/object-fit-cover-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-003e",
+      "test": "css/css-images/object-fit-cover-svg-003e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-003i",
+      "test": "css/css-images/object-fit-cover-svg-003i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-003o",
+      "test": "css/css-images/object-fit-cover-svg-003o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-003p",
+      "test": "css/css-images/object-fit-cover-svg-003p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-004e",
+      "test": "css/css-images/object-fit-cover-svg-004e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-004i",
+      "test": "css/css-images/object-fit-cover-svg-004i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-004o",
+      "test": "css/css-images/object-fit-cover-svg-004o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-004p",
+      "test": "css/css-images/object-fit-cover-svg-004p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-005e",
+      "test": "css/css-images/object-fit-cover-svg-005e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-005i",
+      "test": "css/css-images/object-fit-cover-svg-005i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-005o",
+      "test": "css/css-images/object-fit-cover-svg-005o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-005p",
+      "test": "css/css-images/object-fit-cover-svg-005p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-006e",
+      "test": "css/css-images/object-fit-cover-svg-006e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-006i",
+      "test": "css/css-images/object-fit-cover-svg-006i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-006o",
+      "test": "css/css-images/object-fit-cover-svg-006o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-cover-svg-006p",
+      "test": "css/css-images/object-fit-cover-svg-006p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-dyn-aspect-ratio-001",
+      "test": "css/css-images/object-fit-dyn-aspect-ratio-001.html"
+    },
+    {
+      "id": "css/css-images/object-fit-dyn-aspect-ratio-002",
+      "test": "css/css-images/object-fit-dyn-aspect-ratio-002.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-001c",
+      "test": "css/css-images/object-fit-fill-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-001e",
+      "test": "css/css-images/object-fit-fill-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-001i",
+      "test": "css/css-images/object-fit-fill-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-001o",
+      "test": "css/css-images/object-fit-fill-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-001p",
+      "test": "css/css-images/object-fit-fill-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-002c",
+      "test": "css/css-images/object-fit-fill-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-002e",
+      "test": "css/css-images/object-fit-fill-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-002i",
+      "test": "css/css-images/object-fit-fill-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-002o",
+      "test": "css/css-images/object-fit-fill-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-png-002p",
+      "test": "css/css-images/object-fit-fill-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-001e",
+      "test": "css/css-images/object-fit-fill-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-001i",
+      "test": "css/css-images/object-fit-fill-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-001o",
+      "test": "css/css-images/object-fit-fill-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-001p",
+      "test": "css/css-images/object-fit-fill-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-002e",
+      "test": "css/css-images/object-fit-fill-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-002i",
+      "test": "css/css-images/object-fit-fill-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-002o",
+      "test": "css/css-images/object-fit-fill-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-002p",
+      "test": "css/css-images/object-fit-fill-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-003e",
+      "test": "css/css-images/object-fit-fill-svg-003e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-003i",
+      "test": "css/css-images/object-fit-fill-svg-003i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-003o",
+      "test": "css/css-images/object-fit-fill-svg-003o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-003p",
+      "test": "css/css-images/object-fit-fill-svg-003p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-004e",
+      "test": "css/css-images/object-fit-fill-svg-004e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-004i",
+      "test": "css/css-images/object-fit-fill-svg-004i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-004o",
+      "test": "css/css-images/object-fit-fill-svg-004o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-004p",
+      "test": "css/css-images/object-fit-fill-svg-004p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-005e",
+      "test": "css/css-images/object-fit-fill-svg-005e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-005i",
+      "test": "css/css-images/object-fit-fill-svg-005i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-005o",
+      "test": "css/css-images/object-fit-fill-svg-005o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-005p",
+      "test": "css/css-images/object-fit-fill-svg-005p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-006e",
+      "test": "css/css-images/object-fit-fill-svg-006e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-006i",
+      "test": "css/css-images/object-fit-fill-svg-006i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-006o",
+      "test": "css/css-images/object-fit-fill-svg-006o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-fill-svg-006p",
+      "test": "css/css-images/object-fit-fill-svg-006p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-001c",
+      "test": "css/css-images/object-fit-none-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-001e",
+      "test": "css/css-images/object-fit-none-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-001i",
+      "test": "css/css-images/object-fit-none-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-001o",
+      "test": "css/css-images/object-fit-none-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-001p",
+      "test": "css/css-images/object-fit-none-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-002c",
+      "test": "css/css-images/object-fit-none-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-002e",
+      "test": "css/css-images/object-fit-none-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-002i",
+      "test": "css/css-images/object-fit-none-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-002o",
+      "test": "css/css-images/object-fit-none-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-png-002p",
+      "test": "css/css-images/object-fit-none-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-001e",
+      "test": "css/css-images/object-fit-none-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-001i",
+      "test": "css/css-images/object-fit-none-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-001o",
+      "test": "css/css-images/object-fit-none-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-001p",
+      "test": "css/css-images/object-fit-none-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-002e",
+      "test": "css/css-images/object-fit-none-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-002i",
+      "test": "css/css-images/object-fit-none-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-002o",
+      "test": "css/css-images/object-fit-none-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-002p",
+      "test": "css/css-images/object-fit-none-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-003e",
+      "test": "css/css-images/object-fit-none-svg-003e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-003i",
+      "test": "css/css-images/object-fit-none-svg-003i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-003o",
+      "test": "css/css-images/object-fit-none-svg-003o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-003p",
+      "test": "css/css-images/object-fit-none-svg-003p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-004e",
+      "test": "css/css-images/object-fit-none-svg-004e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-004i",
+      "test": "css/css-images/object-fit-none-svg-004i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-004o",
+      "test": "css/css-images/object-fit-none-svg-004o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-004p",
+      "test": "css/css-images/object-fit-none-svg-004p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-005e",
+      "test": "css/css-images/object-fit-none-svg-005e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-005i",
+      "test": "css/css-images/object-fit-none-svg-005i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-005o",
+      "test": "css/css-images/object-fit-none-svg-005o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-005p",
+      "test": "css/css-images/object-fit-none-svg-005p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-006e",
+      "test": "css/css-images/object-fit-none-svg-006e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-006i",
+      "test": "css/css-images/object-fit-none-svg-006i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-006o",
+      "test": "css/css-images/object-fit-none-svg-006o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-none-svg-006p",
+      "test": "css/css-images/object-fit-none-svg-006p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-001c",
+      "test": "css/css-images/object-fit-scale-down-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-001e",
+      "test": "css/css-images/object-fit-scale-down-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-001i",
+      "test": "css/css-images/object-fit-scale-down-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-001o",
+      "test": "css/css-images/object-fit-scale-down-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-001p",
+      "test": "css/css-images/object-fit-scale-down-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-002c",
+      "test": "css/css-images/object-fit-scale-down-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-002e",
+      "test": "css/css-images/object-fit-scale-down-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-002i",
+      "test": "css/css-images/object-fit-scale-down-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-002o",
+      "test": "css/css-images/object-fit-scale-down-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-png-002p",
+      "test": "css/css-images/object-fit-scale-down-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-001e",
+      "test": "css/css-images/object-fit-scale-down-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-001i",
+      "test": "css/css-images/object-fit-scale-down-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-001o",
+      "test": "css/css-images/object-fit-scale-down-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-001p",
+      "test": "css/css-images/object-fit-scale-down-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-002e",
+      "test": "css/css-images/object-fit-scale-down-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-002i",
+      "test": "css/css-images/object-fit-scale-down-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-002o",
+      "test": "css/css-images/object-fit-scale-down-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-002p",
+      "test": "css/css-images/object-fit-scale-down-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-003e",
+      "test": "css/css-images/object-fit-scale-down-svg-003e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-003i",
+      "test": "css/css-images/object-fit-scale-down-svg-003i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-003o",
+      "test": "css/css-images/object-fit-scale-down-svg-003o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-003p",
+      "test": "css/css-images/object-fit-scale-down-svg-003p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-004e",
+      "test": "css/css-images/object-fit-scale-down-svg-004e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-004i",
+      "test": "css/css-images/object-fit-scale-down-svg-004i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-004o",
+      "test": "css/css-images/object-fit-scale-down-svg-004o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-004p",
+      "test": "css/css-images/object-fit-scale-down-svg-004p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-005e",
+      "test": "css/css-images/object-fit-scale-down-svg-005e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-005i",
+      "test": "css/css-images/object-fit-scale-down-svg-005i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-005o",
+      "test": "css/css-images/object-fit-scale-down-svg-005o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-005p",
+      "test": "css/css-images/object-fit-scale-down-svg-005p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-006e",
+      "test": "css/css-images/object-fit-scale-down-svg-006e.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-006i",
+      "test": "css/css-images/object-fit-scale-down-svg-006i.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-006o",
+      "test": "css/css-images/object-fit-scale-down-svg-006o.html"
+    },
+    {
+      "id": "css/css-images/object-fit-scale-down-svg-006p",
+      "test": "css/css-images/object-fit-scale-down-svg-006p.html"
+    },
+    {
+      "id": "css/css-images/object-fit-stale-image-while-revalidating",
+      "test": "css/css-images/object-fit-stale-image-while-revalidating.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-001c",
+      "test": "css/css-images/object-position-png-001c.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-001e",
+      "test": "css/css-images/object-position-png-001e.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-001i",
+      "test": "css/css-images/object-position-png-001i.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-001o",
+      "test": "css/css-images/object-position-png-001o.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-001p",
+      "test": "css/css-images/object-position-png-001p.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-002c",
+      "test": "css/css-images/object-position-png-002c.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-002e",
+      "test": "css/css-images/object-position-png-002e.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-002i",
+      "test": "css/css-images/object-position-png-002i.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-002o",
+      "test": "css/css-images/object-position-png-002o.html"
+    },
+    {
+      "id": "css/css-images/object-position-png-002p",
+      "test": "css/css-images/object-position-png-002p.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-001e",
+      "test": "css/css-images/object-position-svg-001e.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-001i",
+      "test": "css/css-images/object-position-svg-001i.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-001o",
+      "test": "css/css-images/object-position-svg-001o.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-001p",
+      "test": "css/css-images/object-position-svg-001p.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-002e",
+      "test": "css/css-images/object-position-svg-002e.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-002i",
+      "test": "css/css-images/object-position-svg-002i.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-002o",
+      "test": "css/css-images/object-position-svg-002o.html"
+    },
+    {
+      "id": "css/css-images/object-position-svg-002p",
+      "test": "css/css-images/object-position-svg-002p.html"
+    },
+    {
+      "id": "css/css-images/tools/template-object-fit-test",
+      "test": "css/css-images/tools/template-object-fit-test.html"
+    },
+    {
+      "id": "css/css-images/tools/template-object-position-test",
+      "test": "css/css-images/tools/template-object-position-test.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/adopt-from-image-document",
+      "test": "html/semantics/embedded-content/the-img-element/adopt-from-image-document.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/animated-image-update.tentative",
+      "test": "html/semantics/embedded-content/the-img-element/animated-image-update.tentative.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/animated-webp-update.tentative",
+      "test": "html/semantics/embedded-content/the-img-element/animated-webp-update.tentative.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/available-images",
+      "test": "html/semantics/embedded-content/the-img-element/available-images.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/content-type-with-parameters",
+      "test": "html/semantics/embedded-content/the-img-element/content-type-with-parameters.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/document-adopt-base-url",
+      "test": "html/semantics/embedded-content/the-img-element/document-adopt-base-url.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/document-base-url",
+      "test": "html/semantics/embedded-content/the-img-element/document-base-url.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-compositing-change",
+      "test": "html/semantics/embedded-content/the-img-element/image-compositing-change.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-compositing-large-scale-change",
+      "test": "html/semantics/embedded-content/the-img-element/image-compositing-large-scale-change.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-loading-lazy-clip-path",
+      "test": "html/semantics/embedded-content/the-img-element/image-loading-lazy-clip-path.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-loading-lazy-data-url-to-https",
+      "test": "html/semantics/embedded-content/the-img-element/image-loading-lazy-data-url-to-https.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-loading-lazy-slow-aspect-ratio",
+      "test": "html/semantics/embedded-content/the-img-element/image-loading-lazy-slow-aspect-ratio.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-loading-lazy-slow",
+      "test": "html/semantics/embedded-content/the-img-element/image-loading-lazy-slow.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-loading-subpixel-clip",
+      "test": "html/semantics/embedded-content/the-img-element/image-loading-subpixel-clip.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/image-srcdoc-relative-uri-print",
+      "test": "html/semantics/embedded-content/the-img-element/image-srcdoc-relative-uri-print.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/img-with-containment-and-size",
+      "test": "html/semantics/embedded-content/the-img-element/img-with-containment-and-size.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/responsive-image-select-print",
+      "test": "html/semantics/embedded-content/the-img-element/responsive-image-select-print.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-2",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-2.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-3",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-3.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-dynamic",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering-dynamic.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-auto-rendering.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-dynamic-001",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-dynamic-001.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/sizes/sizes-dynamic-002",
+      "test": "html/semantics/embedded-content/the-img-element/sizes/sizes-dynamic-002.html"
+    },
+    {
+      "id": "html/semantics/embedded-content/the-img-element/svg-img-with-external-stylesheet",
+      "test": "html/semantics/embedded-content/the-img-element/svg-img-with-external-stylesheet.html"
+    }
+  ]
+}
