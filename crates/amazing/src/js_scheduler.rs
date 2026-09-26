@@ -287,6 +287,16 @@ impl DriverScheduler {
     pub(crate) fn pump_now(&mut self, render: bool) -> Result<bool, Throw> {
         self.pump_at(self.started.elapsed(), render)
     }
+
+    /// [`Self::pump_now`] variant that ticks a host render hook at the loop's
+    /// frame boundary (see [`Self::pump_at_with_render`]).
+    pub(crate) fn pump_now_with_render(
+        &mut self,
+        render: bool,
+        on_render: impl FnMut(RenderPhase, Duration),
+    ) -> Result<bool, Throw> {
+        self.pump_at_with_render(self.started.elapsed(), render, on_render)
+    }
 }
 
 fn loop_error(error: amazing_dom::event_loop::LoopError) -> Throw {
