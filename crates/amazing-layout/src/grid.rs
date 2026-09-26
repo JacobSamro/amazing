@@ -1166,18 +1166,6 @@ fn size_axis(
     base
 }
 
-fn stretch_auto_tracks(sizes: &mut [f32], kinds: &[TrackSize], available: f32, gap: f32) {
-    let autos = kinds.iter().enumerate().filter_map(|(index, kind)|
-        kind.has_auto_max().then_some(index)).collect::<Vec<_>>();
-    if autos.is_empty() { return; }
-    let spare = available - sizes.iter().sum::<f32>()
-        - gap * sizes.len().saturating_sub(1) as f32;
-    if spare > 0.0 {
-        let each = spare / autos.len() as f32;
-        for index in autos { sizes[index] += each; }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Item helpers (box-model glue shared conceptually with flex.rs)
 // ---------------------------------------------------------------------------
@@ -1835,6 +1823,7 @@ fn choose_lane(running: &[f32], span: usize, tolerance: f32, cursor: usize) -> (
     let span = span.clamp(1, running.len());
     let candidates = (0..=running.len() - span)
         .map(|start| (start, running[start..start + span].iter().copied().fold(0.0, f32::max)))
+        .filter(|(_, position)| position.is_finite())
         .collect::<Vec<_>>();
     let shortest = candidates.iter().map(|(_, pos)| *pos).fold(f32::INFINITY, f32::min);
     let tied = candidates.into_iter().filter(|(_, pos)| *pos <= shortest + tolerance)
@@ -1900,22 +1889,13 @@ pub(crate) fn layout_grid_lanes(
             outer: intrinsic_outer_width(it, fonts),
         });
     }
-    let mut sizes = size_axis(&kinds, spec.col_gap, Some(content_w), &contributions);
+    let axis = ActiveAxis::for_lanes(tracks, &spec.col_auto_fit, raw.iter().map(|p| (p.col, p.col_span)));
+    let mut sizes = axis.size(&kinds, spec.col_gap, Some(content_w), &contributions);
     if spec.justify_content == Pack::Stretch {
-        stretch_auto_tracks(&mut sizes, &kinds, content_w, spec.col_gap);
+        axis.stretch(&mut sizes, &kinds, content_w, spec.col_gap);
     }
-    let free = content_w - sizes.iter().sum::<f32>()
-        - spec.col_gap * tracks.saturating_sub(1) as f32;
-    let (lead, between) = pack_pair(spec.justify_content, free, tracks);
-    let mut positions = Vec::with_capacity(tracks);
-    if spec.rtl {
-        let mut x = content_x + content_w - lead;
-        for size in &sizes { x -= size; positions.push(x); x -= spec.col_gap + between; }
-    } else {
-        let mut x = content_x + lead;
-        for size in &sizes { positions.push(x); x += size + spec.col_gap + between; }
-    }
-    let mut running = vec![0.0f32; tracks];
+    let positions = axis.positions(&sizes, spec.col_gap, spec.justify_content, content_w, content_x, spec.rtl);
+    let mut running = axis.lane_positions();
     let tolerance = flow_tolerance(container, font_px, content_w);
     let mut cursor = 0usize;
     let mut order = (0..items.len()).collect::<Vec<_>>();
@@ -1958,7 +1938,7 @@ pub(crate) fn layout_grid_lanes(
             *position = stack + advance;
         }
     }
-    let natural_height = (running.into_iter().fold(0.0, f32::max) - spec.row_gap).max(0.0);
+    let natural_height = (running.into_iter().filter(|value| value.is_finite()).fold(0.0, f32::max) - spec.row_gap).max(0.0);
     if let Some(height) = definite_height {
         // Grid Lanes 3 §6.3 has one stacking-range alignment subject. Align
         // the entire waterfall, never distribute free space between its items.
@@ -2006,15 +1986,15 @@ fn layout_row_lanes(
             outer: outer_h(it),
         });
     }
-    let sizes = size_axis(&kinds, spec.row_gap, definite_height, &contributions);
-    let natural_height = sizes.iter().sum::<f32>()
-        + spec.row_gap * tracks.saturating_sub(1) as f32;
-    let (lead, between) = pack_pair(spec.align_content,
-        definite_height.unwrap_or(natural_height) - natural_height, tracks);
-    let mut positions = Vec::with_capacity(tracks);
-    let mut y = content_y + lead;
-    for size in &sizes { positions.push(y); y += size + spec.row_gap + between; }
-    let mut running = vec![0.0f32; tracks];
+    let axis = ActiveAxis::for_lanes(tracks, &spec.row_auto_fit, raw.iter().map(|p| (p.row, p.row_span)));
+    let mut sizes = axis.size(&kinds, spec.row_gap, definite_height, &contributions);
+    if spec.align_content == Pack::Stretch {
+        if let Some(height) = definite_height { axis.stretch(&mut sizes, &kinds, height, spec.row_gap); }
+    }
+    let natural_height = sizes.iter().sum::<f32>() + axis.gaps(spec.row_gap);
+    let positions = axis.positions(&sizes, spec.row_gap, spec.align_content,
+        definite_height.unwrap_or(natural_height), content_y, false);
+    let mut running = axis.lane_positions();
     let tolerance = flow_tolerance(container, font_px, definite_height.unwrap_or(content_w));
     let mut cursor = 0usize;
     let mut order = (0..items.len()).collect::<Vec<_>>();
@@ -2034,12 +2014,14 @@ fn layout_row_lanes(
         let end = start + span - 1;
         let area_h = positions[end] + sizes[end] - area_y;
         let it = &mut items[index];
+        it.containing_block_height = Some(area_h);
         let rows = subgrid_axis_for_item(it, "grid-template-rows", &sizes,
             spec.row_gap, &spec.row_line_names, start + 1, span);
         it.grid_subgrid = rows.map(|rows| SubgridContext { cols: None, rows: Some(rows) });
         let width = match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
             MaybeLen::Px(width) => width.max(0.0),
-            MaybeLen::Auto => crate::flex::max_content_width(it, fonts).min(content_w),
+            MaybeLen::Auto => (crate::flex::max_content_width(it, fonts) - h_chrome(it)).max(0.0)
+                .min((content_w - h_chrome(it)).max(0.0)),
         };
         it.style.set("width", &format!("{}px", width));
         if height_is_auto(it) {
@@ -2062,7 +2044,7 @@ fn layout_row_lanes(
         }
     }
     if !spec.rtl {
-        let natural_width = (running.into_iter().fold(0.0, f32::max) - spec.col_gap).max(0.0);
+        let natural_width = (running.into_iter().filter(|value| value.is_finite()).fold(0.0, f32::max) - spec.col_gap).max(0.0);
         let (lead, _) = pack_pair(spec.justify_content, content_w - natural_width, 1);
         if lead != 0.0 {
             for item in items {

@@ -76,6 +76,32 @@ impl ActiveAxis {
         Self { collapsed, prefix }
     }
 
+    /// Grid Lanes sizes before placement: reserve explicit spans, then the
+    /// first N remaining tracks, where N is the sum of automatic spans.
+    pub(super) fn for_lanes(count: usize, auto_fit: &[bool], placements: impl Iterator<Item = (Option<u32>, u32)>) -> Self {
+        let placements = placements.collect::<Vec<_>>();
+        let mut occupied = vec![false; count];
+        let mut automatic = 0usize;
+        for (line, span) in placements {
+            if let Some(line) = line {
+                for entry in occupied.iter_mut().skip(line.saturating_sub(1) as usize).take(span as usize) {
+                    *entry = true;
+                }
+            } else {
+                automatic = automatic.saturating_add(span as usize);
+            }
+        }
+        for entry in &mut occupied {
+            if !*entry && automatic > 0 { *entry = true; automatic -= 1; }
+        }
+        Self::new(count, auto_fit, occupied.into_iter().enumerate()
+            .filter_map(|(index, used)| used.then_some((index, 1))))
+    }
+
+    pub(super) fn lane_positions(&self) -> Vec<f32> {
+        self.collapsed.iter().map(|collapsed| if *collapsed { f32::INFINITY } else { 0.0 }).collect()
+    }
+
     pub(super) fn gaps(&self, gap: f32) -> f32 {
         gap * self.prefix.last().unwrap().saturating_sub(1) as f32
     }

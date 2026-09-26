@@ -126,7 +126,17 @@ impl ContainerSpec {
             .get("flex-wrap")
             .map(|v| v.eq_ignore_ascii_case("wrap") || v.eq_ignore_ascii_case("wrap-reverse"))
             .unwrap_or(false);
-        let wrap_reverse = style.get("flex-wrap")
+        // The solvers place cross lines left-to-right/top-to-bottom. Map
+        // logical cross-start first, then apply wrap-reverse (Flexbox §5.2).
+        let mode = style.get("writing-mode").unwrap_or("horizontal-tb");
+        let cross_reversed = match logical_direction {
+            Direction::Row | Direction::RowReverse =>
+                mode.eq_ignore_ascii_case("vertical-rl") || mode.eq_ignore_ascii_case("sideways-rl"),
+            Direction::Column | Direction::ColumnReverse =>
+                style.get("direction").is_some_and(|value| value.eq_ignore_ascii_case("rtl"))
+                    ^ mode.eq_ignore_ascii_case("sideways-lr"),
+        };
+        let wrap_reverse = cross_reversed ^ style.get("flex-wrap")
             .is_some_and(|value| value.eq_ignore_ascii_case("wrap-reverse"));
         let justify = parse_pack(style.get("justify-content"), Pack::Start);
         let align_items = parse_align(style.get("align-items"), Pack::Stretch);
