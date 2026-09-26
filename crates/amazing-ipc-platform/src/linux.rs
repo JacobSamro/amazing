@@ -125,13 +125,22 @@ impl FrameView {
         if seals & required != required {
             return Err(Error::Authentication);
         }
+        // MAP_PRIVATE, not MAP_SHARED: on some kernels (observed on Ubuntu
+        // 24.04 / 6.8.0-71-generic; not on 7.0), F_SEAL_WRITE makes the
+        // kernel reject *any* new MAP_SHARED mapping of the memfd -- even a
+        // PROT_READ-only one -- with EPERM, though the seal is documented as
+        // only blocking writable shared mappings. All four immutability
+        // seals were just checked above, so the file's contents can never
+        // change again and no writer can exist; a private (copy-on-write)
+        // mapping is therefore observationally identical to a shared one for
+        // read-only access, and it is accepted on every kernel.
         // SAFETY: exact size and all immutability seals were checked before mapping.
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
                 len,
                 libc::PROT_READ,
-                libc::MAP_SHARED,
+                libc::MAP_PRIVATE,
                 fd.as_raw_fd(),
                 0,
             )
@@ -480,5 +489,47 @@ mod tests {
             after <= before + 1,
             "descriptors: before={before}, after={after}"
         );
+    }
+
+    /// IPC-12 regression: some kernels (observed on Ubuntu 24.04 /
+    /// 6.8.0-71-generic, not on 7.0) reject a `MAP_SHARED` `PROT_READ` mmap
+    /// of a memfd sealed with `F_SEAL_WRITE` with EPERM, even though the
+    /// seal is documented as blocking only *writable* shared mappings.
+    /// `FrameView::from_fd` now maps `MAP_PRIVATE` instead (see the comment
+    /// there for why that is observationally identical for an immutable,
+    /// fully sealed memfd). `sealed_mapping_rejects_forgery_and_closes_descriptors`
+    /// above already exercises the in-process `local_view` path; this test
+    /// exercises the actual cross-process fd-passing path
+    /// (`HandleChannel::send` -> `receive` -> `FrameView::from_fd`) that the
+    /// process-model tests (`amazing-process`'s `process_leaks`,
+    /// `utility_storage`, ...) go through, since a real child process isn't
+    /// needed to reproduce the kernel behavior -- only a sealed memfd
+    /// crossing a socket with `SCM_RIGHTS` does.
+    #[test]
+    fn sealed_frame_delivered_across_a_socket_maps_without_map_shared_eperm() {
+        let (sender, mut receiver) = HandleChannel::pair_for_test().unwrap();
+        let pid = std::process::id();
+        receiver.expected_pid = Some(pid);
+        receiver
+            .socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let enabled: libc::c_int = 1;
+        // SAFETY: socket is live and enabled points to a valid integer option value.
+        let rc = unsafe {
+            libc::setsockopt(
+                receiver.socket.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_PASSCRED,
+                (&enabled as *const libc::c_int).cast(),
+                size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+        assert_eq!(rc, 0);
+        let rgba = vec![0x42; 32 * 32 * 4];
+        let handle = FrameHandle::new(1, 32, 32, &rgba).unwrap();
+        handle.publish(&sender).unwrap();
+        let view = receiver.receive(handle.metadata(), pid).unwrap();
+        assert_eq!(view.bytes(), rgba);
     }
 }

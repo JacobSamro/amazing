@@ -72,6 +72,13 @@ const INTERFACES: &[VersionRange] = &[
         min: 1,
         max: 1,
     },
+    // IPC-11c follow-up: the demo JS realm's postMessage/MessagePort proof
+    // (`demo_realm::DemoPage`), opt-in via the `__js_realm` capability.
+    VersionRange {
+        interface: 20,
+        min: 1,
+        max: 1,
+    },
 ];
 const FRAME_NONCE_CAPABILITY: &str = "__frame_nonce";
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -830,6 +837,7 @@ pub struct SandboxPolicy {
     pub allow_gpu: bool,
 }
 
+pub mod demo_realm;
 pub mod gpu;
 pub mod gpu_snapshot_wire;
 pub mod history;
@@ -842,6 +850,7 @@ pub mod network_v2;
 pub mod protocol;
 pub mod renderer;
 pub mod storage;
+pub mod structured_clone_wire;
 pub mod utility;
 
 /// Browser-side liveness observer. A crash is emitted once per renderer host.
