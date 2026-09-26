@@ -40,6 +40,20 @@ mod shadow_values;
 // and from this file's own `expand_declaration` as a bare name); re-exporting
 // keeps both call shapes working unchanged.
 pub(crate) use shadow_values::valid_box_shadow;
+#[path = "background_values.rs"]
+mod background_values;
+// CSS-30: the background-clip/-origin/-attachment/-repeat/-size/-position(-x/-y)
+// grammars live in their own module for the same reason as `grid_values`/
+// `shadow_values` above. `valid_background_clip` and the `_computed` pair
+// per property are called from `values.rs` and from this file's own
+// `expand_declaration`/`valid_new_paint_property`.
+pub(crate) use background_values::{
+    background_attachment_computed, background_clip_computed, background_origin_computed,
+    background_position_axis_computed, background_position_computed, background_repeat_computed,
+    background_size_computed, valid_background_attachment, valid_background_clip,
+    valid_background_origin, valid_background_position, valid_background_position_axis,
+    valid_background_repeat, valid_background_size,
+};
 use crate::values::{self, ComputedValue};
 use crate::media_queries::MediaEnvironment;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -353,6 +367,8 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "transition-behavior", initial: "normal", inherited: false },
     PropertyMetadata { name: "background-image", initial: "none", inherited: false },
     PropertyMetadata { name: "background-position", initial: "0% 0%", inherited: false },
+    PropertyMetadata { name: "background-position-x", initial: "0%", inherited: false },
+    PropertyMetadata { name: "background-position-y", initial: "0%", inherited: false },
     PropertyMetadata { name: "background-size", initial: "auto", inherited: false },
     PropertyMetadata { name: "background-repeat", initial: "repeat", inherited: false },
     PropertyMetadata { name: "background-origin", initial: "padding-box", inherited: false },
@@ -1169,12 +1185,78 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         .collect(),
         "border-radius" if contains_var_function(value) => deferred_border_radius(value),
         "border-radius" => expand_border_radius(value).unwrap_or_default(),
-        "background-clip"
-            if css_wide_keyword(value).is_some()
-                || contains_var_function(value)
-                || valid_background_clip(value) =>
-        {
-            vec![(property, value.to_owned())]
+        // CSS-30: `background-clip`, `-origin`, `-attachment`, `-repeat`,
+        // `-size` and `-position`(-x/-y) each get their own real grammar in
+        // `background_values.rs`, with the winning declaration's computed
+        // form -- not its literal specified text -- stored: several of these
+        // canonicalize (box+text reordering, same-keyword collapsing,
+        // keyword-to-percentage/edge+offset resolution), so passing through
+        // `value.to_owned()` the way `box-shadow`/`transform` do below would
+        // be wrong here even when the value validates.
+        "background-clip" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_clip_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-origin" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_origin_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-attachment" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_attachment_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-repeat" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_repeat_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-size" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_size_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-position" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) = background_position_computed(value) {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
+        }
+        "background-position-x" | "background-position-y" => {
+            if css_wide_keyword(value).is_some() || contains_var_function(value) {
+                vec![(property, value.to_owned())]
+            } else if let Some(canonical) =
+                background_position_axis_computed(value, property == "background-position-x")
+            {
+                vec![(property, canonical)]
+            } else {
+                Vec::new()
+            }
         }
         "box-shadow"
             if css_wide_keyword(value).is_some()
@@ -1247,8 +1329,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         {
             vec![(property, value.to_owned())]
         }
-        "background-clip"
-        | "box-shadow"
+        "box-shadow"
         | "transform"
         | "transform-style"
         | "opacity"
@@ -1852,16 +1933,6 @@ fn radius_component(tokens: &[Token]) -> Option<String> {
             None
         },
     }
-}
-
-fn valid_background_clip(value: &str) -> bool {
-    matches!(
-        trim_tokens(&tokenize(value)),
-        [Token::Ident(keyword)] if matches!(
-            keyword.to_ascii_lowercase().as_str(),
-            "border-box" | "padding-box" | "content-box"
-        )
-    )
 }
 
 // CSS-27: this used to accept only a bare `Token::Number`/`Token::Percentage`,
@@ -2896,6 +2967,13 @@ fn computed_opacity(value: &str) -> Option<String> {
 fn valid_new_paint_property(property: &str, value: &str) -> bool {
     match property {
         "background-clip" => valid_background_clip(value),
+        "background-origin" => valid_background_origin(value),
+        "background-attachment" => valid_background_attachment(value),
+        "background-repeat" => valid_background_repeat(value),
+        "background-size" => valid_background_size(value),
+        "background-position" => valid_background_position(value),
+        "background-position-x" => valid_background_position_axis(value, true),
+        "background-position-y" => valid_background_position_axis(value, false),
         "box-shadow" => valid_box_shadow(value),
         "transform" => valid_transform(value),
         "transform-style" => matches!(
@@ -3721,6 +3799,13 @@ mod tests {
     fn paint_properties_use_validated_computed_value_grammars() {
         for property in [
             "background-clip",
+            "background-origin",
+            "background-attachment",
+            "background-repeat",
+            "background-size",
+            "background-position",
+            "background-position-x",
+            "background-position-y",
             "box-shadow",
             "transform",
             "transform-style",
@@ -3731,6 +3816,61 @@ mod tests {
                 "missing metadata for {property}"
             );
         }
+        // CSS-30: background-clip's box+text combination and comma list
+        // (previously rejected by a single-keyword-only validator, which
+        // silently dropped the declaration back to its initial value).
+        assert_eq!(
+            expand_declaration("background-clip", "text border-area"),
+            vec![("background-clip".to_owned(), "border-area text".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("background-clip", "border-box, padding-box"),
+            vec![(
+                "background-clip".to_owned(),
+                "border-box, padding-box".to_owned()
+            )]
+        );
+        assert!(expand_declaration("background-clip", "fill-box").is_empty());
+        assert!(expand_declaration("background-attachment", "auto").is_empty());
+        assert!(expand_declaration("background-repeat", "repeat repeat-x").is_empty());
+        assert_eq!(
+            expand_declaration("background-repeat", "repeat repeat"),
+            vec![("background-repeat".to_owned(), "repeat".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("background-size", "1px"),
+            vec![("background-size".to_owned(), "1px auto".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("background-size", "auto auto"),
+            vec![("background-size".to_owned(), "auto".to_owned())]
+        );
+        assert!(expand_declaration("background-size", "-1px").is_empty());
+        assert!(expand_declaration("background-size", "1px 2px 3px").is_empty());
+        // CSS-30: background-position's edge+offset resolution (CSS
+        // Backgrounds 3 SS3.9), including the right/bottom-anchored
+        // `calc(100% - <length>)` complement form.
+        assert_eq!(
+            expand_declaration("background-position", "top 17px right -18px"),
+            vec![(
+                "background-position".to_owned(),
+                "calc(100% + 18px) 17px".to_owned()
+            )]
+        );
+        assert_eq!(
+            expand_declaration("background-position", "top left"),
+            vec![("background-position".to_owned(), "0% 0%".to_owned())]
+        );
+        assert!(expand_declaration("background-position", "left right").is_empty());
+        assert_eq!(
+            expand_declaration("background-position-x", "right -10px"),
+            vec![(
+                "background-position-x".to_owned(),
+                "calc(100% + 10px)".to_owned()
+            )]
+        );
+        assert!(expand_declaration("background-position-x", "top").is_empty());
+        assert!(expand_declaration("background-position-y", "left").is_empty());
         assert!(expand_declaration("transform", "translate(10px,20px)").len() == 1);
         assert!(expand_declaration("transform", "translate(10px,)").is_empty());
         assert!(expand_declaration("transform", "scale(1,2,3)").is_empty());

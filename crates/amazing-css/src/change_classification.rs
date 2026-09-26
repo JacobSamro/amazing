@@ -38,6 +38,8 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "background-image" |
         "background-origin" |
         "background-position" |
+        "background-position-x" |
+        "background-position-y" |
         "background-repeat" |
         "background-size" |
         "border-bottom-color" |
@@ -258,7 +260,9 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [16, 40, 125, 31]);
+        // CSS-30 registered two new longhands, `background-position-x`/`-y`
+        // (PaintOnly, alongside `background-position`), raising this count.
+        assert_eq!(counts, [16, 42, 125, 31]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }
