@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "subdir": "css/css-cascade",
+  "mismatch_count": 4,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-cascade__scope-implicit-006-print.html",
+        "css__css-cascade__scope-implicit-001-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-cascade__scope-implicit-005-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-cascade__all-prop-initial-visited.html"
+      ]
+    }
+  ]
+}

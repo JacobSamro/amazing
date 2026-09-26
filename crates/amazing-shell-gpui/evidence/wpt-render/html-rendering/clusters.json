@@ -1,0 +1,205 @@
+{
+  "schema": 1,
+  "subdir": "html/rendering",
+  "mismatch_count": 68,
+  "unreadable": 9,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 7,
+      "examples": [
+        "html__rendering__the-details-element__details-pseudo-elements-005.html",
+        "html__rendering__bindings__the-select-element-0__listbox-abspos-descendant.html",
+        "html__rendering__the-details-element__details-content-pseudo-attr.html",
+        "html__rendering__non-replaced-elements__the-br-element__br-clear-presentational-hints.html",
+        "html__rendering__the-details-element__details-pseudo-elements-004.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 7,
+      "examples": [
+        "html__rendering__the-details-element__summary-text-decoration.html",
+        "html__rendering__replaced-elements__attributes-for-embedded-content-and-images__input-image-inline-alt.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-list-item-numbering.html",
+        "html__rendering__replaced-elements__the-select-element__customizable-select__min-size-empty-002-ref.html",
+        "html__rendering__replaced-elements__the-select-element__customizable-select__min-size-empty-001-ref.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 7,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-position-relative.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-border-gap-negative-margin.html",
+        "html__rendering__widgets__button-layout__centering-003.html",
+        "html__rendering__the-details-element__summary-display-list-item-001.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-border-gap-position-relative.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 5,
+      "examples": [
+        "html__rendering__non-replaced-elements__tables__table-cell-width.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-border-radius-with-alpha.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-list-item.html",
+        "html__rendering__non-replaced-elements__tables__tr-transform-and-will-change.html",
+        "html__rendering__non-replaced-elements__tables__table-cell-width-s.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__grid-template-propagation.html",
+        "html__rendering__widgets__input-radio-no-centering.html",
+        "html__rendering__widgets__input-checkbox-no-centering.html",
+        "html__rendering__replaced-elements__the-select-element__select-1-block-size-001-ref.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "html__rendering__the-details-element__summary-display-flex.html",
+        "html__rendering__replaced-elements__the-select-element__customizable-select__min-width-in-flex.html",
+        "html__rendering__the-details-element__details-revert.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 3,
+      "examples": [
+        "html__rendering__the-details-element__details-pseudo-elements-003.html",
+        "html__rendering__replaced-elements__the-select-element__customizable-select__min-size-empty-001.html",
+        "html__rendering__replaced-elements__the-select-element__customizable-select__min-size-empty-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "html__rendering__non-replaced-elements__tables__table-row-pagination-002-print.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-vertical.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "html__rendering__non-replaced-elements__lists__list-style-position-quirks-mode.html",
+        "html__rendering__the-details-element__summary-display-inline-flex.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "html__rendering__non-replaced-elements__flow-content-0__div-align.html",
+        "html__rendering__sections__headingoffset-and-headingreset.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 2,
+      "examples": [
+        "html__rendering__the-details-element__details-pseudo-elements-001.html",
+        "html__rendering__the-details-element__details-pseudo-elements-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-block-margins-2.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-containing-block.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 2,
+      "examples": [
+        "html__rendering__widgets__button-layout__anonymous-button-content-box.html",
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-tall.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-hr-element-0__width.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__absolute-fixed-in-legend.html"
+      ]
+    },
+    {
+      "signature": "small-region, bottom-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__tables__table-row-pagination-001-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-hr-element-0__size.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "html__rendering__the-css-user-agent-style-sheet-and-presentational-hints__pre-margin-block.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__fieldset-painting-order.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-hr-element-0__color.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-block-margins.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-auto-margins.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__non-replaced-elements__the-fieldset-and-legend-elements__legend-display-rendering.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "html__rendering__widgets__input-number-text-size.tentative.html"
+      ]
+    }
+  ]
+}

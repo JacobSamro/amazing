@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/css-scroll-snap",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:10:17Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-scroll-snap/run-20260926T161014Z-93427",
+  "inventory": {
+    "document_files": 217,
+    "testharness_files": 166,
+    "reftests": 26,
+    "eligible_static_self_contained": 7,
+    "selected": 7,
+    "excluded": {
+      "not-reftest": 191,
+      "xml-reference-mode": 1,
+      "scripted": 13,
+      "flagged-environment": 3,
+      "embedded-resource": 2
+    }
+  },
+  "counts": {
+    "pass": 1,
+    "mismatch": 6,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__scroll-snap-initial-layout-000.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "scroll-snap-initial-layout-000-ref.html",
+      "differing_pixels": 6796,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1b298a925d207ed0b77b771a034114aa63e7cca84c13ce952780c8146f087651",
+      "reference_sha256": "36b985219d7ac42d8c40ef843bcb664e1fbf7b36dce227d54e15f63f66c63cd0",
+      "diff_sha256": "3931860eb877ad928eb6e4023a61f82a62757ebf3121c93c1751a52b10d01e42",
+      "detail": "maxDifference=255/0; totalPixels=6796/0"
+    },
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__writing-mode-vertical-lr.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "snap-after-initial-layout-ref.html",
+      "differing_pixels": 60000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "7b9aba92de9374a152f7ce94194cc17778e29c9cd646a86e8642995912cabedb",
+      "reference_sha256": "4640661316bca7498590b5ef35545a1811592f0a6456969a5e6fe0444cbb1023",
+      "diff_sha256": "673a6eecb9598c3ab81f1bb28236e61d3269e4895292862a1ab61d036a7670f4",
+      "detail": "maxDifference=255/0; totalPixels=60000/0"
+    },
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__scroll-snap-writing-mode-000.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "scroll-snap-writing-mode-000-ref.html",
+      "differing_pixels": 19656,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "2327afbd27d194821f306afdaf63f21849bfdf63105de1d92bcd1743aa599575",
+      "reference_sha256": "40014be14700a817175bbc40c4c0c625340a3b9f3dc89f58549a6e06eba41e72",
+      "diff_sha256": "abef9a7bb2eba69733ad259d2548ad7de808ae9145dc8df99446010ececd2dc7",
+      "detail": "maxDifference=255/0; totalPixels=19656/0"
+    },
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__writing-mode-vertical-rl.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "snap-after-initial-layout-ref.html",
+      "differing_pixels": 60000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "7b9aba92de9374a152f7ce94194cc17778e29c9cd646a86e8642995912cabedb",
+      "reference_sha256": "4640661316bca7498590b5ef35545a1811592f0a6456969a5e6fe0444cbb1023",
+      "diff_sha256": "673a6eecb9598c3ab81f1bb28236e61d3269e4895292862a1ab61d036a7670f4",
+      "detail": "maxDifference=255/0; totalPixels=60000/0"
+    },
+    {
+      "id": "css__css-scroll-snap__scroll-snap-root-003.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "no-red-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "e3bdf1ce043bcf8d377520a2b8807569fb708d8fc412203eee2aeeb3c3daa559",
+      "reference_sha256": "e3bdf1ce043bcf8d377520a2b8807569fb708d8fc412203eee2aeeb3c3daa559",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__writing-mode-horizontal-tb.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "snap-after-initial-layout-ref.html",
+      "differing_pixels": 60000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "7b9aba92de9374a152f7ce94194cc17778e29c9cd646a86e8642995912cabedb",
+      "reference_sha256": "4640661316bca7498590b5ef35545a1811592f0a6456969a5e6fe0444cbb1023",
+      "diff_sha256": "673a6eecb9598c3ab81f1bb28236e61d3269e4895292862a1ab61d036a7670f4",
+      "detail": "maxDifference=255/0; totalPixels=60000/0"
+    },
+    {
+      "id": "css__css-scroll-snap__snap-after-initial-layout__direction-rtl.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "snap-after-initial-layout-ref.html",
+      "differing_pixels": 140000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "3fed65ac7c160979f7f3909389752c89bffc80f4d580e2ae06d1acfb76fff40d",
+      "reference_sha256": "4640661316bca7498590b5ef35545a1811592f0a6456969a5e6fe0444cbb1023",
+      "diff_sha256": "1e755cb9b2f056f577f34de04f1cb1e9329c2e71fab899139ce535f33cbda12e",
+      "detail": "maxDifference=255/0; totalPixels=140000/0"
+    }
+  ]
+}

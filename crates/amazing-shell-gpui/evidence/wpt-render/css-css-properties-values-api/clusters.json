@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "subdir": "css/css-properties-values-api",
+  "mismatch_count": 3,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-properties-values-api__registered-property-computation-color-004.html",
+        "css__css-properties-values-api__registered-property-computation-color-005.html",
+        "css__css-properties-values-api__registered-property-computation-color-006.html"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "subdir": "css/css-pseudo",
+  "mismatch_count": 52,
+  "unreadable": 11,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 9,
+      "examples": [
+        "css__css-pseudo__first-letter-005.html",
+        "css__css-pseudo__first-letter-punctuation-and-space.html",
+        "css__css-pseudo__first-letter-with-before-after.html",
+        "css__css-pseudo__first-letter-002.html",
+        "css__css-pseudo__first-letter-skip-empty-span-nested.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, bluer than reference",
+      "count": 5,
+      "examples": [
+        "css__css-pseudo__first-line-with-out-of-flow-and-nested-span.html",
+        "css__css-pseudo__first-line-with-out-of-flow.html",
+        "css__css-pseudo__first-line-on-ancestor-block.html",
+        "css__css-pseudo__first-letter-c0.tentative.html",
+        "css__css-pseudo__first-line-with-out-of-flow-and-nested-div.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-pseudo__first-letter-with-quote.html",
+        "css__css-pseudo__before-as-flex-container.html",
+        "css__css-pseudo__first-letter-exclude-inline-child-marker.html",
+        "css__css-pseudo__first-letter-skip-marker.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-pseudo__relative-box-order-of-pseudo-elements.html",
+        "css__css-pseudo__marker-and-other-pseudo-elements.html",
+        "css__css-pseudo__first-line-inherited-no-transition.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-pseudo__first-letter-003.html",
+        "css__css-pseudo__first-letter-with-span.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-pseudo__marker-text-combine-upright.html",
+        "css__css-pseudo__marker-text-transform-default.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-pseudo__spelling-error-001.html",
+        "css__css-pseudo__grammar-error-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-pseudo__marker-content-003.html",
+        "css__css-pseudo__marker-content-003b.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-letter-trailing-punctuation.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__marker-text-transform-uppercase.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__marker-list-style-position.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-line-with-inline-block-before.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-line-line-height-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-letter-exclude-block-child-marker.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__marker-content-010.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__marker-line-height.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-line-and-marker.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-letter-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-letter-digraph.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-pseudo__first-line-line-height-002.html"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "subdir": "css/css-variables",
+  "mismatch_count": 37,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 26,
+      "examples": [
+        "css__css-variables__variable-supports-32.html",
+        "css__css-variables__variable-supports-56.html",
+        "css__css-variables__variable-reference-33.html",
+        "css__css-variables__variable-reference-03.html",
+        "css__css-variables__variable-supports-50.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 8,
+      "examples": [
+        "css__css-variables__variable-reference-23.html",
+        "css__css-variables__variable-declaration-59.html",
+        "css__css-variables__variable-declaration-26.html",
+        "css__css-variables__variable-declaration-34.html",
+        "css__css-variables__variable-reference-30.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-variables__vars-background-shorthand-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-variables__wide-keyword-fallback-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-variables__variable-declaration-60.html"
+      ]
+    }
+  ]
+}

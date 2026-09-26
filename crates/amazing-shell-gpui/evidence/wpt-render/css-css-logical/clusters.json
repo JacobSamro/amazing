@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "subdir": "css/css-logical",
+  "mismatch_count": 4,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-logical__logical-values-float-clear-2.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-logical__logical-values-float-clear-3.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-logical__logical-values-float-clear-1.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-logical__logical-values-float-clear-4.html"
+      ]
+    }
+  ]
+}

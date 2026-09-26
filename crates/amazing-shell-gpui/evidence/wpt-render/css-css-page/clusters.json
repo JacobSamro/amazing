@@ -1,0 +1,313 @@
+{
+  "schema": 1,
+  "subdir": "css/css-page",
+  "mismatch_count": 103,
+  "unreadable": 1,
+  "clusters": [
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 17,
+      "examples": [
+        "css__css-page__page-box-003-print.html",
+        "css__css-page__page-size-017-print.tentative.html",
+        "css__css-page__margin-boxes__dimensions-010-print.html",
+        "css__css-page__basic-pagination-002-print.html",
+        "css__css-page__page-box-010-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-page__subpixel-page-size-001-print.html",
+        "css__css-page__page-margin-auto-negative-print.tentative.html",
+        "css__css-page__body-background-vrl-print.html",
+        "css__css-page__media-queries-001-print.html",
+        "css__css-page__subpixel-page-size-002-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-page__monolithic-overflow-031-print.html",
+        "css__css-page__layers-004-print.html",
+        "css__css-page__page-size-001-print.html",
+        "css__css-page__page-name-margin-001-print.html",
+        "css__css-page__layers-003-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-page__page-size-009-print.html",
+        "css__css-page__page-margin-001-print.html",
+        "css__css-page__page-size-008-print.html",
+        "css__css-page__page-size-007-print.html",
+        "css__css-page__page-margin-003-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-page__margin-boxes__alignment-001-print.html",
+        "css__css-page__margin-boxes__content-013-print.html",
+        "css__css-page__page-size-010-print.html",
+        "css__css-page__margin-boxes__content-004-print.html",
+        "css__css-page__margin-boxes__auto-margins-003-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-page__margin-boxes__content-009-print.html",
+        "css__css-page__margin-boxes__content-012-print.html",
+        "css__css-page__margin-boxes__content-011-print.html",
+        "css__css-page__margin-boxes__content-010-print.html",
+        "css__css-page__margin-boxes__content-008-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 6,
+      "examples": [
+        "css__css-page__page-name-margin-002-print.html",
+        "css__css-page__layers-002-print.html",
+        "css__css-page__pseudo-first-margin-002-print.html",
+        "css__css-page__pseudo-first-margin-001-print.html",
+        "css__css-page__pseudo-first-margin-003-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less blue than reference",
+      "count": 5,
+      "examples": [
+        "css__css-page__page-margin-002-print.html",
+        "css__css-page__page-margin-auto-and-non-zero-print.html",
+        "css__css-page__page-left-right-002-print.html",
+        "css__css-page__page-margin-auto-print.html",
+        "css__css-page__page-box-007-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-page__fixedpos-003-print.html",
+        "css__css-page__page-size-002-print.html",
+        "css__css-page__page-size-003-print.html",
+        "css__css-page__page-name-003-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, bluer than reference",
+      "count": 3,
+      "examples": [
+        "css__css-page__margin-boxes__dimensions-015-print.tentative.html",
+        "css__css-page__margin-boxes__paint-order-001-print.html",
+        "css__css-page__margin-boxes__paint-order-002-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-page__page-box-008-print.html",
+        "css__css-page__page-margin-004-print.html",
+        "css__css-page__margin-boxes__inapplicable-properties-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-page__margin-boxes__content-005-print.html",
+        "css__css-page__margin-boxes__content-007-print.html",
+        "css__css-page__margin-boxes__content-006-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-page__page-rule-specificity-002-print.html",
+        "css__css-page__page-rule-specificity-003-print.html",
+        "css__css-page__page-rule-specificity-001-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-page__margin-boxes__dimensions-001-print.html",
+        "css__css-page__monolithic-overflow-023-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, right, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-page__monolithic-overflow-030-print.html",
+        "css__css-page__fixedpos-010-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less blue than reference",
+      "count": 2,
+      "examples": [
+        "css__css-page__tentative__safe-printable-inset-001-print.html",
+        "css__css-page__tentative__safe-printable-inset-002-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, top, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-left-right-001-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__root-element-display-none-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__body-background-srl-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-size-005-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__body-background-slr-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-size-004-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__margin-boxes__dimensions-002-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__fixedpos-with-link-with-inline-child-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-orientation-on-landscape-001-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-name-orthogonal-writing-002-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, bottom-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__monolithic-overflow-016-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, right, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__fixedpos-011-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-size-006-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-margin-007-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__margin-boxes__overconstrained-001-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-box-001-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__tentative__safe-printable-inset-003-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-page__margin-boxes__content-002-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__margin-boxes__content-001-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, bottom, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-page__monolithic-overflow-017-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-page__page-orientation-on-square-001-print.html"
+      ]
+    }
+  ]
+}

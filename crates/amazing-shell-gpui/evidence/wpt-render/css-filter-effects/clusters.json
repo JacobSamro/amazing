@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "subdir": "css/filter-effects",
+  "mismatch_count": 56,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 19,
+      "examples": [
+        "css__filter-effects__backdrop-filter-nested-border-radius-clip-2.html",
+        "css__filter-effects__backdrop-filter-with-background-clip-padding-box.html",
+        "css__filter-effects__backdrop-filter-nested-border-radius-clip-4.html",
+        "css__filter-effects__css-filters-animation-grayscale.html",
+        "css__filter-effects__css-filters-animation-brightness.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 6,
+      "examples": [
+        "css__filter-effects__filter-function__filter-function-repeating-conic-gradient.html",
+        "css__filter-effects__filter-function__filter-function-linear-gradient.html",
+        "css__filter-effects__filter-function__filter-function-radial-gradient.html",
+        "css__filter-effects__filter-function__filter-function-repeating-linear-gradient.html",
+        "css__filter-effects__filter-function__filter-function-conic-gradient.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__filter-effects__css-filters-animation-invert.html",
+        "css__filter-effects__css-filters-animation-combined-001.html",
+        "css__filter-effects__css-filters-animation-opacity.html",
+        "css__filter-effects__filters-test-brightness-003.html",
+        "css__filter-effects__css-filters-animation-contrast.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__filter-effects__backdrop-filter-backdrop-root-clip-path.html",
+        "css__filter-effects__backdrop-filter-backdrop-root-backdrop-filter.html",
+        "css__filter-effects__backdrop-filter-backdrop-root-filter.html",
+        "css__filter-effects__backdrop-filter-backdrop-root-opacity.html",
+        "css__filter-effects__backdrop-filter-backdrop-root-mix-blend-mode.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__filter-effects__css-backdrop-filters-animation-blur.html",
+        "css__filter-effects__css-backdrop-filters-animation-hue-rotate.html",
+        "css__filter-effects__css-filters-animation-hue-rotate.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__filter-effects__backdrop-filter-edge-clipping.html",
+        "css__filter-effects__backdrop-filter-clip-rect-2.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__filter-effects__backdrop-filter-containing-block.html",
+        "css__filter-effects__backdrop-filter-clip-radius-zoom.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__filter-effects__filters-drop-shadow-003.html",
+        "css__filter-effects__backdrop-filter-blur-large-value.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__filter-effects__css-filters-animation-sepia.html",
+        "css__filter-effects__css-backdrop-filters-animation-sepia.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__filter-effects__css-filters-animation-blur.html",
+        "css__filter-effects__filtered-inline-applies-to-float.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__root-element-with-opacity-filter-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filter-transform.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filter-image-size-filter-size-mismatch.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filter-isolation-isolate.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filter-backdrop-root-clip-path-2.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__fixed-pos-filter-clip-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filters-blur-large.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__filter-effects__backdrop-filter-inline-positioning.html"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/css-view-transitions",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:21:15Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-view-transitions/run-20260926T162114Z-107484",
+  "inventory": {
+    "document_files": 731,
+    "testharness_files": 151,
+    "reftests": 311,
+    "eligible_static_self_contained": 3,
+    "selected": 3,
+    "excluded": {
+      "not-reftest": 420,
+      "scripted": 304,
+      "xml-reference-mode": 2,
+      "missing-reference": 2
+    }
+  },
+  "counts": {
+    "pass": 2,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css__css-view-transitions__view-transition-name-is-grouping.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "view-transition-name-is-grouping-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "527a6f4e24ee556bcf09b5fa52eba2ccf259c265a65dda80213a89dbb245d991",
+      "reference_sha256": "527a6f4e24ee556bcf09b5fa52eba2ccf259c265a65dda80213a89dbb245d991",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-view-transitions__animation-name-ua-prefix.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "/css/reference/blank.html",
+      "differing_pixels": 10000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "7a49dc48c980651cd6d59900253afe3251d08b08755606d665dc9ed24227b12e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "dcc9319fee51cd899f285dd895948fa316d9fb8b93b8655bb341712e6cbac4db",
+      "detail": "maxDifference=255/0; totalPixels=10000/0"
+    },
+    {
+      "id": "css__css-view-transitions__view-transition-name-is-backdrop-filter-root.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "view-transition-name-is-backdrop-filter-root-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1a2b5686e924d609068460c21b1ba600b507398e05d12198a58ff4cde5a51ee7",
+      "reference_sha256": "1a2b5686e924d609068460c21b1ba600b507398e05d12198a58ff4cde5a51ee7",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    }
+  ]
+}

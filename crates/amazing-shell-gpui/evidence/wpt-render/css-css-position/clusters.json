@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "subdir": "css/css-position",
+  "mismatch_count": 19,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 9,
+      "examples": [
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-009.html",
+        "css__css-position__position-relative-013.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-003.html",
+        "css__css-position__position-relative-011.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-007.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-004.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-012.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-011.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-010.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-position__nested-inline-abspos-child.html",
+        "css__css-position__nested-inline-abspos-child-with-siblings.html"
+      ]
+    },
+    {
+      "signature": "large-region, bottom, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-position__sticky__position-sticky-in-fixed-container.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-position__sticky__position-sticky-table-pixel-rounding.html"
+      ]
+    }
+  ]
+}
