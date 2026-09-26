@@ -878,6 +878,7 @@ fn handle_websocket(mut stream: TcpStream, request: SeenRequest) {
             | "set-cookie-secure"
             | "set-cookies-samesite"
             | "basic_auth"
+            | "receive-many-with-backpressure"
     );
     if !known {
         // No handler for this path: pywebsocket3 fails the opening
@@ -942,6 +943,7 @@ fn handle_websocket(mut stream: TcpStream, request: SeenRequest) {
         "delayed-passive-close" => ws_loop_idle(&mut stream, true, false),
         "passive-close-abort" => ws_loop_idle(&mut stream, false, true),
         "remote-close" => ws_remote_close(&mut stream, &request),
+        "receive-many-with-backpressure" => ws_loop_receive_many_with_backpressure(&mut stream),
         "protocol" | "protocol_array" => {
             let value = protocol.unwrap_or_default();
             let _ = write_ws_frame(&mut stream, 0x1, value.as_bytes());
@@ -1040,6 +1042,56 @@ fn ws_loop_echo_raw(stream: &mut TcpStream) {
                 }
                 if stream.write_all(&payload).is_err() {
                     return;
+                }
+            }
+        }
+    }
+}
+
+/// Ports `websockets/resources/receive-many-with-backpressure_wsh.py`: reads
+/// up to 50 data messages, replying to each with the byte length of that
+/// message as text after a short server-side delay (the pinned
+/// `send-many-64K-messages-with-backpressure.any.js` comment: "with 0.1
+/// second server-side delay per message, sending 50 messages will take
+/// around 5 seconds" -- the delay is what applies backpressure to the
+/// client's `send()` calls, which is the behavior under test).
+fn ws_loop_receive_many_with_backpressure(stream: &mut TcpStream) {
+    const MAX_MESSAGES: usize = 50;
+    let mut received = 0;
+    loop {
+        match read_ws_message(stream) {
+            None => return,
+            Some((0x8, payload)) => {
+                ws_passive_close_default(stream, &payload);
+                return;
+            }
+            Some((0x9, payload)) => {
+                let _ = write_ws_frame(stream, 0xA, &payload);
+            }
+            Some((0xA, _)) => {}
+            Some((_, payload)) => {
+                thread::sleep(Duration::from_millis(100));
+                let reply = payload.len().to_string();
+                if write_ws_frame(stream, 0x1, reply.as_bytes()).is_err() {
+                    return;
+                }
+                received += 1;
+                if received >= MAX_MESSAGES {
+                    // The client closes once it has every reply; wait for
+                    // that close rather than racing it with our own.
+                    loop {
+                        match read_ws_message(stream) {
+                            None => return,
+                            Some((0x8, payload)) => {
+                                ws_passive_close_default(stream, &payload);
+                                return;
+                            }
+                            Some((0x9, payload)) => {
+                                let _ = write_ws_frame(stream, 0xA, &payload);
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
         }
