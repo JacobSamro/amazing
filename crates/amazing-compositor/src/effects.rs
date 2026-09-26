@@ -103,6 +103,14 @@ pub struct EffectOperations {
     pub isolate: bool,
     pub clip_path: Option<EffectClip>,
     pub mask: Option<EffectMask>,
+    /// The group's own resolved CSS `transform` (origin already applied),
+    /// mapping its local pre-transform pixels to the pixels it composites
+    /// into once its parent has no transform of its own (COMP-16). `None`
+    /// keeps the pre-COMP-16 identity-space behavior; a group whose own
+    /// transform sits under an ancestor transform, or that nests with
+    /// another filter/backdrop/clip group, is refused at import instead of
+    /// being resolved here (see `PainterFilterSource::from_view`).
+    pub local_transform: Option<Matrix4>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectError {
@@ -163,6 +171,9 @@ impl EffectOperations {
         }
         if let Some(clip) = &self.clip_path {
             clip.validate()?;
+        }
+        if self.local_transform.is_some_and(|m| m.unmap(0.5, 0.5).is_none()) {
+            return Err(EffectError::InvalidValue);
         }
         if let Some(mask) = &self.mask {
             let len = u64::from(mask.image.width) * u64::from(mask.image.height);

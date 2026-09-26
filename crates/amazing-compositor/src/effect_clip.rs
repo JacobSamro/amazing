@@ -170,6 +170,28 @@ pub(crate) fn apply_masks(surface: &mut Surface, operations: &EffectOperations) 
         }
     }
 }
+/// COMP-16: a group with its own `local_transform` tests `clip_path` at the
+/// exact fractional point its outer inverse-mapped sample lands on (see
+/// `DrawQuad::Pass`), matching `composite_group`'s own `mask.contains` test
+/// there rather than this group's local integer pixel grid; only the image
+/// `mask` (already sampled per destination-adjacent integer pixel) applies
+/// here, on that same local grid.
+pub(crate) fn apply_mask_image_only(surface: &mut Surface, operations: &EffectOperations) {
+    let Some(mask) = &operations.mask else { return };
+    for y in 0..surface.height {
+        for x in 0..surface.width {
+            let coverage = mask.coverage(x, y);
+            let i = ((y * surface.width + x) * 4 + 3) as usize;
+            surface.pixels[i] = (f32::from(surface.pixels[i]) * coverage).round() as u8;
+        }
+    }
+}
+/// The hard, unsupersampled `clip_path` test at an exact local point (see
+/// `apply_masks`'s own comment), for a `local_transform` group's inverse-
+/// mapped fractional sample instead of its surface's integer pixel grid.
+pub(crate) fn clip_path_contains(operations: &EffectOperations, x: f32, y: f32) -> bool {
+    operations.clip_path.as_ref().is_none_or(|c| c.contains(x, y))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ClipPathSegment {
