@@ -382,13 +382,33 @@ this needs a GPUI-native way to place a multi-pass/transformed frame -- the
 presenter-layer counterpart to COMP-16's matrix-aware compositing -- which is
 real, separate follow-up work, filed rather than silently left unmeasured.
 
-Measured: `amazing-shell-gpui` (excluded from the main workspace, gated on
-its own) **69/69 passed, 0 failed** via `cargo test --locked --bin
-amazing-shell` (was 68/68 before this ticket's 1 new test). No
-`amazing-compositor` source touched this ticket, so the compositor-crate/
-workspace numbers are unchanged from COMP-17 (compositor 93/93, workspace
-3152/0/14, doctests 4/4) -- reconfirmed on a fresh gate. Real-pages
-screenshot gate (`scripts/linux-shell-capture.sh compositor --real-pages`):
-zero mismatches, confirming the `scroll_input` refactor changed no rendered
-pixels. Evidence:
+Measured on a fresh `git merge dev` (local `dev` had moved to touch
+`engine_viewport.rs`/`compositor_presenter.rs`/`paint_filters.rs` since this
+ticket started -- A11Y-11's accessibility-tree field and RC's polygon-clip
+import, both merged clean except one already-fixed duplicate of this
+ticket's own `compositor_presenter.rs` test fix, kept as dev's version):
+`amazing-shell-gpui` (excluded from the main workspace, gated on its own,
+required regenerating its own `Cargo.lock` for the new dependency set pulled
+in by the merge) **75/75 passed, 0 failed** via `cargo test --locked --bin
+amazing-shell`. No `amazing-compositor` source touched this ticket. Full
+workspace gate on the merged head: **3338 tests run, 3338 passed, 0 failed,
+17 skipped (3 slow)**, doctests 4 suites/4 passed/0 failed. Zero lost passes.
+
+Real-pages screenshot gate (`scripts/linux-shell-capture.sh compositor
+--real-pages`): **not** zero-mismatch on this ticket's build host
+(worker-2) -- 50 mismatch/2 excluded/0 crash -- but proven pre-existing and
+unrelated to this ticket's code, not a regression: (1) the checked-in
+baselines were captured on a Boat sandbox's specific Mesa/Xvfb/font stack,
+and worker-2 needed `xvfb`/`xdotool`/`imagemagick`/`mesa-vulkan-drivers`
+freshly installed just to run the capture at all, so a different
+software-rendering stack producing small, page-wide pixel drift is expected;
+(2) with this ticket's diff stashed out entirely (tree back at the
+pre-ticket `dev`-merge commit), `--real-pages --only news-section`
+reproduces the *exact same* `ae=19094` mismatch; (3) `--real-pages` only
+exercises each page's plain initial paint -- it never calls
+`scroll_input`/`animate_transform`/`animate_opacity`, so none of this
+ticket's changed code runs during the capture regardless. Filed as a
+cross-lane infrastructure gap in `questions.md` (any lane capturing
+`--real-pages` off a non-Boat host will see this same drift against the
+Boat-captured baselines). Full detail and the control-test method:
 `crates/amazing-shell-gpui/evidence/comp18/shell-frame-time.md`.

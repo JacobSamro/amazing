@@ -1,10 +1,12 @@
 # Compositor wired into the live GPUI shell's frame loop (COMP-18)
 
-Fixed source base `b05b37c5`/local `dev` (COMP-16/17 merged). Linux Boat
-sandbox pool-paint (later runs on venus-001, once Boat's daily sandbox-start
-quota was exhausted mid-ticket), compositor's isolated target
-`/home/user/amazing/targets/compositor`. Windows deferred under the
-Linux-first rule.
+Started from source base `b05b37c5`/local `dev` (COMP-16/17 merged); merged
+local `dev` again (to `56aaa378`) before the final gate once drift there was
+found to touch `amazing-shell-gpui`/`amazing-compositor`. Ran on venus/
+worker-2 hosts (Boat's daily sandbox-start quota was exhausted mid-ticket, so
+this ticket's builds/tests/captures never touched a Boat sandbox), each
+lane's own target dir under the host's shared `~/amazing/target`. Windows
+deferred under the Linux-first rule.
 
 ## What changed
 
@@ -36,7 +38,10 @@ non-nested effect group, and `PropertyTrees::opacity`'s `nested_effect_opacity`
 stays pixel-parity with a full repaint. CSS `opacity: 0.5` composites as
 `128/255 = 0.5019608`, not the raw float `0.5` -- the test's hardcoded `0.5`
 was the actual bug, not the compositor. Fixed by asserting against
-`quantize_opacity(0.5) as f32 / 255.` instead of a literal `0.5`.
+`quantize_opacity(0.5) as f32 / 255.` instead of a literal `0.5`; the later
+`dev` merge turned up an equivalent, independently-landed fix for this same
+test (an `assert!` with an explicit `128.0 / 255.0` tolerance check instead),
+kept as-is rather than re-diffing a already-fixed assertion.
 
 ## Proving tile reuse: `shell_viewport_frame_time_trace`
 
@@ -64,12 +69,14 @@ reused already-rastered tiles rather than triggering a reraster.
 
 ## Measured
 
-Compositor-crate side unchanged this ticket (no `amazing-compositor` source
-edited): compositor 93/93, workspace 3152/0/14, doctests 4/4 (COMP-17's
-numbers). Shell crate (`amazing-shell-gpui`, gated on its own since it is
-excluded from the main workspace): **69/69 passed, 0 failed** (was 68 before
-this ticket's 1 new test), run through `cargo test --locked --bin
-amazing-shell`.
+No `amazing-compositor` source edited this ticket. After merging local `dev`
+(to `56aaa378`, since drift there touched `amazing-shell-gpui`/
+`amazing-compositor`) and regenerating `amazing-shell-gpui/Cargo.lock` for
+the merge's new dependency set: full workspace gate **3338 tests run, 3338
+passed, 0 failed, 17 skipped (3 slow)**, doctests 4 suites/4 passed/0
+failed, zero lost passes. Shell crate (`amazing-shell-gpui`, gated on its own
+since it is excluded from the main workspace): **75/75 passed, 0 failed**,
+run through `cargo test --locked --bin amazing-shell`.
 
 ```
 page,scenario,frames,full_paint_us,retained_call_us,build_cache_hits,direct_tiles
