@@ -20,6 +20,8 @@ pub enum StorageInterface {
     CacheStorage,
     Cache,
     StorageManager,
+    StorageBucketManager,
+    StorageBucket,
     LockManager,
     Lock,
 }
@@ -108,6 +110,14 @@ pub const INTERFACES: &[Interface] = &[
     ]},
     Interface { kind: StorageInterface::StorageManager, name: "StorageManager", parent: None, members: &[
         method("estimate", 0), method("persist", 0), method("persisted", 0),
+    ]},
+    Interface { kind: StorageInterface::StorageBucketManager, name: "StorageBucketManager", parent: None, members: &[
+        method("open", 1), method("delete", 1), method("keys", 0),
+    ]},
+    Interface { kind: StorageInterface::StorageBucket, name: "StorageBucket", parent: None, members: &[
+        getter("name"), getter("indexedDB"), getter("caches"),
+        method("persist", 0), method("persisted", 0), method("estimate", 0),
+        method("durability", 0), method("setExpires", 1), method("expires", 0),
     ]},
     Interface { kind: StorageInterface::LockManager, name: "LockManager", parent: None, members: &[
         method("request", 2), method("query", 0),

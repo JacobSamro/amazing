@@ -51,3 +51,25 @@ js-runtime. Raw reports, the fixed selection, and the runner are under
 
 STORE-4 Cache API bindings remain parked on NET-26 Request/Response record
 accessors. IPC owns wiring the coordinator across tabs and processes.
+
+## STORE-6: Storage Buckets
+
+`navigator.storageBuckets` implements `StorageBucketManager` (`open`, `delete`,
+`keys`) and `StorageBucket` (`name`, `persisted`, `persist`, `estimate`,
+`durability`, `expires`, `setExpires`, `indexedDB`, `caches`). Bucket names use
+the `[a-z0-9][a-z0-9_-]{0,63}` charset; `open` accepts `{quota, durability,
+expires}` with a `[1, 2^53-1]` quota range. Handles are invalidated by an epoch
+counter, so every method on a deleted (or deleted-and-recreated) bucket rejects
+with `UnknownError`.
+
+`amazing-storage::buckets::BucketRegistry` persists each bucket's policy on disk,
+and the IndexedDB engine is now keyed by `BucketKey` so `bucket.indexedDB` gives
+each bucket its own database namespace. `StorageBucket.caches` returns a
+bucket-scoped `CacheStorage`, but the Cache API surface itself still waits on
+NET-26. Per-bucket quota is reported through `bucket.estimate()` and validated on
+`open`, but writes are not yet evicted per bucket.
+
+The six runnable pinned `storage/buckets/*.any.js` files are the gate
+(`idlharness-worker.https.any.js` needs `idlharness.js` resources absent from the
+pinned checkout). Raw reports are under
+`crates/amazing-storage/evidence/store6/`.

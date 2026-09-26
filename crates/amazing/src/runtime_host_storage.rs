@@ -2,7 +2,7 @@
 use super::*;
 use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
 use amazing_bindings::storage_interfaces;
-use amazing_storage::{core::{BucketKey, DiskStore, StorageKey, QuotaLedger}, web::{PersistentWebStorage, StorageChange}, idb::{self, IndexedDb, StructuredValue, Key, KeyRange, Direction, Mode, Durability, Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, locks::{LockCoordinator, Mode as LockMode, Options as LockOptions}};
+use amazing_storage::{core::{BucketKey, DiskStore, StorageKey, QuotaLedger}, web::{PersistentWebStorage, StorageChange}, idb::{self, IndexedDb, StructuredValue, Key, KeyRange, Direction, Mode, Durability, Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{BucketRegistry, Policy, valid_bucket_name}, locks::{LockCoordinator, Mode as LockMode, Options as LockOptions}};
 use std::sync::atomic::{AtomicU64, Ordering};
 use amazing_js::{SerializedHostValue, StructuredCloneHost};
 
@@ -86,14 +86,15 @@ pub(super) struct StorageRuntime {
     idb: Rc<RefCell<IndexedDb>>,
     cache: Rc<RefCell<PersistentCacheStorage>>,
     manager: Rc<RefCell<StorageManager>>,
+    buckets: Rc<RefCell<BucketRegistry>>,
     locks: Rc<RefCell<LockCoordinator>>,
     lock_client_id: u64,
     lock_callbacks: HashMap<u64,LockCallback>,
     objects: Vec<StorageObject>,
     wrappers: HashMap<usize, JsValue>,
     pending: VecDeque<StorageJob>,
-    blocked_opens: VecDeque<(StorageKey,String,usize)>,
-    blocked_deletes: VecDeque<(StorageKey,String,usize)>,
+    blocked_opens: VecDeque<(BucketKey,String,usize)>,
+    blocked_deletes: VecDeque<(BucketKey,String,usize)>,
     tick_scheduled: bool,
     _test_root: Option<Rc<TestStorageRoot>>,
 }
@@ -103,6 +104,7 @@ thread_local! {
     static SHARED_INDEXED_DB: RefCell<HashMap<PathBuf,Weak<RefCell<IndexedDb>>>>=RefCell::new(HashMap::new());
     static SHARED_CACHE: RefCell<HashMap<PathBuf,Weak<RefCell<PersistentCacheStorage>>>>=RefCell::new(HashMap::new());
     static SHARED_MANAGER: RefCell<HashMap<PathBuf,Weak<RefCell<StorageManager>>>>=RefCell::new(HashMap::new());
+    static SHARED_BUCKETS: RefCell<HashMap<PathBuf,Weak<RefCell<BucketRegistry>>>>=RefCell::new(HashMap::new());
     static SHARED_QUOTA: RefCell<HashMap<PathBuf,SyncWeak<Mutex<QuotaLedger>>>>=RefCell::new(HashMap::new());
     static SHARED_LOCKS: RefCell<HashMap<PathBuf,Weak<RefCell<LockCoordinator>>>>=RefCell::new(HashMap::new());
     static STORAGE_DOCUMENTS: RefCell<HashMap<PathBuf,Vec<Weak<RefCell<BindingState>>>>>=RefCell::new(HashMap::new());
@@ -116,7 +118,7 @@ pub(super) struct StorageEventDelivery {
 
 enum StorageObject {
     Area { session: bool },
-    Factory,
+    Factory { bucket: String },
     Request { result: JsValue, error: JsValue, ready: bool, source: JsValue, transaction: JsValue, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Database { connection: u64, name: String, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Transaction { connection: u64, id: u64, value: Option<IdbTransaction>, mode: Mode, scope: Vec<String>, queued: bool, active_for_requests: bool, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
@@ -124,11 +126,13 @@ enum StorageObject {
     Index { transaction: usize, store: String, name: String, key_path_value: Option<JsValue>, object_store_value: Option<JsValue> },
     Cursor { cursor: IdbCursor, transaction: usize, source: usize, request: usize, with_value: bool },
     Range(KeyRange),
-    CacheStorage,
+    CacheStorage { bucket: String },
     Cache { name: String },
     Manager,
     LockManager,
     Lock { name: String, mode: amazing_storage::locks::Mode },
+    BucketManager,
+    Bucket { name: String, epoch: u64 },
 }
 
 enum StorageJob {
@@ -284,8 +288,8 @@ impl RuntimeBindingHost<'_> {
             self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
         for (name,interface,object) in [
-            ("indexedDB",SI::IDBFactory,StorageObject::Factory),
-            ("caches",SI::CacheStorage,StorageObject::CacheStorage),
+            ("indexedDB",SI::IDBFactory,StorageObject::Factory{bucket:"default".into()}),
+            ("caches",SI::CacheStorage,StorageObject::CacheStorage{bucket:"default".into()}),
         ] {
             let wrapper=self.storage_allocate(interface,object)?;
             self.define_data_property(&global,name,wrapper,true,true,true)?;
@@ -300,6 +304,8 @@ impl RuntimeBindingHost<'_> {
         self.define_data_property(&navigator,"storage",manager,true,true,true)?;
         let locks=self.storage_allocate(SI::LockManager,StorageObject::LockManager)?;
         self.define_data_property(&navigator,"locks",locks,true,true,true)?;
+        let buckets=self.storage_allocate(SI::StorageBucketManager,StorageObject::BucketManager)?;
+        self.define_data_property(&navigator,"storageBuckets",buckets,true,true,true)?;
         self.install_storage_legacy();
         Ok(())
     }
@@ -366,8 +372,16 @@ impl RuntimeBindingHost<'_> {
             let value=Rc::new(RefCell::new(LockCoordinator::default()));
             shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));value
         });
+        let buckets=SHARED_BUCKETS.with(|shared|->Result<_,Throw>{
+            if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
+            let disk=DiskStore::open(path.join("buckets"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("Storage Buckets open: {e:?}")))?;
+            let value=Rc::new(RefCell::new(BucketRegistry::load(disk)
+                .map_err(|e|Throw::type_error(format!("Storage Buckets decode: {e:?}")))?));
+            shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
+        })?;
         let lock_client_id=self.state.borrow().arena;
-        self.state.borrow_mut().storage=Some(StorageRuntime {web,idb,cache,manager,locks,lock_client_id,lock_callbacks:HashMap::new(),objects:Vec::new(),wrappers:HashMap::new(),pending:VecDeque::new(),blocked_opens:VecDeque::new(),blocked_deletes:VecDeque::new(),tick_scheduled:false,_test_root:test_root});
+        self.state.borrow_mut().storage=Some(StorageRuntime {web,idb,cache,manager,buckets,locks,lock_client_id,lock_callbacks:HashMap::new(),objects:Vec::new(),wrappers:HashMap::new(),pending:VecDeque::new(),blocked_opens:VecDeque::new(),blocked_deletes:VecDeque::new(),tick_scheduled:false,_test_root:test_root});
         STORAGE_DOCUMENTS.with(|documents| {
             let mut documents = documents.borrow_mut();
             let peers = documents.entry(path).or_default();
@@ -585,6 +599,8 @@ impl RuntimeBindingHost<'_> {
             },
             SI::CacheStorage|SI::Cache=>self.storage_cache_invoke(interface,member,this,args),
             SI::StorageManager=>self.storage_manager_invoke(member,this),
+            SI::StorageBucketManager=>self.storage_bucket_manager_invoke(member,this,args),
+            SI::StorageBucket=>self.storage_bucket_invoke(member,kind,this,args),
             SI::LockManager=>self.storage_lock_manager_invoke(member,this,args),
             SI::Lock=>self.storage_lock_invoke(member,this),
             _=>self.storage_idb_invoke(interface,member,kind,this,args),
@@ -742,6 +758,120 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn storage_bucket_manager_invoke(&mut self, member:&str, this:JsValue, args:&[JsValue])->Result<JsValue,Throw>{
+        self.storage_slot(&this,SI::StorageBucketManager)?;
+        let promise=self.new_promise()?;
+        let result=(||->Result<JsValue,Throw>{
+            let key=self.storage_key()?;
+            match member {
+                "keys"=>{
+                    let names=self.state.borrow().storage.as_ref().unwrap().buckets.borrow().keys(&key);
+                    let values=names.into_iter().map(JsValue::str).collect();
+                    Ok(self.js.binding_create_array(values)?)
+                },
+                "open"=>{
+                    let name=self.storage_string(self.storage_arg(args,0)?)?;
+                    if !valid_bucket_name(&name){return Err(Throw::type_error("Invalid bucket name"))}
+                    let mut policy=Policy::default();
+                    if let Some(options@JsValue::Object(_))=args.get(1){
+                        let quota=self.js.binding_get_property(options,"quota")?;
+                        if !matches!(quota,JsValue::Undefined){
+                            let number=self.js.binding_to_number(&quota)?;
+                            if !number.is_finite()||number<1.0||number>9_007_199_254_740_991.0{
+                                return Err(Throw::type_error("Invalid bucket quota"))}
+                            policy.quota=Some(number as u64);
+                        }
+                        let durability=self.js.binding_get_property(options,"durability")?;
+                        if !matches!(durability,JsValue::Undefined){
+                            policy.durability=match self.storage_string(&durability)?.as_str(){
+                                "strict"=>Durability::Strict,"relaxed"=>Durability::Relaxed,
+                                _=>return Err(Throw::type_error("Invalid bucket durability"))};
+                        }
+                        let expires=self.js.binding_get_property(options,"expires")?;
+                        if !matches!(expires,JsValue::Undefined|JsValue::Null){
+                            let number=self.js.binding_to_number(&expires)?;
+                            if !number.is_finite(){return Err(Throw::type_error("Invalid bucket expires"))}
+                            policy.expires=Some(number as i64);
+                        }
+                    }
+                    let epoch=self.state.borrow().storage.as_ref().unwrap().buckets.borrow_mut()
+                        .open(key,name.clone(),policy)
+                        .map_err(|error|Throw::type_error(format!("Bucket open: {error:?}")))?;
+                    self.storage_allocate(SI::StorageBucket,StorageObject::Bucket{name,epoch})
+                },
+                "delete"=>{
+                    let name=self.storage_string(self.storage_arg(args,0)?)?;
+                    if !valid_bucket_name(&name){return Err(Throw::type_error("Invalid bucket name"))}
+                    self.state.borrow().storage.as_ref().unwrap().buckets.borrow_mut()
+                        .delete(&key,&name)
+                        .map_err(|error|Throw::type_error(format!("Bucket delete: {error:?}")))?;
+                    Ok(JsValue::Undefined)
+                },
+                _=>Err(Throw::type_error("Unknown StorageBucketManager member")),
+            }
+        })();
+        match result {Ok(value)=>self.resolve_promise(&promise,value)?,Err(error)=>self.reject_promise(&promise,error.0)?}
+        Ok(promise)
+    }
+    fn storage_bucket_invoke(&mut self, member:&str, kind:SM, this:JsValue, args:&[JsValue])->Result<JsValue,Throw>{
+        let slot=self.storage_slot(&this,SI::StorageBucket)?;
+        let (name,epoch)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Bucket{name,epoch}=>(name.clone(),*epoch),_=>unreachable!()}};
+        if kind!=SM::Getter {
+            let key=self.storage_key()?;
+            let promise=self.new_promise()?;
+            let result=(||->Result<JsValue,Throw>{
+                if !self.state.borrow().storage.as_ref().unwrap().buckets.borrow().handle_valid(&key,&name,epoch){
+                    return Err(self.storage_dom_error("UnknownError","Bucket has been deleted"))}
+                let buckets=self.state.borrow().storage.as_ref().unwrap().buckets.clone();
+                match member {
+                    "persisted"=>Ok(JsValue::Bool(buckets.borrow().policy(&key,&name).is_some_and(|policy|policy.persisted))),
+                    "persist"=>{
+                        let mut policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        policy.persisted=true;
+                        buckets.borrow_mut().update(&key,&name,policy)
+                            .map_err(|error|Throw::type_error(format!("Bucket persist: {error:?}")))?;
+                        Ok(JsValue::Bool(true))
+                    },
+                    "durability"=>Ok(JsValue::str(match buckets.borrow().policy(&key,&name).map(|policy|policy.durability){
+                        Some(Durability::Strict)=>"strict",_=>"relaxed"})),
+                    "expires"=>Ok(buckets.borrow().policy(&key,&name).and_then(|policy|policy.expires)
+                        .map_or(JsValue::Null,|expires|JsValue::num(expires as f64))),
+                    "setExpires"=>{
+                        let number=self.js.binding_to_number(self.storage_arg(args,0)?)?;
+                        if !number.is_finite(){return Err(Throw::type_error("Invalid expires"))}
+                        let mut policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        policy.expires=Some(number as i64);
+                        buckets.borrow_mut().update(&key,&name,policy)
+                            .map_err(|error|Throw::type_error(format!("Bucket setExpires: {error:?}")))?;
+                        Ok(JsValue::Undefined)
+                    },
+                    "estimate"=>{
+                        let policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        let quota=policy.quota.unwrap_or_else(||{
+                            let manager=self.state.borrow().storage.as_ref().unwrap().manager.clone();
+                            manager.borrow().estimate(&key).quota});
+                        let value=self.js.binding_create_object(None)?;
+                        self.define_data_property(&value,"usage",JsValue::num(0.0),true,true,true)?;
+                        self.define_data_property(&value,"quota",JsValue::num(quota as f64),true,true,true)?;
+                        Ok(value)
+                    },
+                    _=>Err(Throw::type_error("Unknown StorageBucket member")),
+                }
+            })();
+            match result {Ok(value)=>self.resolve_promise(&promise,value)?,Err(error)=>self.reject_promise(&promise,error.0)?}
+            return Ok(promise)
+        }
+        match member {
+            "name"=>Ok(JsValue::str(name)),
+            "indexedDB"=>self.storage_allocate(SI::IDBFactory,StorageObject::Factory{bucket:name}),
+            "caches"=>self.storage_allocate(SI::CacheStorage,StorageObject::CacheStorage{bucket:name}),
+            _=>Err(Throw::type_error("Unknown StorageBucket member")),
+        }
+    }
+}
+
+impl RuntimeBindingHost<'_> {
     fn storage_idb_error(&mut self, error: idb::Error) -> Throw {
         let name = match error {
             idb::Error::Data => "DataError", idb::Error::Constraint => "ConstraintError",
@@ -760,8 +890,10 @@ impl RuntimeBindingHost<'_> {
         Ok((slot,value))
     }
     fn storage_factory_invoke(&mut self, member: &str, this: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let _=self.storage_slot(&this,SI::IDBFactory)?;
-        let key=self.storage_key()?;
+        let slot=self.storage_slot(&this,SI::IDBFactory)?;
+        let bucket={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Factory{bucket}=>bucket.clone(),_=>unreachable!()}};
+        let key=BucketKey::new(self.storage_key()?,bucket);
         match member {
             "cmp"=>{
                 if args.len()<2 {
@@ -935,7 +1067,9 @@ impl RuntimeBindingHost<'_> {
                     let state=self.state.borrow();if let StorageObject::Database{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
                 }
                 let (connection,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Database{connection,name,..}=>(*connection,name.clone()),_=>unreachable!()}};
-                let key=self.storage_key()?;
+                let key=self.state.borrow().storage.as_ref().unwrap().idb.borrow()
+                    .connection(connection).map(|connection|connection.key.clone())
+                    .ok_or_else(||Throw::type_error("IDBDatabase is closed"))?;
                 match member {
                     "name"=>Ok(JsValue::str(name)),
                     "version"=>{let state=self.state.borrow();let version=state.storage.as_ref().unwrap().idb.borrow().connection(connection).map_or(0,|connection|connection.version);
@@ -1691,5 +1825,37 @@ mod storage_binding_tests {
             if scheduler.run_script("result").unwrap()==JsValue::str("version:1:2:ready:2") {break}
         }
         assert_eq!(scheduler.run_script("result").unwrap(),JsValue::str("version:1:2:ready:2"));
+    }
+
+    #[test]
+    fn storage_buckets_open_keys_describe_and_invalidate() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; var bucket=null; \
+            navigator.storageBuckets.open('alpha',{durability:'strict',quota:4096,expires:777}) \
+            .then(function(b){bucket=b;log.push(b.name);return navigator.storageBuckets.open('beta')}) \
+            .then(function(){return navigator.storageBuckets.keys()}) \
+            .then(function(names){log.push(names.join(','));return bucket.durability()}) \
+            .then(function(d){log.push(d);return bucket.expires()}) \
+            .then(function(e){log.push(String(e));return bucket.estimate()}) \
+            .then(function(est){log.push(est.quota+':'+est.usage);log.push(typeof bucket.indexedDB.open);return navigator.storageBuckets.delete('alpha')}) \
+            .then(function(){return bucket.persisted()}) \
+            .catch(function(error){log.push('error:'+error.name)});").unwrap();
+        for step in 1..25 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap(),
+            JsValue::str("alpha|alpha,beta|strict|777|4096:0|function|error:UnknownError"));
+    }
+
+    #[test]
+    fn storage_buckets_reject_invalid_names_and_quotas() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var rejected=[]; function capture(p){return p.then(function(){rejected.push('resolved')},function(e){rejected.push(e.name)})} \
+            capture(navigator.storageBuckets.open('Bad Name')); \
+            capture(navigator.storageBuckets.open('_bad')); \
+            capture(navigator.storageBuckets.open('ok',{quota:0})); \
+            capture(navigator.storageBuckets.open('ok',{quota:9007199254740992})); \
+            capture(navigator.storageBuckets.delete('bad name'));").unwrap();
+        for step in 1..15 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("rejected.join(',')").unwrap(),
+            JsValue::str("TypeError,TypeError,TypeError,TypeError,TypeError"));
     }
 }
