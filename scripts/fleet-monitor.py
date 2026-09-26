@@ -130,7 +130,13 @@ def scan(seen: set[str]) -> list[str]:
 
         # Failure paths: a stalled or context-exhausted lane must not look quiet.
         if tmuxctl.state_of(raw) == "busy":
-            mins = stale_minutes(tmuxctl.age_of(st.get("updated", "-")))
+            # Measure from the file's mtime, not the agent-written "updated"
+            # field: OpenCode agents sometimes write placeholder timestamps.
+            status_file = tmuxctl.AGENTS_DIR / lane / "status.json"
+            if status_file.exists():
+                mins = int((time.time() - status_file.stat().st_mtime) // 60)
+            else:
+                mins = stale_minutes(tmuxctl.age_of(st.get("updated", "-")))
             # A restarted agent inherits its predecessor's status.json. Until
             # it writes its own, measure staleness from the newest brief, or a
             # fresh agent working normally looks stalled for days.
@@ -159,7 +165,16 @@ def scan(seen: set[str]) -> list[str]:
                         events.append(f"ERROR    {lane} idle after provider error '{marker}' -- resend to resume")
                     break
 
-        m = MODEL_RE.search(raw)
+        if tmuxctl.OC_FOOTER in raw:
+            # OpenCode lane: the mode line names the model.
+            if tmuxctl.AGENT_MODEL_LABEL not in raw:
+                key = digest(f"model:{lane}:oc")
+                if key not in seen:
+                    remember(seen, key)
+                    events.append(f"MODEL    {lane} not running {tmuxctl.AGENT_MODEL_LABEL}")
+            m = None
+        else:
+            m = MODEL_RE.search(raw)
         if m:
             running = f"{m.group(1)} {m.group(2)}".lower()
             expected = f"{tmuxctl.AGENT_MODEL} {tmuxctl.AGENT_EFFORT}"

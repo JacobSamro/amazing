@@ -43,16 +43,26 @@ done
 [ $# -gt 0 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
 
-# Lane homes. Both hosts carry the pinned Test262 checkout; the five
-# JavaScript lanes are split so full runs do not queue behind each other.
+# Lane homes. Since 2026-09-26 every lane runs on its own Boat sandbox
+# (scripts/boat-lane.py: one sandbox per lane from the amazing-builder template,
+# stopped by boat-idle-reaper.py after 15 idle minutes). The venus hosts remain
+# available with --host venus-001 / venus-003.
 if [ -z "$HOST" ]; then
-  case "$LANE" in
-    js-lang|js-vm|js-binary) HOST=venus-001 ;;
-    js-runtime|js-stdlib|integrator-primary) HOST=venus-003 ;;
-    *) HOST=venus-001 ;;
-  esac
+  # Boat needs the amazing-builder template; without it (for example after
+  # delete-on-stop data retention removed it) fall back to the venus hosts.
+  if "$HOME/.ascii/bin/boat" snapshots --json 2>/dev/null | grep -q '"name":"amazing-builder"'; then
+    HOST=boat
+  else
+    case "$LANE" in
+      js-lang|js-vm|js-binary) HOST=venus-001 ;;
+      js-runtime|js-stdlib|integrator-primary) HOST=venus-003 ;;
+      *) HOST=venus-001 ;;
+    esac
+    echo "linux-run: Boat template missing, using $HOST" >&2
+  fi
 fi
 case "$HOST" in
+  boat) SLOTS=0 JOBS=0 ;;
   venus-001) SLOTS=3 JOBS=10 ;;
   venus-003) SLOTS=2 JOBS=8 ;;
   *) echo "linux-run: unknown host $HOST" >&2; exit 2 ;;
@@ -84,6 +94,27 @@ else
   if [ "$LANE" = integrator-primary ]; then SRC="$MAIN"; else SRC="$(dirname "$MAIN")/amazing-wt/$LANE"; fi
   [ -d "$SRC" ] || { echo "linux-run: no worktree at $SRC" >&2; exit 2; }
   echo "linux-run[$LANE]: $HOST from $SRC ($(git -C "$SRC" rev-parse --short HEAD)$(git -C "$SRC" diff --quiet HEAD || echo ', with uncommitted edits'))" >&2
+fi
+
+if [ "$HOST" = boat ]; then
+  read -r BOAT_HOST BOAT_PORT BOAT_ID < <("$REPO/scripts/boat-lane.py" ensure "$LANE") || {
+    echo "linux-run: no Boat sandbox for $LANE" >&2; exit 3; }
+  echo "linux-run[$LANE]: boat sandbox $BOAT_ID" >&2
+  BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
+  # The template keeps a warm target/ and the Test262 checkout outside the
+  # synced tree; never let --delete touch them.
+  rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
+    --exclude /.agents --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/" || {
+    echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
+  REMOTE=". ~/.amazing-env
+cd ~/amazing || exit 3
+export CARGO_TARGET_DIR=\$HOME/amazing/target JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
+export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1
+mkdir -p ~/amazing/out; ln -sfn ~/corpora ~/amazing/corpora
+$CMD"
+  ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
+  $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
+  exit $?
 fi
 
 # Bulk transfers get their own connection; a stalled one on the shared master

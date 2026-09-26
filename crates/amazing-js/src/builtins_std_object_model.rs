@@ -203,7 +203,11 @@ impl Interpreter {
         let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
             let property = if let Some(name) = key.as_string() {
-                self.legacy_own_property(&object, name, false)?
+                // Legacy named properties belong to the collection itself.
+                // They do not prevent an ordinary receiver from shadowing one.
+                let inherited = !matches!(&receiver, JsValue::Object(receiver_object)
+                    if Rc::ptr_eq(&receiver_object.0, &object.0));
+                self.legacy_own_property(&object, name, inherited)?
             } else { object.borrow().own_prop(key).cloned() };
             if let Some(property) = property {
                 if let Some(setter) = property.setter {
