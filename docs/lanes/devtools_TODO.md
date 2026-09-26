@@ -154,7 +154,7 @@ doctests 4 passed.
 
 ## CDP-5 — Emulation domain — done
 
-Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
+Source `85e6f5c9`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
 nextest (0 skipped) and 1 doctest; workspace 2746 passed, 0 failed, 10 skipped,
 doctests 4 passed.
 
