@@ -113,6 +113,18 @@ pub(crate) fn transport_label(content_type: Option<&str>) -> Option<&str> {
     })
 }
 
+/// HTML-32: decodes (never parses) an HTML byte stream, for a caller that
+/// wants to drive `amazing_html::ResumableParser`/`cmd::js::
+/// run_interleaved_parse` directly instead of a pre-built `Dom` --
+/// `parse_document_bytes`'s own decode-then-`tree::build` split, minus the
+/// build. Only meaningful for `DocumentKind::Html`; XML keeps its existing
+/// lossy-UTF-8, whole-source `parse_xml` path (`parse_document_bytes`),
+/// since interleaved parsing is an HTML-only, script-execution-timing
+/// concept with no XML equivalent here.
+pub(crate) fn decode_html_bytes(bytes: &[u8], content_type: Option<&str>) -> String {
+    amazing_html::encoding::decode(bytes, transport_label(content_type)).text
+}
+
 pub(crate) fn parse_document_bytes(
     bytes: &[u8],
     location: &str,

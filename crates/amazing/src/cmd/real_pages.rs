@@ -134,24 +134,31 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
             Err(code) => return code,
         }
     };
-    let document = match crate::document::parse_document_bytes(&html, &base_url, content_type.as_deref()) {
-        Ok(document) => document,
-        Err(error) => {
-            let errors = vec![error.to_string()];
-            emit(&PageReport {
-                page, status: "parse_error", errors: &errors, probe: &[],
-                width: 0, height: 0, render_ms: started.elapsed().as_millis() as u64,
-                wrote_image: false, nonwhite: 0,
-            });
-            return ExitCode::SUCCESS;
-        }
-    };
-    let scripting = document.kind == crate::document::DocumentKind::Html;
+    // HTML-32: only the HTML path is script-interleaved; a cheap, decode-
+    // free `document_kind` sniff decides which parse this page gets, same
+    // as `render.rs::render_surface`. XML keeps the existing whole-source
+    // `parse_document_bytes`.
+    let scripting = crate::document::document_kind(&base_url, content_type.as_deref())
+        == crate::document::DocumentKind::Html;
     let render_started = Instant::now();
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: document.dom,
+        dom: amazing_dom::Dom::new(),
         native_forwarded: false,
     }));
+    if !scripting {
+        match crate::document::parse_document_bytes(&html, &base_url, content_type.as_deref()) {
+            Ok(document) => host.borrow_mut().dom = document.dom,
+            Err(error) => {
+                let errors = vec![error.to_string()];
+                emit(&PageReport {
+                    page, status: "parse_error", errors: &errors, probe: &[],
+                    width: 0, height: 0, render_ms: started.elapsed().as_millis() as u64,
+                    wrote_image: false, nonwhite: 0,
+                });
+                return ExitCode::SUCCESS;
+            }
+        }
+    }
     // IA-LIVE-3: matchMedia (runtime_host_integrator_assist.rs) evaluates
     // size-based media features against the real per-page viewport rather
     // than a hardcoded default.
@@ -159,8 +166,9 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
         .map(|h| h as f32)
         .unwrap_or_else(|| amazing_css::MediaEnvironment::default().viewport_height_px);
     let outcome = if scripting {
+        let text = crate::document::decode_html_bytes(&html, content_type.as_deref());
         crate::cmd::js::execute_page_scripts_lenient(
-            &host, &base_url, probe_source.as_deref(), (width, viewport_height),
+            &host, &base_url, &text, probe_source.as_deref(), (width, viewport_height),
         )
     } else {
         crate::cmd::js::LenientScriptResult { errors: Vec::new(), probe: Vec::new() }

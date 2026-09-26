@@ -229,19 +229,7 @@ fn classic_or_module_script_type(attrs: &[(String, String)]) -> Option<bool> {
     // or "text/javascript\u{00A0}" that WPT's script-type-and-language-with-
     // params.html/script-type-whitespace.html expect to be rejected.
     let value = strip_ascii_whitespace(raw.unwrap_or("")).to_ascii_lowercase();
-    if value.is_empty()
-        || matches!(
-            value.as_str(),
-            "text/javascript"
-                | "application/javascript"
-                | "application/ecmascript"
-                | "text/ecmascript"
-                | "application/x-javascript"
-                | "text/x-javascript"
-                | "text/jscript"
-                | "text/livescript"
-        )
-    {
+    if value.is_empty() || is_javascript_mime_type(&value) {
         Some(false)
     } else if value == "module" {
         Some(true)
@@ -272,6 +260,38 @@ fn classify_script(attrs: &[(String, String)]) -> Option<ScriptMode> {
 /// (kept spelled out so the exact spec set is visible at the call site).
 pub fn strip_ascii_whitespace(s: &str) -> &str {
     s.trim_matches(|c: char| matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' '))
+}
+
+/// mimesniff's "JavaScript MIME type" list
+/// (<https://mimesniff.spec.whatwg.org/#javascript-mime-type>), the exact
+/// authority "prepare the script element" (HTML §13.2.7.4) cites for
+/// recognizing a classic script's `type` string. `value` must already be
+/// ASCII-lowercased and ASCII-whitespace-trimmed (`strip_ascii_whitespace`)
+/// by the caller -- this only does the fixed-set membership check.
+/// HTML-32: this list previously had only 8 of the 16 entries (missing
+/// `application/x-ecmascript`, `text/x-ecmascript`, and `text/javascript1.0`
+/// through `text/javascript1.5`), caught while investigating WPT's
+/// `script-type-and-language-js.html`.
+pub fn is_javascript_mime_type(value: &str) -> bool {
+    matches!(
+        value,
+        "application/ecmascript"
+            | "application/javascript"
+            | "application/x-ecmascript"
+            | "application/x-javascript"
+            | "text/ecmascript"
+            | "text/javascript"
+            | "text/javascript1.0"
+            | "text/javascript1.1"
+            | "text/javascript1.2"
+            | "text/javascript1.3"
+            | "text/javascript1.4"
+            | "text/javascript1.5"
+            | "text/jscript"
+            | "text/livescript"
+            | "text/x-ecmascript"
+            | "text/x-javascript"
+    )
 }
 
 impl Default for TreeBuilder {
@@ -770,8 +790,30 @@ impl TreeBuilder {
                     .current()
                     .and_then(|idx| self.dom.namespace(idx))
                     .unwrap_or(Namespace::Html);
-                self.insert_foreign_element(&name, attrs, namespace);
+                let node = self.insert_foreign_element(&name, attrs, namespace);
                 if self_closing {
+                    // HTML-32: a self-closing SVG `<script/>` (necessarily
+                    // `src`-only -- self-closing leaves no room for inline
+                    // text content) used to be popped here with no classify/
+                    // pause check at all, so it was silently never collected
+                    // -- the same bug HTML-31 fixed for its non-self-closing
+                    // `<script>...</script>` sibling, just reached through
+                    // the self-closing branch instead of the `EndTag` match
+                    // arm below. Same guards: not a fragment parse, not
+                    // inside `<template>` content, SVG namespace only
+                    // (MathML has no script element).
+                    if !self.fragment
+                        && self.template_modes.is_empty()
+                        && name.eq_ignore_ascii_case("script")
+                        && namespace == Namespace::Svg
+                    {
+                        let attrs = self.dom.attrs_of(node).map(<[_]>::to_vec).unwrap_or_default();
+                        match classify_script(&attrs) {
+                            Some(ScriptMode::Blocking) => self.pending_script = Some(node),
+                            Some(mode) => self.script_events.push((node, mode)),
+                            None => {},
+                        }
+                    }
                     self.open.pop();
                 }
             },
@@ -3625,5 +3667,27 @@ mod tests {
         }
         assert_eq!(build_shape("<!DOCTYPE Html PUBLIC 'p' \"s\"><p>x"),
             "(doc <!DOCTYPE html>html[head[]body[p[\"x\"]]])");
+    }
+
+    /// HTML-32: `is_javascript_mime_type` previously (as an inline `matches!`
+    /// in `classic_or_module_script_type`, duplicated in `amazing`'s
+    /// `cmd/js.rs::is_classic_javascript_type`) had only 8 of mimesniff's 16
+    /// "JavaScript MIME type" entries -- caught while triaging WPT's
+    /// `script-type-and-language-js.html`. `value` here is already
+    /// lowercased/trimmed, matching every call site's contract.
+    #[test]
+    fn javascript_mime_type_matches_the_full_mimesniff_list() {
+        for value in [
+            "application/ecmascript", "application/javascript", "application/x-ecmascript",
+            "application/x-javascript", "text/ecmascript", "text/javascript",
+            "text/javascript1.0", "text/javascript1.1", "text/javascript1.2",
+            "text/javascript1.3", "text/javascript1.4", "text/javascript1.5",
+            "text/jscript", "text/livescript", "text/x-ecmascript", "text/x-javascript",
+        ] {
+            assert!(is_javascript_mime_type(value), "{value} should be a recognized JS MIME type");
+        }
+        for value in ["", "javascript", "text/javascript1.6", "text/plain", "module"] {
+            assert!(!is_javascript_mime_type(value), "{value} should not be recognized");
+        }
     }
 }
