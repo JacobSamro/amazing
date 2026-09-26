@@ -1065,7 +1065,38 @@ pub(crate) fn layout_wrapper(
     text: Option<&dyn amazing_text::TextSystem>,
 ) -> f32 {
     b.margin = values::resolve_margins(&b.style, b.font_size, cbw);
-    let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
+    // CSS2.1 10.3.7's "both insets known" case: an absolutely positioned
+    // wrapper with definite `left` AND `right` has a definite used width,
+    // `cb.w - left - right - margins`, computed directly from those insets
+    // (LAYOUT-26: using `cbw - margins` unconditionally ignored insets
+    // entirely, so such a wrapper rendered at the full containing-block
+    // width instead). Checking `left`/`right` themselves rather than reading
+    // back the wrapper's own `width` style is deliberate: `prepare_sizes`
+    // also writes a resolved `width` for the *shrink-to-fit* case (at most
+    // one inset known), computed from this box's own `intrinsic_content_widths`
+    // estimate of the table's min/max -- a good estimate, but not always
+    // bit-identical to `table::layout`'s own authoritative per-column
+    // min/max below (`mn`/`mx`, from this same `constraints()` call with
+    // real text). Overriding on `width` alone regressed
+    // `position/CSS2__positioning__abspos-008.xht` (only one inset set) for
+    // exactly that reason; only the both-known case is a closed-form exact
+    // value with no such estimate involved, so only it is safe to prefer
+    // here. The shrink-to-fit case is left to fall through unchanged, exactly
+    // as before this ticket, so `table::layout`'s own
+    // `specified.unwrap_or(available.min(mx)).max(mn)` clamp remains the
+    // sole source of truth for it.
+    let available = if length(b, "left", cbw).is_some() && length(b, "right", cbw).is_some() {
+        // css-tables-3 #abspos: "the given available-size can never exceed
+        // the available-size of the containing block" -- unlike an ordinary
+        // CSS2.1 abspos box, a table's resolved insets are additionally
+        // clamped to `cbw` (a negative `left` paired with `right: 0`, for
+        // instance, must not stretch the table wider than its containing
+        // block; `absolute-tables-009.tentative.html`).
+        (cbw - length(b, "left", cbw).unwrap() - length(b, "right", cbw).unwrap()
+            - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0).min(cbw)
+    } else {
+        (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0)
+    };
     let capmin = children(b)[1..]
         .iter()
         .map(|c| crate::flex::min_content_width(c, fonts))

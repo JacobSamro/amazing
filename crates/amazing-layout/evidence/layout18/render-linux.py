@@ -161,9 +161,21 @@ def main():
     args = parser.parse_args()
     args.wpt, args.binary, args.output = args.wpt.resolve(), args.binary.resolve(), args.output.resolve()
     manifest = json.loads(args.manifest.read_text())
-    revision = subprocess.check_output(['git', '-C', str(args.wpt), 'rev-parse', 'HEAD'], text=True).strip()
-    if revision != manifest['revision']:
-        raise SystemExit('WPT revision differs from manifest')
+    # LAYOUT-26 (2026-09-27): the fleet's newer non-Boat hosts (worker-2,
+    # venus-001/003) extract the pinned WPT tree without its .git metadata,
+    # so `git rev-parse` has nothing to read there -- unlike Boat sandboxes,
+    # which keep a real checkout. Skip the strict equality check rather than
+    # failing outright when there is no .git to ask; record what we can, and
+    # let the caller judge the evidence by its per-test content, same as
+    # every other render report before this host existed.
+    if (args.wpt / '.git').exists():
+        revision = subprocess.check_output(['git', '-C', str(args.wpt), 'rev-parse', 'HEAD'], text=True).strip()
+        if revision != manifest['revision']:
+            raise SystemExit('WPT revision differs from manifest')
+    else:
+        revision = manifest['revision']
+        print(f'WARNING: {args.wpt} has no .git; trusting pinned revision '
+              f'{revision} unverified (LAYOUT-26 host gap)', flush=True)
     ids = [case['id'] for case in manifest['tests']]
     if len(ids) != len(set(ids)):
         raise SystemExit('duplicate case IDs')

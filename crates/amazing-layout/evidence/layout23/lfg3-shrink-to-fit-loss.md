@@ -193,3 +193,22 @@ was applied and after, at `512912d5`):
 `tables`/`writing`/`ruby`/`retained`, since none of those flipped to `pass`),
 with `abspos-008` removed from `position` and the comment block updated to
 describe the fix and the LAYOUT-26 follow-up.
+
+## Resolution, part 2 (LAYOUT-26, 2026-09-27)
+
+The "~1px rounding drift" hypothesis above was wrong. The actual bug: for a
+table wrapper with a CSS2.1 §17.4-moved `position:absolute` and *both*
+`left`/`right` insets definite, `table::layout_wrapper` computed its offered
+width as `cbw - margins` (the raw containing-block width), never reading the
+insets at all -- `table-anonymous-objects-059`'s reference (`left:1px;
+right:1px`) got the full container width instead of `cb.w - 1 - 1`, a 2px
+error (measured directly: `cbw=784` vs. the correct `782`, confirmed via
+temporary `TABLE26_DEBUG` instrumentation comparing the actual test's green
+table against its reference's). Fixed in `layout_wrapper` by computing
+`cb.w - left - right - margins` directly whenever both insets resolve to
+definite lengths (plus css-tables-3's `#abspos` clamp to `cbw`, needed for
+`absolute-tables-009.tentative.html`'s negative-`left` case), leaving every
+other case (shrink-to-fit, ordinary in-flow) on the original
+`cbw - margins` path so `table::layout`'s own per-column min/max clamp stays
+authoritative there. See `docs/lanes/layout_TODO.md`'s LAYOUT-26 section for
+full measured numbers (tables 271 → 301) and the residual 13-case gap.
