@@ -309,3 +309,25 @@ The five remaining expanded mismatches are routed to CSS and layout for
 ligature precedence. The remaining crash is the DOM/driver
 `getElementById("content")` script-order issue. No remaining failure in this
 selection has a text-owned cause established by the audit.
+
+## TEXT-13: font-size-adjust metric resolution and line-edge shaping audit
+
+`FontSizeAdjustMetric` (`ExHeight`, `CapHeight`, `ChWidth`, `IcWidth`,
+`IcHeight`) and `TextSystem::adjusted_font_size(&TextStyle, metric, aspect)` are
+the text-owned half of CSS Fonts 4 §2.6 `font-size-adjust`. The default trait
+method returns `style.size` unchanged, so no caller has to change. The provider
+resolves the requested metric against the first available font through the same
+`font_relative_metrics` path as `ch`/`ic`, then returns
+`style.size * aspect / font_metric_ratio`; a zero aspect yields a zero used size
+and a missing or non-positive font metric falls back to `style.size`. Layout
+adopts it by computing the used size for each element and passing it as
+`TextStyle.size`; that handoff is not yet wired.
+
+The same audit closed the two unassigned `css-text` word-break-shaping cases
+(`overflow-wrap-shaping-001`, `line-break-shaping-001`). With the pinned
+`NotoNaskhArabic-regular.woff2`, `shape_line` returns glyph ids identical to the
+whole-word `shape` for every split, so Arabic joining context survives the line
+edge, and `line_breaks` emits the correct Emergency/Anywhere opportunities.
+The residual failure is layout break selection / float shrink-to-fit and is
+routed to `.agents/layout/questions.md`; no text-owned change applies.
+

@@ -11,10 +11,10 @@ pub use font_display::FontDisplayPeriods;
 
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
-    FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
-    GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine,
-    ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle, TextSystem,
-    WritingMode, resolve_synthesis,
+    FontMetrics, FontSizeAdjustMetric, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId,
+    GlyphImage, GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph,
+    ShapedLine, ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle,
+    TextSystem, WritingMode, resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
@@ -701,6 +701,38 @@ impl TextSystem for TextProvider {
             return self.fallback.font_relative_metrics(style);
         };
         font_relative_metrics::for_font(&self.fonts[index], style)
+    }
+
+    /// CSS Fonts 4 §2.6: resolve the requested `font-size-adjust` metric against
+    /// the first available font, then scale the used size by the aspect value.
+    fn adjusted_font_size(
+        &self,
+        style: &TextStyle,
+        metric: FontSizeAdjustMetric,
+        aspect: f32,
+    ) -> f32 {
+        if !style.size.is_finite() || style.size <= 0.0 || !aspect.is_finite() || aspect < 0.0 {
+            return style.size;
+        }
+        if aspect == 0.0 {
+            return 0.0;
+        }
+        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
+            return style.size;
+        };
+        let relative = font_relative_metrics::for_font(&self.fonts[index], style);
+        let metric_px = match metric {
+            FontSizeAdjustMetric::ExHeight => relative.x_height,
+            FontSizeAdjustMetric::CapHeight => relative.cap_height,
+            FontSizeAdjustMetric::ChWidth => relative.ch_advance,
+            FontSizeAdjustMetric::IcWidth | FontSizeAdjustMetric::IcHeight => relative.ic_advance,
+        };
+        let ratio = metric_px / style.size;
+        if ratio.is_finite() && ratio > 0.0 {
+            style.size * aspect / ratio
+        } else {
+            style.size
+        }
     }
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
         amazing_text::validate_paragraph(&Paragraph {
