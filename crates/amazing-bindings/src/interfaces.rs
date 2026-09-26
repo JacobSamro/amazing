@@ -1381,6 +1381,20 @@ pub static INTERFACES: &[D] = &[
             setter("returnValue", O::BeforeUnloadSetReturnValue)] },
     D { interface: I::CompositionEvent, name: "CompositionEvent", parent: Some(I::UIEvent),
         constructor: Some(O::CompositionEventConstructor), members: COMPOSITION_EVENT },
+    // Legacy `document.createEvent()`-only aliases: real DOM/HTML interfaces this engine does
+    // not otherwise implement (device orientation, drag-and-drop, web storage, legacy IME text
+    // events). No constructor, matching BeforeUnloadEvent above -- `new X()` is unsupported but
+    // `window.X.prototype` must exist so createEvent(name)'s alias-identity checks pass.
+    D { interface: I::DeviceMotionEvent, name: "DeviceMotionEvent", parent: Some(I::Event),
+        constructor: None, members: &[] },
+    D { interface: I::DeviceOrientationEvent, name: "DeviceOrientationEvent", parent: Some(I::Event),
+        constructor: None, members: &[] },
+    D { interface: I::DragEvent, name: "DragEvent", parent: Some(I::MouseEvent),
+        constructor: None, members: &[] },
+    D { interface: I::StorageEvent, name: "StorageEvent", parent: Some(I::Event),
+        constructor: None, members: &[] },
+    D { interface: I::TextEvent, name: "TextEvent", parent: Some(I::UIEvent),
+        constructor: None, members: &[] },
     D {
         interface: I::MutationObserver,
         name: "MutationObserver",

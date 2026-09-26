@@ -168,6 +168,13 @@ pub fn map_role(role: AmazingRole) -> gpui::accesskit::Role {
         AmazingRole::Caption => K::Caption,
         AmazingRole::Cell => K::Cell,
         AmazingRole::Code => K::Code,
+        // A11Y-10: `<cite>` has no ARIA equivalent (HTML-AAM's own fixture
+        // names the "implicit platform computedrole" `html-cite`, not an
+        // ARIA token) — expose it the same way `role::apply_minimum_role`
+        // and real browsers treat an otherwise-plain generic: a bare
+        // grouping container, so its content is still walked, just under no
+        // special AccessKit role.
+        AmazingRole::HtmlCite => K::GenericContainer,
         AmazingRole::Columnheader => K::ColumnHeader,
         AmazingRole::Definition => K::Definition,
         AmazingRole::Deletion => K::ContentDeletion,

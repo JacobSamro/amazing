@@ -17,6 +17,7 @@ enum IntlState {
     Segments(IntlSegmentsState),
     SegmentIterator(IntlSegmentIteratorState),
     DisplayNames(IntlDisplayState),
+    Duration(IntlDurationState),
 }
 
 thread_local! {
@@ -342,16 +343,35 @@ fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Ve
     Ok(output)
 }
 
+/// The BCP-47 Lookup algorithm against `INTL_NUMBER_DATA`'s locale inventory,
+/// for one already extension-stripped tag: truncate trailing subtags until an
+/// exact data locale is found, then -- if that exhausts down to the bare
+/// primary-language subtag with no exact hit -- match any data locale that
+/// carries this language under a different script (for example "zh" or
+/// "zh-TW" against the scripted "zh-Hans": the only Chinese data this engine
+/// carries). Shared by `intl_lookup` and `intl_number_supported_locales` so
+/// resolvedOptions().locale and supportedLocalesOf() stay consistent; see
+/// intl402/fallback-locales-are-supported.js and
+/// intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
+fn intl_lookup_one(tag: &str) -> Option<&'static str> {
+    let mut candidate = tag;
+    loop {
+        if let Some(data) = INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(candidate)) {
+            return Some(data.locale);
+        }
+        let Some(dash) = candidate.rfind('-') else { break };
+        candidate = &candidate[..dash];
+    }
+    INTL_NUMBER_DATA.iter()
+        .find(|data| data.locale.split('-').next().unwrap().eq_ignore_ascii_case(candidate))
+        .map(|data| data.locale)
+}
+
 fn intl_lookup(requested: &[String]) -> String {
     for tag in requested {
         let no_extension = tag.split("-u-").next().unwrap_or(tag);
-        let mut candidate = no_extension.to_string();
-        loop {
-            if INTL_NUMBER_DATA.iter().any(|data| data.locale.eq_ignore_ascii_case(&candidate)) {
-                return INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(&candidate)).unwrap().locale.to_string();
-            }
-            let Some(dash) = candidate.rfind('-') else { break };
-            candidate.truncate(dash);
+        if let Some(locale) = intl_lookup_one(no_extension) {
+            return locale.to_string();
         }
     }
     "en".to_string()
@@ -480,6 +500,7 @@ impl Interpreter {
         self.install_intl_collator(&namespace);
         self.install_intl_segmenter(&namespace);
         self.install_intl_display_names(&namespace);
+        self.install_intl_duration(&namespace);
         let _ = namespace.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl")));
         self.define_global("Intl", intl);

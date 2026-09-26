@@ -1,0 +1,47 @@
+{
+  "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-001.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-002.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-safe-001.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-001.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-002.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-001.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-002.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-safe-001.html": {
+    "owner": "layout-flexgrid",
+    "status": "open",
+    "reason": "Grid Lanes fill-reverse alignment changes actual pixels while reference is unchanged"
+  },
+  "css-sizing__intrinsic-height-abspos-stretch-percentage-child.html": {
+    "owner": "css",
+    "status": "open",
+    "reason": "Sizing parser rejects stretch and legacy fill-available before layout"
+  }
+}

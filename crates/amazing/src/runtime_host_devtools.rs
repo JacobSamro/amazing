@@ -152,6 +152,126 @@
 //!   `set_inspect_mode`/`hideHighlight` are left at the trait's own `Ok(())`
 //!   defaults for the same reason. Proof is `DOM.getBoxModel`'s real
 //!   geometry, not a rendered overlay.
+//!
+//! CDP-20 implements the `Debugger` domain: `enable`/`disable`,
+//! `scriptParsed` (classic and module scripts), `getScriptSource`,
+//! `setBreakpointByUrl`/`removeBreakpoint` at line granularity, and
+//! `pause`/`resume`, plus a minimal per-statement hook added to
+//! `amazing-js` itself (`amazing_js::debug_hook::DebugHook`,
+//! `Interpreter::set_debug_hook`/`set_current_script`) so this driver can
+//! see which line is about to run without the interpreter knowing what a
+//! breakpoint is.
+//!
+//! * **This driver cannot suspend JS execution mid-statement.** The engine
+//!   is a single-threaded tree-walking interpreter with no coroutine/fiber
+//!   mechanism, and this driver's own page thread processes one
+//!   `PageCommand` at a time (see the module's top doc comment) — nothing
+//!   can service a `Debugger.resume` command while the same thread is stuck
+//!   inside a synchronous `run_script` call. So `Debugger.pause` cannot mean
+//!   "halt execution and wait": it arms a one-shot flag that the *next*
+//!   statement to actually run (the next event-loop tick, timer, or handler
+//!   on an otherwise idle page) reports as a `Debugger.paused` "other" event
+//!   — real, but after the fact, not a live suspend. `Debugger.resume`
+//!   correspondingly just clears that flag if it had not fired yet; nothing
+//!   is ever truly blocked for it to resume. `stepInto`/`stepOver`/`stepOut`
+//!   and `evaluateOnCallFrame` stay at the trait's `Unsupported` default —
+//!   there is no suspended call stack for any of them to act on. Real
+//!   synchronous pause/resume/step needs the interpreter itself to expose a
+//!   resumable/steppable execution API (fibers, or a bytecode VM with
+//!   explicit continuation state); that is a genuine `amazing-js` change,
+//!   not a driver one, and is filed to the js-runtime lane in
+//!   `.agents/js-runtime/questions.md`.
+//! * **A breakpoint hit is still real**, just reported post-hoc: the hook
+//!   fires on every statement (`Interpreter::exec_stmt`'s choke-point, plus
+//!   the top-level program loop's own fast path for a bare `expr;`
+//!   statement, which bypasses `exec_stmt` for performance and needed its
+//!   own hook call), checks the statement's `(url, line)` against every
+//!   `setBreakpointByUrl` breakpoint, and queues a `Debugger.paused` event
+//!   with `hitBreakpoints` set and `reason: "Breakpoint"` the moment one
+//!   matches — it just cannot stop the statement from finishing first.
+//! * **Script identity is coarse.** `Interpreter::set_current_script` tags
+//!   every subsequent statement with whichever script the driver most
+//!   recently told it about; only [`PageOwner::load_scripts_leniently`]'s
+//!   per-top-level-script loop calls it. An inline event handler, a timer
+//!   callback, or a `Runtime.evaluate`/`Runtime.callFunctionOn` call all run
+//!   under whatever the *last top-level script* set, not their own real
+//!   identity — an honest simplification, not real Chrome's per-execution-
+//!   context script attribution.
+//! * **Module scripts are collected, not executed** — this engine does not
+//!   support ES modules yet (`cmd::js::is_classic_javascript_type`'s own doc
+//!   comment). [`collect_module_scripts`] walks the DOM for
+//!   `<script type="module">` the same way `cmd::js::collect_script_text`
+//!   does for classic scripts, fetching a `src` module exactly like a
+//!   classic `<script src>` (a real `Network.*` triple), so `scriptParsed`
+//!   and `getScriptSource` see real source text for a module a DevTools
+//!   frontend could not otherwise learn exists — but its top-level code
+//!   never runs, and it never gets its own JS module namespace/bindings.
+//! * **Script line/column extents are relative to the script's own text**,
+//!   not to its position in the containing HTML document — this driver has
+//!   no HTML-node source-position tracking to add that offset, so
+//!   `startLine`/`startColumn` are always `0`/`0` and `endLine`/`endColumn`
+//!   come from a plain line/character count of the script's own source
+//!   ([`script_extent`]). `hash` is a `std::hash::DefaultHasher` (SipHash)
+//!   digest of the source text ([`script_hash`]) — a real, stable value a
+//!   client can compare across edits, not V8's own script-hash algorithm.
+//! * **`setBreakpointByUrl`'s `url` is matched literally**, never as a
+//!   regex, and its `condition` parameter is accepted (to keep the trait's
+//!   real signature) but never evaluated — every breakpoint this driver
+//!   accepts is unconditional.
+//!
+//! CDP-21 implements `Network.setCacheDisabled`/`setExtraHTTPHeaders` (new
+//! `amazing-devtools` protocol-layer trait methods, since neither existed
+//! there before this ticket — unlike CDP-19/20 the dispatch layer needed
+//! extending, not just the driver), `Emulation.setDeviceMetricsOverride`/
+//! `clearDeviceMetricsOverride`, and `Input.insertText`.
+//!
+//! * **`Network.setCacheDisabled` has no actual HTTP cache to disable** —
+//!   `amazing-net` has no cache subsystem at all. The honest, wire-observable
+//!   substitute: while disabled, every future request (including the very
+//!   next document fetch a `Page.navigate` performs) carries real
+//!   `Cache-Control: no-cache`/`Pragma: no-cache` request headers, matching
+//!   what a real browser sends over the wire in addition to bypassing its
+//!   cache.
+//! * **`Network.setExtraHTTPHeaders` is a full replace, not a merge**,
+//!   matching CDP, and applies to every future request the same way.
+//! * **Both survive a `Page.navigate` reload.** A reload replaces the whole
+//!   [`PageOwner`] (`navigate()`'s `*self = reloaded`), and the very first
+//!   document fetch of the *new* `PageOwner` must already see the headers —
+//!   so `extra_headers`/`cache_disabled` are threaded as explicit parameters
+//!   into [`PageOwner::fetch_and_load`] itself, with `navigate()` passing its
+//!   own current state forward, rather than trying to inject them after
+//!   construction.
+//! * **`Emulation.setDeviceMetricsOverride`'s `width`/`height` are read
+//!   through [`PageOwner::effective_width`]/[`PageOwner::effective_fixed_height`]
+//!   at every layout/render entry point** (`getLayoutMetrics`, hit-testing,
+//!   `getBoxModel`, `getComputedStyleForNode`'s media environment,
+//!   `captureScreenshot`, `getFullAXTree`), so the override is consistently
+//!   observable everywhere, not just in one command. `height: 0` means "don't
+//!   override height" (auto height from content), matching real Chrome's own
+//!   documented convention for that field — mapped directly onto this
+//!   engine's pre-existing `paint_host_surface(..., fixed_height: Option<u32>,
+//!   ...)` convention where `None` already meant the same thing.
+//! * **The override does not ride along with a reload the way headers do** —
+//!   there is no "base height" field to bake it into (unlike width, which has
+//!   a real base field), so `navigate()` instead captures
+//!   `override_width`/`override_fixed_height`/`device_scale_factor` before
+//!   fetching and explicitly restores them onto the replacement `PageOwner`
+//!   afterward.
+//! * **`deviceScaleFactor`/`mobile`/`screenWidth`/`screenHeight`/
+//!   `positionX`/`positionY`/`dontSetVisibleSize`/orientation are accepted
+//!   but not applied** beyond storing `deviceScaleFactor` — this driver's
+//!   raster path has no concept of a separate screen size, window position,
+//!   or orientation to honor them against.
+//! * **`Input.insertText` has no caret/selection model.** It appends `text`
+//!   to the focused element's own `value` (`document.activeElement`) and
+//!   dispatches a real, bubbling `input` event — through a small synthesized
+//!   JS snippet run via the existing `scheduler.run_script`, reusing the
+//!   engine's own real `activeElement`/`value` setter/`Event`/`dispatchEvent`
+//!   bindings rather than reimplementing DOM value-setting or event dispatch
+//!   in the driver. Scope is `<input>`/`<textarea>`-only (anything with a
+//!   `value` property); a `contenteditable` element or nothing focused
+//!   returns `HostError::Unsupported`, since there is no rich-text insertion
+//!   point to append to.
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -163,15 +283,16 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use amazing_devtools::host::{
-    AxNode, BoxModel, CallArgument, CallFunctionParams, ConsoleEvent, DevToolsHost,
-    DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
+    AxNode, BoxModel, CallArgument, CallFrame, CallFunctionParams, ConsoleEvent, DeviceMetrics,
+    DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
     ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
     LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
-    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad,
-    RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams, StyleOrigin,
-    TargetInfo, Viewport,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
+    Quad, RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams,
+    ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
+use amazing_js::debug_hook::DebugHook;
 use amazing_js::DomHost;
 
 use crate::dom_host::BrowserDomHost;
@@ -218,6 +339,19 @@ enum PageCommand {
     GetBoxModel(EngineNodeId, Reply<BoxModel>),
     GetContentQuads(EngineNodeId, Reply<Vec<BoxModel>>),
     HighlightNode(EngineNodeId, Reply<()>),
+    DebuggerEnabled(bool, Reply<()>),
+    SetBreakpointByUrl(String, u32, Option<u32>, Reply<(String, Vec<ScriptLocation>)>),
+    RemoveBreakpoint(String, Reply<()>),
+    DebuggerPause(Reply<()>),
+    DebuggerResume(Reply<()>),
+    GetScriptSource(String, Reply<String>),
+    DrainScriptsParsed(Reply<Vec<ScriptInfo>>),
+    DrainDebuggerPaused(Reply<Vec<PausedEvent>>),
+    SetCacheDisabled(bool, Reply<()>),
+    SetExtraHttpHeaders(Vec<(String, String)>, Reply<()>),
+    SetDeviceMetricsOverride(DeviceMetrics, Reply<()>),
+    ClearDeviceMetricsOverride(Reply<()>),
+    InsertText(String, Reply<()>),
     Shutdown,
 }
 
@@ -631,6 +765,219 @@ struct PageOwner {
     network_failed: VecDeque<NetworkFailedEvent>,
     exceptions: VecDeque<ExceptionEvent>,
     logs: VecDeque<LogEntry>,
+    /// Every script this page has parsed (classic, executed; or module,
+    /// collected but not executed — see [`Self::load_scripts_leniently`]'s
+    /// doc comment), keyed by the minted `script_id` in [`ScriptRecord`].
+    scripts: Vec<ScriptRecord>,
+    /// `Debugger.scriptParsed` events not yet drained.
+    scripts_parsed: VecDeque<ScriptInfo>,
+    next_script_id: u64,
+    debugger_enabled: bool,
+    /// Breakpoints by URL pattern, shared with `debug_hook` so the
+    /// interpreter's per-statement callback can match against them without
+    /// re-entering `PageOwner` (see [`DriverDebugHook`]'s doc comment).
+    breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
+    next_breakpoint_id: u64,
+    /// One-shot "pause at the next statement" flag, also shared with the
+    /// hook.
+    pause_requested: Rc<RefCell<bool>>,
+    /// `Debugger.paused` events the hook has queued, shared for the same
+    /// reason as `breakpoints`.
+    debugger_paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+    /// `Network.setExtraHTTPHeaders`' current header set (CDP-21), applied
+    /// to every future fetch this driver makes — the initial document fetch
+    /// on a `Page.navigate` reload and every `<script src>` fetch
+    /// (`fetch_and_record`). A full replace each call, matching CDP; empty
+    /// by default. Not applied to the very first page load, since no CDP
+    /// session exists yet to have set anything.
+    extra_headers: Vec<(String, String)>,
+    /// `Network.setCacheDisabled` (CDP-21). This driver has no HTTP cache of
+    /// its own to bypass, so the real, observable effect is the same one a
+    /// disabled cache produces over the wire in a real browser: every future
+    /// fetch also carries `Cache-Control: no-cache` and `Pragma: no-cache`.
+    cache_disabled: bool,
+    /// `Emulation.setDeviceMetricsOverride`'s `width`/`height` (CDP-21),
+    /// read through [`Self::effective_width`]/[`Self::effective_fixed_height`]
+    /// everywhere this driver currently reads `self.width`/passes a fixed
+    /// height into `paint_host_surface`. `None` (the common case) means "use
+    /// the page's own base `width`"/"auto height from content" exactly as
+    /// before this ticket.
+    override_width: Option<f32>,
+    override_fixed_height: Option<u32>,
+    /// `deviceScaleFactor`/`mobile` are accepted and stored but not applied
+    /// to anything — this driver's raster path has no DPI-scaling concept
+    /// and no separate mobile layout mode to switch into. See the module's
+    /// "Known limitations".
+    device_scale_factor: f64,
+}
+
+/// One script this driver has seen, classic or module (see
+/// [`PageOwner::load_scripts_leniently`]).
+struct ScriptRecord {
+    script_id: String,
+    url: String,
+    source: String,
+    start_line: u32,
+    start_column: u32,
+    end_line: u32,
+    end_column: u32,
+    hash: String,
+}
+
+/// A breakpoint set by `Debugger.setBreakpointByUrl`, matched against the
+/// *URL* of whatever script is currently running (not a specific
+/// `script_id`), so it also matches a script loaded after the breakpoint was
+/// set, the same as real Chrome's persistent-by-url breakpoints.
+///
+/// `line` is stored in `amazing_js`'s own 1-based line numbering
+/// (`ast::SourceLocation::line`, what [`DebugHook::on_statement`] reports),
+/// not CDP's 0-based `lineNumber` — converted once at
+/// [`PageOwner::set_breakpoint_by_url`], so the hot per-statement match in
+/// [`DriverDebugHook::on_statement`] is a plain integer comparison.
+struct BreakpointRecord {
+    id: String,
+    url: String,
+    line: u32,
+    column: Option<u32>,
+}
+
+/// CDP-20's driver-side [`DebugHook`] implementation. Lives on the
+/// `amazing-js` `Interpreter` (via `Rc<RefCell<dyn DebugHook>>`) but shares
+/// its actual state with [`PageOwner`] through plain `Rc<RefCell<_>>` cells
+/// rather than by calling back into `PageOwner` methods — the interpreter
+/// calls this hook from deep inside a `PageOwner` method that already holds
+/// `&mut self`, so a callback that tried to re-enter `PageOwner` would need
+/// a second `&mut` borrow the borrow checker (rightly) will not allow. Only
+/// plain data flows through these cells; no engine or `PageOwner` state is
+/// reachable from here.
+struct DriverDebugHook {
+    breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
+    pause_requested: Rc<RefCell<bool>>,
+    paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+}
+
+impl DebugHook for DriverDebugHook {
+    fn on_statement(&mut self, script_id: &str, url: &str, line: u32) {
+        let hit_ids: Vec<String> = self
+            .breakpoints
+            .borrow()
+            .iter()
+            .filter(|bp| bp.url == url && bp.line == line)
+            .map(|bp| bp.id.clone())
+            .collect();
+        let forced = {
+            let mut flag = self.pause_requested.borrow_mut();
+            std::mem::take(&mut *flag)
+        };
+        if hit_ids.is_empty() && !forced {
+            return;
+        }
+        let frame = CallFrame {
+            call_frame_id: "cf0".to_owned(),
+            function_name: String::new(),
+            // `line` is `amazing_js`'s 1-based line; CDP's `Location.lineNumber` is 0-based.
+            location: ScriptLocation { script_id: script_id.to_owned(), line_number: line.saturating_sub(1), column_number: None },
+            url: url.to_owned(),
+        };
+        let reason = if hit_ids.is_empty() { "other" } else { "Breakpoint" };
+        self.paused.borrow_mut().push_back(PausedEvent {
+            call_frames: vec![frame],
+            reason: reason.to_owned(),
+            hit_breakpoints: hit_ids,
+        });
+    }
+}
+
+/// A double-quoted JS string literal for `text`, for `Input.insertText`
+/// (CDP-21) to splice into a small synthesized script. Escapes only what a
+/// typed string realistically needs (backslash, double quote, and the line
+/// terminators JS disallows unescaped in a string literal) — not a general
+/// JSON/JS-literal encoder.
+fn js_string_literal(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Builds the request-header list CDP-21's `Network.setExtraHTTPHeaders`/
+/// `setCacheDisabled` add to every future fetch: `extra` first (a client's
+/// own headers take precedence in position, matching how a real browser
+/// merges them), then `Cache-Control: no-cache`/`Pragma: no-cache` if the
+/// cache is disabled — the same two headers a real browser adds over the
+/// wire for "disable cache", used here since this driver has no HTTP cache
+/// of its own to actually bypass.
+fn request_headers_for(extra: &[(String, String)], cache_disabled: bool) -> Vec<(String, String)> {
+    let mut headers = extra.to_vec();
+    if cache_disabled {
+        headers.push(("Cache-Control".to_owned(), "no-cache".to_owned()));
+        headers.push(("Pragma".to_owned(), "no-cache".to_owned()));
+    }
+    headers
+}
+
+/// A deterministic content hash for `Debugger.scriptParsed`'s `hash` field.
+/// Uses `std`'s own `SipHash` (`DefaultHasher`) rather than a real
+/// cryptographic digest — this workspace's engine crates take zero external
+/// dependencies, and CDP only needs *a* stable value a client can compare
+/// across edits, not V8's own hash algorithm.
+fn script_hash(source: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// `(end_line, end_column)` of `source`, 0-based and relative to the
+/// script's own text (this driver has no HTML-node source-position tracking
+/// to offset it into its containing document — see the module's "Known
+/// limitations").
+fn script_extent(source: &str) -> (u32, u32) {
+    let lines: Vec<&str> = source.split('\n').collect();
+    let end_line = lines.len().saturating_sub(1) as u32;
+    let end_column = lines.last().map(|line| line.chars().count()).unwrap_or(0) as u32;
+    (end_line, end_column)
+}
+
+/// Walks the DOM collecting `<script type="module">` elements' url/inline
+/// source *without* executing them — this engine does not support ES
+/// modules yet (`cmd::js::is_classic_javascript_type`'s own doc comment on
+/// why `collect_script_text` skips them). CDP-20 still reports a
+/// `Debugger.scriptParsed` for each one collected here so a DevTools
+/// frontend can see modules exist and read their source via
+/// `getScriptSource`, rather than silently losing them the way plain script
+/// execution already did before this ticket.
+fn collect_module_scripts(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut Vec<crate::cmd::js::PageScript>) {
+    if dom.name(node) == Some("script") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let is_module = attrs
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("type") && value.eq_ignore_ascii_case("module"));
+        if is_module {
+            let mut source = String::new();
+            for child in dom.children(node) {
+                if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                    source.push_str(data);
+                }
+            }
+            let src = attrs.iter().find(|(name, _)| name == "src").map(|(_, value)| value.clone());
+            if src.is_some() || !source.trim().is_empty() {
+                out.push(crate::cmd::js::PageScript { src, body: source });
+            }
+        }
+    }
+    for child in dom.children(node) {
+        collect_module_scripts(dom, child, out);
+    }
 }
 
 impl PageOwner {
@@ -640,8 +987,17 @@ impl PageOwner {
     /// events (for `fetch_and_load`'s document fetch) before scripts run.
     fn empty(target_id: &str, url: &str, width: f32, dom: amazing_dom::Dom) -> Result<Self, HostError> {
         let dom_host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
-        let scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
+        let mut scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| HostError::Internal(error.describe()))?;
+        let breakpoints = Rc::new(RefCell::new(Vec::new()));
+        let pause_requested = Rc::new(RefCell::new(false));
+        let debugger_paused = Rc::new(RefCell::new(VecDeque::new()));
+        let hook: amazing_js::debug_hook::SharedDebugHook = Rc::new(RefCell::new(DriverDebugHook {
+            breakpoints: breakpoints.clone(),
+            pause_requested: pause_requested.clone(),
+            paused: debugger_paused.clone(),
+        }));
+        scheduler.js.set_debug_hook(Some(hook));
         Ok(Self {
             dom_host,
             scheduler,
@@ -659,6 +1015,19 @@ impl PageOwner {
             network_failed: VecDeque::new(),
             exceptions: VecDeque::new(),
             logs: VecDeque::new(),
+            scripts: Vec::new(),
+            scripts_parsed: VecDeque::new(),
+            next_script_id: 0,
+            debugger_enabled: false,
+            breakpoints,
+            next_breakpoint_id: 0,
+            pause_requested,
+            debugger_paused,
+            extra_headers: Vec::new(),
+            cache_disabled: false,
+            override_width: None,
+            override_fixed_height: None,
+            device_scale_factor: 1.0,
         })
     }
 
@@ -681,8 +1050,14 @@ impl PageOwner {
     /// Fetches `url` as the top-level document (instrumented as a real
     /// `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` or
     /// `loadingFailed` triple/pair), parses it, then runs its scripts exactly
-    /// as [`Self::from_parsed`] does.
-    fn fetch_and_load(target_id: &str, url: &str, width: f32) -> Result<Self, HostError> {
+    /// as [`Self::from_parsed`] does. `extra_headers`/`cache_disabled` (CDP-21)
+    /// carry a prior `Network.setExtraHTTPHeaders`/`setCacheDisabled` state
+    /// across a `Page.navigate` reload into both this document fetch and
+    /// every `<script src>` fetch [`Self::load_scripts_leniently`] makes for
+    /// the freshly loaded page (`request_headers_for`) — the very first page
+    /// load passes `&[]`/`false`, since no CDP session exists yet to have
+    /// set anything.
+    fn fetch_and_load(target_id: &str, url: &str, width: f32, extra_headers: &[(String, String)], cache_disabled: bool) -> Result<Self, HostError> {
         let mut network_requests = VecDeque::new();
         let mut network_responses = VecDeque::new();
         let mut network_finished = VecDeque::new();
@@ -690,11 +1065,12 @@ impl PageOwner {
         let mut bodies = HashMap::new();
 
         let request_id = "req-1".to_owned();
+        let request_headers = request_headers_for(extra_headers, cache_disabled);
         network_requests.push_back(NetworkRequestEvent {
             request_id: request_id.clone(),
             url: url.to_owned(),
             method: "GET".into(),
-            headers: Vec::new(),
+            headers: request_headers.clone(),
             post_data: None,
             resource_type: "Document".into(),
             frame_id: target_id.to_owned(),
@@ -706,6 +1082,7 @@ impl PageOwner {
         let options = amazing_net::FetchOptions {
             max_response_bytes: 16 * 1024 * 1024,
             timeout: std::time::Duration::from_secs(15),
+            request_headers,
             ..amazing_net::FetchOptions::default()
         };
         let response = match amazing_net::fetch(url, &options) {
@@ -768,6 +1145,8 @@ impl PageOwner {
         page.network_finished = network_finished;
         page.network_failed = network_failed;
         page.bodies = bodies;
+        page.extra_headers = extra_headers.to_vec();
+        page.cache_disabled = cache_disabled;
         page.scheduler.set_location_url(&page.url);
         page.load_scripts_leniently();
         Ok(page)
@@ -780,13 +1159,15 @@ impl PageOwner {
     /// own persistent `scheduler` rather than building (and dropping) its
     /// own, since CDP needs the realm to survive past page load.
     fn load_scripts_leniently(&mut self) {
-        let (scripts, handlers) = {
+        let (scripts, modules, handlers) = {
             let host = self.dom_host.borrow();
             let mut scripts = Vec::new();
             crate::cmd::js::collect_script_text(&host.dom, amazing_dom::NodeIdx(0), &mut scripts);
+            let mut modules = Vec::new();
+            collect_module_scripts(&host.dom, amazing_dom::NodeIdx(0), &mut modules);
             let mut handlers = Vec::new();
             crate::cmd::js::collect_inline_handlers(&host.dom, amazing_dom::NodeIdx(0), &mut handlers);
-            (scripts, handlers)
+            (scripts, modules, handlers)
         };
         for (node, event, body) in handlers {
             if let Err(thrown) = self.scheduler.install_inline_handler(node, &event, &body) {
@@ -794,19 +1175,40 @@ impl PageOwner {
             }
         }
         for script in scripts {
-            let source = match script.src {
+            let (source, url) = match script.src {
                 Some(src) => {
                     let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
                     match self.fetch_and_record(&script_url, "Script") {
-                        Ok(text) => text,
+                        Ok(text) => (text, script_url),
                         Err(()) => continue, // already recorded as a network failure
                     }
                 }
-                None => script.body,
+                None => (script.body, self.url.clone()),
             };
+            let script_id = self.register_script(&url, &source);
+            self.scheduler.js.set_current_script(script_id, url);
             if let Err(thrown) = self.scheduler.run_script(&source) {
                 self.record_load_error(format!("page script: {}", thrown.describe()));
             }
+        }
+        // Module scripts are collected and reported as `Debugger.scriptParsed`
+        // (real source, real url) but never executed — this engine does not
+        // support ES modules yet (`cmd::js::is_classic_javascript_type`'s own
+        // doc comment). Reporting them honestly, rather than silently
+        // dropping them as `collect_script_text` does, is CDP-20's own delta
+        // here; see the module's "Known limitations".
+        for module in modules {
+            let (source, url) = match module.src {
+                Some(src) => {
+                    let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
+                    match self.fetch_and_record(&script_url, "Script") {
+                        Ok(text) => (text, script_url),
+                        Err(()) => continue,
+                    }
+                }
+                None => (module.body, self.url.clone()),
+            };
+            self.register_script(&url, &source);
         }
         if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
             self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));
@@ -839,7 +1241,11 @@ impl PageOwner {
     /// success.
     fn fetch_and_record(&mut self, url: &str, resource_type: &str) -> Result<String, ()> {
         let request_id = self.record_request(url, "GET", resource_type);
-        match amazing_net::fetch(url, &amazing_net::FetchOptions::default()) {
+        let options = amazing_net::FetchOptions {
+            request_headers: request_headers_for(&self.extra_headers, self.cache_disabled),
+            ..amazing_net::FetchOptions::default()
+        };
+        match amazing_net::fetch(url, &options) {
             Ok(response) if response.is_success() => {
                 let text = response.text().unwrap_or_default();
                 self.record_response(&request_id, &response, resource_type);
@@ -1010,7 +1416,19 @@ impl PageOwner {
     }
 
     fn navigate(&mut self, url: &str) -> Result<FrameInfo, HostError> {
-        let reloaded = Self::fetch_and_load(&self.target_id, url, self.width)?;
+        let override_width = self.override_width;
+        let override_fixed_height = self.override_fixed_height;
+        let device_scale_factor = self.device_scale_factor;
+        let mut reloaded = Self::fetch_and_load(&self.target_id, url, self.width, &self.extra_headers, self.cache_disabled)?;
+        // CDP-21: `Network.setExtraHTTPHeaders`/`setCacheDisabled` already
+        // carried into the fresh document/script fetches above (and land on
+        // `reloaded` itself via `fetch_and_load`'s own assignment); a device
+        // metrics override has no fetch to ride along with, so it is simply
+        // restored here — real Chrome persists it across navigation the
+        // same way.
+        reloaded.override_width = override_width;
+        reloaded.override_fixed_height = override_fixed_height;
+        reloaded.device_scale_factor = device_scale_factor;
         *self = reloaded;
         Ok(frame_info(&self.target_id, &self.url))
     }
@@ -1020,12 +1438,13 @@ impl PageOwner {
     }
 
     fn layout_metrics(&self) -> Result<LayoutMetrics, HostError> {
-        let surface = crate::cmd::render::paint_host_surface(&self.dom_host, &self.url, self.width, None, "")
+        let width = self.effective_width();
+        let surface = crate::cmd::render::paint_host_surface(&self.dom_host, &self.url, width, self.effective_fixed_height(), "")
             .map_err(|error| HostError::Internal(error.to_string()))?;
         let viewport = Viewport {
             page_x: 0.0,
             page_y: 0.0,
-            client_width: self.width as f64,
+            client_width: width as f64,
             client_height: surface.height as f64,
         };
         Ok(LayoutMetrics {
@@ -1288,7 +1707,82 @@ impl PageOwner {
     }
 
     fn media_environment(&self) -> amazing_css::MediaEnvironment {
-        amazing_css::MediaEnvironment { viewport_width_px: self.width.max(1.0), ..amazing_css::MediaEnvironment::default() }
+        amazing_css::MediaEnvironment { viewport_width_px: self.effective_width().max(1.0), ..amazing_css::MediaEnvironment::default() }
+    }
+
+    /// The width this page's layout/paint/media-query pipeline should
+    /// actually use: `Emulation.setDeviceMetricsOverride`'s `width`
+    /// (CDP-21) when active, else the page's own base `width`.
+    fn effective_width(&self) -> f32 {
+        self.override_width.unwrap_or(self.width)
+    }
+
+    /// The fixed viewport height `paint_host_surface` should render at
+    /// (CDP-21's device metrics override), or `None` for the pre-existing
+    /// "auto height from content" behavior every call site already used.
+    fn effective_fixed_height(&self) -> Option<u32> {
+        self.override_fixed_height
+    }
+
+    /// `Emulation.setDeviceMetricsOverride`. `height: 0` (a real, documented
+    /// CDP value) keeps auto height rather than fixing it at `0`, matching
+    /// real Chrome's own "don't override" convention for that field.
+    /// `mobile`/`screen_*`/`position_*`/`dont_set_visible_size`/orientation
+    /// are accepted but not applied — see the module's "Known limitations".
+    fn set_device_metrics_override(&mut self, metrics: &DeviceMetrics) -> Result<(), HostError> {
+        self.override_width = Some(metrics.width as f32);
+        self.override_fixed_height = if metrics.height == 0 { None } else { Some(metrics.height) };
+        self.device_scale_factor = metrics.device_scale_factor;
+        Ok(())
+    }
+
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        self.override_width = None;
+        self.override_fixed_height = None;
+        self.device_scale_factor = 1.0;
+        Ok(())
+    }
+
+    /// `Network.setCacheDisabled`. See the `cache_disabled` field's doc
+    /// comment for what this driver can actually do about it.
+    fn set_cache_disabled(&mut self, disabled: bool) -> Result<(), HostError> {
+        self.cache_disabled = disabled;
+        Ok(())
+    }
+
+    /// `Network.setExtraHTTPHeaders`: a full replace, matching CDP.
+    fn set_extra_http_headers(&mut self, headers: &[(String, String)]) -> Result<(), HostError> {
+        self.extra_headers = headers.to_vec();
+        Ok(())
+    }
+
+    /// `Input.insertText`: appends `text` to the focused input/textarea's
+    /// own `value` (there is no caret/selection model to insert at a
+    /// specific position, so appending at the end is this driver's honest
+    /// simplification) and dispatches a real `input` event, through the
+    /// engine's own JS bindings rather than reimplementing value-setting
+    /// and event dispatch here — `document.activeElement`, the `value`
+    /// setter, `new Event`, and `dispatchEvent` are all real, spec-backed
+    /// bindings this reuses as-is. Returns `HostError::Unsupported` when the
+    /// focused element has no `value` (e.g. nothing is focused, or a
+    /// `contenteditable` element — real rich-text insertion is out of scope;
+    /// see the module's "Known limitations").
+    fn insert_text(&mut self, text: &str) -> Result<(), HostError> {
+        use amazing_js::value::JsValue;
+        let script = format!(
+            "(() => {{ const el = document.activeElement; if (!el || !('value' in el)) return false; \
+             el.value = (el.value || '') + {literal}; \
+             el.dispatchEvent(new Event('input', {{ bubbles: true }})); return true; }})()",
+            literal = js_string_literal(text),
+        );
+        match self.scheduler.run_script(&script) {
+            Ok(JsValue::Bool(false)) => Err(HostError::Unsupported),
+            Ok(_) => Ok(()),
+            Err(thrown) => {
+                self.record_exception(&thrown);
+                Err(HostError::Internal(thrown.describe()))
+            }
+        }
     }
 
     /// The page's own `<style>`/`<link rel=stylesheet>` sheets, in document
@@ -1383,7 +1877,12 @@ impl PageOwner {
         let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
         let text = amazing_text::FallbackTextSystem::new();
         let layout = amazing_layout::layout_styled_document(
-            dom, &styled, &text, &amazing_layout::NoReplacedElements, self.width, None,
+            dom,
+            &styled,
+            &text,
+            &amazing_layout::NoReplacedElements,
+            self.effective_width(),
+            self.effective_fixed_height().map(|h| h as f32),
         );
         hit_test(&layout, x as f32, y as f32)
             .and_then(|box_| box_.node)
@@ -1405,7 +1904,12 @@ impl PageOwner {
         let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
         let text = amazing_text::FallbackTextSystem::new();
         let layout = amazing_layout::layout_styled_document(
-            dom, &styled, &text, &amazing_layout::NoReplacedElements, self.width, None,
+            dom,
+            &styled,
+            &text,
+            &amazing_layout::NoReplacedElements,
+            self.effective_width(),
+            self.effective_fixed_height().map(|h| h as f32),
         );
         let target = amazing_dom::NodeIdx(node.0 as u32);
         let box_ = find_box_for_node(&layout, target).ok_or(HostError::NotFound)?;
@@ -1428,6 +1932,123 @@ impl PageOwner {
     /// node exactly as a real highlight request would fail.
     fn highlight_node(&self, node: EngineNodeId) -> Result<(), HostError> {
         self.get_box_model(node).map(|_| ())
+    }
+
+    /// Mints a `script_id` and records a [`ScriptRecord`] (source kept for
+    /// `get_script_source`). Only queues a live `Debugger.scriptParsed` if
+    /// the domain is *already* enabled — a script parsed before the client
+    /// ever calls `Debugger.enable` (i.e. every script on this driver's
+    /// synchronous initial page load) is reported once, by that enable
+    /// call's own backfill, not twice.
+    fn register_script(&mut self, url: &str, source: &str) -> String {
+        self.next_script_id += 1;
+        let script_id = format!("script-{}", self.next_script_id);
+        let (end_line, end_column) = script_extent(source);
+        let hash = script_hash(source);
+        self.scripts.push(ScriptRecord {
+            script_id: script_id.clone(),
+            url: url.to_owned(),
+            source: source.to_owned(),
+            start_line: 0,
+            start_column: 0,
+            end_line,
+            end_column,
+            hash: hash.clone(),
+        });
+        if self.debugger_enabled {
+            self.scripts_parsed.push_back(ScriptInfo {
+                script_id: script_id.clone(),
+                url: url.to_owned(),
+                start_line: 0,
+                start_column: 0,
+                end_line,
+                end_column,
+                hash,
+            });
+        }
+        script_id
+    }
+
+    /// `Debugger.enable`: backfills a `scriptParsed` for every script parsed
+    /// before the client enabled the domain, matching real Chrome (a client
+    /// that enables `Debugger` after `Page.navigate` still sees every
+    /// script). Re-enabling is a no-op; disabling just stops the flag —
+    /// breakpoints and their bookkeeping are left in place, since real
+    /// Chrome only deactivates them for the *session*, and this driver has
+    /// only one session per page anyway.
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        if enabled && !self.debugger_enabled {
+            for script in &self.scripts {
+                self.scripts_parsed.push_back(ScriptInfo {
+                    script_id: script.script_id.clone(),
+                    url: script.url.clone(),
+                    start_line: script.start_line,
+                    start_column: script.start_column,
+                    end_line: script.end_line,
+                    end_column: script.end_column,
+                    hash: script.hash.clone(),
+                });
+            }
+        }
+        self.debugger_enabled = enabled;
+        Ok(())
+    }
+
+    /// `Debugger.setBreakpointByUrl` at line granularity. `url` is matched
+    /// literally (no `urlRegex` support) against every script's own
+    /// `ScriptRecord::url`; a script that has not loaded yet can still match
+    /// once it does, since the debug hook re-checks `breakpoints` by URL on
+    /// every statement rather than resolving once at set time. `locations`
+    /// only reports scripts that exist *right now* and whose source actually
+    /// has that many lines — matching real Chrome, which can return an empty
+    /// `locations` array for an unresolved breakpoint without that being an
+    /// error. `line_number` arrives 0-based (CDP convention); stored as
+    /// `amazing_js`'s 1-based line so [`DriverDebugHook::on_statement`] can
+    /// compare it directly against `ast::SourceLocation::line`.
+    fn set_breakpoint_by_url(&mut self, url: &str, line_number: u32, column_number: Option<u32>) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        self.next_breakpoint_id += 1;
+        let id = format!("bp-{}", self.next_breakpoint_id);
+        self.breakpoints.borrow_mut().push(BreakpointRecord { id: id.clone(), url: url.to_owned(), line: line_number + 1, column: column_number });
+        let locations = self
+            .scripts
+            .iter()
+            .filter(|script| script.url == url && line_number <= script.end_line)
+            .map(|script| ScriptLocation { script_id: script.script_id.clone(), line_number, column_number })
+            .collect();
+        Ok((id, locations))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) {
+        self.breakpoints.borrow_mut().retain(|bp| bp.id != breakpoint_id);
+    }
+
+    /// `Debugger.pause`: see `DriverPageSession::debugger_pause`'s doc
+    /// comment for why this is "pause at the next statement that actually
+    /// runs" rather than a true synchronous halt.
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        *self.pause_requested.borrow_mut() = true;
+        Ok(())
+    }
+
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        *self.pause_requested.borrow_mut() = false;
+        Ok(())
+    }
+
+    fn get_script_source(&self, script_id: &str) -> Result<String, HostError> {
+        self.scripts
+            .iter()
+            .find(|script| script.script_id == script_id)
+            .map(|script| script.source.clone())
+            .ok_or(HostError::NotFound)
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        self.scripts_parsed.drain(..).collect()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        self.debugger_paused.borrow_mut().drain(..).collect()
     }
 
     fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
@@ -1474,8 +2095,14 @@ impl PageOwner {
         if !matches!(params.format, ScreenshotFormat::Png) {
             return Err(HostError::Unsupported);
         }
-        let mut surface = crate::cmd::render::paint_host_surface(&self.dom_host, &self.url, self.width, None, "")
-            .map_err(|error| HostError::Internal(error.to_string()))?;
+        let mut surface = crate::cmd::render::paint_host_surface(
+            &self.dom_host,
+            &self.url,
+            self.effective_width(),
+            self.effective_fixed_height(),
+            "",
+        )
+        .map_err(|error| HostError::Internal(error.to_string()))?;
         if let Some(clip) = &params.clip {
             surface = crop_surface(&surface, clip);
         }
@@ -1498,7 +2125,7 @@ impl PageOwner {
             dom,
             &sheets,
             &amazing_css::MediaEnvironment {
-                viewport_width_px: self.width.max(1.0),
+                viewport_width_px: self.effective_width().max(1.0),
                 ..amazing_css::MediaEnvironment::default()
             },
         );
@@ -1508,8 +2135,8 @@ impl PageOwner {
             &styled,
             &text,
             &amazing_layout::NoReplacedElements,
-            self.width,
-            None,
+            self.effective_width(),
+            self.effective_fixed_height().map(|h| h as f32),
         );
         let tree = crate::runtime_host_a11y::build_ax_tree(dom, &styled, &layout);
         Ok(convert_ax_tree(&tree))
@@ -1533,7 +2160,7 @@ impl PageInit {
     fn load(self) -> Result<PageOwner, HostError> {
         match self {
             PageInit::Parsed { target_id, url, dom, width } => PageOwner::from_parsed(&target_id, &url, dom, width),
-            PageInit::Fetch { target_id, url, width } => PageOwner::fetch_and_load(&target_id, &url, width),
+            PageInit::Fetch { target_id, url, width } => PageOwner::fetch_and_load(&target_id, &url, width, &[], false),
         }
     }
 }
@@ -1640,6 +2267,46 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::HighlightNode(node, reply) => {
                 let _ = reply.send(page.highlight_node(node));
+            }
+            PageCommand::DebuggerEnabled(enabled, reply) => {
+                let _ = reply.send(page.debugger_enabled(enabled));
+            }
+            PageCommand::SetBreakpointByUrl(url, line, column, reply) => {
+                let _ = reply.send(page.set_breakpoint_by_url(&url, line, column));
+            }
+            PageCommand::RemoveBreakpoint(id, reply) => {
+                page.remove_breakpoint(&id);
+                let _ = reply.send(Ok(()));
+            }
+            PageCommand::DebuggerPause(reply) => {
+                let _ = reply.send(page.debugger_pause());
+            }
+            PageCommand::DebuggerResume(reply) => {
+                let _ = reply.send(page.debugger_resume());
+            }
+            PageCommand::GetScriptSource(script_id, reply) => {
+                let _ = reply.send(page.get_script_source(&script_id));
+            }
+            PageCommand::DrainScriptsParsed(reply) => {
+                let _ = reply.send(Ok(page.drain_scripts_parsed()));
+            }
+            PageCommand::DrainDebuggerPaused(reply) => {
+                let _ = reply.send(Ok(page.drain_debugger_paused()));
+            }
+            PageCommand::SetCacheDisabled(disabled, reply) => {
+                let _ = reply.send(page.set_cache_disabled(disabled));
+            }
+            PageCommand::SetExtraHttpHeaders(headers, reply) => {
+                let _ = reply.send(page.set_extra_http_headers(&headers));
+            }
+            PageCommand::SetDeviceMetricsOverride(metrics, reply) => {
+                let _ = reply.send(page.set_device_metrics_override(&metrics));
+            }
+            PageCommand::ClearDeviceMetricsOverride(reply) => {
+                let _ = reply.send(page.clear_device_metrics_override());
+            }
+            PageCommand::InsertText(text, reply) => {
+                let _ = reply.send(page.insert_text(&text));
             }
             PageCommand::Shutdown => break,
         }
@@ -1853,6 +2520,85 @@ impl DevToolsSession for DriverPageSession {
     fn highlight_quad(&mut self, _quad: Quad, _config: &HighlightConfig) -> Result<(), HostError> {
         Ok(())
     }
+
+    /// CDP-20: `Debugger.enable` backfills `scriptParsed` for every script
+    /// already parsed (`PageOwner::debugger_enabled`), matching real Chrome.
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::DebuggerEnabled(enabled, reply))
+    }
+
+    /// `condition` is accepted (to match the trait's real Chrome-shaped
+    /// signature) but never evaluated — see the module's "Known
+    /// limitations": a conditional breakpoint here behaves as
+    /// unconditional.
+    fn set_breakpoint_by_url(
+        &mut self,
+        url: &str,
+        line_number: u32,
+        column_number: Option<u32>,
+        _condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        let url = url.to_owned();
+        request(&self.sender, |reply| PageCommand::SetBreakpointByUrl(url, line_number, column_number, reply))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) -> Result<(), HostError> {
+        let breakpoint_id = breakpoint_id.to_owned();
+        request(&self.sender, |reply| PageCommand::RemoveBreakpoint(breakpoint_id, reply))
+    }
+
+    /// `Debugger.pause`: since nothing can be blocked mid-statement on this
+    /// driver's single page thread (see the module's "Known limitations"),
+    /// this arms a one-shot flag the debug hook consumes on the *next*
+    /// statement that actually runs (the next event-loop tick, timer, or
+    /// handler for an otherwise idle page) rather than halting anything
+    /// already executing.
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerPause)
+    }
+
+    /// `Debugger.resume`: clears that same flag if it had not fired yet.
+    /// Nothing is ever truly suspended by this driver, so there is no
+    /// execution to actually resume — see "Known limitations".
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerResume)
+    }
+
+    fn get_script_source(&mut self, script_id: &str) -> Result<String, HostError> {
+        let script_id = script_id.to_owned();
+        request(&self.sender, |reply| PageCommand::GetScriptSource(script_id, reply))
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        request(&self.sender, PageCommand::DrainScriptsParsed).unwrap_or_default()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        request(&self.sender, PageCommand::DrainDebuggerPaused).unwrap_or_default()
+    }
+
+    fn set_cache_disabled(&mut self, disabled: bool) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::SetCacheDisabled(disabled, reply))
+    }
+
+    fn set_extra_http_headers(&mut self, headers: &[(String, String)]) -> Result<(), HostError> {
+        let headers = headers.to_vec();
+        request(&self.sender, |reply| PageCommand::SetExtraHttpHeaders(headers, reply))
+    }
+
+    fn set_device_metrics_override(&mut self, metrics: &DeviceMetrics) -> Result<(), HostError> {
+        let metrics = metrics.clone();
+        request(&self.sender, |reply| PageCommand::SetDeviceMetricsOverride(metrics, reply))
+    }
+
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::ClearDeviceMetricsOverride)
+    }
+
+    fn insert_text(&mut self, text: &str) -> Result<(), HostError> {
+        let text = text.to_owned();
+        request(&self.sender, |reply| PageCommand::InsertText(text, reply))
+    }
 }
 
 /// The browser-level seam: one page target, backed by a real page (fetched or,
@@ -1943,1032 +2689,5 @@ pub(crate) fn spawn_devtools_server(initial_url: &str, addr: &str) -> Result<Dev
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use amazing_devtools::json::Json;
-    use amazing_devtools::ws::{Message, WsConnection};
-    use std::io::{Read, Write};
-    use std::net::TcpStream;
-    use std::time::Duration;
-
-    /// Builds a page thread directly from an in-memory document, bypassing
-    /// network I/O, exactly like `prepare_page_scripts` production path
-    /// (`force_scheduler: true`).
-    fn spawn_test_host(url: &str, html: &str) -> Arc<DriverDevToolsHost> {
-        let document =
-            crate::document::parse_document_bytes(html.as_bytes(), url, None).expect("parse fixture document");
-        let init = PageInit::Parsed { target_id: "page-1".into(), url: url.to_owned(), dom: document.dom, width: 800.0 };
-        Arc::new(DriverDevToolsHost::spawn("page-1", init).expect("spawn devtools host"))
-    }
-
-    /// A one-shot local HTTP server for exercising the real `navigate()`
-    /// path (which always fetches, matching production) without reaching the
-    /// network: everything stays on `127.0.0.1`.
-    fn serve_once(html: &'static str) -> SocketAddr {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind fixture server");
-        let addr = listener.local_addr().expect("local_addr");
-        std::thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let mut buf = [0u8; 1024];
-                let _ = stream.read(&mut buf);
-                let body = html.as_bytes();
-                let head = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let _ = stream.write_all(head.as_bytes());
-                let _ = stream.write_all(body);
-            }
-        });
-        addr
-    }
-
-    /// A one-shot local HTTP server that answers `routes.len()` requests, one
-    /// per `(path, content_type, body)` entry, matching each incoming
-    /// request's path exactly. Lets a fixture exercise real document +
-    /// subresource fetches (`<script src>`) in one page load, so
-    /// `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` fire
-    /// for more than just the top-level document.
-    fn serve_multi(routes: Vec<(&'static str, &'static str, &'static str)>) -> SocketAddr {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind fixture server");
-        let addr = listener.local_addr().expect("local_addr");
-        std::thread::spawn(move || {
-            for stream in listener.incoming().take(routes.len()) {
-                let Ok(mut stream) = stream else { continue };
-                let mut buf = [0u8; 4096];
-                let n = stream.read(&mut buf).unwrap_or(0);
-                let request = String::from_utf8_lossy(&buf[..n]);
-                let path = request.lines().next().and_then(|line| line.split_whitespace().nth(1)).unwrap_or("/");
-                if let Some((_, content_type, body)) = routes.iter().find(|(route, _, _)| *route == path) {
-                    let body = body.as_bytes();
-                    let head = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                        body.len()
-                    );
-                    let _ = stream.write_all(head.as_bytes());
-                    let _ = stream.write_all(body);
-                } else {
-                    let body = b"not found";
-                    let head = format!(
-                        "HTTP/1.1 404 Not Found\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                        body.len()
-                    );
-                    let _ = stream.write_all(head.as_bytes());
-                    let _ = stream.write_all(body);
-                }
-            }
-        });
-        addr
-    }
-
-    #[test]
-    fn attach_unknown_target_is_not_found() {
-        let host = spawn_test_host("http://example.test/fixture.html", "<title>fixture</title>");
-        match host.attach("no-such-target") {
-            Err(HostError::NotFound) => {}
-            other => panic!("expected HostError::NotFound, got {}", other.is_ok()),
-        }
-    }
-
-    #[test]
-    fn navigate_fetches_a_real_page_and_evaluate_reads_the_new_dom() {
-        let host = spawn_test_host("http://example.test/start.html", "<title>start</title><body>a</body>");
-        let mut session = host.attach("page-1").expect("attach");
-        let addr = serve_once("<title>second</title><body>b</body>");
-        let frame = session.navigate(&format!("http://{addr}/")).expect("navigate");
-        assert!(frame.url.contains(&addr.to_string()));
-        let tree = session.frame_tree().expect("frame_tree");
-        assert_eq!(tree.frame.url, frame.url);
-
-        let result = session
-            .evaluate(&EvaluateParams { expression: "document.title".into(), ..EvaluateParams::default() })
-            .expect("evaluate");
-        assert_eq!(result.result, RemoteObject::string("second"));
-    }
-
-    #[test]
-    fn evaluate_persists_full_js_realm_state_across_calls() {
-        // The bug CDP-16 fixes: the first slice built a fresh `Interpreter`
-        // per `evaluate()` call, so `globalThis` state never survived between
-        // calls even though the DOM (plain owned data) did. With one page
-        // thread and one persistent `DriverScheduler`, it now does.
-        let host = spawn_test_host("http://example.test/doc.html", "<title>t</title><body></body>");
-        let mut session = host.attach("page-1").expect("attach");
-        let expr = "globalThis.counter = (globalThis.counter || 0) + 1; globalThis.counter";
-        let first = session
-            .evaluate(&EvaluateParams { expression: expr.into(), ..EvaluateParams::default() })
-            .expect("evaluate #1");
-        assert_eq!(first.result, RemoteObject::number(1.0));
-        let second = session
-            .evaluate(&EvaluateParams { expression: expr.into(), ..EvaluateParams::default() })
-            .expect("evaluate #2");
-        assert_eq!(second.result, RemoteObject::number(2.0), "globalThis state should survive across evaluate() calls");
-    }
-
-    #[test]
-    fn evaluate_reports_a_thrown_exception_instead_of_erroring_the_call() {
-        let host = spawn_test_host("http://example.test/doc.html", "<title>t</title>");
-        let mut session = host.attach("page-1").expect("attach");
-        let result = session
-            .evaluate(&EvaluateParams { expression: "undefinedGlobal.member".into(), ..EvaluateParams::default() })
-            .expect("evaluate");
-        assert!(result.exception.is_some());
-    }
-
-    #[test]
-    fn get_document_and_query_selector_see_the_live_dom() {
-        let host = spawn_test_host(
-            "http://example.test/doc.html",
-            "<title>t</title><body><h1 id=\"h\">Hi</h1><p class=\"x\">one</p><p class=\"x\">two</p></body>",
-        );
-        let mut session = host.attach("page-1").expect("attach");
-        let root = session.get_document(64).expect("get_document");
-        assert_eq!(root.node_type, 9, "document root should be nodeType 9");
-
-        let found = session
-            .query_selector(root.node, "#h")
-            .expect("query_selector")
-            .expect("#h should resolve to a node");
-        let all = session.query_selector_all(root.node, ".x").expect("query_selector_all");
-        assert_eq!(all.len(), 2, "both <p class=x> nodes should be found");
-        assert_ne!(found, EngineNodeId(0));
-    }
-
-    #[test]
-    fn get_full_ax_tree_reflects_the_live_page() {
-        let host = spawn_test_host(
-            "http://example.test/doc.html",
-            "<title>t</title><body><h1>Hello</h1><button>Go</button></body>",
-        );
-        let mut session = host.attach("page-1").expect("attach");
-        let nodes = session.get_full_ax_tree(None).expect("get_full_ax_tree");
-        assert!(nodes.iter().any(|node| node.role.as_deref() == Some("heading")), "{nodes:?}");
-        assert!(nodes.iter().any(|node| node.role.as_deref() == Some("button")), "{nodes:?}");
-    }
-
-    /// A minimal scripted CDP WebSocket client, mirroring the pattern
-    /// `amazing-devtools`' own `tests/cdp.rs` uses against `MockHost`. This is
-    /// the "prove it" test the ticket asks for: a real client, real JSON-RPC
-    /// framing over a real `WsConnection`, against the real page thread.
-    struct Client {
-        ws: WsConnection<TcpStream>,
-        next_id: u64,
-    }
-
-    impl Client {
-        fn connect(addr: SocketAddr, path: &str) -> Self {
-            let mut stream = TcpStream::connect(addr).expect("connect");
-            stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-            let key = "dGhlIHNhbXBsZSBub25jZQ==";
-            let request = format!(
-                "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n"
-            );
-            stream.write_all(request.as_bytes()).unwrap();
-            stream.flush().unwrap();
-            let mut head = Vec::new();
-            let mut byte = [0u8; 1];
-            while !head.ends_with(b"\r\n\r\n") {
-                stream.read_exact(&mut byte).expect("handshake");
-                head.push(byte[0]);
-            }
-            let head = String::from_utf8(head).unwrap();
-            assert!(head.starts_with("HTTP/1.1 101"), "unexpected handshake: {head}");
-            let expected = amazing_devtools::sha1::websocket_accept(key);
-            assert!(
-                head.to_ascii_lowercase().contains(&format!("sec-websocket-accept: {}", expected.to_ascii_lowercase())),
-                "bad accept header: {head}"
-            );
-            Self { ws: WsConnection::as_client(stream), next_id: 0 }
-        }
-
-        fn recv_json(&mut self) -> Json {
-            match self.ws.poll() {
-                Ok(Some(Message::Text(text))) => Json::parse(&text).expect("server json"),
-                Ok(Some(Message::Binary(_))) => panic!("unexpected binary frame"),
-                Ok(None) => panic!("timed out waiting for a server message"),
-                Err(error) => panic!("websocket error: {error}"),
-            }
-        }
-
-        fn result(&mut self, method: &str, params: Json) -> Json {
-            self.next_id += 1;
-            let id = self.next_id;
-            let message = Json::Object(vec![
-                ("id".into(), Json::Number(id as f64)),
-                ("method".into(), Json::String(method.into())),
-                ("params".into(), params),
-            ]);
-            self.ws.write_message(&message.to_string()).expect("write message");
-            loop {
-                let reply = self.recv_json();
-                if reply.get("id").and_then(Json::as_f64) == Some(id as f64) {
-                    return reply
-                        .get("result")
-                        .cloned()
-                        .unwrap_or_else(|| panic!("{method} returned no result: {reply}"));
-                }
-                // Not our reply (a push event) — keep waiting.
-            }
-        }
-
-        /// Like [`Self::result`], but also returns every push event (a
-        /// message with no matching `id`) seen while waiting for the reply,
-        /// in arrival order. CDP-18's engine-driven events (`Network.*`,
-        /// `Runtime.consoleAPICalled`/`exceptionThrown`, `Log.entryAdded`)
-        /// are pushed asynchronously by the server's own poll loop, not
-        /// attached to any one command's reply, so a test proving they
-        /// arrived must collect across every command it sends rather than
-        /// only inspecting one reply.
-        fn result_and_events(&mut self, method: &str, params: Json) -> (Json, Vec<Json>) {
-            self.next_id += 1;
-            let id = self.next_id;
-            let message = Json::Object(vec![
-                ("id".into(), Json::Number(id as f64)),
-                ("method".into(), Json::String(method.into())),
-                ("params".into(), params),
-            ]);
-            self.ws.write_message(&message.to_string()).expect("write message");
-            let mut events = Vec::new();
-            loop {
-                let reply = self.recv_json();
-                if reply.get("id").and_then(Json::as_f64) == Some(id as f64) {
-                    let result = reply
-                        .get("result")
-                        .cloned()
-                        .unwrap_or_else(|| panic!("{method} returned no result: {reply}"));
-                    return (result, events);
-                }
-                events.push(reply);
-            }
-        }
-
-        /// Sends a command and returns the whole reply message, including an
-        /// error response (`result()`/`result_and_events()` both assume
-        /// success and panic on an `"error"` reply). For tests that expect a
-        /// command to fail.
-        fn raw(&mut self, method: &str, params: Json) -> Json {
-            self.next_id += 1;
-            let id = self.next_id;
-            let message = Json::Object(vec![
-                ("id".into(), Json::Number(id as f64)),
-                ("method".into(), Json::String(method.into())),
-                ("params".into(), params),
-            ]);
-            self.ws.write_message(&message.to_string()).expect("write message");
-            loop {
-                let reply = self.recv_json();
-                if reply.get("id").and_then(Json::as_f64) == Some(id as f64) {
-                    return reply;
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn end_to_end_cdp_client_evaluates_queries_dom_and_reads_the_ax_tree() {
-        let host = spawn_test_host(
-            "http://example.test/doc.html",
-            "<title>Live</title><body><h1 id=\"h\">Hello</h1><button>Go</button></body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-
-        // Runtime.evaluate against the live realm.
-        let evaluate = client.result(
-            "Runtime.evaluate",
-            Json::Object(vec![
-                ("expression".into(), Json::String("21 * 2".into())),
-                ("returnByValue".into(), Json::Bool(true)),
-            ]),
-        );
-        assert_eq!(
-            evaluate.get("result").and_then(|result| result.get("value")).and_then(Json::as_f64),
-            Some(42.0),
-            "{evaluate}"
-        );
-
-        // DOM.getDocument + DOM.querySelector/querySelectorAll on the live DOM.
-        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
-        let root_node_id = document
-            .get("root")
-            .and_then(|root| root.get("nodeId"))
-            .and_then(Json::as_f64)
-            .expect("root nodeId") as u64;
-
-        let query = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_node_id as f64)),
-                ("selector".into(), Json::String("#h".into())),
-            ]),
-        );
-        let found_node_id = query.get("nodeId").and_then(Json::as_f64).unwrap_or(0.0);
-        assert!(found_node_id > 0.0, "#h should resolve to a real node: {query}");
-
-        let heading_query = client.result(
-            "DOM.querySelectorAll",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_node_id as f64)),
-                ("selector".into(), Json::String("h1".into())),
-            ]),
-        );
-        assert_eq!(
-            heading_query.get("nodeIds").and_then(Json::as_array).map(<[Json]>::len),
-            Some(1),
-            "{heading_query}"
-        );
-
-        // Accessibility.getFullAXTree through runtime_host_a11y::build_ax_tree.
-        let ax_tree = client.result("Accessibility.getFullAXTree", Json::Object(Vec::new()));
-        let nodes = ax_tree.get("nodes").and_then(Json::as_array).expect("nodes array");
-        let has_role = |role: &str| {
-            nodes.iter().any(|node| node.get("role").and_then(|r| r.get("value")).and_then(Json::as_str) == Some(role))
-        };
-        assert!(has_role("heading"), "{nodes:?}");
-        assert!(has_role("button"), "{nodes:?}");
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-17: `DOM.describeNode`/`getOuterHTML`/`setAttributeValue`/
-    /// `setOuterHTML`/`removeNode`, plus comma-separated selector lists in
-    /// `querySelectorAll`, all through a real WebSocket client against the
-    /// live DOM.
-    #[test]
-    fn end_to_end_dom_mutation_and_selector_lists_work_through_the_real_websocket_client() {
-        let host = spawn_test_host(
-            "http://example.test/dom.html",
-            "<title>Dom</title><body><div id=\"container\"><span id=\"target\" class=\"x\">old</span><p class=\"x\">p</p></div></body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
-        let root_id = document
-            .get("root")
-            .and_then(|root| root.get("nodeId"))
-            .and_then(Json::as_f64)
-            .expect("root nodeId") as u64;
-
-        // Comma-separated selector list: the <span class=x> and <p class=x>.
-        let all = client.result(
-            "DOM.querySelectorAll",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("span.x, p.x".into())),
-            ]),
-        );
-        assert_eq!(
-            all.get("nodeIds").and_then(Json::as_array).map(<[Json]>::len),
-            Some(2),
-            "{all}"
-        );
-
-        let target = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#target".into())),
-            ]),
-        );
-        let target_id = target.get("nodeId").and_then(Json::as_f64).expect("target nodeId") as u64;
-        assert!(target_id > 0, "{target}");
-
-        let describe = client.result(
-            "DOM.describeNode",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        assert_eq!(
-            describe.get("node").and_then(|node| node.get("nodeName")).and_then(Json::as_str),
-            Some("SPAN"),
-            "{describe}"
-        );
-
-        let outer = client.result(
-            "DOM.getOuterHTML",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        let outer_html = outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
-        assert!(outer_html.contains("old"), "{outer_html}");
-
-        client.result(
-            "DOM.setAttributeValue",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(target_id as f64)),
-                ("name".into(), Json::String("data-x".into())),
-                ("value".into(), Json::String("1".into())),
-            ]),
-        );
-        let outer_after_attr = client.result(
-            "DOM.getOuterHTML",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        let outer_after_attr = outer_after_attr.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
-        assert!(outer_after_attr.contains("data-x=\"1\""), "{outer_after_attr}");
-
-        client.result(
-            "DOM.setOuterHTML",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(target_id as f64)),
-                ("outerHTML".into(), Json::String("<span id=\"target\">new</span>".into())),
-            ]),
-        );
-        let requeried = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#target".into())),
-            ]),
-        );
-        let requeried_id = requeried.get("nodeId").and_then(Json::as_f64).expect("requeried nodeId") as u64;
-        assert!(requeried_id > 0, "{requeried}");
-        let new_outer = client.result(
-            "DOM.getOuterHTML",
-            Json::Object(vec![("nodeId".into(), Json::Number(requeried_id as f64))]),
-        );
-        let new_outer = new_outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
-        assert!(new_outer.contains("new") && !new_outer.contains("old"), "{new_outer}");
-
-        client.result(
-            "DOM.removeNode",
-            Json::Object(vec![("nodeId".into(), Json::Number(requeried_id as f64))]),
-        );
-        let gone = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#target".into())),
-            ]),
-        );
-        assert_eq!(gone.get("nodeId").and_then(Json::as_f64), Some(0.0), "{gone}");
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-17: `CSS.getComputedStyleForNode`, `getMatchedStylesForNode` (the
-    /// matched rules from `amazing-css`) and `getStyleSheetText`.
-    #[test]
-    fn end_to_end_css_computed_matched_styles_and_stylesheet_text() {
-        let host = spawn_test_host(
-            "http://example.test/css.html",
-            "<title>Css</title><style>#head { color: red; }</style><body><h1 id=\"head\">Hi</h1></body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
-        let root_id = document
-            .get("root")
-            .and_then(|root| root.get("nodeId"))
-            .and_then(Json::as_f64)
-            .expect("root nodeId") as u64;
-        let head = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#head".into())),
-            ]),
-        );
-        let head_id = head.get("nodeId").and_then(Json::as_f64).expect("head nodeId") as u64;
-        assert!(head_id > 0, "{head}");
-
-        let computed = client.result(
-            "CSS.getComputedStyleForNode",
-            Json::Object(vec![("nodeId".into(), Json::Number(head_id as f64))]),
-        );
-        let computed = computed.get("computedStyle").and_then(Json::as_array).expect("computedStyle array");
-        let color = computed
-            .iter()
-            .find(|entry| entry.get("name").and_then(Json::as_str) == Some("color"))
-            .unwrap_or_else(|| panic!("no color property in {computed:?}"));
-        assert!(
-            color.get("value").and_then(Json::as_str).unwrap_or_default().contains("red"),
-            "{color}"
-        );
-
-        let matched = client.result(
-            "CSS.getMatchedStylesForNode",
-            Json::Object(vec![("nodeId".into(), Json::Number(head_id as f64))]),
-        );
-        let rules = matched.get("matchedCSSRules").and_then(Json::as_array).expect("matchedCSSRules array");
-        assert!(!rules.is_empty(), "{rules:?}");
-        let first_rule = rules[0].get("rule").expect("rule field");
-        assert_eq!(first_rule.get("origin").and_then(Json::as_str), Some("author"), "{first_rule}");
-        assert!(
-            first_rule
-                .get("selectorList")
-                .and_then(|list| list.get("text"))
-                .and_then(Json::as_str)
-                .unwrap_or_default()
-                .contains("head"),
-            "{first_rule}"
-        );
-
-        let sheet_text = client.result(
-            "CSS.getStyleSheetText",
-            Json::Object(vec![("styleSheetId".into(), Json::String("0".into()))]),
-        );
-        let text = sheet_text.get("text").and_then(Json::as_str).unwrap_or_default();
-        assert!(text.contains("color") && text.contains("red"), "{text}");
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-17: `Input.dispatchMouseEvent`/`dispatchKeyEvent` reach real
-    /// `addEventListener` handlers on the live page (hit-tested for the mouse
-    /// event, `document.activeElement` for the key event).
-    #[test]
-    fn end_to_end_input_dispatch_reaches_real_dom_event_listeners() {
-        let host = spawn_test_host(
-            "http://example.test/input.html",
-            "<title>Input</title><body>\
-             <button id=\"btn\" style=\"position:absolute;left:0;top:0;width:200px;height:200px\">Go</button>\
-             <input id=\"field\">\
-             <script>\
-               document.getElementById('btn').addEventListener('mousedown', () => { window.mouseHit = true; });\
-               document.getElementById('field').addEventListener('keydown', () => { window.keyHit = true; });\
-             </script>\
-             </body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-
-        client.result(
-            "Input.dispatchMouseEvent",
-            Json::Object(vec![
-                ("type".into(), Json::String("mousePressed".into())),
-                ("x".into(), Json::Number(50.0)),
-                ("y".into(), Json::Number(50.0)),
-                ("button".into(), Json::String("left".into())),
-                ("buttons".into(), Json::Number(1.0)),
-                ("clickCount".into(), Json::Number(1.0)),
-            ]),
-        );
-        let mouse_hit = client.result(
-            "Runtime.evaluate",
-            Json::Object(vec![
-                ("expression".into(), Json::String("window.mouseHit === true".into())),
-                ("returnByValue".into(), Json::Bool(true)),
-            ]),
-        );
-        assert_eq!(
-            mouse_hit.get("result").and_then(|result| result.get("value")).and_then(Json::as_bool),
-            Some(true),
-            "{mouse_hit}"
-        );
-
-        client.result(
-            "Runtime.evaluate",
-            Json::Object(vec![(
-                "expression".into(),
-                Json::String("document.getElementById('field').focus()".into()),
-            )]),
-        );
-        client.result(
-            "Input.dispatchKeyEvent",
-            Json::Object(vec![
-                ("type".into(), Json::String("keyDown".into())),
-                ("key".into(), Json::String("a".into())),
-                ("code".into(), Json::String("KeyA".into())),
-            ]),
-        );
-        let key_hit = client.result(
-            "Runtime.evaluate",
-            Json::Object(vec![
-                ("expression".into(), Json::String("window.keyHit === true".into())),
-                ("returnByValue".into(), Json::Bool(true)),
-            ]),
-        );
-        assert_eq!(
-            key_hit.get("result").and_then(|result| result.get("value")).and_then(Json::as_bool),
-            Some(true),
-            "{key_hit}"
-        );
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-17: `Page.captureScreenshot` returns a real, decodable PNG through
-    /// the existing raster path.
-    #[test]
-    fn end_to_end_capture_screenshot_returns_a_valid_png() {
-        let host = spawn_test_host(
-            "http://example.test/shot.html",
-            "<title>Shot</title><body style=\"background:white\"><h1>Hello</h1></body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-        let shot = client.result(
-            "Page.captureScreenshot",
-            Json::Object(vec![("format".into(), Json::String("png".into()))]),
-        );
-        let data = shot.get("data").and_then(Json::as_str).expect("data field");
-        let bytes = amazing_devtools::base64::decode(data).expect("valid base64");
-        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "not a PNG signature: {bytes:?}");
-        assert!(bytes.len() > 100, "suspiciously small PNG: {} bytes", bytes.len());
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-18's "prove it end to end" test: a real page that fetches an
-    /// external script and logs to the console, driven through a real
-    /// WebSocket client against a real fixture HTTP server (document +
-    /// `<script src>`, both real `amazing_net::fetch` calls, not the
-    /// in-memory `spawn_test_host` shortcut). Proves `Network.*`,
-    /// `Runtime.consoleAPICalled`, `Runtime.getProperties`,
-    /// `Runtime.callFunctionOn` and `Network.getResponseBody` together.
-    #[test]
-    fn end_to_end_network_console_and_object_inspection_from_a_real_fetched_page() {
-        static DOC: &str = "<title>Live</title><script src=\"/app.js\"></script><body><h1>hi</h1></body>";
-        static SCRIPT: &str =
-            "console.log('hello from app.js'); globalThis.pageObject = { greeting: 'hi', num: 7 };";
-        let addr = serve_multi(vec![("/", "text/html", DOC), ("/app.js", "application/javascript", SCRIPT)]);
-        let url = format!("http://{addr}/");
-        let init = PageInit::Fetch { target_id: "page-1".into(), url, width: 800.0 };
-        let host = Arc::new(DriverDevToolsHost::spawn("page-1", init).expect("spawn devtools host"));
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let server_addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(server_addr, "/devtools/page/page-1");
-        let mut events = Vec::new();
-        let (_, more) = client.result_and_events("Network.enable", Json::Object(Vec::new()));
-        events.extend(more);
-        let (_, more) = client.result_and_events("Runtime.enable", Json::Object(Vec::new()));
-        events.extend(more);
-        let (_, more) = client.result_and_events("Log.enable", Json::Object(Vec::new()));
-        events.extend(more);
-        // Nudges another poll cycle so anything still queued after the
-        // enables above is flushed before this test starts asserting.
-        let (_, more) = client.result_and_events(
-            "Runtime.evaluate",
-            Json::Object(vec![("expression".into(), Json::String("1 + 1".into()))]),
-        );
-        events.extend(more);
-
-        let find_all = |method: &str| -> Vec<Json> {
-            events.iter().filter(|event| event.get("method").and_then(Json::as_str) == Some(method)).cloned().collect()
-        };
-        let request_type = |event: &Json| -> String {
-            event.get("params").and_then(|params| params.get("type")).and_then(Json::as_str).unwrap_or_default().to_owned()
-        };
-        let request_id_of = |event: &Json| -> String {
-            event.get("params").and_then(|params| params.get("requestId")).and_then(Json::as_str).unwrap_or_default().to_owned()
-        };
-
-        let requests = find_all("Network.requestWillBeSent");
-        assert_eq!(requests.len(), 2, "document + script requests: {events:?}");
-        let document_request_id = requests
-            .iter()
-            .find(|event| request_type(event) == "Document")
-            .map(request_id_of)
-            .expect("a Document requestWillBeSent");
-        let script_request_id = requests
-            .iter()
-            .find(|event| request_type(event) == "Script")
-            .map(request_id_of)
-            .expect("a Script requestWillBeSent");
-
-        let responses = find_all("Network.responseReceived");
-        assert!(
-            responses.iter().any(|event| request_id_of(event) == document_request_id),
-            "no responseReceived for the document: {events:?}"
-        );
-        assert!(
-            responses.iter().any(|event| request_id_of(event) == script_request_id),
-            "no responseReceived for the script: {events:?}"
-        );
-
-        let finished = find_all("Network.loadingFinished");
-        assert!(finished.iter().any(|event| request_id_of(event) == document_request_id));
-        assert!(finished.iter().any(|event| request_id_of(event) == script_request_id));
-
-        let console = find_all("Runtime.consoleAPICalled");
-        assert!(
-            console.iter().any(|event| {
-                event
-                    .get("params")
-                    .and_then(|params| params.get("args"))
-                    .and_then(Json::as_array)
-                    .into_iter()
-                    .flatten()
-                    .any(|arg| arg.get("value").and_then(Json::as_str).unwrap_or_default().contains("hello from app.js"))
-            }),
-            "no consoleAPICalled with the script's console.log line: {events:?}"
-        );
-
-        // Runtime.getProperties on the object app.js created.
-        let evaluated = client.result(
-            "Runtime.evaluate",
-            Json::Object(vec![("expression".into(), Json::String("globalThis.pageObject".into()))]),
-        );
-        let object_id = evaluated
-            .get("result")
-            .and_then(|result| result.get("objectId"))
-            .and_then(Json::as_str)
-            .expect("pageObject should be a live object with an objectId")
-            .to_owned();
-        let properties = client.result(
-            "Runtime.getProperties",
-            Json::Object(vec![
-                ("objectId".into(), Json::String(object_id.clone())),
-                ("ownProperties".into(), Json::Bool(true)),
-            ]),
-        );
-        let descriptors = properties.get("result").and_then(Json::as_array).expect("result array");
-        let greeting = descriptors
-            .iter()
-            .find(|descriptor| descriptor.get("name").and_then(Json::as_str) == Some("greeting"))
-            .unwrap_or_else(|| panic!("no greeting property in {descriptors:?}"));
-        assert_eq!(
-            greeting.get("value").and_then(|value| value.get("value")).and_then(Json::as_str),
-            Some("hi")
-        );
-
-        // Runtime.callFunctionOn against that same object.
-        let called = client.result(
-            "Runtime.callFunctionOn",
-            Json::Object(vec![
-                ("objectId".into(), Json::String(object_id)),
-                (
-                    "functionDeclaration".into(),
-                    Json::String("function() { return this.num * 2; }".into()),
-                ),
-                ("returnByValue".into(), Json::Bool(true)),
-            ]),
-        );
-        assert_eq!(
-            called.get("result").and_then(|result| result.get("value")).and_then(Json::as_f64),
-            Some(14.0),
-            "{called}"
-        );
-
-        // Network.getResponseBody for the script request.
-        let body = client.result(
-            "Network.getResponseBody",
-            Json::Object(vec![("requestId".into(), Json::String(script_request_id))]),
-        );
-        assert!(
-            body.get("body").and_then(Json::as_str).unwrap_or_default().contains("hello from app.js"),
-            "{body}"
-        );
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-18: a page whose own script throws (uncaught) still loads and
-    /// keeps its realm — `Runtime.exceptionThrown` and `Log.entryAdded`
-    /// report the bug instead of failing the whole page load.
-    #[test]
-    fn end_to_end_uncaught_script_error_is_reported_not_fatal() {
-        let host = spawn_test_host(
-            "http://example.test/broken.html",
-            "<title>Broken</title><script>undefinedGlobal.member;</script><body>still here</body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-        let mut events = Vec::new();
-        let (_, more) = client.result_and_events("Runtime.enable", Json::Object(Vec::new()));
-        events.extend(more);
-        let (_, more) = client.result_and_events("Log.enable", Json::Object(Vec::new()));
-        events.extend(more);
-        let (title, more) = client.result_and_events(
-            "Runtime.evaluate",
-            Json::Object(vec![
-                ("expression".into(), Json::String("document.title".into())),
-                ("returnByValue".into(), Json::Bool(true)),
-            ]),
-        );
-        events.extend(more);
-        assert_eq!(title.get("result").and_then(|result| result.get("value")).and_then(Json::as_str), Some("Broken"));
-
-        assert!(
-            events.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Runtime.exceptionThrown")),
-            "no Runtime.exceptionThrown for the page's own uncaught error: {events:?}"
-        );
-        assert!(
-            events.iter().any(|event| {
-                event.get("method").and_then(Json::as_str) == Some("Log.entryAdded")
-                    && event.get("params").and_then(|params| params.get("entry")).and_then(|entry| entry.get("source")).and_then(Json::as_str)
-                        == Some("javascript")
-            }),
-            "no Log.entryAdded for the page's own uncaught error: {events:?}"
-        );
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    /// CDP-19's "prove it end to end" test: `DOM.getDocument`/`querySelector`/
-    /// `getOuterHTML`/`setAttributeValue` and `CSS.getComputedStyleForNode`
-    /// (already implemented from CDP-16/17) chained onto the *new* work —
-    /// `DOM.getBoxModel`/`getContentQuads` and `Overlay.highlightNode`/
-    /// `hideHighlight` — against one live node, over a real WebSocket client.
-    #[test]
-    fn end_to_end_box_model_and_overlay_highlight_on_the_live_page() {
-        let host = spawn_test_host(
-            "http://example.test/box.html",
-            "<title>Box</title><body>\
-             <div id=\"target\" style=\"position:absolute;left:10px;top:20px;width:100px;\
-             height:50px;border:5px solid black;margin:3px;padding:2px\">hi</div>\
-             <span id=\"hidden\" style=\"display:none\">gone</span>\
-             </body>",
-        );
-        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut client = Client::connect(addr, "/devtools/page/page-1");
-        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
-        let root_id = document
-            .get("root")
-            .and_then(|root| root.get("nodeId"))
-            .and_then(Json::as_f64)
-            .expect("root nodeId") as u64;
-
-        let target = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#target".into())),
-            ]),
-        );
-        let target_id = target.get("nodeId").and_then(Json::as_f64).expect("target nodeId") as u64;
-        assert!(target_id > 0, "{target}");
-
-        let outer = client.result(
-            "DOM.getOuterHTML",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        assert!(
-            outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default().contains("hi"),
-            "{outer}"
-        );
-
-        client.result(
-            "DOM.setAttributeValue",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(target_id as f64)),
-                ("name".into(), Json::String("data-cdp19".into())),
-                ("value".into(), Json::String("1".into())),
-            ]),
-        );
-        let outer_after = client.result(
-            "DOM.getOuterHTML",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        assert!(
-            outer_after.get("outerHTML").and_then(Json::as_str).unwrap_or_default().contains("data-cdp19=\"1\""),
-            "{outer_after}"
-        );
-
-        let computed = client.result(
-            "CSS.getComputedStyleForNode",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        let computed = computed.get("computedStyle").and_then(Json::as_array).expect("computedStyle array");
-        assert!(
-            computed.iter().any(|entry| entry.get("name").and_then(Json::as_str) == Some("width")),
-            "{computed:?}"
-        );
-
-        // DOM.getBoxModel: content is the CSS content box (100x50, unaffected
-        // by position), the border box adds the 2px padding + 5px border on
-        // every side (114x64), and the margin box adds the 3px margin
-        // (120x70) — pure box-model arithmetic, independent of where the
-        // absolutely-positioned box actually landed on the page.
-        let box_model = client.result(
-            "DOM.getBoxModel",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        let model = box_model.get("model").expect("model field");
-        assert_eq!(model.get("width").and_then(Json::as_f64), Some(114.0), "{model}");
-        assert_eq!(model.get("height").and_then(Json::as_f64), Some(64.0), "{model}");
-        let quad_width = |points: &[Json]| -> f64 {
-            points[2].as_f64().unwrap() - points[0].as_f64().unwrap()
-        };
-        let content = model.get("content").and_then(Json::as_array).expect("content quad");
-        assert!((quad_width(content) - 100.0).abs() < 0.01, "{content:?}");
-        let margin = model.get("margin").and_then(Json::as_array).expect("margin quad");
-        assert!((quad_width(margin) - 120.0).abs() < 0.01, "{margin:?}");
-
-        // DOM.getContentQuads: one *content*-box quad (the dispatch layer
-        // extracts `model.content`, matching real Chrome's own semantics —
-        // "content quads", not border quads); this driver does not split
-        // inline content by line box, so every node gets exactly one.
-        let quads = client.result(
-            "DOM.getContentQuads",
-            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
-        );
-        let quads = quads.get("quads").and_then(Json::as_array).expect("quads array");
-        assert_eq!(quads.len(), 1, "{quads:?}");
-        assert!((quad_width(quads[0].as_array().unwrap()) - 100.0).abs() < 0.01, "{quads:?}");
-
-        // Overlay.highlightNode succeeds on a real, laid-out node...
-        let highlight = client.result(
-            "Overlay.highlightNode",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(target_id as f64)),
-                ("highlightConfig".into(), Json::Object(Vec::new())),
-            ]),
-        );
-        assert_eq!(highlight, Json::Object(Vec::new()), "{highlight}");
-        client.result("Overlay.hideHighlight", Json::Object(Vec::new()));
-
-        // ...but reports a real error for a node with no box of its own
-        // (`display: none`), exactly as a real highlight request would fail.
-        let hidden = client.result(
-            "DOM.querySelector",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(root_id as f64)),
-                ("selector".into(), Json::String("#hidden".into())),
-            ]),
-        );
-        let hidden_id = hidden.get("nodeId").and_then(Json::as_f64).expect("hidden nodeId") as u64;
-        let bogus = client.raw(
-            "Overlay.highlightNode",
-            Json::Object(vec![
-                ("nodeId".into(), Json::Number(hidden_id as f64)),
-                ("highlightConfig".into(), Json::Object(Vec::new())),
-            ]),
-        );
-        assert!(
-            bogus.get("error").is_some(),
-            "highlighting a display:none node (no box) should fail: {bogus}"
-        );
-
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-
-    #[test]
-    fn spawn_devtools_server_serves_json_version_over_the_bound_port() {
-        let html_host = spawn_test_host("http://example.test/wired.html", "<title>wired</title>");
-        let server = CdpServer::bind(html_host, "127.0.0.1:0").expect("bind");
-        let addr = server.local_addr().expect("local_addr");
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let worker_shutdown = shutdown.clone();
-        let join = std::thread::spawn(move || server.serve(worker_shutdown));
-
-        let mut response = String::new();
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        let mut last_error = None;
-        while std::time::Instant::now() < deadline {
-            match TcpStream::connect(addr) {
-                Ok(mut stream) => {
-                    stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
-                    let _ = stream.write_all(
-                        format!("GET /json/version HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes(),
-                    );
-                    let _ = stream.read_to_string(&mut response);
-                    break;
-                }
-                Err(error) => {
-                    last_error = Some(error);
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            }
-        }
-        assert!(response.contains("200"), "no /json/version response; last connect error: {last_error:?}, got: {response}");
-        shutdown.store(true, Ordering::Relaxed);
-        let _ = join.join();
-    }
-}
+#[path = "runtime_host_devtools_tests.rs"]
+mod tests;

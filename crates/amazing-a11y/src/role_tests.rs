@@ -54,7 +54,7 @@ fn html_aam_implicit_roles() {
         ("<b>x</b>", Generic),
         ("<bdi>x</bdi>", Generic),
         ("<bdo>x</bdo>", Generic),
-        ("<cite>x</cite>", Generic),
+        ("<cite>x</cite>", HtmlCite),
         ("<data value=\"1\">x</data>", Generic),
         ("<div>x</div>", Generic),
         ("<i>x</i>", Generic),
@@ -141,14 +141,17 @@ fn context_sensitive_landmarks() {
         implicit_role_of_tag("<body><footer>x</footer></body>", "footer"),
         Some(Role::Contentinfo)
     );
-    // ...but demoted inside sectioning content.
+    // ...but demoted inside sectioning content (A11Y-10: to `sectionheader`/
+    // `sectionfooter` per ARIA PR 1931, not plain `generic` — confirmed via
+    // the pinned `roles-contextual.tentative.html`'s nameless
+    // `el-footer-ancestormain` case, which still expects `sectionfooter`).
     assert_eq!(
         implicit_role_of_tag("<article><header>x</header></article>", "header"),
-        Some(Role::Generic)
+        Some(Role::Sectionheader)
     );
     assert_eq!(
         implicit_role_of_tag("<section><footer>x</footer></section>", "footer"),
-        Some(Role::Generic)
+        Some(Role::Sectionfooter)
     );
 }
 

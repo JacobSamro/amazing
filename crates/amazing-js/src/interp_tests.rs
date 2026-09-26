@@ -1311,4 +1311,30 @@ mod tests {
             assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
         }
     }
+
+    #[test]
+    fn proxy_traps_and_invariants_behave_per_spec() {
+        let mut i = Interpreter::new();
+        for source in [
+            "var t={a:1}; var p=new Proxy(t,{}); p.a===1 && (p.b=2, t.b===2)",
+            "var p=new Proxy({},{get(t,k){return k+'!'}}); p.hi==='hi!'",
+            "var log=[]; var p=new Proxy({},{set(t,k,v){log.push(k+'='+v); t[k]=v; return true}}); p.x=5; log.join(',')==='x=5' && p.x===5",
+            "var p=new Proxy({},{has(){return true}}); ('anything' in p)===true",
+            "var log=[]; var p=new Proxy({a:1},{deleteProperty(t,k){log.push(k); delete t[k]; return true}}); delete p.a; log.join(',')==='a' && !('a' in p)",
+            "var p=new Proxy({},{ownKeys(){return ['x','y']},getOwnPropertyDescriptor(){return {value:1,enumerable:true,configurable:true}}}); Object.keys(p).join(',')==='x,y'",
+            "var log=[]; var p=new Proxy({},{defineProperty(t,k,d){log.push(k); Object.defineProperty(t,k,d); return true}}); Object.defineProperty(p,'z',{value:9,enumerable:true,configurable:true,writable:true}); p.z===9 && log.join(',')==='z'",
+            "var proto={q:1}; var target=Object.setPrototypeOf({},proto); var p=new Proxy(target,{getPrototypeOf(){return proto}}); Object.getPrototypeOf(p)===proto && p.q===1",
+            "var calls=[]; var p=new Proxy({},{isExtensible(t){calls.push('ext'); return Reflect.isExtensible(t)},preventExtensions(t){calls.push('prevent'); return Reflect.preventExtensions(t)}}); Object.isExtensible(p)===true && Object.preventExtensions(p)===p && Object.isExtensible(p)===false && calls.join(',')==='ext,prevent,ext'",
+            "var p=new Proxy(function(a,b){return a+b},{apply(t,thisArg,args){return t.apply(thisArg,args)*10}}); p(2,3)===50",
+            "function F(a){this.a=a}; var p=new Proxy(F,{construct(t,args){return new t(...args)}}); new p(7).a===7",
+            "typeof new Proxy(function(){},{})==='function'",
+            "var r=Proxy.revocable({a:1},{}); r.proxy.a===1 && (r.revoke(), true) && (function(){try{r.proxy.a; return false}catch(e){return e instanceof TypeError}})()",
+            "var t={}; Object.defineProperty(t,'x',{value:1,writable:false,configurable:false}); var p=new Proxy(t,{get(){return 2}}); try{p.x; false}catch(e){e instanceof TypeError}",
+            "Proxy.prototype===undefined",
+            "try{Proxy({},{}); false}catch(e){e instanceof TypeError}",
+            "(function(){try{new Proxy(1,{}); return false}catch(e){return e instanceof TypeError}})() && (function(){try{new Proxy({},1); return false}catch(e){return e instanceof TypeError}})()",
+        ] {
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        }
+    }
 }

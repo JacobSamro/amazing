@@ -1,0 +1,632 @@
+{
+  "counts": {
+    "pass": 257,
+    "mismatch": 379,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 9,
+    "crash": 0
+  },
+  "families": {
+    "CSS2__positioning__bottom": {
+      "pass": 48,
+      "mismatch": 2
+    },
+    "CSS2__positioning__left": {
+      "mismatch": 33,
+      "pass": 17
+    },
+    "CSS2__positioning__right": {
+      "mismatch": 49,
+      "pass": 1
+    },
+    "CSS2__positioning__top": {
+      "pass": 48,
+      "mismatch": 2
+    },
+    "CSS2__positioning__absolute-replaced-width": {
+      "mismatch": 43,
+      "pass": 3
+    },
+    "CSS2__positioning__absolute-replaced-height": {
+      "pass": 6,
+      "mismatch": 29
+    },
+    "CSS2__positioning__absolute-non-replaced-width": {
+      "mismatch": 23,
+      "pass": 3
+    },
+    "CSS2__positioning__position-relative": {
+      "pass": 8,
+      "mismatch": 15,
+      "unsupported": 2
+    },
+    "CSS2__positioning__abspos": {
+      "mismatch": 14,
+      "pass": 6,
+      "unsupported": 2
+    },
+    "css-position__static-position__inline-level-absolute-in-block-level-context": {
+      "mismatch": 6,
+      "pass": 8
+    },
+    "css-position__position-absolute-in-inline": {
+      "mismatch": 12
+    },
+    "CSS2__positioning__absolute-non-replaced-height": {
+      "mismatch": 11,
+      "pass": 1
+    },
+    "CSS2__positioning__abspos-overflow": {
+      "mismatch": 10,
+      "pass": 2
+    },
+    "CSS2__positioning__bottom-applies-to": {
+      "mismatch": 12
+    },
+    "CSS2__positioning__left-applies-to": {
+      "pass": 12
+    },
+    "CSS2__positioning__position-applies-to": {
+      "mismatch": 12
+    },
+    "CSS2__positioning__right-applies-to": {
+      "mismatch": 12
+    },
+    "CSS2__positioning__top-applies-to": {
+      "pass": 12
+    },
+    "css-position__position-relative": {
+      "mismatch": 5,
+      "pass": 6
+    },
+    "CSS2__positioning__absolute-non-replaced-max-height": {
+      "unsupported": 3,
+      "mismatch": 8
+    },
+    "CSS2__positioning__abspos-containing-block": {
+      "pass": 9,
+      "mismatch": 1
+    },
+    "CSS2__positioning__position-absolute": {
+      "pass": 3,
+      "mismatch": 4
+    },
+    "CSS2__positioning__relpos-calcs": {
+      "pass": 7
+    },
+    "css-position__position-absolute-center": {
+      "mismatch": 4,
+      "pass": 2
+    },
+    "css-position__sticky__position-sticky-bottom": {
+      "mismatch": 2,
+      "pass": 3
+    },
+    "CSS2__positioning__abspos-width": {
+      "pass": 5
+    },
+    "CSS2__positioning__right-offset": {
+      "mismatch": 4
+    },
+    "CSS2__positioning__bottom-offset": {
+      "mismatch": 3
+    },
+    "CSS2__positioning__left-offset": {
+      "mismatch": 3
+    },
+    "CSS2__positioning__top-offset": {
+      "mismatch": 3
+    },
+    "css-position__position-absolute-iframe-print": {
+      "mismatch": 2
+    },
+    "css-position__sticky__position-sticky-left": {
+      "mismatch": 2
+    },
+    "css-position__sticky__position-sticky-margins": {
+      "mismatch": 2
+    },
+    "css-position__sticky__position-sticky-right": {
+      "mismatch": 2
+    },
+    "css-position__sticky__position-sticky-top": {
+      "mismatch": 2
+    },
+    "CSS2__positioning__abspos-inline": {
+      "unsupported": 1,
+      "mismatch": 1
+    },
+    "CSS2__positioning__left-offset-percentage": {
+      "mismatch": 1,
+      "pass": 1
+    },
+    "CSS2__positioning__position-fixed": {
+      "pass": 1,
+      "mismatch": 1
+    },
+    "CSS2__positioning__positioning-float": {
+      "unsupported": 1,
+      "mismatch": 1
+    },
+    "CSS2__positioning__top-offset-percentage": {
+      "mismatch": 1,
+      "pass": 1
+    },
+    "css-position__multicol__static-position__vlr-ltr-ltr-in-multicol.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vlr-ltr-rtl-in-multicol.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vlr-rtl-ltr-in-multicol.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vlr-rtl-rtl-in-multicol.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vrl-ltr-ltr-in-multicol.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vrl-ltr-rtl-in-multicol.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vrl-rtl-ltr-in-multicol.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__static-position__vrl-rtl-rtl-in-multicol.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vlr-ltr-ltr-in-multicols.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vlr-ltr-rtl-in-multicols.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vlr-rtl-ltr-in-multicols.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vlr-rtl-rtl-in-multicols.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vrl-ltr-ltr-in-multicols.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vrl-ltr-rtl-in-multicols.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vrl-rtl-ltr-in-multicols.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__multicol__vrl-rtl-rtl-in-multicols.html": {
+      "mismatch": 1
+    },
+    "css-position__nested-inline-abspos-child-with-siblings.html": {
+      "mismatch": 1
+    },
+    "css-position__nested-inline-abspos-child.html": {
+      "mismatch": 1
+    },
+    "css-position__position-absolute-fieldset.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-fit-content.html": {
+      "mismatch": 1
+    },
+    "css-position__position-absolute-in-inline-margin-top.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-large-negative-inset.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-multicol": {
+      "pass": 1
+    },
+    "css-position__position-absolute-replaced-intrinsic-size.tentative.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-replaced-no-intrinsic-size.tentative.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-replaced-with-display-table.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-root-element-flex.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-root-element-grid.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-semi-replaced-stretch-button.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-semi-replaced-stretch-input.html": {
+      "pass": 1
+    },
+    "css-position__position-absolute-semi-replaced-stretch-other.html": {
+      "pass": 1
+    },
+    "css-position__position-fixed-overflow-print.html": {
+      "pass": 1
+    },
+    "css-position__position-fixed-root-element-flex.html": {
+      "pass": 1
+    },
+    "css-position__position-fixed-root-element-grid.html": {
+      "pass": 1
+    },
+    "css-position__position-fixed-video-controls-print.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-caption.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tbody-left-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tbody-left.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tbody-top-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tbody-top.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-td-left.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-td-top.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tfoot-left-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tfoot-left.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tfoot-top-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tfoot-top.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-thead-left-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-thead-left.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-thead-top-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-thead-top.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tr-left-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tr-left.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tr-top-absolute-child.html": {
+      "pass": 1
+    },
+    "css-position__position-relative-table-tr-top.html": {
+      "pass": 1
+    },
+    "css-position__position-static": {
+      "pass": 1
+    },
+    "css-position__static-position__htb-ltr-ltr.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__htb-ltr-rtl.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__htb-rtl-ltr.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__htb-rtl-rtl.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vlr-ltr-ltr.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vlr-ltr-rtl.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vlr-rtl-ltr.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vlr-rtl-rtl.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vrl-ltr-ltr.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vrl-ltr-rtl.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vrl-rtl-ltr.tentative.html": {
+      "mismatch": 1
+    },
+    "css-position__static-position__vrl-rtl-rtl.html": {
+      "mismatch": 1
+    },
+    "css-position__sticky__position-sticky-fixed-ancestor": {
+      "mismatch": 1
+    },
+    "css-position__sticky__position-sticky-in-fixed-container.html": {
+      "mismatch": 1
+    },
+    "css-position__sticky__position-sticky-rtl.html": {
+      "pass": 1
+    },
+    "css-position__sticky__position-sticky-stacking-context": {
+      "mismatch": 1
+    },
+    "css-position__sticky__position-sticky-table-pixel-rounding.html": {
+      "pass": 1
+    },
+    "css-position__sticky__position-sticky-table-td-subpixel-zoom.html": {
+      "pass": 1
+    },
+    "css-position__sticky__position-sticky-top-and-bottom": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__absolute-non-replaced-max": {
+      "pass": 1
+    },
+    "CSS2__positioning__absolute-non-replaced-min": {
+      "pass": 1
+    },
+    "CSS2__positioning__absolute-non-replaced-min-max": {
+      "pass": 1
+    },
+    "CSS2__positioning__abspos-block-level": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__abspos-float-with-inline-container.html": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__abspos-negative-margin": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__auto-position-rtl-child-viewport-scrollbar.html": {
+      "pass": 1
+    },
+    "CSS2__positioning__bottom-offset-percentage": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__position": {
+      "pass": 1
+    },
+    "CSS2__positioning__position-relative-nested": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__position-static": {
+      "mismatch": 1
+    },
+    "CSS2__positioning__right-offset-percentage": {
+      "mismatch": 1
+    }
+  },
+  "mismatches_with_image_references": [
+    "CSS2__positioning__absolute-non-replaced-height-002.xht",
+    "CSS2__positioning__absolute-non-replaced-height-003.xht",
+    "CSS2__positioning__absolute-non-replaced-height-004.xht",
+    "CSS2__positioning__absolute-non-replaced-height-005.xht",
+    "CSS2__positioning__absolute-non-replaced-height-006.xht",
+    "CSS2__positioning__absolute-non-replaced-height-007.xht",
+    "CSS2__positioning__absolute-non-replaced-height-008.xht",
+    "CSS2__positioning__absolute-non-replaced-height-009.xht",
+    "CSS2__positioning__absolute-non-replaced-height-010.xht",
+    "CSS2__positioning__absolute-non-replaced-height-011.xht",
+    "CSS2__positioning__absolute-non-replaced-height-012.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-003.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-004.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-005.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-006.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-008.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-010.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-011.xht",
+    "CSS2__positioning__absolute-non-replaced-max-height-012.xht",
+    "CSS2__positioning__absolute-non-replaced-width-001.xht",
+    "CSS2__positioning__absolute-non-replaced-width-002.xht",
+    "CSS2__positioning__absolute-non-replaced-width-003.xht",
+    "CSS2__positioning__absolute-non-replaced-width-004.xht",
+    "CSS2__positioning__absolute-non-replaced-width-005.xht",
+    "CSS2__positioning__absolute-non-replaced-width-006.xht",
+    "CSS2__positioning__absolute-non-replaced-width-007.xht",
+    "CSS2__positioning__absolute-non-replaced-width-008.xht",
+    "CSS2__positioning__absolute-non-replaced-width-010.xht",
+    "CSS2__positioning__absolute-non-replaced-width-011.xht",
+    "CSS2__positioning__absolute-non-replaced-width-012.xht",
+    "CSS2__positioning__absolute-non-replaced-width-013.xht",
+    "CSS2__positioning__absolute-non-replaced-width-014.xht",
+    "CSS2__positioning__absolute-non-replaced-width-015.xht",
+    "CSS2__positioning__absolute-non-replaced-width-016.xht",
+    "CSS2__positioning__absolute-replaced-height-002.xht",
+    "CSS2__positioning__absolute-replaced-height-003.xht",
+    "CSS2__positioning__absolute-replaced-height-006.xht",
+    "CSS2__positioning__absolute-replaced-height-013.xht",
+    "CSS2__positioning__absolute-replaced-height-020.xht",
+    "CSS2__positioning__absolute-replaced-height-027.xht",
+    "CSS2__positioning__absolute-replaced-height-034.xht",
+    "CSS2__positioning__absolute-replaced-width-001.xht",
+    "CSS2__positioning__absolute-replaced-width-002.xht",
+    "CSS2__positioning__absolute-replaced-width-003.xht",
+    "CSS2__positioning__absolute-replaced-width-004.xht",
+    "CSS2__positioning__absolute-replaced-width-006.xht",
+    "CSS2__positioning__absolute-replaced-width-008.xht",
+    "CSS2__positioning__absolute-replaced-width-009.xht",
+    "CSS2__positioning__absolute-replaced-width-010.xht",
+    "CSS2__positioning__absolute-replaced-width-011.xht",
+    "CSS2__positioning__absolute-replaced-width-013.xht",
+    "CSS2__positioning__absolute-replaced-width-015.xht",
+    "CSS2__positioning__absolute-replaced-width-020.xht",
+    "CSS2__positioning__absolute-replaced-width-022.xht",
+    "CSS2__positioning__absolute-replaced-width-023.xht",
+    "CSS2__positioning__absolute-replaced-width-024.xht",
+    "CSS2__positioning__absolute-replaced-width-025.xht",
+    "CSS2__positioning__absolute-replaced-width-027.xht",
+    "CSS2__positioning__absolute-replaced-width-029.xht",
+    "CSS2__positioning__absolute-replaced-width-030.xht",
+    "CSS2__positioning__absolute-replaced-width-031.xht",
+    "CSS2__positioning__absolute-replaced-width-032.xht",
+    "CSS2__positioning__absolute-replaced-width-034.xht",
+    "CSS2__positioning__absolute-replaced-width-036.xht",
+    "CSS2__positioning__absolute-replaced-width-037.xht",
+    "CSS2__positioning__absolute-replaced-width-038.xht",
+    "CSS2__positioning__absolute-replaced-width-039.xht",
+    "CSS2__positioning__absolute-replaced-width-041.xht",
+    "CSS2__positioning__absolute-replaced-width-043.xht",
+    "CSS2__positioning__absolute-replaced-width-048.xht",
+    "CSS2__positioning__absolute-replaced-width-050.xht",
+    "CSS2__positioning__absolute-replaced-width-051.xht",
+    "CSS2__positioning__absolute-replaced-width-052.xht",
+    "CSS2__positioning__absolute-replaced-width-053.xht",
+    "CSS2__positioning__absolute-replaced-width-055.xht",
+    "CSS2__positioning__absolute-replaced-width-057.xht",
+    "CSS2__positioning__absolute-replaced-width-062.xht",
+    "CSS2__positioning__absolute-replaced-width-064.xht",
+    "CSS2__positioning__absolute-replaced-width-065.xht",
+    "CSS2__positioning__absolute-replaced-width-066.xht",
+    "CSS2__positioning__absolute-replaced-width-067.xht",
+    "CSS2__positioning__absolute-replaced-width-069.xht",
+    "CSS2__positioning__absolute-replaced-width-071.xht",
+    "CSS2__positioning__absolute-replaced-width-076.xht",
+    "CSS2__positioning__abspos-001.xht",
+    "CSS2__positioning__abspos-024.xht",
+    "CSS2__positioning__abspos-026.xht",
+    "CSS2__positioning__abspos-029.html",
+    "CSS2__positioning__bottom-offset-001.xht",
+    "CSS2__positioning__bottom-offset-002.xht",
+    "CSS2__positioning__bottom-offset-003.xht",
+    "CSS2__positioning__bottom-offset-percentage-001.xht",
+    "CSS2__positioning__left-004.xht",
+    "CSS2__positioning__left-005.xht",
+    "CSS2__positioning__left-006.xht",
+    "CSS2__positioning__left-016.xht",
+    "CSS2__positioning__left-017.xht",
+    "CSS2__positioning__left-018.xht",
+    "CSS2__positioning__left-028.xht",
+    "CSS2__positioning__left-029.xht",
+    "CSS2__positioning__left-030.xht",
+    "CSS2__positioning__left-040.xht",
+    "CSS2__positioning__left-041.xht",
+    "CSS2__positioning__left-042.xht",
+    "CSS2__positioning__left-052.xht",
+    "CSS2__positioning__left-053.xht",
+    "CSS2__positioning__left-054.xht",
+    "CSS2__positioning__left-064.xht",
+    "CSS2__positioning__left-065.xht",
+    "CSS2__positioning__left-066.xht",
+    "CSS2__positioning__left-076.xht",
+    "CSS2__positioning__left-077.xht",
+    "CSS2__positioning__left-078.xht",
+    "CSS2__positioning__left-088.xht",
+    "CSS2__positioning__left-089.xht",
+    "CSS2__positioning__left-090.xht",
+    "CSS2__positioning__left-100.xht",
+    "CSS2__positioning__left-101.xht",
+    "CSS2__positioning__left-102.xht",
+    "CSS2__positioning__left-109.xht",
+    "CSS2__positioning__left-110.xht",
+    "CSS2__positioning__left-111.xht",
+    "CSS2__positioning__left-112.xht",
+    "CSS2__positioning__left-offset-001.xht",
+    "CSS2__positioning__left-offset-002.xht",
+    "CSS2__positioning__left-offset-003.xht",
+    "CSS2__positioning__left-offset-percentage-001.xht",
+    "CSS2__positioning__position-absolute-002.xht",
+    "CSS2__positioning__position-absolute-004.xht",
+    "CSS2__positioning__position-absolute-006.xht",
+    "CSS2__positioning__position-fixed-007.xht",
+    "CSS2__positioning__position-relative-004.xht",
+    "CSS2__positioning__position-relative-005.xht",
+    "CSS2__positioning__position-relative-006.xht",
+    "CSS2__positioning__position-relative-007.xht",
+    "CSS2__positioning__position-relative-009.xht",
+    "CSS2__positioning__position-relative-010.xht",
+    "CSS2__positioning__position-relative-014.xht",
+    "CSS2__positioning__position-relative-015.xht",
+    "CSS2__positioning__position-relative-016.xht",
+    "CSS2__positioning__position-relative-017.xht",
+    "CSS2__positioning__position-relative-019.xht",
+    "CSS2__positioning__position-relative-037.xht",
+    "CSS2__positioning__position-relative-038.xht",
+    "CSS2__positioning__position-static-001.xht",
+    "CSS2__positioning__right-004.xht",
+    "CSS2__positioning__right-005.xht",
+    "CSS2__positioning__right-006.xht",
+    "CSS2__positioning__right-007.xht",
+    "CSS2__positioning__right-008.xht",
+    "CSS2__positioning__right-016.xht",
+    "CSS2__positioning__right-017.xht",
+    "CSS2__positioning__right-018.xht",
+    "CSS2__positioning__right-019.xht",
+    "CSS2__positioning__right-020.xht",
+    "CSS2__positioning__right-028.xht",
+    "CSS2__positioning__right-029.xht",
+    "CSS2__positioning__right-030.xht",
+    "CSS2__positioning__right-031.xht",
+    "CSS2__positioning__right-032.xht",
+    "CSS2__positioning__right-040.xht",
+    "CSS2__positioning__right-041.xht",
+    "CSS2__positioning__right-042.xht",
+    "CSS2__positioning__right-043.xht",
+    "CSS2__positioning__right-044.xht",
+    "CSS2__positioning__right-052.xht",
+    "CSS2__positioning__right-053.xht",
+    "CSS2__positioning__right-054.xht",
+    "CSS2__positioning__right-055.xht",
+    "CSS2__positioning__right-056.xht",
+    "CSS2__positioning__right-064.xht",
+    "CSS2__positioning__right-065.xht",
+    "CSS2__positioning__right-066.xht",
+    "CSS2__positioning__right-067.xht",
+    "CSS2__positioning__right-068.xht",
+    "CSS2__positioning__right-076.xht",
+    "CSS2__positioning__right-077.xht",
+    "CSS2__positioning__right-078.xht",
+    "CSS2__positioning__right-079.xht",
+    "CSS2__positioning__right-080.xht",
+    "CSS2__positioning__right-088.xht",
+    "CSS2__positioning__right-089.xht",
+    "CSS2__positioning__right-090.xht",
+    "CSS2__positioning__right-091.xht",
+    "CSS2__positioning__right-092.xht",
+    "CSS2__positioning__right-100.xht",
+    "CSS2__positioning__right-101.xht",
+    "CSS2__positioning__right-102.xht",
+    "CSS2__positioning__right-103.xht",
+    "CSS2__positioning__right-104.xht",
+    "CSS2__positioning__right-109.xht",
+    "CSS2__positioning__right-110.xht",
+    "CSS2__positioning__right-111.xht",
+    "CSS2__positioning__right-112.xht",
+    "CSS2__positioning__right-applies-to-001.xht",
+    "CSS2__positioning__right-applies-to-002.xht",
+    "CSS2__positioning__right-applies-to-003.xht",
+    "CSS2__positioning__right-applies-to-004.xht",
+    "CSS2__positioning__right-applies-to-005.xht",
+    "CSS2__positioning__right-applies-to-006.xht",
+    "CSS2__positioning__right-applies-to-007.xht",
+    "CSS2__positioning__right-applies-to-009.xht",
+    "CSS2__positioning__right-applies-to-012.xht",
+    "CSS2__positioning__right-applies-to-013.xht",
+    "CSS2__positioning__right-applies-to-014.xht",
+    "CSS2__positioning__right-applies-to-015.xht",
+    "CSS2__positioning__right-offset-001.xht",
+    "CSS2__positioning__right-offset-002.xht",
+    "CSS2__positioning__right-offset-003.xht",
+    "CSS2__positioning__right-offset-percentage-001.xht",
+    "CSS2__positioning__top-offset-001.xht",
+    "CSS2__positioning__top-offset-002.xht",
+    "CSS2__positioning__top-offset-003.xht",
+    "CSS2__positioning__top-offset-percentage-001.xht"
+  ],
+  "note": "Image references are a triage hint, not an exclusion or proof of root cause."
+}

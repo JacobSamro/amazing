@@ -3,18 +3,19 @@
 use amazing_css::ComputedStyle;
 use amazing_text::FeatureSetting;
 
-pub(crate) fn from_style(style: &ComputedStyle, letter_spacing: f32) -> Vec<FeatureSetting> {
+pub(crate) fn from_style(
+    style: &ComputedStyle,
+    letter_spacing: f32,
+    vertical: bool,
+) -> Vec<FeatureSetting> {
     let mut features = Vec::new();
-    // CSS Fonts 4: font-kerning precedes explicit font-feature-settings.
+    // CSS Fonts 4 §6.6.4: font-kerning maps to `kern` for horizontal text and
+    // `vkrn` for vertical text only, never both; it precedes explicit
+    // font-feature-settings.
+    let kerning_tag = if vertical { *b"vkrn" } else { *b"kern" };
     match style.get("font-kerning").unwrap_or("auto").to_ascii_lowercase().as_str() {
-        "normal" => {
-            set(&mut features, *b"kern", 1);
-            set(&mut features, *b"vkrn", 1);
-        }
-        "none" => {
-            set(&mut features, *b"kern", 0);
-            set(&mut features, *b"vkrn", 0);
-        }
+        "normal" => set(&mut features, kerning_tag, 1),
+        "none" => set(&mut features, kerning_tag, 0),
         _ => {},
     }
     if let Some(variant) = style.get("font-variant-ligatures") {
@@ -96,25 +97,36 @@ mod tests {
         let mut style = ComputedStyle::default();
         style.set("font-variant-ligatures", "none");
         style.set("font-feature-settings", "'liga' on, \"rlig\" off");
-        let features = from_style(&style, 0.0);
+        let features = from_style(&style, 0.0, false);
         assert_eq!(features.iter().find(|f| &f.tag == b"liga").unwrap().value, 1);
         assert_eq!(features.iter().find(|f| &f.tag == b"rlig").unwrap().value, 0);
         assert_eq!(features.iter().find(|f| &f.tag == b"clig").unwrap().value, 0);
     }
 
     #[test]
-    fn kerning_maps_both_orientations_and_explicit_settings_win() {
+    fn kerning_maps_to_the_flow_orientations_own_tag_only() {
+        let mut style = ComputedStyle::default();
+        style.set("font-kerning", "normal");
+        let horizontal = from_style(&style, 0.0, false);
+        assert_eq!(horizontal.iter().find(|f| &f.tag == b"kern").unwrap().value, 1);
+        assert!(horizontal.iter().all(|f| &f.tag != b"vkrn"));
+        let vertical = from_style(&style, 0.0, true);
+        assert_eq!(vertical.iter().find(|f| &f.tag == b"vkrn").unwrap().value, 1);
+        assert!(vertical.iter().all(|f| &f.tag != b"kern"));
+
+        style.set("font-kerning", "none");
+        let horizontal = from_style(&style, 0.0, false);
+        assert_eq!(horizontal.iter().find(|f| &f.tag == b"kern").unwrap().value, 0);
+        assert!(horizontal.iter().all(|f| &f.tag != b"vkrn"));
+    }
+
+    #[test]
+    fn explicit_feature_settings_win_over_font_kerning() {
         let mut style = ComputedStyle::default();
         style.set("font-kerning", "none");
         style.set("font-feature-settings", "'kern' on");
-        let features = from_style(&style, 0.0);
+        let features = from_style(&style, 0.0, false);
         assert_eq!(features.iter().find(|f| &f.tag == b"kern").unwrap().value, 1);
-        assert_eq!(features.iter().find(|f| &f.tag == b"vkrn").unwrap().value, 0);
-        style.set("font-kerning", "normal");
-        style.set("font-feature-settings", "normal");
-        let features = from_style(&style, 0.0);
-        assert_eq!(features.iter().find(|f| &f.tag == b"kern").unwrap().value, 1);
-        assert_eq!(features.iter().find(|f| &f.tag == b"vkrn").unwrap().value, 1);
     }
 
     #[test]
@@ -122,7 +134,7 @@ mod tests {
         let mut style = ComputedStyle::default();
         style.set("font-variant-ligatures", "common-ligatures discretionary-ligatures");
         style.set("font-feature-settings", "'liga' on");
-        let features = from_style(&style, 2.0);
+        let features = from_style(&style, 2.0, false);
         assert_eq!(features.iter().find(|f| &f.tag == b"liga").unwrap().value, 1);
         for tag in [b"clig", b"dlig", b"hlig", b"calt"] {
             assert_eq!(features.iter().find(|f| &f.tag == tag).unwrap().value, 0);

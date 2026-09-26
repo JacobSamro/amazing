@@ -94,8 +94,20 @@ fn explicit_empty_alt_removes_the_image() {
 
 #[test]
 fn structural_alternatives() {
+    // A11Y-10: unlike `table`/`caption` and `fieldset`/`legend` below, a
+    // `<figure>`'s own accessible name is NOT derived from its
+    // `<figcaption>` — per HTML-AAM (confirmed by the pinned
+    // `figure-name-no-figcaption.tentative.html`), only
+    // `aria-label`/`aria-labelledby`/`title` name a figure; a bare figure
+    // with only a figcaption and no such attribute has no name at all. (The
+    // figcaption text is a separate, `img`-only fallback — see
+    // `figure_figcaption_fallback` — not a mapping for the figure itself.)
+    assert_eq!(name("<figure><figcaption>Fig 1</figcaption></figure>", "figure"), "");
     assert_eq!(
-        name("<figure><figcaption>Fig 1</figcaption></figure>", "figure"),
+        name(
+            "<figure aria-label=\"Fig 1\"><figcaption>caption text</figcaption></figure>",
+            "figure"
+        ),
         "Fig 1"
     );
     assert_eq!(

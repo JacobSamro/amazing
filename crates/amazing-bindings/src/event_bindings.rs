@@ -365,6 +365,11 @@ pub(crate) fn invoke<H: BindingHost>(
                 "keyboardevent" => EventClass::Keyboard,
                 "mouseevent" | "mouseevents" => EventClass::Mouse,
                 "uievent" | "uievents" => EventClass::Ui,
+                "devicemotionevent" => EventClass::DeviceMotion,
+                "deviceorientationevent" => EventClass::DeviceOrientation,
+                "dragevent" => EventClass::Drag,
+                "storageevent" => EventClass::Storage,
+                "textevent" => EventClass::Text,
                 _ => event.class(),
             };
             event.set_class(class);

@@ -1,0 +1,37 @@
+source=4c694f2a
+target=/home/user/amazing/target
+a8ea474fe01aa7741c86425cef8631ab14ed14cf3800b13860f33efc49b46101  crates/amazing-layout/src/position.rs
+b900cdd3c4fe8ba2ca00595120f954852ee548700b11b28b0a2b8ff3c2f52d16  crates/amazing-layout/src/position_constraints.rs
+3afef8f9547f4ee5056111609f99756cbb32ec39df1583fe166b1e1f76449333  crates/amazing-layout/src/block.rs
+16e3288b2f63b87d8afbb269a3bae8e12e4f4ebe066837111088cc599cc1dc09  crates/amazing-layout/src/box_tree.rs
+decdf027fa1befdf7763e2ace539fd1be8e98cb4a7e7132ebf7f99920122588d  crates/amazing-layout/src/lib.rs
+90dae96b23496c19ade84d1b9cdfad196c1e6b8298f091dd540ada12a18f2d86  Cargo.lock
+
+Final remerge gate on 4c694f2a (merge of dev, containing layout-flexgrid's
+LFG-1/LFG-2, into lane/layout, plus the grid_child_static_anchor
+use_grid_area fix). All source hashes above verified byte-identical between
+the sandbox binary's provenance record and this local worktree.
+
+Workspace: 3094 pass / 12 skipped, four doctests pass, zero failures.
+amazing-layout crate: 372 pass / 1 skipped.
+
+Corpora (before -> after, gains/losses):
+  position (645):  226 -> 255  (+30/-1, 1 accepted owner-external exception:
+                    CSS2__positioning__right-113.xht, IPC-10/RC-21)
+  writing  (1112): 243 -> 245  (+2/-0)
+  ruby     (118):  70  -> 70   (+0/-0)
+  tables   (386):  309 -> 310  (+1/-0)
+  retained (449):  303 -> 305  (+3/-1, 1 accepted owner-external exception:
+                    css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html,
+                    pre-existing layout-flexgrid subgrid/grid-lanes named-line
+                    bug, routed via .agents/layout-flexgrid/questions.md)
+
+Cross-check (not part of gate.sh, requested by the orchestrator):
+layout-flexgrid's flex-grid-manifest.json (1,446 cases), same binary:
+614 -> 709 pass (net +95 over the pre-LFG-1 baseline, +11 over
+layout-flexgrid's own reported 698 at LFG-2). 7 case-level losses relative to
+the 614 baseline (4 flex-direction-column family, 3 subgrid/grid-lanes
+named-line family) confirmed pre-existing and unrelated to this merge
+(crates/amazing-layout/src/flex.rs is byte-identical between this lane's
+pre-merge HEAD and the merged dev tip); routed to
+.agents/layout-flexgrid/questions.md.

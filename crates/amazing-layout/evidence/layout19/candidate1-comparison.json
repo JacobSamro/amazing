@@ -1,0 +1,57 @@
+{
+  "before": "/home/user/amazing/out/layout/layout19-before-corpus/report.json",
+  "after": "/home/user/amazing/out/layout/layout19/candidate1/tables/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 386,
+  "before_counts": {
+    "pass": 241,
+    "mismatch": 145,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 264,
+    "mismatch": 122,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "CSS2__tables__fixed-table-layout-003e01.xht",
+    "CSS2__tables__fixed-table-layout-003e02.xht",
+    "CSS2__tables__fixed-table-layout-003e03.xht",
+    "CSS2__tables__fixed-table-layout-003e04.xht",
+    "CSS2__tables__fixed-table-layout-003e05.xht",
+    "CSS2__tables__fixed-table-layout-003e06.xht",
+    "CSS2__tables__fixed-table-layout-003e07.xht",
+    "CSS2__tables__fixed-table-layout-003e08.xht",
+    "CSS2__tables__fixed-table-layout-003e09.xht",
+    "CSS2__tables__fixed-table-layout-003e10.xht",
+    "CSS2__tables__fixed-table-layout-003e11.xht",
+    "CSS2__tables__fixed-table-layout-003e12.xht",
+    "CSS2__tables__fixed-table-layout-003f01.xht",
+    "CSS2__tables__fixed-table-layout-003f02.xht",
+    "CSS2__tables__fixed-table-layout-003f03.xht",
+    "CSS2__tables__fixed-table-layout-003f04.xht",
+    "CSS2__tables__fixed-table-layout-003f05.xht",
+    "CSS2__tables__fixed-table-layout-003f06.xht",
+    "CSS2__tables__fixed-table-layout-003f07.xht",
+    "CSS2__tables__fixed-table-layout-003f08.xht",
+    "CSS2__tables__fixed-table-layout-017.xht",
+    "CSS2__tables__fixed-table-layout-018.xht",
+    "CSS2__tables__fixed-table-layout-019.xht",
+    "CSS2__tables__fixed-table-layout-020.xht",
+    "css-tables__table-colspan-percent-auto.html"
+  ],
+  "losses": [
+    "CSS2__tables__fixed-table-layout-026.xht",
+    "css-tables__table-cell-overflow-auto.html"
+  ],
+  "actual_hash_changes": 43,
+  "reference_hash_changes": 4,
+  "before_projection_sha256": "3334e5f256cb3fb57714ab5090f3ba0f20c664228998e4c6f5dccf98bd1ed047",
+  "after_projection_sha256": "84d92b72e64491ab9fe215bfb787504565d989f6491c3a3660efdbec30fbe3de"
+}

@@ -1,0 +1,12 @@
+{
+  "base_commit": "19d856cc",
+  "note": "Windows loss probe archive captured before final computed-style test correction and inset subtraction in 012f017a; flex/grid repair code matches except deletion of unused helper. Not a final gate.",
+  "files_sha256": {
+    "Cargo.lock": "e1733674f089ba199e3bfe871da318aab05740aea2ac5d649548be4f0b6dae98",
+    "crates/amazing-layout/src/flex.rs": "014bb6844b56d16070410226bdec0356eb44842bd17081a29816ec4a8cf3b93b",
+    "crates/amazing-layout/src/grid.rs": "35fc1966a56e9af010f0b9125eccac5ec970c652b533f598b44e03121f25e384",
+    "crates/amazing-layout/src/grid_repeat.rs": "410480acc32666d45060c964896d2ea748de640756ede1b74f45b713b3260f8e",
+    "crates/amazing-layout/src/position.rs": "7c8a9370d36ee65f0e839c4257c2183bb1ff1bb070f861f4b5d26d5a15ba3711",
+    "crates/amazing-layout/src/contents_tests.rs": "67de2da9bef0f9f92f1b65a21260e22554d7a5e427356388d1ccae0633ebc6b4"
+  }
+}

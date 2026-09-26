@@ -1,0 +1,28 @@
+{
+  "before": "/home/user/amazing/out/layout/layout19/final-after/retained/report.json",
+  "after": "/home/user/amazing/out/layout/layout20/final-after/retained/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [],
+  "losses": [],
+  "actual_hash_changes": 7,
+  "reference_hash_changes": 8,
+  "before_projection_sha256": "b38e0eadfc9687defa61f8a47baaf0833190a8312e93294ff7e0245a3dbf1b9e",
+  "after_projection_sha256": "603d31bda095d0a8c74fb0726e359dedca08facd706f71ff2cedfae740622f51"
+}
