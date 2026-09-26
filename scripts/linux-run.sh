@@ -68,10 +68,10 @@ if [ -z "$HOST" ]; then
     # k-test (16) the DOM, HTML, net and platform lanes; worker-3 (4) ipc.
     case "$LANE" in
       js-lang|js-vm|js-binary|js-date|integrator-primary|t262-shard-*) HOST=venus-001 ;;
-      js-runtime|js-stdlib|js-intl|wasm|layout|layout-flexgrid|css|text|shell|replaced-content|compositor) HOST=venus-003 ;;
-      # worker-2 / k-test / worker-3 are provisioned but the Mac's uplink to them
-      # runs at ~10 KB/s, so a lane tree takes an hour to sync; use them with
-      # --host only once a server-side seed path exists.
+      js-runtime|js-stdlib|js-intl|wasm) HOST=venus-003 ;;
+      layout|layout-flexgrid|css|text|shell|replaced-content|compositor) HOST=worker-2 ;;
+      dom-bindings|html|net|storage|a11y|devtools|integrator-assist) HOST=k-test ;;
+      ipc) HOST=worker-3 ;;
       *) HOST=venus-001 ;;
     esac
     [ "$boat_lane" = 1 ] && [ ! -e "$MAIN/.agents/.boat-off" ] && echo "linux-run: Boat template missing, using $HOST" >&2
@@ -175,11 +175,26 @@ fi
 # cargo reused a stale binary after a --ref switch (JSRT-6's Test262 check ran
 # the 7c6824b host). --checksum rewrites only files whose content changed, and
 # a rewritten file gets the current time, so cargo always sees real changes.
-rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
-  -e "ssh -o ControlPath=none" "$SRC/" "$SSH:amazing/wt/$LANE/" || {
-  echo "linux-run: rsync to $HOST failed" >&2; exit 3; }
-# Lane trees may predate ensure-wpt.sh's git-less (tarball) path; use main's.
-scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$SSH:amazing/wt/$LANE/scripts/ensure-wpt.sh" 2>/dev/null
+#
+# The worker hosts (root@ logins) are reached from the Mac at ~10 KB/s, so their
+# trees are relayed: Mac -> venus-001 (fast) -> worker (venus-001's
+# ~/.ssh/amazing_relay key is authorized there; ~4.5 MB/s).
+EXCL=(--exclude .git --exclude /target --exclude /.agents --exclude /corpora --exclude /out --exclude .DS_Store)
+case "$SSH" in root@*) RELAY=venus-001 ;; *) RELAY="" ;; esac
+if [ -n "$RELAY" ]; then
+  ssh -o ControlPath=none "$RELAY" "mkdir -p amazing/relay/$LANE" &&
+  rsync -rlpDz --checksum --delete "${EXCL[@]}" -e "ssh -o ControlPath=none" "$SRC/" "$RELAY:amazing/relay/$LANE/" &&
+  scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$RELAY:amazing/relay/$LANE/scripts/ensure-wpt.sh" &&
+  ssh -o ControlPath=none "$RELAY" "rsync -rlpDz --checksum --delete ${EXCL[*]} \
+    -e 'ssh -i ~/.ssh/amazing_relay -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
+    amazing/relay/$LANE/ $SSH:amazing/wt/$LANE/" || {
+    echo "linux-run: relay sync to $HOST via $RELAY failed" >&2; exit 3; }
+else
+  rsync -rlpDz --checksum --delete "${EXCL[@]}" -e "ssh -o ControlPath=none" "$SRC/" "$SSH:amazing/wt/$LANE/" || {
+    echo "linux-run: rsync to $HOST failed" >&2; exit 3; }
+  # Lane trees may predate ensure-wpt.sh's git-less (tarball) path; use main's.
+  scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$SSH:amazing/wt/$LANE/scripts/ensure-wpt.sh" 2>/dev/null
+fi
 
 REMOTE=". ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
