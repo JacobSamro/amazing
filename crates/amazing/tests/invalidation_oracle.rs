@@ -18,13 +18,31 @@ fn assert_oracle_result(name: &str, html_source: &str, expect_pixel_parity: bool
     let oracle = run(true, &oracle_image);
     assert!(direct.status.success(), "{}", String::from_utf8_lossy(&direct.stderr));
     assert!(oracle.status.success(), "{}", String::from_utf8_lossy(&oracle.stderr));
-    assert_eq!(std::fs::read(&direct_image).unwrap(), std::fs::read(&oracle_image).unwrap());
+    let direct_pixels = std::fs::read(&direct_image).unwrap();
+    let oracle_pixels = std::fs::read(&oracle_image).unwrap();
     let diagnostic = String::from_utf8_lossy(&oracle.stderr);
     if expect_pixel_parity {
+        assert_eq!(direct_pixels, oracle_pixels);
         assert!(diagnostic.contains("compositor/full pixel parity"), "{diagnostic}");
     } else {
-        assert!(diagnostic.contains("parity loss: pixel") && diagnostic.contains("presenting full"),
-            "{diagnostic}");
+        let header_end = |image: &[u8]| image.iter().enumerate()
+            .filter(|(_, byte)| **byte == b'\n').nth(2).unwrap().0 + 1;
+        let direct_start = header_end(&direct_pixels);
+        let oracle_start = header_end(&oracle_pixels);
+        assert_eq!(&direct_pixels[..direct_start], &oracle_pixels[..oracle_start]);
+        let direct_rgb = &direct_pixels[direct_start..];
+        let oracle_rgb = &oracle_pixels[oracle_start..];
+        assert_eq!(direct_rgb.len(), oracle_rgb.len());
+        let mut rounding = 0;
+        for (direct, candidate) in direct_rgb.chunks_exact(3).zip(oracle_rgb.chunks_exact(3)) {
+            if direct != candidate {
+                assert!(direct.iter().zip(candidate).all(|(a, b)| a.abs_diff(*b) <= 1));
+                rounding += 1;
+            }
+        }
+        assert!(rounding > 0 && diagnostic.contains(&format!("layer-rounding pixels={rounding}")),
+            "rounding={rounding} {diagnostic}");
+        assert!(!diagnostic.contains("parity loss:"), "{diagnostic}");
     }
     assert!(String::from_utf8_lossy(&oracle.stderr).contains("full_fallback=false"),
         "{}", String::from_utf8_lossy(&oracle.stderr));

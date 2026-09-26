@@ -296,15 +296,40 @@ const NAMED: &[(&str, [u8; 4])] = &[
 ];
 
 fn lookup_named(lower: &str) -> Option<[u8; 4]> {
-    // Deterministic platform palette for the currently supported system
-    // colors. Deprecated aliases share the corresponding modern role.
-    match lower {
-        "buttonface" | "threedface" => return Some([240, 240, 240, 255]),
-        "buttonborder" | "inactiveborder" | "threedlightshadow" => return Some([128, 128, 128, 255]),
-        "canvastext" | "infotext" => return Some([0, 0, 0, 255]),
-        _ => {},
-    }
-    NAMED.iter().find(|(n, _)| *n == lower).map(|(_, c)| *c)
+    lookup_system(lower).or_else(|| NAMED.iter().find(|(n, _)| *n == lower).map(|(_, c)| *c))
+}
+
+pub(crate) fn parse_system_color(value: &str) -> Option<[u8; 4]> {
+    lookup_system(&value.trim().to_ascii_lowercase())
+}
+
+fn lookup_system(lower: &str) -> Option<[u8; 4]> {
+    // Fixed palette for system roles. CSS Color 4 Appendix A requires each
+    // deprecated keyword to resolve through the corresponding modern role.
+    let role = match lower {
+        "activeborder" | "inactiveborder" | "threeddarkshadow" | "threedhighlight"
+        | "threedlightshadow" | "threedshadow" | "windowframe" => "buttonborder",
+        "activecaption" | "appworkspace" | "background" | "inactivecaption"
+        | "infobackground" | "menu" | "scrollbar" | "window" => "canvas",
+        "buttonhighlight" | "buttonshadow" | "threedface" => "buttonface",
+        "captiontext" | "infotext" | "menutext" | "windowtext" => "canvastext",
+        "inactivecaptiontext" => "graytext",
+        _ => lower,
+    };
+    let system = match role {
+        "canvas" | "field" => Some([255, 255, 255, 255]),
+        "canvastext" | "fieldtext" | "buttontext" | "marktext" => Some([0, 0, 0, 255]),
+        "buttonface" => Some([240, 240, 240, 255]),
+        "buttonborder" | "graytext" => Some([128, 128, 128, 255]),
+        "highlight" | "selecteditem" | "accentcolor" => Some([0, 120, 215, 255]),
+        "highlighttext" | "selecteditemtext" | "accentcolortext" => Some([255, 255, 255, 255]),
+        "linktext" => Some([0, 0, 238, 255]),
+        "visitedtext" => Some([85, 26, 139, 255]),
+        "activetext" => Some([255, 0, 0, 255]),
+        "mark" => Some([255, 255, 0, 255]),
+        _ => None,
+    };
+    system
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +339,41 @@ fn lookup_named(lower: &str) -> Option<[u8; 4]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deprecated_system_colors_resolve_to_modern_roles() {
+        for (alias, modern) in [
+            ("ActiveBorder", "ButtonBorder"), ("ActiveCaption", "Canvas"),
+            ("AppWorkspace", "Canvas"), ("Background", "Canvas"),
+            ("ButtonHighlight", "ButtonFace"), ("ButtonShadow", "ButtonFace"),
+            ("CaptionText", "CanvasText"), ("InactiveBorder", "ButtonBorder"),
+            ("InactiveCaption", "Canvas"), ("InactiveCaptionText", "GrayText"),
+            ("InfoBackground", "Canvas"), ("InfoText", "CanvasText"),
+            ("Menu", "Canvas"), ("MenuText", "CanvasText"),
+            ("Scrollbar", "Canvas"), ("ThreeDDarkShadow", "ButtonBorder"),
+            ("ThreeDFace", "ButtonFace"), ("ThreeDHighlight", "ButtonBorder"),
+            ("ThreeDLightShadow", "ButtonBorder"), ("ThreeDShadow", "ButtonBorder"),
+            ("Window", "Canvas"), ("WindowFrame", "ButtonBorder"),
+            ("WindowText", "CanvasText"),
+        ] {
+            assert_eq!(parse_css_color(alias), parse_css_color(modern), "{alias}");
+        }
+    }
+
+    #[test]
+    fn lab_and_oklab_lightness_endpoints_gamut_map_to_black_and_white() {
+        for css in ["lab(100% 100 -100)", "lch(100% 110 60)",
+            "oklab(100% .4 -.4)", "oklch(100% 110 60)"] {
+            assert_eq!(parse_css_color(css), Some([255, 255, 255, 255]), "{css}");
+        }
+        for css in ["lab(0% 100 -100)", "lch(0% 110 60)",
+            "oklab(0% .4 -.4)", "oklch(0% 110 60)"] {
+            assert_eq!(parse_css_color(css), Some([0, 0, 0, 255]), "{css}");
+        }
+        for css in ["oklab(0.0001% 0.15 0.15)", "oklch(0.0001% 0.2 45)"] {
+            assert_eq!(parse_css_color(css), Some([0, 0, 0, 255]), "{css}");
+        }
+    }
 
     #[test]
     fn hex_three_digit_expands_by_doubling() {

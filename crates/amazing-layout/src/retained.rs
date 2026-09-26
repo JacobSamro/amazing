@@ -69,6 +69,21 @@ pub struct GeometryDelta {
     pub changed: Vec<GeometryChange>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BoxRef {
+    pub key: BoxKey,
+    pub ordinal: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LayoutDamage {
+    pub box_ref: BoxRef,
+    pub before: Option<BoxGeometry>,
+    pub after: Option<BoxGeometry>,
+    /// The union of old and new visual overflow, including moved fragments.
+    pub rect: Rect,
+}
+
 #[derive(Debug, Default)]
 pub struct InputChanges {
     pub text: Vec<NodeIdx>,
@@ -82,7 +97,9 @@ pub struct LayoutTree {
     root: LayoutBox,
     styles: StyledDom,
     generations: BTreeMap<NodeIdx, u64>,
+    geometry: BTreeMap<BoxKey, Vec<BoxGeometry>>,
     dirty: BTreeMap<BoxKey, DirtySeverity>,
+    damage: Vec<LayoutDamage>,
     viewport: (f32, Option<f32>),
 }
 
@@ -103,11 +120,15 @@ impl LayoutTree {
             viewport_width,
             viewport_height,
         );
+        let generations = generations(dom);
+        let geometry = collect_geometry(&root, &generations);
         Self {
             root,
             styles,
-            generations: generations(dom),
+            generations,
+            geometry,
             dirty: BTreeMap::new(),
+            damage: Vec::new(),
             viewport: (viewport_width, viewport_height),
         }
     }
@@ -123,6 +144,23 @@ impl LayoutTree {
     /// Dirty bits from the most recent update, keyed by DOM slot generation.
     pub fn dirty_boxes(&self) -> &BTreeMap<BoxKey, DirtySeverity> {
         &self.dirty
+    }
+
+    /// Borrow the last update's bounded paint damage. Each entry owns both
+    /// geometries; `box_ref` resolves into this tree's current root when
+    /// `after` is present, or removes the old paint item otherwise.
+    pub fn damage(&self) -> &[LayoutDamage] {
+        &self.damage
+    }
+
+    /// Resolve an affected box in the current tree. A removed box has no
+    /// current reference; its damage entry still owns its previous geometry.
+    pub fn box_for_ref(&self, reference: BoxRef) -> Option<&LayoutBox> {
+        if self.generations.get(&reference.key.node) != Some(&reference.key.generation) {
+            return None;
+        }
+        let mut ordinal = 0;
+        find_box_ref(&self.root, reference, &mut ordinal)
     }
 
     pub fn update(
@@ -147,13 +185,14 @@ impl LayoutTree {
         {
             self.styles = style_delta.styles;
             self.dirty.clear();
+            self.damage.clear();
             return GeometryDelta {
                 outcome: UpdateOutcome::Retained,
                 dirty: Vec::new(),
                 changed: Vec::new(),
             };
         }
-        let old_geometry = collect_geometry(&self.root, &self.generations);
+        let old_geometry = self.geometry.clone();
         let mut dirty = BTreeMap::<NodeIdx, DirtySeverity>::new();
         for (&node, properties) in &style_delta.changed {
             let severity = properties
@@ -179,6 +218,12 @@ impl LayoutTree {
             && style_delta.changed.values().all(|properties| {
                 !properties.is_empty() && properties.iter().all(|name| name == "opacity")
             });
+        let retained_relayout = !style_delta.full_rebuild
+            && reused_generation
+            && same_viewport
+            && inputs.text.is_empty()
+            && inputs.replaced.is_empty()
+            && try_relayout_contained(&mut self.root, dom, &self.styles, &style_delta, text);
         let mut reason = if style_delta.full_rebuild {
             Some("style requested a full rebuild")
         } else if !reused_generation {
@@ -187,12 +232,12 @@ impl LayoutTree {
             Some("viewport changed")
         } else if !inputs.text.is_empty() || !inputs.replaced.is_empty() {
             Some("text or replaced intrinsic input changed")
-        } else if !only_opacity && !style_delta.changed.is_empty() {
+        } else if !only_opacity && !retained_relayout && !style_delta.changed.is_empty() {
             Some("layout or box style changed")
         } else {
             None
         };
-        if reason.is_none() {
+        if reason.is_none() && !retained_relayout {
             for &node in style_delta.changed.keys() {
                 let Some(style) = style_delta.styles.get(node) else {
                     reason = Some("changed style has no live box");
@@ -217,6 +262,7 @@ impl LayoutTree {
             self.generations = next_generations;
             self.viewport = (viewport_width, viewport_height);
             let new_geometry = collect_geometry(&self.root, &self.generations);
+            self.geometry = new_geometry.clone();
             let boundaries = stable_containment_boundaries(
                 dom,
                 &self.styles,
@@ -239,6 +285,7 @@ impl LayoutTree {
             }
             let dirty = dirty_boxes(dom, dirty);
             self.dirty = dirty_keys(&dirty, &new_geometry);
+            self.damage = collect_damage(&old_geometry, &new_geometry, &self.dirty);
             return GeometryDelta {
                 outcome: UpdateOutcome::RequiresFullRebuild(reason),
                 dirty,
@@ -268,14 +315,102 @@ impl LayoutTree {
             }
         }
         let new_geometry = collect_geometry(&self.root, &self.generations);
+        self.geometry = new_geometry.clone();
         let dirty = dirty_boxes(dom, dirty);
         self.dirty = dirty_keys(&dirty, &new_geometry);
+        self.damage = collect_damage(&old_geometry, &new_geometry, &self.dirty);
         GeometryDelta {
             outcome,
             dirty,
             changed: compare_geometry(old_geometry, new_geometry),
         }
     }
+}
+
+fn find_box_ref<'a>(box_: &'a LayoutBox, reference: BoxRef, ordinal: &mut usize) -> Option<&'a LayoutBox> {
+    for child in &box_.positioned {
+        if let Some(found) = find_box_ref(child, reference, ordinal) { return Some(found); }
+    }
+    if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &box_.flow {
+        for child in children {
+            if let Some(found) = find_box_ref(child, reference, ordinal) { return Some(found); }
+        }
+    }
+    if box_.node == Some(reference.key.node)
+        && box_.source_order == reference.key.source_order
+        && (box_.generated_pseudo.is_none() == reference.key.principal)
+    {
+        if *ordinal == reference.ordinal { return Some(box_); }
+        *ordinal += 1;
+    }
+    None
+}
+
+/// The narrow fast path relayouts one existing block formatting context. Its
+/// border and margins must stay fixed, so siblings and ancestors keep their
+/// placement. All other dependencies use the explicit full-layout path.
+fn try_relayout_contained(
+    root: &mut LayoutBox,
+    dom: &Dom,
+    old_styles: &StyledDom,
+    delta: &StyleDelta,
+    text: &dyn TextSystem,
+) -> bool {
+    let Some((&changed, properties)) = delta.changed.iter().next() else { return false };
+    if delta.changed.len() != 1 || properties.is_empty() || !properties.iter().all(|property| {
+        matches!(property.as_str(), "width" | "height" | "min-width" | "max-width"
+            | "min-height" | "max-height" | "padding-top" | "padding-right"
+            | "padding-bottom" | "padding-left" | "margin-top" | "margin-right"
+            | "margin-bottom" | "margin-left")
+    }) { return false; }
+    let mut ancestor = Some(changed);
+    let mut boundary = None;
+    while let Some(node) = ancestor {
+        let contained = |styles: &StyledDom| styles.get(node)
+            .and_then(|style| style.get("contain"))
+            .is_some_and(|value| value.split_whitespace()
+                .any(|token| matches!(token, "layout" | "content" | "strict")));
+        if contained(old_styles) && contained(&delta.styles) {
+            boundary = Some(node);
+            break;
+        }
+        ancestor = dom.get(node).parent;
+    }
+    let Some(boundary) = boundary else { return false };
+    fn relayout(
+        box_: &mut LayoutBox, boundary: NodeIdx, changed: NodeIdx,
+        styles: &StyledDom, text: &dyn TextSystem, parent_width: Option<f32>,
+    ) -> Option<bool> {
+        if box_.node == Some(boundary) && box_.generated_pseudo.is_none() {
+            let width = parent_width?;
+            if box_.display != crate::Display::Block || box_.style.get("display") != Some("flow-root")
+                || box_.table_wrapper
+                || !box_.positioned.is_empty() || box_.style.get("float").is_some_and(|v| v != "none")
+            { return Some(false); }
+            let old_border = box_.border_box;
+            let old_margin = box_.margin;
+            if !replace_box_style(box_, changed, styles.get(changed)?) { return Some(false); }
+            let x = old_border.x - old_margin.left.unwrap_or(0.0);
+            let y = old_border.y - old_margin.top.unwrap_or(0.0);
+            crate::block::layout_block_with_text(
+                box_, x, y, width, &crate::font::FontSource::fallback(), text,
+            );
+            let margin = box_.margin;
+            return Some(box_.border_box == old_border
+                && (margin.top, margin.right, margin.bottom, margin.left)
+                    == (old_margin.top, old_margin.right, old_margin.bottom, old_margin.left));
+        }
+        let width = box_.content_box.w;
+        if let Flow::Blocks(children) = &mut box_.flow {
+            for child in children {
+                if let Some(result) = relayout(child, boundary, changed, styles, text, Some(width)) {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+    relayout(root, boundary, changed, &delta.styles, text, None).unwrap_or(false)
 }
 
 fn classify_property(name: &str) -> DirtySeverity {
@@ -544,6 +679,32 @@ fn compare_geometry(
     changes
 }
 
+fn collect_damage(
+    old: &BTreeMap<BoxKey, Vec<BoxGeometry>>,
+    new: &BTreeMap<BoxKey, Vec<BoxGeometry>>,
+    dirty: &BTreeMap<BoxKey, DirtySeverity>,
+) -> Vec<LayoutDamage> {
+    let keys: BTreeSet<_> = old.keys().chain(new.keys()).chain(dirty.keys()).copied().collect();
+    let mut damage = Vec::new();
+    for key in keys {
+        let before = old.get(&key);
+        let after = new.get(&key);
+        for ordinal in 0..before.map_or(0, Vec::len).max(after.map_or(0, Vec::len)) {
+            let before = before.and_then(|items| items.get(ordinal)).copied();
+            let after = after.and_then(|items| items.get(ordinal)).copied();
+            if before == after && !dirty.contains_key(&key) { continue; }
+            let rect = match (before, after) {
+                (Some(a), Some(b)) => union(a.overflow, b.overflow),
+                (Some(a), None) => a.overflow,
+                (None, Some(b)) => b.overflow,
+                (None, None) => continue,
+            };
+            damage.push(LayoutDamage { box_ref: BoxRef { key, ordinal }, before, after, rect });
+        }
+    }
+    damage
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -606,6 +767,61 @@ mod tests {
             .any(|(key, severity)| key.node == node
                 && key.generation == dom.node_generation(node).unwrap()
                 && *severity == DirtySeverity::Repaint));
+        assert!(tree.damage().iter().any(|damage| damage.box_ref.key.node == node
+            && damage.box_ref.key.generation == dom.node_generation(node).unwrap()
+            && damage.before == damage.after));
+    }
+
+    #[test]
+    fn contained_block_relayouts_child_and_owns_before_after_damage() {
+        let dom = amazing_html::parse("<body><section><div>x</div></section><p>after</p></body>");
+        let section = node_named(&dom, "section");
+        let child = node_named(&dom, "div");
+        let text = FallbackTextSystem::new();
+        let before = "body{margin:0}section{display:flow-root;contain:layout;width:100px;height:80px}section>div{width:20px;height:20px}";
+        let after = "body{margin:0}section{display:flow-root;contain:layout;width:100px;height:80px}section>div{width:40px;height:20px}";
+        let mut tree = LayoutTree::new(&dom, styled(&dom, before), &text, &NoReplacedElements, 200.0, None);
+        let old_section = collect_geometry(tree.root(), &generations(&dom)).into_iter()
+            .find(|(key, _)| key.node == section && key.principal).unwrap().1[0].border;
+        let result = tree.update(&dom, delta(styled(&dom, after), child, "width"),
+            &InputChanges::default(), &text, &NoReplacedElements, 200.0, None);
+        assert_eq!(result.outcome, UpdateOutcome::Retained);
+        assert!(result.changed.iter().any(|change| change.key.node == child));
+        let new_section = collect_geometry(tree.root(), &generations(&dom)).into_iter()
+            .find(|(key, _)| key.node == section && key.principal).unwrap().1[0].border;
+        assert_eq!(old_section, new_section);
+        let damage = tree.damage().iter().find(|damage| damage.box_ref.key.node == child).unwrap();
+        assert_eq!(damage.box_ref.key.generation, dom.node_generation(child).unwrap());
+        assert_ne!(damage.before, damage.after);
+        assert_eq!(tree.box_for_ref(damage.box_ref).unwrap().node, Some(child));
+    }
+
+    /// Run explicitly on a build host to track ADR 0010's 20 ms p95 target.
+    #[test]
+    #[ignore]
+    fn contained_relayout_p95_500_siblings() {
+        let mut html = String::from("<body><section><div>x</div></section>");
+        for _ in 0..500 { html.push_str("<p>stable</p>"); }
+        html.push_str("</body>");
+        let dom = amazing_html::parse(&html);
+        let child = node_named(&dom, "div");
+        let text = FallbackTextSystem::new();
+        let base = "body{margin:0}section{display:flow-root;contain:layout;width:100px;height:80px}";
+        let narrow = styled(&dom, &format!("{base}section>div{{width:20px;height:20px}}"));
+        let wide = styled(&dom, &format!("{base}section>div{{width:40px;height:20px}}"));
+        let mut tree = LayoutTree::new(&dom, narrow.clone(), &text, &NoReplacedElements, 800.0, None);
+        let mut times = Vec::new();
+        for index in 0..40 {
+            let next = if index % 2 == 0 { wide.clone() } else { narrow.clone() };
+            let start = std::time::Instant::now();
+            let result = tree.update(&dom, delta(next, child, "width"),
+                &InputChanges::default(), &text, &NoReplacedElements, 800.0, None);
+            assert_eq!(result.outcome, UpdateOutcome::Retained);
+            times.push(start.elapsed());
+        }
+        times.sort_unstable();
+        let p95 = times[37];
+        eprintln!("LAYOUT-17 contained relayout 500 siblings p95={:.3}ms", p95.as_secs_f64() * 1000.0);
     }
 
     #[test]
@@ -863,5 +1079,10 @@ mod generation_tests {
         assert!(collect_geometry(tree.root(), &generations(&dom))
             .keys()
             .any(|key| key.node == inserted));
+        let added = tree.damage().iter().find(|entry| entry.box_ref.key.node == inserted).unwrap();
+        assert_eq!(added.box_ref.key.generation, dom.node_generation(inserted).unwrap());
+        assert!(added.before.is_none());
+        assert!(added.after.is_some());
+        assert_eq!(tree.box_for_ref(added.box_ref).unwrap().node, Some(inserted));
     }
 }

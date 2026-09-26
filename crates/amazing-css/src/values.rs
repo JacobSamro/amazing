@@ -31,6 +31,18 @@ pub enum RelativeUnit {
     Vh,
     Vmin,
     Vmax,
+    Svw,
+    Svh,
+    Svmin,
+    Svmax,
+    Lvw,
+    Lvh,
+    Lvmin,
+    Lvmax,
+    Dvw,
+    Dvh,
+    Dvmin,
+    Dvmax,
 }
 
 impl LengthPercentage {
@@ -64,6 +76,18 @@ impl LengthPercentage {
                     "vh" => return Some(Self::Relative(*n, RelativeUnit::Vh)),
                     "vmin" => return Some(Self::Relative(*n, RelativeUnit::Vmin)),
                     "vmax" => return Some(Self::Relative(*n, RelativeUnit::Vmax)),
+                    "svw" => return Some(Self::Relative(*n, RelativeUnit::Svw)),
+                    "svh" => return Some(Self::Relative(*n, RelativeUnit::Svh)),
+                    "svmin" => return Some(Self::Relative(*n, RelativeUnit::Svmin)),
+                    "svmax" => return Some(Self::Relative(*n, RelativeUnit::Svmax)),
+                    "lvw" => return Some(Self::Relative(*n, RelativeUnit::Lvw)),
+                    "lvh" => return Some(Self::Relative(*n, RelativeUnit::Lvh)),
+                    "lvmin" => return Some(Self::Relative(*n, RelativeUnit::Lvmin)),
+                    "lvmax" => return Some(Self::Relative(*n, RelativeUnit::Lvmax)),
+                    "dvw" => return Some(Self::Relative(*n, RelativeUnit::Dvw)),
+                    "dvh" => return Some(Self::Relative(*n, RelativeUnit::Dvh)),
+                    "dvmin" => return Some(Self::Relative(*n, RelativeUnit::Dvmin)),
+                    "dvmax" => return Some(Self::Relative(*n, RelativeUnit::Dvmax)),
                     _ => return None,
                 };
                 let px = n * scale;
