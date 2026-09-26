@@ -3,6 +3,22 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_frozen_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+        let array = self.js.binding_create_array(values)?;
+        let JsValue::Object(object) = &array else { unreachable!() };
+        {
+            let mut object = object.borrow_mut();
+            for key in object.own_property_keys() {
+                let mut property = object.own_prop(key.clone()).unwrap().clone();
+                property.configurable = false;
+                if property.getter.is_none() && property.setter.is_none() { property.writable = false; }
+                object.define(key, property).map_err(|_| Throw::type_error("Cannot freeze message ports"))?;
+            }
+            object.extensible = false;
+        }
+        Ok(array)
+    }
+
     pub(super) fn install_dom_unscopables(&mut self) -> Result<(), Throw> {
         for interface in [Interface::Document, Interface::DocumentFragment, Interface::Element,
             Interface::CharacterData, Interface::DocumentType] {
@@ -44,6 +60,7 @@ impl RuntimeBindingHost<'_> {
             EventClass::Wheel => Interface::WheelEvent,
             EventClass::Keyboard => Interface::KeyboardEvent,
             EventClass::Composition => Interface::CompositionEvent,
+            EventClass::Message => Interface::MessageEvent,
         })
     }
 
@@ -58,5 +75,41 @@ impl RuntimeBindingHost<'_> {
         let prototype = self.prototype(Interface::EventTarget)
             .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
         self.js.binding_set_global_prototype(&prototype)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_message_event_preserves_identity_and_freezes_ports_without_user_code() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        // IPC's temporary global installer is adopted separately by its owner.
+        // Exercise the real registered binding constructor and host adapter here.
+        let mut adapter = RuntimeBindingHost { js: &mut js, state: bindings.state.clone() };
+        let prototype = adapter.prototype(Interface::MessageEvent).unwrap();
+        let constructor = adapter.get_property(&prototype, "constructor").unwrap();
+        let global = adapter.js.binding_global_object();
+        adapter.define_data_property(&global, "NativeMessageEvent", constructor, true, false, true).unwrap();
+        let result = js.run_script(r#"
+            Object.freeze = function() { throw new Error('must not call user freeze'); };
+            const legacy = document.createEvent('MessageEvent');
+            let nullPortsTypeError = false;
+            try { legacy.initMessageEvent('message', false, false, null, '', '', null, null); }
+            catch (e) { nullPortsTypeError = e instanceof TypeError; }
+            const payload = {};
+            const event = new NativeMessageEvent('message', {data: payload, source: window});
+            let rejected = false;
+            try { event.ports.push(1); } catch (e) { rejected = true; }
+            event instanceof Event && event instanceof NativeMessageEvent &&
+                NativeMessageEvent.length === 1 && event.data === payload &&
+                event.source === window && event.ports === event.ports &&
+                Object.isFrozen(event.ports) && event.ports.length === 0 && rejected && nullPortsTypeError;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
     }
 }
