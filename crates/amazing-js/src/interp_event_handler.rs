@@ -61,8 +61,9 @@ impl Interpreter {
             }
             current = parent;
         }
-        if self.global_obj.borrow().has_property(name) {
-            Ok(Some(Reference::Property(JsValue::Object(self.global_obj.clone()), name.into())))
+        let global = env.realm_global_object().unwrap_or_else(|| self.global_obj.clone());
+        if global.borrow().has_property(name) {
+            Ok(Some(Reference::Property(JsValue::Object(global.clone()), name.into())))
         } else { Ok(None) }
     }
 
@@ -73,13 +74,21 @@ impl Interpreter {
 
     pub(super) fn name_reference_value(&mut self, env: &EnvHandle, name: &str) -> Result<(Reference, JsValue), Throw> {
         let reference = self.name_reference(env, name)?;
-        let value = match &reference {
-            Reference::Binding(name) => {
-                if env.is_uninitialized(name) {
-                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
-                }
-                env.resolve(name).unwrap_or(JsValue::Undefined)
+        // A global binding backed by the realm's global object may be an
+        // accessor; go through get_prop/set_prop rather than the raw cell so
+        // getters/setters on window-mirrored bindings run (§9.1.1.4.15).
+        if let Reference::Binding(name) = &reference {
+            if env.is_uninitialized(name) {
+                return Err(Throw::reference_error(format!("{name} is uninitialized")));
             }
+            if let Some(global) = env.global_binding_object(name) {
+                let global = JsValue::Object(global);
+                let value = self.get_prop(&global, name)?;
+                return Ok((Reference::Property(global, name.clone().into()), value));
+            }
+        }
+        let value = match &reference {
+            Reference::Binding(name) => env.resolve(name).unwrap_or(JsValue::Undefined),
             Reference::Property(base, key) => self.get_prop(base, key)?,
             Reference::Private(_, _) => unreachable!("identifier reference"),
         };

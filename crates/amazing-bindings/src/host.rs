@@ -14,6 +14,16 @@ pub struct ImageLoaderState {
     pub natural_height: u32,
 }
 
+#[derive(Clone, Debug)]
+pub struct FormNavigationRequest {
+    pub url: String,
+    pub method: String,
+    pub enctype: String,
+    pub target: String,
+    pub body: Vec<u8>,
+    pub content_type: Option<String>,
+}
+
 /// Result of an optional installation capability. `NotSupported` leaves the
 /// rest of the interface usable and is recorded by the installer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,7 +82,8 @@ impl InterfaceBrand {
     pub const LOCATION: Self = Self(34);
     pub const DOM_STRING_LIST: Self = Self(35);
     pub const SELECTION: Self = Self(36);
-    pub const DOM_STRING_MAP: Self = Self(37);
+    pub const SELECTED_OPTIONS: Self = Self(37);
+    pub const DOM_STRING_MAP: Self = Self(38);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -242,18 +253,25 @@ pub enum Operation {
     LocationSearch, LocationSetSearch, LocationHash, LocationSetHash,
     LocationAssign, LocationReplace, LocationReload, LocationAncestorOrigins,
     LocationToString, DOMStringListLength, DOMStringListItem, DOMStringListContains,
-    FormElements, FormLength, FormReset, FormCheckValidity, FormReportValidity,
+    FormElements, FormLength, FormReset, FormSubmit, FormRequestSubmit,
+    FormCheckValidity, FormReportValidity,
+    FormAutocompleteGet, FormAutocompleteSet, FormDataFormConstructor,
     FormControlForm, FormControlName, FormControlSetName,
     InputValue, InputSetValue, InputDefaultValue, InputSetDefaultValue,
     InputChecked, InputSetChecked, InputDefaultChecked, InputSetDefaultChecked,
     InputValueAsNumber, InputSetValueAsNumber, InputValueAsDate, InputSetValueAsDate,
-    InputSelect, InputSetSelectionRange, InputSelectionStart, InputSetSelectionStart,
+    InputStepUp, InputStepDown,
+    InputSelect, InputSetSelectionRange, InputSetRangeText, InputSelectionStart, InputSetSelectionStart,
     InputSelectionEnd, InputSetSelectionEnd, InputSelectionDirection, InputSetSelectionDirection,
     TextAreaValue, TextAreaSetValue, TextAreaDefaultValue, TextAreaSetDefaultValue,
     SelectValue, SelectSetValue, SelectSelectedIndex, SelectSetSelectedIndex,
     SelectOptions, SelectLength, SelectMultiple, SelectSetMultiple, SelectAdd, SelectRemove,
     OptionValue, OptionSetValue, OptionSelected, OptionSetSelected,
+    SelectItem, SelectNamedItem, SelectSetLength, SelectSelectedOptions,
+    SelectedOptionsIndexedGetter, SelectedOptionsSupportedIndexCount,
+    SelectedOptionsNamedGetter,
     OptionDefaultSelected, OptionSetDefaultSelected, OptionText, OptionSetText,
+    OptionIndex,
     ButtonType, ButtonSetType,
     ControlWillValidate, ControlValidity, ControlValidationMessage,
     ControlCheckValidity, ControlReportValidity, ControlSetCustomValidity,
@@ -271,6 +289,11 @@ pub enum Operation {
     ElementGetHTML, ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
     ElementRel, ElementSetRel, ElementRelList, ElementSetRelList,
     OutputHtmlFor, OutputSetHtmlFor, IFrameSandbox, IFrameSetSandbox,
+    OutputValue, OutputSetValue, OutputDefaultValue, OutputSetDefaultValue,
+    LabelControl, LabelForm,
+    ProgressValue, ProgressSetValue, ProgressMax, ProgressSetMax, ProgressPosition,
+    MeterValue, MeterSetValue, MeterMin, MeterSetMin, MeterMax, MeterSetMax,
+    MeterLow, MeterSetLow, MeterHigh, MeterSetHigh, MeterOptimum, MeterSetOptimum,
     LinkSizes, LinkSetSizes, ElementDownload, ElementSetDownload,
     ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
     ImageHeight, ImageSetHeight, ImageLoading, ImageSetLoading,
@@ -1016,6 +1039,15 @@ pub trait BindingHost: Sized {
     }
     fn location_reload(&mut self) -> Result<(), Self::Error> {
         self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Queue a user-interaction task after a text control's selection changes.
+    fn form_selection_changed(&mut self, _node: NodeIdx) -> Result<(), Self::Error> { Ok(()) }
+    fn form_submit_event(&mut self, _form: NodeIdx, _submitter: Option<NodeIdx>)
+        -> Result<bool, Self::Error> { Ok(true) }
+    fn form_data_event(&mut self, _form: NodeIdx, data: amazing_fetch::api::FormData)
+        -> Result<amazing_fetch::api::FormData, Self::Error> { Ok(data) }
+    fn form_navigate(&mut self, request: FormNavigationRequest) -> Result<(), Self::Error> {
+        self.location_navigate(&request.url, false)
     }
     fn location_ancestor_origins(&mut self) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))

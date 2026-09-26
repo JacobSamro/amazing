@@ -16,6 +16,21 @@ pub fn document_with_css(html: &str, css: &str) -> AxDocument {
     build_document(html, css, 800.0, Some(600.0))
 }
 
+/// Builds the full pipeline with the first element of `focus_tag` focused.
+pub fn document_with_focus(html: &str, focus_tag: &str) -> AxDocument {
+    let mut doc = build_document(html, "", 800.0, Some(600.0));
+    let target = doc
+        .dom
+        .tree_order(NodeIdx(0))
+        .into_iter()
+        .find(|node| doc.dom.name(*node) == Some(focus_tag));
+    if let Some(node) = target {
+        doc.dom.set_active_element(NodeIdx(0), Some(node), true);
+        doc.tree = crate::build(&doc.dom, &doc.styled, &doc.layout);
+    }
+    doc
+}
+
 /// The first DOM node with the given tag name.
 pub fn dom_of_tag(doc: &AxDocument, tag: &str) -> Option<NodeIdx> {
     doc.dom

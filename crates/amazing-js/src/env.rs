@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::value::{JsValue, Obj, Throw};
+use crate::value::{JsValue, Obj, Property, Throw};
 
 /// Shared handle to one environment frame. The only way code outside this
 /// module touches an environment.
@@ -110,6 +110,8 @@ pub enum EnvKind {
 }
 
 pub struct Env {
+    realm: Option<u64>,
+    global_object: Option<Obj>,
     pub kind: EnvKind,
     pub parent: Option<EnvHandle>,
     /// Per-binding cells: assignment mutates through `&self` without
@@ -155,6 +157,21 @@ impl Env {
             }
             _ => {}
         }
+        if !lexical && self.kind == EnvKind::Global {
+            if let Some(object) = &self.global_object {
+                let mut object = object.borrow_mut();
+                if let Some(mut property) = object.own_prop(name).cloned() {
+                    if property.writable && property.getter.is_none() && property.setter.is_none() {
+                        property.value = value.clone();
+                        let _ = object.define(name, property);
+                    }
+                } else {
+                    let mut property = Property::data(value.clone());
+                    property.configurable = false;
+                    let _ = object.define(name, property);
+                }
+            }
+        }
         self.vars.insert(
             name.to_string(),
             BindingCell(Rc::new(RefCell::new(Binding {
@@ -171,6 +188,11 @@ impl Env {
     /// §9.1.2 GetIdentifierReference: walk the chain; None = unresolvable.
     fn resolve_raw(&self, name: &str) -> Option<JsValue> {
         if let Some(b) = self.vars.get(name) {
+            if self.kind == EnvKind::Global && !b.0.borrow().lexical {
+                if let Some(object) = &self.global_object {
+                    return object.borrow().get_own(name);
+                }
+            }
             return b.read().ok();
         }
         let p = self.parent.as_ref()?;
@@ -193,6 +215,17 @@ impl Env {
                 return Err(Throw::type_error(format!(
                     "assignment to constant variable '{name}'"
                 )));
+            }
+            if self.kind == EnvKind::Global && !b.lexical {
+                if let Some(object) = &self.global_object {
+                    let mut object = object.borrow_mut();
+                    if let Some(mut property) = object.own_prop(name).cloned() {
+                        if property.writable && property.getter.is_none() && property.setter.is_none() {
+                            property.value = value.clone();
+                            let _ = object.define(name, property);
+                        }
+                    } else { object.set_own(name, value.clone()); }
+                }
             }
             b.value = value;
             return Ok(true);
@@ -232,7 +265,10 @@ impl Env {
 
 impl EnvHandle {
     pub fn new(kind: EnvKind, parent: Option<EnvHandle>) -> EnvHandle {
+        let realm = parent.as_ref().and_then(EnvHandle::realm);
         EnvHandle(Rc::new(RefCell::new(Env {
+            realm,
+            global_object: None,
             kind,
             parent,
             vars: HashMap::new(),
@@ -247,6 +283,29 @@ impl EnvHandle {
         frame.0.borrow_mut().binding_object = Some(object);
         frame
     }
+
+    pub(crate) fn set_global_object(&self, object: Obj) { self.0.borrow_mut().global_object = Some(object); }
+
+    pub(crate) fn global_binding_object(&self, name: &str) -> Option<Obj> {
+        let frame = self.0.borrow();
+        if let Some(cell) = frame.vars.get(name) {
+            return (frame.kind == EnvKind::Global && !cell.0.borrow().lexical)
+                .then(|| frame.global_object.clone()).flatten();
+        }
+        frame.parent.as_ref().and_then(|parent| parent.global_binding_object(name))
+    }
+
+    pub(crate) fn realm(&self) -> Option<u64> { self.0.borrow().realm }
+    pub(crate) fn set_realm(&self, realm: u64) { self.0.borrow_mut().realm = Some(realm); }
+
+    /// Nearest realm's global object, walking outward past object/with scopes
+    /// so a with-scope's final fallback checks the correct realm (§9.1.1.4.15).
+    pub(crate) fn realm_global_object(&self) -> Option<Obj> {
+        let frame = self.0.borrow();
+        frame.global_object.clone()
+            .or_else(|| frame.parent.as_ref().and_then(EnvHandle::realm_global_object))
+    }
+
 
     /// `var` declaration: mutable, non-lexical, redeclaration-friendly.
     pub fn declare_var(&self, name: &str, value: JsValue) -> Result<(), Throw> {
@@ -265,7 +324,14 @@ impl EnvHandle {
             }
             return Ok(());
         }
-        env.declare_raw(name, JsValue::Undefined, true, false)
+        let value = if env.kind == EnvKind::Global {
+            env.global_object.as_ref().and_then(|object| object.borrow().get_own(name)).unwrap_or(JsValue::Undefined)
+        } else { JsValue::Undefined };
+        env.declare_raw(name, value, true, false)
+    }
+
+    pub(crate) fn has_local_lexical(&self, name: &str) -> bool {
+        self.0.borrow().vars.get(name).is_some_and(|cell| cell.0.borrow().lexical)
     }
 
     /// Initialize a parameter's preallocated cell, preserving closure identity.
@@ -429,6 +495,19 @@ impl EnvHandle {
 
     pub fn kind(&self) -> EnvKind {
         self.0.borrow().kind
+    }
+
+    /// The realm global environment, independent of an active module/eval scope.
+    pub(crate) fn global_scope(&self) -> EnvHandle {
+        let mut current = self.clone();
+        loop {
+            let (kind, parent) = {
+                let frame = current.0.borrow();
+                (frame.kind, frame.parent.clone())
+            };
+            if kind == EnvKind::Global { return current; }
+            match parent { Some(parent) => current = parent, None => return current }
+        }
     }
 
     /// Variable declarations in sloppy direct eval target the nearest var environment.

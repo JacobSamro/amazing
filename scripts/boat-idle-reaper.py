@@ -27,6 +27,8 @@ import time
 from datetime import datetime, timezone
 
 BOAT = os.path.expanduser("~/.ascii/bin/boat")
+# Sandboxes the user runs by hand; never stop them.
+KEEP = {"bx_rg6jga8q", "bx_p3hj37uf", "bx_9czp5hbk"}
 LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
 PROBE = (
@@ -45,7 +47,10 @@ def log(msg: str) -> None:
 def boat(*args: str, timeout: int = 60) -> dict | None:
     try:
         out = subprocess.run(
-            [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
+            # --json goes right after the subcommand: after `exec <id> <cmd>`
+            # it would be passed to the remote command, the probe would fail,
+            # and every sandbox would count as busy (never stopped, 2026-09-26).
+            [BOAT, args[0], "--json", *args[1:]], capture_output=True, text=True, timeout=timeout
         ).stdout
     except subprocess.TimeoutExpired:
         return None
@@ -104,7 +109,7 @@ def main() -> int:
         live = running_sandboxes()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
-            if "keep" in name.lower():
+            if "keep" in name.lower() or sid in KEEP:
                 continue
             busy = is_busy(sid)
             if busy is not False:
