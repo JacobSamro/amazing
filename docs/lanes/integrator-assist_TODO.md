@@ -876,12 +876,34 @@ Boat named snapshots are unavailable while the account has zero-data-retention
 enabled, so `boat-lane.py ensure` cannot provision lane sandboxes; `linux-run.sh`
 falls back to venus automatically. Routed in `.agents/integrator-assist/questions.md`.
 
-### IA-FRAME-PHASES — next
+### IA-FRAME-PHASES — done (2026-09-26)
 
 The driver EventLoop emits `Action::Render` at `RenderPhase::BeforeAnimationFrames`
-after resize/scroll and at `AfterAnimationFrames` after rAF. The driver scheduler
-ignores those actions, so `pump_at`/`pump_now` callers self-drive rendering
-outside the loop. This ticket exposes a render hook on `DriverScheduler`, calls
-the retained compositor's `on_vsync` from it in the WPT render path, and moves
-the driver GUI's animation-frame cadence into the hook. The GPUI shell's
-`engine_compositor` on_vsync adoption needs shell grants and is routed.
+after resize/scroll and at `AfterAnimationFrames` after rAF. `DriverScheduler`
+previously ignored those actions, so callers self-drove rendering outside the
+loop. This ticket adds `DriverScheduler::pump_at_with_render` and
+`pump_now_with_render`, which invoke a host hook for each render action while
+`pump_at`/`pump_now` keep ignoring them (`|_, _| {}`). The WPT reftest loop now
+ticks the retained compositor's `RenderCoordinator::on_vsync` from the
+`AfterAnimationFrames` step, so the sample stays at the same frame boundary as
+before (after rAF mutations, before the next loop step) but is sourced from the
+render hook; the virtual 16 ms steps are unchanged. The driver Win32 GUI's
+animation sample and event/update capture move into the same hook in
+`pump_timers`, after rAF callbacks have run.
+
+Commits on `origin/dev` `f5f97c39`: `939942bb` (hook + ordering test),
+`2e80541c` (WPT `on_vsync` and GUI sample from the hook). Linux Boat `-p amazing`:
+**191 passed / 4 skipped**, including `cmd::render::reftest_protocol_tests::*`,
+the oracle traces, and `js_scheduler::tests::driver_render_hook_brackets_animation_frames`,
+which asserts the hook sees `BeforeAnimationFrames` then `AfterAnimationFrames`
+around the rAF callback. Win-001 combined gate (win-002 offline): workspace
+nextest **2483 passed / 9 skipped** (124 binaries) and workspace doctests
+**2 passed / 0 failed**.
+
+The driver Win32 GUI has no retained compositor scene, so its hook samples
+animations but cannot tick a compositor; the GPUI shell drives frames from
+`amazing_js::Interpreter::pump_timers` and never calls a compositor `on_vsync`.
+Both are routed in `questions.md` as follow-ups (shell grants / a retained GUI
+scene). A first win-001 gate failed on `os error 112` (C: 0 GB free); the lane
+purged its own `debug\incremental` and stale `ia-*` evidence folders, and the
+orchestrator freed the rest. The retry gate is the measurement above.
