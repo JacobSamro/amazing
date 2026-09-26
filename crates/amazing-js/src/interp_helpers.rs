@@ -46,3 +46,92 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
         _ => env.clone(),
     }
 }
+
+impl Interpreter {
+    fn bind_pattern(
+        &mut self, binding: &Binding, value: JsValue,
+        kind: ast::VarKind, env: &EnvHandle,
+    ) -> Result<(), Throw> {
+        self.bind_pattern_mode(binding, value, Some(kind), env)
+    }
+
+    fn bind_pattern_mode(
+        &mut self,
+        binding: &Binding,
+        value: JsValue,
+        kind: Option<ast::VarKind>,
+        env: &EnvHandle,
+    ) -> Result<(), Throw> {
+        match binding {
+            Binding::Ident(identifier) => match kind {
+                None => env.initialize_parameter(&identifier.name, value)?,
+                Some(ast::VarKind::Var) => {
+                    if !env.assign(&identifier.name, value.clone())? {
+                        self.global_env.declare_var(&identifier.name, value)?;
+                    }
+                }
+                Some(ast::VarKind::Let) => env.declare_lexical(&identifier.name, value, true)?,
+                Some(ast::VarKind::Const) => env.declare_lexical(&identifier.name, value, false)?,
+            },
+            Binding::Default(inner, expression) => {
+                let value = if value.is_undefined() {
+                    self.eval_expr(expression, env)?
+                } else {
+                    value
+                };
+                self.bind_pattern_mode(inner, value, kind, env)?;
+            }
+            Binding::Rest(inner) => self.bind_pattern_mode(inner, value, kind, env)?,
+            Binding::Array(elements) => {
+                let items = self.iterate(&value).unwrap_or_default();
+                let mut index = 0usize;
+                for element in elements {
+                    if let Some(element) = element {
+                        if let Binding::Rest(rest) = element.as_ref() {
+                            let rest_value = array_values(self, items[index..].to_vec())?;
+                            self.bind_pattern_mode(rest, rest_value, kind, env)?;
+                            index = items.len();
+                        } else {
+                            let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
+                            self.bind_pattern_mode(element, item, kind, env)?;
+                            index += 1;
+                        }
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            Binding::Object(properties) => {
+                let source = match value {
+                    JsValue::Object(_) | JsValue::Str(_) => value,
+                    JsValue::Null | JsValue::Undefined => {
+                        return Err(Throw::type_error("cannot destructure nullish value"))
+                    }
+                    other => other,
+                };
+                let mut used = Vec::new();
+                for (key, property) in properties {
+                    match key {
+                        ast::BindingKey::Static(name) if name == "..." => {
+                            let rest = self.object_rest(&source, &used)?;
+                            self.bind_pattern_mode(property, rest, kind, env)?;
+                        }
+                        ast::BindingKey::Static(name) => {
+                            used.push(name.clone().into());
+                            let item = self.get_prop(&source, name)?;
+                            self.bind_pattern_mode(property, item, kind, env)?;
+                        }
+                        ast::BindingKey::Computed(expression) => {
+                            let computed_value = self.eval_expr(expression, env)?;
+                            let computed = self.to_property_key(&computed_value)?;
+                            used.push(computed.clone());
+                            let item = self.get_prop(&source, &computed)?;
+                            self.bind_pattern_mode(property, item, kind, env)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}

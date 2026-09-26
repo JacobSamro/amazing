@@ -92,6 +92,33 @@ the ADR 0005 path is available to the driver.
   WebSocket (discovery, page round trip across every domain, flattened browser
   sessions, error reporting).
 - [x] Linux crate gate and full Linux workspace gate.
-- [ ] CDP-2 candidates: `Fetch` interception + `Debugger`, push
+- [x] CDP-2 candidates: `Fetch` interception + `Debugger`, push
   target-lifecycle events, `Page.printToPDF`. Driver adoption (integrator-assist
   `runtime_host_devtools.rs`) is a separate ticket.
+
+## CDP-2 — inspector read paths and target lifecycle push — done
+
+Source commit `4519210c`; base `dev` `0c117657` merged as `f1de15ad`. Linux gate on
+Boat `bx_xbhqabax`: `amazing-devtools` 69/69 nextest (0 skipped) and 1 doctest;
+workspace 2641 passed, 0 failed, 10 skipped, doctests 3 passed.
+
+Adds the read paths a DevTools front end uses after connect, plus the
+`Target.*` push events, all behind the same seam (every new method defaults to
+`HostError::Unsupported`):
+
+- DOM: `getBoxModel` (`BoxModel`), `getContentQuads`, `getAttributes` (already
+  present), `performSearch`/`getSearchResults`/`discardSearchResults` with a
+  per-session search cache, `pushNodesByBackendIdsToFrontend`, `setNodeValue`.
+- CSS: `getStyleSheetText`/`setStyleSheetText`, `getMediaQueries`,
+  `getBackgroundColors`.
+- Page: `getLayoutMetrics` (`LayoutMetrics`/`Viewport`),
+  `getResourceTree` (`FrameResourceTree`/`ResourceInfo`), `getResourceContent`
+  (text or base64), and `Page.domContentEventFired`/`loadEventFired` builders.
+- Target: the host can queue `TargetEvent`s; the browser endpoint emits
+  `Target.targetCreated`/`targetInfoChanged`/`targetDestroyed` after
+  `Target.setDiscoverTargets(true)` and auto-attaches a flattened session
+  (`Target.attachedToTarget`, then `Target.detachedFromTarget`) when
+  `Target.setAutoAttach(true)` is set on a new target.
+
+`mock::MockHost` implements all of it over the fixed document and gains
+scriptable target events (`push_target_created`/`push_target_destroyed`).
