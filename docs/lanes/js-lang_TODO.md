@@ -1,7 +1,7 @@
 # JS language conformance decision map
 
-Frontier: **JS-7 — WPT `dom/` parse barriers**. JS-6 is merged as `0244456`;
-unmodified upstream WPT testharness.js parses and completes.
+Frontier: **JS-13 — remaining parser early errors and grammar contexts**.
+JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
 `amazing-regex`. `ast.rs` is the front-end-owned contract consumed by js-runtime;
@@ -1385,3 +1385,32 @@ Full records remain `/tmp/js11-final-before-{tree,vm}.json` and
 venus-001. Logs and the 16-file replay are in lane scratch. Remaining target
 nonpasses include iterator error identity, class element edge cases and async
 job ordering; these measurements do not claim complete class or async conformance.
+
+## JS-12 — bounded character-class folding
+
+Fixed base `063a0105b018735550b64c844f55f174cd3be163`. The JSB-6 Intl helper
+blocker reproduces with 32 consecutive `[a-z]` classes under ignore-case flags:
+the compiler charges a complete Unicode folding-table scan for each class and
+exhausts its instruction/work budget. A shared sorted index of the same table
+endpoints lets each range visit only relevant entries. Class members, range
+lookups and visited endpoints remain budgeted; no resource limit is raised.
+
+The regression covers legacy/Unicode/UnicodeSets class sequences, non-ASCII
+folding, inversion, predefined classes, lookaheads, and rejection of expensive
+wide-range sequences. Code `7e7edf84`, Linux gate head `1de643c8` (the merge changes only gate
+instructions/scripts). Boat owned nextest: **345 passed, 1 skipped**; owned
+doctests: **1 passed**. Workspace: **2,530 passed, 10 skipped**; separate
+workspace doctests: **31 suites, 2 passed, 0 failed**. Windows is deferred.
+
+Full pinned Test262 (53,872 files / 102,918 variants, 4 workers, 60-second
+variant deadline): **39,938 → 39,953 passing files**, **77,661 → 77,691 passing
+variants**, **zero passing file or variant losses**. All 33 files previously
+blocked by class-compilation limits advance; 15 now pass and 18 expose other
+failures. The input and runner hashes match. Baseline/after classification
+hashes are `dc657e09` / `57200b23`. Evidence and exact hashes are in
+[js-lang_JS12-evidence.json](js-lang_JS12-evidence.json); compressed full
+records and gate logs are retained in lane scratch.
+
+Next: the measured frontier contains 64 front-end failures, including 15 missed
+parse-negative tests. JS-13 handles parser context, strictness and template
+escape errors; decorator and Annex B RegExp clusters remain separate areas.
