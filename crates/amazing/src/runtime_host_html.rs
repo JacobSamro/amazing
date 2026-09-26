@@ -239,8 +239,16 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn option_constructor(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let text = args.first().map(|v| self.to_dom_string(v)).transpose()?;
-        let value = args.get(1).map(|v| self.to_dom_string(v)).transpose()?;
+        // WebIDL optional DOMString arguments treat an explicit `undefined` as
+        // absent, so `new Option(undefined, undefined)` has no text or value.
+        let text = match args.first() {
+            Some(value) if !matches!(value, JsValue::Undefined) => Some(self.to_dom_string(value)?),
+            _ => None,
+        };
+        let value = match args.get(1) {
+            Some(value) if !matches!(value, JsValue::Undefined) => Some(self.to_dom_string(value)?),
+            _ => None,
+        };
         let has_default = args.get(2).is_some();
         let default_selected = args.get(2).is_some_and(|v| self.to_boolean(v));
         let has_selected = args.get(3).is_some();
@@ -260,9 +268,12 @@ impl RuntimeBindingHost<'_> {
             if default_selected {
                 dom.set_attribute(node, "selected", "")?;
             }
-            // `selected` falls back to `defaultSelected` when not supplied.
+            // Selectedness comes only from the `selected` argument; a
+            // defaultSelected-only option keeps the attribute but is not
+            // selected, and neither path sets the dirty flag.
             if has_selected || has_default {
-                dom.set_option_selected(node, selected || (!has_selected && default_selected))?;
+                let selectedness = has_selected && selected;
+                dom.set_option_selectedness(node, selectedness)?;
             }
             Ok(node)
         })?;

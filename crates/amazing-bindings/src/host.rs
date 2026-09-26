@@ -259,6 +259,7 @@ pub enum Operation {
     SelectOptions, SelectLength, SelectMultiple, SelectSetMultiple, SelectAdd, SelectRemove,
     OptionValue, OptionSetValue, OptionSelected, OptionSetSelected,
     OptionDefaultSelected, OptionSetDefaultSelected, OptionText, OptionSetText,
+    OptionIndex,
     ButtonType, ButtonSetType,
     ControlWillValidate, ControlValidity, ControlValidationMessage,
     ControlCheckValidity, ControlReportValidity, ControlSetCustomValidity,

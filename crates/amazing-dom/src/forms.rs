@@ -1032,6 +1032,20 @@ impl Dom {
         }
         self.option_text(node)
     }
+    /// The index of an option in its parent select's list of options, or 0.
+    pub fn option_index(&self, node: NodeIdx) -> Result<i32, DomError> {
+        self.require_tag(node, &["option"])?;
+        if let Some(parent) = self.get(node).parent {
+            if self.html_tag(parent, "select") {
+                let options = self.select_options(parent)?;
+                return Ok(options
+                    .iter()
+                    .position(|option| *option == node)
+                    .map_or(0, |index| index as i32));
+            }
+        }
+        Ok(0)
+    }
     fn raw_option_selected(&self, node: NodeIdx) -> bool {
         self.form_state(node)
             .and_then(|s| s.selected)
@@ -1082,6 +1096,15 @@ impl Dom {
                 .position(|n| !self.has(*n, "disabled"))
                 .map_or(-1, |n| n as i32))
         }
+    }
+    /// Set an option's selectedness without marking it dirty, so later
+    /// `selected` content-attribute changes still update the selected IDL value.
+    pub fn set_option_selectedness(&mut self, option: NodeIdx, selected: bool) -> Result<(), DomError> {
+        self.require_tag(option, &["option"])?;
+        let old_selected = self.option_selected(option)?;
+        self.form_state_mut(option).selected = Some(selected);
+        self.record_render_state(option, "selected", old_selected, selected);
+        Ok(())
     }
     pub fn set_option_selected(&mut self, option: NodeIdx, selected: bool) -> Result<(), DomError> {
         self.require_tag(option, &["option"])?;

@@ -86,6 +86,7 @@ pub(crate) fn handles(op: O) -> bool {
             | O::OptionSetDefaultSelected
             | O::OptionText
             | O::OptionSetText
+            | O::OptionIndex
             | O::ButtonType
             | O::ButtonSetType
             | O::ControlWillValidate
@@ -1195,6 +1196,10 @@ pub(crate) fn invoke<H: BindingHost>(
             let value = string(host, args, 0)?;
             host.with_dom(|dom| dom.replace_children(target, &[NodeOrString::Utf16(value)]))?;
             Ok(host.undefined())
+        }
+        O::OptionIndex => {
+            let index = host.with_dom(|dom| dom.option_index(target))?;
+            Ok(host.number(index as f64))
         }
         O::ControlWillValidate => {
             let value = host.with_dom(|dom| dom.will_validate(target))?;

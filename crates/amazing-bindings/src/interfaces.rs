@@ -726,6 +726,7 @@ const OPTION: &[Member] = &[
     getter("selected", O::OptionSelected), setter("selected", O::OptionSetSelected),
     getter("defaultSelected", O::OptionDefaultSelected), setter("defaultSelected", O::OptionSetDefaultSelected),
     getter("text", O::OptionText), setter("text", O::OptionSetText),
+    getter("index", O::OptionIndex),
 ];
 const OPTGROUP: &[Member] = &[
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
