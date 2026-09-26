@@ -85,13 +85,17 @@ impl Interpreter {
             Self::native("queueMicrotask", native_queue_microtask, &self.function_proto),
         );
         let error_constructor = Self::native("Error", native_error, &self.function_proto);
-        let error_prototype = match &error_constructor {
-            JsValue::Object(function) => match function.borrow().get_own("prototype") {
-                Some(JsValue::Object(prototype)) => prototype,
-                _ => unreachable!("native function has a prototype"),
-            },
-            _ => unreachable!("native function is an object"),
-        };
+        // Reused as the stored %Error.prototype% (self.error_proto) rather than
+        // the fresh ordinary object `Self::native` allocates, so the `stack`
+        // setter's SameValue-with-home-object check has a stable identity to
+        // compare against at call time.
+        let error_prototype = self.error_proto.clone();
+        if let JsValue::Object(function) = &error_constructor {
+            function.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(error_prototype.clone()), writable: true,
+                enumerable: false, configurable: true, getter: None, setter: None,
+            }).unwrap();
+        }
         {
             let mut prototype = error_prototype.borrow_mut();
             prototype.proto = Some(self.object_proto.clone());
@@ -99,6 +103,21 @@ impl Interpreter {
             prototype.set_own("message", JsValue::str(""));
             prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
             prototype.set_own("constructor", error_constructor.clone());
+        }
+        {
+            // `Error.prototype.stack` accessor (proposal error-stack-accessor,
+            // pinned in this Test262 revision); see native_error_stack_getter
+            // and native_error_stack_setter for the exact algorithm. Built via
+            // symbol_method so the accessor functions are non-constructible
+            // with no own "prototype", matching every other built-in accessor
+            // pair (verifyPrimordialAccessorProperty in prop-desc.js).
+            let getter = symbol_method(self, "get stack", native_error_stack_getter);
+            let setter = symbol_method(self, "set stack", native_error_stack_setter);
+            symbol_method_length(&setter, 1);
+            error_prototype.borrow_mut().define("stack", Property {
+                value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                getter: Some(getter), setter: Some(setter),
+            }).unwrap();
         }
         if let JsValue::Object(error) = &error_constructor {
             error.borrow_mut().define("isError", symbol_data(
@@ -151,6 +170,16 @@ impl Interpreter {
         let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
         symbol_method_length(&property_is_enumerable, 1);
         self.object_proto.borrow_mut().define("propertyIsEnumerable", symbol_data(property_is_enumerable, true, true)).unwrap();
+        for (name, length, native) in [
+            ("__defineGetter__", 2, native_object_define_getter as crate::value::NativeFn),
+            ("__defineSetter__", 2, native_object_define_setter as crate::value::NativeFn),
+            ("__lookupGetter__", 1, native_object_lookup_getter as crate::value::NativeFn),
+            ("__lookupSetter__", 1, native_object_lookup_setter as crate::value::NativeFn),
+        ] {
+            let method = symbol_method(self, name, native);
+            symbol_method_length(&method, length);
+            self.object_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
+        }
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));

@@ -422,3 +422,206 @@ no comma lists; `Accessibility.getFullAXTree`'s `depth` parameter is ignored
 (whole tree always returned, matching the domain layer's own `-1`
 convention); layout for the ax tree uses the same fallback text/no-replaced-
 content path as `amazing axtree`, not the driver's real providers.
+
+## CDP-17 — DOM mutation, CSS styles, Input dispatch, PNG screenshots — done
+
+Closed most of CDP-16's boundary list, making the driver usable by a real
+DevTools frontend rather than just `Runtime.evaluate`/basic DOM reads.
+
+- Surveying `domains/dom.rs`/`css.rs`/`input.rs`/`page.rs` first showed almost
+  every CDP method the ticket asked for was **already dispatch-wired** from
+  earlier tickets (CDP-2..15), calling `DevToolsSession` methods that default
+  to `HostError::Unsupported` — so this ticket was almost entirely a
+  driver-side (`runtime_host_devtools.rs`) implementation task, not new
+  domain wiring. The two exceptions, confirmed missing by grep: `DOM.setOuterHTML`
+  and `DOM.removeNode` needed new `set_outer_html`/`remove_node` trait
+  methods on `DevToolsSession` (`amazing-devtools/src/host.rs`) plus dispatch
+  arms (`domains/dom.rs`).
+- **DOM**: `describeNode`/`getOuterHTML` reuse `Dom::serialize_node` (the same
+  serializer the JS `outerHTML` binding uses, per
+  `amazing-bindings/src/markup_bindings.rs` — DevTools and scripted access
+  now agree). `setAttributeValue` calls `Dom::set_attribute`/
+  `remove_attribute`. `setOuterHTML` re-parses the replacement HTML with
+  `amazing_html::parse_fragment` in the parent element's tag-name context
+  (falling back to `"body"` when the parent isn't an element), clones the
+  fragment into the live `Dom` with a new `clone_subtree_into` helper
+  (mirroring `amazing-html`'s own private `clone_subtree` — there is no
+  cross-`Dom` "adopt" primitive), then `detach`+`pre_insert`s the clone at
+  the original position before detaching the original node. `removeNode` is
+  a one-line `Dom::detach`. `querySelector`/`querySelectorAll` now accept
+  comma-separated selector lists via a new `split_selector_list` (splits on
+  top-level commas, tracking quote/paren/bracket depth so `:is(a, b)` and
+  `[data-x="a,b"]` are not split).
+- **CSS**: `getComputedStyleForNode` reads `StyledDom::get`/
+  `ComputedStyle::iter` after computing style with the page's own author
+  sheets. `getMatchedStylesForNode` walks those same `Stylesheet.rules`
+  against `amazing_css::selectors::matches` (using each rule's pre-split
+  `selector_srcs`, so no selector-list splitter was needed there), reporting
+  every match as `StyleOrigin::Author` — there is no separately exposed
+  user-agent/built-in sheet, a documented limitation rather than a silent
+  gap. `getStyleSheetText` uses the 0-based index into the page's collected
+  author sheets as an ad-hoc `styleSheetId` (this driver mints no other id
+  for stylesheets) and reconstructs CSS text from parsed `selector_srcs`/
+  `declarations` — an honest re-serialization, not the original source
+  bytes, since the parser doesn't retain those.
+- **Input**: `dispatchMouseEvent`/`dispatchKeyEvent` reach real
+  `addEventListener` handlers via the existing `DriverScheduler::
+  dispatch_dom_event` (the same call scripted event dispatch already uses,
+  so DevTools-originated and script-originated events share one path).
+  Mouse events resolve a target node through a **new** `hit_test`: a
+  depth-first, topmost-child-wins point-in-box walk of the
+  `amazing_layout::LayoutBox` tree returned by `layout_styled_document`
+  (`Flow::Blocks`/`Flex`/`Grid` for normal-flow children, `LayoutBox::
+  positioned` for absolutely/fixed-positioned descendants). No point-to-node
+  helper existed anywhere in the workspace before this (confirmed by grep
+  across `amazing-layout`, `crates/amazing`, `amazing-paint`); everything
+  needed to write one was already public on `LayoutBox`, so no cross-lane
+  seam to `layout` was needed. Key events target `Dom::active_element`,
+  falling back to the document root when nothing is focused.
+- **Page**: `captureScreenshot` renders through the existing
+  `paint_host_surface` raster path (`amazing render`'s own function) and
+  encodes PNG with `amazing_canvas::encode_png` — the ticket said to write a
+  small encoder "if no encoder exists in the workspace yet"; one already did
+  (`crates/amazing-canvas/src/png.rs`, a stored-DEFLATE zlib writer), so it
+  was reused rather than duplicated. `clip` crops the rendered `Surface`
+  before encoding; only `format: "png"` is supported (`jpeg`/`webp` stay
+  `Unsupported` — no encoder for either in the workspace).
+- **A real bug the tests caught**: `hit_test`'s first version checked a
+  box's own point-in-box bounds *before* checking its `positioned` children,
+  so a `position: absolute` descendant that extends past the shrink-to-fit
+  box of the ancestor that hoisted it — the common case, e.g. an
+  otherwise-empty `<body>` with one absolutely-positioned child taller than
+  the body's own auto height — was unreachable by any click landing inside
+  it but outside the ancestor's shrunk box. The end-to-end Input test failed
+  with `HostError::NotFound` on exactly this shape before the fix
+  (`positioned` descendants are now checked unconditionally, ahead of the
+  box's own bounds check).
+- Proof — four new end-to-end tests, each a real WebSocket CDP client (same
+  framing as `amazing-devtools`'s own `tests/cdp.rs`) against the real page
+  thread, never `MockHost`:
+  `end_to_end_dom_mutation_and_selector_lists_work_through_the_real_websocket_client`
+  (describeNode/getOuterHTML/setAttributeValue/setOuterHTML/removeNode plus a
+  comma-separated `querySelectorAll`), `end_to_end_css_computed_matched_
+  styles_and_stylesheet_text`, `end_to_end_input_dispatch_reaches_real_
+  dom_event_listeners` (a real `addEventListener` handler observably runs,
+  for both a hit-tested mouse event and a focused-element key event), and
+  `end_to_end_capture_screenshot_returns_a_valid_png` (base64-decodes the
+  response and checks the real PNG magic bytes).
+
+Known limitations, unchanged or newly documented: `hit_test` does not
+descend into `Flow::Inlines` line boxes, so a click on inline text resolves
+to the nearest block/inline-container ancestor, not the exact inline run;
+dispatched DOM events carry no coordinate/key/button detail properties (no
+binding-host API at the `dispatch_dom_event` layer accepts a rich init
+dict); `getMatchedStylesForNode` omits the user-agent sheet;
+`getStyleSheetText`'s id scheme and reconstructed text are driver-side
+approximations; layout for hit-testing (like the ax tree) still uses
+`FallbackTextSystem`/`NoReplacedElements`, not the driver's real providers.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` crate nextest
+265/265 (0 skipped, +4 vs. CDP-16's 261) + 1 doctest; `amazing-devtools`
+crate nextest 113/113 + 1 doctest; workspace nextest 3029 passed, 0 failed,
+12 skipped; all 4 workspace doctests passed. Committed as `3d06357e`. No
+cross-lane seam needed (`questions.md` for js-runtime/dom-bindings/layout
+untouched this ticket).
+
+Boundary candidates for a future ticket: `DOM.getNodeForLocation` (trivial
+reuse of the new `hit_test`, still `Unsupported`), inline-run hit-testing, a
+real text/replaced-content provider for layout (shared by hit-testing and
+the ax tree), and Network/Fetch domain wiring on the live page.
+
+## CDP-18 — Network/Runtime console/exceptions, Log, object inspection — done
+
+Wired the remaining "live page" gaps CDP-16/17 left `Unsupported`:
+
+- **Network**: `requestWillBeSent`/`responseReceived`/`loadingFinished`/
+  `loadingFailed` plus `getResponseBody`, for the top-level document fetch
+  (`Page.navigate` and the initial load) and every `<script src>` fetch.
+  Bypassed `cmd::real_pages::fetch_document` (which discards status/headers
+  and fails hard on non-2xx) in favor of calling `amazing_net::fetch`
+  directly from the driver, so real status codes, headers and bodies are
+  available (`amazing-devtools/src/host.rs` adds `NetworkFailedEvent` +
+  `drain_network_failed`). Response bodies are cached per request id in
+  `PageOwner::bodies` for `getResponseBody`. Scope is document + script only
+  — stylesheet/image loads belong to css/layout/replaced-content, not this
+  driver, and are not instrumented.
+- **Runtime console/exceptions**: `consoleAPICalled` reads
+  `amazing_js::interp::Interpreter.output` directly (the field the driver
+  already read for its own diagnostics) rather than needing any new
+  engine-side hook. `native_log` is the only console method the interpreter
+  implements and already joins every argument into one string, so every
+  event has `kind: "log"` and one string `RemoteObject` argument.
+  `exceptionThrown` covers two sources: page-load failures (a thrown script,
+  inline handler, or bounded event-loop step) and a mouse/key event
+  listener's own throw — the latter used to propagate as `HostError::
+  Internal`, failing the whole `Input.dispatch*Event` command; it now goes
+  through `PageOwner::record_exception` and the command still returns `Ok`,
+  matching a real browser (a page's own bug doesn't fail the DevTools
+  command, only gets reported through the console/exception channel).
+  `Log.entryAdded` mirrors both exception sources plus network failures,
+  not ordinary `console.log` calls — matching Chrome's own split between
+  the Log domain (browser-internal) and the console API.
+- **Page load: strict → lenient**: `PageOwner::from_parsed`/`fetch_and_load`
+  no longer call `cmd::js::prepare_page_scripts` (which fails the whole
+  load — and drops the realm — on the first script/handler error). A new
+  `PageOwner::load_scripts_leniently` mirrors `cmd::js::
+  execute_page_scripts_lenient`'s collect-don't-abort logic but keeps this
+  page's own persistent `scheduler` (that sibling function builds and drops
+  its own scheduler, which doesn't fit CDP-16's persistent-realm design);
+  every failure becomes an exception+log entry instead of an `Err`.
+- **Runtime.getProperties/callFunctionOn**: a per-realm `objectId` registry
+  (`PageOwner::objects: HashMap<String, JsValue>`) minted by
+  `PageOwner::remote_object`, which every `evaluate`/`getProperties`/
+  `callFunctionOn` result now goes through instead of the old free function
+  `js_value_to_remote_object` (removed). Built entirely on `amazing-js`'s
+  already-public embedding API — no engine or shared-file change needed:
+  `binding_own_property_keys`/`binding_get_own_property` (own properties,
+  reading through a getter via `binding_call` when present) for
+  `getProperties`, and `binding_call` (with `this` resolved from `objectId`
+  or `binding_global_object`, arguments from `objectId` handles or
+  `json_to_js_value` for JSON literals) for `callFunctionOn`. `objectId`s
+  never expire individually except via `Runtime.releaseObject`; navigating
+  the page replaces the whole `PageOwner`, dropping all of them at once —
+  matching a real navigation invalidating the previous document's ids.
+- **Debugger.\* stays `Unsupported`** — the ticket explicitly keeps
+  stepping/breakpoints for js-runtime, since that needs VM-level hooks this
+  driver does not implement. No `questions.md` entry was needed: nothing
+  else in this ticket required another lane's internals.
+- Proof — two new end-to-end tests, both a real WebSocket CDP client
+  against the real page thread:
+  `end_to_end_network_console_and_object_inspection_from_a_real_fetched_page`
+  drives a real fixture HTTP server (`serve_multi`, new — serves N routes by
+  path, generalizing the existing single-route `serve_once`) with a document
+  that `<script src>`s an external script which `console.log`s and sets a
+  global object, through `PageInit::Fetch` (the real `amazing_net::fetch`
+  path, not the in-memory `spawn_test_host` shortcut), and checks
+  `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` for both
+  the document and the script, `Runtime.consoleAPICalled` for the script's
+  log line, `Runtime.getProperties` and `callFunctionOn` against the
+  script's global object, and `Network.getResponseBody` for the script.
+  `end_to_end_uncaught_script_error_is_reported_not_fatal` proves a page
+  with a top-level throw still loads (`document.title` still evaluates) and
+  produces both `Runtime.exceptionThrown` and a `source: "javascript"`
+  `Log.entryAdded`.
+
+Known limitations, newly documented: console events are always `kind:
+"log"` with one string argument (no `warn`/`error`/`info`/`debug`, no
+per-argument `RemoteObject`s — `native_log` already collapsed everything
+before this driver ever sees it); `getProperties`' `ownProperties=false`
+(include inherited) is not distinguished from `true` — every call is own
+properties only, every descriptor reports `isOwn: true`; `callFunctionOn`
+arguments only round-trip JSON primitives, an array/object literal argument
+becomes `undefined`; network instrumentation covers only document + script
+fetches.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` + `amazing-
+devtools` crate nextest combined 383/383 (0 failed) + both crates' doctests
+green; workspace nextest 3051 passed, 0 failed, 13 skipped; all workspace
+doctests passed (amazing-js, amazing-html, amazing-a11y, amazing-devtools).
+Committed as `528d2e03`. No cross-lane seam needed.
+
+Boundary candidates for a future ticket: per-argument `RemoteObject`s for
+console calls (needs an engine-side change to `native_log` to stop joining
+arguments before the driver sees them — a js-runtime-owned seam);
+`ownProperties=false` vs `true`; stylesheet/image `Network.*` events;
+`Debugger.*` stepping/breakpoints (js-runtime).

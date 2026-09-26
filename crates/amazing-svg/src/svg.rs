@@ -828,6 +828,14 @@ fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
             continue;
         }
         if !text.starts_with('<') {
+            // Character data is only meaningful inside a `<text>` element (the
+            // static subset never shapes glyphs), so skip it there instead of
+            // rejecting the whole document; elsewhere it stays unsupported.
+            if stack.last().is_some_and(|frame| frame.name == "text") {
+                let end = text.find('<').ok_or(DecodeError::InvalidImage)?;
+                text = &text[end..];
+                continue;
+            }
             return Err(DecodeError::UnsupportedSvg);
         }
         let end = tag_end(text)?;
@@ -948,6 +956,18 @@ fn append_element(
                 if style.opacity != 1.0 {
                     return Err(DecodeError::UnsupportedSvg);
                 }
+                None
+            }
+            // Glyph shaping is out of scope for this static subset (see the
+            // module doc); recognize `text` structurally, like `g`, so a
+            // label next to supported shapes (e.g. a rect background) does
+            // not reject the whole image. Its content renders as nothing,
+            // matching the inline-SVG DOM path's non-Ahem fallback.
+            "text" => {
+                check_attrs(
+                    &attrs,
+                    &["x", "y", "dx", "dy", "font-family", "font-size", "font-weight", "text-anchor"],
+                )?;
                 None
             }
             "rect" => {
@@ -1364,4 +1384,51 @@ fn entities(mut value: &str) -> Result<String, DecodeError> {
     }
     out.push_str(value);
     Ok(out)
+}
+
+#[cfg(test)]
+mod text_element_tests {
+    use super::decode;
+    use crate::DecodeLimits;
+
+    /// RC-28: a `<text>` label next to a supported shape must not reject the
+    /// whole document. `logo.svg`/`thumb-N.svg` in the real-pages corpus are
+    /// exactly this shape (a `<rect>` background plus a `<text>` label).
+    #[test]
+    fn rect_next_to_a_text_label_still_decodes_and_paints_the_rect() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" fill="#2f6f4e"/><text x="8" y="64" font-family="sans-serif" font-size="12" fill="#ffffff">1</text></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("decode should not reject the whole document");
+        assert_eq!((image.width, image.height), (160, 120));
+        // The rect fills the whole viewport with an opaque color; sample its
+        // center, well away from the text label near the bottom-left.
+        let (x, y) = (120u32, 20u32);
+        let at = (y as usize * image.width as usize + x as usize) * 4;
+        assert_eq!(&image.pixels[at..at + 4], &[0x2f, 0x6f, 0x4e, 0xff]);
+    }
+
+    #[test]
+    fn text_before_a_shape_still_decodes() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="0" y="10">label</text><rect width="40" height="40" fill="#112233"/></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("decode should not reject the whole document");
+        let at = (20usize * image.width as usize + 20) * 4;
+        assert_eq!(&image.pixels[at..at + 4], &[0x11, 0x22, 0x33, 0xff]);
+    }
+
+    #[test]
+    fn unbalanced_text_tag_is_still_rejected() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="0" y="10">label<rect width="40" height="40" fill="#112233"/></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    #[test]
+    fn character_data_outside_text_is_still_unsupported() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">stray text<rect width="40" height="40" fill="#112233"/></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    #[test]
+    fn unknown_attribute_on_text_is_still_rejected() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="0" y="10" onclick="evil()">label</text><rect width="40" height="40" fill="#112233"/></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
 }

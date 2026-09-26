@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "subdir": "css/fill-stroke",
+  "mismatch_count": 1,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__fill-stroke__paint-order-001.html"
+      ]
+    }
+  ]
+}

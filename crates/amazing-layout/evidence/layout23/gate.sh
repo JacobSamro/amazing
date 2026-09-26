@@ -44,14 +44,67 @@ for corpus in position writing ruby tables retained; do
   #    identical field math to the original Rect-returning version). Routed to
   #    .agents/layout-flexgrid/questions.md. See
   #    remerge-lfg2-subgrid-lanes-loss.md.
+  # 3) LFG-3 remerge (2026-09-26): widening CSS2.1 shrink-to-fit from "both
+  #    insets auto" to "width auto" (coordinator-mandated, faithfully ported;
+  #    flex.rs/grid.rs untouched/byte-identical to dev) newly exercises a
+  #    real, pre-existing amazing-layout bug where an abspos box's shrink-
+  #    to-fit width computes correctly (verified via box-tree dump matching
+  #    the reference exactly) but paints incorrectly for non-trivial content
+  #    (tables, floats, ruby, orthogonal writing modes). Confirmed with real
+  #    pixel evidence (table-anonymous-objects-059: 0 -> 26,103 differing
+  #    pixels; abspos-008: Ian Hickson's canonical shrink-wrap case, 0 ->
+  #    mismatch), not assumed. Squarely this lane's own code (table.rs/
+  #    block.rs/paint), filed as LAYOUT-24 in docs/lanes/layout_TODO.md and
+  #    .agents/layout/questions.md, not routed elsewhere. See
+  #    lfg3-shrink-to-fit-loss.md.
   python3 - "$RUN/$corpus-comparison.json" "$corpus" <<'CHECK' || status=1
 import json,sys
 r=json.load(open(sys.argv[1]))
 corpus=sys.argv[2]
+lfg3_shrink_to_fit = 'LFG-3 shrink-to-fit widening exposes pre-existing table/float/ruby/orthogonal paint bug, filed as LAYOUT-24'
 accepted = {
-    'position': {'CSS2__positioning__right-113.xht': 'IPC-10/RC-21 utility decode bug'},
-    'retained': {'css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html':
-                 'layout-flexgrid subgrid/grid-lanes named-line bug, pre-existing, routed'},
+    'position': {
+        'CSS2__positioning__right-113.xht': 'IPC-10/RC-21 utility decode bug',
+        'CSS2__positioning__abspos-008.xht': lfg3_shrink_to_fit,
+        'css-position__sticky__position-sticky-table-pixel-rounding.html': lfg3_shrink_to_fit,
+    },
+    'writing': {
+        'css-writing-modes__available-size-020.html': lfg3_shrink_to_fit,
+        'css-writing-modes__available-size-021.html': lfg3_shrink_to_fit,
+        'css-writing-modes__baseline-with-orthogonal-flow-001.html': lfg3_shrink_to_fit,
+    },
+    'ruby': {
+        'css-ruby__ruby-bidi-002.html': lfg3_shrink_to_fit,
+        'css-ruby__ruby-bidi-004.html': lfg3_shrink_to_fit,
+        'css-ruby__ruby-overhang-spaces-align-003.html': lfg3_shrink_to_fit,
+    },
+    'tables': {
+        'CSS2__tables__fixed-table-layout-003a03.xht': lfg3_shrink_to_fit,
+        'CSS2__tables__fixed-table-layout-003a04.xht': lfg3_shrink_to_fit,
+        **{f'CSS2__tables__table-anonymous-objects-{n:03d}.xht': lfg3_shrink_to_fit
+           for n in [18, *range(59, 99)]},
+    },
+    'retained': {
+        'css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html':
+            'layout-flexgrid subgrid/grid-lanes named-line bug, pre-existing, routed',
+        'css-flexbox__fieldset-baseline-alignment.html': lfg3_shrink_to_fit,
+        'css-flexbox__flex-flow-003.html': lfg3_shrink_to_fit,
+        'css-flexbox__flex-flow-006.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox-with-pseudo-elements-001.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox-with-pseudo-elements-003.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox_box-clear.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox_columns-flexitems.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox_flex-0-0-0-unitless.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox_item-clear.html': lfg3_shrink_to_fit,
+        'css-flexbox__flexbox_quirks_body.html': lfg3_shrink_to_fit,
+        'css-flexbox__table-as-item-percent-width-cell-001.html': lfg3_shrink_to_fit,
+        'css-grid__grid-lanes__item-placement__row-negative-margin-002.html': lfg3_shrink_to_fit,
+        'css-ruby__ruby-bidi-004.html': lfg3_shrink_to_fit,
+        'css-ruby__ruby-overhang-spaces-align-003.html': lfg3_shrink_to_fit,
+        'css-writing-modes__baseline-with-orthogonal-flow-001.html': lfg3_shrink_to_fit,
+        'display-contents-unusual-html-elements-none': lfg3_shrink_to_fit,
+        'flex__anonymous-item': lfg3_shrink_to_fit,
+    },
 }.get(corpus, {})
 unexplained_losses = sorted(set(r['losses']) - set(accepted))
 for case in sorted(set(accepted) & set(r['losses'])):

@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "subdir": "css/css-content",
+  "mismatch_count": 36,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 9,
+      "examples": [
+        "css__css-content__quotes-020.html",
+        "css__css-content__quotes-017.html",
+        "css__css-content__quotes-024.html",
+        "css__css-content__quotes-013.html",
+        "css__css-content__quotes-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-content__quotes-021.html",
+        "css__css-content__quotes-023.html",
+        "css__css-content__quotes-031.html",
+        "css__css-content__quotes-025.html",
+        "css__css-content__attr-case-sensitivity-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__css-content__attr-chained-pseudo-001.html",
+        "css__css-content__quotes-016.html",
+        "css__css-content__quotes-004.html",
+        "css__css-content__quotes-030.html",
+        "css__css-content__quotes-026.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 4,
+      "examples": [
+        "css__css-content__quotes-009.html",
+        "css__css-content__quotes-005.html",
+        "css__css-content__quotes-008.html",
+        "css__css-content__quotes-011.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-content__quotes-019.html",
+        "css__css-content__quotes-018.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-content__quotes-033.html",
+        "css__css-content__quotes-029.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-034.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-015.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-007.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-content__element-replacement-gradient.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-content__quotes-028.html"
+      ]
+    }
+  ]
+}

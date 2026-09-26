@@ -168,6 +168,8 @@ LANE_PATHS = {
 # Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
 # exception the orchestrator deliberately made. Remove one when its ticket lands.
 LANE_GRANTS = {
+    # NET-38: wptserve .sub. placeholder substitution for websockets/ and fetch/.
+    "net": ["crates/amazing/src/cmd/wpt_harness.rs"],
     # WASM-2b: the WebAssembly JS API lives in its own amazing-js file, plus the
     # dependency line and one install line where builtins are installed.
     "wasm": ["crates/amazing-js/src/builtins_wasm", "crates/amazing-js/Cargo.toml",

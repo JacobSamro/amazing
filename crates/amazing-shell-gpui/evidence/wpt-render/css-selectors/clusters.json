@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "subdir": "css/selectors",
+  "mismatch_count": 9,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__selectors__featureless-004.html",
+        "css__selectors__featureless-005.html",
+        "css__selectors__featureless-002.html",
+        "css__selectors__featureless-001.html",
+        "css__selectors__featureless-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__selectors__first-line-bidi-001.html",
+        "css__selectors__first-line-bidi-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__selectors__first-letter-flag-001.html",
+        "css__selectors__is-where-visited.html"
+      ]
+    }
+  ]
+}

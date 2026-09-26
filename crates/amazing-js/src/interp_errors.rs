@@ -50,11 +50,6 @@ fn runtime_aggregate_rejection(i: &Interpreter, errors: JsValue) -> JsValue {
     JsValue::Object(Obj(Rc::new(RefCell::new(object))))
 }
 
-fn native_error_is_error(_: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::Bool(matches!(args.first(), Some(JsValue::Object(object))
-        if matches!(object.borrow().exotic, Exotic::Error))))
-}
-
 #[cfg(test)]
 mod error_construction_tests {
     use super::*;

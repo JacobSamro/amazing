@@ -416,8 +416,21 @@ fn prepare_sizes(
         let size = if stretch || (start.is_some() && end.is_some()) {
             Some(available)
         } else if property == "width" {
+            // CSS2.1 §10.3.7 cases 1/2/4 (css-position-3 §3.5.1): whenever
+            // `width` is auto and `left`/`right` are NOT both definite (case
+            // 1: neither set — pure static position; case 2/4: exactly one
+            // set — still shrink-to-fit for the width, only the *position*
+            // differs), the shrink-to-fit basis is the containing block
+            // minus margin/border/padding only — never the single known
+            // inset or the static-position anchor fallback above, which
+            // determine position, not how much the box is allowed to
+            // shrink into. Without this, an abspos child with only one
+            // inset set was clamped too narrow by that inset (or, with no
+            // insets at all, by the anchor fallback) instead of shrinking to
+            // fit its content against the whole containing block.
+            let shrink_to_fit_available = (extent - margin - chrome).max(0.0);
             let (minimum, preferred) = intrinsic_content_widths(box_, fonts, text);
-            Some(minimum.max(available).min(preferred))
+            Some(minimum.max(shrink_to_fit_available).min(preferred))
         } else {
             None
         };
@@ -426,9 +439,6 @@ fn prepare_sizes(
         }
     }
 }
-
-// CSS lengths stored in ComputedStyle are unzoomed; geometry is already in
-// used coordinates. Do not apply the effective zoom a second time on relayout.
 
 // CSS lengths stored in ComputedStyle are unzoomed; geometry is already in
 // used coordinates. Do not apply the effective zoom a second time on relayout.
@@ -564,6 +574,20 @@ fn grid_area_containing_block(
     }
 }
 
+/// css-writing-modes-3: whether the block axis runs physically horizontal
+/// (vertical-* / sideways-*) rather than vertical (horizontal-tb).
+fn is_vertical_writing_mode(mode: &str) -> bool {
+    !mode.eq_ignore_ascii_case("horizontal-tb")
+}
+
+/// Physical side the block axis starts from when it runs horizontally:
+/// vertical-lr/sideways-lr progress left-to-right (block-start = physical
+/// left, the minimum coordinate); vertical-rl/sideways-rl progress
+/// right-to-left (block-start = physical right, the maximum coordinate).
+fn block_start_is_min_x(mode: &str) -> bool {
+    mode.eq_ignore_ascii_case("vertical-lr") || mode.eq_ignore_ascii_case("sideways-lr")
+}
+
 fn grid_child_static_anchor(
     parent: &LayoutBox,
     child: &LayoutBox,
@@ -599,8 +623,30 @@ fn grid_child_static_anchor(
             .or_else(|| parent.style.get(items_property))
             .unwrap_or("normal")
     };
-    let horizontal = static_align(choice("justify-self", "justify-items"), parent_rtl, child_rtl, true);
-    let vertical = static_align(choice("align-self", "align-items"), parent_rtl, child_rtl, false);
+    // Box Alignment §5: `align-*` always targets the block axis and
+    // `justify-*` the inline axis, regardless of writing mode. In a
+    // horizontal-tb container the block axis is physical Y and the inline
+    // axis physical X (the historical assumption below); in a vertical-* /
+    // sideways-* container the axes swap physically (block = X, inline = Y).
+    // `left`/`right` are only ever in `justify-*`'s grammar: they compute to
+    // the true physical side when the inline axis is itself physical
+    // horizontal (horizontal-tb), and to their start/end equivalent
+    // otherwise (css-align-3 §8.3). They aren't in `align-*`'s grammar at
+    // all, so both keywords there behave as if the whole declaration were
+    // invalid — same as `start`/unset — never as distinct start vs. end.
+    let parent_mode = parent.style.get("writing-mode").unwrap_or("horizontal-tb");
+    let (horizontal, vertical) = if is_vertical_writing_mode(parent_mode) {
+        let child_mode = child.style.get("writing-mode").unwrap_or(parent_mode);
+        let x_min = block_start_is_min_x(parent_mode);
+        let x_self_min = block_start_is_min_x(child_mode);
+        let x = static_align(choice("align-self", "align-items"), x_min, x_self_min, LeftRight::Invalid);
+        let y = static_align(choice("justify-self", "justify-items"), !parent_rtl, !child_rtl, LeftRight::Logical);
+        (x, y)
+    } else {
+        let x = static_align(choice("justify-self", "justify-items"), !parent_rtl, !child_rtl, LeftRight::Physical);
+        let y = static_align(choice("align-self", "align-items"), true, true, LeftRight::Invalid);
+        (x, y)
+    };
     let (col_area, row_area) = if use_grid_area {
         parent.grid_tracks.as_ref()
             .map(|tracks| tracks.area(&child.style))
@@ -637,47 +683,68 @@ fn grid_child_static_anchor(
     (x, y)
 }
 
-fn static_align(value: &str, parent_rtl: bool, child_rtl: bool, horizontal: bool) -> StaticAlign {
+/// How `left`/`right` resolve for the property being computed (see the
+/// `grid_child_static_anchor` doc comment above): `Physical` for `justify-*`
+/// on a physically-horizontal inline axis (true left/right, independent of
+/// the `start`/`end` polarity), `Logical` for `justify-*` on a
+/// physically-vertical inline axis (start/end equivalent), `Invalid` for
+/// `align-*` (not in its grammar; both keywords fall back to `start`).
+#[derive(Clone, Copy, PartialEq)]
+enum LeftRight {
+    Physical,
+    Logical,
+    Invalid,
+}
+
+/// Resolve a `justify-self`/`align-self`/`-items` keyword to a physical
+/// `StaticAlign` for one axis. `physical_start_is_min`/`self_physical_start_is_min`
+/// say whether that axis's logical `start` (resp. the item's own `self-start`)
+/// lands on the smaller physical coordinate — already resolved by the caller
+/// from the container's/item's direction and writing mode, so this function
+/// only maps keywords, never re-derives polarity from `rtl`/writing mode.
+fn static_align(
+    value: &str,
+    physical_start_is_min: bool,
+    self_physical_start_is_min: bool,
+    left_right: LeftRight,
+) -> StaticAlign {
+    let start = |min: bool| if min { StaticAlign::Start } else { StaticAlign::End };
+    let end = |min: bool| if min { StaticAlign::End } else { StaticAlign::Start };
     // The safe fallback needs the abspos grid area as its alignment container.
     // Until that rectangle is carried here, use its start edge rather than
     // aligning beyond it when a safe position is requested.
-    if value
-        .split_ascii_whitespace()
-        .any(|part| part.eq_ignore_ascii_case("safe"))
-    {
-        return if horizontal && parent_rtl {
-            StaticAlign::End
-        } else {
-            StaticAlign::Start
-        };
+    if value.split_ascii_whitespace().any(|part| part.eq_ignore_ascii_case("safe")) {
+        return start(physical_start_is_min);
     }
-    let keyword = value
-        .split_ascii_whitespace()
-        .last()
-        .unwrap_or("normal")
-        .to_ascii_lowercase();
-    let start = |rtl: bool| {
-        if horizontal && rtl {
-            StaticAlign::End
-        } else {
-            StaticAlign::Start
+    // <baseline-position> = [ first | last ]? baseline. Neither of these
+    // fixed-size boxes (or the shrink-to-fit ones without a real line box)
+    // has an actual baseline to align; a synthesized baseline falls back to
+    // the box's own start edge for `baseline`/`first baseline`, and its end
+    // edge for `last baseline` (css-align-3 §9, "Fallback Alignment").
+    let mut words = value.split_ascii_whitespace();
+    if let Some(last_word) = words.next_back() {
+        if last_word.eq_ignore_ascii_case("baseline") {
+            return if words.next_back().is_some_and(|w| w.eq_ignore_ascii_case("last")) {
+                end(physical_start_is_min)
+            } else {
+                start(physical_start_is_min)
+            };
         }
-    };
-    let end = |rtl: bool| {
-        if horizontal && rtl {
-            StaticAlign::Start
-        } else {
-            StaticAlign::End
-        }
-    };
+    }
+    let keyword = value.split_ascii_whitespace().last().unwrap_or("normal").to_ascii_lowercase();
     match keyword.as_str() {
         "center" => StaticAlign::Center,
-        "end" | "flex-end" => end(parent_rtl),
-        "self-start" => start(child_rtl),
-        "self-end" => end(child_rtl),
-        "left" => StaticAlign::Start,
-        "right" => StaticAlign::End,
-        _ => start(parent_rtl),
+        "end" | "flex-end" => end(physical_start_is_min),
+        "self-start" => start(self_physical_start_is_min),
+        "self-end" => end(self_physical_start_is_min),
+        "left" if left_right == LeftRight::Physical => StaticAlign::Start,
+        "right" if left_right == LeftRight::Physical => StaticAlign::End,
+        // Logical (justify-* on a non-horizontal inline axis): behaves like
+        // the plain start/end keyword. Invalid (align-*, not in its
+        // grammar): both keywords behave like the unset/`normal` default.
+        "left" => start(physical_start_is_min),
+        "right" if left_right == LeftRight::Logical => end(physical_start_is_min),
+        _ => start(physical_start_is_min),
     }
 }
 
@@ -715,6 +782,15 @@ fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
     box_.border_box.y += dy;
     box_.content_box.x += dx;
     box_.content_box.y += dy;
+    // Keep `grid_tracks` (absolute track positions used for an abspos
+    // child's grid-area static position / containing block, see
+    // `grid_area_containing_block`) in sync with a `position: relative`
+    // offset applied to this grid container — see the matching fix in
+    // `flex::translate` for the float-placement case.
+    if let Some(tracks) = &mut box_.grid_tracks {
+        for x in &mut tracks.col_positions { *x += dx; }
+        for y in &mut tracks.row_positions { *y += dy; }
+    }
     for line in &mut box_.lines {
         line.y_top += dy;
         line.baseline += dy;

@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "subdir": "css/CSS2",
+  "mismatch_count": 54,
+  "unreadable": 2,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-3.html",
+        "css__CSS2__floats-clear__floats-clear-multicol-balancing-001.html",
+        "css__CSS2__floats-clear__floats-clear-multicol-balancing-000.html",
+        "css__CSS2__floats__float-nowrap-9.html",
+        "css__CSS2__floats__float-nowrap-2.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__CSS2__linebox__split-inline-borders.html",
+        "css__CSS2__floats__float-nowrap-5.html",
+        "css__CSS2__css21-errata__s-11-1-1b-002.html",
+        "css__CSS2__abspos__hypothetical-inline-alone-on-second-line.html",
+        "css__CSS2__visuren__table-pseudo-in-part3-1.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 6,
+      "examples": [
+        "css__CSS2__css21-errata__s-11-1-1b-003.html",
+        "css__CSS2__css21-errata__s-11-1-1b-005.html",
+        "css__CSS2__normal-flow__intrinsic-size-with-negative-margins.html",
+        "css__CSS2__positioning__abspos-negative-margin-001.html",
+        "css__CSS2__css21-errata__s-11-1-1b-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__CSS2__stacking-context__zindex-affects-block-in-inline.html",
+        "css__CSS2__stacking-context__opacity-affects-block-in-inline.html",
+        "css__CSS2__floats__overflow-scroll-float-paint-order.html",
+        "css__CSS2__normal-flow__overflow-scroll-paint-order.html",
+        "css__CSS2__floats__float-after-block-with-collapsed-margin-inside-inline.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__CSS2__abspos__static-inside-float-inside-inline.html",
+        "css__CSS2__normal-flow__float-percentage-resolution-quirks-mode.html",
+        "css__CSS2__normal-flow__margin-collapse-through-percentage-height-block-inside-table-cell.html",
+        "css__CSS2__floats__new-fc-beside-adjoining-float-2.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__CSS2__floats__table-sizing-with-adjacent-floats.html",
+        "css__CSS2__floats-clear__negative-clearance-after-bottom-margin.html",
+        "css__CSS2__floats__zero-width-floats-positioning.tentative.html",
+        "css__CSS2__floats-clear__clear-on-parent-with-margins-no-clearance.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__CSS2__floats__new-fc-separates-from-float-2.html",
+        "css__CSS2__floats-clear__clear-on-parent-with-margins.html",
+        "css__CSS2__visufx__overflow-propagation-001a.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__CSS2__stacking-context__root-element-creates-stacking-context.html",
+        "css__CSS2__positioning__abspos-float-with-inline-container.html",
+        "css__CSS2__cascade__inherit-computed-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-7.html",
+        "css__CSS2__positioning__abspos-block-level-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__CSS2__floats-clear__floats-clear-multicol-001.html",
+        "css__CSS2__floats-clear__floats-clear-multicol-000.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__CSS2__linebox__line-breaking-font-size-zero-001.html",
+        "css__CSS2__normal-flow__block-in-inline-float-in-layer-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__intrinsic-size-float-and-line.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-hyphen-rewind-1.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__new-fc-beside-adjoining-float.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__floats-line-wrap-shifted-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-6.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__selectors__first-letter-abspos.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__linebox__baseline-block-with-overflow-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__CSS2__borders__border-conflict-style-107.html"
+      ]
+    }
+  ]
+}

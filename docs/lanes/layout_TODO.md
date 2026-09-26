@@ -1550,4 +1550,65 @@ LFG-1/LFG-2 artifacts unrelated to this merge (`flex.rs` is byte-identical
 before/after), routed to the same questions.md. Evidence:
 `crates/amazing-layout/evidence/layout23/final-remerge/`.
 
-Next: inline positioned ancestors and fragment containing blocks (LAYOUT-24).
+**Remerge with layout-flexgrid LFG-3 (2026-09-26):** `dev` took LFG-3
+(`5935e2ae`, merged as `ab002ce4`) after the LFG-1/LFG-2 remerge above landed,
+conflicting again in `position.rs` (3 hunks around `prepare_sizes`). LFG-3's
+four mandated behaviors were ported into this lane's `ContainingBlock`/
+`prepare_sizes` structure: (1) `GridTracks` positions kept in sync with
+`flex::translate`/`shift_box` — already auto-merged clean, verified
+unconflicted. (2) Box Alignment axis mapping (`align-*` = block axis,
+`justify-*` = inline axis, `left`/`right`/`self-start`/`self-end` resolved
+per writing mode) — took dev's rewrite, re-adding this lane's `use_grid_area`
+gate around the grid-area lookup so a `position: static` grid container still
+doesn't get flexbox's unconditional containing-block special case. (3)
+Last-baseline synthesis in `static_align` — took dev's side (the signature
+and match arms above/below the conflict were already auto-merged to dev's
+new parameterization). (4) Shrink-to-fit widened from "both insets auto" to
+"width auto" (CSS2.1 §10.3.7 cases 1/2/4) — folded into the existing unified
+for-loop's clamp basis (`cb.w - margin - chrome`, ignoring the single known
+inset/anchor fallback) instead of duplicating dev's separate block, which
+would have been unreachable for non-replaced boxes and would have skipped
+this lane's replaced-element auto-width special case for replaced ones.
+`flex.rs`/`grid.rs` (LFG-3's other two touched files) are byte-identical to
+dev, confirmed via `git diff`.
+
+Crate 372/1 skip, workspace **3190 pass/14 skip**, four doctests pass — all
+green, no regressions in cargo's own suites. The pinned corpora surfaced a
+real, substantial, newly-exposed (not introduced by this lane's merge choices)
+amazing-layout bug: LFG-3's widened shrink-to-fit computes a *correct* used
+width for an abspos box (verified via box-tree dump matching the reference
+exactly, byte-for-byte) but the actual paint/render output is badly wrong for
+non-trivial content (tables, floats, ruby, orthogonal writing modes) —
+confirmed with real pixel evidence, not assumed
+(`CSS2__tables__table-anonymous-objects-059.xht`: 0 → 26,103 differing
+pixels; `CSS2__positioning__abspos-008.xht`, Ian Hickson's canonical CSS2.1
+shrink-wrap case: 0 → mismatch). Full root-cause trace (ruling out a simple
+width-computation bug) in
+`crates/amazing-layout/evidence/layout23/lfg3-shrink-to-fit-loss.md`. Filed as
+**LAYOUT-24** (ahead of the previously-planned inline positioned ancestors
+scope, which becomes LAYOUT-25).
+
+Position **226→258/645** (+35/-3: 1 pre-existing right-113/IPC-10, 2 LAYOUT-24
+[`abspos-008`, `position-sticky-table-pixel-rounding`]); writing
+**243→242/1112** (+2/-3, all LAYOUT-24: `available-size-020/021`,
+`baseline-with-orthogonal-flow-001`); ruby **70→78/118** (+11/-3, all
+LAYOUT-24: `ruby-bidi-002/004`, `ruby-overhang-spaces-align-003`); tables
+**309→271/386** (+5/-43, all LAYOUT-24, the `table-anonymous-objects`/
+`fixed-table-layout-003a0{3,4}` family); retained **303→304/449** (+19/-18: 17
+LAYOUT-24, 1 pre-existing subgrid). All losses across all five corpora are
+documented, non-silent `gate.sh` exceptions with the same evidence bar as the
+LFG-1/LFG-2 exceptions. Cross-check of layout-flexgrid's own 1,446-case
+flex/grid selection: **614→702** (+115/-27: 3 pre-existing subgrid + 24
+LAYOUT-24, strong thematic overlap with the corpora above — several of the
+same file names, e.g. `flexbox-with-pseudo-elements-00{1,3}`,
+`flexbox_box-clear`, `flexbox_item-clear`, `flexbox_quirks_body`, appear in
+both). This is short of layout-flexgrid's own reported 698→714 because their
+number was measured on LFG-3 standalone (dev's simpler pre-`ContainingBlock`
+`prepare_stretch`), not on the combination with this lane's replaced-element
+and anchor-fallback refactor — the two numbers are not directly comparable;
+714 was never reachable on this merged head without also fixing LAYOUT-24.
+Merge commit: see `.agents/layout/status.json` for the SHA.
+
+Next: LAYOUT-24 (this newly-discovered shrink-to-fit/paint bug, own-lane,
+high priority), then inline positioned ancestors and fragment containing
+blocks (LAYOUT-25).

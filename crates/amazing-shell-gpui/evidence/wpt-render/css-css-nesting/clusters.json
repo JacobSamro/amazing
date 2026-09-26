@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "subdir": "css/css-nesting",
+  "mismatch_count": 7,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-nesting__conditional-properties.html",
+        "css__css-nesting__nest-containing-forgiving.html",
+        "css__css-nesting__nesting-type-selector.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-nesting__conditional-rules.html",
+        "css__css-nesting__implicit-nesting.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-nesting__nesting-basic.html",
+        "css__css-nesting__supports-rule.html"
+      ]
+    }
+  ]
+}

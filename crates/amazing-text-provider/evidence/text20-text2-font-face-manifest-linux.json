@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "manifest": "crates/amazing-text-provider/evidence/text2-font-face-manifest.json",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "fixed-text2-font-face",
+    "case_count": 8,
+    "scope": "css/css-fonts @font-face matching reftests; native reach before cross-lane descriptor/loader integration"
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "run_directory": "/tmp/text20out/text2-linux-run",
+  "counts": {
+    "pass": 5,
+    "mismatch": 3,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css-fonts__matching__fixed-stretch-style-over-weight.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "fixed-stretch-style-over-weight-ref.html",
+      "differing_pixels": 5285,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "5ce6784d55709409343e727c268f2bb4f19b4913c71b6ec3c52fa04d63f73690",
+      "reference_sha256": "1bb741ab9a3f7a716b09347fb75a26806e42e92d42842090e5c4e8055f19697b",
+      "detail": "maxDifference=255/0; totalPixels=5285/0"
+    },
+    {
+      "id": "css-fonts__matching__range-descriptor-reversed.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "range-descriptor-reversed-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "3f2700cfb16c124edc8b345c1b8b769d994284998e0d4faa6d45cdd5a9b91722",
+      "reference_sha256": "3f2700cfb16c124edc8b345c1b8b769d994284998e0d4faa6d45cdd5a9b91722",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-fonts__matching__stretch-distance-over-weight-distance.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "stretch-distance-over-weight-distance-ref.html",
+      "differing_pixels": 4260,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "4b67f48e80461bb978ff4959887f24693273d47ca7fff533311184181e4a7e4d",
+      "reference_sha256": "350306035a2b04539bdb09d6202ad84b07ef18c8aa3d4c9dd5b83d147a00a9f6",
+      "detail": "maxDifference=255/0; totalPixels=4260/0"
+    },
+    {
+      "id": "css-fonts__matching__style-ranges-over-weight-direction.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "style-ranges-over-weight-direction-ref.html",
+      "differing_pixels": 5605,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "98913af4638311ec8028c75f62295d73fc4d92b706aa0e3a1ce64a9a63dc43a8",
+      "reference_sha256": "e007c9ba670270363285db099a3b290e1a15179d63df01cd3c421e48c253ed38",
+      "detail": "maxDifference=255/0; totalPixels=5605/0"
+    },
+    {
+      "id": "css-fonts__variations__font-descriptor-range-reversed.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "font-descriptor-range-reversed-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "54e272faa99c3787da970168f8494ebfad3e07ba1859e492503faf69795c5dae",
+      "reference_sha256": "54e272faa99c3787da970168f8494ebfad3e07ba1859e492503faf69795c5dae",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-fonts__variations__font-descriptor-range-reversed-002.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "font-descriptor-range-reversed-002-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "54e272faa99c3787da970168f8494ebfad3e07ba1859e492503faf69795c5dae",
+      "reference_sha256": "54e272faa99c3787da970168f8494ebfad3e07ba1859e492503faf69795c5dae",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-fonts__variations__font-slant-2a.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "font-slant-2-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "c801a8bcfda5d27bd72ffe011e110bf686d3e9c8328e65d47c663d5fada5db7b",
+      "reference_sha256": "c801a8bcfda5d27bd72ffe011e110bf686d3e9c8328e65d47c663d5fada5db7b",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-fonts__variations__font-slant-2b.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "font-slant-2-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "c801a8bcfda5d27bd72ffe011e110bf686d3e9c8328e65d47c663d5fada5db7b",
+      "reference_sha256": "c801a8bcfda5d27bd72ffe011e110bf686d3e9c8328e65d47c663d5fada5db7b",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    }
+  ],
+  "generated_at": "2026-09-26T16:32:39Z"
+}

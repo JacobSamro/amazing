@@ -82,8 +82,15 @@ pub(crate) struct GroupEffect {
     /// surface pixel space as this box's own decorations (valid only when
     /// `backdrop_filter` is non-empty).
     pub backdrop_bounds: Rect,
-    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()` only).
+    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()`/
+    /// `polygon()`/a straight-edged `path()`).
     pub clip: Option<crate::clip::ClipMask>,
+    /// Resolved single-layer `mask-image: url(...)` (see [`crate::mask`]).
+    pub mask_image: Option<crate::mask::MaskLayer>,
+    /// The border box `mask_image` is stretched to fill, in the same
+    /// untransformed surface pixel space as `backdrop_bounds` (valid only
+    /// when `mask_image` is `Some`).
+    pub mask_bounds: Rect,
 }
 
 impl GroupEffect {
@@ -506,6 +513,9 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         .style
         .get("clip-path")
         .and_then(|value| crate::clip::ClipMask::from_css(value, (border.x, border.y, border.w, border.h)));
+    let mask_image = box_.style.get("mask-image").and_then(|value| {
+        crate::mask::MaskLayer::from_css(value, box_.style.get("mask-mode").unwrap_or("match-source"))
+    });
     if opacity >= 1.0
         && transform.is_none()
         && blend == amazing_css::effects::BlendMode::Normal
@@ -513,6 +523,7 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         && filter.is_empty()
         && backdrop_filter.is_empty()
         && clip.is_none()
+        && mask_image.is_none()
     {
         return None;
     }
@@ -528,6 +539,8 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         backdrop_filter,
         backdrop_bounds: border,
         clip,
+        mask_image,
+        mask_bounds: border,
     })
 }
 
