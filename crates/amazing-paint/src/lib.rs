@@ -51,6 +51,7 @@ pub mod controls;
 mod display_list;
 mod gradient;
 pub mod display_list_view;
+pub mod filter;
 pub mod image;
 pub mod paint;
 pub mod surface;

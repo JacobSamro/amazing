@@ -184,6 +184,7 @@ impl RasterState {
                     origin_y: 0.0,
                     blend: amazing_css::effects::BlendMode::Normal,
                     isolate: false,
+                    filter: crate::filter::FilterPlan::default(),
                 },
                 Some(mask),
             );
@@ -242,6 +243,7 @@ fn composite_group(
             let Some(source_pixel) = source.get_pixel(sx as u32, sy as u32) else {
                 continue;
             };
+            let source_pixel = effect.filter.apply(source_pixel);
             if source_pixel[3] == 0 {
                 continue;
             }
@@ -2359,6 +2361,23 @@ mod tests {
         parent.flow = Flow::Blocks(vec![child]);
         let surface = paint_document(&parent, 4, 4, &FontSource::fallback());
         assert_eq!(surface.get_pixel(1, 1), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn filter_color_function_applies_to_only_the_element_subtree() {
+        let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 4.0, 4.0);
+        let child = block(
+            &[("background-color", "red"), ("filter", "grayscale(1)")],
+            0.0,
+            0.0,
+            2.0,
+            2.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 4, 4, &FontSource::fallback());
+        let luma = (0.2126_f32 * 255.0).round() as u8;
+        assert_eq!(surface.get_pixel(1, 1), Some([luma, luma, luma, 255]));
+        assert_eq!(surface.get_pixel(3, 3), Some([255, 255, 255, 255]));
     }
 
     #[test]

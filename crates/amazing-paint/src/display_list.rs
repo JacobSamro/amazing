@@ -75,6 +75,7 @@ pub(crate) struct GroupEffect {
     pub origin_y: f32,
     pub blend: amazing_css::effects::BlendMode,
     pub isolate: bool,
+    pub filter: crate::filter::FilterPlan,
 }
 
 impl GroupEffect {
@@ -483,10 +484,12 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         .get("isolation")
         .and_then(amazing_css::effects::parse_isolation)
         .unwrap_or(false);
+    let filter = crate::filter::FilterPlan::from_css(box_.style.get("filter").unwrap_or("none"));
     if opacity >= 1.0
         && transform.is_none()
         && blend == amazing_css::effects::BlendMode::Normal
         && !isolate
+        && filter.is_empty()
     {
         return None;
     }
@@ -499,6 +502,7 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         origin_y: border.y + border.h * 0.5,
         blend,
         isolate,
+        filter,
     })
 }
 

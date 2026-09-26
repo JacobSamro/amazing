@@ -187,6 +187,8 @@ pub struct EffectNode {
     pub blend: amazing_css::effects::BlendMode,
     /// `isolation: isolate` opened the group even without opacity/transform/blend.
     pub isolate: bool,
+    /// Bounded CSS `filter` color functions applied to the group layer.
+    pub filter: crate::filter::FilterPlan,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -342,6 +344,7 @@ impl<'a> DisplayListView<'a> {
                 opacity: 1.0,
                 blend: amazing_css::effects::BlendMode::Normal,
                 isolate: false,
+                filter: crate::filter::FilterPlan::default(),
             }],
             scrolls: vec![
                 ScrollNode {
@@ -391,6 +394,7 @@ impl<'a> DisplayListView<'a> {
                         opacity: group.opacity,
                         blend: group.blend,
                         isolate: group.isolate,
+                        filter: group.filter,
                     });
                     state.effect = next;
                     if group.transform != Affine::IDENTITY {
