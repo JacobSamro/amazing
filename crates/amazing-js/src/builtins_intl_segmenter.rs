@@ -146,9 +146,12 @@ fn intl_segments_containing(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     let Some(IntlState::Segments(state)) = intl_state(object) else {
         return Err(Throw::type_error("incompatible Segments receiver"));
     };
-    let index = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
-    if !index.is_finite() || index < 0.0 { return Ok(JsValue::Undefined); }
-    let Some(piece) = state.pieces.iter().find(|piece| piece.index <= index as usize && (index as usize) < piece.end) else {
+    let number = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
+    // ToInteger: NaN and signed zero become +0, other values truncate toward zero.
+    let index = if number.is_nan() { 0.0 } else { number.trunc() };
+    if index < 0.0 { return Ok(JsValue::Undefined); }
+    let index = index as usize;
+    let Some(piece) = state.pieces.iter().find(|piece| piece.index <= index && index < piece.end) else {
         return Ok(JsValue::Undefined);
     };
     intl_segment_record(i, piece, &state.input, state.granularity == "word")

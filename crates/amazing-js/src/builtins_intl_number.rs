@@ -341,16 +341,23 @@ fn intl_number_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
         else { format!("{left} – {right}") }))
 }
 
+fn intl_number_endpoint_parts(i: &mut Interpreter, state: &IntlNumberState, value: &JsValue) -> Result<(String, Vec<(&'static str, String)>), Throw> {
+    if let JsValue::BigInt(bigint) = value {
+        let text = intl_format_bigint(state, &bigint.to_radix_string(10));
+        return Ok((text.clone(), vec![("integer", text)]));
+    }
+    let number = i.to_number(value)?;
+    if number.is_nan() { return Err(Throw::range_error("NaN range endpoint")); }
+    Ok(intl_format_number(state, number))
+}
+
 fn intl_number_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_number_state(&this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRangeToParts requires two numbers"));
     }
-    let start = i.to_number(&args[0])?;
-    let end = i.to_number(&args[1])?;
-    if start.is_nan() || end.is_nan() { return Err(Throw::range_error("NaN range endpoint")); }
-    let (left, left_parts) = intl_format_number(&state, start);
-    let (right, right_parts) = intl_format_number(&state, end);
+    let (left, left_parts) = intl_number_endpoint_parts(i, &state, &args[0])?;
+    let (right, right_parts) = intl_number_endpoint_parts(i, &state, &args[1])?;
     let mut parts: Vec<(&'static str, String, &'static str)> = Vec::new();
     if left == right {
         parts.push(("approximatelySign", "~".into(), "shared"));
@@ -566,7 +573,12 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
             number_parts.push(("decimal", data.decimal.to_string()));
             number_parts.push(("fraction", intl_localize_digits(fraction, &state.numbering_system)));
         }
-        if !compact_suffix.is_empty() { number_parts.push(("compact", compact_suffix.to_string())); }
+        if !compact_suffix.is_empty() {
+            let trimmed = compact_suffix.trim_start_matches(|ch: char| !ch.is_alphanumeric());
+            let lead = compact_suffix.len() - trimmed.len();
+            if lead > 0 { number_parts.push(("literal", compact_suffix[..lead].to_string())); }
+            if !trimmed.is_empty() { number_parts.push(("compact", trimmed.to_string())); }
+        }
         if state.notation == "scientific" || state.notation == "engineering" {
             number_parts.push(("exponentSeparator", "E".into()));
             if exponent < 0 { number_parts.push(("exponentMinusSign", data.minus.into())); }
@@ -621,11 +633,8 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
             Some(entry) => {
                 if !entry.prefix.is_empty() {
                     let prefix_parts = intl_unit_pattern_parts(entry.prefix, entry.unit_name);
-                    let insert_at = parts.iter().position(|(kind, _)| {
-                        matches!(*kind, "integer" | "group" | "decimal" | "fraction" | "nan" | "infinity" | "compact")
-                    }).unwrap_or(parts.len());
                     for (offset, part) in prefix_parts.into_iter().enumerate() {
-                        parts.insert(insert_at + offset, part);
+                        parts.insert(offset, part);
                     }
                 }
                 parts.extend(intl_unit_pattern_parts(entry.suffix, entry.unit_name));
@@ -805,6 +814,12 @@ mod intl_number_tests {
         assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'narrow'}).format(987)"), "987km/h");
         assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'long'}).format(987)"), "987 kilometers per hour");
         assert_eq!(eval("new Intl.NumberFormat('de',{style:'unit',unit:'kilometer-per-hour'}).format(987)"), "987 km/h");
+    }
+
+    #[test]
+    fn bound_format_is_anonymous_with_length_then_name() {
+        assert_eq!(eval("Object.getOwnPropertyNames(new Intl.NumberFormat().format).join(',')"), "length,name");
+        assert_eq!(eval("new Intl.NumberFormat().format.name"), "");
     }
 
     #[test]

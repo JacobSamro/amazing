@@ -74,14 +74,23 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let calendar_option = intl_string_option(i, &options, "calendar", &[], "gregory")?;
+    let calendar_option = i.get_prop(&options, "calendar")?;
+    let calendar_option = if calendar_option.is_undefined() {
+        requested.first().and_then(|tag| intl_unicode_keyword(tag, "ca")).unwrap_or_else(|| "gregory".into())
+    } else {
+        i.to_string(&calendar_option)?
+    };
     if calendar_option.split('-').any(|part| !(3..=8).contains(&part.len())
         || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
         return Err(Throw::range_error("invalid calendar"));
     }
     // A well-formed but unavailable calendar falls back to the locale default.
-    let calendar = if calendar_option == "gregorian" { "gregory".into() }
-        else if INTL_KNOWN_CALENDARS.contains(&calendar_option.as_str()) { calendar_option }
+    let canonical_calendar = calendar_option.to_ascii_lowercase();
+    let canonical_calendar = match canonical_calendar.as_str() {
+        "gregorian" => "gregory", "islamicc" => "islamic-civil",
+        "ethiopic-amete-alem" => "ethioaa", other => other,
+    };
+    let calendar = if INTL_KNOWN_CALENDARS.contains(&canonical_calendar) { canonical_calendar.to_string() }
         else { "gregory".into() };
     let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
     if !(3..=8).contains(&numbering_system.len())

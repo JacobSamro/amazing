@@ -18,6 +18,10 @@ impl Interpreter {
         });
         o.proto = Some(proto.clone());
         let handle = Obj(Rc::new(RefCell::new(o)));
+        // JsObject::function seeds "name" then "length"; built-in functions
+        // must expose "length" before "name" in property order.
+        let _ = handle.borrow_mut().delete_own("name");
+        let _ = handle.borrow_mut().delete_own("length");
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         handle.borrow_mut().define("prototype", Property {
             value: JsValue::Object(prototype), writable: true, enumerable: false,

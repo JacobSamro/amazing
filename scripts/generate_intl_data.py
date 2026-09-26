@@ -87,8 +87,9 @@ def main() -> None:
     lines.append("];")
 
     numbering_systems = cldr("cldr-core/supplemental/numberingSystems.json")["supplemental"]["numberingSystems"]
-    simple_systems = sorted(code for code, entry in numbering_systems.items()
-                            if entry.get("_type") == "numeric" and "_digits" in entry)
+    # AvailableNumberingSystems includes both simple and algorithmic systems.
+    simple_systems = sorted(code for code in numbering_systems
+                            if 3 <= len(code) <= 8 and code.isascii() and code.isalnum())
     lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
                  + rust_string(" ".join(simple_systems)) + ";")
 
