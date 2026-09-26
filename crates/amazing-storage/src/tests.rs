@@ -1,13 +1,61 @@
 use crate::{
+    buckets::*,
     cache::*,
     core::*,
     idb::{self, *},
     web::*,
 };
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 fn partition() -> StorageKey {
     StorageKey::new("https://a.example", "https://top.example")
+}
+
+#[test]
+fn profile_quota_counts_web_idb_and_cache_together_and_persists_grant() {
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let root = std::env::temp_dir().join(format!("amazing-profile-quota-{}-{nonce}", std::process::id()));
+    let quota = Arc::new(Mutex::new(QuotaLedger::new(30)));
+    let mut stores = Vec::new();
+    for name in ["web", "idb", "cache"] {
+        let mut disk = DiskStore::open(root.join(name), 1000).unwrap();
+        disk.attach_quota(quota.clone());
+        stores.push(disk);
+    }
+    let entry = |namespace: &str| EntryKey { bucket: bucket(), namespace: namespace.into(), key: b"a".to_vec() };
+    stores[0].put(entry("w"), vec![1; 10]).unwrap();
+    stores[1].put(entry("i"), vec![2; 10]).unwrap();
+    assert_eq!(stores[2].put(entry("c"), vec![3; 10]), Err(crate::core::Error::QuotaExceeded));
+    assert_eq!(quota.lock().unwrap().usage(&partition()), 24);
+    let mut manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), quota.clone()).unwrap();
+    assert_eq!(manager.estimate(&partition()), crate::manager::Estimate { usage: 24, quota: 30 });
+    assert!(!manager.persisted(&partition()));
+    assert!(manager.persist(partition()).unwrap());
+    drop(manager);
+    let manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), quota.clone()).unwrap();
+    assert!(manager.persisted(&partition()));
+    assert!(stores[0].delete(&entry("w")).unwrap());
+    stores[2].put(entry("c"), vec![3; 10]).unwrap();
+    assert_eq!(manager.estimate(&partition()).usage, 24);
+    drop(manager);
+    drop(stores);
+    let reopened_quota = Arc::new(Mutex::new(QuotaLedger::new(30)));
+    let mut reopened = Vec::new();
+    for name in ["web", "idb", "cache"] {
+        let mut disk = DiskStore::open(root.join(name), 1000).unwrap();
+        disk.attach_quota(reopened_quota.clone());
+        reopened.push(disk);
+    }
+    let manager = crate::manager::StorageManager::open(
+        DiskStore::open(root.join("manager"), 1000).unwrap(), reopened_quota).unwrap();
+    assert_eq!(manager.estimate(&partition()).usage, 24);
+    assert!(manager.persisted(&partition()));
+    drop(manager);
+    drop(reopened);
+    let _ = std::fs::remove_dir_all(root);
 }
 fn bucket() -> BucketKey {
     BucketKey::new(partition(), "default")
@@ -204,7 +252,7 @@ fn idb_keys_ranges_indexes_and_cursor() {
 #[test]
 fn idb_versionchange_block_and_transaction_rollback() {
     let mut engine = IndexedDb::default();
-    let key = partition();
+    let key = bucket();
     let opened = engine.open(key.clone(), "db", Some(1)).unwrap();
     let id = opened.connection.unwrap();
     assert!(matches!(
@@ -255,7 +303,7 @@ fn idb_versionchange_block_and_transaction_rollback() {
 #[test]
 fn idb_index_cursor_primary_key_and_transaction_scheduling() {
     let mut engine = IndexedDb::default();
-    let key = partition();
+    let key = bucket();
     let id = engine
         .open(key.clone(), "db", Some(1))
         .unwrap()
@@ -389,7 +437,7 @@ fn durable_web_cache_and_idb_reopen() {
         let disk = DiskStore::open(root.join("idb"), 100_000).unwrap();
         let mut engine = IndexedDb::with_disk(disk).unwrap();
         let id = engine
-            .open(partition(), "db", Some(1))
+            .open(bucket(), "db", Some(1))
             .unwrap()
             .connection
             .unwrap();
@@ -419,7 +467,7 @@ fn durable_web_cache_and_idb_reopen() {
         let engine = IndexedDb::with_disk(disk).unwrap();
         assert_eq!(
             engine
-                .database(&partition(), "db")
+                .database(&bucket(), "db")
                 .unwrap()
                 .store("s")
                 .unwrap()
@@ -427,5 +475,76 @@ fn durable_web_cache_and_idb_reopen() {
             Some(&StructuredValue::Binary(vec![1, 2, 3]))
         );
     }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn bucket_names_follow_the_lowercase_charset_and_length() {
+    for good in [
+        "abcdefghijklmnopqrstuvwxyz0123456789-_",
+        "2021-01-01",
+        "2021_01_01",
+        "2021_01_01_",
+        "2021-01-01-",
+        "a",
+        "0",
+    ] {
+        assert!(valid_bucket_name(good), "{good:?} should be a valid name");
+    }
+    for bad in [
+        "_bucket",
+        "-bucket",
+        "bucket name",
+        "bUcKet123",
+        "bucket♦",
+        "2021/01/01",
+        "   ",
+        "",
+        "mjnkhtwsiyjsrxvrzzqafldfvomqopdjfiuxqelfkllcugrhvvblkvmiqlguhhqepoggyu",
+    ] {
+        assert!(!valid_bucket_name(bad), "{bad:?} should be rejected");
+    }
+    // 64 characters is the inclusive limit.
+    let limit = "a".repeat(MAX_BUCKET_NAME);
+    assert!(valid_bucket_name(&limit));
+    assert!(!valid_bucket_name(&format!("{limit}a")));
+}
+
+#[test]
+fn bucket_registry_persists_policy_and_invalidates_deleted_handles() {
+    let root = std::env::temp_dir().join(format!("amazing-buckets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let key = partition();
+    let strict = Policy { durability: Durability::Strict, quota: Some(4096), ..Policy::default() };
+    let mut registry =
+        BucketRegistry::load(DiskStore::open(root.join("buckets"), 100_000).unwrap()).unwrap();
+    let epoch = registry.open(key.clone(), "one".into(), strict.clone()).unwrap();
+    registry.open(key.clone(), "two".into(), Policy::default()).unwrap();
+    assert_eq!(registry.keys(&key), vec!["one".to_owned(), "two".to_owned()]);
+    // The existing policy is kept when the bucket already exists.
+    let same = registry.open(key.clone(), "one".into(), Policy::default()).unwrap();
+    assert_eq!(same, epoch);
+    assert_eq!(registry.policy(&key, "one"), Some(&strict));
+    assert!(registry.handle_valid(&key, "one", epoch));
+    assert!(!registry.handle_valid(&key, "one", epoch + 1));
+    assert!(registry.delete(&key, "one").unwrap());
+    assert!(!registry.delete(&key, "one").unwrap());
+    assert!(!registry.handle_valid(&key, "one", epoch));
+    // Recreating the name yields a new epoch, invalidating the old handle.
+    let remade = registry.open(key.clone(), "one".into(), Policy::default()).unwrap();
+    assert_ne!(remade, epoch);
+    assert!(registry.handle_valid(&key, "one", remade));
+
+    registry
+        .update(&key, "two", Policy { persisted: true, expires: Some(42), ..Policy::default() })
+        .unwrap();
+    drop(registry);
+    let registry =
+        BucketRegistry::load(DiskStore::open(root.join("buckets"), 100_000).unwrap()).unwrap();
+    assert_eq!(registry.keys(&key), vec!["one".to_owned(), "two".to_owned()]);
+    assert_eq!(
+        registry.policy(&key, "two"),
+        Some(&Policy { persisted: true, expires: Some(42), ..Policy::default() })
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
