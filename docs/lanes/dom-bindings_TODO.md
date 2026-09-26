@@ -1782,3 +1782,17 @@ is in `crates/amazing-bindings/evidence/messageevent/`.
 
 Next independent DOM-B event cluster: UIEvent dictionary Window validation,
 conversion order, signed-long detail, and related-target validation/root cleanup.
+
+## DOM-B UI event dictionary conversion complete (2026-09-26)
+
+`01e52255` validates Window views and related EventTargets, reads supported
+inherited dictionary fields in WebIDL order, converts UIEvent.detail as signed
+long, and roots values only after fallible conversion completes. Native tests
+cover all six UI event constructors, nullable/default fields, numeric edges,
+conversion ordering, invalid dictionaries, and root cleanup.
+
+Linux Boat exact-source workspace **2534 passed / 10 skipped**, docs **2/2**;
+owned/driver **517 passed / 4 skipped**, owned docs **0**. Pinned event subclass
+constructors improve **48/49→49/49**; the seven-source selection gains one file
+and one assertion with **zero losses**. Evidence:
+`crates/amazing-bindings/evidence/event-dictionaries/`.
