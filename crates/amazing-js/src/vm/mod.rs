@@ -32,6 +32,8 @@ fn take_registers(count: usize) -> Vec<JsValue> {
 }
 
 pub use compiler::compile;
+#[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
+pub(crate) use compiler::compile_async_body;
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
@@ -1045,6 +1047,12 @@ impl FunctionCode {
             return self.call_async(i, env);
         }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
+    }
+
+    /// Start the resumable body in the environment prepared by AST parameter binding.
+    #[allow(dead_code)] // Consumed by the runtime async bridge in interp.rs.
+    pub(crate) fn call_async_with_env(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
+        self.call_async(i, env)
     }
 
     fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
