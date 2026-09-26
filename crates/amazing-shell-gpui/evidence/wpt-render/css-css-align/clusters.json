@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "subdir": "css/css-align",
+  "mismatch_count": 28,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-align__blocks__align-content-table-cell-004.html",
+        "css__css-align__blocks__align-content-table-cell-005.html",
+        "css__css-align__blocks__align-content-table-cell-003.html",
+        "css__css-align__blocks__align-content-table-cell-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-align__self-alignment__self-align-safe-unsafe-grid-001.html",
+        "css__css-align__self-alignment__self-align-safe-unsafe-flex-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-align__self-alignment__self-align-safe-unsafe-flex-002.html",
+        "css__css-align__abspos__align-self-static-position-006.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-align__baseline-rules__grid-item-input-type-number.html",
+        "css__css-align__baseline-rules__grid-item-input-type-text.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__self-alignment__self-align-safe-unsafe-grid-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__self-alignment__self-align-start-end-flex-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-self-static-position-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__self-alignment__self-align-safe-unsafe-flex-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-items-static-position.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__baseline-of-scrollable-1b.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-self-static-position-008.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__self-alignment__self-align-safe-unsafe-grid-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__baseline-rules__inline-table-inline-block-baseline.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-self-static-position-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-self-stretch-auto-size.tentative.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__self-alignment__block-justify-self.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__blocks__align-content-block-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__content-distribution__place-content-shorthand-007.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-align__baseline-rules__synthesized-baseline-table-cell-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__baseline-rules__inline-table-inline-block-baseline-vert-rl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__justify-self-static-position-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-align__abspos__align-out-of-flow-only-content.html"
+      ]
+    }
+  ]
+}

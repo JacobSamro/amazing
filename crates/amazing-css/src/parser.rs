@@ -201,16 +201,15 @@ pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
             weight: descriptor("font-weight").unwrap_or("normal").to_owned(),
             style: descriptor("font-style").unwrap_or("normal").to_owned(),
             stretch: descriptor("font-stretch").unwrap_or("normal").to_owned(),
+            // CSS-26: `unicode-range` values now come through as verbatim
+            // `Token::UnicodeRange` text (see syntax.rs's `<urange>`
+            // tokenization), so `descriptor()` already yields correct,
+            // sign/leading-zero-preserving spellings like `U+0131`; this
+            // just normalizes the canonical ", " list separator down to a
+            // bare comma for this field's established (no-space) format.
             unicode_range: descriptor("unicode-range").map(|raw| {
                 raw.split(',')
-                    .map(|part| {
-                        let part = part.trim();
-                        if part.starts_with('U') && !part.starts_with("U+") {
-                            format!("U+{}", &part[1..])
-                        } else {
-                            part.to_owned()
-                        }
-                    })
+                    .map(str::trim)
                     .collect::<Vec<_>>()
                     .join(",")
             }),
@@ -1022,6 +1021,43 @@ mod tests {
         assert_eq!(faces[0].feature_settings.as_deref(), Some("\"liga\" 0"));
     }
 
+    // CSS-26 regression: `@font-face { unicode-range: U+0131; }` used to
+    // reach this field as `"u131"` (the '+' sign and the leading zero were
+    // lost when the descriptor's value was re-tokenized generically as
+    // `Ident("u")` + `Number(131.0)`, then re-serialized). A real
+    // `@font-face` rule for Turkish dotless-i coverage, exactly the reported
+    // shape.
+    #[test]
+    fn font_face_unicode_range_preserves_sign_and_leading_zeros() {
+        let faces = parse_font_faces(
+            "@font-face { font-family: Tr; src: url(tr.woff2); unicode-range: U+0131; }",
+        );
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].unicode_range.as_deref(), Some("U+0131"));
+    }
+
+    #[test]
+    fn font_face_unicode_range_covers_single_range_and_wildcard_forms() {
+        // Single low-codepoint value with no leading zero.
+        let faces = parse_font_faces(
+            "@font-face { font-family: A; src: url(a.woff2); unicode-range: U+41; }",
+        );
+        assert_eq!(faces[0].unicode_range.as_deref(), Some("U+41"));
+
+        // Explicit hyphenated range, wildcard, and a leading-zero single
+        // value together in one real descriptor list (mirrors a Latin +
+        // CJK-fallback @font-face split).
+        let faces = parse_font_faces(
+            "@font-face { font-family: B; src: url(b.woff2); \
+             unicode-range: U+0041-005A, U+4??, U+0100; }",
+        );
+        assert_eq!(faces.len(), 1);
+        assert_eq!(
+            faces[0].unicode_range.as_deref(),
+            Some("U+0041-005A,U+4??,U+0100")
+        );
+    }
+
     #[test]
     fn font_face_recovery_consumes_invalid_rules_and_last_descriptor_wins() {
         assert!(
@@ -1063,7 +1099,7 @@ mod tests {
         let d = decls("p{ background: rgba(255, 0, 0, 0.5) }");
         assert_eq!(
             d,
-            vec![("background".into(), "rgba(255,0,0,.5)".into(), false)]
+            vec![("background".into(), "rgba(255, 0, 0, .5)".into(), false)]
         );
     }
 
@@ -1101,7 +1137,7 @@ mod tests {
             vec![
                 ("--a".into(), "green".into(), false),
                 ("--b".into(), "blue".into(), false),
-                ("color".into(), "var(--a,(;))".into(), false),
+                ("color".into(), "var(--a, (;))".into(), false),
             ]
         );
     }

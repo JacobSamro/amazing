@@ -756,6 +756,14 @@ impl<'a> Builder<'a> {
                 || !node.name.is_empty()
                 || node.states.focusable
                 || !node.properties.raw.is_empty()
+                // An explicit (even invalid/unrecognized) `role` attribute
+                // must still surface an AxNode, falling back to `generic`:
+                // ARIA 1.2 conflict resolution never removes the node, only
+                // reassigns its role. Without this, an invalid-role element
+                // like `<span role="foo">` would be silently pruned away.
+                || node
+                    .dom_node
+                    .is_some_and(|dom_node| self.dom.get_attribute_ns(dom_node, None, "role").is_some())
             {
                 continue;
             }

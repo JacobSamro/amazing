@@ -14,10 +14,12 @@ use std::time::{Duration, Instant};
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, DerivedConstructor, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
-    JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
+    number_to_string, ClassElements, DerivedConstructor, Exotic, FieldKey, FunctionBody, HostCallPolicy,
+    HostFunctionId, HostHandle, InstanceElement, JsFunction, JsObject, JsValue, LegacyIteratorKind,
+    LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PrivateElementKind,
+    PrivateName, PromiseFate,
     PromiseState, Property, PropertyKey, CollectionIteratorKind, CollectionIteratorState,
-    SequenceIteratorKind, SequenceIteratorState,
+    SequenceIteratorKind, SequenceIteratorState, StaticElement,
     SetState, Throw, WellKnownSymbol, JsSymbol,
 };
 
@@ -39,8 +41,6 @@ mod bindings;
 pub use bindings::BindingPropertyFlags;
 #[path = "interp_legacy.rs"]
 mod legacy;
-#[path = "interp_class.rs"]
-mod class;
 #[path = "interp_async_iter.rs"]
 mod async_iter;
 pub use legacy::{LegacyPlatformHooks, PairIterableHooks};
@@ -155,7 +155,11 @@ struct CallFrame {
     home: Option<Obj>,
     super_constructor: Option<JsValue>,
     new_target: Option<JsValue>,
-    class_constructor: Option<Obj>,
+    /// The function object actually executing in this frame (`None` for the
+    /// synthetic frame a field initializer/static block runs in). Lets an
+    /// explicit `super()` call find its OWN class's instance elements
+    /// without threading them through every call site separately.
+    own_function: Option<Obj>,
 }
 
 #[derive(Clone)]
@@ -169,7 +173,7 @@ struct DomListener {
 enum Reference {
     Binding(String),
     Property(JsValue, PropertyKey),
-    Private(JsValue, JsSymbol),
+    Private(JsValue, PrivateName),
 }
 
 /// Host hooks for the small browser-facing DOM surface.
@@ -238,6 +242,11 @@ pub struct Interpreter {
     pub date_proto: Obj,
     pub promise_proto: Obj,
     pub regexp_proto: Obj,
+    /// %Error.prototype%, kept as a stored field so the `stack` accessor's
+    /// setter can compare its receiver against the exact home object
+    /// (SetterThatIgnoresPrototypeProperties' SameValue check) without a
+    /// global-lookup round trip that user code could shadow.
+    pub error_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
@@ -254,6 +263,7 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
+    error_brands: std::collections::HashSet<u64>,
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
     pair_iterator_proto: Obj,
@@ -363,6 +373,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let error_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -399,6 +414,7 @@ impl Interpreter {
             date_proto,
             promise_proto,
             regexp_proto,
+            error_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
@@ -415,6 +431,7 @@ impl Interpreter {
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
+            error_brands: std::collections::HashSet::new(),
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
             pair_iterator_proto,
@@ -1656,7 +1673,7 @@ impl Interpreter {
                 .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => env.resolve_this_checked(),
-            ExprKind::NewTarget => Err(Throw::type_error("new.target is not implemented")),
+            ExprKind::NewTarget => Ok(self.frames.last().and_then(|frame| frame.new_target.clone()).unwrap_or(JsValue::Undefined)),
             ExprKind::DynamicImport(_) => Err(Throw::type_error("dynamic import is not implemented")),
             ExprKind::DynamicImportPhase { .. } => Err(Throw::type_error("dynamic import phase is not implemented")),
             ExprKind::ImportMeta => env.resolve("\0import.meta")
@@ -1814,15 +1831,17 @@ impl Interpreter {
             ExprKind::Unary { op, operand } => self.unary(*op, operand, env),
             ExprKind::Update { op, prefix, target } => self.update(*op, *prefix, target, env),
             ExprKind::Binary { op, left, right } => {
-                if *op == ast::BinOp::In {
-                    if let ExprKind::PrivateName(name) = &left.kind {
-                        let id = self.private_name(env, &name.name)?;
-                        let receiver = self.eval_expr(right, env)?;
-                        return Ok(JsValue::Bool(self.private_has(&receiver, &id)?));
-                    }
-                }
                 if *op == ast::BinOp::Add {
                     return self.eval_add_chain(e, env);
+                }
+                if *op == ast::BinOp::In {
+                    if let ExprKind::PrivateName(identifier) = &left.kind {
+                        let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                        })?;
+                        let base = self.eval_expr(right, env)?;
+                        return private_field_has(&base, &name).map(JsValue::Bool);
+                    }
                 }
                 let a = self.eval_expr(left, env)?;
                 let b = self.eval_expr(right, env)?;
@@ -1871,9 +1890,11 @@ impl Interpreter {
                 let o = self.eval_expr(obj, env)?;
                 if *optional && (o.is_null() || o.is_undefined()) {
                     Ok(JsValue::Undefined)
-                } else if let MemberProp::Private(name) = prop {
-                    let id = self.private_name(env, &name.name)?;
-                    self.private_get(&o, &id)
+                } else if let MemberProp::Private(identifier) = prop {
+                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                    })?;
+                    private_field_get(self, &o, &name)
                 } else {
                     let k = self.member_key(prop, env)?;
                     self.get_prop(&o, &k)
@@ -1947,6 +1968,12 @@ impl Interpreter {
             ast::UnOp::Delete => match &x.kind {
                 ExprKind::Paren(inner) => self.unary(op, inner, env),
                 ExprKind::Ident(name) => self.delete_scoped_name(env, &name.name),
+                ExprKind::Member { obj, prop, .. } if matches!(prop, MemberProp::Private(_)) => {
+                    // A private member's `delete` target is an early SyntaxError
+                    // (§13.5.1.1); the parser does not reject it yet, so guard here.
+                    let _ = self.eval_expr(obj, env)?;
+                    Err(Throw::syntax_error("private members cannot be deleted"))
+                }
                 ExprKind::Member { obj, prop, .. } => {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
@@ -2162,11 +2189,13 @@ impl Interpreter {
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         if op == ast::AssignOp::Assign {
-            if let ExprKind::Member { obj, prop: MemberProp::Private(name), .. } = &t.kind {
+            if let ExprKind::Member { obj, prop: MemberProp::Private(identifier), .. } = &t.kind {
                 let receiver = self.eval_expr(obj, e)?;
-                let id = self.private_name(e, &name.name)?;
+                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
+                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                })?;
                 let value = self.eval_expr(r, e)?;
-                self.private_set(&receiver, &id, value.clone())?;
+                private_field_set(self, &receiver, &name, value.clone())?;
                 return Ok(value);
             }
         }
@@ -2283,18 +2312,16 @@ impl Interpreter {
             ExprKind::Ident(identifier) => self.name_reference_value(env, &identifier.name),
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
-                if let MemberProp::Private(name) = prop {
-                    let id = self.private_name(env, &name.name)?;
-                    let value = self.private_get(&base, &id)?;
-                    return Ok((Reference::Private(base, id), value));
+                if let MemberProp::Private(identifier) = prop {
+                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                    })?;
+                    let value = private_field_get(self, &base, &name)?;
+                    return Ok((Reference::Private(base, name), value));
                 }
                 let key = match prop {
                     MemberProp::Ident(identifier) => identifier.name.clone().into(),
-                    MemberProp::Private(_) => {
-                        return Err(Throw::type_error(
-                            "private names are not yet supported by the runtime",
-                        ))
-                    }
+                    MemberProp::Private(_) => unreachable!("handled above"),
                     MemberProp::Computed(expression) => {
                         let property_value = self.eval_expr(expression, env)?;
                         if base.is_null() || base.is_undefined() {
@@ -2349,7 +2376,7 @@ impl Interpreter {
                     Err(Throw::type_error("cannot assign to property"))
                 }
             }
-            Reference::Private(base, id) => self.private_set(&base, &id, value),
+            Reference::Private(base, name) => private_field_set(self, &base, &name, value),
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
@@ -2459,14 +2486,17 @@ impl Interpreter {
             let frame = self.frames.last().ok_or_else(|| Throw::syntax_error("super() used outside a constructor"))?;
             let constructor = frame.super_constructor.clone().ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
             let new_target = frame.new_target.clone().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+            let own_function = frame.own_function.clone();
             let argv = self.eval_args(args, e)?;
             let result = self.construct_with_new_target(&constructor, argv, new_target)?;
-            if let Some(class_constructor) = self.frames.last().and_then(|frame| frame.class_constructor.clone()) {
-                self.initialize_instance_elements(&class_constructor, &result)?;
-            }
             e.initialize_this(result.clone())?;
             if let Some(frame) = self.frames.last_mut() {
                 frame.this = result.clone();
+            }
+            if let Some(own_function) = own_function {
+                if let Some(elements) = own_function.borrow().class_elements.clone() {
+                    initialize_instance_elements(self, &result, &elements)?;
+                }
             }
             return Ok(result);
         }
@@ -2485,9 +2515,11 @@ impl Interpreter {
             } else {
                 o.clone()
             };
-            let function = if let MemberProp::Private(name) = prop {
-                let id = self.private_name(e, &name.name)?;
-                self.private_get(&receiver, &id)?
+            let function = if let MemberProp::Private(identifier) = prop {
+                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
+                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                })?;
+                private_field_get(self, &receiver, &name)?
             } else {
                 let k = self.member_key(prop, e)?;
                 self.get_prop(&o, &k)?
@@ -2604,7 +2636,7 @@ impl Interpreter {
             home: fun.home.clone(),
             super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
             new_target: new_target.clone().or(lexical_new_target),
-            class_constructor: o.borrow().class_constructor.then_some(o.clone()),
+            own_function: Some(o.clone()),
         });
         let previous_completion = self.completion.clone();
         let previous_strict = self.strict_eval_context;
@@ -2662,13 +2694,20 @@ impl Interpreter {
                             let parent = &derived_constructor.as_ref().expect("derived parent").parent;
                             let bound = self.construct_with_new_target(parent, args.clone(), new_target.clone().expect("newTarget"))?;
                             e.initialize_this(bound.clone())?;
-                            self.initialize_instance_elements(&o, &bound)?;
                             if let Some(frame) = self.frames.last_mut() {
-                                frame.this = bound;
+                                frame.this = bound.clone();
+                            }
+                            if let Some(elements) = o.borrow().class_elements.clone() {
+                                initialize_instance_elements(self, &bound, &elements)?;
                             }
                         }
                     } else {
-                        if !fun.is_arrow { e.bind_this(this); }
+                        if !fun.is_arrow { e.bind_this(this.clone()); }
+                        if new_target.is_some() {
+                            if let Some(elements) = o.borrow().class_elements.clone() {
+                                initialize_instance_elements(self, &this, &elements)?;
+                            }
+                        }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
@@ -2819,7 +2858,6 @@ impl Interpreter {
             x.constructed = true;
             x
         })));
-        self.initialize_instance_elements(&o, &JsValue::Object(obj.clone()))?;
         let v = self.call_value_with_new_target(
             f,
             JsValue::Object(obj.clone()),
@@ -2957,6 +2995,292 @@ impl Interpreter {
         let handle = Obj(Rc::new(RefCell::new(o)));
         JsValue::Object(handle)
     }
+    fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
+        self.eval_class_named(c, e, None)
+    }
+
+    // NamedEvaluation (§15.7.14 ClassTail) supplies an anonymous class's name
+    // before static work runs. It does not create a class-local lexical
+    // binding for the inferred name (only an explicit class name gets one).
+    fn eval_named_class_expr(&mut self, expression: &ast::Expr, env: &EnvHandle,
+        name: &crate::value::JsString) -> Result<JsValue, Throw>
+    {
+        match &expression.kind {
+            ExprKind::Paren(inner) => self.eval_named_class_expr(inner, env, name),
+            ExprKind::Class(class) if class.name.is_none() =>
+                self.eval_class_named(class, env, Some(name)),
+            _ => self.eval_expr(expression, env),
+        }
+    }
+
+    // Shared by the VM's MakeClass instruction, which defines each compiled
+    // class method the same way the tree-walk evaluator does: a get/set pair
+    // sharing one accessor descriptor, everything else a plain data method.
+    fn define_class_method(&mut self, target: &JsValue, key: &PropertyKey,
+        kind: ast::MethodKind, value: JsValue) -> Result<(), Throw>
+    {
+        let JsValue::Object(object) = target else { unreachable!() };
+        let mut descriptor = object.borrow().own_prop(key).cloned().unwrap_or(Property {
+            value: JsValue::Undefined, writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        });
+        if matches!(kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+            descriptor.writable = false;
+            if kind == ast::MethodKind::Get { descriptor.getter = Some(value); }
+            else { descriptor.setter = Some(value); }
+        } else {
+            descriptor = Property {
+                value, writable: true, enumerable: false, configurable: true,
+                getter: None, setter: None,
+            };
+        }
+        object.borrow_mut().define(key, descriptor)
+            .map_err(|_| Throw::type_error("could not define class method"))
+    }
+
+    fn class_binding_name(name: &str) -> crate::value::JsString {
+        // The module front end lowers anonymous default exports into this slot.
+        if name == "\0module.default" { "default".into() } else { name.into() }
+    }
+
+    fn property_function_name(key: &PropertyKey) -> crate::value::JsString {
+        match key {
+            PropertyKey::String(name) => name.clone(),
+            PropertyKey::Symbol(symbol) => match symbol.description() {
+                Some(description) => {
+                    let mut units = vec![b'[' as u16];
+                    units.extend_from_slice(description.units());
+                    units.push(b']' as u16);
+                    crate::value::JsString::from_units(units)
+                }
+                None => crate::value::JsString::from(""),
+            },
+        }
+    }
+
+    // SetFunctionName (§10.2.9) plus the length recomputation a class method
+    // needs on top of it: an accessor's own `name` is "get "/"set " prefixed,
+    // and `length` counts the method's own leading required parameters
+    // rather than the constructor-style default `method_value` gave it.
+    fn name_class_method(method: &mut JsValue, base_name: &str, kind: ast::MethodKind, params: &[ast::Param]) {
+        let JsValue::Object(function) = method else { return };
+        let name = match kind {
+            ast::MethodKind::Get => format!("get {base_name}"),
+            ast::MethodKind::Set => format!("set {base_name}"),
+            _ => base_name.to_string(),
+        };
+        let length = params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
+        let mut function = function.borrow_mut();
+        function.func.as_mut().unwrap().name = name.clone();
+        function.define("name", Property {
+            value: JsValue::str(name), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("method name property");
+        function.define("length", Property {
+            value: JsValue::num(length as f64), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("method length property");
+    }
+
+    fn eval_class_named(&mut self, c: &ast::ClassItem, e: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>) -> Result<JsValue, Throw>
+    {
+        let previous_strict = self.strict_eval_context;
+        self.strict_eval_context = true;
+        let result = self.eval_class_inner(c, e, inferred_name);
+        self.strict_eval_context = previous_strict;
+        result
+    }
+
+    fn eval_class_inner(&mut self, c: &ast::ClassItem, e: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>) -> Result<JsValue, Throw> {
+        let ctor = c.members.iter().find_map(|m| {
+            if let ast::ClassMember::Method(x) = m {
+                (x.kind == ast::MethodKind::Constructor).then_some(x)
+            } else {
+                None
+            }
+        });
+        // NewPrivateEnvironment (§9.2): every method, field initializer, and
+        // static block of this class captures `class_env`, not the raw outer
+        // scope, so `#name` inside any of them resolves through it.
+        let class_env = EnvHandle::new(EnvKind::Block, Some(e.clone()));
+        class_env.set_class_private(collect_private_names(&c.members));
+        let f = if let Some(x) = ctor {
+            self.method_value(x, &class_env, true)
+        } else {
+            self.make_function(
+                &ast::FunctionItem {
+                    name: c.name.clone(),
+                    params: Vec::new(),
+                    body: ast::Block {
+                        body: Vec::new(),
+                        span: crate::tokens::Span::new(
+                            crate::tokens::SourceLocation::new(1, 1),
+                            crate::tokens::SourceLocation::new(1, 1),
+                        ),
+                    },
+                    is_async: false,
+                    is_generator: false,
+                },
+                &class_env,
+            )
+        };
+        if let JsValue::Object(o) = &f {
+            o.borrow_mut().class_constructor = true;
+            if o.borrow().get_own("prototype").is_none() {
+                let prototype = Obj(Rc::new(RefCell::new({
+                    let mut object = JsObject::ordinary();
+                    object.proto = Some(self.object_proto.clone());
+                    object
+                })));
+                o.borrow_mut()
+                    .set_own("prototype", JsValue::Object(prototype.clone()));
+                o.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
+            }
+            let prototype = o.borrow().get_own("prototype");
+            if let Some(JsValue::Object(p)) = prototype {
+                p.borrow_mut().define("constructor", symbol_data(f.clone(), true, true)).unwrap();
+                if let Some(super_class) = &c.super_class {
+                    let super_value = self.eval_expr(super_class, &class_env)?;
+                    let super_prototype = match &super_value {
+                        JsValue::Object(super_constructor) => match super_constructor
+                            .borrow()
+                            .get_own("prototype")
+                        {
+                            Some(JsValue::Object(prototype)) => prototype,
+                            _ => {
+                                return Err(Throw::type_error("super constructor has no prototype"))
+                            }
+                        },
+                        _ => return Err(Throw::type_error("super class is not a constructor")),
+                    };
+                    p.borrow_mut().proto = Some(super_prototype);
+                    o.borrow_mut().proto = match &super_value {
+                        JsValue::Object(parent) => Some(parent.clone()),
+                        _ => unreachable!(),
+                    };
+                    o.borrow_mut().derived_constructor = Some(DerivedConstructor {
+                        parent: super_value,
+                        implicit: ctor.is_none(),
+                    });
+                }
+                let mut class_function = o.borrow_mut();
+                if let Some(function) = &mut class_function.func {
+                    function.home = Some(p.clone());
+                }
+                drop(class_function);
+                // An explicit class name gets its own class-local lexical
+                // binding (so a method/field/static block can reference the
+                // class by name even before any outer binding is initialized);
+                // NamedEvaluation's inferred name never creates one.
+                if let Some(name) = &c.name {
+                    class_env.declare_lexical(&name.name, f.clone(), false)?;
+                }
+                let class_name = c.name.as_ref().map(|name| crate::value::JsString::from(name.name.clone()))
+                    .or_else(|| inferred_name.cloned()).unwrap_or_else(|| crate::value::JsString::from(""));
+                o.borrow_mut().func.as_mut().unwrap().name = class_name.to_utf8_lossy();
+                o.borrow_mut().define("name", Property {
+                    value: JsValue::str(class_name), writable: false, enumerable: false,
+                    configurable: true, getter: None, setter: None,
+                }).expect("class name property");
+                let mut instance_elements: Vec<InstanceElement> = Vec::new();
+                let mut static_elements: Vec<StaticElement> = Vec::new();
+                for m in &c.members {
+                    match m {
+                        ast::ClassMember::Method(x) if x.kind != ast::MethodKind::Constructor => {
+                            let target_home = if x.is_static { o.clone() } else { p.clone() };
+                            let mut method = self.method_value(x, &class_env, true);
+                            if let JsValue::Object(method_object) = &method {
+                                method_object.borrow_mut().func.as_mut().unwrap().home = Some(target_home.clone());
+                            }
+                            if let ast::PropKey::Private(identifier) = &x.key {
+                                // Private identifier text already includes the leading '#'.
+                                Self::name_class_method(&mut method, &identifier.name, x.kind, &x.params);
+                                let name = class_env
+                                    .resolve_private(&identifier.name)
+                                    .expect("collect_private_names recorded every private key");
+                                let is_getter = x.kind == ast::MethodKind::Get;
+                                let is_accessor = matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set);
+                                if x.is_static {
+                                    upsert_static_private_accessor_or_method(
+                                        &mut static_elements, name, is_accessor, is_getter, method,
+                                    );
+                                } else {
+                                    upsert_instance_private_accessor_or_method(
+                                        &mut instance_elements, name, is_accessor, is_getter, method,
+                                    );
+                                }
+                                continue;
+                            }
+                            let k = match &x.key_utf16 {
+                                Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
+                                None => self.prop_key(&x.key, &class_env)?,
+                            };
+                            let key_name = match &k {
+                                PropertyKey::String(s) => s.to_utf8_lossy(),
+                                PropertyKey::Symbol(symbol) => symbol.descriptive_string(),
+                            };
+                            Self::name_class_method(&mut method, &key_name, x.kind, &x.params);
+                            let target = if x.is_static { &o } else { &p };
+                            if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+                                let mut property =
+                                    target.borrow().own_prop(&k).cloned().unwrap_or(Property {
+                                        value: JsValue::Undefined,
+                                        writable: false,
+                                        enumerable: false,
+                                        configurable: true,
+                                        getter: None,
+                                        setter: None,
+                                    });
+                                if x.kind == ast::MethodKind::Get {
+                                    property.getter = Some(method);
+                                } else {
+                                    property.setter = Some(method);
+                                }
+                                target.borrow_mut().define(&k, property).map_err(|_| {
+                                    Throw::type_error("could not define class accessor")
+                                })?;
+                            } else {
+                                target.borrow_mut().define(k, symbol_data(method, true, true)).unwrap();
+                            }
+                        }
+                        ast::ClassMember::Method(_) => {}
+                        ast::ClassMember::Field(field) => {
+                            let key = if let ast::PropKey::Private(identifier) = &field.key {
+                                FieldKey::Private(
+                                    class_env
+                                        .resolve_private(&identifier.name)
+                                        .expect("collect_private_names recorded every private key"),
+                                )
+                            } else {
+                                FieldKey::Public(self.prop_key(&field.key, &class_env)?)
+                            };
+                            let init = field.init.clone();
+                            if field.is_static {
+                                static_elements.push(StaticElement::Field { key, init });
+                            } else {
+                                instance_elements.push(InstanceElement::Field { key, init });
+                            }
+                        }
+                        ast::ClassMember::StaticBlock(block) => {
+                            static_elements.push(StaticElement::Block(block.clone()));
+                        }
+                    }
+                }
+                if !instance_elements.is_empty() {
+                    o.borrow_mut().class_elements = Some(Rc::new(ClassElements {
+                        instance: instance_elements,
+                        class_env: class_env.clone(),
+                        home: p.clone(),
+                    }));
+                }
+                run_static_elements(self, &f, o.clone(), &class_env, &static_elements)?;
+            }
+        }
+        Ok(f)
+    }
+
     fn object_value(&self) -> JsValue {
         let mut o = JsObject::ordinary();
         o.proto = Some(self.object_proto.clone());
@@ -3288,9 +3612,24 @@ impl Interpreter {
             _ => 0,
         }
     }
+    /// True when `v` is an array whose `[Symbol.iterator]` still resolves to
+    /// the intrinsic `Array.prototype[Symbol.iterator]` (§22.1.3.34, aliased
+    /// to `Array.prototype.values`), so the O(1) index-based fast path below
+    /// is spec-equivalent to walking the general iterator protocol. A
+    /// subclass override or a deleted `Array.prototype[Symbol.iterator]`
+    /// must fall through to the slow path instead, so a missing/non-callable
+    /// method still throws per GetIterator (§7.4.2).
+    fn has_original_array_iterator(&mut self, v: &JsValue) -> Result<bool, Throw> {
+        let method = self.get_prop(v, WellKnownSymbol::Iterator.symbol())?;
+        let canonical = self.array_proto.borrow().get_own(WellKnownSymbol::Iterator.symbol());
+        Ok(matches!(
+            (&method, &canonical),
+            (JsValue::Object(a), Some(JsValue::Object(b))) if Rc::ptr_eq(&a.0, &b.0)
+        ))
+    }
     fn iterate(&mut self, v: &JsValue) -> Result<Vec<JsValue>, Throw> {
         if let JsValue::Object(object) = v {
-            if matches!(object.borrow().exotic, Exotic::Array) {
+            if matches!(object.borrow().exotic, Exotic::Array) && self.has_original_array_iterator(v)? {
                 let n = match object.borrow().get_own("length") {
                     Some(JsValue::Num(n)) => n as usize,
                     _ => 0,
@@ -3323,27 +3662,35 @@ impl Interpreter {
                         return Err(error);
                     }
                 };
-                let result_object = match result {
-                    JsValue::Object(result) => result,
+                let result_value = match result {
+                    JsValue::Object(_) => result,
                     _ => {
                         self.close_iterator(v);
                         return Err(Throw::type_error("iterator result is not an object"));
                     }
                 };
-                let done = result_object
-                    .borrow()
-                    .get_own("done")
-                    .map(|value| value.to_boolean())
-                    .unwrap_or(false);
+                // IteratorComplete/IteratorValue (§7.4.6/§7.4.7) go through
+                // the full [[Get]], not a raw own-property probe, so a
+                // `done`/`value` accessor that throws is observed instead of
+                // silently reading as absent (which would loop forever on an
+                // iterator whose result objects define `value` as a getter).
+                let done = match self.get_prop(&result_value, "done") {
+                    Ok(value) => value.to_boolean(),
+                    Err(error) => {
+                        self.close_iterator(v);
+                        return Err(error);
+                    }
+                };
                 if done {
                     return Ok(values);
                 }
-                values.push(
-                    result_object
-                        .borrow()
-                        .get_own("value")
-                        .unwrap_or(JsValue::Undefined),
-                );
+                match self.get_prop(&result_value, "value") {
+                    Ok(value) => values.push(value),
+                    Err(error) => {
+                        self.close_iterator(v);
+                        return Err(error);
+                    }
+                }
             }
             self.close_iterator(v);
             return Err(Throw::range_error("iterator exceeded the iteration limit"));
@@ -3407,25 +3754,30 @@ impl Interpreter {
                     return Err(error);
                 }
             };
-            let result_object = match result {
-                JsValue::Object(object) => object,
+            let result_value = match result {
+                JsValue::Object(_) => result,
                 _ => {
                     self.close_iterator(&iterator);
                     return Err(Throw::type_error("iterator result is not an object"));
                 }
             };
-            if result_object
-                .borrow()
-                .get_own("done")
-                .map(|value| value.to_boolean())
-                .unwrap_or(false)
-            {
+            let done = match self.get_prop(&result_value, "done") {
+                Ok(value) => value.to_boolean(),
+                Err(error) => {
+                    self.close_iterator(&iterator);
+                    return Err(error);
+                }
+            };
+            if done {
                 break;
             }
-            let value = result_object
-                .borrow()
-                .get_own("value")
-                .unwrap_or(JsValue::Undefined);
+            let value = match self.get_prop(&result_value, "value") {
+                Ok(value) => value,
+                Err(error) => {
+                    self.close_iterator(&iterator);
+                    return Err(error);
+                }
+            };
             let iteration_env = for_iteration_env(left, env);
             self.bind_for(left, value, &iteration_env)?;
             match self.exec_stmt(body, &iteration_env) {
@@ -3451,7 +3803,7 @@ impl Interpreter {
         let JsValue::Object(object) = value else {
             return Ok(None);
         };
-        if matches!(object.borrow().exotic, Exotic::Array) {
+        if matches!(object.borrow().exotic, Exotic::Array) && self.has_original_array_iterator(value)? {
             return Ok(None);
         }
         let method = self.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
@@ -3650,6 +4002,8 @@ include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
+include!("interp_array_factories.rs");
+include!("interp_class_private.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");
@@ -3664,8 +4018,10 @@ include!("builtins_intl_data.rs");
 include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");
 include!("builtins_intl_number.rs");
+include!("builtins_intl_number_digits.rs");
 include!("builtins_intl_plural.rs");
 include!("builtins_intl_datetime.rs");
+include!("builtins_intl_date_support.rs");
 include!("builtins_intl_relative_list.rs");
 include!("builtins_intl_collator.rs");
 include!("builtins_intl_segmenter.rs");

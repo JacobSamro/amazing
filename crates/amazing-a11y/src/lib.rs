@@ -39,7 +39,7 @@ pub mod tree;
 pub use accname::NameContext;
 pub use aria::{AxProperties, AxStates, InvalidState, Orientation, Relevant, Sort, Tristate};
 pub use bounds::{AxRect, BoundsMap};
-pub use event::{AxEvent, AxEventKind, Live, LiveRegionInfo, diff, live_region};
+pub use event::{AxEvent, AxEventKind, Live, LiveRegionInfo, diff, live_region, rebuild_and_diff};
 pub use role::Role;
 pub use tree::{
     AxDocument, AxNode, AxNodeId, AxRelations, AxTree, SchemaNode, SchemaSnapshot, build,

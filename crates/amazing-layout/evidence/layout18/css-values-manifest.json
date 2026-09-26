@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "LAYOUT-18 css-values routed cases",
+    "case_count": 17
+  },
+  "sparse_paths": [
+    "css/css-values"
+  ],
+  "tests": [
+    {
+      "id": "css-values__calc-size__calc-size-min-max-sizes-001.html",
+      "test": "css/css-values/calc-size/calc-size-min-max-sizes-001.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-bottom-1.html",
+      "test": "css/css-values/calc-offsets-relative-bottom-1.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-flex-006.html",
+      "test": "css/css-values/calc-size/calc-size-flex-006.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-min-max-sizes-004.html",
+      "test": "css/css-values/calc-size/calc-size-min-max-sizes-004.html"
+    },
+    {
+      "id": "css-values__attr-in-max.html",
+      "test": "css/css-values/attr-in-max.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-top-1.html",
+      "test": "css/css-values/calc-offsets-relative-top-1.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-aspect-ratio-003.html",
+      "test": "css/css-values/calc-size/calc-size-aspect-ratio-003.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-left-1.html",
+      "test": "css/css-values/calc-offsets-relative-left-1.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-min-max-sizes-006.html",
+      "test": "css/css-values/calc-size/calc-size-min-max-sizes-006.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-grid-repeat.html",
+      "test": "css/css-values/calc-size/calc-size-grid-repeat.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-aspect-ratio-005.html",
+      "test": "css/css-values/calc-size/calc-size-aspect-ratio-005.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-aspect-ratio-001.html",
+      "test": "css/css-values/calc-size/calc-size-aspect-ratio-001.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-flex-001.html",
+      "test": "css/css-values/calc-size/calc-size-flex-001.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-flex-005.html",
+      "test": "css/css-values/calc-size/calc-size-flex-005.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-no-body-height-quirk-001.html",
+      "test": "css/css-values/calc-size/calc-size-no-body-height-quirk-001.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-min-max-sizes-002.html",
+      "test": "css/css-values/calc-size/calc-size-min-max-sizes-002.html"
+    },
+    {
+      "id": "css-values__calc-size__calc-size-min-max-sizes-003.html",
+      "test": "css/css-values/calc-size/calc-size-min-max-sizes-003.html"
+    }
+  ]
+}

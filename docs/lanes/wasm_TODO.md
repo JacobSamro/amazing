@@ -58,32 +58,115 @@ Bugs found and fixed this session (all in `crates/amazing-wasm/src`):
   (missing the mandatory leading digit before `.`) were also accepted. Fixed
   both (20 `const.wast` failures).
 
-## Remaining WASM-1 gaps (not blocking, follow-up)
+## WASM-1b (done, commit follows in log.md)
 
-All in the **`.wat`/`.wast` text parser** (`wat.rs`, `sexpr.rs`) — the
-decoder/validator/interpreter that the JS API and any future consumer will
-actually exercise are unaffected. 39 assertions across:
-- `tokens.wast` (17): lexer edge cases around comment/whitespace adjacency
-  (`func;;bla`) and adjacent string-literal segments in `data`.
-- `binary.wast` (8): a handful of malformed-binary shapes not yet rejected.
-- `stack.wast` (6): a deep folded-instruction form (`$body`) the parser
-  doesn't resolve; likely a fold-desugaring gap, not validated as a real
-  spec-required form beyond this test.
-- `func.wast` (4): redundant explicit `(type $sig)` alongside inline
-  param/result should be malformed; currently accepted.
-- `call_indirect.wast` (2), `elem.wast` (1), `select.wast` (1): similar
-  narrow malformed-text acceptance gaps.
+Fixed the 39 remaining WASM-1 testsuite gaps, all in the WAT text parser
+(`wat.rs`) and its s-expression lexer (`sexpr.rs`), plus one decoder
+strictness fix (`decode.rs`). None touch the binary decoder's happy path,
+validator, or interpreter.
 
-Pick up by re-running `scripts/linux-run.sh wasm -- '<build+run wast_suite>'`
-against the pinned testsuite (fetch via `git clone` + `git checkout
-7ef86ddeed81458f9031a49a40b3a3f99c1c6a8a` into `corpora/testsuite`, not
-committed) and triaging by file.
+Linux gate (Boat sandbox): **27898/27898 testsuite assertions (100%)**, up
+from 27858/27897, across the same 89 non-skipped `.wast` files. Full
+workspace `cargo nextest run --workspace --locked --no-fail-fast`: 2882
+passed, 0 failed, 10 skipped. `cargo test --workspace --locked --doc`: all
+green.
 
-## Next: WASM-2 (JS API binding seam)
+Fixes (all in `crates/amazing-wasm/src`):
+- `sexpr.rs`: a string literal glued directly onto a preceding word/string
+  with no separating white space or comment (`data"a"`, `"a""b"`) is
+  malformed even though the `"` makes the boundary unambiguous — added
+  `prev_word_or_str_end` tracking to reject it. A lone `;` (not `;;` or
+  `(;`) is now an explicit malformed error instead of falling through to an
+  empty atom (`tokens.wast`, 17 assertions).
+- `decode.rs` `decode_reserved_memory`: `memory.size`/`memory.grow`'s
+  reserved byte must be exactly one raw byte; was reading a full LEB128
+  varint, which happened to accept multi-byte encodings of zero
+  (`binary.wast`, part of 8 assertions).
+- `wat.rs` `parse_func` / `call_indirect` immediates: an explicit
+  `(type $sig)` clause after inline `(param)`/`(result)` fields is
+  malformed per the text-format typeuse grammar (type must come first);
+  added the ordering check (`func.wast` 4, `call_indirect.wast` 2).
+- `wat.rs` `parse_func`: fixed local-index numbering for functions whose
+  params come entirely from a `(type $sig)` reference with no literal
+  `(param)` fields — locals now start numbering after the referenced type's
+  param count. Caught a self-introduced regression (double-counting when
+  literal `(param)` fields are *also* present, since those are numbered
+  independently by the existing field walk) before it was committed, via
+  the very next corpus rerun (13308/27898 -> traced to one line -> back to
+  27897/27898).
+- `wat.rs` `parse_elem`: any list head other than `offset` (explicit) or
+  `item` (explicit passive marker) counts as an implicit offset expression,
+  matching the spec's active/passive/declarative disambiguation rule
+  instead of special-casing `i32.const`/`global.get` heads (`elem.wast`, 1).
+- `wat.rs` select: `consume_immediates` and `build()` now consume and
+  concatenate *all* repeated `(result t)` clauses instead of just the
+  first, for chained forms like `select (result i32) (result)`
+  (`select.wast`, 1).
+- `wat.rs` `parse_plain`: consume an optional repeated `$label` atom after
+  `else`/`end`, matching the currently open block's label
+  (`stack.wast`, 6 — the "deep folded-instruction form" noted below turned
+  out to be this).
 
-WebAssembly.{Module,Instance,Memory,Table,Global}, `instantiate`/`compile`.
-Needs a small binding seam into `amazing-js`/js-runtime (JsValue <->
-`amazing_wasm::Value` marshaling, import-object resolution, JS closures as
-`Extern::Func` hosts). Flagged in `.agents/js-runtime/questions.md` rather
-than implemented, per lane escalation rules — `amazing-wasm` stays a pure
-engine crate with no dependency on `amazing-js`.
+Diagnosis note: mapping a wast-runner failure index back to source text by
+hand-rolling a comment-stripping line counter is unreliable (`;;` inside a
+string literal, multi-line block comments) — use the crate's own
+`amazing_wasm::sexpr::parse` from a throwaway example instead for ground
+truth, then delete the example before committing.
+
+## WASM-2a (done, commit follows in log.md): embedder API
+
+Added `crates/amazing-wasm/src/embed.rs`: the seam js-runtime calls to build
+the WebAssembly JS API, with **no dependency on `amazing-js`** in either
+direction — every type here is store-address/handle-based, never a
+`JsValue`. Full API surface (also re-exported from crate root):
+
+- **Compile:** `embed::compile(bytes: &[u8]) -> Result<CompiledModule>` —
+  decode + validate. `CompiledModule::imports()` / `::exports()` return
+  `&[ImportType]` / `&[ExportType]`, each an `(module, name)` (imports only)
+  plus an `ExternKind` — `Func(FuncType)`, `Table(TableType)`,
+  `Memory(MemoryType)`, or `Global(GlobalType)` — i.e. exactly the shape of
+  `WebAssembly.Module.imports()`/`.exports()`.
+- **Instantiate:** `Engine::instantiate(&mut self, &CompiledModule, &mut dyn
+  ImportResolver) -> Result<InstanceHandle>`. `ImportResolver::resolve(&mut
+  self, module: &str, name: &str, expected: &ExternKind) -> Result<ExternValue>`
+  is the trait the embedder implements over its own import-object lookup;
+  it returns a handle (see below), not a raw value, so js-runtime never
+  touches a `Store` address directly. `instantiate` runs the module's
+  `start` afterward, exactly like `wast.rs`'s `Runner::instantiate`. A
+  resolver `Err` (use `WasmError::unlinkable` for "no such import") is
+  propagated as-is; a type-incompatible resolved value is caught by the
+  same linking checks `Store::instantiate` already runs and comes back as
+  `ErrorKind::Unlinkable`.
+- **Handles:** `FuncHandle`/`TableHandle`/`MemoryHandle`/`GlobalHandle`
+  (opaque, `Copy`) stand in for `WebAssembly.{Function,Table,Memory,Global}`.
+  `Engine::create_func`/`create_table`/`create_memory`/`create_global` mint
+  fresh ones — `create_func` takes a `store::HostFn`
+  (`Rc<dyn Fn(&[Value]) -> Result<Vec<Value>>>`), i.e. the JS-closure-as-host-
+  function case. `Engine::get_export` reads a handle off an
+  `InstanceHandle` by export name. `Engine::call_export`/`call_func` invoke;
+  `table_grow`/`memory_grow` are `.grow()`; `memory_bytes`/`memory_bytes_mut`
+  back a `WebAssembly.Memory`'s `buffer`; `global_get`/`global_set` are the
+  `.value` getter/setter (setter rejects immutable or type-mismatched).
+- **Error classification:** `ErrorKind::js_error_class(self) -> JsErrorClass`
+  (`Compile`/`Link`/`Runtime`) — `Malformed`/`Invalid`/`Unsupported` ->
+  `Compile` (`WebAssembly.CompileError`), `Unlinkable` -> `Link`
+  (`LinkError`), `Trap`/`Exhaustion` -> `Runtime` (`RuntimeError`). One
+  lookup instead of js-runtime re-deriving the mapping.
+
+4 new unit tests in `embed.rs` build a module by hand (import + call +
+export + memory + global), round-trip it through `encode_module`/`compile`,
+instantiate through a resolver backed by a `create_func` host closure, call
+the export, grow the memory, and read/write the global — plus the
+unlinkable-import and error-class-mapping paths. Full workspace gate: 2886
+nextest passed/0 failed/10 skipped (up from 2882: the 4 new tests), doctests
+all green, corpus unaffected at 27898/27898.
+
+## Next: WASM-2b (JS-side binding, owned by js-runtime)
+
+`WebAssembly.{Module,Instance,Memory,Table,Global}` JS constructors/
+prototypes and `WebAssembly.instantiate`/`.compile` built on the `embed`
+seam above: `JsValue <-> amazing_wasm::Value` marshaling, building an
+`ImportResolver` over a JS import object, and surfacing `ErrorKind::
+js_error_class` as the matching JS error constructor. Not amazing-wasm's
+work — see the updated request in the main checkout's
+`.agents/js-runtime/questions.md`.

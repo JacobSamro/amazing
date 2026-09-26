@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "subdir": "css/css-text-decor",
+  "mismatch_count": 127,
+  "unreadable": 11,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 36,
+      "examples": [
+        "css__css-text-decor__text-emphasis-property-004.html",
+        "css__css-text-decor__text-emphasis-property-004a.html",
+        "css__css-text-decor__text-emphasis-position-property-001b.html",
+        "css__css-text-decor__text-emphasis-position-property-002a.html",
+        "css__css-text-decor__text-emphasis-style-property-012.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 18,
+      "examples": [
+        "css__css-text-decor__text-emphasis-position-property-004g.html",
+        "css__css-text-decor__text-emphasis-position-property-006d.html",
+        "css__css-text-decor__text-decoration-subelements-002.html",
+        "css__css-text-decor__text-emphasis-position-property-005g.html",
+        "css__css-text-decor__text-emphasis-position-property-003e.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 17,
+      "examples": [
+        "css__css-text-decor__text-emphasis-style-property-011a.html",
+        "css__css-text-decor__text-shadow__quirks-decor-noblur.html",
+        "css__css-text-decor__text-emphasis-style-010.html",
+        "css__css-text-decor__text-shadow__basic-negcoord.html",
+        "css__css-text-decor__text-emphasis-style-property-016.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 13,
+      "examples": [
+        "css__css-text-decor__text-underline-offset-calc.html",
+        "css__css-text-decor__text-decoration-inset-percentage-slice.html",
+        "css__css-text-decor__text-emphasis-style-property-017a.html",
+        "css__css-text-decor__text-emphasis-style-021.html",
+        "css__css-text-decor__text-decoration-skip-spaces-005.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, same tone, different shape",
+      "count": 11,
+      "examples": [
+        "css__css-text-decor__text-emphasis-position-property-004b.html",
+        "css__css-text-decor__text-emphasis-position-property-004.html",
+        "css__css-text-decor__text-emphasis-position-property-003a.html",
+        "css__css-text-decor__text-emphasis-position-property-003b.html",
+        "css__css-text-decor__text-emphasis-position-property-004a.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, lighter than reference",
+      "count": 8,
+      "examples": [
+        "css__css-text-decor__text-emphasis-position-property-006b.html",
+        "css__css-text-decor__text-emphasis-position-property-005a.html",
+        "css__css-text-decor__text-emphasis-position-property-005c.html",
+        "css__css-text-decor__text-emphasis-position-property-006.html",
+        "css__css-text-decor__text-emphasis-position-property-006a.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-text-decor__text-shadow__textindent.html",
+        "css__css-text-decor__text-emphasis-property-002.html",
+        "css__css-text-decor__text-emphasis-style-property-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-text-decor__text-emphasis-ruby-004a.html",
+        "css__css-text-decor__text-emphasis-ruby-003a.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-right, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-text-decor__text-emphasis-ruby-003.html",
+        "css__css-text-decor__text-emphasis-ruby-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-text-decor__text-decoration-propagation-03.html",
+        "css__css-text-decor__text-decoration-propagation-02.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-text-decor__text-shadow__standards-decor-noblur-2.html",
+        "css__css-text-decor__text-emphasis-punctuation-3.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-text-decor__text-decoration-color.html"
+      ]
+    },
+    {
+      "signature": "large-region, bottom-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-text-decor__text-decoration-inset-025.html"
+      ]
+    }
+  ]
+}

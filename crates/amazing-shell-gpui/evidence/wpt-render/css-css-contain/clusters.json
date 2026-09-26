@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "subdir": "css/css-contain",
+  "mismatch_count": 124,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 22,
+      "examples": [
+        "css__css-contain__contain-subgrid-001.html",
+        "css__css-contain__contain-paint-clip-018.html",
+        "css__css-contain__contain-layout-018.html",
+        "css__css-contain__contain-paint-clip-017.html",
+        "css__css-contain__contain-size-064.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 17,
+      "examples": [
+        "css__css-contain__contain-paint-size-003.html",
+        "css__css-contain__contain-size-button-001.html",
+        "css__css-contain__contain-size-inline-flex-001.html",
+        "css__css-contain__contain-layout-containing-block-fixed-001.html",
+        "css__css-contain__contain-strict-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 10,
+      "examples": [
+        "css__css-contain__contain-size-003.html",
+        "css__css-contain__contain-paint-006.html",
+        "css__css-contain__contain-size-002.html",
+        "css__css-contain__contain-paint-005.html",
+        "css__css-contain__contain-inline-size-grid-stretches-auto-rows.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 9,
+      "examples": [
+        "css__css-contain__contain-style-ol-ordinal-reversed.html",
+        "css__css-contain__counter-scoping-004.html",
+        "css__css-contain__contain-size-fieldset-004.html",
+        "css__css-contain__contain-style-ol-ordinal-pseudo-reversed.html",
+        "css__css-contain__contain-layout-formatting-context-margin-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 7,
+      "examples": [
+        "css__css-contain__counter-scoping-001.html",
+        "css__css-contain__contain-paint-formatting-context-margin-001.html",
+        "css__css-contain__contain-style-ol-ordinal.html",
+        "css__css-contain__counter-scoping-002.html",
+        "css__css-contain__contain-style-counters-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-contain__contain-style-counters-004.html",
+        "css__css-contain__contain-layout-baseline-006.html",
+        "css__css-contain__contain-size-select-elem-001.html",
+        "css__css-contain__contain-size-062.html",
+        "css__css-contain__contain-paint-clip-005.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-contain__contain-paint-cell-002.html",
+        "css__css-contain__contain-paint-cell-001.html",
+        "css__css-contain__contain-paint-047.html",
+        "css__css-contain__contain-paint-table-001.html",
+        "css__css-contain__content-visibility__content-visibility-fieldset-size.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__css-contain__contain-size-063.html",
+        "css__css-contain__contain-layout-cell-002.html",
+        "css__css-contain__contain-inline-size-fieldset.html",
+        "css__css-contain__contain-content-004.html",
+        "css__css-contain__contain-layout-cell-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-contain__contain-size-grid-005.html",
+        "css__css-contain__contain-size-multicol-003.html",
+        "css__css-contain__contain-size-flex-001.html",
+        "css__css-contain__contain-size-block-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-contain__contain-size-inline-block-001.html",
+        "css__css-contain__contain-size-inline-block-003.html",
+        "css__css-contain__contain-size-inline-block-002.html",
+        "css__css-contain__contain-size-inline-block-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-contain__contain-paint-stacking-context-001b.html",
+        "css__css-contain__contain-paint-stacking-context-001a.html",
+        "css__css-contain__contain-layout-stacking-context-001.html",
+        "css__css-contain__contain-size-027.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-contain__contain-paint-clip-002.html",
+        "css__css-contain__contain-content-011.html",
+        "css__css-contain__contain-paint-clip-006.html",
+        "css__css-contain__content-visibility__content-visibility-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 4,
+      "examples": [
+        "css__css-contain__contain-size-056.html",
+        "css__css-contain__contain-layout-ifc-022.html",
+        "css__css-contain__contain-strict-011.html",
+        "css__css-contain__contain-content-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-contain__contain-style-ol-ordinal-start.html",
+        "css__css-contain__quote-scoping-001.html",
+        "css__css-contain__quote-scoping-003.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-contain__contain-size-block-002.html",
+        "css__css-contain__contain-size-block-004.html",
+        "css__css-contain__contain-size-block-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-contain__contain-paint-clip-019.html",
+        "css__css-contain__contain-size-fieldset-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-contain__contain-layout-independent-formatting-context-001.html",
+        "css__css-contain__contain-paint-independent-formatting-context-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-contain__contain-content-002.html",
+        "css__css-contain__contain-paint-ifc-011.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-contain__contain-paint-independent-formatting-context-002.html",
+        "css__css-contain__contain-layout-independent-formatting-context-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-contain__contain-size-flexbox-001.html",
+        "css__css-contain__contain-size-grid-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-inline-size-bfc-floats-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-size-023.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-size-button-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-style-counters-005.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-paint-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-contain__contain-size-multicol-002.html"
+      ]
+    }
+  ]
+}

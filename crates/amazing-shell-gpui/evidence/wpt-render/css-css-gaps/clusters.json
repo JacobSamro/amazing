@@ -1,0 +1,362 @@
+{
+  "schema": 1,
+  "subdir": "css/css-gaps",
+  "mismatch_count": 347,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 66,
+      "examples": [
+        "css__css-gaps__grid-lanes__row-gap-decorations-006.html",
+        "css__css-gaps__grid-lanes__row-gap-decorations-012.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-inset-overlapping-gutters-percentage.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-012.html",
+        "css__css-gaps__flex__flex-gap-decorations-050.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 42,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-031.html",
+        "css__css-gaps__flex__flex-gap-decorations-multi-value-reverse-direction-interaction.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-001.html",
+        "css__css-gaps__flex__flex-gap-decorations-006.html",
+        "css__css-gaps__flex__flex-gap-decorations-028.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 30,
+      "examples": [
+        "css__css-gaps__grid-lanes__column-gap-decorations-027.html",
+        "css__css-gaps__flex__flex-gap-decorations-040.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-inset-across-spanner.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-inset-cap-vs-junction.html",
+        "css__css-gaps__grid-lanes__row-gap-decorations-020.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 28,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-029.html",
+        "css__css-gaps__grid__grid-gap-decorations-012.html",
+        "css__css-gaps__grid__grid-gap-decorations-011.html",
+        "css__css-gaps__grid__grid-gap-decorations-082.html",
+        "css__css-gaps__grid__grid-gap-decorations-025.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 20,
+      "examples": [
+        "css__css-gaps__grid__grid-gap-decorations-071.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-020.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-013.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-014.html",
+        "css__css-gaps__grid__grid-gap-decorations-081.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 18,
+      "examples": [
+        "css__css-gaps__grid__grid-gap-decorations-092.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-039.html",
+        "css__css-gaps__flex__flex-gap-decorations-067.html",
+        "css__css-gaps__grid__grid-gap-decorations-090.html",
+        "css__css-gaps__grid__grid-gap-decorations-007.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 17,
+      "examples": [
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-036.html",
+        "css__css-gaps__grid-lanes__row-gap-decorations-019.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-002.html",
+        "css__css-gaps__flex__flex-gap-decorations-multi-value-width-flex-direction-reverse.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-009.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 11,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-064.html",
+        "css__css-gaps__flex__flex-gap-decorations-037.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-013.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-026.html",
+        "css__css-gaps__flex__flex-gap-decorations-036.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 10,
+      "examples": [
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-012.html",
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-024.html",
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-015.html",
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-025.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-010.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 9,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-035.html",
+        "css__css-gaps__grid__grid-gap-decorations-018.html",
+        "css__css-gaps__grid__grid-gap-decorations-017.html",
+        "css__css-gaps__grid__grid-gap-decorations-016.html",
+        "css__css-gaps__grid__grid-gap-decorations-050.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, greener than reference",
+      "count": 8,
+      "examples": [
+        "css__css-gaps__grid__grid-gap-decorations-077.html",
+        "css__css-gaps__grid__grid-gap-decorations-074.html",
+        "css__css-gaps__grid__grid-gap-decorations-073.html",
+        "css__css-gaps__grid__grid-gap-decorations-078.html",
+        "css__css-gaps__flex__flex-gap-decorations-multi-value-direction.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 8,
+      "examples": [
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-009.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-007.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-011.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-006.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-008.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, bluer than reference",
+      "count": 7,
+      "examples": [
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-018.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-017.html",
+        "css__css-gaps__flex__flex-gap-decorations-046.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-031.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-019.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 7,
+      "examples": [
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-021.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-015.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-019.html",
+        "css__css-gaps__flex__flex-gap-decorations-061.html",
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-010.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, less red than reference",
+      "count": 6,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-025.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-033.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-022.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-016.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 6,
+      "examples": [
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-019.html",
+        "css__css-gaps__grid__grid-gap-decorations-054.html",
+        "css__css-gaps__grid__grid-gap-decorations-055.html",
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-020.html",
+        "css__css-gaps__grid__grid-gap-decorations-057.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 6,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-002.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-008.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-010.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-011.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-009.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 6,
+      "examples": [
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-006.html",
+        "css__css-gaps__flex__flex-gap-decorations-multi-value-writing-mode.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-multi-value-writing-mode.html",
+        "css__css-gaps__grid__subgrid__subgrid-gap-decorations-005.html",
+        "css__css-gaps__grid__grid-gap-decorations-multi-value-writing-mode.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-writing-mode.html",
+        "css__css-gaps__grid__grid-gap-decorations-writing-mode.html",
+        "css__css-gaps__flex__flex-gap-decorations-045.html",
+        "css__css-gaps__flex__flex-gap-decorations-058.html",
+        "css__css-gaps__flex__flex-gap-decorations-writing-mode.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-024.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-023.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-027.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-022.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 4,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-034.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-014.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-036.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-035.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-020.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-001.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-030.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-028.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-029.html",
+        "css__css-gaps__flex__flex-gap-decorations-multi-value-wrap-reverse.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, greener than reference",
+      "count": 3,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-direction-inset.html",
+        "css__css-gaps__grid__grid-gap-decorations-direction-inset.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-017.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-gaps__grid__grid-gap-decorations-multi-value-direction.html",
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-015.html",
+        "css__css-gaps__multicol__multicol-gap-decorations-multi-value-direction.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-gaps__grid-lanes__column-gap-decorations-019.html",
+        "css__css-gaps__grid-lanes__row-gap-decorations-021.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-003.html",
+        "css__css-gaps__flex__fragmentation__flex-gap-decorations-fragmentation-015.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 2,
+      "examples": [
+        "css__css-gaps__grid-lanes__column-gap-decorations-029.html",
+        "css__css-gaps__grid-lanes__column-gap-decorations-033.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, greener than reference",
+      "count": 2,
+      "examples": [
+        "css__css-gaps__grid__fragmentation__grid-gap-decorations-fragmentation-029.html",
+        "css__css-gaps__grid__grid-gap-decorations-064.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-017.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-025.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__flex__flex-gap-decorations-043.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__grid__grid-gap-decorations-065.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-007.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__grid__subgrid__fragmentation__subgrid-gap-decorations-fragmentation-016.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-040.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-gaps__multicol__multicol-gap-decorations-003.html"
+      ]
+    }
+  ]
+}

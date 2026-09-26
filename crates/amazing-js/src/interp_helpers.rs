@@ -10,8 +10,8 @@ fn has_use_strict_directive(statements: &[ast::Stmt]) -> bool {
 fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
-        Reference::Private(_, _) => None,
         Reference::Property(_, key) => key.as_string().map(|name| name.to_utf8_lossy()),
+        Reference::Private(_, name) => Some(format!("#{}", name.text())),
     }
 }
 
@@ -36,6 +36,123 @@ fn is_destructuring_expr(expression: &ast::Expr) -> bool {
         ExprKind::Paren(inner) => is_destructuring_expr(inner),
         ExprKind::Array(_) | ExprKind::Object(_) => true,
         _ => false,
+    }
+}
+
+/// A lazily-stepped iterator for array-pattern `BindingInitialization`
+/// (§8.6.2/§8.6.3): unlike `Interpreter::iterate`'s eager collect-everything
+/// (right for spread and for-of, which always want every value), a pattern
+/// without a trailing rest element must pull only as many values as it has
+/// elements, then perform IteratorClose (§7.4.11) exactly once — an iterator
+/// that legitimately never signals `done` (e.g. an infinite generator bound
+/// to `[x]`) must not be drained to completion first.
+enum PatternIter {
+    /// An array whose `[Symbol.iterator]` is still the untouched intrinsic:
+    /// index access is spec-equivalent, and %ArrayIteratorPrototype% has no
+    /// `return` method, so IteratorClose on it is always a no-op — `close`
+    /// is simply never called for this variant.
+    Fast { value: JsValue, index: usize, len: usize },
+    Protocol { iterator: JsValue, next: JsValue, done: bool },
+}
+
+impl PatternIter {
+    fn new(i: &mut Interpreter, value: &JsValue) -> Result<PatternIter, Throw> {
+        if let JsValue::Object(object) = value {
+            if matches!(object.borrow().exotic, Exotic::Array) && i.has_original_array_iterator(value)? {
+                let len = match object.borrow().get_own("length") {
+                    Some(JsValue::Num(n)) => n as usize,
+                    _ => 0,
+                };
+                return Ok(PatternIter::Fast { value: value.clone(), index: 0, len });
+            }
+        }
+        let method = i.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
+        if callable_function(&method).is_none() {
+            return Err(Throw::type_error("value is not iterable"));
+        }
+        let iterator = i.call_value(&method, value.clone(), Vec::new())?;
+        let next = i.get_prop(&iterator, "next")?;
+        if callable_function(&next).is_none() {
+            return Err(Throw::type_error("iterator's next method is not callable"));
+        }
+        Ok(PatternIter::Protocol { iterator, next, done: false })
+    }
+
+    /// `Ok(None)` is IteratorStep returning done — never advances past it.
+    fn step(&mut self, i: &mut Interpreter) -> Result<Option<JsValue>, Throw> {
+        match self {
+            PatternIter::Fast { value, index, len } => {
+                if *index >= *len {
+                    return Ok(None);
+                }
+                let v = i.get_prop(value, &index.to_string())?;
+                *index += 1;
+                Ok(Some(v))
+            }
+            PatternIter::Protocol { iterator, next, done } => {
+                if *done {
+                    return Ok(None);
+                }
+                let result = match i.call_value(next, iterator.clone(), Vec::new()) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        *done = true;
+                        return Err(error);
+                    }
+                };
+                let result_value = match result {
+                    JsValue::Object(_) => result,
+                    _ => {
+                        *done = true;
+                        return Err(Throw::type_error("iterator result is not an object"));
+                    }
+                };
+                // IteratorComplete/IteratorValue (§7.4.6/§7.4.7): the full
+                // [[Get]], not a raw own-property probe, so a `done`/`value`
+                // accessor that throws is observed instead of silently
+                // reading as absent (an iterator whose result objects define
+                // `value` as a getter would otherwise loop forever).
+                let is_done = match i.get_prop(&result_value, "done") {
+                    Ok(value) => value.to_boolean(),
+                    Err(error) => {
+                        *done = true;
+                        return Err(error);
+                    }
+                };
+                if is_done {
+                    *done = true;
+                    return Ok(None);
+                }
+                match i.get_prop(&result_value, "value") {
+                    Ok(value) => Ok(Some(value)),
+                    Err(error) => {
+                        *done = true;
+                        Err(error)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Pulls every remaining value for a trailing rest element; the
+    /// iterator is naturally exhausted afterward, so `close` need not run.
+    fn collect_rest(&mut self, i: &mut Interpreter) -> Result<Vec<JsValue>, Throw> {
+        let mut values = Vec::new();
+        while let Some(value) = self.step(i)? {
+            values.push(value);
+        }
+        Ok(values)
+    }
+
+    /// IteratorClose: a no-op once already done (naturally exhausted, a
+    /// rest element drained it, or `step` itself already failed).
+    fn close(&mut self, i: &mut Interpreter) {
+        if let PatternIter::Protocol { iterator, done, .. } = self {
+            if !*done {
+                i.close_iterator(iterator);
+                *done = true;
+            }
+        }
     }
 }
 
@@ -90,54 +207,31 @@ impl Interpreter {
             }
             Binding::Rest(inner) => self.bind_pattern_mode(inner, value, kind, env)?,
             Binding::Array(elements) => {
-                let method = self.get_prop(&value, WellKnownSymbol::Iterator.symbol())?;
-                if callable_function(&method).is_none() {
-                    return Err(Throw::type_error("value is not iterable"));
-                }
-                let iterator = self.call_value(&method, value, Vec::new())?;
-                if !iterator.is_object() {
-                    return Err(Throw::type_error("iterator is not an object"));
-                }
-                let next = self.get_prop(&iterator, "next")?;
-                if callable_function(&next).is_none() {
-                    return Err(Throw::type_error("iterator next is not callable"));
-                }
-                let mut exhausted = false;
-                for element in elements {
-                    if let Some(Binding::Rest(rest)) = element.as_deref() {
-                        let mut values = Vec::new();
-                        if !exhausted {
-                            for _ in 0..100_000 {
-                                match self.binding_iterator_step(&iterator, &next) {
-                                    Ok(Some(value)) => values.push(value),
-                                    Ok(None) => { exhausted = true; break; }
-                                    Err(error) => { self.close_iterator(&iterator); return Err(error); }
-                                }
-                            }
-                        }
-                        if !exhausted {
-                            self.close_iterator(&iterator);
-                            return Err(Throw::range_error("iterator exceeded the iteration limit"));
-                        }
-                        let rest_value = array_values(self, values)?;
-                        self.bind_pattern_mode(rest, rest_value, kind, env)?;
-                    } else {
-                        let item = if exhausted { JsValue::Undefined } else {
-                            match self.binding_iterator_step(&iterator, &next) {
-                                Ok(Some(value)) => value,
-                                Ok(None) => { exhausted = true; JsValue::Undefined }
-                                Err(error) => { self.close_iterator(&iterator); return Err(error); }
-                            }
-                        };
+                // GetIterator (§7.4.2) must throw when `value` has no usable
+                // iterator, and a pattern without a trailing rest element
+                // must pull only as many values as it declares (§8.6.3),
+                // closing the iterator afterward rather than draining an
+                // iterator that may never signal done — see `PatternIter`.
+                let mut iter = PatternIter::new(self, &value)?;
+                let result = (|| -> Result<(), Throw> {
+                    for element in elements {
                         if let Some(element) = element {
-                            if let Err(error) = self.bind_pattern_mode(element, item, kind, env) {
-                                if !exhausted { self.close_iterator(&iterator); }
-                                return Err(error);
+                            if let Binding::Rest(rest) = element.as_ref() {
+                                let items = iter.collect_rest(self)?;
+                                let rest_value = array_values(self, items)?;
+                                self.bind_pattern_mode(rest, rest_value, kind, env)?;
+                            } else {
+                                let item = iter.step(self)?.unwrap_or(JsValue::Undefined);
+                                self.bind_pattern_mode(element, item, kind, env)?;
                             }
+                        } else {
+                            iter.step(self)?;
                         }
                     }
-                }
-                if !exhausted { self.close_iterator(&iterator); }
+                    Ok(())
+                })();
+                iter.close(self);
+                result?;
             }
             Binding::Object(properties) => {
                 let source = match value {

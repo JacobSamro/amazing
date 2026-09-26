@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "subdir": "css/css-display",
+  "mismatch_count": 6,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-display__display-math-on-pseudo-elements-002.html",
+        "css__css-display__display-contents-fieldset.html",
+        "css__css-display__display-contents-before-after-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-display__display-flow-root-list-item-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-display__display-contents-before-after-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-display__display-contents-first-line-002.html"
+      ]
+    }
+  ]
+}

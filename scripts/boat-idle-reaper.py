@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import os
 import subprocess
 import time
@@ -33,9 +34,11 @@ LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
 PROBE = (
     "cut -d' ' -f1 /proc/loadavg; "
-    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
-    # linux-run.sh leases (removed when its command exits; stale after 3 h).
-    "find ~/.amazing-busy -type f -mmin -180 2>/dev/null | wc -l"
+    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|amazing|amazing-shell|wpt_render_compare|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
+    # linux-run.sh leases (removed when its command exits). A run killed with
+    # its ssh session can leave one behind, so they count for 60 min only;
+    # long runs stay visible through the build/test process check above.
+    "find ~/.amazing-busy -type f -mmin -60 2>/dev/null | wc -l"
 )
 
 
@@ -56,6 +59,29 @@ def boat(*args: str, timeout: int = 60) -> dict | None:
         return None
     lines = [l for l in out.splitlines() if l.startswith("{")]
     return json.loads(lines[-1]) if lines else None
+
+
+LANE_MAP = Path(__file__).resolve().parent.parent / ".agents" / ".boat-lanes.json"
+
+
+def wanted_types() -> dict[str, str]:
+    """Sandbox id -> the size boat-lane.py's POOL_TYPE wants for it."""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location("boat_lane", Path(__file__).with_name("boat-lane.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        lanes = json.loads(LANE_MAP.read_text())
+    except Exception:
+        return {}
+    return {sid: mod.pool_type(key) for key, sid in lanes.items() if key.startswith("pool-")}
+
+
+def managed_ids() -> set[str]:
+    try:
+        return set(json.loads(LANE_MAP.read_text()).values())
+    except (OSError, ValueError):
+        return set()
 
 
 def running_sandboxes() -> list[dict]:
@@ -80,20 +106,27 @@ def is_busy(sandbox_id: str) -> bool | None:
 START_RESERVE = 15  # keep this many hourly starts free for lanes and Test262 shards
 
 
+START_RESERVE_DAY = 40  # Boat allows 200 starts a day; a refused resume blocks a lane
+
+
 def starts_left_this_hour() -> int | None:
+    """Hourly starts left, or 0 when the daily allowance is nearly spent."""
     status = boat("billing", "status") or {}
     try:
-        return int(status["limits"]["starts"]["hour"]["remaining"])
+        starts = status["limits"]["starts"]
+        if int(starts["day"]["remaining"]) < START_RESERVE_DAY:
+            return 0
+        return int(starts["hour"]["remaining"])
     except (KeyError, TypeError, ValueError):
         return None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--idle-minutes", type=float, default=5)
+    ap.add_argument("--idle-minutes", type=float, default=15)
     # Every resume counts against Boat's 60 starts per hour. When few are left,
     # stopping early just forces a resume that may be refused, so wait longer.
-    ap.add_argument("--scarce-idle-minutes", type=float, default=15)
+    ap.add_argument("--scarce-idle-minutes", type=float, default=20)
     ap.add_argument("--poll", type=int, default=60)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -107,12 +140,26 @@ def main() -> int:
         if left is not None and left < START_RESERVE:
             limit = args.scarce_idle_minutes
         live = running_sandboxes()
+        wanted = wanted_types()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
-            if "keep" in name.lower() or sid in KEEP:
+            # Only "amazing*" sandboxes boat-lane.py manages; anything else is the user's
+            # (their hand-made "Box <date>" sandboxes above all), never touched.
+            if (not name.startswith("amazing") or "keep" in name.lower() or sid in KEEP
+                    or sid not in managed_ids()):
                 continue
             busy = is_busy(sid)
             if busy is not False:
+                idle_since.pop(sid, None)
+                continue
+            # A busy pool never idles long enough to pick up a new size, so a
+            # size change is applied in the first gap between runs: stop it now
+            # and boat-lane.py resumes it at the wanted size.
+            want = wanted.get(sid)
+            if want and sb.get("type") and sb.get("type") != want and is_busy(sid) is False:
+                log(f"RESIZE-STOP {sid} ({sb.get('type')} -> {want} on next resume)")
+                if not args.dry_run:
+                    boat("stop", sid, timeout=120)
                 idle_since.pop(sid, None)
                 continue
             first = idle_since.setdefault(sid, now)

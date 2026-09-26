@@ -1,0 +1,445 @@
+{
+  "ticket": "JSRT-13 synchronous Array factories",
+  "base": "6683ceaa6fa07997fffb1242dab5cf47a2b1b34e",
+  "implementation_commit": "40cc5b88e2c0da2d3e5c3022f17ffbf7767d3625",
+  "gate": {
+    "platform": "Linux Boat",
+    "workspace_pass": 2825,
+    "workspace_skipped": 10,
+    "workspace_seconds": 65.852,
+    "doctests_pass": 4,
+    "commands": [
+      "cargo build -p amazing-js --example test262_host --release --locked",
+      "cargo nextest run --workspace --locked --no-fail-fast",
+      "cargo test --workspace --locked --doc",
+      "python3 scripts/test262.py \"$TEST262_ROOT\" --binary \"$OUT/factories-after-host\" --jobs 4 --timeout 60 --output \"$OUT/factories-after.json\""
+    ]
+  },
+  "before": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "fe9b3f161f1fda38d76dcb55a521ea5d9bc468c1d2e0ff714cfd52f2055c7b68",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "classification_sha256": "dfec7cfcaba3d55daa44074be2ce50e9c2e9d1b8b4a9505774930e32041002cf",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": false,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "files": {
+      "pass": 33092,
+      "fail": 20036,
+      "timeout": 15,
+      "unsupported": 435,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 64030,
+      "fail": 38251,
+      "timeout": 30,
+      "unsupported": 607,
+      "skipped": 0
+    }
+  },
+  "after": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "9735eaa510fe022cbf2ad71a55cf8deffcc9a845a9bd2a919141290d4cdaf607",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "classification_sha256": "07be32cc41f57b1e24ce3a41cdca873e3e4f83677cc56690a84427ad8abd2200",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": false,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "files": {
+      "pass": 33112,
+      "fail": 20015,
+      "timeout": 17,
+      "unsupported": 434,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 64070,
+      "fail": 38209,
+      "timeout": 33,
+      "unsupported": 606,
+      "skipped": 0
+    }
+  },
+  "array_directory": {
+    "before": {
+      "files": 3082,
+      "passed_files": 2931,
+      "passed_variants": 5815
+    },
+    "after": {
+      "files": 3082,
+      "passed_files": 2950,
+      "passed_variants": 5853
+    }
+  },
+  "raw_full_sweep": {
+    "lost_variants": [
+      {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "variant": "strict",
+        "after": {
+          "variant": "strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "staging/sm/regress/regress-610026.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "fail",
+          "reason": "host.abnormal-exit",
+          "exit_code": -9,
+          "detail": ""
+        }
+      },
+      {
+        "path": "staging/sm/regress/regress-610026.js",
+        "variant": "strict",
+        "after": {
+          "variant": "strict",
+          "status": "fail",
+          "reason": "host.abnormal-exit",
+          "exit_code": -9,
+          "detail": ""
+        }
+      }
+    ],
+    "gained_files": 22,
+    "note": "The single jobs=4 full sweep at the pinned 60s deadline recorded 4 lost variants across two staging/sm files unrelated to Array.from/of (a TypedArray sort-under-mutation test and a large-source eval regression test). These are retained here verbatim, not discarded."
+  },
+  "directory_recheck": {
+    "method": "Reran staging/sm/TypedArray/ (96 files) and staging/sm/regress/ (106 files) with both frozen before/after hosts at the identical pinned 60s deadline but --jobs 1 (serialized, no concurrent Test262 workers), to separate resource contention from a real regression. staging/sm/regress/regress-610026.js uses ~3.9GB RSS per process (confirmed by direct /usr/bin/time -v probes on both hosts, ~4.5s wall, no timeout/-9 in isolation): under jobs=4-8 concurrent load on this 8GB sandbox, simultaneous heavy processes can exceed available memory and trigger the OOM killer (exit -9). staging/sm/TypedArray/sort_modifications.js runs in ~49-54s wall time in direct single-process probes on BOTH the before and after hosts (11 TypedArray constructors x 5 size classes x 3 sorts), leaving only 6-11s of margin under the pinned 60s deadline; it is a pre-existing marginal/flaky timing case on this hardware in both old and new code, not a regression introduced by this ticket.",
+    "lost_variants_in_recheck": [],
+    "replaced_paths_count": 202,
+    "recheck_summaries": {
+      "recheck-typedarray-before": {
+        "discovered": 53872,
+        "files": {
+          "pass": 37,
+          "fail": 58,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 53776
+        },
+        "variant_count": 185,
+        "variants": {
+          "pass": 74,
+          "fail": 109,
+          "timeout": 2,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "by_variant": {
+          "non-strict": {
+            "pass": 37,
+            "fail": 57,
+            "timeout": 1,
+            "unsupported": 0,
+            "skipped": 0
+          },
+          "strict": {
+            "pass": 37,
+            "fail": 52,
+            "timeout": 1,
+            "unsupported": 0,
+            "skipped": 0
+          }
+        },
+        "reason_counts": {
+          "fail": {
+            "runtime:TypeError": 51,
+            "runtime:Test262Error": 33,
+            "runtime:ReferenceError": 17,
+            "runtime:String": 4,
+            "runtime:SyntaxError": 2,
+            "runtime:RangeError": 2
+          },
+          "pass": {
+            "completed": 74
+          },
+          "skipped": {
+            "selection.excluded": 53482,
+            "fixture": 294
+          },
+          "timeout": {
+            "execution.deadline": 2
+          }
+        }
+      },
+      "recheck-typedarray-after": {
+        "discovered": 53872,
+        "files": {
+          "pass": 37,
+          "fail": 58,
+          "timeout": 1,
+          "unsupported": 0,
+          "skipped": 53776
+        },
+        "variant_count": 185,
+        "variants": {
+          "pass": 74,
+          "fail": 109,
+          "timeout": 2,
+          "unsupported": 0,
+          "skipped": 0
+        },
+        "by_variant": {
+          "non-strict": {
+            "pass": 37,
+            "fail": 57,
+            "timeout": 1,
+            "unsupported": 0,
+            "skipped": 0
+          },
+          "strict": {
+            "pass": 37,
+            "fail": 52,
+            "timeout": 1,
+            "unsupported": 0,
+            "skipped": 0
+          }
+        },
+        "reason_counts": {
+          "fail": {
+            "runtime:TypeError": 51,
+            "runtime:Test262Error": 33,
+            "runtime:ReferenceError": 17,
+            "runtime:String": 4,
+            "runtime:SyntaxError": 2,
+            "runtime:RangeError": 2
+          },
+          "pass": {
+            "completed": 74
+          },
+          "skipped": {
+            "selection.excluded": 53482,
+            "fixture": 294
+          },
+          "timeout": {
+            "execution.deadline": 2
+          }
+        }
+      },
+      "recheck-regress-before": {
+        "discovered": 53872,
+        "files": {
+          "pass": 73,
+          "fail": 30,
+          "timeout": 0,
+          "unsupported": 3,
+          "skipped": 53766
+        },
+        "variant_count": 182,
+        "variants": {
+          "pass": 132,
+          "fail": 44,
+          "timeout": 0,
+          "unsupported": 6,
+          "skipped": 0
+        },
+        "by_variant": {
+          "non-strict": {
+            "pass": 72,
+            "fail": 30,
+            "timeout": 0,
+            "unsupported": 3,
+            "skipped": 0
+          },
+          "strict": {
+            "pass": 60,
+            "fail": 14,
+            "timeout": 0,
+            "unsupported": 3,
+            "skipped": 0
+          }
+        },
+        "reason_counts": {
+          "fail": {
+            "runtime:Test262Error": 26,
+            "runtime:TypeError": 14,
+            "runtime:SyntaxError": 2,
+            "runtime:ReferenceError": 2
+          },
+          "pass": {
+            "completed": 132
+          },
+          "skipped": {
+            "selection.excluded": 53472,
+            "fixture": 294
+          },
+          "unsupported": {
+            "host.gc": 6
+          }
+        }
+      },
+      "recheck-regress-after": {
+        "discovered": 53872,
+        "files": {
+          "pass": 73,
+          "fail": 30,
+          "timeout": 0,
+          "unsupported": 3,
+          "skipped": 53766
+        },
+        "variant_count": 182,
+        "variants": {
+          "pass": 132,
+          "fail": 44,
+          "timeout": 0,
+          "unsupported": 6,
+          "skipped": 0
+        },
+        "by_variant": {
+          "non-strict": {
+            "pass": 72,
+            "fail": 30,
+            "timeout": 0,
+            "unsupported": 3,
+            "skipped": 0
+          },
+          "strict": {
+            "pass": 60,
+            "fail": 14,
+            "timeout": 0,
+            "unsupported": 3,
+            "skipped": 0
+          }
+        },
+        "reason_counts": {
+          "fail": {
+            "runtime:Test262Error": 26,
+            "runtime:TypeError": 14,
+            "runtime:SyntaxError": 2,
+            "runtime:ReferenceError": 2
+          },
+          "pass": {
+            "completed": 132
+          },
+          "skipped": {
+            "selection.excluded": 53472,
+            "fixture": 294
+          },
+          "unsupported": {
+            "host.gc": 6
+          }
+        }
+      }
+    }
+  },
+  "combined_measurement": {
+    "description": "Substituting the two directories' isolated (jobs=1) recheck records into the raw jobs=4 full-sweep before/after results, as JSRT-9 did for its one TypedArray timing loss. This is a combined measurement, not a claim that the original single jobs=4 sweep had zero lost variants.",
+    "before_files": {
+      "pass": 33092,
+      "fail": 20036,
+      "timeout": 15,
+      "unsupported": 435,
+      "skipped": 294
+    },
+    "after_files": {
+      "pass": 33114,
+      "fail": 20014,
+      "timeout": 15,
+      "unsupported": 435,
+      "skipped": 294
+    },
+    "before_variants": {
+      "pass": 64030,
+      "fail": 38251,
+      "timeout": 30,
+      "unsupported": 607
+    },
+    "after_variants": {
+      "pass": 64074,
+      "fail": 38207,
+      "timeout": 30,
+      "unsupported": 607
+    },
+    "lost_variants": [],
+    "gained_files": 22
+  },
+  "lost_variants": [],
+  "gained_files": [
+    "built-ins/Array/from/Array.from_forwards-length-for-array-likes.js",
+    "built-ins/Array/from/elements-deleted-after.js",
+    "built-ins/Array/from/elements-updated-after.js",
+    "built-ins/Array/from/iter-cstm-ctor-err.js",
+    "built-ins/Array/from/iter-cstm-ctor.js",
+    "built-ins/Array/from/iter-get-iter-val-err.js",
+    "built-ins/Array/from/iter-map-fn-err.js",
+    "built-ins/Array/from/iter-set-elem-prop-err.js",
+    "built-ins/Array/from/iter-set-length-err.js",
+    "built-ins/Array/from/proto-from-ctor-realm.js",
+    "built-ins/Array/from/source-object-constructor.js",
+    "built-ins/Array/from/source-object-length-set-elem-prop-err.js",
+    "built-ins/Array/of/construct-this-with-the-number-of-arguments.js",
+    "built-ins/Array/of/proto-from-ctor-realm.js",
+    "built-ins/Array/of/return-a-custom-instance.js",
+    "built-ins/Array/of/return-abrupt-from-contructor.js",
+    "built-ins/Array/of/return-abrupt-from-data-property.js",
+    "built-ins/Array/of/return-abrupt-from-setting-length.js",
+    "built-ins/Array/of/sets-length.js",
+    "staging/sm/Array/from_length_setter.js",
+    "staging/sm/Array/from_mapping.js",
+    "staging/sm/Array/from_realms.js"
+  ],
+  "source_manifest_sha256": "53f0f9548bb363b9ef5a42970cab1127eee4d98c900df126e1981c9cf0aa30cd",
+  "changes": [
+    "Array.from/of construct custom receivers and pass the specified argument list",
+    "Array.from caches iterator method and next once, advancing lazily between mapper calls",
+    "Mapper and data-definition errors close the iterator while retaining original error precedence",
+    "Iterator step/done/value errors propagate without an extra close",
+    "Factories create own data properties and perform the required throwing length Set"
+  ],
+  "limitations": [
+    "The existing generic iterator limit of 100000 items now applies consistently to all factory iterable inputs; array-like inputs retain the 1000000 limit",
+    "Proxy support and Array.fromAsync remain separate areas"
+  ],
+  "specifications": [
+    "https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.from",
+    "https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.of"
+  ]
+}

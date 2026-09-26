@@ -48,6 +48,12 @@ fn parse_css_color_depth(input: &str, depth: usize) -> Option<[u8; 4]> {
     }
     let (name_raw, inner) = split_function(s)?;
     let name = name_raw.to_ascii_lowercase();
+    // `alpha()` (CSS Color 5) has its own dedicated grammar -- see
+    // `color_advanced::alpha_outcome` -- rather than the numeric-channel
+    // `relative()` helper the other functions below share.
+    if name == "alpha" {
+        return advanced::alpha_color(inner, depth);
+    }
     // CSS Color 5 relative color syntax: `fn(from <color> <channels>)`.
     if advanced::has_from(inner) {
         return advanced::relative(&name, inner, depth);
@@ -69,6 +75,39 @@ fn parse_css_color_depth(input: &str, depth: usize) -> Option<[u8; 4]> {
 
 #[path = "color_advanced.rs"]
 mod advanced;
+
+/// CSS-27: `values.rs`'s grammar check for the `color`-family properties
+/// needs to tell an `alpha()` call that is genuinely invalid apart from one
+/// that is well-formed but names `currentcolor` as its source (deferred to
+/// the computed-value seam, matching every other relative-color function's
+/// treatment of `currentcolor`) -- a distinction `parse_css_color`'s plain
+/// `Option<[u8; 4]>` can't carry.
+pub enum AlphaClassification {
+    Invalid,
+    /// Well-formed but not resolvable yet: source is `currentcolor`
+    /// (deferred to the computed-value seam) or the `/ <alpha>` slot
+    /// references a custom property via `var()` (deferred to substitution).
+    Deferred,
+    Resolved([u8; 4]),
+}
+
+/// Classifies an `alpha(...)` declaration value (the full text, e.g.
+/// `"alpha(from red / 0.5)"`). Returns `Invalid` for any non-`alpha()` or
+/// unparseable input, so callers can use it directly on a declaration's raw
+/// CSS text.
+pub fn classify_alpha_function(css: &str) -> AlphaClassification {
+    let Some((name, inner)) = split_function(css.trim()) else {
+        return AlphaClassification::Invalid;
+    };
+    if !name.eq_ignore_ascii_case("alpha") {
+        return AlphaClassification::Invalid;
+    }
+    match advanced::alpha_outcome(inner, 0) {
+        advanced::AlphaOutcome::Invalid => AlphaClassification::Invalid,
+        advanced::AlphaOutcome::Deferred => AlphaClassification::Deferred,
+        advanced::AlphaOutcome::Resolved(rgba) => AlphaClassification::Resolved(rgba),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // hex forms
@@ -165,16 +204,16 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
         let t: Vec<&str> = joined.split_ascii_whitespace().collect();
         match t.as_slice() {
             [r, g, b] => Some([
-                clamp_byte(parse_channel(r)?),
-                clamp_byte(parse_channel(g)?),
-                clamp_byte(parse_channel(b)?),
+                clamp_byte(channel_or_none(r)?),
+                clamp_byte(channel_or_none(g)?),
+                clamp_byte(channel_or_none(b)?),
                 255,
             ]),
             [r, g, b, slash, a] if *slash == "/" => Some([
-                clamp_byte(parse_channel(r)?),
-                clamp_byte(parse_channel(g)?),
-                clamp_byte(parse_channel(b)?),
-                parse_alpha(a)?,
+                clamp_byte(channel_or_none(r)?),
+                clamp_byte(channel_or_none(g)?),
+                clamp_byte(channel_or_none(b)?),
+                alpha_or_none(a)?,
             ]),
             _ => None,
         }
@@ -184,6 +223,16 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
 /// One RGB channel as a raw 0..=255-scale f32 (percentages rescaled).
 /// Alphabetic tokens (`nan`, `inf`) are rejected; decimal values that
 /// overflow f32 to ±infinity survive and clamp in [`clamp_byte`].
+/// CSS Color 4 `none` in the modern `rgb()`/`rgba()` space syntax (not the
+/// legacy comma syntax, which predates `none` and does not accept it).
+fn channel_or_none(tok: &str) -> Option<f32> {
+    if tok.eq_ignore_ascii_case("none") { Some(0.0) } else { parse_channel(tok) }
+}
+
+fn alpha_or_none(tok: &str) -> Option<u8> {
+    if tok.eq_ignore_ascii_case("none") { Some(0) } else { parse_alpha(tok) }
+}
+
 fn parse_channel(tok: &str) -> Option<f32> {
     let val = if let Some(p) = tok.strip_suffix('%') {
         p.trim().parse::<f32>().ok()? * 255.0 / 100.0

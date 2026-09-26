@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "subdir": "css/css-multicol",
+  "mismatch_count": 59,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-multicol__baseline-003.html",
+        "css__css-multicol__baseline-002.html",
+        "css__css-multicol__table__table-cell-as-multicol.html",
+        "css__css-multicol__baseline-000.html",
+        "css__css-multicol__baseline-005.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-multicol__multicol-oof-inline-cb-002.html",
+        "css__css-multicol__relative-child-overflowing-column-gap.html",
+        "css__css-multicol__multicol-span-all-children-height-001.html",
+        "css__css-multicol__column-balancing-with-span-and-oof-001.html",
+        "css__css-multicol__multicol-oof-inline-cb-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-multicol__multicol-scroll-content.html",
+        "css__css-multicol__multicol-span-all-020.html",
+        "css__css-multicol__baseline-007.html",
+        "css__css-multicol__composited-under-clip-under-multicol.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less green than reference",
+      "count": 4,
+      "examples": [
+        "css__css-multicol__multicol-breaking-001.html",
+        "css__css-multicol__multicol-breaking-000.html",
+        "css__css-multicol__multicol-breaking-003.html",
+        "css__css-multicol__multicol-breaking-004.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-multicol__multicol-breaking-nobackground-005.html",
+        "css__css-multicol__multicol-breaking-nobackground-002.html",
+        "css__css-multicol__multicol-breaking-005.html",
+        "css__css-multicol__abspos-containing-block-outside-spanner.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-multicol__balance-break-avoidance-002.html",
+        "css__css-multicol__column-pseudo-background-color.html",
+        "css__css-multicol__non-adjacent-spanners-000.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-multicol__column-rule-002.html",
+        "css__css-multicol__broken-column-rule-1.html",
+        "css__css-multicol__float-with-line-after-spanner.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-multicol__zero-column-width-layout.html",
+        "css__css-multicol__multicol-fill-balance-002.html",
+        "css__css-multicol__multicol-span-all-children-height-008.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__multicol-span-all-children-height-006.html",
+        "css__css-multicol__multicol-span-all-children-height-005.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__multicol-span-all-children-height-004a.html",
+        "css__css-multicol__multicol-span-all-children-height-004b.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__multicol-breaking-nobackground-003.html",
+        "css__css-multicol__multicol-breaking-nobackground-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__column-balancing-with-span-and-oof-002.html",
+        "css__css-multicol__multicol-fill-balance-006.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__multicol-breaking-006.html",
+        "css__css-multicol__multicol-width-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-multicol__multicol-list-item-005.html",
+        "css__css-multicol__multicol-list-item-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-contained-absolute.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-zero-height-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-list-item-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__column-height-009.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-span-all-children-height-002.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-breaking-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__baseline-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-breaking-nobackground-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-breaking-nobackground-000.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-span-all-children-height-003.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-width-005.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-list-item-008.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-span-all-rule-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-gap-fraction-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-multicol__multicol-span-all-children-height-007.html"
+      ]
+    }
+  ]
+}

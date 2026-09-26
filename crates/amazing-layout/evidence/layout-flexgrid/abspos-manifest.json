@@ -1,0 +1,465 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout-flexgrid abspos group",
+    "case_count": 113
+  },
+  "sparse_paths": [
+    "css/css-grid/abspos"
+  ],
+  "tests": [
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-end.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-safe-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-safe-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-negative-indices-003.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-negative-indices-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-026.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-026.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-008.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-008.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-017.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-017.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-001.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-010.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-010.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-003.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-003.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-016.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-016.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-center.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-center.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-017.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-017.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-001.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-012.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-012.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-006.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-006.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-self-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-self-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-center-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-center-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-002.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-002.html"
+    },
+    {
+      "id": "css-grid__abspos__descendant-static-position-003.html",
+      "test": "css/css-grid/abspos/descendant-static-position-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-center-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-center-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-005.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-005.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-009.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-009.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-004.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-015.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-015.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-safe-outer-cb-002.tentative.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-safe-outer-cb-002.tentative.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-008.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-008.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-last-baseline-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-last-baseline-004.html"
+    },
+    {
+      "id": "css-grid__abspos__descendant-static-position-002.html",
+      "test": "css/css-grid/abspos/descendant-static-position-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-003.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-023.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-023.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendants-017.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendants-017.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-011.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-011.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-004.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-006.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-006.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-013.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-013.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-last-baseline-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-010.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-010.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-007.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-007.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendant-containing-block-008.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendant-containing-block-008.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-negative-indices-002.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-negative-indices-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-003.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-003.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-016.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-016.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendant-containing-block-009.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendant-containing-block-009.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-negative-indices-001.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-negative-indices-001.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendant-containing-block-012.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendant-containing-block-012.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-022.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-022.html"
+    },
+    {
+      "id": "css-grid__abspos__descendant-static-position-004.html",
+      "test": "css/css-grid/abspos/descendant-static-position-004.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-004.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-end.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-003.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-009.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-009.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-self-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-self-end.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-flex-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-flex-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendant-containing-block-013.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendant-containing-block-013.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-last-baseline-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-last-baseline-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-flex-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-flex-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__descendant-static-position-001.html",
+      "test": "css/css-grid/abspos/descendant-static-position-001.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-001.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-001.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-004.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-001.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-007.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-007.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-rtl-last-baseline-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-015.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-015.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-001.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-002.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-025.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-025.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-last-baseline-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-last-baseline-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-items-flex-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-items-flex-end.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-012.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-012.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-rtl-last-baseline-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-rtl-last-baseline-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-last-baseline-003.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-last-baseline-003.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-flex-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-flex-end.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-005.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-005.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-safe-outer-cb-001.tentative.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-safe-outer-cb-001.tentative.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-descendant-containing-block-010.html",
+      "test": "css/css-grid/abspos/positioned-grid-descendant-containing-block-010.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-self-end-large-border-padding.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-self-end-large-border-padding.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-001.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-019.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-019.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-013.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-013.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-011.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-011.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-last-baseline-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-last-baseline-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-last-baseline-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-last-baseline-002.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-014.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-014.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-center.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-center.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-last-baseline-001.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-last-baseline-001.html"
+    },
+    {
+      "id": "css-grid__abspos__orthogonal-positioned-grid-items-014.html",
+      "test": "css/css-grid/abspos/orthogonal-positioned-grid-items-014.html"
+    },
+    {
+      "id": "css-grid__abspos__positioned-grid-items-018.html",
+      "test": "css/css-grid/abspos/positioned-grid-items-018.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-vertWM-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-vertWM-002.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-004.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-vertWM-004.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-safe-outer-cb-003.tentative.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-safe-outer-cb-003.tentative.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-align-self-self-end.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-align-self-self-end.html"
+    }
+  ]
+}
