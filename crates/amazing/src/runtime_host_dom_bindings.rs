@@ -3,6 +3,12 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        // The current embedding associates its one WindowProxy with the active
+        // document. DOMImplementation, DOMParser and clones create inert docs.
+        Ok((document == self.current_document()).then(|| self.js.binding_global_object()))
+    }
+
     pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
         matches!(brand, InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP
             | InterfaceBrand::COLLECTION | InterfaceBrand::FORM_CONTROLS
@@ -142,6 +148,39 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_default_view_preserves_window_identity_and_inert_document_nulls() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('document defaultView'); }
+            check(document.defaultView === window);
+            check(document.defaultView.document === document);
+            check(document.defaultView.DOMException === DOMException);
+            check(new Document().defaultView === null);
+            check(document.implementation.createHTMLDocument('').defaultView === null);
+            check(document.implementation.createDocument(null, 'root').defaultView === null);
+            check(document.cloneNode(false).defaultView === null);
+            const getter = Object.getOwnPropertyDescriptor(Document.prototype, 'defaultView').get;
+            let rejected = false;
+            try { getter.call({}); } catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            for (const [uri, name, expected, code] of [
+                [null, '1foo', 'InvalidCharacterError', 5],
+                [null, 'p:foo', 'NamespaceError', 14],
+                ['urn:test', 'xml:foo', 'NamespaceError', 14]]) {
+                let caught;
+                try { document.createElementNS(uri, name); } catch (error) { caught = error; }
+                check(caught.name === expected && caught.code === code);
+                check(caught.constructor === document.defaultView.DOMException);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn token_list_reads_live_state_after_argument_conversion() {

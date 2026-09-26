@@ -296,6 +296,7 @@ pub enum Operation {
     DocumentElement,
     DocumentDoctype,
     DocumentReadyState,
+    DocumentDefaultView,
     DocumentURL,
     DocumentURI,
     DocumentCharacterSet,
@@ -678,6 +679,11 @@ pub enum DocumentField { URL, DocumentURI, CharacterSet, ContentType, CompatMode
 
 /// Browsing-context data comes from the driver, not guesses from the DOM tree.
 pub trait DocumentHost: BindingHost {
+    /// The document's associated WindowProxy, or None for an inert document.
+    /// Child-realm embedders supply the proxy belonging to that document.
+    fn document_default_view(&mut self, _document: NodeIdx) -> Result<Option<Self::Value>, Self::Error> {
+        self.with_dom::<Option<Self::Value>>(|_| Err(DomError::NotSupportedError))
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField)
         -> Result<Vec<u16>, Self::Error>;
     fn active_element(&mut self, document: NodeIdx) -> Result<Option<NodeIdx>, Self::Error>;

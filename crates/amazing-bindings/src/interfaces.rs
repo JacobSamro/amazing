@@ -237,6 +237,7 @@ const DOCUMENT: &[Member] = &[
     getter("documentElement", O::DocumentElement),
     getter("doctype", O::DocumentDoctype),
     getter("readyState", O::DocumentReadyState),
+    getter("defaultView", O::DocumentDefaultView),
     getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
     getter("characterSet", O::DocumentCharacterSet),
     getter("charset", O::DocumentCharacterSet), getter("inputEncoding", O::DocumentCharacterSet),

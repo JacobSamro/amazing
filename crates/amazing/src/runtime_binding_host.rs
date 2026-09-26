@@ -1673,6 +1673,9 @@ impl AbortHost for RuntimeBindingHost<'_> {
 }
 
 impl DocumentHost for RuntimeBindingHost<'_> {
+    fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        self.dom_document_default_view(document)
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();
