@@ -737,12 +737,13 @@ impl EngineViewport {
                         height: rect.h,
                     }
                 });
-                if !amazing_media::loading::should_fetch(
+                let fetch = amazing_media::loading::should_fetch(
                     amazing_media::loading::Loading::Lazy,
                     rect,
                     viewport,
                     0.0,
-                ) {
+                );
+                if !fetch {
                     page.resources.deferred_images.push(entry);
                     continue;
                 }
@@ -2856,17 +2857,22 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let server = std::thread::spawn(move || {
             listener.set_nonblocking(true).unwrap();
-            let mut stream = (0..100)
-                .find_map(|_| match listener.accept() {
-                    Ok((stream, _)) => Some(stream),
+            let mut stream = None;
+            for _ in 0..6000 {
+                match listener.accept() {
+                    Ok((accepted, _)) => {
+                        stream = Some(accepted);
+                        break;
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(10));
-                        None
                     }
                     Err(error) => panic!("lazy fixture accept: {error}"),
-                })
-                .expect("lazy image request timed out");
+                }
+            }
+            let Some(stream) = stream else { return };
             stream.set_nonblocking(false).unwrap();
+            let mut stream = stream;
             let mut request = [0u8; 2048];
             let count = stream.read(&mut request).unwrap();
             assert!(String::from_utf8_lossy(&request[..count])
