@@ -302,6 +302,82 @@ fn raw_tile_rasterizes_shaped_text_at_tile_origin() {
 }
 
 #[test]
+fn raw_tile_rasterizes_inline_replaced_content_and_retains_it() {
+    // RC-21 boundary: an inline `<img>` (a line's `replaced` item) used to force
+    // the retained path to fall back, which left the page without a compositor
+    // scroll node. The raw tile path now rasterizes it like the full painter.
+    struct AnyImage(amazing_media::Image);
+    impl crate::paint::ImageProvider for AnyImage {
+        fn image(&self, _node: NodeIdx) -> Option<&amazing_media::Image> {
+            Some(&self.0)
+        }
+    }
+    let node = NodeIdx(7);
+    let mut root = LayoutBox::new(
+        Some(NodeIdx(1)),
+        amazing_layout::Display::Block,
+        amazing_css::ComputedStyle::default(),
+        16.0,
+        19.2,
+    );
+    root.border_box = amazing_layout::Rect { x: 0.0, y: 0.0, w: 4.0, h: 2.0 };
+    root.content_box = root.border_box;
+    root.lines.push(amazing_layout::LineBox {
+        y_top: 0.0,
+        height: 1.0,
+        baseline: 1.0,
+        words: Vec::new(),
+        glyphs: Vec::new(),
+        decorations: Vec::new(),
+        replaced: vec![amazing_layout::ReplacedFrag {
+            node,
+            source_order: None,
+            x: 1.0,
+            y: 0.0,
+            width: 2.0,
+            height: 1.0,
+        }],
+    });
+    let text = FallbackTextSystem::new();
+    let images = AnyImage(amazing_media::Image {
+        width: 2,
+        height: 1,
+        pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
+    });
+    let view = DisplayListView::with_node_generations(
+        &root,
+        4,
+        2,
+        &text,
+        &images,
+        &crate::controls::NoControls,
+        &|_| Some(3),
+    );
+    let item = view
+        .items()
+        .iter()
+        .find(|item| item.kind == PaintItemKind::Content)
+        .expect("inline replaced content item");
+    let mut raw = Surface::new(4, 2);
+    view.raster_raw_local(item.index..item.index + 1, &mut raw, (0, 0))
+        .expect("inline replaced item is separable");
+    let mut baked = Surface::new(4, 2);
+    assert!(view.raster_range(
+        item.index..item.index + 1,
+        &mut baked,
+        (0, 0),
+        PaintBounds::viewport(4, 2),
+    ));
+    assert_eq!(raw.pixels, baked.pixels, "raw tile matches the full painter");
+    assert_eq!(raw.get_pixel(1, 0), Some([255, 0, 0, 255]));
+    assert_eq!(raw.get_pixel(2, 0), Some([0, 255, 0, 255]));
+    let retained = RetainedPaintView::from_view(&view).expect("inline replaced content retains");
+    assert!(retained
+        .items()
+        .any(|item| item.kind == PaintItemKind::Content));
+}
+
+#[test]
 fn raw_tile_leaves_ancestor_clip_to_compositor() {
     let root = amazing_layout::layout_document_with_text(
         "<body><div class='outer'><div class='inner'></div></div></body>",

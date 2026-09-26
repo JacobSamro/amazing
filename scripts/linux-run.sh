@@ -106,13 +106,14 @@ if [ "$HOST" = boat ]; then
   # mid-sync (low load, no cargo yet) and killed the run.
   # A new lane tree is seeded on the sandbox from its own ~/amazing copy, so
   # rsync sends only the lane's differences instead of the whole 85 MB tree.
-  # Pooled sandboxes host several lanes: each syncs into ~/amazing/wt/<lane>,
-  # all share ~/amazing/target, and cargo's lock serializes their compiles.
+  # Pooled sandboxes host several lanes: each syncs into ~/amazing/wt/<lane>
+  # and builds into its own target dir (boat-lane.py target_of: a shared one
+  # linked another lane's stale artifacts).
   LEASE=".amazing-busy/$LANE.$$"
   ok=0
   for attempt in 1 2 3; do
     if [ "$attempt" = 1 ]; then how=ensure; else how=heal; sleep 10; fi
-    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL < <("$REPO/scripts/boat-lane.py" "$how" "$LANE") || continue
+    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$REPO/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
@@ -130,9 +131,10 @@ if [ "$HOST" = boat ]; then
   REMOTE="trap 'rm -f ~/$LEASE' EXIT
 . ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
-export CARGO_TARGET_DIR=\$HOME/amazing/target JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
+export CARGO_TARGET_DIR=\$HOME/$BOAT_TARGET JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
 ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
+free=\$(df -Pk ~ | awk 'NR==2{print int(\$4/1048576)}'); [ \"\$free\" -lt 8 ] && echo \"linux-run: WARNING only \${free} GB free on this sandbox\" >&2
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)
