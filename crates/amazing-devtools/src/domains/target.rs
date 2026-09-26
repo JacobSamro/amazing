@@ -37,6 +37,51 @@ pub fn browser_version(info: &HostInfo) -> Json {
     ])
 }
 
+fn target_event(method: &str, key: &str, target: &TargetInfo) -> Json {
+    crate::protocol::event(method, object(vec![(key, target_info(target))]))
+}
+
+/// `Target.targetCreated`.
+pub fn created_event(target: &TargetInfo) -> Json {
+    target_event("Target.targetCreated", "targetInfo", target)
+}
+
+/// `Target.targetInfoChanged`.
+pub fn info_changed_event(target: &TargetInfo) -> Json {
+    target_event("Target.targetInfoChanged", "targetInfo", target)
+}
+
+/// `Target.targetDestroyed`.
+pub fn destroyed_event(target: &TargetInfo) -> Json {
+    crate::protocol::event(
+        "Target.targetDestroyed",
+        object(vec![("targetId", Json::String(target.id.clone()))]),
+    )
+}
+
+/// `Target.attachedToTarget` for a flattened auto-attached session.
+pub fn attached_event(session_id: &str, target: &TargetInfo, waiting: bool) -> Json {
+    crate::protocol::event(
+        "Target.attachedToTarget",
+        object(vec![
+            ("sessionId", Json::String(session_id.to_string())),
+            ("targetInfo", target_info(target)),
+            ("waitingForDebugger", Json::Bool(waiting)),
+        ]),
+    )
+}
+
+/// `Target.detachedFromTarget`.
+pub fn detached_event(session_id: &str) -> Json {
+    crate::protocol::event(
+        "Target.detachedFromTarget",
+        object(vec![
+            ("sessionId", Json::String(session_id.to_string())),
+            ("targetId", Json::String(String::new())),
+        ]),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
