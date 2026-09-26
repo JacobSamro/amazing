@@ -1,0 +1,14 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("fetch rejects with an already aborted signal reason");
+var controller = new AbortController();
+controller.abort("before");
+fetch("data:text/plain,hello", {signal: controller.signal}).then(function() {
+  throw new Error("fetch unexpectedly resolved");
+}, function(error) {
+  assert_equals(error, "before");
+  t.done();
+  done();
+});
+</script>
