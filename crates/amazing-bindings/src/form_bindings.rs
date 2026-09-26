@@ -78,6 +78,9 @@ pub(crate) fn handles(op: O) -> bool {
             | O::SelectSetMultiple
             | O::SelectAdd
             | O::SelectRemove
+            | O::SelectItem
+            | O::SelectNamedItem
+            | O::SelectSetLength
             | O::OptionValue
             | O::OptionSetValue
             | O::OptionSelected
@@ -1171,6 +1174,41 @@ pub(crate) fn invoke<H: BindingHost>(
         O::SelectSetMultiple => {
             let value = boolean(host, args, 0)?;
             bool_attr(host, target, "multiple", value)?;
+            Ok(host.undefined())
+        }
+        O::SelectItem => {
+            let at = index(host, args, 0)?;
+            let options = host.with_dom(|dom| dom.select_options(target))?;
+            wrap(host, options.get(at).copied())
+        }
+        O::SelectNamedItem => {
+            let name = string(host, args, 0)?;
+            if name.is_empty() {
+                return wrap(host, None);
+            }
+            let found = host.with_dom(|dom| {
+                Ok(dom.select_options(target)?.into_iter().find(|option| {
+                    ["id", "name"].iter().any(|attribute| {
+                        dom.attribute_utf16(*option, attribute).as_deref() == Some(name.as_slice())
+                    })
+                }))
+            })?;
+            wrap(host, found)
+        }
+        O::SelectSetLength => {
+            let desired = unsigned(number(host, args, 0)?);
+            host.with_dom(|dom| {
+                let options = dom.select_options(target)?;
+                for old in options.iter().skip(desired as usize).rev() {
+                    if let Some(parent) = dom.get(*old).parent {
+                        dom.pre_remove(*old, parent)?;
+                    }
+                }
+                for _ in options.len()..desired as usize {
+                    dom.create_element(target, "option");
+                }
+                Ok(())
+            })?;
             Ok(host.undefined())
         }
         O::SelectAdd => {

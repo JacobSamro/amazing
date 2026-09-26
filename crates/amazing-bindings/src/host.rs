@@ -258,6 +258,7 @@ pub enum Operation {
     SelectValue, SelectSetValue, SelectSelectedIndex, SelectSetSelectedIndex,
     SelectOptions, SelectLength, SelectMultiple, SelectSetMultiple, SelectAdd, SelectRemove,
     OptionValue, OptionSetValue, OptionSelected, OptionSetSelected,
+    SelectItem, SelectNamedItem, SelectSetLength,
     OptionDefaultSelected, OptionSetDefaultSelected, OptionText, OptionSetText,
     OptionIndex,
     ButtonType, ButtonSetType,
