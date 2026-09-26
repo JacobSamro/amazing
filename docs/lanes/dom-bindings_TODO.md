@@ -1809,3 +1809,42 @@ lost passes** across the seven-source selection (409 pass / 31 fail / 6 errors).
 Evidence: `crates/amazing-bindings/evidence/legacy-events/`.
 
 Next: routed DOMException conformance and event-handler content attributes.
+
+# DOM-B DOMException conformance ready
+
+Implementation `82bb3868`, fixed base `129cde71`. Explicit undefined uses the
+constructor defaults; native name/message/code accessors remain inherited.
+The existing constructor, 25 legacy constants and native thrown exceptions
+are covered by the full pinned WebIDL exception directory.
+
+Linux Boat gate: **2709 passed / 10 skipped**, workspace doctests **4/4**.
+Baseline owned/driver tests: **533 passed / 4 skipped**. Whole-directory WPT
+subtests **112→123 passed, 19→8 failed**, **11 gains / zero lost passes**.
+Files: **2→4 pass**, **4→2 fail**, **1 timeout**. The remaining eight failures
+need JS Error.isError/stack support; the iframe portion of exceptions.html is
+deferred for JSRT-9 → HTML-25 part 2. Its six local assertions now pass.
+
+Evidence: `crates/amazing-bindings/evidence/dom-exception/`.
+Windows deferred. Next: DOMStringMap, with numeric named-property hooks routed
+to JS runtime; handler scope/compiler facade also routed there.
+
+# DOM-B DOMStringMap native area ready
+
+Implementation `07a885b5`, fixed base `c7b0c3c2`. Live dataset reads/writes/deletes,
+ASCII name conversion, UTF-16 values, attribute-order names and SameObject wrappers
+now use native DOMStringMap. HTML, SVG and MathML expose the getter; arbitrary
+namespaces no longer receive the old legacy dataset extension.
+
+Linux isolated-target gate: **2733 passed / 10 skipped**, docs **4/4**;
+baseline owned/driver **537 passed / 4 skipped**. The full 55-source collection
+and global-attribute testharness selection improves **140→168 passing subtests**,
+**135→107 failing**, **28 gains / zero lost passes**. Files **15→22 pass**,
+**39→32 fail**, one harness error unchanged. All native dataset files pass except
+the two prototype-accessor setter assertions in dataset-binding.window.js.
+Those and numeric named-only set/define/delete discrimination are routed to JS.
+
+Evidence: `crates/amazing-bindings/evidence/dataset/` (includes excluded reftest
+inventory). The interrupted namespace gate was discarded; identical source was
+rerun through linux-run recovery and completed. Windows remains deferred.
+Next: inherited collection property surfaces; generic intrinsic array iteration
+needs a routed JS LengthOfArrayLike fix. Iframe Range remains deferred.
