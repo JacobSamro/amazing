@@ -87,7 +87,7 @@ trap 'rm -rf "$LANE_LOCK"' EXIT
 # Source: the lane's worktree (with uncommitted edits), or an exact commit.
 if [ -n "$REF" ]; then
   COMMIT="$(git -C "$MAIN" rev-parse "$REF")" || exit 2
-  SRC="$(mktemp -d)"
+  SRC="$(mktemp -d)"; SRC_TMP="$SRC"
   trap 'rm -rf "$SRC" "$LANE_LOCK"' EXIT
   git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC"
   echo "linux-run[$LANE]: $HOST at $REF ($COMMIT)" >&2
@@ -98,22 +98,35 @@ else
 fi
 
 if [ "$HOST" = boat ]; then
-  read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL < <("$REPO/scripts/boat-lane.py" ensure "$LANE") || {
-    echo "linux-run: no Boat sandbox for $LANE" >&2; exit 3; }
-  echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
-  BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
-  # Pooled sandboxes host several lanes: each lane syncs into its own
-  # ~/amazing/wt/<lane>, and all share ~/amazing/target. Cargo's lock on that
-  # directory serializes the lanes' compiles; dependencies stay warm for all.
+  # Resumed sandboxes serve /home/user from a lazy FUSE filesystem that can die
+  # under load ("Transport endpoint is not connected"); retry the setup up to
+  # three times, restarting a broken sandbox in between (boat-lane.py heal).
   # A lease file marks the sandbox busy for boat-idle-reaper.py from before the
   # sync until the command exits; without it the reaper stopped a sandbox
-  # mid-sync (low load, no cargo yet) and killed the run (2026-09-26).
+  # mid-sync (low load, no cargo yet) and killed the run.
+  # A new lane tree is seeded on the sandbox from its own ~/amazing copy, so
+  # rsync sends only the lane's differences instead of the whole 85 MB tree.
+  # Pooled sandboxes host several lanes: each syncs into ~/amazing/wt/<lane>,
+  # all share ~/amazing/target, and cargo's lock serializes their compiles.
   LEASE=".amazing-busy/$LANE.$$"
-  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" || {
-    echo "linux-run: cannot reach $BOAT_ID" >&2; exit 3; }
-  rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
-    --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" || {
-    echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
+  ok=0
+  for attempt in 1 2 3; do
+    if [ "$attempt" = 1 ]; then how=ensure; else how=heal; sleep 10; fi
+    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL < <("$REPO/scripts/boat-lane.py" "$how" "$LANE") || continue
+    [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
+    BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
+    # Drop the lease if we exit before the remote command's own trap takes
+    # over (failed or interrupted sync); a stale lease keeps the sandbox billed.
+    trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
+    $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE &&
+      { [ -e amazing/wt/$LANE/Cargo.toml ] || [ ! -e amazing/Cargo.toml ] ||
+        tar -C amazing -cf - --exclude=./target --exclude=./wt --exclude=./out --exclude=./corpora . | tar -C amazing/wt/$LANE -xf -; }" &&
+    rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
+      --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" &&
+    { ok=1; break; }
+    echo "linux-run[$LANE]: setup attempt $attempt on $BOAT_ID failed" >&2
+  done
+  [ "$ok" = 1 ] || { echo "linux-run: could not sync to Boat for $LANE after 3 attempts" >&2; exit 3; }
   REMOTE="trap 'rm -f ~/$LEASE' EXIT
 . ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
