@@ -14,6 +14,7 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(proto.clone());
+        o.realm = proto.borrow().realm;
         let handle = Obj(Rc::new(RefCell::new(o)));
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         handle.borrow_mut().define("prototype", Property {

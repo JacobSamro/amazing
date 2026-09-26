@@ -155,7 +155,7 @@ fn object_integrity(
     let JsValue::Object(object) = &target else {
         return Ok(target);
     };
-    if i.legacy_for(object).is_some() {
+    if i.is_window_proxy(object) || i.legacy_for(object).is_some() {
         return Err(Throw::type_error("cannot seal a legacy platform object"));
     }
     if freeze && matches!(object.borrow().exotic, Exotic::TypedArray) {
@@ -201,7 +201,7 @@ fn object_integrity_test(
     let JsValue::Object(object) = &target else {
         return Ok(JsValue::Bool(true));
     };
-    if i.legacy_for(object).is_some() || object.borrow().extensible {
+    if i.is_window_proxy(object) || i.legacy_for(object).is_some() || object.borrow().extensible {
         return Ok(JsValue::Bool(false));
     }
     for key in i.own_property_keys(&target)? {
@@ -499,6 +499,9 @@ impl Interpreter {
     fn object_own_enumerable(&mut self, value: &JsValue, key: &PropertyKey) -> Result<bool, Throw> {
         match value {
             JsValue::Object(object) => {
+                if let Some(result) = self.window_proxy_own_property(object, key) {
+                    return Ok(result?.is_some_and(|property| property.enumerable));
+                }
                 let property = match binary_index_descriptor(object, key) {
                     Some(property) => property,
                     None => match key {

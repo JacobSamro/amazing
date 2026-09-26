@@ -226,6 +226,7 @@ impl fmt::Debug for Obj {
             (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
+            (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -632,6 +633,7 @@ pub type NativeFn =
 pub enum Exotic {
     #[default]
     Ordinary,
+    WindowProxy(Rc<RefCell<crate::interp::WindowProxyState>>),
     Array,
     TypedArray,
     Error,
@@ -789,6 +791,8 @@ pub struct PendingReaction {
 #[derive(Debug, Clone)]
 pub struct JsObject {
     props: Vec<(PropertyKey, Property)>,
+    /// Creation realm for callable dispatch and intrinsic allocation.
+    pub(crate) realm: Option<u64>,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
     /// Whether new own properties may be created.
@@ -825,6 +829,7 @@ impl JsObject {
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),
+            realm: None,
             proto: None,
             exotic: Exotic::Ordinary,
             extensible: true,
@@ -891,6 +896,7 @@ impl JsObject {
 
     pub fn function(func: JsFunction) -> JsObject {
         let mut o = Self::ordinary();
+        o.realm = func.env.realm();
         let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
         o.define("name", Property {
             value: JsValue::str(&func.name), writable: false, enumerable: false,

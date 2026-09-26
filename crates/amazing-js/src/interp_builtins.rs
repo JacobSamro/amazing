@@ -1,4 +1,10 @@
-fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_object(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if let (Some(new_target), Some(active)) = (i.current_new_target(), i.native_stack.last()) {
+        let is_object_constructor = active.borrow().func.as_ref().is_some_and(|function|
+            matches!(&function.body, FunctionBody::Native(native)
+                if std::ptr::fn_addr_eq(*native, native_object as crate::value::NativeFn)));
+        if is_object_constructor && new_target != JsValue::Object(active.clone()) { return Ok(this); }
+    }
     Ok(match a.into_iter().next() {
         Some(value @ JsValue::Object(_)) => value,
         Some(JsValue::Num(number)) => {
@@ -870,6 +876,9 @@ fn native_object_get_prototype_of(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    if let Some(JsValue::Object(object)) = args.first() {
+        if let Some(result) = i.window_proxy_prototype(object) { return result; }
+    }
     match args.first() {
         Some(JsValue::Symbol(_)) => Ok(JsValue::Object(i.symbol_proto.clone())),
         Some(JsValue::Object(object)) => Ok(object
@@ -883,25 +892,22 @@ fn native_object_get_prototype_of(
 }
 
 fn native_object_set_prototype_of(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let object = match args.first() {
-        Some(JsValue::Object(object)) => object.clone(),
-        _ => return Err(Throw::type_error("setPrototypeOf target is not an object")),
-    };
-    if matches!(object.borrow().exotic, Exotic::ModuleNamespace(_)) {
-        if matches!(args.get(1), Some(JsValue::Null)) { return Ok(JsValue::Object(object)); }
-        return Err(Throw::type_error("module namespace prototype is fixed"));
+    let target = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if target.is_null() || target.is_undefined() {
+        return Err(Throw::type_error("setPrototypeOf target is nullish"));
     }
-    let prototype = match args.get(1).cloned().unwrap_or(JsValue::Null) {
-        JsValue::Null => None,
-        JsValue::Object(prototype) => Some(prototype),
-        _ => return Err(Throw::type_error("prototype must be an object or null")),
-    };
-    object.borrow_mut().proto = prototype;
-    Ok(JsValue::Object(object))
+    if !matches!(args.get(1), Some(JsValue::Object(_) | JsValue::Null)) {
+        return Err(Throw::type_error("prototype must be an object or null"));
+    }
+    if !target.is_object() { return Ok(target); }
+    if std_reflect_set_prototype_of(i, JsValue::Undefined, args)? != JsValue::Bool(true) {
+        return Err(Throw::type_error("cannot change object prototype"));
+    }
+    Ok(target)
 }
 
 fn native_object_has_own(
@@ -915,6 +921,7 @@ fn native_object_has_own(
         _ => return Err(Throw::type_error("hasOwn target is not an object")),
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(result) = i.window_proxy_own_property(object, &key) { return Ok(JsValue::Bool(result?.is_some())); }
     if let Some(own) = binary_index_descriptor(object, &key) { return Ok(JsValue::Bool(own.is_some())); }
     let own = match key.as_string() {
         Some(name) => i.legacy_own_property(object, name, false)?.is_some(),
@@ -1106,6 +1113,7 @@ fn native_function_bind(
         let mut function = function.borrow_mut();
         if let JsValue::Object(target) = &this {
             function.proto = target.borrow().proto.clone();
+            function.realm = target.borrow().realm;
         }
         function.func.as_mut().unwrap().home = Some(data);
         function.constructible = target_constructible;
@@ -1204,7 +1212,7 @@ fn native_prevent_extensions(
     let target = args.first().cloned().unwrap_or(this);
     match target {
         JsValue::Object(object) => {
-            if i.legacy_for(&object).is_some() { return Err(Throw::type_error("cannot prevent extensions on a legacy platform object")); }
+            if i.is_window_proxy(&object) || i.legacy_for(&object).is_some() { return Err(Throw::type_error("cannot prevent extensions on a legacy platform object")); }
             object.borrow_mut().extensible = false;
             Ok(JsValue::Object(object))
         }
@@ -1220,7 +1228,7 @@ fn native_is_extensible(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     match args.first() {
-        Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.legacy_for(object).is_some() || object.borrow().extensible)),
+        Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.is_window_proxy(object) || i.legacy_for(object).is_some() || object.borrow().extensible)),
         _ => Err(Throw::type_error("isExtensible target is not an object")),
     }
 }
@@ -1261,7 +1269,7 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
         crate::parse_script(&source)
     }.map_err(|error| Throw::syntax_error(error.to_string()))?;
     let caller = i.direct_eval_env.take().unwrap_or_else(|| i.global_env.clone());
-    let strict = direct && (i.strict_eval_context || has_use_strict_directive(&program.body));
+    let strict = (direct && i.strict_eval_context) || has_use_strict_directive(&program.body);
     i.direct_eval_env = Some(if strict {
         EnvHandle::new(EnvKind::Function, Some(caller))
     } else if direct { caller } else { i.global_env.clone() });
@@ -2135,6 +2143,9 @@ fn native_object_get_own_property_descriptor(
         return Ok(property.map(|property| object_descriptor_value(i, property))
             .unwrap_or(JsValue::Undefined));
     };
+    if let Some(result) = i.window_proxy_own_property(object, &key) {
+        return Ok(result?.map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
+    }
     if let Some(property) = binary_index_descriptor(object, &key) {
         let Some(property) = property else { return Ok(JsValue::Undefined); };
         let mut descriptor = JsObject::ordinary();
@@ -2228,6 +2239,7 @@ fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(result) = i.window_proxy_delete(&target, &key) { return Ok(JsValue::Bool(result?)); }
     if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
         return Ok(JsValue::Bool(target.borrow().own_prop(&key).is_none()));
     }
@@ -3369,6 +3381,9 @@ fn native_property_is_enumerable(
 ) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("propertyIsEnumerable receiver is not an object")); };
     let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
+    if let Some(result) = i.window_proxy_own_property(&object, &key) {
+        return Ok(JsValue::Bool(result?.is_some_and(|p| p.enumerable)));
+    }
     if let Some(property) = binary_index_descriptor(&object, &key) { return Ok(JsValue::Bool(property.is_some())); }
     let property = match key.as_string() {
         Some(name) => i.legacy_own_property(&object, name, false)?,
