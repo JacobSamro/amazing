@@ -148,10 +148,19 @@ Linux pixel results are reported as Linux numbers. `~/corpora/wpt` is shared by 
 sandbox: treat it as read-only, never run `git sparse-checkout` on it (clone a sparse copy under
 `$OUT` if you need one), and start WPT commands with `bash scripts/ensure-wpt.sh &&`, which
 restores the full tree if another lane narrowed it.
-**Linux reftests (2026-09-26):** `scripts/linux-render-wpt.sh <lane> css/<category>` renders the
-self-contained static reftests of a pinned-WPT subdir with the headless `amazing` renderer and
-fuzzy-compares them (`scripts/wpt_render_compare.py`), writing one `report.json`; it replaces
-win-001 render sweeps while Windows is deferred. Baselines: `crates/amazing-shell-gpui/evidence/wpt-render/`.
+**Linux reftests (2026-09-26, extended 2026-09-26 SHELL-L5):** `scripts/linux-render-wpt.sh <lane>
+<wpt-subdir> [<wpt-subdir> ...]` renders the self-contained static reftests of one or more
+pinned-WPT subdirs (e.g. `css/css-backgrounds css/css-color`; batch a lane's whole sweep into one
+call, sharing a single build) with the headless `amazing` renderer and fuzzy-compares them
+(`scripts/wpt_render_compare.py`, `--jobs N` parallel), writing one `report.json` per subdir plus a
+`clusters.json` grouping mismatches by diff bounding-box and colour
+(`scripts/wpt_render_cluster.py`); it replaces win-001 render sweeps while Windows is deferred.
+`--baseline auto|<dir>|<file>` turns a run into a zero-loss gate: it diffs the run's per-test
+classifications against a previous report (checked-in evidence by default with `auto`) and prints
+gained/lost/changed/unchanged/new/removed counts, failing the run (and every remaining subdir still
+runs) if anything regressed from passing. `--compact` writes/commits `compact.json` (test id ->
+classification only, no per-test detail) instead of the full `report.json`, so gating evidence
+stays small over repeated runs. Baselines: `crates/amazing-shell-gpui/evidence/wpt-render/`.
 **Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
 `boat data-retention`, `boat billing`, ...): the account, its templates and its retention
 settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in
