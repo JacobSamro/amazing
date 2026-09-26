@@ -62,6 +62,10 @@ struct Host {
     font_ready: Option<V>,
     image_state: Option<ImageLoaderState>,
     image_decode_requested: Vec<NodeIdx>,
+    external_targets: Vec<(u64, V)>,
+    window: Option<(u64, V)>,
+    cancel_events: bool,
+    callback_targets: Vec<Option<amazing_dom::events::EventTarget>>,
 }
 impl Host {
     fn web_push(&mut self, object: WebMock, brand: InterfaceBrand) -> V {
@@ -180,6 +184,11 @@ impl BindingHost for Host {
     fn call(&mut self, function: &V, this: &V, arguments: &[V]) -> Result<V, String> {
         assert!(!self.arena_borrowed);
         self.call_receivers.push((this.clone(), arguments.to_vec()));
+        if let Some(V::Platform(key, InterfaceBrand::EVENT)) = arguments.first() {
+            let event = self.dom.events_mut().event_mut(amazing_dom::events::EventId::from_slot(key.slot as usize));
+            self.callback_targets.push(event.current_target());
+            if self.cancel_events { event.prevent_default(); }
+        }
         if let V::Callable(id) = function { self.calls.push(*id); self.abort_trace.push(*id); }
         match function { V::Callable(1) => Ok(V::Number(1.)), V::Callable(_) => Ok(V::Undefined), _ => Err("not callable".into()) }
     }
@@ -196,6 +205,24 @@ impl BindingHost for Host {
     fn release_value(&mut self, callback: CallbackId) {
         if let Some(slot) = self.callbacks.get_mut(callback.0 as usize) { *slot = None; }
     }
+    fn window_event_target_slot(&self, value: &V) -> Option<u64> {
+        self.window.as_ref().filter(|(_, window)| window == value).map(|(slot, _)| *slot)
+    }
+    fn window_event_target_value(&self, slot: u64) -> Option<V> {
+        self.window.as_ref().filter(|(target, _)| *target == slot).map(|(_, window)| window.clone())
+    }
+    fn external_event_target_slot(&self, value: &V) -> Option<u64> {
+        self.external_targets.iter().find(|(_, wrapper)| wrapper == value).map(|(slot, _)| *slot)
+    }
+    fn external_event_target_value(&self, slot: u64) -> Option<V> {
+        self.external_targets.iter().find(|(target, _)| *target == slot).map(|(_, value)| value.clone())
+    }
+    fn is_message_port(&self, value: &V) -> bool { self.external_event_target_slot(value).is_some() }
+    fn sequence_message_ports(&mut self, value: &V) -> Result<Vec<V>, String> {
+        match value { V::Array(values) if values.iter().all(|value| self.is_message_port(value)) => Ok(values.clone()),
+            _ => Err("TypeError: Expected MessagePort sequence".into()) }
+    }
+    fn create_frozen_array(&mut self, values: Vec<V>) -> Result<V, String> { self.create_array(values) }
     fn create_array(&mut self, values: Vec<V>) -> Result<V, String> {
         assert!(!self.arena_borrowed);
         Ok(V::Array(values))
@@ -2484,3 +2511,15 @@ fn static_range_requires_all_members_and_converts_in_dictionary_order() {
     init[3].1 = V::Null;
     call(&mut h, O::StaticRangeConstructor, V::Undefined, &[V::Dictionary(init)]);
 }
+
+#[path = "tests_message_events.rs"]
+mod message_events;
+
+#[path = "tests_event_dictionaries.rs"]
+mod event_dictionaries;
+
+#[path = "tests_legacy_events.rs"]
+mod legacy_events;
+
+#[path = "tests_dom_exception.rs"]
+mod dom_exception;

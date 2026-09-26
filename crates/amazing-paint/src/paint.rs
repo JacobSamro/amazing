@@ -639,9 +639,6 @@ pub(crate) fn raster_raw_item(
         }
         PaintCommand::PaintContent(box_) => {
             if !box_.table_decoration().borders.is_empty() { return false; }
-            if box_.lines.iter().any(|line| !line.replaced.is_empty()) {
-                return false;
-            }
             let mut local = LayoutBox::new(
                 box_.node,
                 box_.display,
@@ -672,7 +669,16 @@ pub(crate) fn raster_raw_item(
                 }
             }).collect();
             let clip = ClipRect::viewport(target);
-            paint_shaped_lines(target, &local, text, images, clip);
+            // Inline replaced fragments resolve against the original box, whose
+            // inline flow still carries the styled fragment metadata (generated
+            // URLs, SVG roots). They paint first at the tile offset, then the
+            // shifted glyphs follow. `paint_shaped_lines` cannot be reused here:
+            // it would look the replaced metadata up on `local`, which has no
+            // inline flow of its own.
+            for (line, local_line) in box_.lines.iter().zip(local.lines.iter()) {
+                paint_replaced_fragments(target, box_, line, images, clip, (ox, oy));
+                paint_line_glyphs(target, local_line, text, clip);
+            }
             true
         }
         _ => false,
@@ -703,7 +709,7 @@ fn paint_decorations(
                 surface,
                 &box_.content_box,
                 &svg,
-                ImagePresentation::default(),
+                images.presentation(node),
                 clip,
             );
         }
@@ -1039,40 +1045,52 @@ fn paint_shaped_lines(
     clip: ClipRect,
 ) {
     for line in &box_.lines {
-        for replaced in &line.replaced {
-            let rect = amazing_layout::Rect {
-                x: replaced.x,
-                y: replaced.y,
-                w: replaced.width,
-                h: replaced.height,
-            };
-            if let Some((url, presentation, font_size)) = generated_image_url(box_, replaced) {
-                paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
-                continue;
-            }
-            if let Some(svg) = svg_for_rect(
-                images,
-                replaced.node,
-                &rect,
-            ) {
-                paint_image(
-                    surface,
-                    &rect,
-                    &svg,
-                    ImagePresentation::default(),
-                    clip,
-                );
-            } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
-                paint_image(
-                    surface,
-                    &rect,
-                    image,
-                    images.presentation(replaced.node),
-                    clip,
-                );
-            }
-        }
+        paint_replaced_fragments(surface, box_, line, images, clip, (0.0, 0.0));
         paint_line_glyphs(surface, line, text, clip);
+    }
+}
+
+/// Paints one line's inline replaced fragments using `box_`'s styled fragment
+/// metadata. `offset` shifts the fragment rectangles into the caller's
+/// coordinate space, which lets the raw tile path reuse the same
+/// generated/URL/SVG resolution as the full painter without rebuilding the
+/// box's inline flow (where `styled_replaced_fragments` reads its metadata).
+fn paint_replaced_fragments(
+    surface: &mut Surface,
+    box_: &LayoutBox,
+    line: &amazing_layout::LineBox,
+    images: &dyn ImageProvider,
+    clip: ClipRect,
+    offset: (f32, f32),
+) {
+    for replaced in &line.replaced {
+        let rect = amazing_layout::Rect {
+            x: replaced.x - offset.0,
+            y: replaced.y - offset.1,
+            w: replaced.width,
+            h: replaced.height,
+        };
+        if let Some((url, presentation, font_size)) = generated_image_url(box_, replaced) {
+            paint_generated_image(surface, &rect, &url, presentation, font_size, images, clip);
+            continue;
+        }
+        if let Some(svg) = svg_for_rect(images, replaced.node, &rect) {
+            paint_image(
+                surface,
+                &rect,
+                &svg,
+                images.presentation(replaced.node),
+                clip,
+            );
+        } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
+            paint_image(
+                surface,
+                &rect,
+                image,
+                images.presentation(replaced.node),
+                clip,
+            );
+        }
     }
 }
 
@@ -1731,7 +1749,7 @@ fn paint_lines(
                     surface,
                     &rect,
                     &svg,
-                    ImagePresentation::default(),
+                    images.presentation(replaced.node),
                     clip,
                 );
             } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {

@@ -225,6 +225,33 @@ fn document_viewport_is_a_root_scroll_node_without_css_overflow() {
     assert_eq!(propagated.scrolls().len(), 2, "body overflow uses the viewport scroller");
 }
 #[test]
+fn effects_scroller_property_owners_stay_unique_across_reopened_clips() {
+    // A stacking context re-opens its inherited overflow clips, so the same
+    // scroll container can open a clip twice. Both scopes must resolve to one
+    // compositor scroll node or retained property binding is ambiguous.
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='fixed'>Fixed</div><section class='scroller'><div class='moving'>Move</div><div class='fade'>Fade</div><p>Overflow content</p><p>More overflow content</p></section></body>",
+        "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}",
+        512.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::with_node_generations(
+        &root, 512, 512, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| Some(7),
+    );
+    let owners = view.property_owner_mapping().expect("unique property owners");
+    // Viewport scroll plus exactly one section scroll node.
+    assert_eq!(owners.scrolls.len(), 2);
+    assert_eq!(view.effects().len(), 2, "viewport root plus the fade group");
+    // Every scroll node beyond the synthetic root has a distinct owner.
+    let mut seen = std::collections::HashSet::new();
+    for node in view.scrolls().iter().skip(1) {
+        assert!(seen.insert(node.owner), "duplicate scroll owner {:?}", node.owner);
+    }
+}
+
+#[test]
 fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {
     let root = amazing_layout::layout_document_with_text(
         "<body><div class='box'></div></body>",
@@ -272,6 +299,82 @@ fn raw_tile_rasterizes_shaped_text_at_tile_origin() {
     assert!(view.raster_range(item.index..item.index + 1, &mut baked, (0, 0), PaintBounds::viewport(48, 48)));
     assert!(raw.pixels.chunks_exact(4).any(|pixel| pixel[3] != 0));
     assert_eq!(raw.pixels, baked.pixels);
+}
+
+#[test]
+fn raw_tile_rasterizes_inline_replaced_content_and_retains_it() {
+    // RC-21 boundary: an inline `<img>` (a line's `replaced` item) used to force
+    // the retained path to fall back, which left the page without a compositor
+    // scroll node. The raw tile path now rasterizes it like the full painter.
+    struct AnyImage(amazing_media::Image);
+    impl crate::paint::ImageProvider for AnyImage {
+        fn image(&self, _node: NodeIdx) -> Option<&amazing_media::Image> {
+            Some(&self.0)
+        }
+    }
+    let node = NodeIdx(7);
+    let mut root = LayoutBox::new(
+        Some(NodeIdx(1)),
+        amazing_layout::Display::Block,
+        amazing_css::ComputedStyle::default(),
+        16.0,
+        19.2,
+    );
+    root.border_box = amazing_layout::Rect { x: 0.0, y: 0.0, w: 4.0, h: 2.0 };
+    root.content_box = root.border_box;
+    root.lines.push(amazing_layout::LineBox {
+        y_top: 0.0,
+        height: 1.0,
+        baseline: 1.0,
+        words: Vec::new(),
+        glyphs: Vec::new(),
+        decorations: Vec::new(),
+        replaced: vec![amazing_layout::ReplacedFrag {
+            node,
+            source_order: None,
+            x: 1.0,
+            y: 0.0,
+            width: 2.0,
+            height: 1.0,
+        }],
+    });
+    let text = FallbackTextSystem::new();
+    let images = AnyImage(amazing_media::Image {
+        width: 2,
+        height: 1,
+        pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
+    });
+    let view = DisplayListView::with_node_generations(
+        &root,
+        4,
+        2,
+        &text,
+        &images,
+        &crate::controls::NoControls,
+        &|_| Some(3),
+    );
+    let item = view
+        .items()
+        .iter()
+        .find(|item| item.kind == PaintItemKind::Content)
+        .expect("inline replaced content item");
+    let mut raw = Surface::new(4, 2);
+    view.raster_raw_local(item.index..item.index + 1, &mut raw, (0, 0))
+        .expect("inline replaced item is separable");
+    let mut baked = Surface::new(4, 2);
+    assert!(view.raster_range(
+        item.index..item.index + 1,
+        &mut baked,
+        (0, 0),
+        PaintBounds::viewport(4, 2),
+    ));
+    assert_eq!(raw.pixels, baked.pixels, "raw tile matches the full painter");
+    assert_eq!(raw.get_pixel(1, 0), Some([255, 0, 0, 255]));
+    assert_eq!(raw.get_pixel(2, 0), Some([0, 255, 0, 255]));
+    let retained = RetainedPaintView::from_view(&view).expect("inline replaced content retains");
+    assert!(retained
+        .items()
+        .any(|item| item.kind == PaintItemKind::Content));
 }
 
 #[test]

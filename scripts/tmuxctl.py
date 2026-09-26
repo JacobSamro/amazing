@@ -323,6 +323,10 @@ LANE_GRANTS.setdefault("replaced-content", []).append("crates/amazing/tests/phas
 LANE_GRANTS["dom-bindings"].append("crates/amazing/src/dom_host.rs")
 # JSRT: one-line [[NumberData]] non-enumerable fix in js-stdlib's Number installer.
 LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/builtins_std_number_math.rs")
+# JSRT-9 realms (2026-09-26): narrow WindowProxy dispatch hooks in the object model and Reflect.
+LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing-js/src/builtins_std_object_model.rs", "crates/amazing-js/src/builtins_std_reflect.rs"])
+# JSRT-9 (2026-09-26): one agent per module graph; small patch in the module linker.
+LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/module.rs")
 # JSRT: JsFunction gains a strict bit; mechanical initializer edits in two external files.
 LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-js/examples/test262_host.rs"])
 # HTML-25: iframe getters/insertion hooks (additive) across bindings, driver, scheduler, WPT runner.
