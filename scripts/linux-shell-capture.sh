@@ -9,7 +9,8 @@
 # scripts/capture-gpui-shell.ps1 on win-001.
 #
 # Usage: scripts/linux-shell-capture.sh <lane> [--ref REF] [--size 1280x800]
-#          [--wait 8] [--name capture] [--release] [--scroll N] -- [shell args...]
+#          [--wait 8] [--name capture] [--release] [--scroll N]
+#          [--actions FILE] -- [shell args...]
 #   Writes .agents/<lane>/captures/<name>.png and <name>.json (executable
 #   sha256, commit, shell args, display size, capture time) on the Mac.
 #   Shell args go to amazing-shell unchanged (for example `--url file:///...`
@@ -17,6 +18,20 @@
 #   --scroll N sends N scroll-wheel-down clicks (xdotool button 5) at the
 #   window center after --wait and before capturing, for scrolled-page
 #   regression shots.
+#
+# --actions FILE (SHELL-L9): a scripted product smoke test. FILE is a path
+# (relative to the repo root, so it syncs to the sandbox with the rest of the
+# worktree -- e.g. a fixture under crates/amazing-shell-gpui/smoke/) with one
+# step per line, blank lines and `#` comments ignored:
+#   key <xdotool keystroke>   e.g. `key ctrl+t`, `key alt+Left`, `key Return`
+#   type <text>               xdotool type (no embedded newlines; one line = one step)
+#   wait <seconds>            sleep, for the shell to settle after an action
+#   shot <name>               capture the window to
+#                              .agents/<lane>/captures/<--name>-<name>.png
+# Runs after the initial --wait and (once, via a real click -- see the
+# --scroll note below) transfers X input focus to the shell's only window,
+# since this Xvfb display has no window manager to do it. Replaces the
+# single final capture (each `shot` step is its own named capture instead).
 #
 # --real-pages (SHELL-L6): batch mode. Instead of one capture, opens every
 # page in tests/real-pages/manifest.json (or a --limit/--only subset) through
@@ -45,11 +60,11 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
-USAGE="usage: linux-shell-capture.sh <lane> [--ref REF] [--size WxH] [--wait S] [--name N] [--release] [--scroll N] [-- shell args] | linux-shell-capture.sh <lane> --real-pages [--ref REF] [--size WxH] [--wait S] [--limit N] [--only SLUG] [--baseline auto|<dir>] [--fuzz PCT] [--release]"
+USAGE="usage: linux-shell-capture.sh <lane> [--ref REF] [--size WxH] [--wait S] [--name N] [--release] [--scroll N] [--actions FILE] [-- shell args] | linux-shell-capture.sh <lane> --real-pages [--ref REF] [--size WxH] [--wait S] [--limit N] [--only SLUG] [--baseline auto|<dir>] [--fuzz PCT] [--release]"
 LANE="${1:?$USAGE}"
 shift
 REF_ARGS=() SIZE=1280x800 WAIT=8 NAME="capture-$(date -u +%Y%m%dT%H%M%SZ)" PROFILE=debug SCROLL=0
-REAL_PAGES=0 LIMIT=0 ONLY="" BASELINE="" FUZZ=1
+REAL_PAGES=0 LIMIT=0 ONLY="" BASELINE="" FUZZ=1 ACTIONS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF_ARGS=(--ref "$2"); shift 2 ;;
@@ -58,6 +73,7 @@ while [ $# -gt 0 ]; do
     --name) NAME="$2"; shift 2 ;;
     --release) PROFILE=release; shift ;;
     --scroll) SCROLL="$2"; shift 2 ;;
+    --actions) ACTIONS="$2"; shift 2 ;;
     --real-pages) REAL_PAGES=1; BASELINE=auto; shift ;;
     --limit) LIMIT="$2"; shift 2 ;;
     --only) ONLY="$2"; shift 2 ;;
@@ -148,11 +164,13 @@ fi
 # its own target dir next to the lane's.
 "$REPO/scripts/linux-run.sh" "$LANE" ${REF_ARGS[@]+"${REF_ARGS[@]}"} -- "
 set -u
+ROOT=\"\$PWD\"
 cd crates/amazing-shell-gpui || exit 3
 export CARGO_TARGET_DIR=\$HOME/amazing/target-shell-$LANE
 cargo build --locked $BUILD_FLAG --bin amazing-shell 2>&1 | grep -E '^(error|warning: unused)' -A6 | head -40
 EXE=\$CARGO_TARGET_DIR/$PROFILE/amazing-shell
 [ -x \"\$EXE\" ] || { echo 'linux-shell-capture: build failed' >&2; exit 4; }
+cd \"\$ROOT\"
 mkdir -p \$OUT/captures
 DISP=:\$(( 90 + \$\$ % 9 ))
 Xvfb \$DISP -screen 0 ${SIZE}x24 -nolisten tcp >/dev/null 2>&1 & XPID=\$!
@@ -172,16 +190,42 @@ if [ -n \"\$WID\" ] && [ $SCROLL -gt 0 ]; then
   DISPLAY=\$DISP xdotool click --repeat $SCROLL --delay 80 5
   sleep 1
 fi
-if [ -n \"\$WID\" ]; then DISPLAY=\$DISP import -window \$WID \$OUT/captures/$NAME.png; else
-  echo 'linux-shell-capture: no shell window; capturing the whole display' >&2
-  DISPLAY=\$DISP import -window root \$OUT/captures/$NAME.png; fi
+if [ -n \"\$WID\" ] && [ -n '$ACTIONS' ]; then
+  # Real click, not --window (see the --scroll note above): this Xvfb
+  # display has no window manager, so nothing else transfers X input focus
+  # to the shell's one window before key/type steps can land on it.
+  DISPLAY=\$DISP xdotool mousemove --sync $CENTER_X $CENTER_Y
+  DISPLAY=\$DISP xdotool click 1
+  sleep 1
+  while IFS=' ' read -r verb rest; do
+    case \"\$verb\" in
+      ''|'#'*) continue ;;
+      key) DISPLAY=\$DISP xdotool key \"\$rest\" ;;
+      type) DISPLAY=\$DISP xdotool type --delay 30 -- \"\$rest\" ;;
+      wait) sleep \"\$rest\" ;;
+      shot) DISPLAY=\$DISP import -window \$WID \$OUT/captures/$NAME-\$rest.png ;;
+      *) echo \"linux-shell-capture: unknown action verb '\$verb'\" >&2 ;;
+    esac
+  done < '$ACTIONS'
+fi
+if [ -z '$ACTIONS' ]; then
+  if [ -n \"\$WID\" ]; then DISPLAY=\$DISP import -window \$WID \$OUT/captures/$NAME.png; else
+    echo 'linux-shell-capture: no shell window; capturing the whole display' >&2
+    DISPLAY=\$DISP import -window root \$OUT/captures/$NAME.png; fi
+fi
 kill -0 \$APID 2>/dev/null || { echo 'linux-shell-capture: shell exited early; log:' >&2; tail -20 \$OUT/captures/$NAME.log >&2; }
 printf '{\"exe\":\"%s\",\"sha256\":\"%s\",\"commit_tree\":\"%s\",\"args\":\"%s\",\"display\":\"$SIZE\",\"window\":\"%s\",\"captured\":\"%s\"}\n' \
   \"\$EXE\" \"\$(sha256sum \$EXE | cut -d' ' -f1)\" \"\$PWD\" \"$SHELL_ARGS\" \"\$WID\" \"\$(date -u +%FT%TZ)\" > \$OUT/captures/$NAME.json
-ls -la \$OUT/captures/$NAME.png
+if [ -n '$ACTIONS' ]; then ls -la \$OUT/captures/$NAME-*.png; else ls -la \$OUT/captures/$NAME.png; fi
 " || exit $?
 
 DEST="$MAIN/.agents/$LANE/captures"; mkdir -p "$DEST"
-"$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/captures/$NAME.png" \
-  "amazing/out/$LANE/captures/$NAME.json" "amazing/out/$LANE/captures/$NAME.log"
-echo "linux-shell-capture: $DEST/$NAME.png"
+if [ -n "$ACTIONS" ]; then
+  "$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/captures/$NAME-*.png" \
+    "amazing/out/$LANE/captures/$NAME.json" "amazing/out/$LANE/captures/$NAME.log"
+  echo "linux-shell-capture: $DEST/$NAME-*.png"
+else
+  "$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/captures/$NAME.png" \
+    "amazing/out/$LANE/captures/$NAME.json" "amazing/out/$LANE/captures/$NAME.log"
+  echo "linux-shell-capture: $DEST/$NAME.png"
+fi
