@@ -791,12 +791,19 @@ impl Dom {
                     Some(sanitize_input(new_type, &source, self.attr(node, "min"),
                         self.attr(node, "max"), self.attr(node, "step")))
                 } else { None };
+                let new_text = selects_text(new_type);
+                let shortened = old_value != new_value.clone().unwrap_or_default();
+                let end = new_value.as_deref().map_or(0, <[u16]>::len) as u32;
                 let state = self.form_state_mut(node);
                 state.value = new_value;
-                if selects_text(new_type) && !selects_text(previous) {
+                if new_text && !selects_text(previous) {
                     state.selection = Some((0, 0, SelectionDirection::None));
-                } else if !selects_text(new_type) || old_value != state.value.clone().unwrap_or_default() {
+                } else if !new_text {
                     state.selection = None;
+                } else if shortened {
+                    // Correcting a shortened text value moves the cursor to the
+                    // end of the new value.
+                    state.selection = Some((end, end, SelectionDirection::None));
                 }
             }
             self.form_state_mut(node).last_type = Some(new_type);
