@@ -1380,3 +1380,55 @@ pass only on Linux, four only on Windows. This is recorded for investigation
 in `linux-windows-baseline-comparison.json`, not treated as interchangeable
 platform evidence. Windows work is canceled/deferred. Its failed partial
 source tree requires a verified refresh before future use.
+
+## LAYOUT-19 — table width allocation (done)
+
+Continues the table area while LAYOUT-18's nine owner-tagged losses remain
+routed. Baseline source is `78ae0377` (engine source `d7b3293c`); Windows is
+not part of this ticket's gate. The corpus inventories all static reftests in
+both `css/css-tables/` and `css/CSS2/tables/` at pinned WPT `c2a2fce69`.
+Script-dependent reftests are explicitly excluded by the inventory, so these
+numbers do not claim dynamic testharness coverage.
+
+The implementation covers fixed column/colgroup and first-row constraints,
+spans, cell box-sizing and collapsed offsets, percentage overcommit, and
+proportional excess distribution. Automatic allocation uses column kinds and
+successive percentage/specified/max-content guesses, then the eligible-column
+excess distribution rules. Fixed layout avoids measuring later-row intrinsic
+content. Geometry regressions cover both text paths where relevant.
+
+Rules: [CSS Tables 3 width distribution](https://www.w3.org/TR/css-tables-3/#width-distribution),
+[cell measures](https://www.w3.org/TR/css-tables-3/#computing-cell-measures),
+[CSS 2.2 fixed table layout](https://www.w3.org/TR/CSS22/tables.html#fixed-table-layout).
+Final evidence is in `crates/amazing-layout/evidence/layout19/`.
+
+Candidate iteration on the earlier fixed baseline improved the full 386-case
+static table corpus from **241 to 267 passes**: **26 gains, zero losses**,
+zero renderer failures. Layout tests: **313 passed, one skipped, zero docs**.
+Twenty gains repair the collapsed-border fixed-width family, four repair
+percentage widths after border spacing, and the remaining gains cover auto
+colspan percentages and width constraints. The two first-iteration regressions
+are repaired, with their original reports retained. Percentage-cell offsets
+follow the pinned CSS2 `fixed-table-layout-026` contract; the CSS Tables 3
+working draft's offset-ignoring wording is not applied to these cells.
+
+After merging the user-required per-lane target fix and accompanying paint
+changes, final measurements are being re-paired on engine base `c702f5ef`
+(harness commit `0bf7475b`). Final Linux gate: **2,768 nextest passed /10 skipped, four doctests passed**.
+Layout crate: **315 passed /one skipped, zero docs**. Full table corpus:
+**241 → 272 /386, 31 gains, zero losses**. Retained449: **280 → 280**, identical
+actual/reference hashes and classifications. All renderer failure counters zero.
+The last five gains keep fixed cell decoration inside tracks narrower than
+padding/borders. Three remaining fixed-width fixtures have blank PNG-swatch
+references; column geometry passes and image adoption is routed to its owner.
+
+## LAYOUT-20 — anonymous table repair (in progress)
+
+Next whole area: CSS2.2 anonymous table generation, inline-parent grouping and
+whitespace. Full table corpus from LAYOUT-19 is the before selection (272/386),
+including 17 tree-family mismatches. Fourteen of those exercise orphan cells
+inside inline parents, often with generated content: current construction
+hoists those cells into block flow before normalization. Fix grouping before
+inline flattening; preserve the inline-table wrapper and first-row baseline.
+Also cover the whitespace removal rules and explicit inline-table behavior.
+No result is claimed yet.
