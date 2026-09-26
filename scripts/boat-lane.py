@@ -60,9 +60,10 @@ POOLS = {
     "pool-layout": ["layout", "layout-flexgrid", "css", "text"],
     "pool-paint": ["replaced-content", "compositor"],
     "pool-sys": ["net", "ipc", "storage"],
-    # integrator-assist moved from pool-dom 2026-09-26: three full `amazing` targets
-    # filled a 69 GB default disk to 3 GB free; pool-new had 1% overlap.
-    "pool-new": ["wasm", "a11y", "devtools", "integrator-assist"],
+    "pool-new": ["wasm", "a11y", "devtools"],
+    # integrator-assist left pool-dom (disk full) then pool-new (75% busy, 28% overlap)
+    # on 2026-09-26; it builds the whole `amazing` crate, so it gets its own sandbox.
+    "pool-ia": ["integrator-assist"],
     "pool-desktop": ["shell"],
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
