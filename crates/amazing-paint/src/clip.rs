@@ -1,24 +1,49 @@
 //! Bounded painter reference for CSS `clip-path` basic shapes.
 //!
 //! `inset()`, `circle()`, `ellipse()`, `polygon()` and straight-edged
-//! `path()` resolve to a rasterizable mask; a `url()` reference and a bare
-//! `<geometry-box>` with no shape are skipped rather than guessed. Every
-//! shape resolves its percentages, keywords (`closest-side`,
-//! `farthest-side`, position keywords) and `at <position>` against the
-//! box's own border box, regardless of an explicit `<geometry-box>`: this
-//! bounded resolver does not track a separate padding/margin reference box.
+//! `path()` resolve to a rasterizable mask; a `url()` reference is skipped
+//! rather than guessed (no resource loader here). A bare `<geometry-box>`
+//! with no shape clips to that box's own rect exactly (see `GeometryBoxes`).
 //! `em`/`rem`/viewport-relative lengths need font/viewport context this
 //! parser does not have and are likewise skipped. `polygon()`/`path()`
 //! vertices are capped at [`MAX_CLIP_POINTS`] and stored in a fixed array so
 //! the mask stays `Copy`, like the paint command and effect-node records it
 //! lives in; a shape with more vertices, or a `path()` using a curve or arc
-//! command, is skipped rather than approximated.
+//! command, is skipped rather than approximated. RC-31: a `<basic-shape>`'s
+//! percentages/keywords resolve against the specific `<geometry-box>`
+//! `clip-path` named (`margin-box`/`border-box`/`padding-box`/`content-box`;
+//! `fill-box` uses the `content-box` used value and `stroke-box`/`view-box`
+//! use the `border-box` used value CSS Masking assigns them for non-SVG
+//! content), not always the border box.
 
-use amazing_css::effects::{BasicShape, ClipPath, FillRule, ShapeRadius};
+use amazing_css::effects::{BasicShape, ClipPath, FillRule, MaskBox, ShapeRadius};
 use amazing_css::values::LengthPercentage;
 
 /// The vertex cap for `polygon()`/`path()` masks (see the module doc).
 pub const MAX_CLIP_POINTS: usize = 32;
+
+/// The `<geometry-box>` reference rects a `clip-path` shape or bare box
+/// keyword may resolve against, each `(x, y, width, height)` in the same
+/// untransformed surface pixel space as the group's own decorations.
+#[derive(Debug, Clone, Copy)]
+pub struct GeometryBoxes {
+    pub margin: (f32, f32, f32, f32),
+    pub border: (f32, f32, f32, f32),
+    pub padding: (f32, f32, f32, f32),
+    pub content: (f32, f32, f32, f32),
+}
+
+impl GeometryBoxes {
+    /// All four reference boxes coincide. Correct whenever a caller either
+    /// does not distinguish margin/padding/content from the border box, or
+    /// (as in most of this module's unit tests) only exercises a `clip-path`
+    /// value with no explicit `<geometry-box>`, which always resolves
+    /// against the border box regardless.
+    pub fn uniform(x: f32, y: f32, width: f32, height: f32) -> Self {
+        let rect = (x, y, width, height);
+        GeometryBoxes { margin: rect, border: rect, padding: rect, content: rect }
+    }
+}
 
 /// A resolved clip mask.
 ///
@@ -49,16 +74,44 @@ pub enum ClipMask {
 }
 
 impl ClipMask {
-    /// `reference` is the box this shape's percentages/keywords resolve
-    /// against, in the same untransformed surface pixel space as the
-    /// group's own decorations: `(x, y, width, height)`.
-    pub fn from_css(value: &str, reference: (f32, f32, f32, f32)) -> Option<Self> {
+    /// `boxes` gives every `<geometry-box>` this value might name; the one
+    /// actually named (or the border box, its default) is what the shape's
+    /// percentages/keywords resolve against -- see [`GeometryBoxes`].
+    pub fn from_css(value: &str, boxes: GeometryBoxes) -> Option<Self> {
         let clip_path = amazing_css::effects::parse_clip_path(value)?;
-        let shape = match clip_path {
-            ClipPath::Shape(shape) | ClipPath::ShapeWithBox(shape, _) => shape,
-            ClipPath::None | ClipPath::Url(_) | ClipPath::Geometry(_) => return None,
+        let (shape, geometry) = match clip_path {
+            ClipPath::Shape(shape) => (Some(shape), None),
+            ClipPath::ShapeWithBox(shape, geometry) => (Some(shape), Some(geometry)),
+            ClipPath::Geometry(geometry) => (None, Some(geometry)),
+            ClipPath::None | ClipPath::Url(_) => return None,
         };
-        from_shape(&shape, reference)
+        let reference = match geometry {
+            None | Some(MaskBox::BorderBox) => boxes.border,
+            Some(MaskBox::MarginBox) => boxes.margin,
+            Some(MaskBox::PaddingBox) => boxes.padding,
+            // `fill-box`/`stroke-box`/`view-box` name SVG-specific boxes this
+            // HTML-box resolver does not track. CSS Masking's used value on
+            // non-SVG content differs per box: `fill-box` behaves like
+            // `content-box`, but `stroke-box` and `view-box` both behave
+            // like `border-box` (confirmed against WPT
+            // css-masking/clip-path/clip-path-polygon-010/011/012.html,
+            // whose <meta name="assert"> text states the expected used
+            // value for each keyword explicitly).
+            Some(MaskBox::ContentBox | MaskBox::FillBox) => boxes.content,
+            Some(MaskBox::StrokeBox | MaskBox::ViewBox) => boxes.border,
+            // `mask-clip`'s own keyword; not a valid `clip-path` reference box.
+            Some(MaskBox::NoClip) => return None,
+        };
+        match shape {
+            Some(shape) => from_shape(&shape, reference),
+            None => {
+                let (x, y, width, height) = reference;
+                if width <= 0.0 || height <= 0.0 {
+                    return None;
+                }
+                Some(ClipMask::Rect { x, y, width, height, radii: [(0.0, 0.0); 4] })
+            }
+        }
     }
 
     /// Whether `(x, y)`, in the same coordinate space as the mask, is
@@ -397,7 +450,7 @@ fn parse_straight_path(data: &str) -> Option<Vec<(f32, f32)>> {
 
 #[cfg(test)]
 mod tests {
-    use super::ClipMask;
+    use super::{ClipMask, GeometryBoxes};
 
     /// Unwraps the `Rect` variant for the inset/circle/ellipse tests, which
     /// predate `polygon()`/`path()` and were written against plain fields.
@@ -410,7 +463,7 @@ mod tests {
 
     #[test]
     fn inset_resolves_offsets_and_percentage_round_radius() {
-        let mask = ClipMask::from_css("inset(1px 2px 3px 4px round 10%)", (0.0, 0.0, 20.0, 20.0))
+        let mask = ClipMask::from_css("inset(1px 2px 3px 4px round 10%)", GeometryBoxes::uniform(0.0, 0.0, 20.0, 20.0))
             .expect("valid inset");
         let (x, y, width, height, radii) = rect(mask);
         assert_eq!(x, 4.0);
@@ -423,7 +476,7 @@ mod tests {
 
     #[test]
     fn inset_single_offset_and_round_value_apply_to_all_four() {
-        let mask = ClipMask::from_css("inset(2px round 1px)", (0.0, 0.0, 10.0, 10.0)).expect("valid inset");
+        let mask = ClipMask::from_css("inset(2px round 1px)", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0)).expect("valid inset");
         let (x, y, width, height, radii) = rect(mask);
         assert_eq!((x, y, width, height), (2.0, 2.0, 6.0, 6.0));
         assert!(radii.iter().all(|&r| r == (1.0, 1.0)));
@@ -432,7 +485,7 @@ mod tests {
     #[test]
     fn circle_without_radius_defaults_to_closest_side_and_centers_on_the_box() {
         // A 10x20 box: closest-side from the center is min(5, 10) = 5.
-        let mask = ClipMask::from_css("circle()", (0.0, 0.0, 10.0, 20.0)).expect("valid circle");
+        let mask = ClipMask::from_css("circle()", GeometryBoxes::uniform(0.0, 0.0, 10.0, 20.0)).expect("valid circle");
         let (x, y, width, height, radii) = rect(mask);
         assert_eq!((x, y, width, height), (0.0, 5.0, 10.0, 10.0));
         assert_eq!(radii[0], (5.0, 5.0));
@@ -440,7 +493,7 @@ mod tests {
 
     #[test]
     fn circle_with_explicit_radius_and_position_is_an_exact_disc() {
-        let mask = ClipMask::from_css("circle(3px at 4px 5px)", (0.0, 0.0, 20.0, 20.0))
+        let mask = ClipMask::from_css("circle(3px at 4px 5px)", GeometryBoxes::uniform(0.0, 0.0, 20.0, 20.0))
             .expect("valid circle");
         assert!(mask.contains(4.0, 5.0), "center is inside");
         assert!(mask.contains(4.0, 5.0 + 2.9), "just inside the radius");
@@ -451,7 +504,7 @@ mod tests {
 
     #[test]
     fn ellipse_with_explicit_radii_uses_independent_axes() {
-        let mask = ClipMask::from_css("ellipse(4px 2px at center)", (0.0, 0.0, 20.0, 20.0))
+        let mask = ClipMask::from_css("ellipse(4px 2px at center)", GeometryBoxes::uniform(0.0, 0.0, 20.0, 20.0))
             .expect("valid ellipse");
         assert!(mask.contains(10.0, 10.0));
         assert!(mask.contains(10.0 + 3.9, 10.0));
@@ -461,20 +514,72 @@ mod tests {
     }
 
     #[test]
-    fn path_and_a_bare_geometry_box_are_skipped_not_guessed() {
-        assert!(ClipMask::from_css("border-box", (0.0, 0.0, 10.0, 10.0)).is_none());
-        assert!(ClipMask::from_css("none", (0.0, 0.0, 10.0, 10.0)).is_none());
+    fn unsupported_paths_are_skipped_not_guessed() {
+        assert!(ClipMask::from_css("none", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0)).is_none());
         // A curve command makes this bounded straight-edge-only path() parser skip it.
-        assert!(ClipMask::from_css("path(\"M 0 0 C 1 1 2 2 3 3 Z\")", (0.0, 0.0, 10.0, 10.0)).is_none());
+        assert!(ClipMask::from_css("path(\"M 0 0 C 1 1 2 2 3 3 Z\")", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0)).is_none());
         // More vertices than MAX_CLIP_POINTS is skipped, not truncated.
         let many = (0..super::MAX_CLIP_POINTS + 1).map(|i| format!("{i}px {i}px")).collect::<Vec<_>>().join(", ");
-        assert!(ClipMask::from_css(&format!("polygon({many})"), (0.0, 0.0, 10.0, 10.0)).is_none());
+        assert!(ClipMask::from_css(&format!("polygon({many})"), GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0)).is_none());
+    }
+
+    #[test]
+    fn bare_geometry_box_clips_to_that_box_exactly() {
+        // RC-31: `clip-path: <geometry-box>` alone (no shape function) clips
+        // to that box's own rect -- previously treated the same as `none`
+        // (skipped, so the element painted fully unclipped).
+        let boxes = GeometryBoxes {
+            margin: (0.0, 0.0, 100.0, 100.0),
+            border: (10.0, 10.0, 80.0, 80.0),
+            padding: (18.0, 18.0, 64.0, 64.0),
+            content: (26.0, 26.0, 48.0, 48.0),
+        };
+        let (x, y, width, height, radii) = rect(ClipMask::from_css("border-box", boxes).expect("valid border-box"));
+        assert_eq!((x, y, width, height), (10.0, 10.0, 80.0, 80.0));
+        assert!(radii.iter().all(|&r| r == (0.0, 0.0)));
+        let (x, y, width, height, _) = rect(ClipMask::from_css("margin-box", boxes).expect("valid margin-box"));
+        assert_eq!((x, y, width, height), (0.0, 0.0, 100.0, 100.0));
+        let (x, y, width, height, _) = rect(ClipMask::from_css("padding-box", boxes).expect("valid padding-box"));
+        assert_eq!((x, y, width, height), (18.0, 18.0, 64.0, 64.0));
+        let (x, y, width, height, _) = rect(ClipMask::from_css("content-box", boxes).expect("valid content-box"));
+        assert_eq!((x, y, width, height), (26.0, 26.0, 48.0, 48.0));
+        // `fill-box`/`stroke-box`/`view-box` have no HTML-box meaning; CSS
+        // Masking's used value on non-SVG content is content-box for
+        // `fill-box`, but border-box for `stroke-box`/`view-box` (WPT
+        // css-masking/clip-path/clip-path-polygon-010/011/012.html).
+        let (x, y, width, height, _) = rect(ClipMask::from_css("fill-box", boxes).expect("valid"));
+        assert_eq!((x, y, width, height), (26.0, 26.0, 48.0, 48.0), "fill-box");
+        for keyword in ["stroke-box", "view-box"] {
+            let (x, y, width, height, _) = rect(ClipMask::from_css(keyword, boxes).expect("valid"));
+            assert_eq!((x, y, width, height), (10.0, 10.0, 80.0, 80.0), "{keyword}");
+        }
+    }
+
+    #[test]
+    fn shape_with_box_resolves_against_the_named_box_not_always_the_border_box() {
+        // Same triangle as `polygon_clips_to_the_triangle_by_default_nonzero_winding`,
+        // but the div's border box is (0,0,20,20) while its padding box (what
+        // `padding-box` should resolve against) is the inner (5,5,10,10).
+        let boxes = GeometryBoxes {
+            margin: (0.0, 0.0, 20.0, 20.0),
+            border: (0.0, 0.0, 20.0, 20.0),
+            padding: (5.0, 5.0, 10.0, 10.0),
+            content: (5.0, 5.0, 10.0, 10.0),
+        };
+        let mask = ClipMask::from_css("polygon(0 0, 10px 0, 0 10px) padding-box", boxes)
+            .expect("valid polygon with an explicit box");
+        // Triangle vertices are now offset by the padding box's own origin (5, 5).
+        assert!(mask.contains(6.0, 6.0), "near the right-angle corner, inside");
+        assert!(!mask.contains(14.0, 14.0), "opposite corner, outside the triangle");
+        // Outside the padding box entirely (the border-box-relative equivalent
+        // point would have been inside, if the box keyword were ignored).
+        assert!(!mask.contains(1.0, 1.0));
     }
 
     #[test]
     fn polygon_clips_to_the_triangle_by_default_nonzero_winding() {
         // A right triangle spanning the box's diagonal half.
-        let mask = ClipMask::from_css("polygon(0 0, 10px 0, 0 10px)", (0.0, 0.0, 10.0, 10.0))
+        let mask = ClipMask::from_css("polygon(0 0, 10px 0, 0 10px)", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0))
             .expect("valid polygon");
         assert!(mask.contains(1.0, 1.0), "near the right-angle corner, inside");
         assert!(!mask.contains(9.0, 9.0), "opposite corner, outside the triangle");
@@ -484,7 +589,7 @@ mod tests {
 
     #[test]
     fn polygon_resolves_percentages_against_the_reference_box() {
-        let mask = ClipMask::from_css("polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)", (10.0, 20.0, 40.0, 30.0))
+        let mask = ClipMask::from_css("polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)", GeometryBoxes::uniform(10.0, 20.0, 40.0, 30.0))
             .expect("valid polygon");
         // The box's whole border box, offset by the reference box's origin.
         assert!(mask.contains(30.0, 35.0), "box center is inside");
@@ -493,7 +598,7 @@ mod tests {
 
     #[test]
     fn path_with_only_straight_commands_clips_to_the_closed_outline() {
-        let mask = ClipMask::from_css("path(\"M 0 0 L 10 0 L 10 10 L 0 10 Z\")", (0.0, 0.0, 10.0, 10.0))
+        let mask = ClipMask::from_css("path(\"M 0 0 L 10 0 L 10 10 L 0 10 Z\")", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0))
             .expect("valid straight-edged path");
         assert!(mask.contains(5.0, 5.0));
         assert!(!mask.contains(15.0, 15.0));
@@ -505,7 +610,7 @@ mod tests {
         // as `nonzero`; this only proves the fill-rule keyword parses and is
         // threaded onto the mask (winding-rule divergence needs a
         // self-intersecting path, out of scope for this straight-edge subset).
-        let mask = ClipMask::from_css("path(evenodd, \"M 0 0 L 10 0 L 10 10 L 0 10 Z\")", (0.0, 0.0, 10.0, 10.0))
+        let mask = ClipMask::from_css("path(evenodd, \"M 0 0 L 10 0 L 10 10 L 0 10 Z\")", GeometryBoxes::uniform(0.0, 0.0, 10.0, 10.0))
             .expect("valid path");
         assert!(matches!(mask, ClipMask::Polygon { even_odd: true, .. }));
     }
