@@ -54,8 +54,15 @@ impl SetExpr {
     }
 }
 
-pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize), Error> {
-    let chars = if flags.unicode_mode() {
+/// Group names in declaration order with their 1-based capture index; empty
+/// when the pattern has no named capturing groups.
+pub(crate) type GroupNames = Vec<(Box<str>, usize)>;
+
+pub(crate) fn parse_utf16(
+    pattern: &[u16],
+    flags: Flags,
+) -> Result<(Node, usize, GroupNames), Error> {
+    let chars: Vec<u32> = if flags.unicode_mode() {
         char::decode_utf16(pattern.iter().copied())
             .map(|point| match point {
                 Ok(ch) => ch as u32,
@@ -65,6 +72,27 @@ pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize)
     } else {
         pattern.iter().copied().map(u32::from).collect()
     };
+    // `\k<name>` may reference a group declared later in the pattern, so the
+    // set of names is collected with a throwaway pre-pass before the real
+    // parse resolves each reference to its (stable, deterministic) index.
+    let known_names = {
+        let mut scan = Parser {
+            chars: chars.clone(),
+            pos: 0,
+            flags,
+            captures: 0,
+            depth: 0,
+            refs: Vec::new(),
+            scanning: true,
+            names: Vec::new(),
+            known_names: Vec::new(),
+        };
+        let _ = scan.disjunction()?;
+        if scan.pos != scan.chars.len() {
+            return scan.error("unmatched closing parenthesis");
+        }
+        scan.names
+    };
     let mut p = Parser {
         chars,
         pos: 0,
@@ -72,6 +100,9 @@ pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize)
         captures: 0,
         depth: 0,
         refs: Vec::new(),
+        scanning: false,
+        names: Vec::new(),
+        known_names,
     };
     let ast = p.disjunction()?;
     if p.pos != p.chars.len() {
@@ -80,7 +111,12 @@ pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize)
     if p.refs.iter().any(|n| *n > p.captures) {
         return p.error("invalid backreference (legacy decimal/octal escapes are unsupported)");
     }
-    Ok((ast, p.captures))
+    let mut sorted_names: Vec<&str> = p.names.iter().map(|(n, _)| n.as_ref()).collect();
+    sorted_names.sort_unstable();
+    if sorted_names.windows(2).any(|w| w[0] == w[1]) {
+        return p.error("duplicate capture group name");
+    }
+    Ok((ast, p.captures, p.names))
 }
 struct Parser {
     chars: Vec<u32>,
@@ -89,6 +125,15 @@ struct Parser {
     captures: usize,
     depth: usize,
     refs: Vec<usize>,
+    /// True only for the throwaway pre-pass: `\k<name>` accepts any
+    /// well-formed name without checking it is declared, since the point of
+    /// this pass is to discover every name.
+    scanning: bool,
+    /// Names declared by `(?<name>...)` so far in this pass.
+    names: GroupNames,
+    /// Names available to `\k<name>` (from the pre-pass); empty while
+    /// `scanning`.
+    known_names: GroupNames,
 }
 impl Parser {
     fn peek(&self) -> Option<u32> {
@@ -154,6 +199,10 @@ impl Parser {
                 if self.depth > MAX_DEPTH {
                     return Err(Error::Limit("pattern nesting"));
                 }
+                // 0 = non-capturing, 1 = lookahead, 2 = negative lookahead,
+                // 3 = capturing (name, if any, in `name`), 4/5 = lookbehind
+                // (not yet supported).
+                let mut name = None;
                 let kind = if self.eat('?') {
                     if self.eat(':') {
                         0
@@ -161,15 +210,29 @@ impl Parser {
                         1
                     } else if self.eat('!') {
                         2
+                    } else if self.eat('<') {
+                        if self.eat('=') {
+                            return self.error("lookbehind assertions are unsupported");
+                        } else if self.eat('!') {
+                            return self.error("lookbehind assertions are unsupported");
+                        } else {
+                            name = Some(self.group_name()?);
+                            if !self.eat('>') {
+                                return self.error("unterminated group name");
+                            }
+                            3
+                        }
                     } else {
-                        return self
-                            .error("unsupported group (named captures/lookbehind/modifiers)");
+                        return self.error("unsupported group modifier");
                     }
                 } else {
                     3
                 };
                 let group = if kind == 3 {
                     self.captures += 1;
+                    if let Some(name) = &name {
+                        self.names.push((name.clone(), self.captures));
+                    }
                     self.captures
                 } else {
                     0
@@ -465,7 +528,7 @@ impl Parser {
             .iter()
             .filter_map(|c| char::from_u32(*c))
             .collect();
-        if !crate::unicode_sets::supported(&name) {
+        if !(crate::unicode_sets::supported(&name) || crate::unicode_props::supported(&name)) {
             return self.error("unsupported Unicode property");
         }
         if !self.flags.unicode_sets
@@ -497,6 +560,86 @@ impl Parser {
             Node::Char(c) => Ok(Member::Range(c, c)),
             Node::Class(mut c) if c.members.len() == 1 => Ok(c.members.remove(0)),
             _ => self.error("invalid class escape"),
+        }
+    }
+    /// GroupName: an IdentifierStart (or `\u` escape resolving to one)
+    /// followed by IdentifierPart* (`$`, `_`, ZWNJ/ZWJ, or Unicode
+    /// ID_Start/ID_Continue), up to (not including) the closing `>`.
+    fn group_name(&mut self) -> Result<Box<str>, Error> {
+        let mut name = String::new();
+        loop {
+            let c = if self.eat('\\') {
+                if !self.eat('u') {
+                    return self.error("invalid group name escape");
+                }
+                self.identifier_escape()?
+            } else {
+                match self.peek() {
+                    Some(c) if c != '>' as u32 => {
+                        self.pos += 1;
+                        c
+                    }
+                    _ => break,
+                }
+            };
+            let start = name.is_empty();
+            let ok = c == '$' as u32
+                || c == '_' as u32
+                || (!start && (c == 0x200C || c == 0x200D))
+                || crate::unicode_props::contains(if start { "ID_Start" } else { "ID_Continue" }, c);
+            if !ok {
+                return self.error("invalid character in group name");
+            }
+            match char::from_u32(c) {
+                Some(ch) => name.push(ch),
+                None => return self.error("invalid character in group name"),
+            }
+        }
+        if name.is_empty() {
+            return self.error("empty group name");
+        }
+        Ok(name.into())
+    }
+    /// A RegExpUnicodeEscapeSequence for GroupName: unlike the general `\u`
+    /// character escape, the braced form and surrogate-pair combining are
+    /// always available here regardless of the `u`/`v` flags.
+    fn identifier_escape(&mut self) -> Result<u32, Error> {
+        if self.eat('{') {
+            let mut n = 0u32;
+            let start = self.pos;
+            while self.peek() != Some('}' as u32) {
+                let Some(d) = self
+                    .take()
+                    .and_then(char::from_u32)
+                    .and_then(|c| c.to_digit(16))
+                else {
+                    return self.error("invalid Unicode escape");
+                };
+                n = n
+                    .checked_mul(16)
+                    .and_then(|n| n.checked_add(d))
+                    .filter(|n| *n <= 0x10FFFF)
+                    .ok_or_else(|| Error::Syntax("Unicode escape out of range".into()))?;
+            }
+            if self.pos == start {
+                return self.error("empty Unicode escape");
+            }
+            self.pos += 1;
+            Ok(n)
+        } else {
+            let mut n = self.hex(4)?;
+            if (0xD800..=0xDBFF).contains(&n)
+                && self.chars.get(self.pos..self.pos + 2) == Some(&['\\' as u32, 'u' as u32])
+            {
+                let save = self.pos;
+                self.pos += 2;
+                if let Ok(low @ 0xDC00..=0xDFFF) = self.hex(4) {
+                    n = 0x10000 + ((n - 0xD800) << 10) + (low - 0xDC00);
+                } else {
+                    self.pos = save;
+                }
+            }
+            Ok(n)
         }
     }
     fn hex(&mut self, count: usize) -> Result<u32, Error> {
@@ -607,8 +750,24 @@ impl Parser {
             Some('p' | 'P') if self.flags.unicode_mode() => {
                 Ok(Node::Set(self.property(c == 'P' as u32)?))
             }
-            Some('p' | 'P' | 'k') => {
-                self.error("Unicode properties/named references are unsupported")
+            Some('p' | 'P') => self.error("Unicode properties are unsupported"),
+            Some('k') if !in_class && self.peek() == Some('<' as u32) => {
+                self.pos += 1;
+                let name = self.group_name()?;
+                if !self.eat('>') {
+                    return self.error("unterminated group name");
+                }
+                let index = self
+                    .known_names
+                    .iter()
+                    .find(|(n, _)| **n == *name)
+                    .map(|(_, i)| *i)
+                    .unwrap_or(0);
+                if !self.scanning && index == 0 {
+                    return self.error("undefined named backreference");
+                }
+                self.refs.push(index);
+                Ok(Node::Backref(index))
             }
             Some(ch)
                 if self.flags.unicode_mode()

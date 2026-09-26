@@ -99,6 +99,53 @@ fn bounded_pathological_pattern_throws() {
 }
 
 #[test]
+fn named_capture_groups() {
+    truth(
+        r"var m=/(?<year>\d{4})-(?<month>\d{2})/.exec('2024-06');m.groups.year==='2024' && m.groups.month==='06' && m[1]==='2024'",
+    );
+    truth(r"var m=/(?<a>x)?/.exec('y');m.groups.a===undefined && Object.getPrototypeOf(m.groups)===null");
+    truth(r"/(?<a>x)/.exec('y')===null");
+    truth(r"/(?<a>x)\k<a>/.test('xx') && !/(?<a>x)\k<a>/.test('xy')");
+    truth(r"/\k<a>(?<a>x)/.test('x')");
+    truth(r"'2024-06'.replace(/(?<year>\d{4})-(?<month>\d{2})/,'$<month>/$<year>')==='06/2024'");
+    truth(
+        r"'2024-06'.replace(/(?<year>\d{4})-(?<month>\d{2})/,function(full,year,month,index,source,groups){return groups.year+'!'+groups.month;})==='2024!06'",
+    );
+    truth(r"var error=false;try{new RegExp('(?<a>x)(?<a>y)')}catch(e){error=e.name==='SyntaxError'}error");
+    truth(r"var error=false;try{new RegExp('\\k<a>')}catch(e){error=e.name==='SyntaxError'}error");
+}
+#[test]
+fn regexp_escape_static_method() {
+    truth(r"RegExp.escape('foo bar')==='\\x66oo\\x20bar'");
+    truth(r"RegExp.escape('a+b*c')==='\\x61\\+b\\*c'");
+    truth(r"RegExp.escape('1a')==='\\x31a' && RegExp.escape('a1')==='\\x611'");
+    truth(r"new RegExp('^'+RegExp.escape('a.b')+'$').test('a.b') && !new RegExp('^'+RegExp.escape('a.b')+'$').test('axb')");
+    truth(r"RegExp.escape.length===1 && RegExp.escape.name==='escape'");
+    truth(r"var error=false;try{RegExp.escape(1)}catch(e){error=e.name==='TypeError'}error");
+}
+#[test]
+fn symbol_match_search_and_match_all() {
+    truth(r"/a/[Symbol.match]('cat')[0]==='a'");
+    truth(r"/a/g[Symbol.match]('banana').join(',')==='a,a,a'");
+    truth(r"/z/g[Symbol.match]('banana')===null");
+    truth(r"/an/[Symbol.search]('banana')===1");
+    truth(r"/z/[Symbol.search]('banana')===-1");
+    truth(
+        r"var r=/a/g;r.lastIndex=5;r[Symbol.search]('banana');r.lastIndex===5",
+    );
+    truth(
+        r"var it=/a/g[Symbol.matchAll]('banana');var out=[];var step;while(!(step=it.next()).done){out.push(step.value[0]+':'+step.value.index);}out.join(',')==='a:1,a:3,a:5'",
+    );
+    truth(r"var it=/a/g[Symbol.matchAll]('banana');it[Symbol.iterator]()===it");
+    truth(
+        r"var it=/(?<x>a)/g[Symbol.matchAll]('banana');it.next().value.groups.x==='a'",
+    );
+    truth(
+        r"var it=/a/[Symbol.matchAll]('banana');var first=it.next();var second=it.next();first.done===false && first.value[0]==='a' && second.done===true && second.value===undefined",
+    );
+    truth(r"var r=/a/g;r.lastIndex=3;var it=r[Symbol.matchAll]('banana');r.lastIndex===3 && it.next().value.index===3");
+}
+#[test]
 fn templates_in_blocks_and_getter_receivers() {
     truth(r"function f(){return `a${ /[}]/.test('}') }${ `${({a:2}).a}` }`;} f()==='atrue2'");
     truth(

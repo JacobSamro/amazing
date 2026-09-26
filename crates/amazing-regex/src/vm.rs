@@ -148,10 +148,15 @@ impl SetExpr {
                         .all(|(a, b)| canonical(*a, flags) == canonical(*b, flags))
             }
             Self::Property(name, invert) => {
-                if *invert {
-                    sequence.len() == 1 && !crate::unicode_sets::contains(name, sequence)
-                } else {
+                let base = if crate::unicode_sets::supported(name) {
                     crate::unicode_sets::contains(name, sequence)
+                } else {
+                    matches!(sequence, [c] if crate::unicode_props::contains(name, *c))
+                };
+                if *invert {
+                    sequence.len() == 1 && !base
+                } else {
+                    base
                 }
             }
             Self::Union(terms) => terms.iter().any(|term| term.contains(sequence, flags)),

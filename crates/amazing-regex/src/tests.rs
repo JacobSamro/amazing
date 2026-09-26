@@ -264,8 +264,9 @@ fn syntax_errors_and_bounds() {
         ("a", "gg"),
         ("a", "uv"),
         (r"\a", "u"),
-        ("(?<x>a)", ""),
-        (r"\p{Letter}", "u"),
+        ("(?<x>a)(?<x>b)", ""),
+        ("(?<1a>a)", ""),
+        (r"\p{Bogus_Property}", "u"),
     ] {
         assert!(Regex::new(p, f).is_err(), "{p}/{f}");
     }
@@ -351,6 +352,108 @@ fn unicode_sets_operations_strings_and_properties() {
     ] {
         assert!(Regex::new(pattern, "v").is_err(), "{pattern}");
     }
+}
+#[test]
+fn unicode_property_escapes_general_category_script_and_binary() {
+    let accepts = [
+        (r"^\p{L}+$", "Hello"),
+        (r"^\p{Letter}+$", "Hello"),
+        (r"^\p{Lu}+$", "HELLO"),
+        (r"^\p{Uppercase_Letter}+$", "HELLO"),
+        (r"^\p{General_Category=Lu}+$", "HELLO"),
+        (r"^\p{gc=Lu}+$", "HELLO"),
+        (r"^\p{LC}+$", "Hello"),
+        (r"^\p{Cased_Letter}+$", "Hello"),
+        (r"^\p{Nd}+$", "0123"),
+        (r"^\p{Script=Greek}+$", "\u{3b1}\u{3b2}\u{3b3}"),
+        (r"^\p{Script=Latin}+$", "abc"),
+        (r"^\p{sc=Latn}+$", "abc"),
+        // Common has no Script_Extensions overrides for digits, so the
+        // Script_Extensions escape must fall back to the plain Script value.
+        (r"^\p{Script_Extensions=Common}+$", "0123"),
+        // U+0300 COMBINING GRAVE ACCENT is explicitly listed with several
+        // scripts in ScriptExtensions.txt, including Greek, though its own
+        // Script is Inherited.
+        (r"^\p{scx=Greek}+$", "\u{300}"),
+        (r"^\p{Alphabetic}+$", "abcABC"),
+        (r"^\p{Alpha}+$", "abcABC"),
+        (r"^\p{White_Space}+$", " \t\n"),
+        (r"^\p{Any}+$", "a1 \u{10ffff}"),
+        (r"^\p{ASCII}+$", "abc\u{7f}"),
+        (r"^\p{Assigned}+$", "abc"),
+    ];
+    for (pattern, input) in accepts {
+        assert!(
+            Regex::new(pattern, "u")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_some(),
+            "{pattern} should match {input:?}"
+        );
+    }
+    let rejects = [
+        (r"^\P{L}+$", "Hello"),
+        (r"^\p{Lu}+$", "hello"),
+        (r"^\p{Script=Greek}+$", "abc"),
+        (r"^\p{Assigned}+$", "\u{378}"),
+        (r"^\p{ASCII}+$", "\u{80}"),
+    ];
+    for (pattern, input) in rejects {
+        assert!(
+            Regex::new(pattern, "u")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_none(),
+            "{pattern} should not match {input:?}"
+        );
+    }
+    for property in ["Alphabetic", "Script=Greek", "gc=Lu", "Letter"] {
+        assert!(
+            crate::unicode_props::supported(property),
+            "{property} should be supported"
+        );
+    }
+    assert!(!crate::unicode_props::supported("Not_A_Real_Property"));
+}
+#[test]
+fn named_capture_groups_and_backreferences() {
+    let regex = Regex::new(r"(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})", "").unwrap();
+    assert_eq!(
+        regex.group_names(),
+        &[
+            ("year".into(), 1),
+            ("month".into(), 2),
+            ("day".into(), 3),
+        ]
+    );
+    let m = regex.exec("2024-06-30", 0).unwrap().unwrap();
+    assert_eq!(m.captures[1], Some(0..4));
+    assert_eq!(m.captures[2], Some(5..7));
+    assert_eq!(m.captures[3], Some(8..10));
+
+    // `\k<name>` may reference a group declared later in the pattern.
+    assert_eq!(
+        captures(r"\k<a>(?<a>x)", "", "x"),
+        vec![Some("x".into()), Some("x".into())]
+    );
+    assert!(Regex::new(r"(?<a>x)\k<a>", "")
+        .unwrap()
+        .exec("xx", 0)
+        .unwrap()
+        .is_some());
+    assert!(Regex::new(r"(?<a>x)\k<a>", "")
+        .unwrap()
+        .exec("xy", 0)
+        .unwrap()
+        .is_none());
+
+    // Names accept `$`, `_`, and Unicode ID_Start/ID_Continue (via `\u`
+    // escapes too), but reject an undeclared backreference and duplicates.
+    assert!(Regex::new(r"(?<$_é>a)\k<$_é>", "").is_ok());
+    assert!(Regex::new(r"\k<undeclared>", "").is_err());
+    assert!(Regex::new(r"(?<a>x)(?<a>y)", "").is_err());
 }
 #[test]
 fn upstream_testharness_patterns() {
