@@ -100,6 +100,15 @@ three sequential batches would. The wrapper holds one of three Mac-side slots
 (`mkdir`-atomic, dead holders reclaimed) and queues the rest. Crate-scoped `-p`
 iterations do not need a slot.
 
+**Linux runs on Boat sandboxes (2026-09-26).** `scripts/linux-run.sh <lane> -- '<cmd>'`
+now defaults to the lane's own Boat sandbox (4 vCPU Ryzen 9950X, 8 GB, deployed in
+seconds from the `amazing-builder` template with a warm `target/`, Rust 1.97.1,
+libvpx 1.16, nextest and the pinned Test262). `scripts/boat-lane.py list` shows them;
+`scripts/boat-idle-reaper.py` stops any sandbox idle for 15 minutes and the next run
+resumes it. The venus hosts stay available with `--host venus-001|venus-003`.
+Same interface, same `$CARGO_TARGET_DIR`, `$JOBS` and `$TEST262_ROOT`; outputs go to
+`~/amazing/out` on the sandbox.
+
 **Iterate on Linux; gate on Windows.** Two Linux build hosts, `venus-001`
 (32 threads) and `venus-003` (16 threads), take the platform-independent load:
 crate and workspace nextest while iterating, full Test262, the WPT `dom/`
