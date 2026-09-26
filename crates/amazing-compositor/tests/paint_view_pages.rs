@@ -186,8 +186,27 @@ fn retained_real_page_property_trace() {
         .unwrap();
     let initial = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     assert!(!initial.resources.uploads.is_empty());
+    // The same effect node used for the opacity scenario: `EffectOperations`
+    // carries filters/blend/clip, not opacity, so animating one does not
+    // disturb the other. Reserve both endpoint halos up front, exactly as
+    // `effect_tests::reserved_blur_animation_...` does for a synthetic scene,
+    // so a sampled blur never needs a source raster mid-animation.
+    let filter_from = compositor
+        .trees()
+        .effect_operations(effect)
+        .cloned()
+        .unwrap_or_default();
+    let mut filter_to = filter_from.clone();
+    filter_to.filters = vec![amazing_compositor::FilterOperation::Blur(6.)];
+    compositor
+        .reserve_effect_animation(effect, &filter_from, &filter_to)
+        .unwrap();
+    // Reserving a wider halo can itself dirty tiles that now need the extra
+    // margin; absorb that one-time cost here so it does not land inside the
+    // "scroll" scenario's timed, zero-upload loop below.
+    let _ = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     println!("scenario,frames,full_paint_us,retained_build_us,uploads");
-    for scenario in ["scroll", "transform", "opacity"] {
+    for scenario in ["scroll", "transform", "opacity", "filter"] {
         let mut full_us = 0;
         let mut retained_us = 0;
         let mut uploads = 0;
@@ -214,6 +233,17 @@ fn retained_real_page_property_trace() {
                     .unwrap(),
                 "opacity" => compositor
                     .set_opacity(effect, 0.5 + index as f32 / 100.)
+                    .unwrap(),
+                "filter" => compositor
+                    .set_effect_operations(
+                        effect,
+                        amazing_compositor::sample_effect_operations(
+                            &filter_from,
+                            &filter_to,
+                            (index + 1) as f32 / 20.,
+                        )
+                        .unwrap(),
+                    )
                     .unwrap(),
                 _ => unreachable!(),
             }

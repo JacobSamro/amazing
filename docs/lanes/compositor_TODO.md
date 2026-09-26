@@ -264,3 +264,15 @@ Still open: `clip-path`/`mask-image` as a live CSS effect *delta* (routed to
 CSS, not just resolved-painter import at scene construction); `mask-image`
 has no painter reference renderer at all; transformed filter/clip groups
 still use `BakedFallback`.
+
+### COMP-15 filter animation frame-time trace
+
+`retained_real_page_property_trace` gained a `filter` scenario alongside its
+existing scroll/transform/opacity ones: `reserve_effect_animation` once, then
+`sample_effect_operations`/`set_effect_operations` per step, on the same real
+multi-item page. Measured: `retained_build_us` 9275 vs `full_paint_us`
+1216385 (~0.76%), **0 uploads** across 20 steps — the same source-free,
+zero-reraster guarantee scroll/transform/opacity already had, now proven for
+filter animation too. Compositor 91/91, workspace 3019/11 skipped, doctests
+4/4, all unchanged. Evidence:
+`crates/amazing-compositor/evidence/comp15/filter-frame-time.md`.
