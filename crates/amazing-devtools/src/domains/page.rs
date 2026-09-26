@@ -2,7 +2,10 @@
 
 use super::{frame, frame_tree, object};
 use crate::base64;
-use crate::host::{FrameInfo, LifecycleEvent, Rect, ScreenshotFormat, ScreenshotParams};
+use crate::host::{
+    FrameInfo, FrameResourceTree, LayoutMetrics, LifecycleEvent, Rect, ResourceInfo,
+    ScreenshotFormat, ScreenshotParams, Viewport,
+};
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
 use crate::session::{DispatchOutcome, SessionState};
@@ -79,6 +82,33 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             Ok(DispatchOutcome::empty())
         }
         "Page.bringToFront" => Ok(DispatchOutcome::empty()),
+        "Page.getLayoutMetrics" => {
+            let metrics = session.dev.get_layout_metrics().map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(layout_metrics(&metrics)))
+        }
+        "Page.getResourceTree" => {
+            let tree = session.dev.get_resource_tree().map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "frameTree",
+                resource_tree(&tree),
+            )])))
+        }
+        "Page.getResourceContent" => {
+            let frame_id = request.string_param("frameId")?;
+            let url = request.string_param("url")?;
+            let content = session
+                .dev
+                .get_resource_content(frame_id, url)
+                .map_err(CdpError::from)?;
+            let (content, base64_encoded) = match std::str::from_utf8(&content.bytes) {
+                Ok(text) => (text.to_string(), false),
+                Err(_) => (base64::encode(&content.bytes), true),
+            };
+            Ok(DispatchOutcome::result(object(vec![
+                ("content", Json::String(content)),
+                ("base64Encoded", Json::Bool(base64_encoded)),
+            ])))
+        }
         other => Err(CdpError::method_not_found(other)),
     }
 }
@@ -113,6 +143,69 @@ pub fn load_event(timestamp: f64) -> Json {
         "Page.loadEventFired",
         object(vec![("timestamp", Json::number(timestamp))]),
     )
+}
+
+/// Builds the `Page.domContentEventFired` event from a monotonic timestamp.
+pub fn dom_content_event(timestamp: f64) -> Json {
+    crate::protocol::event(
+        "Page.domContentEventFired",
+        object(vec![("timestamp", Json::number(timestamp))]),
+    )
+}
+
+fn viewport(viewport: &Viewport) -> Json {
+    object(vec![
+        ("pageX", Json::number(viewport.page_x)),
+        ("pageY", Json::number(viewport.page_y)),
+        ("clientWidth", Json::number(viewport.client_width)),
+        ("clientHeight", Json::number(viewport.client_height)),
+    ])
+}
+
+fn layout_metrics(metrics: &LayoutMetrics) -> Json {
+    object(vec![
+        ("layoutViewport", viewport(&metrics.layout_viewport)),
+        ("visualViewport", viewport(&metrics.visual_viewport)),
+        (
+            "contentSize",
+            object(vec![
+                ("x", Json::number(0.0)),
+                ("y", Json::number(0.0)),
+                ("width", Json::number(metrics.content_width)),
+                ("height", Json::number(metrics.content_height)),
+            ]),
+        ),
+    ])
+}
+
+fn resource_info(resource: &ResourceInfo) -> Json {
+    let mut fields = vec![
+        ("url", Json::String(resource.url.clone())),
+        ("type", Json::String(resource.resource_type.clone())),
+        ("mimeType", Json::String(resource.mime_type.clone())),
+        ("cached", Json::Bool(resource.cached)),
+    ];
+    if let Some(size) = resource.content_size {
+        fields.push(("contentSize", Json::number(size as f64)));
+    }
+    if let Some(timestamp) = resource.last_modified {
+        fields.push(("lastModified", Json::number(timestamp)));
+    }
+    object(fields)
+}
+
+fn resource_tree(tree: &FrameResourceTree) -> Json {
+    object(vec![
+        ("frame", frame(&tree.frame)),
+        (
+            "resources",
+            Json::Array(tree.resources.iter().map(resource_info).collect()),
+        ),
+        (
+            "childFrames",
+            Json::Array(tree.child_frames.iter().map(resource_tree).collect()),
+        ),
+    ])
 }
 
 fn screenshot_params(request: &CdpRequest) -> Result<ScreenshotParams, CdpError> {
