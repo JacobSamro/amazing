@@ -35,6 +35,7 @@ pub use message_event_bindings::{dispatch_message_event, MessageEventPayload};
 mod focus_bindings;
 mod abort_bindings;
 mod document_bindings;
+mod legacy_document_bindings;
 mod parser_bindings;
 mod element_reflection;
 mod image_bindings;

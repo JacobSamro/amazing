@@ -2527,3 +2527,6 @@ mod dom_exception;
 
 #[path = "tests_dataset.rs"]
 mod tests_dataset;
+
+#[path = "tests_legacy_document.rs"]
+mod tests_legacy_document;

@@ -20,6 +20,7 @@ pub mod dataset;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
+pub mod legacy_document;
 pub mod render_mutation;
 pub mod markup;
 #[cfg(test)] mod markup_tests;

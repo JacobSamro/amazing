@@ -1,3 +1,4 @@
+use amazing_dom::legacy_document::LegacyColor as LC;
 use crate::host::{
     BindingHost, FormAttribute as F, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
 };
@@ -219,6 +220,14 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("fgColor", O::DocumentLegacyColorGet(LC::Text)), setter("fgColor", O::DocumentLegacyColorSet(LC::Text)),
+    getter("bgColor", O::DocumentLegacyColorGet(LC::Background)), setter("bgColor", O::DocumentLegacyColorSet(LC::Background)),
+    getter("linkColor", O::DocumentLegacyColorGet(LC::Link)), setter("linkColor", O::DocumentLegacyColorSet(LC::Link)),
+    getter("vlinkColor", O::DocumentLegacyColorGet(LC::VisitedLink)), setter("vlinkColor", O::DocumentLegacyColorSet(LC::VisitedLink)),
+    getter("alinkColor", O::DocumentLegacyColorGet(LC::ActiveLink)), setter("alinkColor", O::DocumentLegacyColorSet(LC::ActiveLink)),
+    method("clear", O::DocumentLegacyNoop, 0),
+    method("captureEvents", O::DocumentLegacyNoop, 0),
+    method("releaseEvents", O::DocumentLegacyNoop, 0),
     method("moveBefore", O::MoveBefore, 2),
     getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
@@ -549,6 +558,13 @@ const TEXT: &[Member] = &[
     getter("wholeText", O::TextWholeText),
     method("splitText", O::TextSplit, 1),
 ];
+const HTML_BODY: &[Member] = &[
+    getter("text", O::BodyLegacyColorGet(LC::Text)), setter("text", O::BodyLegacyColorSet(LC::Text)),
+    getter("bgColor", O::BodyLegacyColorGet(LC::Background)), setter("bgColor", O::BodyLegacyColorSet(LC::Background)),
+    getter("link", O::BodyLegacyColorGet(LC::Link)), setter("link", O::BodyLegacyColorSet(LC::Link)),
+    getter("vLink", O::BodyLegacyColorGet(LC::VisitedLink)), setter("vLink", O::BodyLegacyColorSet(LC::VisitedLink)),
+    getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
+];
 const HTML_ELEMENT: &[Member] = &[
     getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),
@@ -872,7 +888,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: LINK },
     D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: META },
     D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: HTML_BODY },
     D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },

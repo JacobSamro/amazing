@@ -128,6 +128,11 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn install_window_event_target(&mut self) -> Result<(), Throw> {
+        let global = self.js.binding_global_object();
+        for name in ["captureEvents", "releaseEvents"] {
+            let function = self.native(name, 0, NativeEntry::Operation(Operation::WindowLegacyNoop), HostCallPolicy::CallOnly);
+            self.define_data_property(&global, name, function, true, true, true)?;
+        }
         let prototype = self.prototype(Interface::EventTarget)
             .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
         self.js.binding_set_global_prototype(&prototype)
@@ -137,6 +142,47 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_document_and_body_colors_share_attributes_and_noops_ignore_arguments() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('legacy document reflection'); }
+            const doc = document.implementation.createHTMLDocument('legacy');
+            const body = doc.body;
+            for (const [documentName, bodyName, attribute] of [
+                ['fgColor', 'text', 'text'], ['bgColor', 'bgColor', 'bgcolor'],
+                ['linkColor', 'link', 'link'], ['vlinkColor', 'vLink', 'vlink'],
+                ['alinkColor', 'aLink', 'alink']]) {
+                doc[documentName] = 'red';
+                check(body[bodyName] === 'red' && body.getAttribute(attribute) === 'red');
+                body[bodyName] = null;
+                check(doc[documentName] === '' && body.getAttribute(attribute) === '');
+                body[bodyName] = undefined;
+                check(doc[documentName] === 'undefined');
+            }
+            body.remove();
+            let conversions = 0;
+            doc.fgColor = {toString() { conversions++; return 'ignored'; }};
+            check(conversions === 1 && doc.fgColor === '');
+            doc.body = body;
+            check(doc.fgColor === 'undefined');
+            const poison = {toString() { throw new Error('must not coerce'); }};
+            for (const name of ['clear', 'captureEvents', 'releaseEvents']) {
+                check(doc[name](poison) === undefined && doc[name].length === 0);
+            }
+            check(window.captureEvents(poison) === undefined);
+            check(window.releaseEvents(poison) === undefined);
+            let rejected = false;
+            try { doc.clear.call({}); } catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn document_collections_are_live_alias_correct_and_rooted_in_their_document() {
