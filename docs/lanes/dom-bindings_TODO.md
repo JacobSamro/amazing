@@ -1748,3 +1748,18 @@ Planned seam (not implemented yet): generalize the Window adapter pattern with o
 Expose a typed trusted message-delivery helper in amazing-bindings so IPC can supply data, origin, lastEventId, source and ports and dispatch through the same native registry. DOM stores only native message metadata and opaque retained-value handles; bindings/host own JS value rooting and cleanup. IPC retains transport, structured clone/transfer, inbox scheduling and lifecycle ownership. Publish exact helper signatures with the implementation; these names are the proposed adapter contract, not callable APIs yet.
 
 Exit checks: native/binding coverage of constructor defaults/conversions, legacy initialization, retained payload identity, target/currentTarget identity, and shared capture/once/passive/removal/dispatch behavior; pinned messaging WPT selection; Windows owned/workspace nextest and doctests.
+
+## Deferred: iframe-dependent Range bulk fixtures (2026-09-26)
+
+On merged source `6a029fa3`, Linux Boat reproduces five pinned bulk timeouts at
+120 seconds each: cloneContents/extractContents/deleteContents each complete
+one detached assertion; insertNode/surroundContents complete none. A minimized
+three-second scaffold passes direct clone/extract, fails iframe contentDocument
+and contentWindow presence, and never completes iframe load. No Range algorithm
+change. Raw evidence and reproducible diagnostic:
+`crates/amazing-bindings/evidence/range-timeouts/`.
+
+User-directed dependency: **JSRT-9 child realms after the await fix, then HTML-25
+part 2**. Deferred, not blocked. Continue independent nodes, traversal, events,
+collections, and queued IPC-11 MessageEvent/shared EventTarget work. Windows
+source upload failed; this is Linux diagnostic evidence, not a Windows gate.
