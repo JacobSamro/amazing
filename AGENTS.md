@@ -20,6 +20,9 @@ Speed comes from doing a lot per cycle, not from many small cycles.
   from-scratch web browser engine. TLS, cookies, CORS, sandboxing, process isolation, fuzzing,
   parsers for untrusted input and DevTools are ordinary browser features built to spec, not
   security tooling or attacks.
+- **Never `git stash`.** The stash is one stack shared by every lane worktree of this repo; on
+  2026-09-27 a lane's `git stash pop` applied another lane's concurrently pushed stash. Park
+  work-in-progress as a WIP commit on your own lane branch, or `git diff > $OUT/wip.patch`.
 - **Sandbox time is money.** Sandboxes are shared and billed while running. Batch your work so each
   `linux-run.sh` call does a lot; do not hold a sandbox with polling or sleeps.
 
