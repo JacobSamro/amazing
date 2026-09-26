@@ -1,7 +1,7 @@
 //! The `CSS` domain: computed styles and matched rules.
 
 use super::{empty_array, object, style_origin};
-use crate::host::MatchedRule;
+use crate::host::{MatchedRule, MediaQuery};
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
 use crate::session::{DispatchOutcome, SessionState};
@@ -86,8 +86,69 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
                 ),
             ])))
         }
+        "CSS.getStyleSheetText" => {
+            let style_sheet_id = request.string_param("styleSheetId")?;
+            let text = session
+                .dev
+                .get_style_sheet_text(style_sheet_id)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "text",
+                Json::String(text.unwrap_or_default()),
+            )])))
+        }
+        "CSS.setStyleSheetText" => {
+            let style_sheet_id = request.string_param("styleSheetId")?;
+            let text = request.string_param("text")?;
+            session
+                .dev
+                .set_style_sheet_text(style_sheet_id, text)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "text",
+                Json::String(text.to_string()),
+            )])))
+        }
+        "CSS.getMediaQueries" => {
+            let queries = session.dev.get_media_queries().map_err(CdpError::from)?;
+            let medias: Vec<Json> = queries.iter().map(media_query).collect();
+            Ok(DispatchOutcome::result(object(vec![(
+                "medias",
+                Json::Array(medias),
+            )])))
+        }
+        "CSS.getBackgroundColors" => {
+            let node = node_from_request(session, request)?;
+            let colors = session
+                .dev
+                .get_background_colors(node)
+                .map_err(CdpError::from)?;
+            let colors: Vec<Json> = colors
+                .into_iter()
+                .map(|color| match color {
+                    Some(value) => Json::String(value),
+                    None => Json::Null,
+                })
+                .collect();
+            Ok(DispatchOutcome::result(object(vec![
+                ("colors", Json::Array(colors)),
+                ("computedFontSize", Json::String(String::new())),
+                ("computedFontWeight", Json::String(String::new())),
+            ])))
+        }
         other => Err(CdpError::method_not_found(other)),
     }
+}
+
+fn media_query(query: &MediaQuery) -> Json {
+    let mut fields = vec![
+        ("text", Json::String(query.text.clone())),
+        ("source", Json::String(query.source.clone())),
+    ];
+    if let Some(url) = &query.source_url {
+        fields.push(("sourceURL", Json::String(url.clone())));
+    }
+    object(fields)
 }
 
 fn node_from_request(
