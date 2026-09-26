@@ -50,9 +50,9 @@ fn class_needs_fallback(class: &ast::ClassItem) -> bool {
     class.super_class.as_ref().is_some_and(expression_needs_fallback)
         || class.members.iter().any(|member| match member {
             ClassMember::Method(method) => method_needs_fallback(method),
-            ClassMember::StaticBlock(block) => block_needs_fallback(block),
-            ClassMember::Field(field) => key_needs_fallback(&field.key)
-                || field.init.as_ref().is_some_and(expression_needs_fallback),
+            // Class fields and static blocks are not represented in bytecode
+            // yet: never let compilation silently drop them.
+            ClassMember::StaticBlock(_) | ClassMember::Field(_) => true,
         })
 }
 

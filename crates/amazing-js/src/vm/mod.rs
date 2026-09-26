@@ -11,7 +11,7 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
+use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -460,7 +460,7 @@ impl Program {
                         }
                         match reference {
                             Reference::Property(receiver, key) => {
-                                fast_path::set(i, &receiver, key, value, &mut caches[*pc - 1])?;
+                                fast_path::set(i, &receiver, key, value, &env, &mut caches[*pc - 1])?;
                             }
                             other => i.put_reference(other, value, &env)?,
                         }
@@ -679,7 +679,24 @@ impl Program {
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };
-                        prototype.borrow_mut().set_own("constructor", constructor.clone());
+                        // MakeConstructor(F, false, proto): a class constructor's
+                        // `prototype` is non-writable/non-enumerable/non-configurable.
+                        callable.borrow_mut().define("prototype", Property {
+                            value: JsValue::Object(prototype.clone()),
+                            writable: false,
+                            enumerable: false,
+                            configurable: false,
+                            getter: None,
+                            setter: None,
+                        }).ok();
+                        prototype.borrow_mut().define("constructor", Property {
+                            value: constructor.clone(),
+                            writable: true,
+                            enumerable: false,
+                            configurable: true,
+                            getter: None,
+                            setter: None,
+                        }).map_err(|_| Throw::type_error("could not define class constructor"))?;
                         callable.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
                         for method in &class.methods {
                             let key = method.key.resolve(&registers)?;
@@ -701,7 +718,14 @@ impl Program {
                                 prototype.borrow_mut().define(&key, property)
                                     .map_err(|_| Throw::type_error("could not define class accessor"))?;
                             } else {
-                                i.set_prop(&JsValue::Object(prototype.clone()), &key, value)?;
+                                prototype.borrow_mut().define(&key, Property {
+                                    value,
+                                    writable: true,
+                                    enumerable: false,
+                                    configurable: true,
+                                    getter: None,
+                                    setter: None,
+                                }).map_err(|_| Throw::type_error("could not define class method"))?;
                             }
                         }
                         registers[*dst] = constructor;
@@ -868,12 +892,33 @@ fn route_abrupt(
     }
 }
 
+/// Reconstruct the AST parameter list for a compiled function. The compiler
+/// only accepts simple identifier parameters (defaults, rest and patterns are
+/// rejected), so names are enough to give the function object the correct
+/// `length` and `Function.prototype.toString` shape.
+fn bytecode_params(names: &[String]) -> Vec<crate::ast::Param> {
+    let span = Span::new(
+        crate::tokens::SourceLocation::new(1, 1),
+        crate::tokens::SourceLocation::new(1, 1),
+    );
+    names
+        .iter()
+        .map(|name| crate::ast::Param {
+            binding: crate::ast::Binding::Ident(crate::ast::Ident { name: name.clone(), span }),
+            default: None,
+            rest: false,
+            span,
+        })
+        .collect()
+}
+
 impl FunctionCode {
     fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
         let name = self.0.name.clone();
+        let params = bytecode_params(&self.0.params);
         let mut object = JsObject::function(JsFunction {
-            name: name.clone(),
-            params: vec![],
+            name,
+            params,
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
             is_generator: self.0.is_generator,
@@ -896,9 +941,8 @@ impl FunctionCode {
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
-        handle
-            .borrow_mut()
-            .set_own("name", JsValue::str(name.as_str()));
+        // `JsObject::function` already defines `name` and `length` with the
+        // spec descriptors; do not overwrite them here.
         if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
@@ -912,9 +956,19 @@ impl FunctionCode {
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
+            // Function `prototype` is a non-enumerable data property
+            // (`{writable:true, enumerable:false, configurable:false}`).
             handle
                 .borrow_mut()
-                .set_own("prototype", JsValue::Object(prototype.clone()));
+                .define("prototype", Property {
+                    value: JsValue::Object(prototype.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: false,
+                    getter: None,
+                    setter: None,
+                })
+                .ok();
             handle.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
         }
         JsValue::Object(handle)
@@ -944,11 +998,33 @@ impl FunctionCode {
             )?;
         }
         if !is_arrow {
-            let arguments = JsValue::object(JsObject::array());
+            // An arguments object is an ordinary object, not an Array exotic
+            // (matching the tree walker): indexed data properties, a
+            // non-enumerable writable `length`, and Symbol.iterator.
+            let arguments = i.object_value();
             for (index, value) in args.iter().enumerate() {
                 i.set_prop(&arguments, &index.to_string(), value.clone())?;
             }
-            i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
+            if let JsValue::Object(object) = &arguments {
+                object.borrow_mut().define("length", Property {
+                    value: JsValue::num(args.len() as f64),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).map_err(|_| Throw::type_error("could not define arguments length"))?;
+                if let Some(values) = i.array_proto.borrow().get_own("values") {
+                    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
+                        value: values,
+                        writable: true,
+                        enumerable: false,
+                        configurable: true,
+                        getter: None,
+                        setter: None,
+                    }).map_err(|_| Throw::type_error("could not define arguments iterator"))?;
+                }
+            }
             env.declare_var("arguments", arguments)?;
         }
         if self.0.is_generator {

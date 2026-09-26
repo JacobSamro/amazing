@@ -172,6 +172,12 @@ impl Compiler {
         if class.super_class.is_some() {
             return Err(self.error(span, "derived class"));
         }
+        if class.members.iter().any(|member| matches!(
+            member,
+            ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)
+        )) {
+            return Err(self.error(span, "class field or static block"));
+        }
         let constructor = class.members.iter().find_map(|member| match member {
             ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
             _ => None,

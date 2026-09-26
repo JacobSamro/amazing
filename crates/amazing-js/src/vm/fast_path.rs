@@ -1,4 +1,5 @@
-use super::{BinOp, Interpreter};
+use super::{BinOp, Interpreter, Reference};
+use crate::env::EnvHandle;
 use crate::value::{Exotic, JsValue, PropertyKey, Throw};
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -53,7 +54,7 @@ pub(super) fn get(
 
 pub(super) fn set(
     interpreter: &mut Interpreter, receiver: &JsValue, key: PropertyKey,
-    value: JsValue, cache: &mut Option<InlineCache>,
+    value: JsValue, env: &EnvHandle, cache: &mut Option<InlineCache>,
 ) -> Result<(), Throw> {
     if let JsValue::Object(object) = receiver {
         if let Some(slot) = cached(cache, object) {
@@ -62,7 +63,11 @@ pub(super) fn set(
             }
         }
     }
-    interpreter.set_prop(receiver, &key, value)?;
+    // Slow path: the interpreter's full OrdinarySet semantics, which honour
+    // prototype setters, accessors, non-writable data properties, array exotic
+    // length, and sloppy-mode failures. `set_prop` is the internal own-property
+    // helper and is NOT equivalent to a JS assignment.
+    interpreter.put_reference(Reference::Property(receiver.clone(), key.clone()), value, env)?;
     if let JsValue::Object(object) = receiver { fill(cache, object, &key); }
     Ok(())
 }
