@@ -150,3 +150,43 @@ pixels, 0 layer-rounding, 0 losses**. Evidence is committed under
 `crates/amazing-compositor/evidence/comp15/`. The native compositor area is
 gated; full COMP-15 remains open for the CSS/painter/driver adoption and the
 new effect-fixture parity criterion described above.
+
+### COMP-15 restart recovery
+
+`5196e881` completes the interrupted nested-animation halo correction. Endpoint
+reservations are per effect: sum ancestors, maximize siblings, retain larger
+previous reservations. Cached and worker raster paths use that same envelope.
+Boat iteration: **76/76**, **0 doctests**. Windows gate remains pending: the
+fixed-commit archive upload lost connection before the gate; no new Windows
+result is claimed. Full CSS-effect parity still depends on painter reference
+effects and metadata, plus CSS/driver adoption.
+
+### COMP-15 Linux-first final gate
+
+Final source `642ffc69` (halo fix `5196e881`, dev base `4518bea7`): Boat
+**2526/2526 workspace tests**, **10 skipped**, **2/2 doctests**; compositor
+**76/76**, **0 doctests**. Before `27de5230` and after corpora both have
+**1/4/1 layers**, **262144 exact pixels per page**, zero rounding/losses.
+Evidence: `crates/amazing-compositor/evidence/comp15/linux.md`. Native recovery
+is complete and ready to merge. Windows is deferred and no longer a blocker.
+Full COMP-15 remains pending painter reference effects/metadata and adoption.
+
+### COMP-15 CSS value adoption and plus-lighter
+
+CSS filter/backdrop/isolation/blend deltas now have an atomic typed converter;
+relative lengths and resource/reference-space decisions remain with producers.
+All 17 CSS blend values map, including new premultiplied plus-lighter. The
+driver refuses effect deltas before committing accompanying opacity or cached
+style while painter metadata is unavailable.
+
+Linux final on fixed base `4c5e877f`: **2723/2723 workspace**, **10 skipped**,
+**4/4 doctests**; compositor **82/82**, **0 doctests**. Four curated fixture files:
+**37 resolved values, 14 explicit fallbacks, 0 failures**. IA before/after remains
+**1/4/1 layers**, **262144 exact pixels/page**, **0 losses**. Details:
+`crates/amazing-compositor/evidence/comp15/linux-css-adoption.md`.
+
+This adoption area is complete. Next COMP-15 item remains importing painter
+effects/reference spaces and measuring the four fixtures against independent
+full paint. The current painter exposes opacity only, so full COMP-15 and
+unmodified WPT effect conformance remain open; no additional owned ticket is
+listed in the brief.

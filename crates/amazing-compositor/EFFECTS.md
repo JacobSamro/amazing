@@ -9,7 +9,7 @@ present the resulting surface. This is not a GPU shader implementation.
 
 `EffectOperations` accepts blur, drop-shadow, brightness, contrast, grayscale,
 hue-rotate, invert, opacity, saturate, sepia, backdrop filters, all 16 standard
-blend modes, isolation, inset/circle/ellipse/polygon/path clipping, and an owned
+blend modes plus additive `plus-lighter`, isolation, inset/circle/ellipse/polygon/path clipping, and an owned
 alpha/luminance mask. `EffectClip::from_path` flattens resolved line, quadratic,
 cubic and elliptical-arc segments with a bounded tolerance. The producer resolves
 CSS reference boxes, units, image decoding/origin checks, mask positioning and
@@ -69,3 +69,31 @@ References: [Filter Effects 1](https://www.w3.org/TR/filter-effects-1/),
 [Compositing and Blending 1](https://www.w3.org/TR/compositing-1/),
 [CSS Masking 1](https://www.w3.org/TR/css-masking-1/), and
 [ADR 0010](../../docs/adr/0010-incremental-style-layout-paint-invalidation.md).
+
+## CSS value adoption
+
+`resolve_css_filters` adopts the CSS lane's typed filter list. It retains list
+order, converts hue angles from CSS radians to kernel degrees, resolves omitted
+drop-shadow color from the supplied current color, and requests relative lengths
+from the producer. Percent filter lengths, calc expressions, resource filters
+and values outside kernel limits fail explicitly.
+
+`resolve_css_effect_delta` returns an all-or-nothing proposed value for filter,
+backdrop-filter, mix-blend-mode and isolation edits. It preserves unchanged masks
+and clips. The caller supplies backdrop bounds in the same raster reference
+space. Geometry and resource edits select fallback;
+this converter does not authorize a stacking-context change or invent layout
+geometry. Sample its resolved endpoints with `sample_effect_operations`.
+
+The current driver deliberately rejects all nonempty CSS effect deltas before
+changing opacity/transform or committing styles, until painter effect groups
+and reference-space metadata can be imported. This prevents silent no-op frames.
+`examples/css_effects_corpus.rs` processes every inline effect declaration in
+`fixtures/comp15/`; resolved/fallback counts are value-adoption evidence, not
+full-painter or unmodified WPT results.
+
+`plus-lighter` follows [Compositing 2 §9.1.15](https://drafts.csswg.org/compositing-2/#porterduffcompositingoperators_plus_lighter):
+add premultiplied color and alpha, clamp both at one, then return straight RGBA.
+Its 500-case numerical grid, translucent group cross-fade, cached presentation
+and V2 snapshot round-trip cover the retained operator independently of CSS
+full-painter adoption.
