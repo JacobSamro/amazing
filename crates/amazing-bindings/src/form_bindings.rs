@@ -87,6 +87,10 @@ pub(crate) fn handles(op: O) -> bool {
             | O::OptionText
             | O::OptionSetText
             | O::OptionIndex
+            | O::OutputValue
+            | O::OutputSetValue
+            | O::OutputDefaultValue
+            | O::OutputSetDefaultValue
             | O::ButtonType
             | O::ButtonSetType
             | O::ControlWillValidate
@@ -1052,6 +1056,23 @@ pub(crate) fn invoke<H: BindingHost>(
         O::FormControlSetName => {
             let value = string(host, args, 0)?;
             set_attr(host, target, "name", &value)?;
+            Ok(host.undefined())
+        }
+        O::OutputValue | O::OutputDefaultValue => {
+            let text = host.with_dom(|dom| {
+                let mut value = String::new();
+                for child in dom.tree_order(target).into_iter().skip(1) {
+                    if let Some(units) = dom.character_data_utf16(child) {
+                        value.push_str(&String::from_utf16_lossy(&units));
+                    }
+                }
+                Ok(value.encode_utf16().collect::<Vec<u16>>())
+            })?;
+            host.string(&text)
+        }
+        O::OutputSetValue | O::OutputSetDefaultValue => {
+            let value = string(host, args, 0)?;
+            host.with_dom(|dom| dom.replace_children(target, &[NodeOrString::Utf16(value)]))?;
             Ok(host.undefined())
         }
         O::InputValue | O::TextAreaValue | O::SelectValue | O::OptionValue => {

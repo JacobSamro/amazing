@@ -653,6 +653,8 @@ const FORM_CONTROL: &[Member] = &[
 ];
 const OUTPUT: &[Member] = &[
     getter("htmlFor", O::OutputHtmlFor), setter("htmlFor", O::OutputSetHtmlFor),
+    getter("value", O::OutputValue), setter("value", O::OutputSetValue),
+    getter("defaultValue", O::OutputDefaultValue), setter("defaultValue", O::OutputSetDefaultValue),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),

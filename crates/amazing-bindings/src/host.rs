@@ -277,6 +277,7 @@ pub enum Operation {
     ElementGetHTML, ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
     ElementRel, ElementSetRel, ElementRelList, ElementSetRelList,
     OutputHtmlFor, OutputSetHtmlFor, IFrameSandbox, IFrameSetSandbox,
+    OutputValue, OutputSetValue, OutputDefaultValue, OutputSetDefaultValue,
     LabelControl, LabelForm,
     ProgressValue, ProgressSetValue, ProgressMax, ProgressSetMax, ProgressPosition,
     MeterValue, MeterSetValue, MeterMin, MeterSetMin, MeterMax, MeterSetMax,
