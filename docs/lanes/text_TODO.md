@@ -942,3 +942,61 @@ Render baseline for css-ruby unchanged (49/67). Gate: workspace nextest
 unchanged from TEXT-23's numbers (re-run to confirm zero losses after the
 `dev` merge to `512912d5`; see status.json for the exact count). Commit
 `<TEXT-24 sha>` (docs/lanes only).
+
+## TEXT-25: css-text re-triage, word-break: manual
+
+Coordinator ask: base on local dev 47355c3c, re-baseline css/css-text, fix
+clusters rooted in amazing-text/amazing-text-provider (line breaking,
+white-space processing, text-transform, hyphens, letter/word-spacing),
+route layout-rooted clusters.
+
+**Base note:** the coordinator's 47355c3c landed as a fast-forward past
+ff56cfc9 (HTML-29's merge) on first fetch, which carries a pre-existing
+dev-wide build break (`runtime_host_devtools.rs`'s `PageScript` literal
+missing the `node` field `cmd/js.rs` added -- not this lane's file).
+`git reset --hard 47355c3c` to land exactly on the specified base rather
+than work on top of a broken build.
+
+**Baseline:** 235 pass / 210 mismatch of 445 selected. `--baseline auto`
+showed `lost=6` against the checked-in evidence on the very first run,
+before any code change -- pre-existing regressions from other lanes since
+TEXT-22 (`text-align-match-parent-*`, `text-indent-overflow`,
+`text-justify-none-001`, `white-space-pre-wrap-justify-*`), all in
+properties already triaged as layout-owned. Flagged, not fixed.
+
+**Fixed: `word-break: manual`.** Added `amazing_text::WordBreak::Manual`.
+Verified by direct test (a Thai phrase with no spaces) that
+`LineBreakWordOption::KeepAll` alone does *not* suppress ICU's
+dictionary-segmented word-internal breaks for complex-context scripts --
+only CJK-ideograph adjacency, which is all `keep-all` needs. Added a second
+filter in `line_breaks` (`is_whitespace_adjacent`) that, only under
+`Manual`, drops any non-mandatory opportunity that isn't next to
+whitespace, matching CSS Text 4's "words are not broken by the UA... only
+line break opportunities defined explicitly" wording. Unit-tested
+(`word_break_manual_suppresses_dictionary_segmented_breaks_like_keep_all`).
+Rebuilt and re-rendered to confirm the render baseline didn't move (it
+didn't, byte-for-byte) -- `box_tree.rs`'s word-break match still only
+constructs `BreakAll`/`KeepAll`, so the CSS value `"manual"` never reaches
+this code yet. Routed the one-line wiring addition to
+`.agents/layout/questions.md`.
+
+**New finding, not fixed:** a "nearest common ancestor" line-breaking gap
+(CSS Text 3 s5.1's rule that a boundary's white-space eligibility is
+governed by the two flanking characters' *shared* ancestor, not either
+character's own containing element) affecting `break-boundary-2-chars-001`,
+`line-breaking-ic-001`, `line-breaking-ic-003`. `style_at_break` only
+checks the preceding character's own span; fixing this needs ancestor-chain
+data `TextSpan` doesn't carry. Filed as a joint design question rather than
+guessing at an API neither lane agreed on.
+
+Every other cluster unchanged from TEXT-22 (white-space 77 still largest,
+hyphens 24, word-space-transform 20, `text-transform` 15 -- still pending
+the same layout wiring TEXT-22 asked for, letter-spacing 14, tab-size/
+text-justify/text-autospace/hanging-punctuation 8/8/5/4, writing-system 4).
+Two new single-test items (`boundary-shaping-009`,
+`line-breaking-atomic-009`) flagged but not chased.
+
+Gate: crate nextest `amazing-text`+`amazing-text-provider` 109/109 (2
+skipped). Workspace nextest 3274/3274 passed (15 skipped, 2 slow),
+doctests clean. Zero lost passes against the 47355c3c base. Commit
+`06c753fe`.
