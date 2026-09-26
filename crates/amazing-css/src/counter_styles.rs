@@ -5,9 +5,9 @@ use crate::media_queries::{MediaEnvironment, MediaQueryList};
 use crate::parser::{CounterStyleRule, Stylesheet};
 use crate::syntax::{Token, tokenize};
 
-fn numeric(number: i32, digits: &str) -> String {
+fn numeric(number: i64, digits: &str) -> String {
     let symbols: Vec<char> = digits.chars().collect();
-    let magnitude = i64::from(number).abs().to_string();
+    let magnitude = number.unsigned_abs().to_string();
     let body: String = magnitude
         .bytes()
         .map(|digit| symbols[usize::from(digit - b'0')])
@@ -15,12 +15,12 @@ fn numeric(number: i32, digits: &str) -> String {
     if number < 0 { format!("-{body}") } else { body }
 }
 
-fn alphabetic(mut number: i32, symbols: &str) -> Option<String> {
+fn alphabetic(mut number: i64, symbols: &str) -> Option<String> {
     if number <= 0 {
         return None;
     }
     let symbols: Vec<char> = symbols.chars().collect();
-    let radix = i32::try_from(symbols.len()).ok()?;
+    let radix = i64::try_from(symbols.len()).ok()?;
     if radix < 2 {
         return None;
     }
@@ -33,18 +33,18 @@ fn alphabetic(mut number: i32, symbols: &str) -> Option<String> {
     Some(result)
 }
 
-fn cyclic(number: i32, symbols: &str) -> Option<String> {
+fn cyclic(number: i64, symbols: &str) -> Option<String> {
     let symbols: Vec<char> = symbols.chars().collect();
     let len = i64::try_from(symbols.len()).ok()?;
     if len == 0 {
         return None;
     }
-    let index = (i64::from(number) - 1).rem_euclid(len);
+    let index = (number - 1).rem_euclid(len);
     Some(symbols[usize::try_from(index).ok()?].to_string())
 }
 
 /// `fixed` starts at 1 and does not wrap: values past the symbol list fall back.
-fn fixed(number: i32, symbols: &str) -> Option<String> {
+fn fixed(number: i64, symbols: &str) -> Option<String> {
     let symbols: Vec<char> = symbols.chars().collect();
     if number < 1 {
         return None;
@@ -52,13 +52,13 @@ fn fixed(number: i32, symbols: &str) -> Option<String> {
     symbols.get(usize::try_from(number - 1).ok()?).map(char::to_string)
 }
 
-fn roman(mut number: i32, upper: bool) -> Option<String> {
+fn roman(mut number: i64, upper: bool) -> Option<String> {
     if !(1..4000).contains(&number) {
         return None;
     }
     let mut result = String::new();
     for (value, numeral) in [
-        (1000, "m"),
+        (1000i64, "m"),
         (900, "cm"),
         (500, "d"),
         (400, "cd"),
@@ -85,7 +85,7 @@ fn roman(mut number: i32, upper: bool) -> Option<String> {
 }
 
 /// Additive ("sign-value") formatting. `tuples` must be decreasing by weight.
-fn additive(number: i32, tuples: &[(i32, &str)], negative: &str) -> Option<String> {
+fn additive(number: i64, tuples: &[(i32, &str)], negative: &str) -> Option<String> {
     let body = additive_body(number, tuples.iter().map(|(w, s)| (*w, *s)).collect())?;
     Some(if number < 0 {
         format!("{negative}{body}")
@@ -94,8 +94,8 @@ fn additive(number: i32, tuples: &[(i32, &str)], negative: &str) -> Option<Strin
     })
 }
 
-fn additive_body(number: i32, tuples: Vec<(i32, &str)>) -> Option<String> {
-    let magnitude = i64::from(number).abs();
+fn additive_body(number: i64, tuples: Vec<(i32, &str)>) -> Option<String> {
+    let magnitude = number.unsigned_abs();
     if magnitude == 0 {
         return tuples
             .into_iter()
@@ -105,7 +105,7 @@ fn additive_body(number: i32, tuples: Vec<(i32, &str)>) -> Option<String> {
     let mut value = magnitude;
     let mut out = String::new();
     for (weight, symbol) in tuples {
-        let weight = i64::from(weight);
+        let weight = i64::from(weight).unsigned_abs();
         if weight == 0 || weight > value {
             continue;
         }
@@ -217,6 +217,9 @@ struct Chinese {
     thousands: char,
     negative: char,
     informal: bool,
+    /// Group markers for the ones, ten-thousands, hundred-millions and
+    /// trillions groups (the fourth is two characters in simplified Chinese).
+    group_markers: [&'static str; 4],
 }
 
 const SIMP_INFORMAL: Chinese = Chinese {
@@ -226,6 +229,7 @@ const SIMP_INFORMAL: Chinese = Chinese {
     thousands: '千',
     negative: '负',
     informal: true,
+    group_markers: ["", "万", "亿", "万亿"],
 };
 
 const SIMP_FORMAL: Chinese = Chinese {
@@ -235,6 +239,7 @@ const SIMP_FORMAL: Chinese = Chinese {
     thousands: '仟',
     negative: '负',
     informal: false,
+    group_markers: ["", "万", "亿", "万亿"],
 };
 
 const TRAD_INFORMAL: Chinese = Chinese {
@@ -244,6 +249,7 @@ const TRAD_INFORMAL: Chinese = Chinese {
     thousands: '千',
     negative: '負',
     informal: true,
+    group_markers: ["", "萬", "億", "兆"],
 };
 
 const TRAD_FORMAL: Chinese = Chinese {
@@ -253,54 +259,74 @@ const TRAD_FORMAL: Chinese = Chinese {
     thousands: '仟',
     negative: '負',
     informal: false,
+    group_markers: ["", "萬", "億", "兆"],
 };
 
-/// CSS Counter Styles 3 §7.1.1.3 limited-range algorithm (-9999..=9999).
-fn chinese(number: i32, style: &Chinese) -> Option<String> {
-    if !(-9999..=9999).contains(&number) {
+/// CSS Counter Styles 3 §7.1.2 extended longhand CJK algorithm (|value| < 10^16).
+fn chinese(number: i64, style: &Chinese) -> Option<String> {
+    if number.unsigned_abs() >= 10u64.pow(16) {
         return None;
     }
     if number == 0 {
         return Some(style.digits[0].to_string());
     }
-    let n = i64::from(number).abs();
-    let digits = [
-        (n / 1000) % 10,
-        (n / 100) % 10,
-        (n / 10) % 10,
-        n % 10,
-    ];
-    let markers = [style.thousands, style.hundreds, style.tens, '\0'];
+    let negative = number < 0;
+    let magnitude = number.unsigned_abs();
+    let mut groups = Vec::new();
+    let mut rest = magnitude;
+    while rest > 0 {
+        groups.push((rest % 10_000) as u32);
+        rest /= 10_000;
+    }
+    let units = [style.thousands, style.hundreds, style.tens, '\0'];
+    let divisors = [1000u32, 100, 10, 1];
     let mut out = String::new();
-    let mut pending_zero = false;
-    for (position, digit) in digits.iter().enumerate() {
-        let digit = *digit as usize;
-        if digit == 0 {
-            if !out.is_empty()
-                && digits[position + 1..].iter().any(|d| *d != 0)
-            {
-                pending_zero = true;
-            }
+    let mut zero_pending = false;
+    for index in (0..groups.len()).rev() {
+        let group = groups[index];
+        if group == 0 {
+            zero_pending = true;
             continue;
         }
-        if pending_zero {
+        // A zero group, or a non-zero group with leading zeros, contributes a
+        // single 零 separator.
+        if !out.is_empty() && (zero_pending || group < 1000) {
             out.push(style.digits[0]);
-            pending_zero = false;
         }
-        // Informal styles drop the leading 一 before 十 for 10-19, keeping the 十.
-        let drop_one = style.informal && position == 2 && digit == 1 && out.is_empty();
-        if !drop_one {
-            out.push(style.digits[digit]);
+        zero_pending = false;
+        let mut text = String::new();
+        let mut inner_zero = false;
+        for position in 0..4 {
+            let digit = (group / divisors[position]) % 10;
+            if digit == 0 {
+                if !text.is_empty() && group % divisors[position] != 0 {
+                    inner_zero = true;
+                }
+                continue;
+            }
+            if inner_zero {
+                text.push(style.digits[0]);
+                inner_zero = false;
+            }
+            text.push(style.digits[digit as usize]);
+            if position < 3 {
+                text.push(units[position]);
+            }
         }
-        if position < 3 {
-            out.push(markers[position]);
+        // Informal styles drop the tens digit for any group in 10..=19.
+        if style.informal && (10..=19).contains(&group) {
+            text.remove(0);
+        }
+        out.push_str(&text);
+        if index > 0 {
+            out.push_str(style.group_markers[index]);
         }
     }
-    if number < 0 {
-        Some(format!("{}{out}", style.negative))
+    Some(if negative {
+        format!("{}{out}", style.negative)
     } else {
-        Some(out)
-    }
+        out
+    })
 }
 
 /// The suffix a predefined counter style appends to a `::marker`.
@@ -330,7 +356,7 @@ fn predefined_fallback(style: &str) -> &'static str {
 
 /// Representation for a predefined style, or `None` when the value is outside the
 /// style's range (the caller then uses [`predefined_fallback`]).
-fn predefined_representation(number: i32, style: &str) -> Option<String> {
+fn predefined_representation(number: i64, style: &str) -> Option<String> {
     match style {
         "decimal" => Some(number.to_string()),
         "decimal-leading-zero" => Some(if (-9..10).contains(&number) {
@@ -416,7 +442,7 @@ fn predefined_representation(number: i32, style: &str) -> Option<String> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn format_counter(number: i32, style: &str) -> String {
+pub(crate) fn format_counter(number: i64, style: &str) -> String {
     let style = style.to_ascii_lowercase();
     predefined_representation(number, &style)
         .or_else(|| predefined_representation(number, predefined_fallback(&style)))
@@ -445,7 +471,7 @@ impl CounterStyles {
         Self { rules }
     }
 
-    pub(crate) fn format(&self, number: i32, style: &str) -> String {
+    pub(crate) fn format(&self, number: i64, style: &str) -> String {
         self.representation(number, style, 0)
             .or_else(|| {
                 let fallback = match self.rules.get(style) {
@@ -457,7 +483,7 @@ impl CounterStyles {
             .unwrap_or_else(|| number.to_string())
     }
 
-    pub(crate) fn marker(&self, number: i32, style: &str) -> String {
+    pub(crate) fn marker(&self, number: i64, style: &str) -> String {
         let mut prefix = None;
         let mut suffix = None;
         let mut current = style;
@@ -483,7 +509,7 @@ impl CounterStyles {
         format!("{}{}{}", prefix.unwrap_or_default(), self.format(number, style), suffix)
     }
 
-    fn representation(&self, number: i32, style: &str, depth: usize) -> Option<String> {
+    fn representation(&self, number: i64, style: &str, depth: usize) -> Option<String> {
         if depth >= 16 {
             return None;
         }
@@ -498,7 +524,7 @@ impl CounterStyles {
         let symbols = descriptor(rule, "symbols")
             .map(parse_symbols)
             .unwrap_or_default();
-        let magnitude = i64::from(number).abs();
+        let magnitude = number.abs();
         let body = if system == "numeric" && symbols.len() >= 2 {
             let radix = i64::try_from(symbols.len()).ok()?;
             let mut value = magnitude;
@@ -523,7 +549,7 @@ impl CounterStyles {
             Some(out.into_iter().rev().collect::<String>())
         } else if system == "cyclic" && !symbols.is_empty() {
             let radix = i64::try_from(symbols.len()).ok()?;
-            Some(symbols[usize::try_from((i64::from(number) - 1).rem_euclid(radix)).ok()?].clone())
+            Some(symbols[usize::try_from((number - 1).rem_euclid(radix)).ok()?].clone())
         } else if system == "symbolic" && !symbols.is_empty() && number > 0 {
             let radix = i64::try_from(symbols.len()).ok()?;
             let repeats = usize::try_from((magnitude - 1) / radix + 1).ok()?;
@@ -539,7 +565,7 @@ impl CounterStyles {
                 .parse::<i64>()
                 .unwrap_or(1);
             symbols
-                .get(usize::try_from(i64::from(number) - start).ok()?)?
+                .get(usize::try_from(number - start).ok()?)?
                 .clone()
                 .into()
         } else if system == "additive" {
@@ -707,6 +733,28 @@ mod tests {
             (101, "simp-chinese-formal", "壹佰零壹"),
             (10, "trad-chinese-formal", "壹拾"),
             (-20, "simp-chinese-informal", "负二十"),
+            // Extended algorithm (§7.1.2) from counter-trad-chinese-informal-ref.html.
+            (10000, "trad-chinese-informal", "一萬"),
+            (10001, "trad-chinese-informal", "一萬零一"),
+            (10010, "trad-chinese-informal", "一萬零十"),
+            (10100, "trad-chinese-informal", "一萬零一百"),
+            (11000, "trad-chinese-informal", "一萬一千"),
+            (100000000, "trad-chinese-informal", "一億"),
+            (100000001, "trad-chinese-informal", "一億零一"),
+            (1000000000, "trad-chinese-informal", "十億"),
+            (123456789, "trad-chinese-informal", "一億二千三百四十五萬六千七百八十九"),
+            (1000000000000, "trad-chinese-informal", "一兆"),
+            (10000000000000, "trad-chinese-informal", "十兆"),
+            (
+                9999999999999999,
+                "trad-chinese-informal",
+                "九千九百九十九兆九千九百九十九億九千九百九十九萬九千九百九十九",
+            ),
+            (-10000, "trad-chinese-informal", "負一萬"),
+            (10000, "simp-chinese-formal", "壹万"),
+            (123456789, "simp-chinese-formal", "壹亿贰仟叁佰肆拾伍万陆仟柒佰捌拾玖"),
+            (1000000000000, "simp-chinese-formal", "壹万亿"),
+            (10000000000000000, "trad-chinese-informal", "一〇〇〇〇〇〇〇〇〇〇〇〇〇〇〇〇"),
         ] {
             assert_eq!(format_counter(number, style), expected, "{number} {style}");
         }

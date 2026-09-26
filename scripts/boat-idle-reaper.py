@@ -6,15 +6,15 @@ from the last activity (docs.boat.dev/faq). A sandbox's own in-VM token cannot
 stop itself either (401 on POST /sandboxes/{id}/stop), so the countdown runs
 here, with the account's CLI login, and no credential ever enters a sandbox.
 
-A sandbox counts as busy while its 1-minute load is at or above LOAD_BUSY, or
-while a build/test process (cargo, rustc, nextest, the Test262 host, a C
+A sandbox counts as busy while linux-run.sh holds a lease file on it, while its
+1-minute load is at or above LOAD_BUSY, or while a build/test process (cargo, rustc, nextest, the Test262 host, a C
 compiler or linker) is running. Anything else is idle. After IDLE_MINUTES of
 continuous idleness it is stopped: Boat snapshots it first and billing ends; a
 `boat resume` brings it back in seconds with its disk intact.
 
 Sandboxes whose name contains "keep" are never stopped.
 
-Usage: scripts/boat-idle-reaper.py [--idle-minutes 15] [--poll 60] [--dry-run]
+Usage: scripts/boat-idle-reaper.py [--idle-minutes 5] [--scarce-idle-minutes 15] [--poll 60] [--dry-run]
 """
 
 from __future__ import annotations
@@ -31,7 +31,9 @@ LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
 PROBE = (
     "cut -d' ' -f1 /proc/loadavg; "
-    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true"
+    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
+    # linux-run.sh leases (removed when its command exits; stale after 3 h).
+    "find ~/.amazing-busy -type f -mmin -180 2>/dev/null | wc -l"
 )
 
 
@@ -64,14 +66,29 @@ def is_busy(sandbox_id: str) -> bool | None:
     lines = result.get("stdout", "").split()
     try:
         load, procs = float(lines[0]), int(lines[1])
+        leases = int(lines[2]) if len(lines) > 2 else 0
     except (IndexError, ValueError):
         return None
-    return load >= LOAD_BUSY or procs > 0
+    return load >= LOAD_BUSY or procs > 0 or leases > 0
+
+
+START_RESERVE = 15  # keep this many hourly starts free for lanes and Test262 shards
+
+
+def starts_left_this_hour() -> int | None:
+    status = boat("billing", "status") or {}
+    try:
+        return int(status["limits"]["starts"]["hour"]["remaining"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--idle-minutes", type=float, default=15)
+    ap.add_argument("--idle-minutes", type=float, default=5)
+    # Every resume counts against Boat's 60 starts per hour. When few are left,
+    # stopping early just forces a resume that may be refused, so wait longer.
+    ap.add_argument("--scarce-idle-minutes", type=float, default=15)
     ap.add_argument("--poll", type=int, default=60)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -80,6 +97,10 @@ def main() -> int:
     log(f"reaper started: stop after {args.idle_minutes:g} idle minutes, poll {args.poll}s")
     while True:
         now = time.time()
+        left = starts_left_this_hour()
+        limit = args.idle_minutes
+        if left is not None and left < START_RESERVE:
+            limit = args.scarce_idle_minutes
         live = running_sandboxes()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
@@ -91,7 +112,11 @@ def main() -> int:
                 continue
             first = idle_since.setdefault(sid, now)
             idle_min = (now - first) / 60
-            if idle_min >= args.idle_minutes:
+            if idle_min >= limit:
+                # Probe once more: a run may have started since the last poll.
+                if is_busy(sid) is not False:
+                    idle_since.pop(sid, None)
+                    continue
                 log(f"STOP {sid} ({name}, {sb.get('type')}) idle {idle_min:.0f} min")
                 if not args.dry_run:
                     boat("stop", sid, timeout=120)

@@ -366,7 +366,7 @@ fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, Pag
         .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == "reftest-wait")))
 }
 
-fn paint_host_surface(
+pub(crate) fn paint_host_surface(
     host: &Rc<RefCell<BrowserDomHost>>,
     html_path: &str,
     width: f32,
@@ -467,7 +467,7 @@ fn paint_host_surface_with_updates(
     }
     let styled = amazing_css::compute_with_animations_and_environment(
         &dom.dom, &sheets, animated, &environment);
-    let media = load_page_media(&dom.dom, html_path, &styled);
+    let mut media = crate::page::load_page_media_in_viewport(&dom.dom, html_path, &styled, width, 1.0);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
@@ -475,7 +475,7 @@ fn paint_host_surface_with_updates(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_styled_document(
+    let mut root = amazing_layout::layout_styled_document(
         &dom.dom,
         &styled,
         &page_text.provider,
@@ -483,6 +483,14 @@ fn paint_host_surface_with_updates(
         width,
         fixed_height.map(|height| height as f32),
     );
+    if media.load_visible_lazy(&root, amazing_media::loading::ViewportRect {
+        x: 0.0, y: 0.0, width, height: fixed_height.unwrap_or(600) as f32,
+    }) > 0 {
+        root = amazing_layout::layout_styled_document(
+            &dom.dom, &styled, &page_text.provider, &media,
+            width, fixed_height.map(|height| height as f32),
+        );
+    }
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.
