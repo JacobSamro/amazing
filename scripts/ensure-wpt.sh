@@ -7,6 +7,8 @@
 set -euo pipefail
 REV=c2a2fce69e5c2509d9dc28440ec8b42532e5c293
 DIR="$HOME/corpora/wpt"
+# The venus hosts have no git; their checkout is the pinned GitHub tarball.
+if [ -e "$DIR/.pinned-${REV:0:7}" ]; then echo "$DIR"; exit 0; fi
 if [ "$(git -C "$DIR" rev-parse HEAD 2>/dev/null)" != "$REV" ]; then
   mkdir -p "$DIR"; cd "$DIR"
   [ -d .git ] || { git init -q; git remote add origin https://github.com/web-platform-tests/wpt.git; }

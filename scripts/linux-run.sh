@@ -11,6 +11,7 @@
 # own CARGO_TARGET_DIR. Heavy commands take a slot from that host's pool.
 #
 # Usage:  scripts/linux-run.sh <lane> [--host H] [--ref REF] [--no-slot] -- <command>
+#         scripts/linux-run.sh <lane> --which   (prints the lane's host)
 #   <command> is one bash string, run from the synced tree root. For example:
 #     scripts/linux-run.sh css -- 'cargo nextest run -p amazing-css --locked'
 #     scripts/linux-run.sh js-lang -- 'cargo build -p amazing-js --example test262_host --release --locked &&
@@ -36,11 +37,12 @@ while [ $# -gt 0 ]; do
     --host) HOST="$2"; shift 2 ;;
     --ref) REF="$2"; shift 2 ;;
     --no-slot) SLOT=0; shift ;;
+    --which) WHICH=1; shift ;;
     --) shift; break ;;
     *) echo "linux-run: unknown option $1" >&2; exit 2 ;;
   esac
 done
-[ $# -gt 0 ] || { echo "linux-run: no command given" >&2; exit 2; }
+[ $# -gt 0 ] || [ "${WHICH:-0}" = 1 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
 
 # Lane homes. Since 2026-09-26 lanes run on pooled Boat sandboxes
@@ -51,17 +53,24 @@ CMD="$*"
 if [ -z "$HOST" ]; then
   # Boat needs the amazing-builder template; without it (for example after
   # delete-on-stop data retention removed it) fall back to the venus hosts.
-  if "$HOME/.ascii/bin/boat" snapshots --json 2>/dev/null | grep -q '"name":"amazing-builder"'; then
+  # .agents/.boat-off forces the fallback: on 2026-09-26 the fleet used up
+  # Boat's 200 sandbox starts per day and every resume was refused.
+  if [ ! -e "$MAIN/.agents/.boat-off" ] &&
+     "$HOME/.ascii/bin/boat" snapshots --json 2>/dev/null | grep -q '"name":"amazing-builder"'; then
     HOST=boat
   else
+    # venus-001 (32 threads) takes the Test262-heavy lanes and the gates;
+    # venus-003 (16 threads) the rest of the JS lanes and the render lanes.
     case "$LANE" in
-      js-lang|js-vm|js-binary) HOST=venus-001 ;;
-      js-runtime|js-stdlib|integrator-primary) HOST=venus-003 ;;
+      js-lang|js-vm|js-binary|js-date|integrator-primary|t262-shard-*) HOST=venus-001 ;;
+      js-runtime|js-stdlib|js-intl|wasm|layout|layout-flexgrid|css|text|shell) HOST=venus-003 ;;
       *) HOST=venus-001 ;;
     esac
-    echo "linux-run: Boat template missing, using $HOST" >&2
+    [ -e "$MAIN/.agents/.boat-off" ] || echo "linux-run: Boat template missing, using $HOST" >&2
   fi
 fi
+# --which: print the host this lane runs on (boat or venus-*), for copy-backs.
+[ "${WHICH:-0}" = 1 ] && { echo "$HOST"; exit 0; }
 case "$HOST" in
   boat) SLOTS=0 JOBS=0 ;;
   venus-001) SLOTS=3 JOBS=10 ;;
@@ -156,12 +165,16 @@ fi
 rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
   -e "ssh -o ControlPath=none" "$SRC/" "$HOST:amazing/wt/$LANE/" || {
   echo "linux-run: rsync to $HOST failed" >&2; exit 3; }
+# Lane trees may predate ensure-wpt.sh's git-less (tarball) path; use main's.
+scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$HOST:amazing/wt/$LANE/scripts/ensure-wpt.sh" 2>/dev/null
 
 REMOTE=". ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
 export CARGO_TARGET_DIR=\$HOME/amazing/target/$LANE JOBS=$JOBS CARGO_BUILD_JOBS=$JOBS
-export TEST262_ROOT=\$HOME/amazing/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1
-mkdir -p ~/amazing/out
+export TEST262_ROOT=\$HOME/amazing/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
+mkdir -p \"\$OUT\"
+# Same layout as a Boat sandbox: ~/corpora/{test262,wpt} and a corpora link in the tree.
+ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
 $CMD"
 ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
 run() { ssh "$HOST" "echo $ENCODED | base64 -d | bash" 2>&1 | grep -v -i -E 'post-quantum|store now|pq\.html'; return "${PIPESTATUS[0]}"; }

@@ -132,11 +132,9 @@ exit \$FINALIZE_STATUS
 " || REMOTE_STATUS=$?
   REMOTE_STATUS="${REMOTE_STATUS:-0}"
 
-  read -r H P _ < <("$MAIN/scripts/boat-lane.py" ensure "$LANE")
   DEST="$MAIN/.agents/$LANE/real-pages"; mkdir -p "$DEST"
-  scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-    -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/$LANE/real-pages/*" "$DEST/" 2>/dev/null \
-    || echo "linux-shell-capture: could not copy real-pages evidence back (venus host? copy manually with scp -o ControlPath=none)" >&2
+  "$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/real-pages/*" \
+    || echo "linux-shell-capture: could not copy real-pages evidence back" >&2
   echo "linux-shell-capture: $DEST/report.json"
   [ -f "$DEST/report.json" ] && python3 -c "
 import json
@@ -183,10 +181,7 @@ printf '{\"exe\":\"%s\",\"sha256\":\"%s\",\"commit_tree\":\"%s\",\"args\":\"%s\"
 ls -la \$OUT/captures/$NAME.png
 " || exit $?
 
-read -r H P _ < <("$MAIN/scripts/boat-lane.py" ensure "$LANE")
 DEST="$MAIN/.agents/$LANE/captures"; mkdir -p "$DEST"
-for f in png json log; do
-  scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-    -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/$LANE/captures/$NAME.$f" "$DEST/" 2>/dev/null
-done
+"$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/captures/$NAME.png" \
+  "amazing/out/$LANE/captures/$NAME.json" "amazing/out/$LANE/captures/$NAME.log"
 echo "linux-shell-capture: $DEST/$NAME.png"
