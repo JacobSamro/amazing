@@ -884,6 +884,28 @@ pub static INTERFACES: &[D] = &[
         members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
     D { interface: I::MathMLElement, name: "MathMLElement", parent: Some(I::Element), constructor: None,
         members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::HTMLDirectoryElement, name: "HTMLDirectoryElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("compact", O::DirectoryCompact), setter("compact", O::DirectoryCompactSet)
+    ] },
+    D { interface: I::HTMLFontElement, name: "HTMLFontElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("color", O::FontColor), setter("color", O::FontColorSet),
+        getter("face", O::FontFace), setter("face", O::FontFaceSet),
+        getter("size", O::FontSize), setter("size", O::FontSizeSet)
+    ] },
+    D { interface: I::HTMLFrameElement, name: "HTMLFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("name", O::FrameName), setter("name", O::FrameNameSet),
+        getter("scrolling", O::FrameScrolling), setter("scrolling", O::FrameScrollingSet),
+        getter("src", O::FrameSrc), setter("src", O::FrameSrcSet),
+        getter("frameBorder", O::FrameBorder), setter("frameBorder", O::FrameBorderSet),
+        getter("longDesc", O::FrameLongDesc), setter("longDesc", O::FrameLongDescSet),
+        getter("noResize", O::FrameNoResize), setter("noResize", O::FrameNoResizeSet),
+        getter("marginHeight", O::FrameMarginHeight), setter("marginHeight", O::FrameMarginHeightSet),
+        getter("marginWidth", O::FrameMarginWidth), setter("marginWidth", O::FrameMarginWidthSet)
+    ] },
+    D { interface: I::HTMLFrameSetElement, name: "HTMLFrameSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("cols", O::FrameSetCols), setter("cols", O::FrameSetColsSet),
+        getter("rows", O::FrameSetRows), setter("rows", O::FrameSetRowsSet)
+    ] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -1179,6 +1201,10 @@ pub fn html_element_interface(local: &str) -> I {
         "script" => I::HTMLScriptElement,
         "template" => I::HTMLTemplateElement,
         "slot" => I::HTMLSlotElement,
+        "dir" => I::HTMLDirectoryElement,
+        "font" => I::HTMLFontElement,
+        "frame" => I::HTMLFrameElement,
+        "frameset" => I::HTMLFrameSetElement,
         "iframe" => I::HTMLIFrameElement,
         "embed" => I::HTMLEmbedElement,
         "object" => I::HTMLObjectElement,

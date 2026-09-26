@@ -150,6 +150,69 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_elements_reflect_attributes_and_keep_interface_identity_when_cloned() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url("https://example.test/base/");
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(value) { step++; if (!value) throw 'legacy element reflection check ' + step; }
+            const groups = [
+                ['dir', HTMLDirectoryElement, ['compact']],
+                ['font', HTMLFontElement, ['color', 'face', 'size']],
+                ['frameset', HTMLFrameSetElement, ['cols', 'rows']],
+                ['frame', HTMLFrameElement, ['name', 'scrolling', 'src', 'frameBorder',
+                    'longDesc', 'noResize', 'marginHeight', 'marginWidth']]
+            ];
+            for (const group of groups) {
+                const tag = group[0], ctor = group[1], element = document.createElement(tag);
+                check(element instanceof ctor && element instanceof HTMLElement);
+                check(!(element instanceof HTMLUnknownElement));
+                for (const prop of group[2]) {
+                    const attr = prop.toLowerCase();
+                    const descriptor = Object.getOwnPropertyDescriptor(ctor.prototype, prop);
+                    check(descriptor.enumerable && descriptor.configurable);
+                    const boolean = prop === 'compact' || prop === 'noResize';
+                    check(element[prop] === (boolean ? false : ''));
+                    element[prop] = boolean ? 'false' : 'https://example.test/path';
+                    check(element.getAttribute(attr) === (boolean ? '' : 'https://example.test/path'));
+                    check(element[prop] === (boolean ? true : 'https://example.test/path'));
+                    element.setAttribute(attr, boolean ? 'false' : 'https://example.test/next');
+                    check(element[prop] === (boolean ? true : 'https://example.test/next'));
+                    const clone = element.cloneNode(true);
+                    check(clone instanceof ctor && clone[prop] === element[prop]);
+                    element.removeAttribute(attr);
+                    check(element[prop] === (boolean ? false : ''));
+                    let converted = false, rejected = false;
+                    try { descriptor.set.call(document.createElement('div'), {toString() { converted = true; return 'x'; }}); }
+                    catch (e) { rejected = e instanceof TypeError; }
+                    check(rejected && !converted);
+                    rejected = false;
+                    try { descriptor.get.call(document.createElementNS('urn:test', tag)); }
+                    catch (e) { rejected = e instanceof TypeError; }
+                    check(rejected);
+                    if (boolean) {
+                        element[prop] = 1; element[prop] = 0;
+                        check(!element.hasAttribute(attr));
+                    } else {
+                        element[prop] = null;
+                        const legacy = prop === 'color' || prop === 'marginHeight' || prop === 'marginWidth';
+                        check(element.getAttribute(attr) === (legacy ? '' : 'null'));
+                        element[prop] = undefined;
+                        check(element.getAttribute(attr) === 'undefined');
+                        element[prop] = '\uD800';
+                        check(element.getAttribute(attr) === (prop === 'src' || prop === 'longDesc' ? '\uFFFD' : '\uD800'));
+                    }
+                }
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn installed_modifier_queries_and_numeric_dictionaries_follow_webidl() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
