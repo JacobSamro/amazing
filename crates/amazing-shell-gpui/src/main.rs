@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+mod a11y_bridge;
 mod audio_output;
 mod dom_runtime;
 mod engine_compositor;

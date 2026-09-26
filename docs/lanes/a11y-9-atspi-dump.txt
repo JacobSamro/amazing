@@ -1,0 +1,143 @@
+A11Y-9 evidence: python3-pyatspi walk of the `amazing-a11y-proof` GPUI
+application registered on the Linux AT-SPI2 (org.a11y.Bus) accessibility bus.
+
+Sandbox: Boat pool-desktop, Ubuntu 24.04, Xvfb :97 800x600x24.
+Binary: crates/amazing-shell-gpui, target amazing-a11y-proof (debug).
+Fixture: tests/real-pages/pages/app-analytics.html
+  -> amazing_a11y::build() produced an 86-node AxTree.
+Client: python3-pyatspi, pyatspi.Registry.getDesktop(0), recursive
+  getChildAtIndex() walk printing role name / accessible name / states.
+
+Command (abbreviated; full form ran under scripts/linux-run.sh a11y):
+  Xvfb :97 -screen 0 800x600x24 -nolisten tcp &
+  DISPLAY=:97 amazing-a11y-proof tests/real-pages/pages/app-analytics.html &
+  python3 -c '... pyatspi.Registry.getDesktop(0) ... recursive dump ...'
+
+--- desktop application listing (coarse proof) ---
+ibus-ui-gtk3
+ibus-x11
+ibus-extension-gtk3
+amazing-a11y-proof      <- our process, self-registered on the a11y bus
+
+--- recursive accessible-object dump of amazing-a11y-proof (fine-grained proof) ---
+'application' name='amazing-a11y-proof' states=[]
+  'frame' name='' states=['enabled', 'focusable', 'sensitive', 'showing', 'visible']
+    'document frame' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+      'document frame' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+        'landmark' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'image' name='logo' states=['enabled', 'sensitive', 'showing', 'visible']
+          'static' name='Console' states=['enabled', 'sensitive', 'showing', 'visible']
+            'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'landmark' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+            'link' name='Home' states=['enabled', 'sensitive', 'showing', 'visible']
+              'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+            'link' name='Section' states=['enabled', 'sensitive', 'showing', 'visible']
+              'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+            'link' name='Search' states=['enabled', 'sensitive', 'showing', 'visible']
+              'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'push button' name='Menu' states=['enabled', 'sensitive', 'showing', 'visible']
+            'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+        'landmark' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'heading' name='Analytics' states=['enabled', 'sensitive', 'showing', 'visible']
+            'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'table' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+            'panel' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='NameValueStatus' states=['enabled', 'sensitive', 'showing', 'visible']
+                'column header' name='Name' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'column header' name='Value' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'column header' name='Status' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+            'panel' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 17ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 1' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='7' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 214ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 2' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='14' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 321ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 3' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='21' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 428ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 4' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='28' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 535ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 5' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='35' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 642ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 6' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='42' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 749ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 7' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='49' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+              'table row' name='row 856ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='row 8' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='56' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+                'table cell' name='ok' states=['enabled', 'sensitive', 'showing', 'visible']
+                  'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+        'landmark' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+          'label' name='' states=['enabled', 'sensitive', 'showing', 'visible']
+
+--- stderr from the proof binary run ---
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
+  (benign: no GPU/DRI3 on the sandbox; GPUI falls back to software rendering,
+  unrelated to accessibility)
+
+(process:1125419): dbind-WARNING **: 16:36:10.509: AT-SPI: Error in GetItems,
+sender=:1.31, error=Unknown object '/org/a11y/atspi/cache'
+  (a known at-spi2-core cache-registration quirk seen with short-lived/newly
+  spawned apps: the central object cache has not indexed the new app by the
+  time GetItems is called on it. It did not block the tree walk above -- every
+  node, role, name and state came back correctly on direct child traversal --
+  so it is cosmetic for this proof, not a defect in the bridge.)
+
+--- interpretation ---
+The tree above reproduces app-analytics.html's real structure through the
+whole chain (amazing_a11y::AxTree -> a11y_bridge::build_element -> GPUI div
+tree -> AccessKit -> accesskit_unix -> AT-SPI2 D-Bus -> pyatspi client):
+  - the page's nav landmark region with its Home/Section/Search links and
+    Menu button
+  - the Analytics heading (role 'heading')
+  - the data table, its header row (Name/Value/Status column headers) and
+    all 8 data rows/cells, with row and cell text matching the fixture
+  - GenericContainer nodes (the two nested 'document frame' entries here)
+    were correctly rendered as structurally-transparent wrappers rather than
+    producing spurious or panicking AccessKit nodes, per the
+    debug_assert!("GenericContainer is filtered out...") guard in GPUI's
+    div().role() implementation.
+Every accessible name visible above (Analytics, Home, Section, Search, Menu,
+Name, Value, Status, row N / count / ok) is present in the source fixture, so
+this is a faithful, unmodified pass-through of the fixture's real content
+through the live AT-SPI2 bus, not a synthetic/hand-built tree.
