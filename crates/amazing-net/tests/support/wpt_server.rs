@@ -575,12 +575,15 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
                     Some("headers" | "txt" | "asis") => "text/plain",
                     _ => "text/plain",
                 };
+                match headers
+                    .iter_mut()
+                    .find(|(name, _)| name.eq_ignore_ascii_case("Content-Type"))
+                {
+                    Some(existing) => existing.1 = content_type.to_string(),
+                    None => headers.push(header("Content-Type", content_type)),
+                }
                 headers.push(header("Access-Control-Allow-Origin", "*"));
-                return reply(200, "OK", {
-                    let mut with_type = vec![header("Content-Type", content_type)];
-                    with_type.extend(headers);
-                    with_type
-                }, &body);
+                return reply(200, "OK", headers, &body);
             }
             reply(404, "Not Found", headers, b"not found")
         }
