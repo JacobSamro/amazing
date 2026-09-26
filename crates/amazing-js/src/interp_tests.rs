@@ -570,6 +570,71 @@ mod tests {
     }
 
     #[test]
+    fn class_expressions_are_strict_and_restore_the_outer_context() {
+        let mut i = Interpreter::new();
+        i.run_script(r#"
+            var frozen = Object.preventExtensions({});
+            try { class C { [frozen.key = 1]() {} } }
+            catch (error) { console.log(error.name); }
+            try { class C extends (frozen.base = 1) {} }
+            catch (error) { console.log(error.name); }
+            frozen.sloppy = 1;
+            console.log(frozen.sloppy);
+        "#).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["TypeError", "TypeError", "undefined"]);
+    }
+
+    #[test]
+    fn prepared_module_uses_strict_declarations_and_execution() {
+        let mut i = Interpreter::new();
+        let program = crate::parse_script(r#"
+            function hoisted() { Object.preventExtensions({}).key = 1; }
+            try { hoisted(); } catch (error) { console.log(error.name); }
+            try { Object.preventExtensions({}).key = 1; }
+            catch (error) { console.log(error.name); }
+            (0, eval)('Object.preventExtensions({}).key = 1');
+        "#).unwrap();
+        i.prepare_module(&program).unwrap();
+        i.run_program(&program).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["TypeError", "TypeError"]);
+    }
+
+    #[test]
+    fn parameter_bindings_allow_var_redeclaration_without_escaping() {
+        let mut i = Interpreter::new();
+        i.run_script(r#"
+            var dbname = 'outer';
+            function createdb_for_multiple_tests(dbname, version) {
+                var dbname = dbname + '-test';
+                var version;
+                return dbname + ':' + version;
+            }
+            console.log(createdb_for_multiple_tests('database', 2));
+            console.log(dbname);
+            function keep(value) { var value; return value; }
+            console.log(keep(7));
+            function duplicate(value, value) { var value; return value; }
+            console.log(duplicate(1, 2));
+            function patterned({value}, ...rest) {
+                var value; var rest;
+                return value + rest[0];
+            }
+            console.log(patterned({value: 3}, 4));
+            console.log(((value) => { var value; return value; })(8));
+            function defaults(a = 5, b = a) { var a; return a + b; }
+            console.log(defaults(undefined));
+            var later = 'outer';
+            try { (function(a = later, later = 1) {} )(); }
+            catch (error) { console.log(error.name); }
+            try { (function(a = a) {} )(); }
+            catch (error) { console.log(error.name); }
+        "#).unwrap();
+        assert_eq!(i.output.borrow().as_slice(),
+            ["database-test:2", "outer", "7", "2", "7", "8", "10",
+             "ReferenceError", "ReferenceError"]);
+    }
+
+    #[test]
     fn async_function_returns_a_promise() {
         let mut i = Interpreter::new();
         i.run_script("async function f(){ return 4; } f().then(x=>console.log(x+1));")

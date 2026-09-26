@@ -105,6 +105,8 @@ pub enum EnvKind {
     Block,
     /// The global environment: lookups missing here become ReferenceErrors.
     Global,
+    /// Module environment: a strict top-level var scope.
+    Module,
 }
 
 pub struct Env {
@@ -257,6 +259,19 @@ impl EnvHandle {
         env.declare_raw(name, JsValue::Undefined, true, false)
     }
 
+    /// Initialize a parameter's preallocated cell, preserving closure identity.
+    /// Parameters permit body `var` declarations and sloppy duplicate names.
+    pub(crate) fn initialize_parameter(&self, name: &str, value: JsValue) -> Result<(), Throw> {
+        let env = self.0.borrow();
+        let cell = env.vars.get(name)
+            .ok_or_else(|| Throw::reference_error("parameter binding was not allocated"))?;
+        let mut binding = cell.0.borrow_mut();
+        binding.value = value;
+        binding.initialized = true;
+        binding.lexical = false;
+        Ok(())
+    }
+
     /// `let`/`const` declaration.
     pub fn declare_lexical(&self, name: &str, value: JsValue, mutable: bool) -> Result<(), Throw> {
         self.0.borrow_mut().declare_raw(name, value, mutable, true)
@@ -397,7 +412,7 @@ impl EnvHandle {
                 let env = current.0.borrow();
                 (env.kind, env.parent.clone())
             };
-            if matches!(kind, EnvKind::Global | EnvKind::Function | EnvKind::Arrow) {
+            if matches!(kind, EnvKind::Global | EnvKind::Module | EnvKind::Function | EnvKind::Arrow) {
                 return current;
             }
             current = parent.expect("block environment has a parent");

@@ -1039,7 +1039,8 @@ impl Interpreter {
             ExecutionBackend::Bytecode => {
                 let code = vm::compile(p).map_err(|error| Throw::type_error(error.to_string()))?;
                 let previous_strict = self.strict_eval_context;
-                self.strict_eval_context |= has_use_strict_directive(&p.body);
+                self.strict_eval_context |= has_use_strict_directive(&p.body)
+                    || (!self.in_eval && self.global_env.kind() == EnvKind::Module);
                 let result = code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
                 self.strict_eval_context = previous_strict;
                 result
@@ -1049,7 +1050,8 @@ impl Interpreter {
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let previous_strict = self.strict_eval_context;
-        if has_use_strict_directive(&p.body) {
+        if has_use_strict_directive(&p.body)
+            || (!self.in_eval && self.global_env.kind() == EnvKind::Module) {
             self.strict_eval_context = true;
         }
         let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
@@ -1098,7 +1100,12 @@ impl Interpreter {
     /// evaluation. The module linker owns the environment and import cells.
     pub fn prepare_module(&mut self, program: &ast::Program) -> Result<(), Throw> {
         let env = self.global_env.clone();
-        self.hoist(&program.body, &env)
+        env.0.borrow_mut().kind = EnvKind::Module;
+        let previous_strict = self.strict_eval_context;
+        self.strict_eval_context = true;
+        let result = self.hoist(&program.body, &env);
+        self.strict_eval_context = previous_strict;
+        result
     }
 
 
@@ -1196,84 +1203,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn bind_pattern(
-        &mut self,
-        binding: &Binding,
-        value: JsValue,
-        kind: ast::VarKind,
-        env: &EnvHandle,
-    ) -> Result<(), Throw> {
-        match binding {
-            Binding::Ident(identifier) => match kind {
-                ast::VarKind::Var => {
-                    if !env.assign(&identifier.name, value.clone())? {
-                        self.global_env.declare_var(&identifier.name, value)?;
-                    }
-                }
-                ast::VarKind::Let => env.declare_lexical(&identifier.name, value, true)?,
-                ast::VarKind::Const => env.declare_lexical(&identifier.name, value, false)?,
-            },
-            Binding::Default(inner, expression) => {
-                let value = if value.is_undefined() {
-                    self.eval_expr(expression, env)?
-                } else {
-                    value
-                };
-                self.bind_pattern(inner, value, kind, env)?;
-            }
-            Binding::Rest(inner) => self.bind_pattern(inner, value, kind, env)?,
-            Binding::Array(elements) => {
-                let items = self.iterate(&value).unwrap_or_default();
-                let mut index = 0usize;
-                for element in elements {
-                    if let Some(element) = element {
-                        if let Binding::Rest(rest) = element.as_ref() {
-                            let rest_value = array_values(self, items[index..].to_vec())?;
-                            self.bind_pattern(rest, rest_value, kind, env)?;
-                            index = items.len();
-                        } else {
-                            let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
-                            self.bind_pattern(element, item, kind, env)?;
-                            index += 1;
-                        }
-                    } else {
-                        index += 1;
-                    }
-                }
-            }
-            Binding::Object(properties) => {
-                let source = match value {
-                    JsValue::Object(_) | JsValue::Str(_) => value,
-                    JsValue::Null | JsValue::Undefined => {
-                        return Err(Throw::type_error("cannot destructure nullish value"))
-                    }
-                    other => other,
-                };
-                let mut used = Vec::new();
-                for (key, property) in properties {
-                    match key {
-                        ast::BindingKey::Static(name) if name == "..." => {
-                            let rest = self.object_rest(&source, &used)?;
-                            self.bind_pattern(property, rest, kind, env)?;
-                        }
-                        ast::BindingKey::Static(name) => {
-                            used.push(name.clone().into());
-                            let item = self.get_prop(&source, name)?;
-                            self.bind_pattern(property, item, kind, env)?;
-                        }
-                        ast::BindingKey::Computed(expression) => {
-                            let computed_value = self.eval_expr(expression, env)?;
-                            let computed = self.to_property_key(&computed_value)?;
-                            used.push(computed.clone());
-                            let item = self.get_prop(&source, &computed)?;
-                            self.bind_pattern(property, item, kind, env)?;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
+
 
     fn object_rest(&mut self, source: &JsValue, used: &[PropertyKey]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
@@ -2680,17 +2610,28 @@ impl Interpreter {
         args: Vec<JsValue>,
         is_arrow: bool,
     ) -> Result<(), Throw> {
+        // Parameters are mutable function bindings, not lexical declarations:
+        // body var declarations reuse them and sloppy duplicate names overwrite.
+        // Allocate locally before binding patterns so assignment cannot escape
+        // into a same-named binding in the enclosing environment.
+        let mut names = std::collections::HashSet::new();
+        for p in ps {
+            for name in binding_names(&p.binding) {
+                if names.insert(name.clone()) {
+                    e.declare_uninitialized(&name, true)?;
+                }
+            }
+        }
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
                 array_values(self, args.iter().skip(i).cloned().collect())?
-            } else if let Some(v) = args.get(i) {
-                v.clone()
-            } else if let Some(d) = &p.default {
-                self.eval_expr(d, e)?
             } else {
-                JsValue::Undefined
+                args.get(i).cloned().unwrap_or(JsValue::Undefined)
             };
-            self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
+            let v = if v.is_undefined() {
+                if let Some(default) = &p.default { self.eval_expr(default, e)? } else { v }
+            } else { v };
+            self.bind_pattern_mode(&p.binding, v, None, e)?;
         }
         if is_arrow { return Ok(()); }
         let argument_count = args.len();
@@ -2874,6 +2815,14 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
+        let previous_strict = self.strict_eval_context;
+        self.strict_eval_context = true;
+        let result = self.eval_class_inner(c, e);
+        self.strict_eval_context = previous_strict;
+        result
+    }
+
+    fn eval_class_inner(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
         let ctor = c.members.iter().find_map(|m| {
             if let ast::ClassMember::Method(x) = m {
                 (x.kind == ast::MethodKind::Constructor).then_some(x)
