@@ -5,21 +5,27 @@
 mod font_display;
 mod font_matching;
 mod font_relative_metrics;
+mod font_variant_synthesis;
 mod font_variations;
 mod line_break_objects;
 pub use font_display::FontDisplayPeriods;
 
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
-    FontMetrics, FontSizeAdjustMetric, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId,
-    GlyphImage, GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph,
-    ShapedLine, ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle,
-    TextSystem, WritingMode, resolve_synthesis,
+    FontMetrics, FontSizeAdjustMetric, FontSlant, FontSynthesis, GlyphCacheKey, GlyphContent,
+    GlyphFlags, GlyphId, GlyphImage, GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph,
+    ShapedGlyph, ShapedLine, ShapedParagraph, ShapedRun, ShapingBoundary, TextError,
+    TextOrientation, TextStyle, TextSystem, WritingMode, resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
     UnicodeBuffer, Variation,
 };
+// Only for the `cmap()` accessor the small-caps synthesis fallback uses to
+// map an originally-lowercase letter to its uppercase glyph; see
+// `font_variant_synthesis`'s module comment for why this crate is pinned
+// explicitly rather than left as a transitive-only dependency of harfrust.
+use read_fonts::TableProvider;
 use icu_segmenter::options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption};
 use icu_segmenter::{GraphemeClusterSegmenter, LineSegmenter};
 use std::cell::{Cell, RefCell};
@@ -1889,6 +1895,38 @@ fn shape_range(
                 .filter(|feature| kerning_tag_matches(&feature.tag))
                 .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
         );
+        // CSS Fonts 4 section 6 synthesis fallback: only probe/parse GSUB and
+        // cmap once per shaping call (not once per glyph) for whichever of
+        // smcp/c2sc/sups/subs are actually requested and allowed.
+        let caps_position_support = font_variant_synthesis::FaceFeatureSupport::probe(&face);
+        let needs_smcp = style.synthesis.small_caps
+            && font_variant_synthesis::feature_on(&features, *b"smcp")
+            && !caps_position_support.smcp;
+        let needs_c2sc = style.synthesis.small_caps
+            && font_variant_synthesis::feature_on(&features, *b"c2sc")
+            && !caps_position_support.c2sc;
+        let needs_sups = style.synthesis.position
+            && font_variant_synthesis::feature_on(&features, *b"sups")
+            && !caps_position_support.sups;
+        let needs_subs = style.synthesis.position
+            && font_variant_synthesis::feature_on(&features, *b"subs")
+            && !caps_position_support.subs;
+        let smcp_cmap = needs_smcp.then(|| face.cmap().ok()).flatten();
+        let lookup_uppercase = |character: char| -> Option<GlyphId> {
+            smcp_cmap
+                .as_ref()
+                .and_then(|cmap| cmap.map_codepoint(character))
+                .map(|glyph| GlyphId(glyph.to_u32()))
+        };
+        let base_synthesis = resolve_synthesis(
+            FontAttributes {
+                weight: style.weight,
+                stretch: style.stretch,
+                slant: style.slant,
+            },
+            font.attributes_for(style),
+            style.synthesis,
+        );
         let output = shaper.shape(
             buffer,
             ShapeOptions::new().scale(Some(scale)).features(&features),
@@ -1905,13 +1943,26 @@ fn shape_range(
                 .iter()
                 .find(|span| span.range.contains(&cluster_start))
                 .unwrap_or(&spans[0]);
+            let plan = font_variant_synthesis::for_cluster(
+                needs_smcp,
+                needs_c2sc,
+                needs_sups,
+                needs_subs,
+                &lookup_uppercase,
+                representative_char(text, cluster_start..cluster_end),
+            );
+            let glyph_synthesis = FontSynthesis {
+                small_caps: plan.small_caps,
+                position: plan.position,
+                ..base_synthesis
+            };
             let glyph = ShapedGlyph {
-                id: GlyphId(info.glyph_id),
+                id: plan.glyph_id.unwrap_or(GlyphId(info.glyph_id)),
                 cluster: cluster_start..cluster_end,
                 advance_x: position.x_advance as f32 / 64.0,
                 advance_y: position.y_advance as f32 / 64.0,
                 offset_x: position.x_offset as f32 / 64.0,
-                offset_y: position.y_offset as f32 / 64.0,
+                offset_y: position.y_offset as f32 / 64.0 + plan.offset_em * adjusted_size,
                 orientation,
                 flags: GlyphFlags {
                     unsafe_to_break: info.unsafe_to_break(),
@@ -1920,6 +1971,7 @@ fn shape_range(
             };
             if let Some(run) = runs.last_mut()
                 && run.source == source_span.source
+                && run.synthesis == glyph_synthesis
             {
                 run.glyphs.push(glyph);
                 run.text_range.start = run.text_range.start.min(cluster_start);
@@ -1935,15 +1987,7 @@ fn shape_range(
                 writing_mode: style.writing_mode,
                 metrics,
                 variations: resolved_variations.clone(),
-                synthesis: resolve_synthesis(
-                    FontAttributes {
-                        weight: style.weight,
-                        stretch: style.stretch,
-                        slant: style.slant,
-                    },
-                    font.attributes_for(style),
-                    style.synthesis,
-                ),
+                synthesis: glyph_synthesis,
                 glyphs: vec![glyph],
             });
         }
@@ -1965,13 +2009,7 @@ fn cluster_orientation(
             TextOrientation::Upright => GlyphOrientation::Upright,
             TextOrientation::Sideways => GlyphOrientation::SidewaysRight,
             TextOrientation::Mixed => {
-                let unit = &text[cluster];
-                let character = unit
-                    .chars()
-                    .find(|character| !is_default_ignorable(*character))
-                    .or_else(|| unit.chars().next())
-                    .unwrap_or('\u{fffd}');
-                match unicode_vo::char_orientation(character) {
+                match unicode_vo::char_orientation(representative_char(text, cluster)) {
                     VerticalOrientation::Upright
                     | VerticalOrientation::TransformedOrUpright
                     | VerticalOrientation::TransformedOrRotated => GlyphOrientation::Upright,
@@ -1980,6 +2018,19 @@ fn cluster_orientation(
             }
         },
     }
+}
+
+/// The first non-default-ignorable character of `cluster`, or its first
+/// character, or U+FFFD if the range is somehow empty. Shared by vertical
+/// orientation (per-cluster UAX50 lookup) and small-caps/position synthesis
+/// (per-cluster case check), both of which only need one representative
+/// character per shaped cluster.
+fn representative_char(text: &str, cluster: std::ops::Range<usize>) -> char {
+    let unit = &text[cluster];
+    unit.chars()
+        .find(|character| !is_default_ignorable(*character))
+        .or_else(|| unit.chars().next())
+        .unwrap_or('\u{fffd}')
 }
 
 fn cluster_end_map(
@@ -2040,11 +2091,33 @@ fn rasterize_font_glyph(
         if request.synthesis.weight {
             render.embolden(key.size() / 32.0);
         }
+        // Style (oblique skew), small-caps, and position synthesis compose:
+        // e.g. an italic face with a synthesized small-caps letter needs
+        // both the skew and the scale. Starting from identity and folding in
+        // only the active transforms keeps the style-only case byte-for-byte
+        // identical to the single `skew` transform used before this compose
+        // path existed.
+        let mut transform = zeno::Transform::IDENTITY;
+        let mut needs_transform = false;
         if request.synthesis.style {
-            render.transform(Some(zeno::Transform::skew(
+            transform = transform.then(&zeno::Transform::skew(
                 zeno::Angle::from_degrees(-14.0),
                 zeno::Angle::ZERO,
-            )));
+            ));
+            needs_transform = true;
+        }
+        if request.synthesis.small_caps {
+            transform =
+                transform.then_scale(font_variant_synthesis::SMALL_CAPS_SCALE, font_variant_synthesis::SMALL_CAPS_SCALE);
+            needs_transform = true;
+        }
+        if request.synthesis.position {
+            transform =
+                transform.then_scale(font_variant_synthesis::POSITION_SCALE, font_variant_synthesis::POSITION_SCALE);
+            needs_transform = true;
+        }
+        if needs_transform {
+            render.transform(Some(transform));
         }
         let image = render.render(&mut scaler, glyph_id);
         let Some(image) = image else {
@@ -2249,6 +2322,93 @@ mod tests {
             );
             tables.push((b"GSUB", gsub));
         }
+        assemble_sfnt(&tables)
+    }
+
+    /// A font with no GSUB table (so `smcp`/`c2sc` are always unsupported)
+    /// mapping two distinct characters to two distinct, differently sized
+    /// glyphs: `lower` to glyph 1, `upper` to glyph 2. Exercises the
+    /// small-caps synthesis substitution path end to end through real cmap
+    /// bytes, the way the rest of this file's synthetic fonts exercise GSUB.
+    fn synthetic_font_with_case_pair(lower: char, upper: char) -> Vec<u8> {
+        let one_glyph = |x_max: u16, y_max: u16| {
+            let mut glyph = vec![0u8; 10];
+            glyph[0..2].copy_from_slice(&be16(1));
+            glyph[6..8].copy_from_slice(&be16(x_max));
+            glyph[8..10].copy_from_slice(&be16(y_max));
+            glyph.extend_from_slice(&be16(3));
+            glyph.extend_from_slice(&be16(0));
+            glyph.extend_from_slice(&[0x31, 0x21, 0x11, 0x21]);
+            glyph.extend_from_slice(&be16(x_max));
+            glyph.extend_from_slice(&be16(0xFE0C));
+            glyph.extend_from_slice(&be16(y_max));
+            glyph
+        };
+        let lower_glyph = one_glyph(500, 700);
+        let upper_glyph = one_glyph(600, 720);
+        let mut glyf = Vec::new();
+        glyf.extend_from_slice(&lower_glyph);
+        glyf.extend_from_slice(&upper_glyph);
+
+        // Format 12 groups must be sorted by codepoint for a real cmap
+        // reader's binary search, so sort the two (lower, upper) mappings
+        // rather than assuming `lower < upper` in code point order.
+        let mut groups = [(lower as u32, 1u32), (upper as u32, 2u32)];
+        groups.sort_by_key(|(codepoint, _)| *codepoint);
+        let mut cmap_format12 = Vec::new();
+        cmap_format12.extend_from_slice(&be16(12));
+        cmap_format12.extend_from_slice(&be16(0));
+        cmap_format12.extend_from_slice(&be32(16 + 12 * groups.len() as u32));
+        cmap_format12.extend_from_slice(&be32(0));
+        cmap_format12.extend_from_slice(&be32(groups.len() as u32));
+        for (codepoint, glyph) in groups {
+            cmap_format12.extend_from_slice(&be32(codepoint));
+            cmap_format12.extend_from_slice(&be32(codepoint));
+            cmap_format12.extend_from_slice(&be32(glyph));
+        }
+        let mut cmap = Vec::new();
+        cmap.extend_from_slice(&be16(0));
+        cmap.extend_from_slice(&be16(1));
+        cmap.extend_from_slice(&be16(3));
+        cmap.extend_from_slice(&be16(10));
+        cmap.extend_from_slice(&be32(12));
+        cmap.extend_from_slice(&cmap_format12);
+
+        let mut head = vec![0u8; 54];
+        head[12..16].copy_from_slice(&be32(0x5F0F_3CF5));
+        head[18..20].copy_from_slice(&be16(1000));
+        let mut hhea = vec![0u8; 36];
+        hhea[4..6].copy_from_slice(&be16(800));
+        hhea[6..8].copy_from_slice(&be16((-200i16) as u16));
+        hhea[34..36].copy_from_slice(&be16(3));
+        let mut maxp = vec![0u8; 32];
+        maxp[0..4].copy_from_slice(&be32(0x0001_0000));
+        maxp[4..6].copy_from_slice(&be16(3));
+        let loca = [
+            be16(0),
+            be16(0),
+            be16(lower_glyph.len() as u16 / 2),
+            be16(glyf.len() as u16 / 2),
+        ]
+        .concat();
+        let hmtx = [
+            be16(600),
+            be16(0),
+            be16(500),
+            be16(0),
+            be16(500),
+            be16(0),
+        ]
+        .concat();
+        let tables: Vec<(&[u8; 4], Vec<u8>)> = vec![
+            (b"head", head),
+            (b"hhea", hhea),
+            (b"maxp", maxp),
+            (b"hmtx", hmtx),
+            (b"cmap", cmap),
+            (b"loca", loca),
+            (b"glyf", glyf),
+        ];
         assemble_sfnt(&tables)
     }
 
@@ -2690,6 +2850,8 @@ mod tests {
                 synthesis: amazing_text::FontSynthesis {
                     weight: false,
                     style: false,
+                    small_caps: false,
+                    position: false,
                 },
             })
             .unwrap()
@@ -2701,12 +2863,16 @@ mod tests {
                     amazing_text::FontSynthesis {
                         weight: false,
                         style: true,
+                        small_caps: false,
+                        position: false,
                     },
                 ),
                 variations: &[],
                 synthesis: amazing_text::FontSynthesis {
                     weight: false,
                     style: true,
+                    small_caps: false,
+                    position: false,
                 },
             })
             .unwrap()
@@ -2742,6 +2908,8 @@ mod tests {
         let synthesis = amazing_text::FontSynthesis {
             weight: true,
             style: false,
+            small_caps: false,
+            position: false,
         };
         let bold = provider
             .rasterize(GlyphRasterRequest {
@@ -2752,6 +2920,97 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_ne!((normal.width, normal.data), (bold.width, bold.data));
+    }
+
+    #[test]
+    fn synthetic_small_caps_changes_the_registered_face_outline() {
+        let mut provider = TextProvider::new();
+        let font = provider
+            .register_web_font(WebFont {
+                family: "Regular only".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let key = GlyphCacheKey::new(provider.generation(), font, GlyphId(1), 30.0, 0, 0).unwrap();
+        let normal = provider
+            .rasterize(GlyphRasterRequest {
+                key,
+                variations: &[],
+                synthesis: amazing_text::FontSynthesis {
+                    weight: false,
+                    style: false,
+                    small_caps: false,
+                    position: false,
+                },
+            })
+            .unwrap()
+            .unwrap();
+        let synthesis = amazing_text::FontSynthesis {
+            weight: false,
+            style: false,
+            small_caps: true,
+            position: false,
+        };
+        let small_caps = provider
+            .rasterize(GlyphRasterRequest {
+                key: key.with_style(&[], synthesis),
+                variations: &[],
+                synthesis,
+            })
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            (normal.width, normal.data),
+            (small_caps.width, small_caps.data)
+        );
+    }
+
+    #[test]
+    fn synthetic_position_changes_the_registered_face_outline() {
+        let mut provider = TextProvider::new();
+        let font = provider
+            .register_web_font(WebFont {
+                family: "Regular only".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let key = GlyphCacheKey::new(provider.generation(), font, GlyphId(1), 30.0, 0, 0).unwrap();
+        let normal = provider
+            .rasterize(GlyphRasterRequest {
+                key,
+                variations: &[],
+                synthesis: amazing_text::FontSynthesis {
+                    weight: false,
+                    style: false,
+                    small_caps: false,
+                    position: false,
+                },
+            })
+            .unwrap()
+            .unwrap();
+        let synthesis = amazing_text::FontSynthesis {
+            weight: false,
+            style: false,
+            small_caps: false,
+            position: true,
+        };
+        let position = provider
+            .rasterize(GlyphRasterRequest {
+                key: key.with_style(&[], synthesis),
+                variations: &[],
+                synthesis,
+            })
+            .unwrap()
+            .unwrap();
+        assert_ne!((normal.width, normal.data), (position.width, position.data));
     }
 
     #[test]
@@ -2797,6 +3056,178 @@ mod tests {
             assert_eq!(shape(0), 2, "{} disabled", String::from_utf8_lossy(&tag));
             assert_eq!(shape(1), 1, "{} enabled", String::from_utf8_lossy(&tag));
         }
+    }
+
+    #[test]
+    fn explicit_smcp_substitutes_the_face_mapped_uppercase_glyph_when_unsupported() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Case pair".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_case_pair('a', 'A'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Case pair".into()],
+            features: vec![amazing_text::FeatureSetting {
+                tag: *b"smcp",
+                value: 1,
+            }],
+            ..TextStyle::default()
+        };
+        let spans = [TextSpan {
+            range: 0..1,
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let shaped = provider
+            .shape(Paragraph {
+                text: "a",
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert_eq!(shaped.runs[0].glyphs[0].id, amazing_text::GlyphId(2));
+        assert!(shaped.runs[0].synthesis.small_caps);
+    }
+
+    #[test]
+    fn smcp_synthesis_is_skipped_when_font_synthesis_disallows_small_caps() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Case pair".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_case_pair('a', 'A'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Case pair".into()],
+            features: vec![amazing_text::FeatureSetting {
+                tag: *b"smcp",
+                value: 1,
+            }],
+            synthesis: amazing_text::FontSynthesis {
+                small_caps: false,
+                ..amazing_text::FontSynthesis::default()
+            },
+            ..TextStyle::default()
+        };
+        let spans = [TextSpan {
+            range: 0..1,
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let shaped = provider
+            .shape(Paragraph {
+                text: "a",
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert_eq!(shaped.runs[0].glyphs[0].id, amazing_text::GlyphId(1));
+        assert!(!shaped.runs[0].synthesis.small_caps);
+    }
+
+    #[test]
+    fn c2sc_scales_an_already_uppercase_letter_without_substitution() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Case pair".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_case_pair('a', 'A'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Case pair".into()],
+            features: vec![amazing_text::FeatureSetting {
+                tag: *b"c2sc",
+                value: 1,
+            }],
+            ..TextStyle::default()
+        };
+        let spans = [TextSpan {
+            range: 0..1,
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let shaped = provider
+            .shape(Paragraph {
+                text: "A",
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        // Already the uppercase (id 2) glyph: c2sc scales it in place, no
+        // substitution needed.
+        assert_eq!(shaped.runs[0].glyphs[0].id, amazing_text::GlyphId(2));
+        assert!(shaped.runs[0].synthesis.small_caps);
+    }
+
+    #[test]
+    fn explicit_sups_flags_position_synthesis_and_raises_the_baseline() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Position fixture".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('a'),
+            })
+            .unwrap();
+        let shape = |value| {
+            let style = TextStyle {
+                families: vec!["Position fixture".into()],
+                size: 20.0,
+                features: vec![amazing_text::FeatureSetting {
+                    tag: *b"sups",
+                    value,
+                }],
+                ..TextStyle::default()
+            };
+            let spans = [TextSpan {
+                range: 0..1,
+                source: 0,
+                style,
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            provider
+                .shape(Paragraph {
+                    text: "a",
+                    spans: &spans,
+                    sources: &[],
+                    bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                })
+                .unwrap()
+        };
+        let unsynthesized = shape(0);
+        let raised = shape(1);
+        assert!(!unsynthesized.runs[0].synthesis.position);
+        assert!(raised.runs[0].synthesis.position);
+        assert!(raised.runs[0].glyphs[0].offset_y > unsynthesized.runs[0].glyphs[0].offset_y);
     }
 
     #[test]
