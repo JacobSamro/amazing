@@ -325,6 +325,7 @@ dependencies = [
  "flate2",
  "harfrust",
  "icu_segmenter",
+ "read-fonts 0.43.2",
  "swash",
  "unicode-bidi",
  "unicode-vo",

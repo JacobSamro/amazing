@@ -443,3 +443,70 @@ layout-owned per the TEXT-7..13 routes, and the PUA/emoji cases are environment
 ones. The lane has asked the orchestrator for its next ticket, proposing
 `font-optical-sizing: auto` (`opsz`) and a `font-variant-caps/-numeric/-position`
 feature contract as provider-local candidates.
+
+## TEXT-16: small-caps and super/subscript synthesis fallback
+
+CSS Fonts 4 section 6: when the selected face has no `smcp`/`c2sc`/`sups`/
+`subs` GSUB feature and `font-synthesis` allows it, the UA may synthesize the
+effect. `amazing_text::FontSynthesis` gains `small_caps`/`position` bools
+(default `true`, matching `font-synthesis`'s initial value `weight style
+small-caps position`) alongside the existing `weight`/`style`. `resolve_synthesis`
+leaves both false — it only compares `FontAttributes` (weight/stretch/slant),
+which has no GSUB visibility — so the provider resolves them separately, per
+glyph cluster, in `shape_range`.
+
+New module `crates/amazing-text-provider/src/font_variant_synthesis.rs`:
+`FaceFeatureSupport::probe` parses the selected face's GSUB feature list once
+per `shape_range` call (via the `read-fonts` crate, pinned to the exact
+version `harfrust` already depends on transitively, giving `TableProvider::
+gsub()`/`cmap()` on the same `harfrust::FontRef`); `feature_on` checks the
+already-built `Feature` list for a requested tag; `for_cluster` is a pure
+decision function (needs_smcp/c2sc/sups/subs booleans, an injectable
+uppercase-glyph-lookup closure, and the cluster's representative character)
+that is unit-tested directly with fake closures, no real font bytes needed.
+
+`shape_range` wires it in: an originally-lowercase letter requesting `smcp`
+gets its shaped glyph id substituted to the face's cmap-mapped uppercase
+glyph (skipped, not guessed, if the face has no such glyph); an
+already-uppercase letter under `c2sc`, or any glyph under `sups`/`subs`,
+keeps its shaped id. Superscript/subscript get a shape-time baseline offset
+(+0.33em / -0.14em, added to `offset_y`) so rasterization only needs a
+uniform outline scale. `ShapedRun`s now split on synthesis equality as well
+as source span, so one run with mixed original case gets separate runs per
+distinct needed synthesis. `rasterize_font_glyph` composes the small-caps
+(0.72) and position (0.66) scales with the existing oblique skew via
+`zeno::Transform::then`/`then_scale`, identical output to before when only
+`style` applies (verified by the retained oblique/bold tests).
+
+The exact scale factors and em shifts are approximations the same way the
+existing bold stroke width and -14 degree oblique skew already are; CSS does
+not mandate synthesis metrics.
+
+Not implemented: `pcap`/`c2pc` (petite-caps) and `titl` (titling-caps) reach
+HarfRust generically through the same `TextStyle.features` vector already
+(no text-owned change needed, same as TEXT-14's kerning conclusion), but have
+no synthesis fallback — CSS Fonts 4 does not mandate one for them, unlike
+small-caps/position. `unicase` has no associated GSUB tag or synthesis path
+and was out of the coordinator's requested scope.
+
+Gate: 11 new unit tests in `font_variant_synthesis` (substitution, the
+no-uppercase-glyph fallback, `c2sc`/`smcp` case gating, digits/punctuation
+untouched, super/sub direction and scale, combinations) plus 6 in `lib.rs`
+(raster transform mirroring the existing bold/oblique tests; the full
+`shape()` path through a new two-glyph synthetic font with real cmap bytes,
+including the small-caps-policy-disabled case). Crate nextest 72/72 ->
+89/89 (1 skipped), zero losses, doctests green. Workspace nextest 2882
+passed/10 skipped/0 failed, workspace doctests 4/0, on merged dev + TEXT-15.
+No pinned WPT `font-variant-caps`/`-position` fixture exists in this lane's
+frozen selections, and the Boat sandbox still has no WPT checkout (TEXT-14's
+filed gap, unchanged), so this gates on unit tests per the fallback
+instruction. Commit `628ec199`.
+
+The CSS/layout keyword-to-feature mapping needed to actually exercise this
+from real pages — computed `font-variant-caps`/`font-variant-position` into
+`TextStyle.features`, and computed `font-synthesis`'s new `small-caps`/
+`position` keywords into `TextStyle.synthesis` — is routed in
+`.agents/css/questions.md` and `.agents/layout/questions.md`; the CSS side of
+the audit found no CSS-owned gap (both properties are already parsed and
+computed as plain keyword strings), and the layout side ties into the
+already-open `font-synthesis` wiring request from TEXT-13.
