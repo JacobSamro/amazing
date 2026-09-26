@@ -798,6 +798,29 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "2",
         inherited: true,
     },
+    // RC-32: `outline` never affects layout (no per-side longhands, unlike
+    // `border`); paint reads these straight from the style map the same
+    // way it already reads `border-*`/`box-shadow`.
+    PropertyMetadata {
+        name: "outline-color",
+        initial: "invert", // CSS UI 4; a UA that doesn't implement inversion falls back to currentcolor -- this painter does the same (see amazing-paint's paint_outline).
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "outline-style",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "outline-width",
+        initial: "medium",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "outline-offset",
+        initial: "0",
+        inherited: false,
+    },
     PropertyMetadata {
         name: "overflow",
         initial: "visible",
@@ -1153,6 +1176,36 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 expanded.push((format!("border-{side}-color"), color.to_owned()));
             }
             expanded
+        }
+        // RC-32: `outline`'s shorthand is the same three-part grammar as
+        // `border`'s (order-independent width/style/color keywords), minus
+        // the per-side replication -- `outline` has no per-side longhands.
+        "outline" if css_wide_keyword(value).is_some() || contains_var_function(value) => [
+            "outline-width",
+            "outline-style",
+            "outline-color",
+        ]
+        .into_iter()
+        .map(|name| (name.to_owned(), value.to_owned()))
+        .collect(),
+        "outline" if !parts.is_empty() => {
+            let mut width = "medium";
+            let mut style = "none";
+            let mut color = "invert";
+            for part in parts {
+                if is_border_style(part) || part.eq_ignore_ascii_case("auto") {
+                    style = part;
+                } else if is_border_width(part) {
+                    width = part;
+                } else {
+                    color = part;
+                }
+            }
+            vec![
+                ("outline-width".to_owned(), width.to_owned()),
+                ("outline-style".to_owned(), style.to_owned()),
+                ("outline-color".to_owned(), color.to_owned()),
+            ]
         }
         "background" if contains_var_function(value) => PROPERTIES.iter()
             .filter(|p| p.name.starts_with("background-"))
