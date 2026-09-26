@@ -80,7 +80,49 @@
 //! * `depth` on `Accessibility.getFullAXTree` is ignored (the whole tree is
 //!   always returned), matching the CDP `-1` convention this crate already
 //!   normalizes `depth` to at the domain layer.
+//!
+//! CDP-18 wires `Network`, `Runtime` console/exceptions, `Log`, and
+//! `Runtime.getProperties`/`callFunctionOn` (with an objectId registry) to
+//! the live page, and switches page load from strict (`prepare_page_scripts`)
+//! to lenient: a thrown script, inline handler or event-loop step no longer
+//! fails the whole load, it becomes a `Runtime.exceptionThrown` +
+//! `Log.entryAdded` pair instead (`PageOwner::load_scripts_leniently`,
+//! replacing the old `prepare_page_scripts` call). `Input.dispatchMouseEvent`/
+//! `dispatchKeyEvent` now catch a listener's own throw the same way rather
+//! than failing the DevTools command itself.
+//!
+//! * Console capture reads `amazing_js::interp::Interpreter.output`
+//!   directly — the field the driver already used for its own diagnostics.
+//!   `native_log` is the *only* console method the interpreter implements
+//!   (no `warn`/`error`/`info`/`debug`), and it already joins every argument
+//!   into one string before appending, so every `Runtime.consoleAPICalled`
+//!   this driver emits has `kind: "log"` and a single string `RemoteObject`
+//!   argument — individual argument values and the real console level are
+//!   both lost before this driver ever sees the line.
+//! * Network instrumentation covers only the top-level document fetch
+//!   (`Page.navigate`/initial load) and `<script src>` fetches; stylesheet
+//!   and image loads are not instrumented (those loading paths belong to the
+//!   css/layout/replaced-content lanes, not this driver). `getResponseBody`
+//!   only has a body for a request this driver itself fetched and recorded.
+//! * `Runtime.getProperties`' `ownProperties=false` (include inherited) is
+//!   not distinguished from `true`: every call uses
+//!   `binding_own_property_keys`/`binding_get_own_property` (own properties
+//!   only), and every descriptor reports `isOwn: true`.
+//! * `Runtime.callFunctionOn`'s `arguments[].value` only round-trips
+//!   JSON primitives (null/bool/number/string, via [`json_to_js_value`]);
+//!   an array or object literal argument becomes `undefined` — the JSON
+//!   model has no existing bridge into a *nested* JS object/array outside
+//!   `amazing-js`'s own `JSON.parse` built-in.
+//! * `objectId`s are minted per `PageOwner` (one realm) and never expire on
+//!   their own; `Runtime.releaseObject` is the only way to drop one, and
+//!   navigating the page (which replaces the whole `PageOwner`) drops all of
+//!   them at once, matching a real frame navigation invalidating every
+//!   `objectId` from the previous document.
+//! * `Debugger.*` (stepping, breakpoints) stays `Unsupported`: CDP-18's
+//!   ticket explicitly keeps that seam for the js-runtime lane, since it
+//!   needs VM-level hooks this driver does not implement.
 use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
@@ -90,12 +132,15 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use amazing_devtools::host::{
-    AxNode, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult,
-    ExceptionDetails, FrameInfo, FrameTree, HostError, KeyEvent, LayoutMetrics, MatchedRule,
-    MouseEvent, NodeDescription, RemoteObject, Screenshot, ScreenshotFormat, ScreenshotParams,
-    StyleOrigin, TargetInfo, Viewport,
+    AxNode, CallArgument, CallFunctionParams, ConsoleEvent, DevToolsHost, DevToolsSession,
+    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, ExceptionEvent, FrameInfo,
+    FrameTree, HostError, KeyEvent, LayoutMetrics, LogEntry, MatchedRule, MouseEvent,
+    NetworkFailedEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent,
+    NodeDescription, PropertyDescriptor, RemoteObject, ResourceContent, Screenshot,
+    ScreenshotFormat, ScreenshotParams, StyleOrigin, TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
+use amazing_js::DomHost;
 
 use crate::dom_host::BrowserDomHost;
 use crate::js_scheduler::DriverScheduler;
@@ -127,6 +172,17 @@ enum PageCommand {
     DispatchMouseEvent(MouseEvent, Reply<()>),
     DispatchKeyEvent(KeyEvent, Reply<()>),
     CaptureScreenshot(ScreenshotParams, Reply<Screenshot>),
+    GetProperties(String, bool, Reply<Vec<PropertyDescriptor>>),
+    CallFunctionOn(CallFunctionParams, Reply<EvaluateResult>),
+    ReleaseObject(String, Reply<()>),
+    GetResponseBody(String, Reply<Option<ResourceContent>>),
+    DrainConsole(Reply<Vec<ConsoleEvent>>),
+    DrainNetworkRequests(Reply<Vec<NetworkRequestEvent>>),
+    DrainNetworkResponses(Reply<Vec<NetworkResponseEvent>>),
+    DrainNetworkFinished(Reply<Vec<NetworkFinishedEvent>>),
+    DrainNetworkFailed(Reply<Vec<NetworkFailedEvent>>),
+    DrainExceptions(Reply<Vec<ExceptionEvent>>),
+    DrainLog(Reply<Vec<LogEntry>>),
     Shutdown,
 }
 
@@ -160,32 +216,57 @@ fn frame_info(target_id: &str, url: &str) -> FrameInfo {
     }
 }
 
-fn js_value_to_remote_object(value: &amazing_js::value::JsValue) -> RemoteObject {
+/// Seconds since this process started, monotonic — what every CDP event's
+/// `timestamp` field means (`Network.*`, `Runtime.consoleAPICalled`,
+/// `Log.entryAdded`). No existing helper in the codebase produces this (the
+/// only prior use was ad hoc `Instant::now()` in test code), so CDP-18 adds
+/// one process-wide monotonic clock here.
+fn monotonic_seconds() -> f64 {
+    use std::sync::OnceLock;
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
+}
+
+/// Seconds since the Unix epoch — `Network.requestWillBeSent`'s `wallTime`.
+fn wall_time_seconds() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since_epoch| since_epoch.as_secs_f64())
+        .unwrap_or(0.0)
+}
+
+/// Wire headers as `(name, value)` pairs, in server order, for
+/// `Network.requestWillBeSent`/`responseReceived`.
+fn headers_from(headers: &amazing_net::Headers) -> Vec<(String, String)> {
+    headers.iter().map(|(name, value)| (name.to_owned(), value.to_owned())).collect()
+}
+
+/// The base media type (no `; charset=...` parameter), or `"text/plain"` when
+/// the server sent no `Content-Type` — `Network.responseReceived`'s
+/// `mimeType` is never absent on the wire even though the header can be.
+fn mime_type_of(headers: &amazing_net::Headers) -> String {
+    headers
+        .get("content-type")
+        .map(|raw| raw.split(';').next().unwrap_or(raw).trim().to_owned())
+        .filter(|mime| !mime.is_empty())
+        .unwrap_or_else(|| "text/plain".to_owned())
+}
+
+/// Converts a `Runtime.CallArgument.value` JSON literal into a `JsValue` for
+/// `callFunctionOn`. Arrays and objects become `undefined`: the JSON model
+/// only carries a value that round-trips through `JSON.parse`-shaped data,
+/// and no existing binding builds a *nested* JS object/array from `Json`
+/// outside `amazing-js`'s own JSON built-in — see the module's "Known
+/// limitations".
+fn json_to_js_value(value: &amazing_devtools::json::Json) -> amazing_js::value::JsValue {
+    use amazing_devtools::json::Json;
     use amazing_js::value::JsValue;
     match value {
-        JsValue::Undefined => RemoteObject::undefined(),
-        JsValue::Null => RemoteObject::null(),
-        JsValue::Bool(b) => RemoteObject::boolean(*b),
-        JsValue::Num(n) => RemoteObject::number(*n),
-        JsValue::Str(s) => RemoteObject::string(s.to_utf8_lossy()),
-        // No live-object bridge yet (`Runtime.getProperties`, previews, object
-        // ids that outlive the call): report identity and a debug description
-        // only. Real pages' `evaluate()` calls are overwhelmingly primitives;
-        // this is a documented gap, not a silent wrong answer.
-        JsValue::BigInt(_) | JsValue::Symbol(_) | JsValue::Object(_) => RemoteObject {
-            object_type: match value {
-                JsValue::BigInt(_) => "bigint",
-                JsValue::Symbol(_) => "symbol",
-                _ => "object",
-            }
-            .to_string(),
-            subtype: None,
-            class_name: None,
-            value: None,
-            unserializable_value: None,
-            description: Some(format!("{value:?}")),
-            object_id: None,
-        },
+        Json::Null => JsValue::Null,
+        Json::Bool(b) => JsValue::Bool(*b),
+        Json::Number(n) => JsValue::Num(*n),
+        Json::String(s) => JsValue::str(s.clone()),
+        Json::Array(_) | Json::Object(_) => JsValue::Undefined,
     }
 }
 
@@ -425,28 +506,401 @@ struct PageOwner {
     target_id: String,
     url: String,
     width: f32,
+    /// How many lines of `scheduler.js.output` `drain_console` has already
+    /// reported, so repeated polls only emit new `console.log` lines.
+    console_read: usize,
+    next_request_id: u64,
+    next_object_id: u64,
+    /// `Runtime.RemoteObject.objectId` registry for this realm
+    /// (`Runtime.getProperties`/`callFunctionOn` handles), cleared on
+    /// navigation along with the rest of `PageOwner`.
+    objects: HashMap<String, amazing_js::value::JsValue>,
+    /// Response bodies by request id, for `Network.getResponseBody`. Only
+    /// the document and `<script src>` fetches this driver instruments are
+    /// present — see the module's "Known limitations".
+    bodies: HashMap<String, ResourceContent>,
+    network_requests: VecDeque<NetworkRequestEvent>,
+    network_responses: VecDeque<NetworkResponseEvent>,
+    network_finished: VecDeque<NetworkFinishedEvent>,
+    network_failed: VecDeque<NetworkFailedEvent>,
+    exceptions: VecDeque<ExceptionEvent>,
+    logs: VecDeque<LogEntry>,
 }
 
 impl PageOwner {
-    /// Builds a page owner from an already-parsed document: installs the JS
-    /// realm, runs every `<script>`/inline handler and dispatches
-    /// `DOMContentLoaded`/`load`, exactly as `amazing render`/`render-page` do
-    /// (`force_scheduler: true`, so even a script-less page still gets a
-    /// realm for `Runtime.evaluate`).
-    fn from_parsed(target_id: &str, url: &str, dom: amazing_dom::Dom, width: f32) -> Result<Self, HostError> {
+    /// Builds a page owner around `dom` with a fresh, empty JS realm and no
+    /// accumulated events — the common tail of [`Self::from_parsed`] and
+    /// [`Self::fetch_and_load`], factored out so both can seed network
+    /// events (for `fetch_and_load`'s document fetch) before scripts run.
+    fn empty(target_id: &str, url: &str, width: f32, dom: amazing_dom::Dom) -> Result<Self, HostError> {
         let dom_host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
-        let scheduler = crate::cmd::js::prepare_page_scripts(&dom_host, url, true)
-            .map_err(HostError::Internal)?
-            .expect("force_scheduler=true always yields a scheduler");
-        Ok(Self { dom_host, scheduler, target_id: target_id.to_owned(), url: url.to_owned(), width })
+        let scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
+            .map_err(|error| HostError::Internal(error.describe()))?;
+        Ok(Self {
+            dom_host,
+            scheduler,
+            target_id: target_id.to_owned(),
+            url: url.to_owned(),
+            width,
+            console_read: 0,
+            next_request_id: 0,
+            next_object_id: 0,
+            objects: HashMap::new(),
+            bodies: HashMap::new(),
+            network_requests: VecDeque::new(),
+            network_responses: VecDeque::new(),
+            network_finished: VecDeque::new(),
+            network_failed: VecDeque::new(),
+            exceptions: VecDeque::new(),
+            logs: VecDeque::new(),
+        })
     }
 
+    /// Builds a page owner from an already-parsed document: installs the JS
+    /// realm, then runs every `<script>`/inline handler and dispatches
+    /// `DOMContentLoaded`/`load` *leniently* (CDP-18): a thrown script,
+    /// handler or event-loop step is reported as `Runtime.exceptionThrown`
+    /// plus a `Log.entryAdded` instead of failing the whole page load, so a
+    /// DevTools frontend can see the page's own bugs rather than losing the
+    /// realm. `<script src>` fetches are instrumented as real `Network.*`
+    /// events (document + script fetches; see the module's "Known
+    /// limitations" for the stylesheet/image gap).
+    fn from_parsed(target_id: &str, url: &str, dom: amazing_dom::Dom, width: f32) -> Result<Self, HostError> {
+        let mut page = Self::empty(target_id, url, width, dom)?;
+        page.scheduler.set_location_url(url);
+        page.load_scripts_leniently();
+        Ok(page)
+    }
+
+    /// Fetches `url` as the top-level document (instrumented as a real
+    /// `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` or
+    /// `loadingFailed` triple/pair), parses it, then runs its scripts exactly
+    /// as [`Self::from_parsed`] does.
     fn fetch_and_load(target_id: &str, url: &str, width: f32) -> Result<Self, HostError> {
-        let (final_url, html, content_type) =
-            crate::cmd::real_pages::fetch_document(url).map_err(HostError::Internal)?;
-        let document = crate::document::parse_document_bytes(&html, &final_url, content_type.as_deref())
+        let mut network_requests = VecDeque::new();
+        let mut network_responses = VecDeque::new();
+        let mut network_finished = VecDeque::new();
+        let mut network_failed = VecDeque::new();
+        let mut bodies = HashMap::new();
+
+        let request_id = "req-1".to_owned();
+        network_requests.push_back(NetworkRequestEvent {
+            request_id: request_id.clone(),
+            url: url.to_owned(),
+            method: "GET".into(),
+            headers: Vec::new(),
+            post_data: None,
+            resource_type: "Document".into(),
+            frame_id: target_id.to_owned(),
+            loader_id: target_id.to_owned(),
+            timestamp: monotonic_seconds(),
+            wall_time: wall_time_seconds(),
+        });
+
+        let options = amazing_net::FetchOptions {
+            max_response_bytes: 16 * 1024 * 1024,
+            timeout: std::time::Duration::from_secs(15),
+            ..amazing_net::FetchOptions::default()
+        };
+        let response = match amazing_net::fetch(url, &options) {
+            Ok(response) if response.is_success() => response,
+            Ok(response) => {
+                let message = format!("HTTP {} {}", response.status, response.reason);
+                network_failed.push_back(NetworkFailedEvent {
+                    request_id,
+                    resource_type: "Document".into(),
+                    error_text: message.clone(),
+                    canceled: false,
+                    timestamp: monotonic_seconds(),
+                });
+                return Err(HostError::Internal(message));
+            }
+            Err(error) => {
+                let message = error.to_string();
+                network_failed.push_back(NetworkFailedEvent {
+                    request_id,
+                    resource_type: "Document".into(),
+                    error_text: message.clone(),
+                    canceled: false,
+                    timestamp: monotonic_seconds(),
+                });
+                return Err(HostError::Internal(message));
+            }
+        };
+        let mime_type = mime_type_of(&response.headers);
+        network_responses.push_back(NetworkResponseEvent {
+            request_id: request_id.clone(),
+            url: response.url.clone(),
+            status: response.status,
+            status_text: response.reason.clone(),
+            mime_type: mime_type.clone(),
+            headers: headers_from(&response.headers),
+            encoded_data_length: response.body.len() as u64,
+            from_disk_cache: false,
+            resource_type: "Document".into(),
+            timestamp: monotonic_seconds(),
+        });
+        network_finished.push_back(NetworkFinishedEvent {
+            request_id: request_id.clone(),
+            encoded_data_length: response.body.len() as u64,
+            decoded_body_length: response.body.len() as u64,
+            timestamp: monotonic_seconds(),
+        });
+        bodies.insert(
+            request_id,
+            ResourceContent { mime_type: mime_type.clone(), bytes: response.body.clone() },
+        );
+
+        let content_type = (!mime_type.is_empty()).then_some(mime_type.as_str());
+        let document = crate::document::parse_document_bytes(&response.body, &response.url, content_type)
             .map_err(|error| HostError::Internal(error.to_string()))?;
-        Self::from_parsed(target_id, &final_url, document.dom, width)
+
+        let mut page = Self::empty(target_id, &response.url, width, document.dom)?;
+        page.next_request_id = 1;
+        page.network_requests = network_requests;
+        page.network_responses = network_responses;
+        page.network_finished = network_finished;
+        page.network_failed = network_failed;
+        page.bodies = bodies;
+        page.scheduler.set_location_url(&page.url);
+        page.load_scripts_leniently();
+        Ok(page)
+    }
+
+    /// Runs every `<script>`/inline handler, dispatches
+    /// `DOMContentLoaded`/`load` and pumps the bounded event loop, collecting
+    /// failures as exceptions/log entries instead of aborting — mirrors
+    /// `cmd::js::execute_page_scripts_lenient`'s logic but keeps this page's
+    /// own persistent `scheduler` rather than building (and dropping) its
+    /// own, since CDP needs the realm to survive past page load.
+    fn load_scripts_leniently(&mut self) {
+        let (scripts, handlers) = {
+            let host = self.dom_host.borrow();
+            let mut scripts = Vec::new();
+            crate::cmd::js::collect_script_text(&host.dom, amazing_dom::NodeIdx(0), &mut scripts);
+            let mut handlers = Vec::new();
+            crate::cmd::js::collect_inline_handlers(&host.dom, amazing_dom::NodeIdx(0), &mut handlers);
+            (scripts, handlers)
+        };
+        for (node, event, body) in handlers {
+            if let Err(thrown) = self.scheduler.install_inline_handler(node, &event, &body) {
+                self.record_load_error(format!("inline {event} handler on node {node}: {}", thrown.describe()));
+            }
+        }
+        for script in scripts {
+            let source = match script.src {
+                Some(src) => {
+                    let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
+                    match self.fetch_and_record(&script_url, "Script") {
+                        Ok(text) => text,
+                        Err(()) => continue, // already recorded as a network failure
+                    }
+                }
+                None => script.body,
+            };
+            if let Err(thrown) = self.scheduler.run_script(&source) {
+                self.record_load_error(format!("page script: {}", thrown.describe()));
+            }
+        }
+        if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
+            self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));
+        }
+        if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "load") {
+            self.record_load_error(format!("load listener: {}", thrown.describe()));
+        }
+        let body = self.dom_host.borrow_mut().query_selector("body");
+        if let Some(body) = body
+            && let Err(thrown) = self.scheduler.dispatch_dom_event(body, "load")
+        {
+            self.record_load_error(format!("body load listener: {}", thrown.describe()));
+        }
+        for _ in 0..16 {
+            match self.scheduler.pump_at(std::time::Duration::from_millis(16), true) {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(thrown) => {
+                    self.record_load_error(format!("page event loop: {}", thrown.describe()));
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Fetches `url` as a subresource of the page (currently only
+    /// `<script src>`), recording `Network.requestWillBeSent` plus either a
+    /// `responseReceived`/`loadingFinished` pair or a `loadingFailed` (with a
+    /// matching `Log.entryAdded`). Returns the body decoded as text on
+    /// success.
+    fn fetch_and_record(&mut self, url: &str, resource_type: &str) -> Result<String, ()> {
+        let request_id = self.record_request(url, "GET", resource_type);
+        match amazing_net::fetch(url, &amazing_net::FetchOptions::default()) {
+            Ok(response) if response.is_success() => {
+                let text = response.text().unwrap_or_default();
+                self.record_response(&request_id, &response, resource_type);
+                Ok(text)
+            }
+            Ok(response) => {
+                let message = format!("HTTP {} {}", response.status, response.reason);
+                self.record_failure(&request_id, resource_type, &message);
+                self.record_load_error(format!("{resource_type} fetch {url}: {message}"));
+                Err(())
+            }
+            Err(error) => {
+                let message = error.to_string();
+                self.record_failure(&request_id, resource_type, &message);
+                self.record_load_error(format!("{resource_type} fetch {url}: {message}"));
+                Err(())
+            }
+        }
+    }
+
+    fn record_request(&mut self, url: &str, method: &str, resource_type: &str) -> String {
+        self.next_request_id += 1;
+        let request_id = format!("req-{}", self.next_request_id);
+        self.network_requests.push_back(NetworkRequestEvent {
+            request_id: request_id.clone(),
+            url: url.to_owned(),
+            method: method.to_owned(),
+            headers: Vec::new(),
+            post_data: None,
+            resource_type: resource_type.to_owned(),
+            frame_id: self.target_id.clone(),
+            loader_id: self.target_id.clone(),
+            timestamp: monotonic_seconds(),
+            wall_time: wall_time_seconds(),
+        });
+        request_id
+    }
+
+    fn record_response(&mut self, request_id: &str, response: &amazing_net::Response, resource_type: &str) {
+        let mime_type = mime_type_of(&response.headers);
+        self.network_responses.push_back(NetworkResponseEvent {
+            request_id: request_id.to_owned(),
+            url: response.url.clone(),
+            status: response.status,
+            status_text: response.reason.clone(),
+            mime_type: mime_type.clone(),
+            headers: headers_from(&response.headers),
+            encoded_data_length: response.body.len() as u64,
+            from_disk_cache: false,
+            resource_type: resource_type.to_owned(),
+            timestamp: monotonic_seconds(),
+        });
+        self.network_finished.push_back(NetworkFinishedEvent {
+            request_id: request_id.to_owned(),
+            encoded_data_length: response.body.len() as u64,
+            decoded_body_length: response.body.len() as u64,
+            timestamp: monotonic_seconds(),
+        });
+        self.bodies.insert(request_id.to_owned(), ResourceContent { mime_type, bytes: response.body.clone() });
+    }
+
+    fn record_failure(&mut self, request_id: &str, resource_type: &str, error_text: &str) {
+        self.network_failed.push_back(NetworkFailedEvent {
+            request_id: request_id.to_owned(),
+            resource_type: resource_type.to_owned(),
+            error_text: error_text.to_owned(),
+            canceled: false,
+            timestamp: monotonic_seconds(),
+        });
+        self.logs.push_back(LogEntry {
+            source: "network".into(),
+            level: "error".into(),
+            text: format!("Failed to load resource: {error_text}"),
+            timestamp: monotonic_seconds(),
+            url: None,
+            line_number: None,
+            stack_trace: None,
+        });
+    }
+
+    /// Records a page-load-time failure (a script/handler/event-loop error
+    /// that isn't itself a live JS exception value) as both
+    /// `Runtime.exceptionThrown` and `Log.entryAdded`, matching a real
+    /// browser surfacing an uncaught error through both the console and the
+    /// Issues-adjacent Log domain.
+    fn record_load_error(&mut self, text: String) {
+        self.exceptions.push_back(ExceptionEvent {
+            details: ExceptionDetails {
+                text: text.clone(),
+                line_number: 0,
+                column_number: 0,
+                url: Some(self.url.clone()),
+                exception: None,
+                stack_trace: None,
+            },
+            timestamp: monotonic_seconds(),
+        });
+        self.logs.push_back(LogEntry {
+            source: "javascript".into(),
+            level: "error".into(),
+            text,
+            timestamp: monotonic_seconds(),
+            url: Some(self.url.clone()),
+            line_number: None,
+            stack_trace: None,
+        });
+    }
+
+    /// Records a live `Throw`n JS value (from a mouse/key event listener) as
+    /// `Runtime.exceptionThrown` plus `Log.entryAdded`, carrying the thrown
+    /// value itself as the exception's `RemoteObject` (unlike
+    /// `record_load_error`, which has no live value to attach).
+    fn record_exception(&mut self, thrown: &amazing_js::value::Throw) {
+        let text = thrown.describe();
+        let exception_object = self.remote_object(&thrown.0);
+        self.exceptions.push_back(ExceptionEvent {
+            details: ExceptionDetails {
+                text: text.clone(),
+                line_number: 0,
+                column_number: 0,
+                url: None,
+                exception: Some(exception_object),
+                stack_trace: None,
+            },
+            timestamp: monotonic_seconds(),
+        });
+        self.logs.push_back(LogEntry {
+            source: "javascript".into(),
+            level: "error".into(),
+            text,
+            timestamp: monotonic_seconds(),
+            url: None,
+            line_number: None,
+            stack_trace: None,
+        });
+    }
+
+    /// Converts an engine value into a CDP `RemoteObject`, minting and
+    /// registering a real `objectId` for `JsValue::Object` so
+    /// `Runtime.getProperties`/`callFunctionOn` can resolve it back later.
+    /// `BigInt`/`Symbol` still only get a debug description (the JSON model
+    /// can't carry either verbatim) — see the module's "Known limitations".
+    fn remote_object(&mut self, value: &amazing_js::value::JsValue) -> RemoteObject {
+        use amazing_js::value::JsValue;
+        match value {
+            JsValue::Undefined => RemoteObject::undefined(),
+            JsValue::Null => RemoteObject::null(),
+            JsValue::Bool(b) => RemoteObject::boolean(*b),
+            JsValue::Num(n) => RemoteObject::number(*n),
+            JsValue::Str(s) => RemoteObject::string(s.to_utf8_lossy()),
+            JsValue::BigInt(_) | JsValue::Symbol(_) => RemoteObject {
+                object_type: if matches!(value, JsValue::BigInt(_)) { "bigint" } else { "symbol" }.to_string(),
+                description: Some(format!("{value:?}")),
+                ..RemoteObject::undefined()
+            },
+            JsValue::Object(_) => {
+                self.next_object_id += 1;
+                let object_id = format!("object:{}", self.next_object_id);
+                self.objects.insert(object_id.clone(), value.clone());
+                RemoteObject {
+                    object_type: if self.scheduler.js.binding_is_callable(value) { "function" } else { "object" }.to_string(),
+                    description: Some(format!("{value:?}")),
+                    object_id: Some(object_id),
+                    ..RemoteObject::undefined()
+                }
+            }
+        }
     }
 
     fn navigate(&mut self, url: &str) -> Result<FrameInfo, HostError> {
@@ -481,19 +935,174 @@ impl PageOwner {
     /// and closures) across every call for this page's lifetime.
     fn evaluate(&mut self, params: &EvaluateParams) -> EvaluateResult {
         match self.scheduler.run_script(&params.expression) {
-            Ok(value) => EvaluateResult::value(js_value_to_remote_object(&value)),
-            Err(thrown) => EvaluateResult {
-                result: js_value_to_remote_object(&thrown.0),
-                exception: Some(ExceptionDetails {
-                    text: thrown.describe(),
-                    line_number: 0,
-                    column_number: 0,
-                    url: None,
-                    exception: Some(js_value_to_remote_object(&thrown.0)),
-                    stack_trace: None,
-                }),
-            },
+            Ok(value) => {
+                let object = self.remote_object(&value);
+                EvaluateResult::value(object)
+            }
+            Err(thrown) => {
+                let exception_object = self.remote_object(&thrown.0);
+                EvaluateResult {
+                    result: exception_object.clone(),
+                    exception: Some(ExceptionDetails {
+                        text: thrown.describe(),
+                        line_number: 0,
+                        column_number: 0,
+                        url: None,
+                        exception: Some(exception_object),
+                        stack_trace: None,
+                    }),
+                }
+            }
         }
+    }
+
+    /// `Runtime.getProperties`: own-property enumeration only — CDP's
+    /// `ownProperties=false` (include inherited) is not distinguished, see
+    /// the module's "Known limitations". Accessor properties are read
+    /// through their getter, matching what a DevTools Properties panel shows.
+    fn get_properties(&mut self, object_id: &str, _own_only: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
+        let object = self.objects.get(object_id).cloned().ok_or(HostError::NotFound)?;
+        let keys = self
+            .scheduler
+            .js
+            .binding_own_property_keys(&object)
+            .map_err(|thrown| HostError::Internal(thrown.describe()))?;
+        let mut properties = Vec::with_capacity(keys.len());
+        for key in keys {
+            let property = match self.scheduler.js.binding_get_own_property(&object, &key) {
+                Ok(Some(property)) => property,
+                Ok(None) => continue,
+                Err(thrown) => return Err(HostError::Internal(thrown.describe())),
+            };
+            let value = match &property.getter {
+                Some(getter) => self
+                    .scheduler
+                    .js
+                    .binding_call(getter, object.clone(), Vec::new())
+                    .unwrap_or(amazing_js::value::JsValue::Undefined),
+                None => property.value.clone(),
+            };
+            let remote = self.remote_object(&value);
+            properties.push(PropertyDescriptor {
+                name: key,
+                value: remote,
+                writable: property.writable,
+                configurable: property.configurable,
+                enumerable: property.enumerable,
+                is_own: true,
+            });
+        }
+        Ok(properties)
+    }
+
+    /// `Runtime.callFunctionOn`: evaluates `function_declaration` (a function
+    /// expression's source, wrapped in parens so it evaluates to the
+    /// function itself rather than being parsed as a statement), resolves
+    /// `this` from `object_id` (or the global object), converts each
+    /// argument (`object_id` handles resolve to the live value; JSON
+    /// `value`s go through [`json_to_js_value`]) and invokes it through the
+    /// same `binding_call` embedding entry point `get_properties` uses for
+    /// accessors.
+    fn call_function_on(&mut self, params: &CallFunctionParams) -> Result<EvaluateResult, HostError> {
+        let this = match &params.object_id {
+            Some(id) => self.objects.get(id).cloned().unwrap_or(amazing_js::value::JsValue::Undefined),
+            None => self.scheduler.js.binding_global_object(),
+        };
+        let function = match self.scheduler.run_script(&format!("({})", params.function_declaration)) {
+            Ok(value) => value,
+            Err(thrown) => return Ok(self.evaluate_exception(thrown)),
+        };
+        let mut args = Vec::with_capacity(params.arguments.len());
+        for argument in &params.arguments {
+            args.push(self.call_argument_value(argument));
+        }
+        match self.scheduler.js.binding_call(&function, this, args) {
+            Ok(value) => {
+                let object = self.remote_object(&value);
+                Ok(EvaluateResult::value(object))
+            }
+            Err(thrown) => Ok(self.evaluate_exception(thrown)),
+        }
+    }
+
+    fn call_argument_value(&mut self, argument: &CallArgument) -> amazing_js::value::JsValue {
+        if let Some(object_id) = &argument.object_id {
+            return self.objects.get(object_id).cloned().unwrap_or(amazing_js::value::JsValue::Undefined);
+        }
+        match &argument.value {
+            Some(value) => json_to_js_value(value),
+            None => amazing_js::value::JsValue::Undefined,
+        }
+    }
+
+    fn evaluate_exception(&mut self, thrown: amazing_js::value::Throw) -> EvaluateResult {
+        let exception_object = self.remote_object(&thrown.0);
+        EvaluateResult {
+            result: exception_object.clone(),
+            exception: Some(ExceptionDetails {
+                text: thrown.describe(),
+                line_number: 0,
+                column_number: 0,
+                url: None,
+                exception: Some(exception_object),
+                stack_trace: None,
+            }),
+        }
+    }
+
+    fn release_object(&mut self, object_id: &str) {
+        self.objects.remove(object_id);
+    }
+
+    fn get_response_body(&self, request_id: &str) -> Option<ResourceContent> {
+        self.bodies.get(request_id).cloned()
+    }
+
+    fn drain_console(&mut self) -> Vec<ConsoleEvent> {
+        // `native_log` (the only console method the engine builtin-implements
+        // — no `warn`/`error`/`info`/`debug`) already joins every argument
+        // into one line, so `kind` is always `"log"` and each event carries a
+        // single string `RemoteObject` rather than per-argument objects; see
+        // the module's "Known limitations".
+        let total = self.scheduler.js.output.borrow().len();
+        if self.console_read >= total {
+            return Vec::new();
+        }
+        let events: Vec<ConsoleEvent> = self.scheduler.js.output.borrow()[self.console_read..total]
+            .iter()
+            .map(|line| ConsoleEvent {
+                kind: "log".into(),
+                args: vec![RemoteObject::string(line.clone())],
+                execution_context_id: 1,
+                timestamp: monotonic_seconds(),
+            })
+            .collect();
+        self.console_read = total;
+        events
+    }
+
+    fn drain_network_requests(&mut self) -> Vec<NetworkRequestEvent> {
+        self.network_requests.drain(..).collect()
+    }
+
+    fn drain_network_responses(&mut self) -> Vec<NetworkResponseEvent> {
+        self.network_responses.drain(..).collect()
+    }
+
+    fn drain_network_finished(&mut self) -> Vec<NetworkFinishedEvent> {
+        self.network_finished.drain(..).collect()
+    }
+
+    fn drain_network_failed(&mut self) -> Vec<NetworkFailedEvent> {
+        self.network_failed.drain(..).collect()
+    }
+
+    fn drain_exceptions(&mut self) -> Vec<ExceptionEvent> {
+        self.exceptions.drain(..).collect()
+    }
+
+    fn drain_log(&mut self) -> Vec<LogEntry> {
+        self.logs.drain(..).collect()
     }
 
     fn get_document(&self, depth: u32) -> NodeDescription {
@@ -685,9 +1294,13 @@ impl PageOwner {
             other => other,
         };
         let target = self.hit_test_node(event.x, event.y)?;
-        self.scheduler
-            .dispatch_dom_event(target.0 as u32, dom_event)
-            .map_err(|thrown| HostError::Internal(thrown.describe()))
+        // A listener's own bug does not fail the DevTools command itself,
+        // matching real browser semantics: it is reported through
+        // `Runtime.exceptionThrown`/the console instead (CDP-18).
+        if let Err(thrown) = self.scheduler.dispatch_dom_event(target.0 as u32, dom_event) {
+            self.record_exception(&thrown);
+        }
+        Ok(())
     }
 
     fn dispatch_key_event(&mut self, event: &KeyEvent) -> Result<(), HostError> {
@@ -703,9 +1316,10 @@ impl PageOwner {
                 .active_element(amazing_dom::NodeIdx(0))
                 .unwrap_or(amazing_dom::NodeIdx(0))
         };
-        self.scheduler
-            .dispatch_dom_event(target.0, dom_event)
-            .map_err(|thrown| HostError::Internal(thrown.describe()))
+        if let Err(thrown) = self.scheduler.dispatch_dom_event(target.0, dom_event) {
+            self.record_exception(&thrown);
+        }
+        Ok(())
     }
 
     /// Renders through the same `paint_host_surface` path `amazing
@@ -838,6 +1452,40 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::CaptureScreenshot(params, reply) => {
                 let _ = reply.send(page.capture_screenshot(&params));
+            }
+            PageCommand::GetProperties(object_id, own_only, reply) => {
+                let _ = reply.send(page.get_properties(&object_id, own_only));
+            }
+            PageCommand::CallFunctionOn(params, reply) => {
+                let _ = reply.send(page.call_function_on(&params));
+            }
+            PageCommand::ReleaseObject(object_id, reply) => {
+                page.release_object(&object_id);
+                let _ = reply.send(Ok(()));
+            }
+            PageCommand::GetResponseBody(request_id, reply) => {
+                let _ = reply.send(Ok(page.get_response_body(&request_id)));
+            }
+            PageCommand::DrainConsole(reply) => {
+                let _ = reply.send(Ok(page.drain_console()));
+            }
+            PageCommand::DrainNetworkRequests(reply) => {
+                let _ = reply.send(Ok(page.drain_network_requests()));
+            }
+            PageCommand::DrainNetworkResponses(reply) => {
+                let _ = reply.send(Ok(page.drain_network_responses()));
+            }
+            PageCommand::DrainNetworkFinished(reply) => {
+                let _ = reply.send(Ok(page.drain_network_finished()));
+            }
+            PageCommand::DrainNetworkFailed(reply) => {
+                let _ = reply.send(Ok(page.drain_network_failed()));
+            }
+            PageCommand::DrainExceptions(reply) => {
+                let _ = reply.send(Ok(page.drain_exceptions()));
+            }
+            PageCommand::DrainLog(reply) => {
+                let _ = reply.send(Ok(page.drain_log()));
             }
             PageCommand::Shutdown => break,
         }
@@ -974,6 +1622,54 @@ impl DevToolsSession for DriverPageSession {
         let params = params.clone();
         request(&self.sender, |reply| PageCommand::CaptureScreenshot(params, reply))
     }
+
+    fn get_properties(&mut self, object_id: &str, own_only: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
+        let object_id = object_id.to_owned();
+        request(&self.sender, |reply| PageCommand::GetProperties(object_id, own_only, reply))
+    }
+
+    fn call_function_on(&mut self, params: &CallFunctionParams) -> Result<EvaluateResult, HostError> {
+        let params = params.clone();
+        request(&self.sender, |reply| PageCommand::CallFunctionOn(params, reply))
+    }
+
+    fn release_object(&mut self, object_id: &str) -> Result<(), HostError> {
+        let object_id = object_id.to_owned();
+        request(&self.sender, |reply| PageCommand::ReleaseObject(object_id, reply))
+    }
+
+    fn get_response_body(&mut self, request_id: &str) -> Result<Option<ResourceContent>, HostError> {
+        let request_id = request_id.to_owned();
+        request(&self.sender, |reply| PageCommand::GetResponseBody(request_id, reply))
+    }
+
+    fn drain_console(&mut self) -> Vec<ConsoleEvent> {
+        request(&self.sender, PageCommand::DrainConsole).unwrap_or_default()
+    }
+
+    fn drain_network_requests(&mut self) -> Vec<NetworkRequestEvent> {
+        request(&self.sender, PageCommand::DrainNetworkRequests).unwrap_or_default()
+    }
+
+    fn drain_network_responses(&mut self) -> Vec<NetworkResponseEvent> {
+        request(&self.sender, PageCommand::DrainNetworkResponses).unwrap_or_default()
+    }
+
+    fn drain_network_finished(&mut self) -> Vec<NetworkFinishedEvent> {
+        request(&self.sender, PageCommand::DrainNetworkFinished).unwrap_or_default()
+    }
+
+    fn drain_network_failed(&mut self) -> Vec<NetworkFailedEvent> {
+        request(&self.sender, PageCommand::DrainNetworkFailed).unwrap_or_default()
+    }
+
+    fn drain_exceptions(&mut self) -> Vec<ExceptionEvent> {
+        request(&self.sender, PageCommand::DrainExceptions).unwrap_or_default()
+    }
+
+    fn drain_log(&mut self) -> Vec<LogEntry> {
+        request(&self.sender, PageCommand::DrainLog).unwrap_or_default()
+    }
 }
 
 /// The browser-level seam: one page target, backed by a real page (fetched or,
@@ -1099,6 +1795,44 @@ mod tests {
                 );
                 let _ = stream.write_all(head.as_bytes());
                 let _ = stream.write_all(body);
+            }
+        });
+        addr
+    }
+
+    /// A one-shot local HTTP server that answers `routes.len()` requests, one
+    /// per `(path, content_type, body)` entry, matching each incoming
+    /// request's path exactly. Lets a fixture exercise real document +
+    /// subresource fetches (`<script src>`) in one page load, so
+    /// `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` fire
+    /// for more than just the top-level document.
+    fn serve_multi(routes: Vec<(&'static str, &'static str, &'static str)>) -> SocketAddr {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind fixture server");
+        let addr = listener.local_addr().expect("local_addr");
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(routes.len()) {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]);
+                let path = request.lines().next().and_then(|line| line.split_whitespace().nth(1)).unwrap_or("/");
+                if let Some((_, content_type, body)) = routes.iter().find(|(route, _, _)| *route == path) {
+                    let body = body.as_bytes();
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = stream.write_all(head.as_bytes());
+                    let _ = stream.write_all(body);
+                } else {
+                    let body = b"not found";
+                    let head = format!(
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = stream.write_all(head.as_bytes());
+                    let _ = stream.write_all(body);
+                }
             }
         });
         addr
@@ -1251,6 +1985,37 @@ mod tests {
                         .unwrap_or_else(|| panic!("{method} returned no result: {reply}"));
                 }
                 // Not our reply (a push event) — keep waiting.
+            }
+        }
+
+        /// Like [`Self::result`], but also returns every push event (a
+        /// message with no matching `id`) seen while waiting for the reply,
+        /// in arrival order. CDP-18's engine-driven events (`Network.*`,
+        /// `Runtime.consoleAPICalled`/`exceptionThrown`, `Log.entryAdded`)
+        /// are pushed asynchronously by the server's own poll loop, not
+        /// attached to any one command's reply, so a test proving they
+        /// arrived must collect across every command it sends rather than
+        /// only inspecting one reply.
+        fn result_and_events(&mut self, method: &str, params: Json) -> (Json, Vec<Json>) {
+            self.next_id += 1;
+            let id = self.next_id;
+            let message = Json::Object(vec![
+                ("id".into(), Json::Number(id as f64)),
+                ("method".into(), Json::String(method.into())),
+                ("params".into(), params),
+            ]);
+            self.ws.write_message(&message.to_string()).expect("write message");
+            let mut events = Vec::new();
+            loop {
+                let reply = self.recv_json();
+                if reply.get("id").and_then(Json::as_f64) == Some(id as f64) {
+                    let result = reply
+                        .get("result")
+                        .cloned()
+                        .unwrap_or_else(|| panic!("{method} returned no result: {reply}"));
+                    return (result, events);
+                }
+                events.push(reply);
             }
         }
     }
@@ -1624,6 +2389,203 @@ mod tests {
         let bytes = amazing_devtools::base64::decode(data).expect("valid base64");
         assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "not a PNG signature: {bytes:?}");
         assert!(bytes.len() > 100, "suspiciously small PNG: {} bytes", bytes.len());
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-18's "prove it end to end" test: a real page that fetches an
+    /// external script and logs to the console, driven through a real
+    /// WebSocket client against a real fixture HTTP server (document +
+    /// `<script src>`, both real `amazing_net::fetch` calls, not the
+    /// in-memory `spawn_test_host` shortcut). Proves `Network.*`,
+    /// `Runtime.consoleAPICalled`, `Runtime.getProperties`,
+    /// `Runtime.callFunctionOn` and `Network.getResponseBody` together.
+    #[test]
+    fn end_to_end_network_console_and_object_inspection_from_a_real_fetched_page() {
+        static DOC: &str = "<title>Live</title><script src=\"/app.js\"></script><body><h1>hi</h1></body>";
+        static SCRIPT: &str =
+            "console.log('hello from app.js'); globalThis.pageObject = { greeting: 'hi', num: 7 };";
+        let addr = serve_multi(vec![("/", "text/html", DOC), ("/app.js", "application/javascript", SCRIPT)]);
+        let url = format!("http://{addr}/");
+        let init = PageInit::Fetch { target_id: "page-1".into(), url, width: 800.0 };
+        let host = Arc::new(DriverDevToolsHost::spawn("page-1", init).expect("spawn devtools host"));
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let server_addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(server_addr, "/devtools/page/page-1");
+        let mut events = Vec::new();
+        let (_, more) = client.result_and_events("Network.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        let (_, more) = client.result_and_events("Runtime.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        let (_, more) = client.result_and_events("Log.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        // Nudges another poll cycle so anything still queued after the
+        // enables above is flushed before this test starts asserting.
+        let (_, more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("1 + 1".into()))]),
+        );
+        events.extend(more);
+
+        let find_all = |method: &str| -> Vec<Json> {
+            events.iter().filter(|event| event.get("method").and_then(Json::as_str) == Some(method)).cloned().collect()
+        };
+        let request_type = |event: &Json| -> String {
+            event.get("params").and_then(|params| params.get("type")).and_then(Json::as_str).unwrap_or_default().to_owned()
+        };
+        let request_id_of = |event: &Json| -> String {
+            event.get("params").and_then(|params| params.get("requestId")).and_then(Json::as_str).unwrap_or_default().to_owned()
+        };
+
+        let requests = find_all("Network.requestWillBeSent");
+        assert_eq!(requests.len(), 2, "document + script requests: {events:?}");
+        let document_request_id = requests
+            .iter()
+            .find(|event| request_type(event) == "Document")
+            .map(request_id_of)
+            .expect("a Document requestWillBeSent");
+        let script_request_id = requests
+            .iter()
+            .find(|event| request_type(event) == "Script")
+            .map(request_id_of)
+            .expect("a Script requestWillBeSent");
+
+        let responses = find_all("Network.responseReceived");
+        assert!(
+            responses.iter().any(|event| request_id_of(event) == document_request_id),
+            "no responseReceived for the document: {events:?}"
+        );
+        assert!(
+            responses.iter().any(|event| request_id_of(event) == script_request_id),
+            "no responseReceived for the script: {events:?}"
+        );
+
+        let finished = find_all("Network.loadingFinished");
+        assert!(finished.iter().any(|event| request_id_of(event) == document_request_id));
+        assert!(finished.iter().any(|event| request_id_of(event) == script_request_id));
+
+        let console = find_all("Runtime.consoleAPICalled");
+        assert!(
+            console.iter().any(|event| {
+                event
+                    .get("params")
+                    .and_then(|params| params.get("args"))
+                    .and_then(Json::as_array)
+                    .into_iter()
+                    .flatten()
+                    .any(|arg| arg.get("value").and_then(Json::as_str).unwrap_or_default().contains("hello from app.js"))
+            }),
+            "no consoleAPICalled with the script's console.log line: {events:?}"
+        );
+
+        // Runtime.getProperties on the object app.js created.
+        let evaluated = client.result(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("globalThis.pageObject".into()))]),
+        );
+        let object_id = evaluated
+            .get("result")
+            .and_then(|result| result.get("objectId"))
+            .and_then(Json::as_str)
+            .expect("pageObject should be a live object with an objectId")
+            .to_owned();
+        let properties = client.result(
+            "Runtime.getProperties",
+            Json::Object(vec![
+                ("objectId".into(), Json::String(object_id.clone())),
+                ("ownProperties".into(), Json::Bool(true)),
+            ]),
+        );
+        let descriptors = properties.get("result").and_then(Json::as_array).expect("result array");
+        let greeting = descriptors
+            .iter()
+            .find(|descriptor| descriptor.get("name").and_then(Json::as_str) == Some("greeting"))
+            .unwrap_or_else(|| panic!("no greeting property in {descriptors:?}"));
+        assert_eq!(
+            greeting.get("value").and_then(|value| value.get("value")).and_then(Json::as_str),
+            Some("hi")
+        );
+
+        // Runtime.callFunctionOn against that same object.
+        let called = client.result(
+            "Runtime.callFunctionOn",
+            Json::Object(vec![
+                ("objectId".into(), Json::String(object_id)),
+                (
+                    "functionDeclaration".into(),
+                    Json::String("function() { return this.num * 2; }".into()),
+                ),
+                ("returnByValue".into(), Json::Bool(true)),
+            ]),
+        );
+        assert_eq!(
+            called.get("result").and_then(|result| result.get("value")).and_then(Json::as_f64),
+            Some(14.0),
+            "{called}"
+        );
+
+        // Network.getResponseBody for the script request.
+        let body = client.result(
+            "Network.getResponseBody",
+            Json::Object(vec![("requestId".into(), Json::String(script_request_id))]),
+        );
+        assert!(
+            body.get("body").and_then(Json::as_str).unwrap_or_default().contains("hello from app.js"),
+            "{body}"
+        );
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-18: a page whose own script throws (uncaught) still loads and
+    /// keeps its realm — `Runtime.exceptionThrown` and `Log.entryAdded`
+    /// report the bug instead of failing the whole page load.
+    #[test]
+    fn end_to_end_uncaught_script_error_is_reported_not_fatal() {
+        let host = spawn_test_host(
+            "http://example.test/broken.html",
+            "<title>Broken</title><script>undefinedGlobal.member;</script><body>still here</body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let mut events = Vec::new();
+        let (_, more) = client.result_and_events("Runtime.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        let (_, more) = client.result_and_events("Log.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        let (title, more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![
+                ("expression".into(), Json::String("document.title".into())),
+                ("returnByValue".into(), Json::Bool(true)),
+            ]),
+        );
+        events.extend(more);
+        assert_eq!(title.get("result").and_then(|result| result.get("value")).and_then(Json::as_str), Some("Broken"));
+
+        assert!(
+            events.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Runtime.exceptionThrown")),
+            "no Runtime.exceptionThrown for the page's own uncaught error: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| {
+                event.get("method").and_then(Json::as_str) == Some("Log.entryAdded")
+                    && event.get("params").and_then(|params| params.get("entry")).and_then(|entry| entry.get("source")).and_then(Json::as_str)
+                        == Some("javascript")
+            }),
+            "no Log.entryAdded for the page's own uncaught error: {events:?}"
+        );
 
         shutdown.store(true, Ordering::Relaxed);
         let _ = join.join();
