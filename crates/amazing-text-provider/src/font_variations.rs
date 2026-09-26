@@ -38,7 +38,15 @@ pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSet
                 },
             ) => axes.push(VariationSetting {
                 tag: *b"slnt",
-                value: super::font_matching::requested_oblique_angle(style)
+                // CSS Fonts 4 section 6.3 (and 7.2's font-variation-settings
+                // note): the OpenType `slnt` axis is positive
+                // counterclockwise, the opposite of CSS's positive-clockwise
+                // `font-style: oblique <angle>`. The face-selection clamp
+                // above stays in CSS-degree space (matching the descriptor's
+                // author-written range and the matching algorithm's own
+                // distance math); only the coordinate actually fed to the
+                // variable font is negated.
+                value: -super::font_matching::requested_oblique_angle(style)
                     .clamp(min_degrees, max_degrees),
             }),
             _ => {}

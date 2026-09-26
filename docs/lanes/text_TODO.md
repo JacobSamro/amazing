@@ -694,3 +694,64 @@ Boat sandbox `bx_cp5jbn5z`). Final gate: workspace nextest **3035/3035
 passed, 13 skipped** (`--locked --no-fail-fast`), workspace doctests green
 (4 doctests: `amazing_a11y`, `amazing_devtools`, `amazing_html`,
 `amazing_js`, each 1 passed). Commit: see `.agents/text/status.json`.
+
+## TEXT-20: fix css-fonts/writing-modes mismatches by cluster, widen the Linux selection
+
+Coordinator ask: fix the 7 css-fonts/writing-modes mismatches TEXT-18 found on Linux, by
+cluster, and widen the pinned css-fonts selection now that WPT runs on Linux.
+
+**Cluster 1 (largest, fixed): `slnt` axis sign inversion.** All 4 `css-fonts/matching/*`
+tests use `@font-face { font-style: oblique <min>deg <max>deg }` ranges on a variable
+test font (`variabletest_matching.ttf`) whose `slnt` axis renders a distinct "bar chart"
+glyph per exact coordinate. `font_variations::for_face`
+(`crates/amazing-text-provider/src/font_variations.rs`) was feeding the CSS-space
+clamped oblique angle straight into the `slnt` variation coordinate. Per CSS Fonts 4
+section 6.3 (and the `font-variation-settings` note in 7.2), confirmed against the
+spec source (`csswg-drafts/css-fonts-4/Overview.bs`): "the OpenType slnt axis is
+defined with a positive angle meaning a counter-clockwise slant, the opposite
+direction to CSS" -- the coordinate fed to the font must be negated; the CSS-space
+value is only used (unnegated) for the section-5.2 face-selection distance math
+against the descriptor's own CSS-degree range. Fixed by negating just the final
+axis value: `value: -requested_oblique_angle(style).clamp(min_degrees, max_degrees)`.
+Verified against the WPT test suite's own README
+(`css/css-fonts/matching/README.md`), which documents the exact bar-length/axis-value
+table used to derive each reference glyph -- traced one case (`fixed-stretch-style-over-weight`
+span 5: oblique 0deg request, face B range 45..67.5deg) through the table by hand and
+confirmed the fix produces the documented reference glyph ("y", "x", "4").
+
+Result: `css-fonts__matching__range-descriptor-reversed.html` now passes exactly
+(byte-identical PPM). The other three matching tests
+(`fixed-stretch-style-over-weight`, `stretch-distance-over-weight-distance`,
+`style-ranges-over-weight-direction`) improved substantially (differing pixels
+dropped from 13481/12324/17281 to 5285/4260/5605 respectively) but still mismatch.
+Pixel-diff analysis (`crates/amazing-text-provider/evidence/text20-text2-font-face-manifest-linux.json`)
+shows the remaining difference is confined to spans where the *second* `@font-face`
+candidate wins (face selection and the resolved `wght`/`wdth`/`slnt` coordinates were
+independently verified correct against the WPT README's table by hand for one such
+span), with the composite "MNOP" bar-chart glyph rendering at a different vertical
+scale/position than the reference's literal static glyphs for those spans only --
+consistent with a subtler swash/harfrust variable-font interpolation discrepancy
+for a specific coordinate combination, not a face-selection or axis-value bug. Not
+resolved this ticket; needs a focused swash/harfrust-level repro. `text2-font-face`:
+4 pass / 4 mismatch -> **5 pass / 3 mismatch**.
+
+**Cluster 2 (routed, unchanged): `text5-vertical`'s 2 mismatches.**
+`css-writing-modes__writing-mode-vertical-lr-002.xht` tests block-flow character
+positioning inside a `vertical-lr` box (line wrapping/positions), which is a layout
+box-geometry concern outside text-provider's shaping/glyph-orientation code --
+confirmed still layout-owned per the existing TEXT-7..13 routing.
+`css-writing-modes__direction-upright-001.html` tests that `text-orientation: upright`
+forces strong-LTR bidi specifically on `<span>`-scoped sub-runs nested inside a
+`dir=rtl` vertical block, while the surrounding (non-upright) text stays normally
+bidi-reordered; `amazing-text-provider` already forces LTR for an upright *paragraph*
+(`upright_vertical_text_forces_left_to_right_bidi_direction`), but the WPT case's
+span-scoped nesting still mismatches. Diagnosed but not fixed this ticket (budget);
+carried forward as the next `text5-vertical` item.
+`text5-vertical`: 5 pass / 2 mismatch, unchanged from TEXT-18.
+
+**Widening deferred.** Given the above two clusters consumed the ticket's budget,
+did not widen the pinned selection this round; carrying that forward as the next
+`text` lane item alongside `direction-upright-001`.
+
+Gate: crate nextest `amazing-text-provider` 80/80 (2 skipped). Final gate: workspace
+nextest and doctests (see status.json for the exact numbers/SHA).
