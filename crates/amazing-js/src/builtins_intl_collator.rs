@@ -76,7 +76,7 @@ fn intl_collator_state(this: &JsValue) -> Result<IntlCollatorState, Throw> {
 
 fn intl_collator_compare_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_collator_state(&this)?;
-    let function = Interpreter::native("compare", intl_collator_bound_compare, &i.function_proto);
+    let function = Interpreter::native_arity("compare", intl_collator_bound_compare, &i.function_proto, 2);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");

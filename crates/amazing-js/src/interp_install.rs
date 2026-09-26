@@ -2,6 +2,9 @@
 
 impl Interpreter {
     fn native(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
+        Self::native_arity(name, f, proto, 0)
+    }
+    pub(crate) fn native_arity(name: &str, f: crate::value::NativeFn, proto: &Obj, arity: usize) -> JsValue {
         let mut o = JsObject::function(JsFunction {
             name: name.into(),
             params: Vec::new(),
@@ -21,7 +24,7 @@ impl Interpreter {
             configurable: true, getter: None, setter: None,
         }).unwrap();
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(0.0), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {

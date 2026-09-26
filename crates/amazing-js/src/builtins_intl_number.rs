@@ -230,7 +230,7 @@ fn intl_valid_unit(unit: &str) -> bool {
 
 fn intl_number_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_number_state(&this)?;
-    let function = Interpreter::native("format", intl_number_bound_format, &i.function_proto);
+    let function = Interpreter::native_arity("format", intl_number_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
