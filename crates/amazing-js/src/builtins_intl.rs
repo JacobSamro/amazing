@@ -292,6 +292,48 @@ fn intl_resolved_locale(requested: &[String], data_locale: &str) -> String {
     "en-US".to_string()
 }
 
+/// Resolve one Unicode extension keyword against its option value per
+/// ECMA-402 ResolveLocale. Returns the value to keep in the resolved locale (if
+/// any) and the effective value used for formatting. An option value that the
+/// implementation does not support is ignored in favour of the requested
+/// extension value; a supported option that differs from the extension drops
+/// the extension from the resolved locale.
+fn intl_resolve_keyword(extension: Option<String>, option: Option<String>,
+    supported: impl Fn(&str) -> bool, fallback: &str) -> (Option<String>, String) {
+    if let Some(value) = option {
+        if supported(&value) {
+            let keep = extension.as_deref() == Some(value.as_str());
+            return (if keep { Some(value.clone()) } else { None }, value);
+        }
+    }
+    if let Some(value) = extension {
+        if supported(&value) { return (Some(value.clone()), value); }
+    }
+    (None, fallback.to_string())
+}
+
+/// Append the retained Unicode extension keywords to a resolved base locale.
+fn intl_locale_with_extensions(base: &str, retained: &[(&str, String)]) -> String {
+    let mut pairs: Vec<(&str, String)> = retained.iter()
+        .filter(|(_, value): &(&str, String)| !value.is_empty())
+        .map(|(key, value)| (*key, value.clone())).collect();
+    if pairs.is_empty() { return base.to_string(); }
+    pairs.sort_by(|a, b| a.0.cmp(b.0));
+    let mut subtags: Vec<String> = Vec::new();
+    for (key, value) in pairs {
+        subtags.push(key.to_string());
+        for part in value.split('-') { if !part.is_empty() { subtags.push(part.to_string()); } }
+    }
+    format!("{base}-u-{}", subtags.join("-"))
+}
+
+/// The numbering systems the implementation advertises through
+/// `Intl.supportedValuesOf`. An option value outside this list is ignored per
+/// ECMA-402 (the requested extension or the locale default is used instead).
+fn intl_supported_numbering_system(value: &str) -> bool {
+    INTL_SUPPORTED_NUMBERING_SYSTEMS.split(' ').any(|entry| entry == value)
+}
+
 fn intl_array(i: &mut Interpreter, values: impl IntoIterator<Item = JsValue>) -> Result<JsValue, Throw> {
     let mut raw = JsObject::array();
     raw.proto = Some(i.array_proto.clone());

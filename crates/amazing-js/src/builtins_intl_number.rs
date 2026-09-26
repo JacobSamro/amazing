@@ -3,6 +3,7 @@
 #[derive(Clone)]
 struct IntlNumberState {
     locale: String,
+    resolved_locale: String,
     numbering_system: String,
     style: String,
     currency: Option<String>,
@@ -98,10 +99,20 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null NumberFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
-    if !numbering_system.bytes().all(|b| b.is_ascii_alphanumeric()) || !(3..=8).contains(&numbering_system.len()) {
-        return Err(Throw::range_error("invalid numbering system"));
+    let numbering_default = intl_data(&locale).numbering_system;
+    let numbering_option = {
+        let value = i.get_prop(&options, "numberingSystem")?;
+        if value.is_undefined() { None } else { Some(i.to_string(&value)?) }
+    };
+    if let Some(value) = numbering_option.as_ref() {
+        if !(3..=8).contains(&value.len())
+            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            return Err(Throw::range_error("invalid numbering system"));
+        }
     }
+    let nu_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "nu"));
+    let (nu_retained, numbering_system) =
+        intl_resolve_keyword(nu_extension, numbering_option, intl_supported_numbering_system, numbering_default);
     let style = intl_string_option(i, &options, "style", &["decimal", "percent", "currency", "unit"], "decimal")?;
     let currency_value = i.get_prop(&options, "currency")?;
     let currency = if matches!(currency_value, JsValue::Undefined) { None }
@@ -123,15 +134,24 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let compact_display = intl_string_option(i, &options, "compactDisplay", &["short", "long"], "short")?;
     let sign_display = intl_string_option(i, &options, "signDisplay",
         &["auto", "never", "always", "exceptZero", "negative"], "auto")?;
+    // GetBooleanOrStringNumberFormatOption: a Boolean is stored as-is, a
+    // String must be one of the three v3 values, and "true"/"false"/"" are
+    // legacy spellings that fall back to the default. Anything else is a
+    // RangeError. Internally `false` is carried as the string "false".
     let grouping_value = i.get_prop(&options, "useGrouping")?;
+    let default_grouping = if notation == "compact" { "min2" } else { "auto" };
     let use_grouping = match grouping_value {
-        JsValue::Undefined => if notation == "compact" { "min2" } else { "auto" }.to_string(),
-        JsValue::Bool(false) => "false".to_string(),
-        JsValue::Str(_) => {
-            let value = i.to_string(&grouping_value)?;
-            if ["min2", "auto", "always"].contains(&value.as_str()) { value } else { "auto".into() }
-        }
-        _ => "auto".into(),
+        JsValue::Undefined => default_grouping.to_string(),
+        JsValue::Bool(true) => "always".to_string(),
+        JsValue::Bool(false) | JsValue::Null => "false".to_string(),
+        JsValue::Str(_) => match i.to_string(&grouping_value)?.as_str() {
+            "min2" | "auto" | "always" => i.to_string(&grouping_value)?,
+            "true" | "false" => "auto".to_string(),
+            "" => "false".to_string(),
+            _ => return Err(Throw::range_error("invalid useGrouping option")),
+        },
+        JsValue::Num(number) if number == 0.0 => "false".to_string(),
+        _ => return Err(Throw::range_error("invalid useGrouping option")),
     };
     let min_integer = intl_integer_option(i, &options, "minimumIntegerDigits", 1, 21, 1)?;
     let currency_digits = currency.as_ref().and_then(|code| INTL_CURRENCY_DATA.iter()
@@ -196,8 +216,11 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let rounding_priority = if compact_defaults { "morePrecision".into() } else { rounding_priority };
     let min_significant = if compact_defaults { Some(1) } else { min_significant };
     let max_significant = if compact_defaults { Some(2) } else { max_significant };
+    let mut retained: Vec<(&str, String)> = Vec::new();
+    if let Some(value) = nu_retained { retained.push(("nu", value)); }
+    let resolved_locale = intl_locale_with_extensions(&locale, &retained);
     let state = IntlNumberState {
-        locale, numbering_system, style, currency, currency_display, currency_sign, unit, unit_display,
+        locale, resolved_locale, numbering_system, style, currency, currency_display, currency_sign, unit, unit_display,
         notation, compact_display, sign_display, use_grouping, min_integer,
         min_fraction, max_fraction, min_significant, max_significant, rounding_priority, rounding_mode,
         rounding_increment, trailing_zero_display,
@@ -263,7 +286,7 @@ fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
     let object = i.object_value();
     // Property insertion order per ECMA-402 16.5.5 Intl.NumberFormat.prototype.resolvedOptions.
     for (name, value) in [
-        ("locale", state.locale.as_str()), ("numberingSystem", state.numbering_system.as_str()),
+        ("locale", state.resolved_locale.as_str()), ("numberingSystem", state.numbering_system.as_str()),
         ("style", state.style.as_str()),
     ] { i.set_prop(&object, name, JsValue::str(value))?; }
     if state.style == "currency" {
@@ -281,7 +304,9 @@ fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
     ] { i.set_prop(&object, name, JsValue::num(value as f64))?; }
     if let Some(value) = state.min_significant { i.set_prop(&object, "minimumSignificantDigits", JsValue::num(value as f64))?; }
     if let Some(value) = state.max_significant { i.set_prop(&object, "maximumSignificantDigits", JsValue::num(value as f64))?; }
-    i.set_prop(&object, "useGrouping", JsValue::str(state.use_grouping.as_str()))?;
+    i.set_prop(&object, "useGrouping", if state.use_grouping == "false" {
+        JsValue::Bool(false)
+    } else { JsValue::str(state.use_grouping.as_str()) })?;
     i.set_prop(&object, "notation", JsValue::str(state.notation.as_str()))?;
     if state.notation == "compact" { i.set_prop(&object, "compactDisplay", JsValue::str(state.compact_display))?; }
     i.set_prop(&object, "signDisplay", JsValue::str(state.sign_display.as_str()))?;

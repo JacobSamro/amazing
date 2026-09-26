@@ -3,6 +3,7 @@
 #[derive(Clone)]
 struct IntlDateState {
     locale: String,
+    resolved_locale: String,
     calendar: String,
     numbering_system: String,
     time_zone: String,
@@ -67,6 +68,15 @@ impl Interpreter {
     }
 }
 
+fn intl_calendar_supported(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    let canonical: &str = match lower.as_str() {
+        "gregorian" => "gregory", "islamicc" => "islamic-civil",
+        "ethiopic-amete-alem" => "ethioaa", other => other,
+    };
+    INTL_KNOWN_CALENDARS.contains(&canonical)
+}
+
 fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
@@ -74,29 +84,37 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let calendar_option = i.get_prop(&options, "calendar")?;
-    let calendar_option = if calendar_option.is_undefined() {
-        requested.first().and_then(|tag| intl_unicode_keyword(tag, "ca")).unwrap_or_else(|| "gregory".into())
-    } else {
-        i.to_string(&calendar_option)?
-    };
-    if calendar_option.split('-').any(|part| !(3..=8).contains(&part.len())
-        || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
-        return Err(Throw::range_error("invalid calendar"));
+    let calendar_raw = i.get_prop(&options, "calendar")?;
+    let calendar_present = !calendar_raw.is_undefined();
+    if calendar_present {
+        let value = i.to_string(&calendar_raw)?;
+        if value.split('-').any(|part| !(3..=8).contains(&part.len())
+            || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
+            return Err(Throw::range_error("invalid calendar"));
+        }
     }
-    // A well-formed but unavailable calendar falls back to the locale default.
-    let canonical_calendar = calendar_option.to_ascii_lowercase();
-    let canonical_calendar = match canonical_calendar.as_str() {
-        "gregorian" => "gregory", "islamicc" => "islamic-civil",
-        "ethiopic-amete-alem" => "ethioaa", other => other,
-    };
-    let calendar = if INTL_KNOWN_CALENDARS.contains(&canonical_calendar) { canonical_calendar.to_string() }
-        else { "gregory".into() };
-    let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
-    if !(3..=8).contains(&numbering_system.len())
-        || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-        return Err(Throw::range_error("invalid numbering system"));
+    // A well-formed but unavailable calendar is ignored; the requested -u-ca
+    // extension or the locale default is used instead.
+    let ca_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "ca"));
+    let ca_option = if calendar_present { Some(i.to_string(&calendar_raw)?) } else { None };
+    let (ca_retained, calendar_effective) = intl_resolve_keyword(
+        ca_extension, ca_option, intl_calendar_supported, "gregory");
+    let calendar = match calendar_effective.as_str() {
+        "gregorian" | "gregory" => "gregory", "islamicc" | "islamic-civil" => "islamic-civil",
+        "ethiopic-amete-alem" | "ethioaa" => "ethioaa", other => other,
+    }.to_string();
+    let numbering_default = intl_data(&locale).numbering_system;
+    let numbering_raw = i.get_prop(&options, "numberingSystem")?;
+    let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
+    if let Some(value) = numbering_option.as_ref() {
+        if !(3..=8).contains(&value.len())
+            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            return Err(Throw::range_error("invalid numbering system"));
+        }
     }
+    let nu_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "nu"));
+    let (nu_retained, numbering_system) =
+        intl_resolve_keyword(nu_extension, numbering_option, intl_supported_numbering_system, numbering_default);
     let time_zone_option = intl_string_option(i, &options, "timeZone", &[], "UTC")?;
     let time_zone = intl_timezone(&time_zone_option)?;
     let date_style = intl_optional_string(i, &options, "dateStyle", &["full", "long", "medium", "short"])?;
@@ -133,14 +151,23 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     }
     let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
     let hour12 = i.get_prop(&options, "hour12")?;
-    let extension_cycle = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
+    let hc_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
         .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
     let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
-    let hour_cycle = if !hour12.is_undefined() {
-        if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string()
-    } else { hour_cycle_option.or(extension_cycle).unwrap_or_else(|| default_cycle.into()) };
+    // An explicit hour12 always overrides (and drops) the hc extension.
+    let (hc_retained, hour_cycle) = if !hour12.is_undefined() {
+        (None, if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string())
+    } else {
+        intl_resolve_keyword(hc_extension, hour_cycle_option,
+            |value| ["h11", "h12", "h23", "h24"].contains(&value), default_cycle)
+    };
+    let mut retained: Vec<(&str, String)> = Vec::new();
+    if let Some(value) = ca_retained { retained.push(("ca", value)); }
+    if let Some(value) = hc_retained { retained.push(("hc", value)); }
+    if let Some(value) = nu_retained { retained.push(("nu", value)); }
+    let resolved_locale = intl_locale_with_extensions(&locale, &retained);
     let state = IntlDateState {
-        locale, calendar, numbering_system, time_zone,
+        locale, resolved_locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle,
     };
@@ -351,9 +378,12 @@ fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, 
         Some(JsValue::Undefined) | None => intl_now_milliseconds(),
         Some(value) => i.to_number(value)?,
     };
-    // PartitionDateTimePattern applies TimeClip: non-finite values are a
-    // RangeError, finite values are truncated toward zero.
-    if !milliseconds.is_finite() { return Err(Throw::range_error("invalid time value")); }
+    // PartitionDateTimePattern applies TimeClip: non-finite values and values
+    // outside the ECMAScript time range are a RangeError; in-range finite
+    // values are truncated toward zero.
+    if !milliseconds.is_finite() || milliseconds.abs() > 8.64e15 {
+        return Err(Throw::range_error("invalid time value"));
+    }
     Ok(milliseconds.trunc())
 }
 
@@ -442,7 +472,7 @@ fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue
     let state = intl_date_state(&this)?;
     let object = i.object_value();
     for (key, value) in [
-        ("locale", &state.locale), ("calendar", &state.calendar),
+        ("locale", &state.resolved_locale), ("calendar", &state.calendar),
         ("numberingSystem", &state.numbering_system), ("timeZone", &state.time_zone),
     ] { i.set_prop(&object, key, JsValue::str(value))?; }
     // hourCycle and hour12 are only part of the resolved options when the

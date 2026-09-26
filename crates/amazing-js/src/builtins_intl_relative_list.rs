@@ -46,14 +46,23 @@ fn intl_relative_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null RelativeTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
-    if !(3..=8).contains(&numbering_system.len())
-        || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-        return Err(Throw::range_error("invalid numbering system"));
+    let numbering_default = intl_data(&locale).numbering_system;
+    let numbering_raw = i.get_prop(&options, "numberingSystem")?;
+    let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
+    if let Some(value) = numbering_option.as_ref() {
+        if !(3..=8).contains(&value.len())
+            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            return Err(Throw::range_error("invalid numbering system"));
+        }
     }
+    let nu_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "nu"));
+    let (nu_retained, numbering_system) =
+        intl_resolve_keyword(nu_extension, numbering_option, intl_supported_numbering_system, numbering_default);
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;
     let numeric = intl_string_option(i, &options, "numeric", &["always", "auto"], "always")?;
-    let resolved = intl_resolved_locale(&requested, &locale);
+    let mut retained: Vec<(&str, String)> = Vec::new();
+    if let Some(value) = nu_retained { retained.push(("nu", value)); }
+    let resolved = intl_locale_with_extensions(&intl_resolved_locale(&requested, &locale), &retained);
     intl_register(&object, IntlState::Relative(IntlRelativeState { locale, resolved, style, numeric, numbering_system }));
     Ok(JsValue::Object(object))
 }
@@ -88,7 +97,8 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         (false, true) => data.future_one, (false, false) => data.future_other,
     };
     let number_state = IntlNumberState {
-        locale: state.locale.clone(), numbering_system: state.numbering_system.clone(),
+        locale: state.locale.clone(), resolved_locale: state.locale.clone(),
+        numbering_system: state.numbering_system.clone(),
         style: "decimal".into(), currency: None, currency_display: "symbol".into(),
         currency_sign: "standard".into(), unit: None, unit_display: "short".into(),
         notation: "standard".into(), compact_display: "short".into(), sign_display: "auto".into(),
