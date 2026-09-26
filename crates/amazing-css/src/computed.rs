@@ -166,14 +166,56 @@ impl ComputedStyle {
         let Some([red, green, blue, alpha]) = crate::color::parse_css_color(color) else { return };
         let resolved = format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}");
         for (property, source) in &self.relative_colors {
-            let value = if relative_currentcolor_identity(source) {
-                Some(resolved.clone())
-            } else {
-                resolve_currentcolor_mix(source, &resolved)
-            };
+            let value = resolve_currentcolor_relative(source, &resolved)
+                .or_else(|| relative_currentcolor_identity(source).then(|| resolved.clone()))
+                .or_else(|| resolve_currentcolor_mix(source, &resolved));
             if let Some(value) = value {
                 self.props.insert(property.clone(), value);
             }
+        }
+    }
+
+    /// CSS Color 5 `light-dark()`: pick the branch for this element's used
+    /// color scheme (from its own `color-scheme` computed value, falling
+    /// back to the environment's `prefers-color-scheme` when `color-scheme`
+    /// is `normal` or lists both `light` and `dark`).
+    fn resolve_light_dark(&mut self, environment: &MediaEnvironment) {
+        if !self.props.values().any(|value| light_dark_branches(value).is_some()) {
+            return;
+        }
+        let dark = self.used_color_scheme_is_dark(environment);
+        if let Some(value) = self.props.get("color").cloned() {
+            if let Some(resolved) = resolve_light_dark_value(&value, dark, None) {
+                self.props.insert("color".to_owned(), resolved);
+            }
+        }
+        let own_color = self.props.get("color").cloned();
+        let updates: Vec<(String, String)> = self
+            .props
+            .iter()
+            .filter(|(property, _)| property.as_str() != "color")
+            .filter_map(|(property, value)| {
+                resolve_light_dark_value(value, dark, own_color.as_deref())
+                    .map(|resolved| (property.clone(), resolved))
+            })
+            .collect();
+        for (property, value) in updates {
+            self.props.insert(property, value);
+        }
+    }
+
+    fn used_color_scheme_is_dark(&self, environment: &MediaEnvironment) -> bool {
+        let scheme = self.props.get("color-scheme").map(String::as_str).unwrap_or("normal");
+        let tokens: Vec<&str> = scheme
+            .split_ascii_whitespace()
+            .filter(|token| !token.eq_ignore_ascii_case("only"))
+            .collect();
+        let has_light = tokens.iter().any(|token| token.eq_ignore_ascii_case("light"));
+        let has_dark = tokens.iter().any(|token| token.eq_ignore_ascii_case("dark"));
+        match (has_light, has_dark) {
+            (true, false) => false,
+            (false, true) => true,
+            _ => environment.prefers_color_scheme == crate::media_queries::ColorScheme::Dark,
         }
     }
 
@@ -927,6 +969,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "mask-size", initial: "auto", inherited: false },
     PropertyMetadata { name: "mask-composite", initial: "add", inherited: false },
     PropertyMetadata { name: "mask-type", initial: "luminance", inherited: true },
+    PropertyMetadata { name: "color-scheme", initial: "normal", inherited: true },
 ];
 
 pub(crate) fn initial_value(name: &str) -> Option<&'static str> {
@@ -2861,7 +2904,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
                 environment,
             ),
         };
-        if relative_currentcolor_identity(&value) || color_mix_currentcolor(&value) {
+        if relative_color_uses_currentcolor(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
         } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
             (specified.is_none() && property.inherited)) &&
@@ -2910,6 +2953,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
         url_bases: parent.map(|parent| parent.url_bases.clone()).unwrap_or_default(),
     };
     style.resolve_relative_colors();
+    style.resolve_light_dark(environment);
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
     style.effective_zoom = parent.map_or(1.0, |parent| parent.effective_zoom) * local_zoom;
     style.rebuild_typed();
@@ -3098,6 +3142,80 @@ fn compute_normal_value(
         computed
     };
     (computed, inherits)
+}
+
+/// A relative color whose source is `currentcolor`. Retain its source across
+/// explicit inheritance so each element resolves `currentcolor` against its
+/// own computed `color`.
+fn relative_color_uses_currentcolor(value: &str) -> bool {
+    let tokens = tokenize(value);
+    let mut significant = tokens.iter().filter(|token| !matches!(token, Token::Whitespace));
+    matches!(significant.next(), Some(Token::Function(_)))
+        && matches!(significant.next(), Some(Token::OpenParen))
+        && matches!(significant.next(),
+            Some(Token::Ident(name)) if name.eq_ignore_ascii_case("from"))
+        && tokens.iter().any(|token| {
+            matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor"))
+        })
+}
+
+/// Splits `light-dark( <color-a> , <color-b> )` into its two branches. The
+/// function name check is case-insensitive; the comma split respects nested
+/// parens so each branch may itself be a function like `rgb(...)`.
+fn light_dark_branches(value: &str) -> Option<(&str, &str)> {
+    let trimmed = value.trim();
+    if trimmed.len() < 12 || !trimmed.is_char_boundary(11)
+        || !trimmed[..11].eq_ignore_ascii_case("light-dark(") || !trimmed.ends_with(')') {
+        return None;
+    }
+    let inner = &trimmed[11..trimmed.len() - 1];
+    let mut depth = 0i32;
+    for (i, ch) in inner.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => return Some((inner[..i].trim(), inner[i + 1..].trim())),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Grammar check for `light-dark()` as a `color`/`background-color`/border
+/// color value: exactly two comma-separated branches, each either
+/// `currentcolor` or a color this crate can already parse.
+pub(crate) fn valid_light_dark(css: &str) -> bool {
+    let Some((a, b)) = light_dark_branches(css) else { return false };
+    [a, b].into_iter().all(|branch| {
+        branch.eq_ignore_ascii_case("currentcolor") || crate::color::parse_css_color(branch).is_some()
+    })
+}
+
+/// Resolve one `light-dark(...)` value to its used branch, substituting the
+/// element's own resolved `color` for a `currentcolor` branch (`own_color` is
+/// `None` while resolving the `color` property's own value).
+fn resolve_light_dark_value(value: &str, dark: bool, own_color: Option<&str>) -> Option<String> {
+    let (light, dark_branch) = light_dark_branches(value)?;
+    let chosen = (if dark { dark_branch } else { light }).trim();
+    let text = if chosen.eq_ignore_ascii_case("currentcolor") { own_color? } else { chosen };
+    let rgba = crate::color::parse_css_color(text)?;
+    Some(format!("#{:02x}{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2], rgba[3]))
+}
+
+/// Substitute the element's resolved `color` for `currentcolor` in a relative
+/// color source and parse the result.
+fn resolve_currentcolor_relative(value: &str, color: &str) -> Option<String> {
+    if !relative_color_uses_currentcolor(value) {
+        return None;
+    }
+    let lower = value.to_ascii_lowercase();
+    let index = lower.find("currentcolor")?;
+    let mut substituted = String::with_capacity(value.len() + color.len());
+    substituted.push_str(&value[..index]);
+    substituted.push_str(color);
+    substituted.push_str(&value[index + "currentcolor".len()..]);
+    let rgba = crate::color::parse_css_color(&substituted)?;
+    Some(format!("#{:02x}{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2], rgba[3]))
 }
 
 // A relative color that copies all channels from currentColor into the same

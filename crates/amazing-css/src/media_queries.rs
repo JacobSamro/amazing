@@ -8,6 +8,10 @@ pub enum MediaType { #[default] Screen, Print }
 pub enum ColorScheme { #[default] Light, Dark }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ContrastPreference { #[default] NoPreference, More, Less, Custom }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HoverCapability { #[default] Hover, None }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PointerCapability { Coarse, #[default] Fine, None }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MediaEnvironment {
@@ -25,6 +29,14 @@ pub struct MediaEnvironment {
     pub prefers_reduced_transparency: bool,
     pub prefers_reduced_data: bool,
     pub forced_colors: bool,
+    /// The primary input's hovering capability and the same aggregated across
+    /// every attached input (Media Queries 4 `hover`/`any-hover`).
+    pub hover: HoverCapability,
+    pub any_hover: HoverCapability,
+    /// The primary pointing device's accuracy and the same aggregated across
+    /// every attached input (`pointer`/`any-pointer`).
+    pub pointer: PointerCapability,
+    pub any_pointer: PointerCapability,
 }
 impl Default for MediaEnvironment {
     fn default() -> Self {
@@ -33,7 +45,9 @@ impl Default for MediaEnvironment {
             device_pixel_ratio: 1.0, media_type: MediaType::Screen,
             prefers_color_scheme: ColorScheme::Light, prefers_reduced_motion: false,
             prefers_contrast: ContrastPreference::NoPreference,
-            prefers_reduced_transparency: false, prefers_reduced_data: false, forced_colors: false }
+            prefers_reduced_transparency: false, prefers_reduced_data: false, forced_colors: false,
+            hover: HoverCapability::Hover, any_hover: HoverCapability::Hover,
+            pointer: PointerCapability::Fine, any_pointer: PointerCapability::Fine }
     }
 }
 
@@ -152,9 +166,10 @@ fn match_condition(input: &str, env: &MediaEnvironment) -> bool {
 fn known_feature(input: &str) -> bool {
     let name = input.split([':', '<', '>', '=']).next().unwrap_or("").trim();
     let name = name.strip_prefix("min-").or_else(|| name.strip_prefix("max-")).unwrap_or(name);
-    matches!(name, "width" | "height" | "resolution" | "orientation" |
+    matches!(name, "width" | "height" | "aspect-ratio" | "resolution" | "orientation" |
         "prefers-color-scheme" | "prefers-reduced-motion" | "prefers-contrast" |
-        "prefers-reduced-transparency" | "prefers-reduced-data" | "forced-colors")
+        "prefers-reduced-transparency" | "prefers-reduced-data" | "forced-colors" |
+        "hover" | "any-hover" | "pointer" | "any-pointer")
 }
 fn match_feature(input: &str, env: &MediaEnvironment) -> bool {
     let input = input.trim().to_ascii_lowercase();
@@ -169,6 +184,22 @@ fn match_feature(input: &str, env: &MediaEnvironment) -> bool {
                 compare(actual, candidate, relation)
             }),
             "resolution" => resolution_dppx(value).is_some_and(|candidate| compare(env.device_pixel_ratio, candidate, relation)),
+            "aspect-ratio" => aspect_ratio(value).is_some_and(|candidate|
+                compare(env.viewport_width_px / env.viewport_height_px, candidate, relation)),
+            "hover" if relation == 0 => match value {
+                "hover" => env.hover == HoverCapability::Hover,
+                "none" => env.hover == HoverCapability::None, _ => false },
+            "any-hover" if relation == 0 => match value {
+                "hover" => env.any_hover == HoverCapability::Hover,
+                "none" => env.any_hover == HoverCapability::None, _ => false },
+            "pointer" if relation == 0 => match value {
+                "coarse" => env.pointer == PointerCapability::Coarse,
+                "fine" => env.pointer == PointerCapability::Fine,
+                "none" => env.pointer == PointerCapability::None, _ => false },
+            "any-pointer" if relation == 0 => match value {
+                "coarse" => env.any_pointer == PointerCapability::Coarse,
+                "fine" => env.any_pointer == PointerCapability::Fine,
+                "none" => env.any_pointer == PointerCapability::None, _ => false },
             "orientation" if relation == 0 => match value {
                 "portrait" => env.viewport_height_px >= env.viewport_width_px,
                 "landscape" => env.viewport_width_px > env.viewport_height_px, _ => false },
@@ -211,6 +242,11 @@ fn match_feature(input: &str, env: &MediaEnvironment) -> bool {
     match input.as_str() {
         "width" => env.viewport_width_px > 0.0, "height" => env.viewport_height_px > 0.0,
         "resolution" => env.device_pixel_ratio > 0.0,
+        "aspect-ratio" => env.viewport_width_px > 0.0 && env.viewport_height_px > 0.0,
+        "hover" => env.hover == HoverCapability::Hover,
+        "any-hover" => env.any_hover == HoverCapability::Hover,
+        "pointer" => env.pointer != PointerCapability::None,
+        "any-pointer" => env.any_pointer != PointerCapability::None,
         "prefers-reduced-motion" => env.prefers_reduced_motion,
         "prefers-reduced-transparency" => env.prefers_reduced_transparency,
         "prefers-reduced-data" => env.prefers_reduced_data,
@@ -232,6 +268,20 @@ fn resolution_dppx(input: &str) -> Option<f32> {
         if let Some(number) = input.strip_suffix(unit) { return number.trim().parse::<f32>().ok().filter(|n| n.is_finite() && *n >= 0.0).map(|n| n*scale); }
     }
     None
+}
+/// `<ratio>` for `aspect-ratio`/`min-aspect-ratio`/`max-aspect-ratio`: a bare
+/// `<number>` or `<number> / <number>` (Media Queries 4 also permits the
+/// integer `width/height` ratio form used by `aspect-ratio` here).
+fn aspect_ratio(input: &str) -> Option<f32> {
+    let value = match input.split_once('/') {
+        Some((num, den)) => {
+            let (num, den) = (num.trim().parse::<f32>().ok()?, den.trim().parse::<f32>().ok()?);
+            if den == 0.0 { return None; }
+            num / den
+        }
+        None => input.trim().parse::<f32>().ok()?,
+    };
+    (value.is_finite() && value > 0.0).then_some(value)
 }
 fn length_px(input: &str, env: &MediaEnvironment) -> Option<f32> {
     let length = LengthPercentage::parse(input)?;

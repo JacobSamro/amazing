@@ -47,7 +47,12 @@ fn parse_css_color_depth(input: &str, depth: usize) -> Option<[u8; 4]> {
         return parse_hex(hex);
     }
     let (name_raw, inner) = split_function(s)?;
-    match name_raw.to_ascii_lowercase().as_str() {
+    let name = name_raw.to_ascii_lowercase();
+    // CSS Color 5 relative color syntax: `fn(from <color> <channels>)`.
+    if advanced::has_from(inner) {
+        return advanced::relative(&name, inner, depth);
+    }
+    match name.as_str() {
         "rgb" | "rgba" => parse_rgb_args(inner),
         "hsl" | "hsla" => advanced::hsl(inner),
         "hwb" => advanced::hwb(inner),
@@ -543,5 +548,93 @@ mod tests {
         for h in hostile {
             let _ = parse_css_color(h); // must only return None, never panic
         }
+    }
+
+    #[test]
+    fn relative_color_syntax_resolves_channel_keywords() {
+        // Identity forms reproduce the source.
+        assert_eq!(parse_css_color("rgb(from red r g b)"), Some([255, 0, 0, 255]));
+        assert_eq!(parse_css_color("hsl(from red h s l)"), Some([255, 0, 0, 255]));
+        assert_eq!(
+            parse_css_color("rgb(from #336699 r g b)"),
+            Some([0x33, 0x66, 0x99, 255])
+        );
+        // Literals, arithmetic over keywords, and per-channel overrides.
+        assert_eq!(parse_css_color("rgb(from red r 0 0)"), Some([255, 0, 0, 255]));
+        assert_eq!(
+            parse_css_color("rgb(from red calc(r - 155) 0 0)"),
+            Some([100, 0, 0, 255])
+        );
+        assert_eq!(
+            parse_css_color("rgb(from red calc(r * 0.5) 0 0)"),
+            Some([128, 0, 0, 255])
+        );
+        assert_eq!(parse_css_color("rgb(from red 0 g b / 0.5)"), Some([0, 0, 0, 128]));
+        // Alpha defaults to the source alpha and can be overridden.
+        assert_eq!(
+            parse_css_color("rgb(from rgba(10 20 30 / 0.5) r g b)"),
+            Some([10, 20, 30, 128])
+        );
+        assert_eq!(
+            parse_css_color("rgb(from red r g b / 25%)"),
+            Some([255, 0, 0, 64])
+        );
+        // Every numeric channel space round-trips its own source.
+        for (css, source) in [
+            ("hsl(from #336699 h s l)", "#336699"),
+            ("hwb(from #336699 h w b)", "#336699"),
+            ("lab(from red l a b)", "red"),
+            ("lch(from red l c h)", "red"),
+            ("oklab(from #336699 l a b)", "#336699"),
+            ("oklch(from #336699 l c h)", "#336699"),
+        ] {
+            let got = parse_css_color(css).unwrap_or_else(|| panic!("{css}"));
+            let want = parse_css_color(source).unwrap();
+            for channel in 0..4 {
+                assert!(
+                    (got[channel] as i32 - want[channel] as i32).abs() <= 1,
+                    "{css} channel {channel}: {got:?} vs {want:?}"
+                );
+            }
+        }
+        // color() relative forms convert the source into the target space and
+        // use that space's channel keywords.
+        assert_eq!(
+            parse_css_color("color(from red srgb r g b)"),
+            Some([255, 0, 0, 255])
+        );
+        assert_eq!(
+            parse_css_color("color(from red srgb r g b / 0.5)"),
+            Some([255, 0, 0, 128])
+        );
+        for (css, source) in [
+            ("color(from #336699 srgb-linear r g b)", "#336699"),
+            ("color(from #336699 display-p3 r g b)", "#336699"),
+            ("color(from #336699 display-p3-linear r g b)", "#336699"),
+            ("color(from #336699 a98-rgb r g b)", "#336699"),
+            ("color(from #336699 prophoto-rgb r g b)", "#336699"),
+            ("color(from #336699 rec2020 r g b)", "#336699"),
+            ("color(from #336699 xyz-d65 x y z)", "#336699"),
+            ("color(from #336699 xyz-d50 x y z)", "#336699"),
+        ] {
+            let got = parse_css_color(css).unwrap_or_else(|| panic!("{css}"));
+            let want = parse_css_color(source).unwrap();
+            for channel in 0..4 {
+                assert!(
+                    (got[channel] as i32 - want[channel] as i32).abs() <= 1,
+                    "{css} channel {channel}: {got:?} vs {want:?}"
+                );
+            }
+        }
+        assert_eq!(parse_css_color("color(from red r g b)"), None);
+        assert_eq!(parse_css_color("color(from red bogus r g b)"), None);
+        assert_eq!(parse_css_color("color(from currentcolor srgb r g b)"), None);
+        // A `currentcolor` source stays for the computed-value seam; malformed
+        // sources and channel lists are rejected.
+        assert_eq!(parse_css_color("rgb(from currentcolor r g b)"), None);
+        assert_eq!(parse_css_color("rgb(from notacolor r g b)"), None);
+        assert_eq!(parse_css_color("rgb(from red r g)"), None);
+        assert_eq!(parse_css_color("rgb(from red r g b b)"), None);
+        assert_eq!(parse_css_color("rgb(from red r g b /)"), None);
     }
 }
