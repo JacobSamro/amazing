@@ -180,7 +180,7 @@ flags are validated and accepted as engine hints.
 
 ## CDP-7 — Performance and Security domains — done
 
-Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 83/83
+Source `20fe9331`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 83/83
 nextest (0 skipped) and 1 doctest; workspace 2761 passed, 0 failed, 10 skipped,
 doctests 4 passed.
 
