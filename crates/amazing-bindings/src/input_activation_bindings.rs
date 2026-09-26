@@ -4,7 +4,7 @@ use amazing_dom::{events::{Dispatch, Event, EventClass, EventInit, EventTarget}}
 use std::time::Duration;
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::HTMLElementOnClick | O::HTMLElementSetOnClick | O::HTMLElementClick | O::InputIndeterminate | O::InputSetIndeterminate)
+    matches!(op, O::HTMLElementOnClick | O::HTMLElementSetOnClick | O::HTMLElementClick(_) | O::InputIndeterminate | O::InputSetIndeterminate)
 }
 pub(crate) fn complete<H: BindingHost>(host: &mut H, dispatch: &mut Dispatch) -> Result<(), H::Error> {
     let node = host.with_dom(|dom| Ok(dom.finish_input_activation(dispatch)))?;
@@ -38,14 +38,17 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         if let Some(old) = old { host.release_value(old); }
         return Ok(host.undefined());
     }
-    if op != O::HTMLElementClick {
-        let old = host.with_dom(|dom| dom.input_indeterminate(node))?;
-        if op == O::InputIndeterminate { return Ok(host.boolean(old)); }
-        let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let value = host.to_boolean(value);
-        host.with_dom(|dom| dom.set_input_indeterminate(node, value))?;
-        return Ok(host.undefined());
-    }
+    let trusted = match op {
+        O::HTMLElementClick(trusted) => trusted,
+        _ => {
+            let old = host.with_dom(|dom| dom.input_indeterminate(node))?;
+            if op == O::InputIndeterminate { return Ok(host.boolean(old)); }
+            let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+            let value = host.to_boolean(value);
+            host.with_dom(|dom| dom.set_input_indeterminate(node, value))?;
+            return Ok(host.undefined());
+        }
+    };
     if !host.with_dom(|dom| dom.begin_html_click(node))? { return Ok(host.undefined()); }
     let result = (|| {
         let event = host.with_dom(|dom| {
@@ -53,8 +56,18 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             event.set_class(EventClass::Mouse);
             Ok(dom.events_mut().create_event(event))
         })?;
-        let value = host.wrap_platform_object(crate::event_bindings::key(host, event.slot() as u64), InterfaceBrand::EVENT)?;
-        crate::event_bindings::invoke(host, O::DispatchEvent, receiver, &[value])
+        if trusted {
+            // Driver-initiated (e.g. testdriver's synthetic click sequence):
+            // dispatch directly with `DispatchOrigin::UserAgent` so
+            // `Event.isTrusted` reads true, matching a real user click.
+            crate::event_bindings::dispatch_created_event(host, EventTarget::Node(node), event).map(|_| ())
+        } else {
+            // Ordinary script call to `element.click()`: the HTML Standard
+            // always dispatches this untrusted, via the same path a script's
+            // own `dispatchEvent()` call would use.
+            let value = host.wrap_platform_object(crate::event_bindings::key(host, event.slot() as u64), InterfaceBrand::EVENT)?;
+            crate::event_bindings::invoke(host, O::DispatchEvent, receiver, &[value]).map(|_| ())
+        }
     })();
     host.with_dom(|dom| { dom.end_html_click(node); Ok(()) })?;
     result.map(|_| host.undefined())

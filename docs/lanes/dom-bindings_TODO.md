@@ -2418,3 +2418,96 @@ as IPC-12, per fleet notice). Re-run clean on `venus-001`:
 Evidence: `crates/amazing-bindings/evidence/dom-b-audit/` (`after-observable`
 = first bulk build; `after-observable-fix4` = final, after the takeUntil-order
 and signal/RangeError fixes and the exception-catch revert).
+
+## DOM-B-ACT: :scope in closest(), trusted driver clicks, label activation forwarding
+
+Base: `dev` @ `75a5a3ce`. Ticket commits: `d589e992` (feature), `ed4028e0`
+(fixup, see below).
+
+**1. `:scope` for `Element.closest()`.** css's CSS-29 widened
+`amazing_css::selectors::matches_in_scope`/`matches_pseudo_in_scope` to `pub`
+specifically for this. Added `SelectorEngine::matches_selector_scoped`
+(`amazing-bindings/src/host.rs`, default body falls back to
+`matches_selector` so every other implementor/call site is unaffected) and
+wired it into `closest()`'s ancestor walk only
+(`amazing-bindings/src/markup_bindings.rs`), binding `:scope` to the
+*original* receiver element throughout, per the DOM spec. The production
+path (`amazing/src/runtime_binding_host.rs`'s `SelectorEngine` impl)
+delegates straight to `matches_in_scope`. The old tree-walking interpreter
+has an independent `closest()`/`matches()` implementation
+(`amazing_js::DomHost` + `native_dom_closest` in `interp_builtins.rs`,
+driven by `amazing/src/dom_host.rs::BrowserDomHost`); gave it the same
+`matches_selector_scoped` method and threaded the original `this` node
+through `native_dom_closest`'s walk, matching the coordinator's named wiring
+point exactly.
+
+**2. Trusted driver clicks.** `Operation::HTMLElementClick` (unit) became
+`HTMLElementClick(bool)`: `false` for script's `element.click()` (unchanged,
+still dispatches via `O::DispatchEvent`/`DispatchOrigin::Script`), `true` for
+driver-initiated clicks, which now dispatch via the existing
+`event_bindings::dispatch_created_event` (`DispatchOrigin::UserAgent`) so
+`Event.isTrusted` reads true. IA-TESTDRIVER's `TdClick` and the WebDriver
+Actions `pointerUp` handler (`amazing/src/runtime_host_integrator_assist.rs`)
+now pass `HTMLElementClick(true)`.
+
+**3. `<label>` click activation forwarding.** `Dom::prepare_input_activation`
+(`amazing-dom/src/input_activation.rs`) resolves a label's associated control
+via `Dom::label_control` and recurses to prepare activation on that control,
+so a label's activation behavior toggles its checkbox/radio exactly as the
+HTML Standard requires (`label_control` never resolves back to a `<label>`,
+so the recursion terminates). **Found via this ticket's own corpus diff and
+fixed before commit `ed4028e0`:** the first version forwarded unconditionally
+and regressed `dom/events/Event-dispatch-click.tentative.html`'s "disabled
+checkbox/radio should not be checked from label click(By dispatchEvent)"
+(4 subtests, pass -> fail) by toggling a *disabled* control's label. Added a
+`form_control_disabled(control)` guard before forwarding (returns `None`,
+i.e. no activation, for a disabled control) — re-measured clean, see below.
+
+Flipped IA-TESTDRIVER's two regression tests in
+`runtime_host_integrator_assist.rs` that asserted the prior (wrong) behavior:
+`td_click_toggles_a_checkbox_via_the_real_click_default_action` now expects
+`trusted_clicks == 1`; the label test (renamed
+`td_click_on_a_label_forwards_to_its_associated_checkbox`) now expects the
+checkbox to end up checked.
+
+**Measured** (`k-test` host). Crate tests
+(`cargo nextest run -p amazing-dom -p amazing-bindings -p amazing-js -p
+amazing --locked`): **1106/1106 passed, 7 skipped**, stable across the fixup.
+Workspace gate (`cargo nextest run --workspace --locked --no-fail-fast`):
+**3362/3362 passed, 17 skipped, 0 failed** (this run did not reproduce the
+host's earlier known `amazing-ipc-platform`/`amazing-process` sealed-memory
+EPERM failures reported for DOM-B-OBS). Doctests: `cargo test --workspace
+--locked --doc` all `ok`; `amazing_js` and `amazing_html` explicitly
+re-checked at 1/1 each.
+
+WPT before/after (`crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py`,
+before = `75a5a3ce`, after = `ed4028e0`; `dom/nodes`+`dom/traversal`+
+`dom/events`+`dom/collections`+`dom/abort`+`dom/lists`+`dom/ranges`+
+`dom/observable`+`html/semantics/forms`, 1084 testharness files):
+before **18564 pass / 1595 fail** subtests (403 pass files / 411 fail / 178
+timeout / 62 error / 30 unsupported) -> after **18550 pass / 1591 fail**
+(405 pass files / 408 fail / 179 timeout). File-status gains:
+`dom/nodes/Element-closest.html` fail -> pass (the new `:scope` subtests:
+`':scope'`, `'select > :scope'`, `':has(> :scope)'`) and
+`dom/events/Event-dispatch-redispatch.html` fail -> pass. **Zero lost
+passes** on any test this ticket touches (`Event-dispatch-click.tentative.html`'s
+6 subtests, including all 4 disabled-checkbox/radio-from-label assertions,
+pass identically before and after). The apparent ~14-subtest net drop in
+raw pass count is entirely shared-sandbox timing flakiness already
+documented under DOM-B-OBS: `dom/nodes/Element-classlist.html`,
+`Node-compareDocumentPosition.html`, `Node-contains.html` and
+`dom/ranges/Range-compareBoundaryPoints.html` all report file status
+`timeout` with `fail: 0` in *both* runs — their `pass` counts differ only
+because a CPU-contended sandbox lets a different number of subtests execute
+before the harness's wall-clock deadline hits, confirmed by identical `fail`
+counts (0) across both runs. Verified by rerunning `after` twice.
+`dom/nodes/Document-createElementNS.html` flipped `fail` -> `timeout` with
+identical `pass: 376, fail: 220` in both — the same pre-existing
+createElementNS DOMException-shape bug already queued as a follow-up in
+`status.json`'s blockers, unrelated to this ticket, now occasionally timing
+out instead of finishing before the deadline (also flakiness, not a
+regression).
+
+Evidence: `crates/amazing-bindings/evidence/dom-b-audit/` (`before-domact`,
+`after-domact` — the latter regenerated once, after the disabled-control
+fixup).
