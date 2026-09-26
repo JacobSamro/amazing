@@ -1,5 +1,9 @@
-//! Child HTML navigables owned by the driver. The DOM arena can hold each
-//! child document before JSRT-9 supplies a separate realm and WindowProxy.
+//! Child HTML navigables owned by the driver. Each connected iframe gets its
+//! own same-agent realm and stable WindowProxy through JSRT-9
+//! (binding_create_realm/binding_create_window_proxy/binding_with_realm);
+//! DOM interface prototypes stay arena-shared, so a child realm's `document`
+//! wraps the same Document/Element prototypes as the top realm rather than a
+//! fully independent intrinsic set.
 use super::*;
 use amazing_dom::document_surface::ReadyState;
 use amazing_net::url::{ParsedUrl, UrlOrigin};
@@ -7,6 +11,7 @@ use amazing_fetch::{HttpUrl, HeaderList, check_frame_embedding,
     api::{ApiRequest, NavigableContext},
     service::{NetworkService, ServiceEvent}};
 use amazing_net::dispatch::DispatchLimits;
+use amazing_js::interp::RealmHandle;
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -35,6 +40,30 @@ pub(super) struct FrameRuntime {
     resolver: Option<FrameResourceResolver>,
     navigation_hook: Option<ChildNavigationHook>,
     form_navigation_hook: Option<FormNavigationHook>,
+    /// The stable WindowProxy (and its current target realm) for each
+    /// connected iframe. The proxy identity survives re-navigation; only the
+    /// realm it targets changes, via binding_retarget_window_proxy.
+    windows: HashMap<NodeIdx, (RealmHandle, JsValue)>,
+}
+
+/// Classic inline `<script>` bodies in tree order. External `src` and
+/// `type="module"` scripts are not fetched or evaluated for iframe
+/// documents yet; this mirrors the WPT harness's classic-only scheduling.
+fn collect_classic_inline_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<String>) {
+    if dom.namespace(node) == Some(Namespace::Html) && dom.local_name(node) == Some("script") {
+        let has_src = dom.get_attribute_ns(node, None, "src").is_some();
+        let module = dom.get_attribute_ns(node, None, "type")
+            .is_some_and(|value| value.eq_ignore_ascii_case("module"));
+        if !has_src && !module {
+            let mut source = String::new();
+            for child in dom.children(node) {
+                if let NodeKind::Text { data } = &dom.get(child).kind { source.push_str(data); }
+            }
+            if !source.trim().is_empty() { out.push(source); }
+        }
+        return;
+    }
+    for child in dom.children(node) { collect_classic_inline_scripts(dom, child, out); }
 }
 
 fn same_origin(parent: &str, child: &str) -> bool {
@@ -175,7 +204,11 @@ impl RuntimeBindings {
             }).collect::<Vec<_>>()
         };
         let connected: HashSet<_> = candidates.iter().map(|(node, _)| *node).collect();
-        self.state.borrow_mut().frames.documents.retain(|node, _| connected.contains(node));
+        {
+            let mut state = self.state.borrow_mut();
+            state.frames.documents.retain(|node, _| connected.contains(node));
+            state.frames.windows.retain(|node, _| connected.contains(node));
+        }
         for (node, src) in candidates {
             if self.state.borrow().frames.documents.get(&node).is_some_and(|old| old.src == src) {
                 continue;
@@ -225,6 +258,64 @@ impl RuntimeBindings {
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
         }
+    }
+
+    /// Give a connected iframe its child browsing context: a same-agent
+    /// realm and a stable WindowProxy (JSRT-9), branded with this document's
+    /// origin, with `document` bound in the realm's global environment and
+    /// the document's classic inline scripts run inside it. Called once per
+    /// committed navigation, after `navigate_iframes` has updated the DOM;
+    /// on re-navigation the existing WindowProxy is retargeted to a fresh
+    /// realm rather than replaced, so `contentWindow` identity is stable.
+    pub(crate) fn setup_iframe_window(&self, js: &mut Interpreter, frame: NodeIdx,
+        document: NodeIdx) -> Result<(), Throw> {
+        let child_url = self.state.borrow().frames.documents.get(&frame)
+            .map(|entry| entry.url.clone()).unwrap_or_default();
+        let origin = ParsedUrl::parse(&child_url).map(|url| url.origin().serialize())
+            .unwrap_or_else(|_| "null".into());
+        let existing = self.state.borrow().frames.windows.get(&frame).cloned();
+        let realm = if let Some((_, proxy)) = existing {
+            let bare = js.binding_create_object(None)?;
+            let realm = js.binding_create_realm(bare)?;
+            js.binding_retarget_window_proxy(&proxy, realm)?;
+            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
+            realm
+        } else {
+            let bare = js.binding_create_object(None)?;
+            let realm = js.binding_create_realm(bare)?;
+            let proxy = js.binding_create_window_proxy(realm)?;
+            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
+            realm
+        };
+        js.binding_set_realm_origin(realm, &origin)?;
+        let state = self.state.clone();
+        let scripts = {
+            let state = state.borrow();
+            let host = state.host.borrow();
+            let mut scripts = Vec::new();
+            collect_classic_inline_scripts(&host.dom, document, &mut scripts);
+            scripts
+        };
+        // Wrap the document in the CALLER's realm (the top realm, here),
+        // not the child's: wrap_node's identity cache is per-realm, and
+        // `frame.contentDocument` is always read from the top realm, so
+        // binding the same wrapper as the child's `document` keeps
+        // `frame.contentWindow.document === frame.contentDocument`.
+        let wrapped = {
+            let mut adapter = RuntimeBindingHost { js, state: state.clone() };
+            adapter.wrap_node(document)?
+        };
+        js.binding_with_realm(realm, |i| {
+            let fresh = EnvHandle::new(EnvKind::Global, Some(i.global_env.clone()));
+            fresh.declare_lexical("document", wrapped.clone(), false)?;
+            i.global_env = fresh;
+            // Also a data property of the global object itself, matching the
+            // top realm's install(), so `window.document`/`contentWindow.document`
+            // property access (not just the lexical `document` binding) works.
+            i.global_obj.borrow_mut().set_own("document", wrapped.clone());
+            for body in &scripts { i.run_script(body)?; }
+            Ok(())
+        })
     }
 }
 
@@ -303,6 +394,9 @@ impl RuntimeBindingHost<'_> {
         let getter = self.native("get contentDocument", 0,
             NativeEntry::IFrameContentDocument, HostCallPolicy::CallOnly);
         self.define_accessor_property(&prototype, "contentDocument", Some(getter), None, true, true)?;
+        let window_getter = self.native("get contentWindow", 0,
+            NativeEntry::IFrameContentWindow, HostCallPolicy::CallOnly);
+        self.define_accessor_property(&prototype, "contentWindow", Some(window_getter), None, true, true)?;
         let src_getter = self.native("get src", 0, NativeEntry::IFrameSrcGet, HostCallPolicy::CallOnly);
         let src_setter = self.native("set src", 1, NativeEntry::IFrameSrcSet, HostCallPolicy::CallOnly);
         self.define_accessor_property(&prototype, "src", Some(src_getter), Some(src_setter), true, true)
@@ -353,6 +447,20 @@ impl RuntimeBindingHost<'_> {
         drop(host);
         drop(state);
         if visible { self.wrap_node(document) } else { Ok(JsValue::Null) }
+    }
+
+    /// Unlike `contentDocument`, `contentWindow` is not nulled cross-origin:
+    /// the WindowProxy itself is always exposed once there is a browsing
+    /// context, and cross-origin property access is what the WindowProxy's
+    /// own origin check (JSRT-9) restricts. Returns null only before the
+    /// realm/proxy has been set up (`setup_iframe_window` runs when the
+    /// driver dispatches the frame's pending load).
+    pub(super) fn iframe_content_window(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        let node = self.iframe_node(&receiver)?;
+        let state = self.state.borrow();
+        if state.host.borrow().dom.root(node) != NodeIdx(0) { return Ok(JsValue::Null); }
+        let window = state.frames.windows.get(&node).map(|(_, proxy)| proxy.clone());
+        Ok(window.unwrap_or(JsValue::Null))
     }
 
     pub(super) fn invoke_operation_with_html_hooks(&mut self, operation: Operation,
@@ -472,5 +580,50 @@ mod tests {
              frame.contentDocument === null"
         ).unwrap(), JsValue::Bool(true));
         std::fs::remove_file(std::env::temp_dir().join(format!("amazing-iframe-cross-{}.xml", std::process::id()))).unwrap();
+    }
+
+    #[test]
+    fn iframe_content_window_runs_scripts_and_keeps_identity_across_navigation() {
+        let path = std::env::temp_dir().join(format!("amazing-iframe-window-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><script>window.markedByChild = true; document.title = 'child';</script></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe src='child.html'></iframe></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        scheduler.run_script("var frame = document.querySelector('iframe');").unwrap();
+        assert_eq!(scheduler.run_script("frame.contentWindow !== null").unwrap(), JsValue::Bool(true), "contentWindow non-null");
+        assert_eq!(scheduler.run_script("frame.contentWindow.markedByChild").unwrap(), JsValue::Bool(true), "child global set");
+        assert_eq!(scheduler.run_script("frame.contentDocument !== null").unwrap(), JsValue::Bool(true), "contentDocument non-null");
+        assert_eq!(scheduler.run_script("typeof frame.contentWindow.document").unwrap(), JsValue::str("object"), "child document typeof");
+        assert_eq!(scheduler.run_script("frame.contentWindow.document !== null").unwrap(), JsValue::Bool(true), "child document non-null");
+        assert_eq!(scheduler.run_script("frame.contentWindow.document === frame.contentDocument").unwrap(), JsValue::Bool(true), "document identity");
+        assert_eq!(scheduler.run_script("frame.contentWindow !== window").unwrap(), JsValue::Bool(true), "distinct from parent window");
+        assert_eq!(scheduler.run_script("frame.contentWindow.Object !== window.Object").unwrap(), JsValue::Bool(true), "distinct intrinsics");
+        assert_eq!(scheduler.run_script(
+            "frame.contentWindow === frame.contentWindow"
+        ).unwrap(), JsValue::Bool(true));
+        scheduler.run_script("globalThis.__savedWin = frame.contentWindow;").unwrap();
+
+        // Re-navigate: the WindowProxy keeps its identity but targets a fresh realm.
+        let path2 = std::env::temp_dir().join(format!("amazing-iframe-window2-{}.html", std::process::id()));
+        std::fs::write(&path2,
+            "<body><script>window.markedByChild = false; window.secondLoad = true;</script></body>").unwrap();
+        let resolved2 = path2.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved2.to_string_lossy().into_owned())));
+        scheduler.run_script("frame.src = 'other.html';").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "frame.contentWindow === globalThis.__savedWin && \
+             frame.contentWindow.secondLoad === true && frame.contentWindow.markedByChild === false"
+        ).unwrap(), JsValue::Bool(true));
+
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(&path2).unwrap();
     }
 }

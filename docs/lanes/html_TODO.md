@@ -695,3 +695,122 @@ raw final JSONL SHA-256 is
 the earlier full-checkout registrations (`select-event`, submit/requestSubmit,
 `valueAsDate`) are dominated by the two engine gaps above; they are classified
 as such rather than hidden.
+
+### HTML-26 closeout — select/option interfaces and text-selection fixes
+
+Further supporting slices landed after the sweep above:
+`HTMLSelectElement.selectedOptions` as a live `HTMLCollection`, `item`/
+`namedItem`/`length` setter, `HTMLOutputElement.value`/`defaultValue`,
+option `text`/`label`/`index`/constructor selectedness (excluding HTML/SVG
+script and non-text option content), and text-control selection: a text
+control's default selection is `(0,0)`, and the value setter moves the entry
+cursor to the end only when the value actually changes.
+
+Re-measuring the same fixed 468-file selection at this head gives **3,076
+pass / 673 fail** subtests, 127 passing files (0 / 254 / 26 / 29 / 54
+timeout/error/unsupported breakdown adjusted accordingly): **+223 further
+subtests** over the 2,853/987 figure above. Named comparison against the
+original 1,526/1,717 baseline found **989 fail-to-pass and one fail-to-timeout
+regression** (`the-input-element/checkable-active-onblur-with-click.html`,
+subtest "Wait for load": 1 pass/6 fail before, full-file timeout now). That
+regression is not attributable to this lane's own commits — it is already
+present immediately after a `dev` merge that lands between two forms-only
+commits and before either of the two text-selection fixes above, isolated by
+re-running the frozen selection at each intermediate commit. The merged
+range includes DOM-B DOMException work, CDP-3 Input domain, NET-31
+synchronous-XHR isolation, RC-20 gradients, and IA-FRAME-PHASES' render-hook
+change to event-loop frame timing; none of the non-render-hook diffs touch
+`:active`/tab-focus/pointer-action code, so IA-FRAME-PHASES is the leading
+suspect, but the exact cause was not isolated further given it is one
+`test_driver.Actions()`-based subtest of 3,076 gained. Filed for cross-lane
+awareness rather than fixed in this lane. Before/after jsonl: `before`
+(baseline) and `sel2` (this head) in `.agents/html/`.
+
+Full workspace `cargo nextest run --workspace --locked --no-fail-fast` and
+`cargo test --workspace --locked --doc` both green on this head (see
+`status.json`/`report.md` for the exact counts). HTML-26 is done.
+
+## HTML-25 part 2 — iframe child realms, contentWindow, script evaluation
+
+Merged local `dev` at `5b5c3b0d` (js-runtime JSRT-9..12 same-agent realms,
+`4a4ff21b`+, now included) as `79cd56cc`, resolving one `InterfaceBrand`
+numeric collision (HTML-26's `SELECTED_OPTIONS` and dev's `DOM_STRING_MAP`
+both claimed index 37; kept ours at 37, moved dev's to 38) and one stale
+legacy-hook count assertion in `amazing-bindings/src/tests.rs` (9 base hooks
++ our `SELECTED_OPTIONS` + dev's `DOM_STRING_MAP` = 11, was hardcoded 10).
+Neither is HTML-owned; both are one-line merge-integration fixes, not new
+behavior, matching the existing "fix merge brace" precedent from HTML-26.
+
+HTML-25's first slice (child navigation, same-origin `contentDocument`, load
+ordering) shipped without a real per-iframe realm; this ticket adds one using
+exactly the JSRT-9 contract from `docs/lanes/js-runtime_TODO.md` ("JSRT-9
+same-agent realms"): `binding_create_realm`/`binding_create_window_proxy`/
+`binding_with_realm`/`binding_retarget_window_proxy`/`binding_set_realm_origin`.
+
+- **`contentWindow`** (`runtime_host_html.rs`): a new accessor on
+  `HTMLIFrameElement`. On each committed navigation (`setup_iframe_window`,
+  called from `DriverScheduler::dispatch_pending_iframe_loads` before the
+  child's `DOMContentLoaded`/`load`), the iframe gets its own same-agent
+  realm and a stable `WindowProxy`: the first navigation creates the proxy,
+  every later one calls `binding_retarget_window_proxy` so
+  `frame.contentWindow` keeps identity (`===`) across re-navigation while its
+  target realm — and thus its `Object`/`Array`/every other intrinsic — is
+  fresh, matching the spec. Unlike `contentDocument`, `contentWindow` is not
+  nulled cross-origin (only null before the realm exists); cross-origin
+  property access is left to the WindowProxy's own origin check.
+- **Origin policy**: `DriverScheduler::set_location_url` now also calls
+  `binding_set_realm_origin` for the top realm, from the navigated URL's
+  serialized origin (previously never set, so it defaulted to `""`, which
+  would have made every child realm reject as cross-origin the moment
+  `setup_iframe_window` gave it a real origin string). Child realms get the
+  same treatment from the resolved child document URL.
+- **Script evaluation**: classic inline `<script>` elements in the child
+  document (`collect_classic_inline_scripts`; `src`/`type="module"` scripts
+  are not fetched or run, same limitation the top-level WPT harness already
+  has for module/async/defer) run inside the child's realm via
+  `binding_with_realm` + `run_script`, after binding `document` there. The
+  child's `document` global is wrapped once, in the **caller's** (top) realm
+  context, before entering the child realm — `wrap_node`'s host-object
+  identity cache is per-realm, and `contentDocument` is always read from the
+  top realm, so this is what keeps `frame.contentWindow.document ===
+  frame.contentDocument`. Both the lexical `document` binding and a
+  `document` **property** on the child global object are set (mirroring the
+  top realm's own `install()`, which does both), so `contentWindow.document`
+  property access and the child script's bare `document` identifier agree.
+- **Scope not attempted**: DOM/Element/other WebIDL prototypes are **not**
+  duplicated per realm — a child realm's `document`/`Element`/etc. objects
+  share the same prototype objects as the top realm (arena-shared
+  `BindingState.interfaces`), so `frame.contentWindow.Object !==
+  window.Object` holds (separate JS intrinsics per realm, correct) but
+  `frame.contentWindow.Document !== window.Document`-style DOM constructor
+  separation does not. Storage, messaging, canvas and net bindings are not
+  installed into child realms. `window`-level event dispatch (`resize`,
+  `scroll`, focus-follows-window) still targets the single arena-wide window
+  event-target slot, unchanged from before this ticket — a real second
+  `Window` event target per browsing context needs a DOM-owned change, not
+  attempted here. `srcdoc` and external-script iframe navigation are
+  unaffected (already out of scope from HTML-25 part 1).
+- New focused regression:
+  `iframe_content_window_runs_scripts_and_keeps_identity_across_navigation`
+  covers: non-null `contentWindow`, the child script's `window.x` global
+  landing on `contentWindow`, distinct intrinsics from the parent, document
+  identity between `contentWindow.document` and `contentDocument`, proxy
+  identity held across `frame.src` re-navigation, and the retargeted realm's
+  fresh globals replacing the old ones.
+
+Linux gate on this head: `amazing` crate nextest **240/240 passed, 5
+skipped**; full workspace `cargo nextest run --workspace --locked
+--no-fail-fast` **2,872/2,872 passed, 11 skipped**; workspace `cargo test
+--workspace --locked --doc` **4/4 passed, 0 failed** (no `amazing`-crate
+doctest target).
+
+`dom/nodes/Document-createElement.html` and `-createElementNS.html`
+(HTML-25's report named these as blocked on exactly this API) were
+re-measured before and after this ticket's diff, both at fixed base
+`79cd56cc`: **49/147** and **206/390 (pass/fail of 596)** subtests,
+identical on both sides — zero change, zero losses. `dev`'s drift since
+HTML-25's original report (255/596 at the time) already moved this file to
+206/596 before this ticket started; these two files' remaining failures are
+not the `contentWindow`-shaped ones HTML-25 flagged, so adding
+`contentWindow` did not move them. Left for a dom-bindings/next-html
+triage pass with the exact per-subtest diff, not chased further here.

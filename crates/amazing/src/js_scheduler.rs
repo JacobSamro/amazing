@@ -65,6 +65,12 @@ impl DriverScheduler {
         let url = url.into();
         self.js.set_location_url(&url);
         self.bindings.set_document_url(&url);
+        // Top realm origin, so same-origin iframe WindowProxy access (JSRT-9)
+        // compares against a real value rather than the "" default.
+        if let Ok(parsed) = amazing_net::url::ParsedUrl::parse(&url) {
+            let realm = self.js.binding_current_realm();
+            let _ = self.js.binding_set_realm_origin(realm, &parsed.origin().serialize());
+        }
     }
     pub(crate) fn set_frame_resource_resolver(&mut self,
         resolver: Rc<dyn Fn(&str) -> Option<String>>) {
@@ -88,6 +94,8 @@ impl DriverScheduler {
     pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
         for (frame, document) in self.bindings.take_iframe_loads() {
             if let Some(document) = document {
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.setup_iframe_window(js, frame, document))?;
                 self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
                 self.dispatch_dom_event(document.0, "load")?;
             }
