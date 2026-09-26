@@ -22,17 +22,28 @@
 //! which is a bigger interpreter change than this hook — see
 //! `.agents/js-runtime/questions.md` for the open request from the
 //! `devtools` lane.
+//!
+//! CDP-23 adds `depth`: `Interpreter`'s own `self.depth` field (already
+//! incremented/decremented around every function call for the
+//! `MAX_CALL_DEPTH` stack-overflow guard) at the two existing call sites,
+//! reported as-is — no new interpreter state, just exposing a counter that
+//! was already there. This lets a host tell "stepped into a deeper call"
+//! from "stayed in/returned to this frame" apart, which `(script_id, url,
+//! line)` alone could not.
 use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Called by the interpreter before running the statement at `line` (1-based,
 /// from `ast::Span::start.line`) inside the script most recently identified
-/// by [`crate::interp::Interpreter::set_current_script`] (`script_id`/`url`).
-/// Implementations are called on *every* statement while installed (there is
-/// no cheap pre-filtering by the interpreter), so they should stay fast, and
-/// must not panic — a panicking hook would poison the whole interpreter call.
+/// by [`crate::interp::Interpreter::set_current_script`] (`script_id`/`url`),
+/// at call-stack `depth` (0 at top level, incremented per nested function
+/// call — `Interpreter`'s own recursion-depth counter, see this module's own
+/// doc comment). Implementations are called on *every* statement while
+/// installed (there is no cheap pre-filtering by the interpreter), so they
+/// should stay fast, and must not panic — a panicking hook would poison the
+/// whole interpreter call.
 pub trait DebugHook {
-    fn on_statement(&mut self, script_id: &str, url: &str, line: u32);
+    fn on_statement(&mut self, script_id: &str, url: &str, line: u32, depth: u32);
 }
 
 /// A hook shared between the interpreter (which calls it) and whatever owns

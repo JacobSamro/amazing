@@ -19,6 +19,7 @@ pub mod attr;
 pub mod dataset;
 pub mod collection;
 pub mod abort;
+pub mod observable;
 pub mod document_surface;
 pub mod legacy_document;
 pub mod render_mutation;
@@ -157,6 +158,7 @@ pub struct Dom {
     radio_lists: Vec<(NodeIdx, Vec<u16>)>,
     template_contents: Vec<(NodeIdx, NodeIdx)>,
     template_owner_documents: Vec<(NodeIdx, NodeIdx)>,
+    observables: observable::Observables,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -222,6 +224,7 @@ impl Dom {
             radio_lists: Vec::new(),
             template_contents: Vec::new(),
             template_owner_documents: Vec::new(),
+            observables: observable::Observables::default(),
             doctype: None,
         };
         dom.nodes.push(Node {

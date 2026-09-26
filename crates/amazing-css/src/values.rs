@@ -686,6 +686,16 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             };
         }
         "transform" => return transforms(css).map(V::Transform),
+        // CSS-29: box-shadow keeps its cascade-side literal representation
+        // (`Unparsed`, same as before), but now actually goes through the
+        // real grammar check -- previously this property had no arm here at
+        // all, so `values::parses`/the WPT parsing-conformance runner
+        // reported every string as valid regardless of content, even though
+        // `expand_declaration`'s cascade path already rejects malformed
+        // shadows via `valid_box_shadow`.
+        "box-shadow" => {
+            return (s == "none" || crate::computed::valid_box_shadow(css)).then_some(V::Unparsed);
+        }
         "filter" | "backdrop-filter" => {
             return crate::effects::parse_filter_list(css).map(V::FilterList);
         }

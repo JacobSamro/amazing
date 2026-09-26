@@ -36,11 +36,13 @@
 pub mod encoding;
 mod byte_stream;
 pub mod entities;
+pub mod resumable;
 pub mod tokenizer;
 pub mod tree;
 pub mod xml;
 pub use tree::IncrementalParser;
-pub use tree::{ParserConstruction, ParserCustomElementHost};
+pub use tree::{strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
+pub use resumable::{ParseSignal, ResumableParser};
 pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 

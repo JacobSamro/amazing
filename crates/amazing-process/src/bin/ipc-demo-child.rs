@@ -148,6 +148,17 @@ fn main() {
         {
             conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler));
         }
+        // IPC-11c follow-up: a real JS realm for the postMessage/MessagePort
+        // cross-process proof (`amazing_process::demo_realm`), instead of the
+        // production byte-frame renderer path this role would otherwise run.
+        if parent
+            .0
+            .get("__js_realm")
+            .is_some_and(|value| value == "1")
+        {
+            amazing_process::demo_realm::serve_demo_realm(conn);
+            return Ok(());
+        }
         match role {
             Role::Renderer => amazing_process::renderer::serve_renderer(conn, channel),
             Role::Gpu => amazing_process::gpu::serve_gpu(conn),

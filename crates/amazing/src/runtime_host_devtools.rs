@@ -173,10 +173,13 @@
 //!   on an otherwise idle page) reports as a `Debugger.paused` "other" event
 //!   — real, but after the fact, not a live suspend. `Debugger.resume`
 //!   correspondingly just clears that flag if it had not fired yet; nothing
-//!   is ever truly blocked for it to resume. `stepInto`/`stepOver`/`stepOut`
-//!   and `evaluateOnCallFrame` stay at the trait's `Unsupported` default —
-//!   there is no suspended call stack for any of them to act on. Real
-//!   synchronous pause/resume/step needs the interpreter itself to expose a
+//!   is ever truly blocked for it to resume. CDP-23 makes `stepInto`/
+//!   `stepOver`/`stepOut` real in this same after-the-fact sense (see that
+//!   section below) by comparing the interpreter's own call-stack depth
+//!   against the depth at the last pause, and `evaluateOnCallFrame` real by
+//!   delegating to the page's global realm — but none of the three make
+//!   execution actually stop mid-statement. Real synchronous pause/resume/
+//!   step needs the interpreter itself to expose a
 //!   resumable/steppable execution API (fibers, or a bytecode VM with
 //!   explicit continuation state); that is a genuine `amazing-js` change,
 //!   not a driver one, and is filed to the js-runtime lane in
@@ -215,9 +218,8 @@
 //!   digest of the source text ([`script_hash`]) — a real, stable value a
 //!   client can compare across edits, not V8's own script-hash algorithm.
 //! * **`setBreakpointByUrl`'s `url` is matched literally**, never as a
-//!   regex, and its `condition` parameter is accepted (to keep the trait's
-//!   real signature) but never evaluated — every breakpoint this driver
-//!   accepts is unconditional.
+//!   regex. Its `condition` parameter was accepted-but-ignored through
+//!   CDP-22; CDP-23 evaluates it for real (see that section below).
 //!
 //! CDP-21 implements `Network.setCacheDisabled`/`setExtraHTTPHeaders` (new
 //! `amazing-devtools` protocol-layer trait methods, since neither existed
@@ -279,16 +281,10 @@
 //! exec_stmt debug hook and object-registry machinery CDP-20/CDP-18 already
 //! added, with no further `amazing-js` changes.
 //!
-//! * **`Debugger.stepOver` shares `Debugger.pause`'s exact one-shot-flag
-//!   mechanism.** [`DebugHook::on_statement`] reports only
-//!   `(script_id, url, line)`, with no call-stack depth, so this driver has
-//!   no way to tell "the next statement in this same frame" apart from "the
-//!   next statement anywhere" — an honest simplification, not a silently-
-//!   approximated feature. A real stepOver needs the interpreter to expose
-//!   call-stack depth to the hook, filed alongside the existing true-pause
-//!   gap in `.agents/js-runtime/questions.md`. `stepInto`/`stepOut` are left
-//!   at the trait's `Unsupported` default, unchanged from CDP-20 — there is
-//!   still no suspended call stack for either to act on.
+//! * **`Debugger.stepOver` (CDP-22) shared `Debugger.pause`'s exact
+//!   one-shot-flag mechanism**, because [`DebugHook::on_statement`] reported
+//!   only `(script_id, url, line)`, with no call-stack depth. CDP-23 (below)
+//!   replaces this with real depth-based stepping.
 //! * **`Debugger.paused`'s call frames now carry a real `scopeChain`.**
 //!   [`DriverDebugHook::on_statement`] itself still cannot build one (it only
 //!   has plain `Rc<RefCell<_>>` cells, no interpreter/object-registry
@@ -325,6 +321,59 @@
 //!   already uses, walking up to 20 levels (a safety net against a
 //!   corrupted/cyclic chain, not a real spec limit) and tagging each
 //!   inherited property `is_own: false`.
+//!
+//! CDP-23 makes `Debugger.stepOver`/`stepInto`/`stepOut` real (depth-based,
+//! not the CDP-22 one-shot-flag approximation), evaluates
+//! `setBreakpointByUrl`'s `condition`, and implements
+//! `Debugger.evaluateOnCallFrame` — the last new `Debugger` methods this
+//! driver had left at the trait's `Unsupported` default. The only
+//! `amazing-js` change is [`DebugHook::on_statement`] gaining a 4th `depth:
+//! u32` parameter — `Interpreter`'s own existing `MAX_CALL_DEPTH`
+//! recursion-guard counter, reported as-is; see `debug_hook.rs`'s own CDP-23
+//! doc-comment addition. Everything else here is driver-side.
+//!
+//! * **Stepping compares depth, not identity.** [`StepMode`] holds what the
+//!   *next* qualifying statement's `depth` must satisfy: `Any` (stepInto,
+//!   and `Debugger.pause`) takes the very next statement regardless of
+//!   depth; `Over(reference)` (stepOver) takes the next statement no deeper
+//!   than `reference`; `Out(reference)` (stepOut) takes the next statement
+//!   strictly shallower than `reference`. `reference` is
+//!   [`PageOwner::step_reference_depth`] — the depth recorded at the *most
+//!   recent* pause/breakpoint hit ([`PageOwner::last_paused_depth`]) — since
+//!   this driver still never truly suspends anything (unchanged from
+//!   CDP-20/22: see the bullets above), so a step command arriving has no
+//!   live "current frame" of its own to read a depth from; the last pause is
+//!   the best available stand-in, and matches the common case of a step
+//!   issued right after a pause/breakpoint/previous step landed. Before any
+//!   pause has ever happened, the reference defaults to `0`, so an initial
+//!   `stepOver`/`stepOut` behaves as "stop at the next top-level statement".
+//! * **Conditional breakpoints are evaluated at drain time, not by the
+//!   hook.** [`DriverDebugHook::on_statement`] still only has plain
+//!   `Rc<RefCell<_>>` cells (see that struct's own doc comment on why); the
+//!   condition itself is stored on the [`BreakpointRecord`] and evaluated in
+//!   [`PageOwner::drain_debugger_paused`] via the same `scheduler.run_script`
+//!   + `binding_to_boolean` path other real-evaluation features in this
+//!   driver already use. An erroring condition counts as false (matching
+//!   real Chrome, which never surfaces a bad condition's exception to the
+//!   frontend as if it were a thrown breakpoint). A breakpoint hit whose
+//!   condition fails is filtered out of that event's `hit_breakpoints`; if
+//!   that empties it and the pause was not *also* independently forced (a
+//!   `Debugger.pause`/step landing on the same statement), the whole event
+//!   is dropped, exactly as if the breakpoint had never matched.
+//! * **`Debugger.evaluateOnCallFrame` has exactly one real frame to evaluate
+//!   in.** This driver never truly suspends a call frame, and the only call
+//!   frame id it ever mints is the literal `"cf0"`
+//!   ([`DriverDebugHook::on_statement`]'s synthesized [`CallFrame`]), so
+//!   [`PageOwner::evaluate_on_call_frame`] validates `call_frame_id == "cf0"`
+//!   (else a genuine `HostError::NotFound`, matching real Chrome for a
+//!   stale/unknown frame id) and otherwise delegates to the exact same
+//!   global-realm evaluation `Runtime.evaluate` uses.
+//! * **Local/closure scopes remain out of reach.** [`PageOwner::
+//!   drain_debugger_paused`]'s `scopeChain` is still `"global"`-only (CDP-22
+//!   limitation, unchanged) — `amazing-js`'s `Env` has no public accessor to
+//!   enumerate a frame's own bindings. Filed to js-runtime in
+//!   `.agents/js-runtime/questions.md` (a new, separate entry from the
+//!   existing true-pause request).
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -340,9 +389,10 @@ use amazing_devtools::host::{
     DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
     ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
     LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
-    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
-    Quad, RemoteObject, ResourceContent, Scope, Screenshot, ScreenshotFormat, ScreenshotParams,
-    ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo, Viewport,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, ObjectPreview, PausedEvent,
+    PropertyDescriptor, PropertyPreview, Quad, RemoteObject, ResourceContent, Scope, Screenshot,
+    ScreenshotFormat, ScreenshotParams, ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo,
+    Viewport,
 };
 use amazing_devtools::server::CdpServer;
 use amazing_js::debug_hook::DebugHook;
@@ -381,6 +431,7 @@ enum PageCommand {
     GetProperties(String, bool, Reply<Vec<PropertyDescriptor>>),
     CallFunctionOn(CallFunctionParams, Reply<EvaluateResult>),
     ReleaseObject(String, Reply<()>),
+    ReleaseObjectGroup(String, Reply<()>),
     GetResponseBody(String, Reply<Option<ResourceContent>>),
     DrainConsole(Reply<Vec<ConsoleEvent>>),
     DrainNetworkRequests(Reply<Vec<NetworkRequestEvent>>),
@@ -393,11 +444,14 @@ enum PageCommand {
     GetContentQuads(EngineNodeId, Reply<Vec<BoxModel>>),
     HighlightNode(EngineNodeId, Reply<()>),
     DebuggerEnabled(bool, Reply<()>),
-    SetBreakpointByUrl(String, u32, Option<u32>, Reply<(String, Vec<ScriptLocation>)>),
+    SetBreakpointByUrl(String, u32, Option<u32>, Option<String>, Reply<(String, Vec<ScriptLocation>)>),
     RemoveBreakpoint(String, Reply<()>),
     DebuggerPause(Reply<()>),
     DebuggerResume(Reply<()>),
     DebuggerStepOver(Reply<()>),
+    DebuggerStepInto(Reply<()>),
+    DebuggerStepOut(Reply<()>),
+    EvaluateOnCallFrame(String, String, Reply<EvaluateResult>),
     GetScriptSource(String, Reply<String>),
     DrainScriptsParsed(Reply<Vec<ScriptInfo>>),
     DrainDebuggerPaused(Reply<Vec<PausedEvent>>),
@@ -809,6 +863,13 @@ struct PageOwner {
     /// (`Runtime.getProperties`/`callFunctionOn` handles), cleared on
     /// navigation along with the rest of `PageOwner`.
     objects: HashMap<String, amazing_js::value::JsValue>,
+    /// `Runtime.releaseObjectGroup` (CDP-24): the `objectGroup` (or `""` for
+    /// CDP's ungrouped default) each top-level `evaluate`/`callFunctionOn`
+    /// result's `objectId` was minted under, so a whole group can be dropped
+    /// at once. Only top-level results are tagged — `Runtime.getProperties`
+    /// has no `objectGroup` parameter in real CDP either, so a property
+    /// value's own handle stays ungrouped, same as real Chrome.
+    object_groups: HashMap<String, String>,
     /// Response bodies by request id, for `Network.getResponseBody`. Only
     /// the document and `<script src>` fetches this driver instruments are
     /// present — see the module's "Known limitations".
@@ -832,12 +893,24 @@ struct PageOwner {
     /// re-entering `PageOwner` (see [`DriverDebugHook`]'s doc comment).
     breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
     next_breakpoint_id: u64,
-    /// One-shot "pause at the next statement" flag, also shared with the
-    /// hook.
-    pause_requested: Rc<RefCell<bool>>,
+    /// One-shot "pause at a statement matching this depth condition" request
+    /// (CDP-23), also shared with the hook. `None` means no pause/step is
+    /// armed. See [`StepMode`].
+    step_request: Rc<RefCell<Option<StepMode>>>,
+    /// The call-stack `depth` (see `debug_hook.rs`'s CDP-23 addition)
+    /// recorded at the most recent pause/breakpoint hit — the reference
+    /// point [`Self::debugger_step_over`]/[`Self::debugger_step_out`] compare
+    /// against, since this driver never truly suspends and so has no live
+    /// "current frame" to read a depth from when a step command arrives.
+    last_paused_depth: Rc<RefCell<u32>>,
     /// `Debugger.paused` events the hook has queued, shared for the same
-    /// reason as `breakpoints`.
-    debugger_paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+    /// reason as `breakpoints`. The `bool` is "this pause was forced by a
+    /// `Debugger.pause`/step command" (as opposed to a breakpoint hit only),
+    /// which [`Self::drain_debugger_paused`] uses to decide whether a
+    /// breakpoint whose condition evaluates false still surfaces the pause
+    /// (with `hit_breakpoints` cleared and `reason` downgraded to `"other"`)
+    /// rather than being dropped outright.
+    debugger_paused: Rc<RefCell<VecDeque<(bool, PausedEvent)>>>,
     /// `Network.setExtraHTTPHeaders`' current header set (CDP-21), applied
     /// to every future fetch this driver makes — the initial document fetch
     /// on a `Page.navigate` reload and every `<script src>` fetch
@@ -893,6 +966,47 @@ struct BreakpointRecord {
     url: String,
     line: u32,
     column: Option<u32>,
+    /// `Debugger.setBreakpointByUrl`'s `condition` (CDP-23), a JS expression
+    /// evaluated in the page's global realm at
+    /// [`PageOwner::drain_debugger_paused`] time (not by the hook itself —
+    /// see [`DriverDebugHook`]'s doc comment on why it cannot reach the
+    /// interpreter). `None` (the common case) means unconditional.
+    condition: Option<String>,
+}
+
+/// What the next `on_statement` call should treat as "the step landed",
+/// compared against that statement's own `depth` (`debug_hook.rs`'s CDP-23
+/// addition — `Interpreter`'s own recursion-depth counter, incremented per
+/// nested function call, decremented on return). Since this driver never
+/// truly suspends anything (see the module's "Known limitations"), a step
+/// command has no live call frame to read "the current depth" from; instead
+/// it compares against `last_paused_depth`, the depth recorded at the most
+/// recent pause/breakpoint hit — the natural reference point for a step
+/// issued right after one.
+#[derive(Clone, Copy)]
+enum StepMode {
+    /// `Debugger.pause` and `stepInto`: the very next statement, at any
+    /// depth, qualifies.
+    Any,
+    /// `stepOver`: a statement *deeper* than the reference depth is "inside
+    /// a call this step is stepping over", so it does not qualify — only
+    /// `depth <= reference` does (this frame continuing, or having just
+    /// returned to a shallower one).
+    Over(u32),
+    /// `stepOut`: only `depth < reference` qualifies — the frame at
+    /// `reference` must have actually returned.
+    Out(u32),
+}
+
+impl StepMode {
+    /// Whether a statement at `depth` satisfies this step request.
+    fn matches(self, depth: u32) -> bool {
+        match self {
+            StepMode::Any => true,
+            StepMode::Over(reference) => depth <= reference,
+            StepMode::Out(reference) => depth < reference,
+        }
+    }
 }
 
 /// CDP-20's driver-side [`DebugHook`] implementation. Lives on the
@@ -906,12 +1020,13 @@ struct BreakpointRecord {
 /// reachable from here.
 struct DriverDebugHook {
     breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
-    pause_requested: Rc<RefCell<bool>>,
-    paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+    step_request: Rc<RefCell<Option<StepMode>>>,
+    last_paused_depth: Rc<RefCell<u32>>,
+    paused: Rc<RefCell<VecDeque<(bool, PausedEvent)>>>,
 }
 
 impl DebugHook for DriverDebugHook {
-    fn on_statement(&mut self, script_id: &str, url: &str, line: u32) {
+    fn on_statement(&mut self, script_id: &str, url: &str, line: u32, depth: u32) {
         let hit_ids: Vec<String> = self
             .breakpoints
             .borrow()
@@ -919,13 +1034,18 @@ impl DebugHook for DriverDebugHook {
             .filter(|bp| bp.url == url && bp.line == line)
             .map(|bp| bp.id.clone())
             .collect();
-        let forced = {
-            let mut flag = self.pause_requested.borrow_mut();
-            std::mem::take(&mut *flag)
+        let step_hit = {
+            let mut step = self.step_request.borrow_mut();
+            let hit = step.is_some_and(|mode| mode.matches(depth));
+            if hit {
+                *step = None;
+            }
+            hit
         };
-        if hit_ids.is_empty() && !forced {
+        if hit_ids.is_empty() && !step_hit {
             return;
         }
+        *self.last_paused_depth.borrow_mut() = depth;
         let frame = CallFrame {
             call_frame_id: "cf0".to_owned(),
             function_name: String::new(),
@@ -939,11 +1059,10 @@ impl DebugHook for DriverDebugHook {
             scope_chain: Vec::new(),
         };
         let reason = if hit_ids.is_empty() { "other" } else { "Breakpoint" };
-        self.paused.borrow_mut().push_back(PausedEvent {
-            call_frames: vec![frame],
-            reason: reason.to_owned(),
-            hit_breakpoints: hit_ids,
-        });
+        self.paused.borrow_mut().push_back((
+            step_hit,
+            PausedEvent { call_frames: vec![frame], reason: reason.to_owned(), hit_breakpoints: hit_ids },
+        ));
     }
 }
 
@@ -1049,11 +1168,13 @@ impl PageOwner {
         let mut scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| HostError::Internal(error.describe()))?;
         let breakpoints = Rc::new(RefCell::new(Vec::new()));
-        let pause_requested = Rc::new(RefCell::new(false));
+        let step_request = Rc::new(RefCell::new(None));
+        let last_paused_depth = Rc::new(RefCell::new(0));
         let debugger_paused = Rc::new(RefCell::new(VecDeque::new()));
         let hook: amazing_js::debug_hook::SharedDebugHook = Rc::new(RefCell::new(DriverDebugHook {
             breakpoints: breakpoints.clone(),
-            pause_requested: pause_requested.clone(),
+            step_request: step_request.clone(),
+            last_paused_depth: last_paused_depth.clone(),
             paused: debugger_paused.clone(),
         }));
         scheduler.js.set_debug_hook(Some(hook));
@@ -1067,6 +1188,7 @@ impl PageOwner {
             next_request_id: 0,
             next_object_id: 0,
             objects: HashMap::new(),
+            object_groups: HashMap::new(),
             bodies: HashMap::new(),
             network_requests: VecDeque::new(),
             network_responses: VecDeque::new(),
@@ -1080,7 +1202,8 @@ impl PageOwner {
             debugger_enabled: false,
             breakpoints,
             next_breakpoint_id: 0,
-            pause_requested,
+            step_request,
+            last_paused_depth,
             debugger_paused,
             extra_headers: Vec::new(),
             cache_disabled: false,
@@ -1624,15 +1747,27 @@ impl PageOwner {
     /// Runs `expression` in this page's persistent realm. Unlike the first
     /// slice, this is the *same* `DriverScheduler` (and so the same globals
     /// and closures) across every call for this page's lifetime.
+    ///
+    /// CDP-24: `generatePreview` attaches an [`ObjectPreview`] to the result
+    /// (see [`Self::object_preview`]); `objectGroup` tags any minted
+    /// `objectId` so [`Self::release_object_group`] can drop it later (see
+    /// [`Self::tag_object_group`]). Neither applies to a `returnByValue`
+    /// result — it has no `objectId` to tag or preview to attach beyond its
+    /// own serialized `value`.
     fn evaluate(&mut self, params: &EvaluateParams) -> EvaluateResult {
         match self.scheduler.run_script(&params.expression) {
             Ok(value) => {
-                let object =
+                let mut object =
                     if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
+                if params.generate_preview {
+                    object.preview = self.object_preview(&value);
+                }
+                self.tag_object_group(&object, params.object_group.as_deref());
                 EvaluateResult::value(object)
             }
             Err(thrown) => {
                 let exception_object = self.remote_object(&thrown.0);
+                self.tag_object_group(&exception_object, params.object_group.as_deref());
                 EvaluateResult {
                     result: exception_object.clone(),
                     exception: Some(ExceptionDetails {
@@ -1648,11 +1783,88 @@ impl PageOwner {
         }
     }
 
+    /// Tags `object`'s `objectId` (if any) with `group` — `""` for CDP's
+    /// ungrouped default when no `objectGroup` was given — so
+    /// [`Self::release_object_group`] can find it later. A primitive or
+    /// by-value result has no `objectId` and this is a no-op for it.
+    fn tag_object_group(&mut self, object: &RemoteObject, group: Option<&str>) {
+        if let Some(id) = &object.object_id {
+            self.object_groups.insert(id.clone(), group.unwrap_or("").to_owned());
+        }
+    }
+
+    /// Builds a shallow `Runtime.ObjectPreview` for `value` (CDP-24): `None`
+    /// for a non-object — primitives don't carry a `.preview` in real CDP
+    /// either. Caps at 5 own enumerable properties (matching real Chrome's
+    /// own default), setting `overflow: true` when more exist. Each
+    /// property's value is summarized by [`Self::property_preview`] as a
+    /// primitive type/short string only — a nested object/function property
+    /// gets no rendered value (an honest one-level-deep limit: a recursive
+    /// preview risks the same self-referential-object problem
+    /// `remote_object_by_value`'s depth cap already works around, and this
+    /// driver has no cycle/pointer-identity check for `JsValue::Object`'s
+    /// `Rc` to lean on instead).
+    fn object_preview(&mut self, value: &amazing_js::value::JsValue) -> Option<ObjectPreview> {
+        use amazing_js::value::JsValue;
+        if !matches!(value, JsValue::Object(_)) {
+            return None;
+        }
+        const PREVIEW_LIMIT: usize = 5;
+        let object_type = if self.scheduler.js.binding_is_callable(value) { "function" } else { "object" }.to_owned();
+        let subtype = if self.js_is_array(value) { Some("array".to_owned()) } else { None };
+        let description = Some(format!("{value:?}"));
+        let keys = match self.scheduler.js.binding_own_property_keys(value) {
+            Ok(keys) => keys,
+            Err(_) => return Some(ObjectPreview { object_type, subtype, description, overflow: false, properties: Vec::new() }),
+        };
+        let overflow = keys.len() > PREVIEW_LIMIT;
+        let mut properties = Vec::with_capacity(PREVIEW_LIMIT.min(keys.len()));
+        for key in keys.into_iter().take(PREVIEW_LIMIT) {
+            let property = match self.scheduler.js.binding_get_own_property(value, &key) {
+                Ok(Some(property)) if property.enumerable => property,
+                _ => continue,
+            };
+            let property_value = match &property.getter {
+                Some(getter) => {
+                    self.scheduler.js.binding_call(getter, value.clone(), Vec::new()).unwrap_or(JsValue::Undefined)
+                }
+                None => property.value.clone(),
+            };
+            properties.push(self.property_preview(key, &property_value));
+        }
+        Some(ObjectPreview { object_type, subtype, description, overflow, properties })
+    }
+
+    /// One [`ObjectPreview::properties`] entry for `value` under `name` —
+    /// see [`Self::object_preview`]'s doc comment on why a nested object
+    /// gets no rendered value.
+    fn property_preview(&mut self, name: String, value: &amazing_js::value::JsValue) -> PropertyPreview {
+        use amazing_js::value::JsValue;
+        let (object_type, rendered) = match value {
+            JsValue::Undefined => ("undefined".to_owned(), Some("undefined".to_owned())),
+            JsValue::Null => ("object".to_owned(), Some("null".to_owned())),
+            JsValue::Bool(b) => ("boolean".to_owned(), Some(b.to_string())),
+            JsValue::Num(n) => ("number".to_owned(), Some(amazing_devtools::json::Json::Number(*n).to_string())),
+            JsValue::Str(s) => ("string".to_owned(), Some(s.to_utf8_lossy())),
+            JsValue::BigInt(_) => ("bigint".to_owned(), Some(format!("{value:?}"))),
+            JsValue::Symbol(_) => ("symbol".to_owned(), Some(format!("{value:?}"))),
+            JsValue::Object(_) => {
+                (if self.scheduler.js.binding_is_callable(value) { "function" } else { "object" }.to_owned(), None)
+            }
+        };
+        PropertyPreview { name, object_type, value: rendered }
+    }
+
     /// The properties [`Self::get_properties`] reports for one level of an
     /// object's own-property table (either `object_id`'s own properties, or
     /// one prototype's own properties during the chain walk below), each
     /// tagged `is_own` for the caller. Accessor properties are read through
     /// their getter, matching what a DevTools Properties panel shows.
+    ///
+    /// CDP-24: an object-typed value always gets a [`Self::object_preview`]
+    /// attached — real `Runtime.getProperties` has no `generatePreview`
+    /// parameter of its own to gate this on, unlike `evaluate`/
+    /// `callFunctionOn`.
     fn own_properties(&mut self, object: &amazing_js::value::JsValue, is_own: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
         let keys = self
             .scheduler
@@ -1674,7 +1886,8 @@ impl PageOwner {
                     .unwrap_or(amazing_js::value::JsValue::Undefined),
                 None => property.value.clone(),
             };
-            let remote = self.remote_object(&value);
+            let mut remote = self.remote_object(&value);
+            remote.preview = self.object_preview(&value);
             properties.push(PropertyDescriptor {
                 name: key,
                 value: remote,
@@ -1730,6 +1943,11 @@ impl PageOwner {
     /// same `binding_call` embedding entry point `get_properties` uses for
     /// accessors. `returnByValue` (CDP-22 completeness fix) is honored the
     /// same way `evaluate` honors it — see [`Self::remote_object_by_value`].
+    /// CDP-24: `Runtime.callFunctionOn` has no `generatePreview` parameter
+    /// in real CDP (only `evaluate` does, matching `CallFunctionParams`'s
+    /// own fields — no `generate_preview` there), so this driver never
+    /// attaches a preview to its result. `objectGroup` still tags any
+    /// minted `objectId`, same as `evaluate`.
     fn call_function_on(&mut self, params: &CallFunctionParams) -> Result<EvaluateResult, HostError> {
         let this = match &params.object_id {
             Some(id) => self.objects.get(id).cloned().unwrap_or(amazing_js::value::JsValue::Undefined),
@@ -1737,7 +1955,7 @@ impl PageOwner {
         };
         let function = match self.scheduler.run_script(&format!("({})", params.function_declaration)) {
             Ok(value) => value,
-            Err(thrown) => return Ok(self.evaluate_exception(thrown)),
+            Err(thrown) => return Ok(self.evaluate_exception(thrown, params.object_group.as_deref())),
         };
         let mut args = Vec::with_capacity(params.arguments.len());
         for argument in &params.arguments {
@@ -1747,9 +1965,10 @@ impl PageOwner {
             Ok(value) => {
                 let object =
                     if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
+                self.tag_object_group(&object, params.object_group.as_deref());
                 Ok(EvaluateResult::value(object))
             }
-            Err(thrown) => Ok(self.evaluate_exception(thrown)),
+            Err(thrown) => Ok(self.evaluate_exception(thrown, params.object_group.as_deref())),
         }
     }
 
@@ -1763,8 +1982,9 @@ impl PageOwner {
         }
     }
 
-    fn evaluate_exception(&mut self, thrown: amazing_js::value::Throw) -> EvaluateResult {
+    fn evaluate_exception(&mut self, thrown: amazing_js::value::Throw, object_group: Option<&str>) -> EvaluateResult {
         let exception_object = self.remote_object(&thrown.0);
+        self.tag_object_group(&exception_object, object_group);
         EvaluateResult {
             result: exception_object.clone(),
             exception: Some(ExceptionDetails {
@@ -1780,6 +2000,20 @@ impl PageOwner {
 
     fn release_object(&mut self, object_id: &str) {
         self.objects.remove(object_id);
+        self.object_groups.remove(object_id);
+    }
+
+    /// `Runtime.releaseObjectGroup` (CDP-24): drops every `objectId` minted
+    /// under `group` by a top-level `evaluate`/`callFunctionOn` result (see
+    /// [`Self::tag_object_group`]). `group == ""` releases CDP's ungrouped
+    /// default bucket — every result whose call omitted `objectGroup`.
+    fn release_object_group(&mut self, group: &str) {
+        let ids: Vec<String> =
+            self.object_groups.iter().filter(|(_, g)| g.as_str() == group).map(|(id, _)| id.clone()).collect();
+        for id in ids {
+            self.objects.remove(&id);
+            self.object_groups.remove(&id);
+        }
     }
 
     fn get_response_body(&self, request_id: &str) -> Option<ResourceContent> {
@@ -2207,11 +2441,26 @@ impl PageOwner {
     /// `locations` array for an unresolved breakpoint without that being an
     /// error. `line_number` arrives 0-based (CDP convention); stored as
     /// `amazing_js`'s 1-based line so [`DriverDebugHook::on_statement`] can
-    /// compare it directly against `ast::SourceLocation::line`.
-    fn set_breakpoint_by_url(&mut self, url: &str, line_number: u32, column_number: Option<u32>) -> Result<(String, Vec<ScriptLocation>), HostError> {
+    /// compare it directly against `ast::SourceLocation::line`. `condition`
+    /// (CDP-23) is stored as-is and evaluated later, at
+    /// [`Self::drain_debugger_paused`] time — see [`BreakpointRecord`]'s doc
+    /// comment for why the hook itself cannot evaluate it.
+    fn set_breakpoint_by_url(
+        &mut self,
+        url: &str,
+        line_number: u32,
+        column_number: Option<u32>,
+        condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
         self.next_breakpoint_id += 1;
         let id = format!("bp-{}", self.next_breakpoint_id);
-        self.breakpoints.borrow_mut().push(BreakpointRecord { id: id.clone(), url: url.to_owned(), line: line_number + 1, column: column_number });
+        self.breakpoints.borrow_mut().push(BreakpointRecord {
+            id: id.clone(),
+            url: url.to_owned(),
+            line: line_number + 1,
+            column: column_number,
+            condition: condition.map(str::to_owned),
+        });
         let locations = self
             .scripts
             .iter()
@@ -2229,27 +2478,57 @@ impl PageOwner {
     /// comment for why this is "pause at the next statement that actually
     /// runs" rather than a true synchronous halt.
     fn debugger_pause(&mut self) -> Result<(), HostError> {
-        *self.pause_requested.borrow_mut() = true;
+        *self.step_request.borrow_mut() = Some(StepMode::Any);
         Ok(())
     }
 
     fn debugger_resume(&mut self) -> Result<(), HostError> {
-        *self.pause_requested.borrow_mut() = false;
+        *self.step_request.borrow_mut() = None;
         Ok(())
     }
 
-    /// `Debugger.stepOver`. [`DebugHook::on_statement`] only reports
-    /// `(script_id, url, line)` — no call-stack depth — so this driver has
-    /// no way to tell "the next statement in this same frame" apart from
-    /// "the next statement anywhere". Rather than pretend otherwise, it arms
-    /// the exact same one-shot flag `debugger_pause` does: an honest
-    /// simplification, not a silently-approximated feature. A real stepOver
-    /// needs the interpreter to expose call-stack depth to the hook, a
-    /// bigger interpreter-level change (see `.agents/js-runtime/
-    /// questions.md`).
-    fn debugger_step_over(&mut self) -> Result<(), HostError> {
-        *self.pause_requested.borrow_mut() = true;
+    /// The depth [`StepMode::Over`]/[`StepMode::Out`] compare against: the
+    /// depth recorded at the most recent pause/breakpoint hit (CDP-23). See
+    /// [`StepMode`]'s own doc comment for why this stand-in, rather than a
+    /// live "current frame", is what a step command has to work with.
+    fn step_reference_depth(&self) -> u32 {
+        *self.last_paused_depth.borrow()
+    }
+
+    /// `Debugger.stepInto` (CDP-23): pause at the very next statement, at
+    /// any depth — the same one-shot request `debugger_pause` arms.
+    fn debugger_step_into(&mut self) -> Result<(), HostError> {
+        *self.step_request.borrow_mut() = Some(StepMode::Any);
         Ok(())
+    }
+
+    /// `Debugger.stepOver` (CDP-23, now real): pauses at the next statement
+    /// whose call-stack `depth` is no deeper than the reference depth — see
+    /// [`StepMode::Over`].
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        *self.step_request.borrow_mut() = Some(StepMode::Over(self.step_reference_depth()));
+        Ok(())
+    }
+
+    /// `Debugger.stepOut` (CDP-23): pauses once the frame at the reference
+    /// depth has actually returned — see [`StepMode::Out`].
+    fn debugger_step_out(&mut self) -> Result<(), HostError> {
+        *self.step_request.borrow_mut() = Some(StepMode::Out(self.step_reference_depth()));
+        Ok(())
+    }
+
+    /// `Debugger.evaluateOnCallFrame` (CDP-23). This driver never truly
+    /// suspends a call frame — see the module's "Known limitations" — and
+    /// the only call frame id it ever mints is the literal `"cf0"`
+    /// ([`DriverDebugHook::on_statement`]'s synthesized [`CallFrame`]), so
+    /// there is exactly one frame to evaluate "in": the page's global realm,
+    /// via the same path `Runtime.evaluate` uses. Any other id is a genuine
+    /// `NotFound`, matching real Chrome for a stale/unknown frame id.
+    fn evaluate_on_call_frame(&mut self, call_frame_id: &str, expression: &str) -> Result<EvaluateResult, HostError> {
+        if call_frame_id != "cf0" {
+            return Err(HostError::NotFound);
+        }
+        Ok(self.evaluate(&EvaluateParams { expression: expression.to_owned(), ..EvaluateParams::default() }))
     }
 
     fn get_script_source(&self, script_id: &str) -> Result<String, HostError> {
@@ -2264,21 +2543,71 @@ impl PageOwner {
         self.scripts_parsed.drain(..).collect()
     }
 
-    /// Drains queued `Debugger.paused` events, then fills each call frame's
-    /// `scope_chain` (CDP-22) — [`DriverDebugHook::on_statement`] cannot do
-    /// this itself (it only has plain `Rc<RefCell<_>>` cells, no interpreter/
-    /// object-registry access; see that struct's doc comment), but
-    /// `PageOwner` does. The only scope this driver can honestly offer is
-    /// `"global"`: this engine's tree-walking interpreter has no reified
-    /// per-call local/closure environment records reachable from outside a
-    /// running call, so there is no real "local"/"closure" scope object to
-    /// hand back — see the module's "Known limitations". The global object
-    /// itself is real and live, though: it goes through the same
-    /// `remote_object` registration `Runtime.evaluate` uses, so
-    /// `Runtime.getProperties` on it reflects genuine `globalThis` state,
-    /// not a snapshot.
+    /// Drains queued `Debugger.paused` events. Two enrichment passes happen
+    /// here rather than in [`DriverDebugHook::on_statement`], because both
+    /// need interpreter/scheduler access the hook does not have (see that
+    /// struct's doc comment):
+    ///
+    /// 1. **Condition filtering (CDP-23).** For an event whose
+    ///    `hit_breakpoints` are non-empty, each hit breakpoint's stored
+    ///    `condition` (if any) is evaluated in the page's global realm via
+    ///    the same `scheduler.run_script` path `Runtime.evaluate` uses; an
+    ///    unconditional breakpoint always passes, and an erroring condition
+    ///    counts as false (matching real Chrome, which never lets a bad
+    ///    condition itself throw to the frontend). `hit_breakpoints` is
+    ///    narrowed to only the ids that passed. If none passed: a purely
+    ///    breakpoint-driven pause (not also a forced `Debugger.pause`/step)
+    ///    is dropped entirely, exactly as if the breakpoint had not fired;
+    ///    one that *was* also forced is kept but downgraded to
+    ///    `reason: "other"` with an empty `hit_breakpoints`, since the step
+    ///    itself still legitimately landed.
+    /// 2. **`scope_chain` (CDP-22).** The only scope this driver can
+    ///    honestly offer is `"global"`: this engine's tree-walking
+    ///    interpreter has no reified per-call local/closure environment
+    ///    records reachable from outside a running call, so there is no
+    ///    real "local"/"closure" scope object to hand back yet — see the
+    ///    module's "Known limitations" and the open `.agents/js-runtime/
+    ///    questions.md` request. The global object itself is real and live:
+    ///    it goes through the same `remote_object` registration
+    ///    `Runtime.evaluate` uses, so `Runtime.getProperties` on it reflects
+    ///    genuine `globalThis` state, not a snapshot.
     fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
-        let mut events: Vec<PausedEvent> = self.debugger_paused.borrow_mut().drain(..).collect();
+        let raw: Vec<(bool, PausedEvent)> = self.debugger_paused.borrow_mut().drain(..).collect();
+        if raw.is_empty() {
+            return Vec::new();
+        }
+        let mut events = Vec::with_capacity(raw.len());
+        for (forced, mut event) in raw {
+            if !event.hit_breakpoints.is_empty() {
+                let conditions: Vec<(String, Option<String>)> = {
+                    let breakpoints = self.breakpoints.borrow();
+                    event
+                        .hit_breakpoints
+                        .iter()
+                        .filter_map(|id| breakpoints.iter().find(|bp| &bp.id == id).map(|bp| (id.clone(), bp.condition.clone())))
+                        .collect()
+                };
+                let passing: Vec<String> = conditions
+                    .into_iter()
+                    .filter(|(_, condition)| match condition {
+                        None => true,
+                        Some(expr) => match self.scheduler.run_script(expr) {
+                            Ok(value) => self.scheduler.js.binding_to_boolean(&value),
+                            Err(_) => false,
+                        },
+                    })
+                    .map(|(id, _)| id)
+                    .collect();
+                if passing.is_empty() && !forced {
+                    continue;
+                }
+                event.hit_breakpoints = passing;
+                if event.hit_breakpoints.is_empty() {
+                    event.reason = "other".to_owned();
+                }
+            }
+            events.push(event);
+        }
         if events.is_empty() {
             return events;
         }
@@ -2480,6 +2809,10 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
                 page.release_object(&object_id);
                 let _ = reply.send(Ok(()));
             }
+            PageCommand::ReleaseObjectGroup(group, reply) => {
+                page.release_object_group(&group);
+                let _ = reply.send(Ok(()));
+            }
             PageCommand::GetResponseBody(request_id, reply) => {
                 let _ = reply.send(Ok(page.get_response_body(&request_id)));
             }
@@ -2516,8 +2849,8 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             PageCommand::DebuggerEnabled(enabled, reply) => {
                 let _ = reply.send(page.debugger_enabled(enabled));
             }
-            PageCommand::SetBreakpointByUrl(url, line, column, reply) => {
-                let _ = reply.send(page.set_breakpoint_by_url(&url, line, column));
+            PageCommand::SetBreakpointByUrl(url, line, column, condition, reply) => {
+                let _ = reply.send(page.set_breakpoint_by_url(&url, line, column, condition.as_deref()));
             }
             PageCommand::RemoveBreakpoint(id, reply) => {
                 page.remove_breakpoint(&id);
@@ -2531,6 +2864,15 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::DebuggerStepOver(reply) => {
                 let _ = reply.send(page.debugger_step_over());
+            }
+            PageCommand::DebuggerStepInto(reply) => {
+                let _ = reply.send(page.debugger_step_into());
+            }
+            PageCommand::DebuggerStepOut(reply) => {
+                let _ = reply.send(page.debugger_step_out());
+            }
+            PageCommand::EvaluateOnCallFrame(call_frame_id, expression, reply) => {
+                let _ = reply.send(page.evaluate_on_call_frame(&call_frame_id, &expression));
             }
             PageCommand::GetScriptSource(script_id, reply) => {
                 let _ = reply.send(page.get_script_source(&script_id));
@@ -2707,6 +3049,11 @@ impl DevToolsSession for DriverPageSession {
         request(&self.sender, |reply| PageCommand::ReleaseObject(object_id, reply))
     }
 
+    fn release_object_group(&mut self, object_group: &str) -> Result<(), HostError> {
+        let object_group = object_group.to_owned();
+        request(&self.sender, |reply| PageCommand::ReleaseObjectGroup(object_group, reply))
+    }
+
     fn get_response_body(&mut self, request_id: &str) -> Result<Option<ResourceContent>, HostError> {
         let request_id = request_id.to_owned();
         request(&self.sender, |reply| PageCommand::GetResponseBody(request_id, reply))
@@ -2775,19 +3122,19 @@ impl DevToolsSession for DriverPageSession {
         request(&self.sender, |reply| PageCommand::DebuggerEnabled(enabled, reply))
     }
 
-    /// `condition` is accepted (to match the trait's real Chrome-shaped
-    /// signature) but never evaluated — see the module's "Known
-    /// limitations": a conditional breakpoint here behaves as
-    /// unconditional.
+    /// `condition` (CDP-23) is a JS expression evaluated at
+    /// `PageOwner::drain_debugger_paused` time — see that method's doc
+    /// comment.
     fn set_breakpoint_by_url(
         &mut self,
         url: &str,
         line_number: u32,
         column_number: Option<u32>,
-        _condition: Option<&str>,
+        condition: Option<&str>,
     ) -> Result<(String, Vec<ScriptLocation>), HostError> {
         let url = url.to_owned();
-        request(&self.sender, |reply| PageCommand::SetBreakpointByUrl(url, line_number, column_number, reply))
+        let condition = condition.map(str::to_owned);
+        request(&self.sender, |reply| PageCommand::SetBreakpointByUrl(url, line_number, column_number, condition, reply))
     }
 
     fn remove_breakpoint(&mut self, breakpoint_id: &str) -> Result<(), HostError> {
@@ -2812,10 +3159,28 @@ impl DevToolsSession for DriverPageSession {
         request(&self.sender, PageCommand::DebuggerResume)
     }
 
-    /// `Debugger.stepOver`: see `PageOwner::debugger_step_over`'s doc
-    /// comment for why this shares `Debugger.pause`'s exact mechanism.
+    /// `Debugger.stepOver` (CDP-23, now real depth-based stepping): see
+    /// `PageOwner::debugger_step_over`'s doc comment.
     fn debugger_step_over(&mut self) -> Result<(), HostError> {
         request(&self.sender, PageCommand::DebuggerStepOver)
+    }
+
+    /// `Debugger.stepInto` (CDP-23).
+    fn debugger_step_into(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerStepInto)
+    }
+
+    /// `Debugger.stepOut` (CDP-23).
+    fn debugger_step_out(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerStepOut)
+    }
+
+    /// `Debugger.evaluateOnCallFrame` (CDP-23): see
+    /// `PageOwner::evaluate_on_call_frame`'s doc comment.
+    fn evaluate_on_call_frame(&mut self, call_frame_id: &str, expression: &str) -> Result<EvaluateResult, HostError> {
+        let call_frame_id = call_frame_id.to_owned();
+        let expression = expression.to_owned();
+        request(&self.sender, |reply| PageCommand::EvaluateOnCallFrame(call_frame_id, expression, reply))
     }
 
     fn get_script_source(&mut self, script_id: &str) -> Result<String, HostError> {

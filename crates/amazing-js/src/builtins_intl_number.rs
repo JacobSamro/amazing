@@ -109,11 +109,11 @@ fn intl_number_supported_locales(i: &mut Interpreter, _: JsValue, args: Vec<JsVa
 
 fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null NumberFormat options")); }
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let numbering_default = intl_data(&locale).numbering_system;
     let numbering_option = {
         let value = i.get_prop(&options, "numberingSystem")?;

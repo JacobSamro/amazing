@@ -942,3 +942,205 @@ Render baseline for css-ruby unchanged (49/67). Gate: workspace nextest
 unchanged from TEXT-23's numbers (re-run to confirm zero losses after the
 `dev` merge to `512912d5`; see status.json for the exact count). Commit
 `<TEXT-24 sha>` (docs/lanes only).
+
+## TEXT-25: css-text re-triage, word-break: manual
+
+Coordinator ask: base on local dev 47355c3c, re-baseline css/css-text, fix
+clusters rooted in amazing-text/amazing-text-provider (line breaking,
+white-space processing, text-transform, hyphens, letter/word-spacing),
+route layout-rooted clusters.
+
+**Base note:** the coordinator's 47355c3c landed as a fast-forward past
+ff56cfc9 (HTML-29's merge) on first fetch, which carries a pre-existing
+dev-wide build break (`runtime_host_devtools.rs`'s `PageScript` literal
+missing the `node` field `cmd/js.rs` added -- not this lane's file).
+`git reset --hard 47355c3c` to land exactly on the specified base rather
+than work on top of a broken build.
+
+**Baseline:** 235 pass / 210 mismatch of 445 selected. `--baseline auto`
+showed `lost=6` against the checked-in evidence on the very first run,
+before any code change -- pre-existing regressions from other lanes since
+TEXT-22 (`text-align-match-parent-*`, `text-indent-overflow`,
+`text-justify-none-001`, `white-space-pre-wrap-justify-*`), all in
+properties already triaged as layout-owned. Flagged, not fixed.
+
+**Fixed: `word-break: manual`.** Added `amazing_text::WordBreak::Manual`.
+Verified by direct test (a Thai phrase with no spaces) that
+`LineBreakWordOption::KeepAll` alone does *not* suppress ICU's
+dictionary-segmented word-internal breaks for complex-context scripts --
+only CJK-ideograph adjacency, which is all `keep-all` needs. Added a second
+filter in `line_breaks` (`is_whitespace_adjacent`) that, only under
+`Manual`, drops any non-mandatory opportunity that isn't next to
+whitespace, matching CSS Text 4's "words are not broken by the UA... only
+line break opportunities defined explicitly" wording. Unit-tested
+(`word_break_manual_suppresses_dictionary_segmented_breaks_like_keep_all`).
+Rebuilt and re-rendered to confirm the render baseline didn't move (it
+didn't, byte-for-byte) -- `box_tree.rs`'s word-break match still only
+constructs `BreakAll`/`KeepAll`, so the CSS value `"manual"` never reaches
+this code yet. Routed the one-line wiring addition to
+`.agents/layout/questions.md`.
+
+**New finding, not fixed:** a "nearest common ancestor" line-breaking gap
+(CSS Text 3 s5.1's rule that a boundary's white-space eligibility is
+governed by the two flanking characters' *shared* ancestor, not either
+character's own containing element) affecting `break-boundary-2-chars-001`,
+`line-breaking-ic-001`, `line-breaking-ic-003`. `style_at_break` only
+checks the preceding character's own span; fixing this needs ancestor-chain
+data `TextSpan` doesn't carry. Filed as a joint design question rather than
+guessing at an API neither lane agreed on.
+
+Every other cluster unchanged from TEXT-22 (white-space 77 still largest,
+hyphens 24, word-space-transform 20, `text-transform` 15 -- still pending
+the same layout wiring TEXT-22 asked for, letter-spacing 14, tab-size/
+text-justify/text-autospace/hanging-punctuation 8/8/5/4, writing-system 4).
+Two new single-test items (`boundary-shaping-009`,
+`line-breaking-atomic-009`) flagged but not chased.
+
+Gate: crate nextest `amazing-text`+`amazing-text-provider` 109/109 (2
+skipped). Workspace nextest 3274/3274 passed (15 skipped, 2 slow),
+doctests clean. Zero lost passes against the 47355c3c base. Commit
+`06c753fe`.
+
+## TEXT-26: css-fonts mismatch triage, font-variant-emoji fix
+
+Coordinator ask: base on current dev (b70b5ec0, past df103fca/855b2ca9),
+re-baseline css/css-fonts, fix in-lane clusters (font matching/fallback,
+@font-face descriptors, font-variant/feature-settings shaping, synthesis),
+propose the `TextSpan` ancestor-chain shape for TEXT-25's
+nearest-common-ancestor line-break gap.
+
+**Baseline:** 21 pass / 11 mismatch of 32 selected (host worker-2).
+
+**Fixed: `font-variant-emoji-1` (U+FE0E/U+FE0F presentation selection).**
+The test doesn't set `font-variant-emoji` at all -- it's a UTR #51 test that
+a trailing U+FE0E (text) vs. U+FE0F (emoji) variation selector on U+263A
+must select visibly different glyphs by default, even though the page's own
+`font: serif` already maps the bare code point. Two gaps, both in-lane:
+
+1. `matching_font_with_space_policy` never looked at presentation
+   selectors at all -- both selectors resolved to whatever family the
+   author declared, with no way to prefer or require a colour-capable face.
+   Fixed: `emoji_presentation_intent(text) -> Option<EmojiPresentation>`
+   reads a trailing FE0E/FE0F; `matching_font_impl` now tries a
+   presentation-constrained search first (a forced emoji presentation
+   requires a face with COLR/CBDT/sbix/SVG tables via the new
+   `has_color_glyph_tables`, detected through `harfrust`'s `TableProvider`
+   already used elsewhere in this file for GSUB/cmap access; forced text
+   presentation requires the opposite), falling back to the old
+   coverage-only search when nothing satisfies the constraint -- so an
+   environment with no emoji font installed degrades to exactly today's
+   behaviour, never to a missing glyph. The generic-fallback list also
+   tries the "emoji" alias first when emoji presentation is forced, ahead
+   of serif/sans-serif/system-ui/monospace, since real engines reach past
+   the declared family for a forced presentation.
+2. No "emoji" generic family was ever registered by the driver, so even
+   with (1) there was nothing to select. `font_loader.rs` (owned outright)
+   now does a best-effort scan for an installed emoji font on Linux
+   (`FontBucket::Emoji`, matched by "emoji" in the filename, e.g.
+   NotoColorEmoji) and registers it under the "emoji" family, same pattern
+   as the existing sans/serif/mono scan; Windows registers
+   `seguiemj.ttf`. A missing emoji font is a safe no-op, same as any other
+   absent generic face -- this cluster is host/font-package dependent, same
+   caveat as `standard-font-family-*` below.
+
+Unit-tested: `has_color_glyph_tables_detects_colr_and_not_plain_fonts`,
+`emoji_presentation_intent_reads_the_trailing_variation_selector`,
+`emoji_variation_selectors_pick_presentation_appropriate_fonts` (two
+registered fonts under the same "serif"/"emoji" split as the real test,
+confirms FE0F reaches past a covering "serif" face to the colour "emoji"
+one, FE0E/no-selector keep "serif"), plus
+`classify_font_file_recognizes_emoji_before_the_other_buckets` in
+`amazing`'s font_loader tests.
+
+**Routed to layout (ready, not wired):** `font-size-adjust-order-001`,
+`font-size-adjust-zero-1`, `font-size-adjust-zero-2` -- `adjusted_font_size`
+already exists and is correct in `amazing-text-provider`; `amazing-layout`
+never calls it. `rlh-in-monospace` -- narrower than TEXT-22's cases:
+`FontRelativeMetrics.line_height_normal` already exists, but
+`amazing-layout`'s own `FontRelativeUnits` struct has no `lh`/`root_lh`
+field and `RelativeUnit::Lh`/`Rlh` have zero consumers anywhere in layout.
+Full detail with exact file/line pointers in
+`.agents/layout/questions.md`.
+
+**Not code, host/environment:** `standard-font-family-{2,3,5,11,17}`,
+`matching__font-unicode-PUA-primary-font` -- unchanged code since TEXT-21
+(confirmed via `git log` on `font_loader.rs`/`page.rs`), differ only by
+which fonts this round's host (worker-2) happens to have installed vs.
+TEXT-21's sandbox.
+
+**Also filed:** a concrete `TextSpan` ancestor-chain (or a layout-precomputed
+per-boundary `white_space`) trait sketch for TEXT-25's nearest-common-ancestor
+line-break gap, in `.agents/layout/questions.md`.
+
+Gate: crate nextest `amazing-text-provider` (+`amazing-text`+`amazing`)
+427/427 passed (8 skipped). Workspace nextest 3290/3290 passed (15 skipped,
+1 slow), doctests clean (4 doctests across amazing_a11y/devtools/html/js, all
+passed) -- run on venus-001 (clean host, none of the known worker-2/k-test
+EPERM sealed-memory failures). Commit `655b8e08`.
+
+## TEXT-27: lib.rs module split (code health), css-fonts re-triage
+
+Coordinator ask: `crates/amazing-text-provider/src/lib.rs` was 5038 lines
+(over the 4000-line limit, was 4871 before TEXT-26). Split into cohesive
+modules with no behavior change, then take the next css-fonts failure
+cluster in text's scope.
+
+**Split (zero behavior change):** `lib.rs` 5038 -> 1266 lines, plus five new
+files, all under the limit: `font_selection.rs` (297 -- matching/fallback:
+`matching_font`, `matching_font_with_space_policy`, `matching_font_impl`,
+`itemize_font_spans`, `font_covers*`, family-name helpers),
+`emoji_presentation.rs` (54 -- TEXT-26's `EmojiPresentation`,
+`emoji_presentation_intent`, `font_matches_presentation`,
+`has_color_glyph_tables`), `font_decode.rs` (273 -- untrusted web-font
+decode/sniff/validate: `decode_web_font_to_sfnt` (kept re-exported at the
+crate root; `amazing-process` calls it directly), `sniff_font_format`,
+`validate_font_structure`, `sfnt_checksum`, `BoundedWriter`),
+`shaping.rs` (551 -- the HarfRust shaping glue: `shape_range`,
+`font_metrics`, `rasterize_font_glyph`, `fallback_grapheme_run`,
+`cluster_orientation`), `tests.rs` (2698 -- the crate's `#[cfg(test)] mod
+tests`, unwrapped into its own file; `web_font_decode_tests.rs`'s
+`include!` keeps resolving since both files stay siblings in `src/`). A
+handful of names exist at the crate root only as
+`#[allow(unused_imports)]` re-exports so `tests.rs`'s `use super::*` still
+finds them by bare name under `cargo test` (a plain `cargo build` never
+activates `#[cfg(test)] mod tests`, so the warning is otherwise real on
+that target and spurious on the test target).
+
+**css-fonts re-triage:** re-ran the pinned selection on worker-2 --
+unchanged 21 pass / 11 mismatch from TEXT-26's own measurement, confirming
+the split changed no behavior. All 11 remaining mismatches are already
+accounted for by TEXT-26: `font-size-adjust-order-001/-zero-1/-zero-2` and
+`rlh-in-monospace` are routed to layout (unwired call sites, not a
+text-provider gap); `standard-font-family-{2,3,5,11,17}` and
+`matching__font-unicode-PUA-primary-font` are host/environment (unchanged
+code since TEXT-21). Went one step further on `font-variant-emoji-1`: the
+test itself says "this test assumes the system has both text and emoji
+glyphs available for U+263A" and declares no `@font-face` at all, so it
+depends entirely on a real installed system emoji font. Direct filesystem
+check on worker-2 (`find / -iname '*emoji*' -type f`, `fc-list | grep
+emoji`) found **zero** installed emoji fonts anywhere on that host --
+only WPT's own `@font-face`-loaded test fixtures under
+`~/corpora/wpt/css/css-fonts/resources/vs/*.ttf`, which this particular
+test doesn't reference. venus-001, by contrast, has
+`/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf` installed. This test
+therefore cannot pass on worker-2 regardless of code correctness --
+TEXT-26's fix (unit-tested with a synthetic COLR font standing in for
+exactly this scenario) is confirmed correct; the mismatch here is purely a
+host font-package gap, same category as `standard-font-family-*`. No new
+in-lane, host-independent cluster remained to fix in this selection.
+
+Refreshed the stale evidence baseline (`crates/amazing-shell-gpui/evidence/
+wpt-render/css-css-fonts/`, last updated by TEXT-21/SHELL-L4 at a different
+sandbox's font set: 25 pass/7 mismatch) to the current worker-2 measurement
+(21 pass/11 mismatch, `compact.json` + `clusters.json`, dropping the stale
+`report.json`) so future gates compare against this host's actual state
+instead of drifting against a different machine's font inventory.
+
+Gate: crate nextest `amazing-text-provider` 112/112 passed (2 skipped,
+unchanged from before the split). Workspace nextest 3302/3302 passed (16
+skipped, 1 slow, `--locked --no-fail-fast`), doctests clean (4 doctests
+across amazing_a11y/devtools/html/js, all passed) -- venus-001. css-fonts
+pinned selection: 21 pass/11 mismatch of 32, zero classification change
+from TEXT-26's own measurement (verified against the refreshed baseline
+above) -- worker-2. Commit `e55d3a2b` (module split); evidence-baseline
+refresh and this note land in the same commit series.

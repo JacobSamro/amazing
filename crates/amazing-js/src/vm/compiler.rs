@@ -88,6 +88,46 @@ pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<Func
     }, body.span)
 }
 
+/// Compile a generator AST body whose parameters have already been bound by
+/// the interpreter. The generator/sync half of the runtime bridge, alongside
+/// `compile_async_body`: `interp.rs` binds the full AST parameter list, then
+/// calls this and `FunctionCode::start_generator_with_env`.
+#[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+pub(crate) fn compile_generator_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: vec![],
+        body: body.clone(),
+        is_async: false,
+        is_generator: true,
+    }, body.span)
+}
+
+/// Compile an async generator AST body whose parameters have already been
+/// bound by the interpreter -- the async-generator half of the runtime
+/// bridge: `interp.rs` binds the full AST parameter list, then calls this
+/// and `FunctionCode::start_generator_with_env`. The returned `FunctionCode`
+/// has both `is_generator` and `is_async` set, so its VM frame suspends at
+/// both `yield`/`yield*` and `await`, and `start_generator_with_env` routes
+/// its `.next()`/`.return()`/`.throw()` to the async (Promise-returning,
+/// request-queued) driver rather than the synchronous one -- see
+/// `FunctionCode::instantiate`'s prototype-methods branch for the same
+/// is_async/is_generator switch on a VM-compiled async generator function.
+#[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+pub(crate) fn compile_async_generator_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: vec![],
+        body: body.clone(),
+        is_async: true,
+        is_generator: true,
+    }, body.span)
+}
+
 struct Compiler {
     program: Program,
     depth: usize,
@@ -254,15 +294,11 @@ impl Compiler {
         )) {
             return Err(self.error(span, "class field or static block"));
         }
-        // Reject the whole program before execution when class elements need
-        // the shared class evaluator; never silently drop fields or static work.
-        if class.members.iter().any(|member| match member {
-            ast::ClassMember::Method(method) => method.is_static
-                || matches!(method.key, ast::PropKey::Private(_)),
-            _ => true,
-        }) {
-            return Err(self.error(span, "class fields, static or private elements"));
-        }
+        // A static method now compiles (installed on the constructor via
+        // `is_static` below, not the prototype); a private method still
+        // fails through `object_key`'s own `PropKey::Private` rejection per
+        // member, which has the same whole-class-falls-back-to-tree-walker
+        // effect as an upfront check without a separate one to keep in sync.
         // The super-class expression is compiled in the enclosing scope,
         // before the constructor: base and derived classes otherwise share
         // this compiler, and `super()`/`super.prop` inside the constructor
@@ -305,7 +341,7 @@ impl Compiler {
                 let key = self.object_key(&method.key, method.key_utf16.as_deref(), method.span)?;
                 self.emit(Instruction::ExitStrict);
                 let code = self.compile_method(method, true)?;
-                methods.push(ClassMethodCode { key, kind: method.kind, code });
+                methods.push(ClassMethodCode { key, kind: method.kind, code, is_static: method.is_static });
             }
         }
         let super_class = super_class.map(|register| ClassSuper { register, implicit: implicit_derived_ctor });

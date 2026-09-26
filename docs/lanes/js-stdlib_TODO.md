@@ -589,4 +589,96 @@ since/until rounding cluster is flagged as the next ticket -- it is the
 largest lever left in Temporal but is a substantial dedicated piece of work,
 not a quick follow-on to this commit.
 
+## JSS-round: Duration.prototype.round relativeTo/calendar-unit balancing
+
+Implemented a real `RoundDuration`/`BalanceDateDurationRelative` for
+`Duration.prototype.round` (`builtins_temporal_arithmetic.rs`,
+`std_temporal_round_duration`, rewritten from scratch) and folded in the
+`ZonedDateTime.prototype.{since,until}` (`builtins_temporal_epoch.rs`,
+`std_epoch_difference`) and `PlainDateTime.prototype.{since,until}`
+(`builtins_temporal_arithmetic.rs`, `std_temporal_difference`) rounding
+clusters, which shared the same underlying gap.
+
+New machinery in `builtins_temporal_arithmetic.rs`:
+- `std_temporal_unit_rank`/`std_temporal_unit_name`/`std_temporal_larger_unit`/
+  `std_temporal_singular_unit`: a year=0..nanosecond=9 rank matching the
+  Duration field-index convention, used throughout for unit defaulting and
+  coarseness comparisons.
+- `std_temporal_epoch_breakdown(base, target_ns, largest)`: exact
+  calendar+time rebalance of an epoch-ns span from `base` to a Duration at a
+  given largestUnit granularity. Contains a "day borrow" step for when the
+  calendar date-difference and the sub-day time remainder disagree in sign
+  (e.g. base + 2 days - 1 hour must borrow a day from the date part and hand
+  it to the time part so both end up sign-consistent).
+- `std_temporal_calendar_step_ns`/`std_temporal_round_calendar_unit`: a
+  bracket search for rounding to a variable-length calendar unit (year/month
+  have no fixed ns length), computing real calendar arithmetic for candidate
+  integer counts and applying floor/ceil/trunc/expand/half* logic within the
+  bracket that contains the true value.
+- `std_temporal_round_to_calendar_unit(base, target_ns, smallest, largest, ...)`:
+  the hierarchical fix for `largestUnit != smallestUnit` -- rounding "the
+  whole span in smallestUnit's own units from base" is wrong in that case
+  (e.g. a span that's exactly 1 month but not a whole number of weeks must
+  not spuriously pick up a week); it gets the exact breakdown at `largest`
+  granularity first, then rounds only the sub-`largest` remainder to
+  `smallest` granularity.
+
+Also fixed along the way: `std_epoch_difference`'s default largestUnit
+ignored an explicit/coarser `smallestUnit` (a `smallestUnit: "year"` with no
+`largestUnit` must default `largestUnit` to "year" too, not the kind's usual
+"hour"/"second"); `std_epoch_difference`'s calendar branch was missing
+`"week"` and only did an exact `calendar_difference`, never true rounding.
+
+Two intermediate regressions surfaced and were fixed before landing:
+- A first pass at the `relativeTo`-string offset/zone-consistency check (for
+  `relativeto-string-wrong-offset.js` /
+  `throws-on-wrong-offset-for-zoned-date-time-relative-to.js`) was added
+  directly inside the general `std_temporal_parse`, which also validates
+  every plain-type constructor/parsing call -- but a mismatched offset must
+  be *ignored* there (only `ToRelativeTemporalObject`'s string-relativeTo
+  resolution needs the strict check), so it broke ~53 previously-passing
+  files across `PlainDate`/`PlainDateTime`/`PlainMonthDay`/`PlainTime`/
+  `PlainYearMonth`/`ZonedDateTime` parsing (`argument-string-date-with-utc-
+  offset.js`, `argument-string-time-zone-annotation.js`,
+  `PlainDateTime/from/parser.js` and more). Reverted the general check and
+  reimplemented it as a new, narrowly-scoped
+  `std_temporal_validate_relative_to_offset` helper
+  (`builtins_temporal.rs`), called only from `std_temporal_round_duration`
+  when `relativeTo` is itself a string.
+- `std_temporal_add_calendar`/`std_temporal_epoch_breakdown` only ever
+  rejected an i64 day-count overflow, not Temporal's actual (much narrower)
+  ISO date range, so a duration with an enormous time component (e.g.
+  `Number.MIN_SAFE_INTEGER` seconds) rounded to a calendar unit relative to a
+  plain date silently bracket-searched to a wildly out-of-range civil date
+  instead of throwing. Added `std_temporal_validate(PlainDate, ...)` calls at
+  the two points that compute an intermediate civil date from an arbitrary
+  epoch-ns offset (`std_temporal_calendar_step_ns`'s bracket-search candidate,
+  and `std_temporal_epoch_breakdown`'s adjusted target before calendar-
+  difference) -- this is what `Duration/prototype/round/relativeto-
+  {plaindate,zoneddatetime}-large-time-component-out-of-range.js` need.
+
+`built-ins/Temporal`: **7,640 -> 7,820 pass variants (+180), zero lost**,
+diffed by (path, variant) against `js-stdlib-temporal2.jsonl` (the
+post-JSS-Temporal baseline; counts are strict+non-strict variants, not
+files -- 4,603 files discovered, 3,908 pass in strict mode alone in the
+final run). Workspace: `cargo nextest run
+--workspace --locked --no-fail-fast` 3,267/3,267 passed (14 skipped, 0
+failed); `cargo test --workspace --locked --doc` all green, including
+`amazing_js` (1/1) and `amazing_html` (1/1). Base: local `dev` at `4f27b9c4`
+(the merge that landed JSS-Temporal) -- `dev` has since advanced to
+`9e1f1aaf`, but the only lane-owned drift since `4f27b9c4`
+(`builtins_std_object_model.rs`, `builtins_std_reflect.rs`, from JSRT-15)
+does not touch any file this ticket changed, so no rebase was needed per the
+"do not chase dev" rule.
+
+Remaining Temporal clusters, none started this round: "duration field must
+be an integer" / `float64`-precision-exact arithmetic (~23 files);
+`PlainDate`/`PlainTime` ISO string validation edge cases (~38 files
+combined); the mixed "Expected RangeError but no exception thrown" bucket;
+`Duration.prototype.total`'s own `relativeTo`-string offset/zone-consistency
+gap (same class of bug as the round() fix above, but out of this ticket's
+scope -- `Duration/compare` and `Duration/prototype/total`'s
+`relativeto-string-wrong-offset.js`-style tests are still failing, unchanged
+from before this ticket).
+
 

@@ -871,3 +871,112 @@ to js-vm), the `ownKeys`/invariant gaps above, and full defineProperty-trap
 routing for `Object.freeze`/`seal` (extensibility and per-key attribute
 changes are trap-routed; the TypedArray/array-length special cases are not
 re-verified against a Proxy target).
+
+## TypedArray regression fix (2026-09-27, blocking origin/dev push)
+
+The JSB-6/7/8 merge landed on `dev` alongside JSRT-15 and regressed 11
+Test262 files in `crates/amazing-js/src/builtins_binary.rs`, all pre-existing
+bugs in that lane's new TypedArray code, unmasked rather than caused by
+Proxy. Fixed in `builtins_binary.rs`:
+
+- `binary_typed_iterator` (backs `%TypedArray%.prototype.{entries,keys,values}`)
+  set `[[Prototype]]` to `Object.prototype` instead of the shared
+  `%ArrayIteratorPrototype%` that `CreateArrayIterator` uses for both Array
+  and TypedArray iterators — now reuses
+  `std_sequence_iterator_proto(SequenceIteratorKind::ArrayValues)`, the same
+  object `Array.prototype.values/keys/entries` share.
+- `binary_construct_typed_object` (shared by `%TypedArray%.from` and `.of`)
+  never checked the constructed instance was at least as long as requested;
+  `.of`'s call site had its own redundant check, `.from`'s did not and
+  silently dropped tail elements instead of throwing. Moved the check into
+  the shared helper so every caller gets it once.
+- `includes`/`indexOf`/`lastIndexOf` re-read `values`/`length` from the view
+  *after* coercing `fromIndex`, so a `fromIndex` `valueOf` that grows a
+  resizable `ArrayBuffer` let the search see the newly grown region. The
+  spec reads `TypedArrayLength` once, before `fromIndex` coercion, and
+  searches that fixed window regardless of a later resize; now reuses the
+  `values`/`length` already captured at the top of `binary_typed_method`.
+- `with()` resolved a negative index against the *current*
+  (post-value-coercion) length instead of the length captured before any
+  coercion, and used `@@species` for the result contrary to the current
+  spec text (which always constructs the TypedArray's own intrinsic kind,
+  ignoring species).
+
+Verified via a full unsharded Test262 run (`linux-run.sh js-runtime --ref
+9767ca91`, not `test262-boat.sh` — see `questions.md` for a stale-shard bug
+found in that script) diffed against `.agents/test262/baseline.json`: the
+`built-ins/TypedArray*` tree loses only one pre-existing timeout
+(`staging/sm/TypedArray/sort_modifications.js`), all 11 originally-reported
+files pass. Full details in
+`docs/lanes/js-runtime_typedarray_regression_evidence.json`. Workspace
+nextest 3285 passed/15 skipped, doctests all `ok`.
+
+## JSRT-16 exotic-object and reference correctness (2026-09-27)
+
+Combined ticket, based on dev `9767ca91` (the TypedArray fix merge above):
+
+- `put_reference` (`interp.rs`): strict-mode assignment to a non-writable
+  var-like global binding (`undefined`, `NaN`, `Infinity`) now throws instead
+  of silently succeeding. Root cause: `Env::declare_var` always passes
+  `mutable: true`, and `Env::assign_raw` syncs the write to the global
+  object's mirrored property only when it's writable but reports success
+  regardless. Fix routes the write through `set_with_receiver` (the object's
+  own correct per-property `[[Set]]`) whenever `Env::global_binding_object`
+  says the name is a var-like global binding, applying PutValue's
+  strict/sloppy handling of an unsuccessful `[[Set]]`. Target:
+  `built-ins/global/10.2.1.1.3-4-18-s.js`.
+- `legacy_own_property`/`legacy_has_property` (`interp_legacy.rs`): an
+  array-index-shaped key is never treated as a named property, in range or
+  not (previously an out-of-range index fell through to the named-getter
+  check). An out-of-range index now falls straight through to ordinary
+  own-property storage. Target: `dom/collections/
+  HTMLCollection-supported-property-indices.html` (5 subtests, WPT-only, no
+  Test262 coverage for legacy DOM platform objects).
+- `legacy_set`/`legacy_define` (`interp_legacy.rs`): gated purely on whether
+  the interface has an indexed setter at all — matching WebIDL's actual
+  `[[Set]]`/`[[DefineOwnProperty]]` algorithms — not on
+  `supported_index_count`. An initial attempt gated on the supported range
+  instead and broke the pre-existing
+  `optional_setters_and_deleter_receive_native_keys` unit test, whose
+  `indexed_setter` legitimately grows the collection when `index ==
+  values.len()`; that test is exactly the evidence the range-gate was wrong.
+  No setter now falls through to an ordinary `[[Set]]`/`[[DefineOwnProperty]]`
+  (`Ok(false)`) instead of unconditionally throwing.
+- `legacy_delete` (`interp_legacy.rs`): a supported index now correctly
+  reports non-configurable delete failure (`Some(false)`); an unsupported
+  index falls through to an ordinary `[[Delete]]` of any expando actually
+  stored there (`None`) instead of claiming vacuous success without ever
+  deleting anything.
+- `native_array_join` (`interp_builtins.rs`): cycle protection for
+  `Array.prototype.join`/`toString` via a thread-local identity stack
+  (`ARRAY_JOIN_STACK`, keyed by `std_weak_id`) and an RAII guard
+  (`ArrayJoinGuard`) that pops on every exit path including early `?`
+  returns; a self-referential array's re-entrant `join` call now contributes
+  an empty string instead of overflowing the real Rust call stack.
+- `ordinary_has_instance` (`interp.rs`), `set_prop` (`interp_property_access.rs`)
+  and `binding_set_property` (`interp_bindings.rs`): their multi-hop
+  prototype-chain walks now observe a Proxy/WindowProxy's `getPrototypeOf`
+  trap past the first hop, closing the specific gaps JSRT-15's own TODO
+  notes flagged as not yet upgraded.
+
+Gated on Linux: `amazing-js` crate 391 passed (1 skipped, two pre-existing
+unit tests updated to match the corrected, spec-accurate behavior); workspace
+`cargo nextest run --workspace --locked` 3285 passed (15 skipped) in
+129.745s; `cargo test --workspace --locked --doc` all `ok` (`amazing_js` and
+`amazing_html` included). Full unsharded Test262 on both `9767ca91` (parent)
+and `04b0f373` (this ticket): **zero lost, zero gained** — expected, since
+JSRT-16's scope (legacy DOM platform objects, global-write strictness, Proxy
+prototype hops, `Array.join` cycles) has no Test262 coverage. A secondary
+diff against the older, independently-flagged-stale
+`.agents/test262/baseline.json` shows 162 apparent variant losses, all
+pre-existing drift unrelated to this diff (destructuring rest patterns,
+async-arrow-function, intl402, async-gen-meth, and a handful of pre-existing
+timeouts) — confirmed absent from the parent-vs-implementation diff. Full
+details in `docs/lanes/js-runtime_jsrt16_evidence.json`.
+
+Not implemented/out of scope: an exhaustive sweep of every remaining raw
+`.proto.clone()` occurrence in the crate (several single-hop reads and
+internal proxy-trap-implementation reads are correct as-is;
+`named_visible`'s own chain walk was assessed lower-priority and left
+unfixed). Generators/async-generators remain blocked on js-vm (cross-lane
+request standing in `questions.md`).

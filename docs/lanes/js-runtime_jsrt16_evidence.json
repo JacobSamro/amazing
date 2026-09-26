@@ -1,0 +1,56 @@
+{
+  "ticket": "JSRT-16 exotic-object and reference correctness",
+  "base_sha": "9767ca91",
+  "implementation_sha": "04b0f373",
+  "items": [
+    {
+      "item": "put_reference strict-mode global-write correctness",
+      "file": "crates/amazing-js/src/interp.rs",
+      "function": "put_reference (Reference::Binding arm)",
+      "root_cause": "Env::declare_var always passes mutable: true, and Env::assign_raw syncs the write to the global object's mirrored property only when it is writable but unconditionally reports success either way, so a strict-mode assignment to a non-writable var-like global (undefined, NaN, Infinity) silently succeeded instead of throwing.",
+      "fix": "Detect a var-like global binding via the pre-existing Env::global_binding_object and route the write through set_with_receiver (the object's own [[Set]], which already has correct per-property writable/getter/setter semantics), applying PutValue's strict/sloppy handling of an unsuccessful [[Set]] exactly as the Reference::Property arm does.",
+      "target_test": "built-ins/global/10.2.1.1.3-4-18-s.js"
+    },
+    {
+      "item": "legacy platform object array-index vs named-property dispatch",
+      "file": "crates/amazing-js/src/interp_legacy.rs",
+      "functions": ["legacy_own_property", "legacy_has_property", "legacy_set", "legacy_define", "legacy_delete"],
+      "root_cause": "An array-index-shaped key that was not a currently supported index fell through to the named-property check (get/has), and any array-index key without an indexed setter/at all threw unconditionally instead of falling through to ordinary storage (set/define); delete for an unsupported index returned vacuous success (Some(true)) without ever deleting a real expando.",
+      "fix": "get/has: an array-index-shaped key is never treated as a named property, in range or not; an unsupported index now falls straight through to ordinary own-property storage instead of being checked against named getters. set/define: gated purely on whether the interface has an indexed setter at all (matching WebIDL's actual [[Set]]/[[DefineOwnProperty]] algorithms), not on supported_index_count -- confirmed necessary by the existing optional_setters_and_deleter_receive_native_keys unit test, whose indexed_setter legitimately grows the collection at index == current length; no setter now falls through to an ordinary [[Set]]/[[DefineOwnProperty]] (Ok(false)) instead of throwing. delete: a supported index now correctly reports non-configurable delete failure (Some(false)); an unsupported index falls through to an ordinary [[Delete]] of any expando actually stored there (None), instead of silently claiming success without deleting anything.",
+      "target_test": "dom/collections/HTMLCollection-supported-property-indices.html (5 subtests; WPT, not Test262 -- HTMLCollection-style legacy platform objects are a DOM/WebIDL concept with no Test262 coverage)",
+      "unit_test_updates": [
+        "visibility_and_unenumerable_names_follow_hook_flags: index \"8\" (out of the fixture's 2-entry supported range, no indexed setter) now asserts a successful ordinary [[Set]] instead of an error.",
+        "optional_setters_and_deleter_receive_native_keys: unaffected by the corrected (setter-presence-gated) legacy_set/legacy_define now that the supported_index_count-based gate was reverted; this test is exactly what caught the initial over-eager range gate."
+      ]
+    },
+    {
+      "item": "Array.prototype.join/toString cycle protection",
+      "file": "crates/amazing-js/src/interp_builtins.rs",
+      "function": "native_array_join",
+      "root_cause": "A self-referential array (a.push(a); a.join()) converts its own element via ToString, re-entering join on the same array with no termination, overflowing the real Rust call stack (a process crash, not a catchable JS error).",
+      "fix": "Thread-local identity stack (ARRAY_JOIN_STACK, keyed by std_weak_id) plus an RAII guard (ArrayJoinGuard) that pops on every exit path including early '?' returns; a re-entrant call on a currently-joining array contributes an empty string, matching observed browser behavior. Array.prototype.toString delegates to join through the interpreter and is covered by the same guard."
+    },
+    {
+      "item": "Proxy/WindowProxy prototype-chain hook gaps",
+      "files": ["crates/amazing-js/src/interp.rs (ordinary_has_instance)", "crates/amazing-js/src/interp_property_access.rs (set_prop)", "crates/amazing-js/src/interp_bindings.rs (binding_set_property)"],
+      "root_cause": "Three multi-hop prototype-chain walks (ordinary_has_instance's own chain walk, set_prop's and binding_set_property's inherited-setter searches) read object.borrow().proto.clone() directly past the first hop, bypassing a Proxy or WindowProxy's getPrototypeOf trap for any hop beyond the first -- the specific gap flagged in JSRT-15's own TODO notes.",
+      "fix": "Each loop now checks window_proxy_prototype then proxy_get_prototype before falling back to the raw proto read, matching the pattern already used elsewhere since JSRT-15."
+    }
+  ],
+  "gates": {
+    "crate_amazing_js": "cargo nextest run -p amazing-js --locked: 391 passed, 0 failed, 1 skipped",
+    "workspace": "cargo nextest run --workspace --locked: 3285 passed, 0 failed, 15 skipped (129.745s)",
+    "doctests": "cargo test --workspace --locked --doc: all crates 0 failed (amazing_js and amazing_html included)",
+    "test262": {
+      "method": "Full unsharded Test262 runs via linux-run.sh --ref <sha> --no-slot (not test262-boat.sh, which has a known stale-Boat-shard-reuse bug -- see questions.md), diffed per-(path,variant) status.",
+      "base_sha": "9767ca91",
+      "implementation_sha": "04b0f373",
+      "base_summary_files": {"pass": 37223, "fail": 15887, "timeout": 33, "unsupported": 435, "skipped": 294},
+      "new_summary_files": {"pass": 37223, "fail": 15887, "timeout": 33, "unsupported": 435, "skipped": 294},
+      "vs_immediate_parent": {"lost": 0, "gained": 0},
+      "note": "Zero change versus the immediate parent, as expected: JSRT-16's scope (legacy DOM platform objects, strict-mode global writes, Proxy prototype-chain hops, Array.join cycles) is not exercised by the Test262 corpus, which has no DOM legacy platform objects. A secondary diff against the older, independently-known-stale .agents/test262/baseline.json (see questions.md) shows 162 apparent variant losses across 81 files, all of which are pre-existing baseline drift unrelated to this diff (destructuring rest-pattern tests, async-arrow-function, intl402, async-gen-meth tests, and a handful of pre-existing timeouts in staging/sm/*, decodeURI/decodeURIComponent, and Function.prototype.toString) -- confirmed absent from the parent-vs-implementation diff above.",
+      "classification_sha256": "8e98adc6c28d538d68408075dd3d9c044fc0c43a3a71f88ad962692853aab678",
+      "elapsed_seconds": 236.178
+    }
+  }
+}

@@ -117,3 +117,61 @@ Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
 - MessageEvent conformance (`instanceof MessageEvent`, `source`/`ports`
   semantics) needs `EventClass::Message` in `amazing-dom`; IPC raises it as a
   cross-lane request if the lane-owned prototype proves insufficient for WPT.
+
+**Done (commit `41b0bdb4`).** `ipc-demo-child` now hosts a real
+`amazing_js::Interpreter` realm (`amazing_process::demo_realm`, one worker
+thread per realm, opt-in via `__js_realm`), with a new `DemoPage` IPC
+interface (20: `eval`/`deliver_window_message`/`deliver_port_message`/
+`take_window_outbox`/`take_port_outbox`). Proved end to end with two real
+spawned processes: page JS in each exchanges `postMessage` payloads both
+directions via structured-clone bytes, and a `MessagePort` created in one
+realm is transferred through `MessageRouter` to the other and stays live
+there (`crates/amazing-process/tests/demo_realm_two_process.rs`). Found and
+fixed a real bug along the way: `MessagingEndpoint::post_port`'s bundled
+`transfer` list resolved the target as the sender's own client
+(`owner_of(request.port)`) instead of the recipient's, making transfer-on-post
+a silent no-op; added `MessageRouter::peer_of()` and a regression test. No
+js-runtime gap found — every `amazing_js` API needed was already public.
+Linux workspace gate: 2901/2901 nextest (10 skipped) + doctests (amazing-html
+1, amazing-js 1, rest 0), all green. Evidence in
+`docs/lanes/ipc-11c-followup-evidence.md`.
+
+### IPC-12. Sealed-frame EPERM on Ubuntu 24.04 / kernel 6.8
+
+**Done (commit `d1efc373`).** `amazing-ipc-platform`'s sealed shared-frame
+path failed with EPERM on worker-3 (Ubuntu 24.04, 6.8.0-71-generic) but
+passed on venus-001 (kernel 7.0). `strace` plus an isolated `ctypes` probe
+against libc pinned the cause: on this kernel, once a memfd has
+`F_SEAL_WRITE` set, a `MAP_SHARED` mapping is rejected with EPERM even when
+requesting `PROT_READ` only, contrary to the documented seal semantics
+(which describe it as blocking only writable shared mappings). Fixed by
+switching `FrameView::from_fd`'s read-only mapping to `MAP_PRIVATE`, which
+is observationally identical for an immutably-sealed memfd (no writer can
+exist) and is accepted on every kernel. One fix, since every consumer of a
+sealed frame -- in-process `local_view` and the cross-process
+`HandleChannel::receive` path `amazing-process` uses throughout -- goes
+through this same function; fixed all 11 originally failing tests. Added a
+regression test exercising the cross-process fd-passing path directly.
+Linux workspace gate on both hosts: worker-3 2902/2902 nextest (10 skipped) +
+doctests; venus-001 2902/2902 nextest (10 skipped) + doctests; both green,
+zero regressions. Evidence in `docs/lanes/ipc-12-evidence.md`.
+
+### IPC-13. Real renderer process, proved over the sealed-frame channel
+
+**Done (commit `9c8248f5`).** `amazing_process::renderer` already ran the
+real engine (parse/style/layout/paint) and already shipped frames over the
+sealed-frame channel before this ticket, with input/navigation flowing
+browser -> renderer and `FrameReady` flowing back -- `split.rs`'s
+`renderer_network_frame_parity_and_input_events` already proved this with
+inline HTML. Added a proof against an actual fixture file
+(`tests/fixtures/ipc13-page.html`, loaded via `include_bytes!`) instead:
+`ipc13_renderer_process.rs` spawns real renderer + network processes,
+compares the cross-process sealed-frame pixels against the in-process
+`render_document` oracle across two separate live navigations on the same
+renderer process, and exercises input events between them. (A viewport that
+was too short for the fixture, not an engine bug, hid the image and
+stylesheet-colored pixels on the first draft -- see the evidence file.)
+Linux workspace gate on both hosts: worker-3 3339/3339 nextest (17 skipped) +
+doctests (250.5s); venus-001 3339/3339 nextest (17 skipped) + doctests
+(65.5s); both green, zero regressions. Evidence in
+`docs/lanes/ipc-13-evidence.md`.

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
+    observable_handle_unsubscribe,
     html_element_interface, registry_for_document,
     dom_exception::throw_dom_error,
     host::{
@@ -134,6 +135,19 @@ struct BindingState {
     /// `write()` implicitly performs `document.open()`'s full-document
     /// replace first. See `runtime_host_html.rs`.
     write_insertion_points: HashMap<NodeIdx, (NodeIdx, Option<NodeIdx>)>,
+    /// HTML-31: the live, script-interleaved parser for a document currently
+    /// being built by `amazing_html::ResumableParser` (top-level pages, via
+    /// `cmd/wpt_harness.rs`/`cmd/js.rs`; iframes still use HTML-29's DOM-
+    /// splice model and never appear here). A present entry means
+    /// `document.write`/`writeln` must insert into the real tokenizer
+    /// (`ResumableParser::write`) instead of splicing a parsed fragment into
+    /// the DOM directly -- "HTML-29's tracker becomes the real one." Also
+    /// keyed in `write_insertion_points` (with the same placeholder-shaped
+    /// entry `begin_document_parsing_state` always inserts) purely so
+    /// `document.open()`'s existing "already active, no-op" guard keeps
+    /// working unchanged; that map's *value* is never read for a document
+    /// with a live entry here.
+    active_parsers: HashMap<NodeIdx, Rc<RefCell<amazing_html::ResumableParser>>>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -542,6 +556,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
             InterfaceBrand::DOM_PARSER => Interface::DOMParser,
+            InterfaceBrand::OBSERVABLE => Interface::Observable,
+            InterfaceBrand::SUBSCRIBER => Interface::Subscriber,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -673,6 +689,7 @@ pub(crate) fn install(
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
         write_insertion_points: HashMap::new(),
+        active_parsers: HashMap::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
@@ -1255,6 +1272,19 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         Ok(strings)
     }
+    fn sequence_values(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
+        self.require_object(value)?;
+        let length = self.js.binding_get_property(value, "length")?;
+        let length = self.js.binding_to_number(&length)?;
+        if !length.is_finite() || length < 0.0 || length > u32::MAX as f64 {
+            return Err(Throw::type_error("Invalid sequence length"));
+        }
+        let mut values = Vec::new();
+        for index in 0..length.trunc() as u32 {
+            values.push(self.js.binding_get_property(value, &index.to_string())?);
+        }
+        Ok(values)
+    }
     fn construct_custom_element(&mut self, constructor: &JsValue,
         _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
         // JSRT-7 must make derived `super()` return this element's canonical
@@ -1291,6 +1321,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn dom_exception_value(&mut self, error: DomError) -> Result<JsValue, Throw> {
         Ok(throw_dom_error(self, error).0)
+    }
+    fn range_error_value(&mut self, message: &'static str) -> Result<JsValue, Throw> {
+        Ok(Throw::range_error(message).0)
     }
     fn image_loader_state(&mut self, node: NodeIdx) -> Result<Option<ImageLoaderState>, Throw> {
         let state = self.state.borrow();
@@ -1783,8 +1816,8 @@ impl AbortHost for RuntimeBindingHost<'_> {
         self.state.borrow_mut().abort_timeouts.push((signal, milliseconds));
         Ok(())
     }
-    fn run_abort_algorithm(&mut self, _algorithm: u64, _reason: &JsValue) -> Result<(), Throw> {
-        Err(throw_dom_error(self, DomError::NotSupportedError))
+    fn run_abort_algorithm(&mut self, algorithm: u64, reason: &JsValue) -> Result<(), Throw> {
+        observable_handle_unsubscribe(self, algorithm, reason)
     }
 }
 

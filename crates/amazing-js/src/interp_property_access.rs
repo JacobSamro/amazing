@@ -168,7 +168,13 @@ impl Interpreter {
                     }
                     break;
                 }
-                cursor = prototype.borrow().proto.clone();
+                // A Proxy mid-chain must have its getPrototypeOf trap observed
+                // when walking further up looking for an inherited setter.
+                cursor = if let Some(result) = self.window_proxy_prototype(&prototype) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else if let Some(result) = self.proxy_get_prototype(&prototype) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else { prototype.borrow().proto.clone() };
             }
         }
         if let Some(property) = o.borrow().own_prop(&key).cloned() {

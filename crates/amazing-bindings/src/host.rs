@@ -84,6 +84,8 @@ impl InterfaceBrand {
     pub const SELECTION: Self = Self(36);
     pub const SELECTED_OPTIONS: Self = Self(37);
     pub const DOM_STRING_MAP: Self = Self(38);
+    pub const OBSERVABLE: Self = Self(39);
+    pub const SUBSCRIBER: Self = Self(40);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -226,6 +228,8 @@ pub enum Interface {
     FormData,
     FontFaceSet,
     DOMParser,
+    Observable,
+    Subscriber,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -743,6 +747,37 @@ pub enum Operation {
     DOMExceptionName,
     DOMExceptionMessage,
     DOMExceptionCode,
+
+    ObservableConstructor,
+    ObservableSubscribe,
+    ObservableMap,
+    ObservableFilter,
+    ObservableTake,
+    ObservableDrop,
+    ObservableFlatMap,
+    ObservableSwitchMap,
+    ObservableTakeUntil,
+    ObservableForEach,
+    ObservableToArray,
+    ObservableFirst,
+    ObservableLast,
+    ObservableFind,
+    ObservableSome,
+    ObservableEvery,
+    ObservableReduce,
+    ObservableFrom,
+    SubscriberNext,
+    SubscriberError,
+    SubscriberComplete,
+    SubscriberAddTeardown,
+    SubscriberActive,
+    SubscriberSignal,
+    EventTargetWhen,
+    /// Internal glue functions created dynamically with `create_native_function`,
+    /// never installed on a prototype. The `u64` packs (ObservableId, run
+    /// generation, and for the promise pair which settlement branch) so one
+    /// thunk shape covers relay/teardown/event-listener/promise-reaction use.
+    ObservableInternalThunk(u64),
 }
 
 /// Context passed to the embedding's HTML fragment parser after the DOM borrow
@@ -1024,6 +1059,13 @@ pub trait BindingHost: Sized {
     fn sequence_dom_strings(&mut self, _value: &Self::Value) -> Result<Vec<Vec<u16>>, Self::Error> {
         self.with_dom::<Vec<Vec<u16>>>(|_| Err(DomError::NotSupportedError))
     }
+    /// Array-like-to-`Vec<Value>` conversion (`.length` plus indexed reads),
+    /// used by `Observable.from()` for its Array/array-like input case. This
+    /// is not the full iterator protocol: a genuine custom iterable or
+    /// generator is not walked, only its `.length`/indexed shape if it has one.
+    fn sequence_values(&mut self, _value: &Self::Value) -> Result<Vec<Self::Value>, Self::Error> {
+        self.with_dom::<Vec<Self::Value>>(|_| Err(DomError::NotSupportedError))
+    }
     /// WebIDL sequence<ShadowRoot> for getHTML({shadowRoots}).
     fn sequence_shadow_roots(&mut self, _value: &Self::Value) -> Result<Vec<NodeIdx>, Self::Error> {
         self.with_dom::<Vec<NodeIdx>>(|_| Err(DomError::NotSupportedError))
@@ -1042,6 +1084,12 @@ pub trait BindingHost: Sized {
         self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
     }
     fn dom_exception_value(&mut self, _error: DomError) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    /// A constructed (not thrown) `RangeError` value, for spots like
+    /// `Observable#first()`/`last()`/`reduce()` that reject a promise with a
+    /// real `RangeError` rather than a `DOMException`.
+    fn range_error_value(&mut self, _message: &'static str) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
     }
     fn report_custom_element_exception(&mut self, _error: Self::Error) -> Result<(), Self::Error> {

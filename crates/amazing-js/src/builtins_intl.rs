@@ -159,18 +159,161 @@ fn intl_title(input: &str) -> String {
     chars.next().map(|first| first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase()).unwrap_or_default()
 }
 
+// General multi-candidate territoryAlias disambiguation (UTS 35 §3.2.1): when
+// a region's replacement lists more than one candidate, the likely region for
+// the tag's own (already-canonicalized) language and script picks among
+// them, falling back to the first candidate. `script` is the tag's script
+// subtag if one is present (in Title case, as stored in `canonical`).
+fn intl_region_replacement(region: &str, language: &str, script: Option<&str>) -> String {
+    let Some(candidates) = intl_alias(INTL_REGION_ALIASES, region) else { return region.to_string() };
+    let mut iter = candidates.split(' ');
+    let first = iter.next().unwrap_or(region);
+    if iter.next().is_none() { return first.to_string(); }
+    let prefix = match script {
+        Some(script) => format!("{language}-{script}"),
+        None => language.to_string(),
+    };
+    if let Some(expanded) = intl_likely_tag(&prefix) {
+        if let Some(likely_region) = expanded.rsplit('-').next() {
+            if candidates.split(' ').any(|candidate| candidate == likely_region) {
+                return likely_region.to_string();
+            }
+        }
+    }
+    first.to_string()
+}
+
+// Resolve a Unicode extension ("u") or transformed extension ("t") tvalue/type
+// against the BCP-47 keyword registry (calendar/collation/measure/timezone/
+// number/segmentation/variant/currency for "u"; the transform-* files for
+// "t"), then, only for "u", drop a value that canonicalizes to the literal
+// "true" (UTS 35 §3.2.1: "any type or tfield value 'true' is removed" --
+// transformed-ext-canonical.js notes this does NOT apply to "t" tvalues,
+// since a tkey must always be followed by a tvalue).
+fn intl_bcp47_type_alias(key: &str, value: &str) -> Option<&'static str> {
+    INTL_BCP47_KEY_TYPE_ALIASES.iter()
+        .find(|(k, alias, _)| *k == key && alias.eq_ignore_ascii_case(value))
+        .map(|(_, _, canonical)| *canonical)
+}
+
+// Shared by the primary unicode_language_id and by a "t" extension's tlang:
+// language ["-" script] ["-" region] *("-" variant), with alias replacement
+// (including the CLDR compound "language-variant"/"language-region" keys
+// used for e.g. "zh-guoyu"->"zh", "aa-saaho"->"ssy" and "sgn-GR"->"gss", and
+// the generic "und-"-prefixed variant deprecations) and conditional merging
+// of any script/region an aliased *plain* language subtag's replacement adds
+// (only when the tag doesn't already supply that component itself). Returns
+// canonicalized (language, script, region, sorted variants); the caller
+// lowercases everything for a tlang or applies primary-tag casing itself.
+fn intl_canonicalize_language_id(parts: &[String]) -> Result<(String, Option<String>, Option<String>, Vec<String>), Throw> {
+    let mut language = parts[0].to_ascii_lowercase();
+    let mut pending_script: Option<String> = None;
+    let mut pending_region: Option<String> = None;
+    if let Some(replacement) = intl_alias(INTL_LANGUAGE_ALIASES, &language) {
+        let mut pieces = replacement.split('-');
+        language = pieces.next().unwrap_or(replacement).to_string();
+        for piece in pieces {
+            if piece.len() == 4 && piece.bytes().all(|b| b.is_ascii_alphabetic()) {
+                pending_script = Some(piece.to_string());
+            } else {
+                pending_region = Some(piece.to_string());
+            }
+        }
+    }
+    let mut i = 1;
+    let mut script = None;
+    if i < parts.len() && parts[i].len() == 4 && parts[i].bytes().all(|b| b.is_ascii_alphabetic()) {
+        script = Some(intl_title(&parts[i]));
+        i += 1;
+    } else if let Some(replacement) = pending_script.take() {
+        script = Some(intl_title(&replacement));
+    }
+    if let Some(script_value) = &script {
+        script = Some(intl_alias(INTL_SCRIPT_ALIASES, script_value).map(str::to_string).unwrap_or_else(|| script_value.clone()));
+    }
+    let mut region = None;
+    if i < parts.len() && ((parts[i].len() == 2 && parts[i].bytes().all(|b| b.is_ascii_alphabetic()))
+        || (parts[i].len() == 3 && parts[i].bytes().all(|b| b.is_ascii_digit()))) {
+        region = Some(parts[i].to_ascii_uppercase());
+        i += 1;
+    } else if let Some(replacement) = pending_region.take() {
+        region = Some(replacement.to_ascii_uppercase());
+    }
+    if let Some(region_value) = &region {
+        // A compound "language-region" alias (the CLDR sign-language codes,
+        // e.g. "sgn-GR" -> "gss") replaces the whole language id; it takes
+        // priority over the generic multi-candidate territoryAlias table.
+        let compound = format!("{language}-{region_value}");
+        if let Some(replacement) = intl_alias(INTL_LANGUAGE_ALIASES, &compound) {
+            if !replacement.contains('-') {
+                language = replacement.to_string();
+                region = None;
+            }
+        }
+    }
+    if let Some(region_value) = &region {
+        region = Some(intl_region_replacement(region_value, &language, script.as_deref()));
+    }
+    // Variant subtags are collected, sorted, and only then alias-resolved
+    // (UTS 35's "bring the tag into canonical syntax first" ordering): a
+    // language-specific compound key ("zh-guoyu", "art-lojban", "aa-saaho")
+    // is tried before the generic "und-"-prefixed deprecation, longest
+    // contiguous window first, so a multi-subtag replacement like
+    // "und-hepburn-heploc"->"und-alalc97" still matches.
+    let mut raw_variants = Vec::new();
+    while i < parts.len() && ((5..=8).contains(&parts[i].len())
+        || (parts[i].len() == 4 && parts[i].as_bytes()[0].is_ascii_digit())) {
+        let variant = parts[i].to_ascii_lowercase();
+        if raw_variants.contains(&variant) { return Err(Throw::range_error("duplicate language variant")); }
+        raw_variants.push(variant);
+        i += 1;
+    }
+    raw_variants.sort();
+    let mut variants = Vec::new();
+    let mut pos = 0;
+    while pos < raw_variants.len() {
+        let mut matched = false;
+        for len in (1..=raw_variants.len() - pos).rev() {
+            let window = raw_variants[pos..pos + len].join("-");
+            let specific = format!("{language}-{window}");
+            let generic = format!("und-{window}");
+            if let Some(replacement) = intl_alias(INTL_LANGUAGE_ALIASES, &specific)
+                .or_else(|| intl_alias(INTL_LANGUAGE_ALIASES, &generic)) {
+                if replacement == "und" {
+                    // Generic deprecation: drop the variant, tag unchanged.
+                } else if let Some(suffix) = replacement.strip_prefix("und-") {
+                    variants.extend(suffix.split('-').map(str::to_string));
+                } else {
+                    language = replacement.to_string();
+                }
+                pos += len;
+                matched = true;
+                break;
+            }
+            // CLDR's plain variantAlias table (e.g. "heploc" -> "alalc97" on
+            // its own, unpaired with "hepburn") only ever replaces a single
+            // variant subtag with another, so it's only tried at len == 1,
+            // after the more specific language-conditioned compounds above.
+            if len == 1 {
+                if let Some(replacement) = intl_alias(INTL_VARIANT_ALIASES, &window) {
+                    variants.push(replacement.to_string());
+                    pos += 1;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if !matched {
+            variants.push(raw_variants[pos].clone());
+            pos += 1;
+        }
+    }
+    variants.sort();
+    variants.dedup();
+    Ok((language, script, region, variants))
+}
+
 fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
-    let alias = INTL_LANGUAGE_ALIASES.iter()
-        .filter(|(old, _)| old.contains('-') && old.split('-').skip(1).all(|part| part.len() >= 4)
-            && input.len() >= old.len()
-            && input.get(..old.len()).is_some_and(|part| part.eq_ignore_ascii_case(old))
-            && (input.len() == old.len() || input.as_bytes()[old.len()] == b'-'))
-        .max_by_key(|(old, _)| old.len());
-    let aliased;
-    let input = if let Some((old, replacement)) = alias {
-        aliased = format!("{replacement}{}", &input[old.len()..]);
-        aliased.as_str()
-    } else { input };
     if input.is_empty() || !input.is_ascii() || input.contains('_') {
         return Err(Throw::range_error("invalid language tag"));
     }
@@ -182,47 +325,29 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
     if !(2..=8).contains(&language.len()) || !language.bytes().all(|b| b.is_ascii_alphabetic()) {
         return Err(Throw::range_error("invalid language tag"));
     }
-    let mut canonical = Vec::new();
-    let mut language = language.to_ascii_lowercase();
-    if let Some(alias) = intl_alias(INTL_LANGUAGE_ALIASES, &language) {
-        language = alias.to_string();
+    // How many of `parts` the primary unicode_language_id consumes: language,
+    // optional script, optional region, then a run of variants. Recomputed
+    // structurally (independent of aliasing) so extension parsing resumes at
+    // the right index regardless of what intl_canonicalize_language_id did.
+    let mut consumed = 1;
+    if parts.get(consumed).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) {
+        consumed += 1;
     }
-    canonical.push(language);
-    let mut i = 1;
-    if i < parts.len() && parts[i].len() == 4 && parts[i].bytes().all(|b| b.is_ascii_alphabetic()) {
-        let script = intl_title(parts[i]);
-        canonical.push(intl_alias(INTL_SCRIPT_ALIASES, &script).unwrap_or(&script).to_string());
-        i += 1;
+    if parts.get(consumed).is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+        || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) {
+        consumed += 1;
     }
-    if i < parts.len() && ((parts[i].len() == 2 && parts[i].bytes().all(|b| b.is_ascii_alphabetic()))
-        || (parts[i].len() == 3 && parts[i].bytes().all(|b| b.is_ascii_digit()))) {
-        let mut region = parts[i].to_ascii_uppercase();
-        if region == "SU" && canonical.get(1).is_some_and(|part| part == "Armn") {
-            region = "AM".into();
-        }
-        canonical.push(intl_alias(INTL_REGION_ALIASES, &region).unwrap_or(&region).to_string());
-        i += 1;
+    while parts.get(consumed).is_some_and(|part| (5..=8).contains(&part.len())
+        || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit())) {
+        consumed += 1;
     }
-    let mut variants = Vec::new();
-    while i < parts.len() && ((5..=8).contains(&parts[i].len())
-        || (parts[i].len() == 4 && parts[i].as_bytes()[0].is_ascii_digit())) {
-        let variant = parts[i].to_ascii_lowercase();
-        // CLDR stores generic variant deprecations under the "und" language,
-        // for example "und-arevela" -> "und".
-        let variant = match intl_alias(INTL_VARIANT_ALIASES, &variant) {
-            Some(replacement) => replacement.to_string(),
-            None => match intl_alias(INTL_LANGUAGE_ALIASES, &format!("und-{variant}")) {
-                Some("und") => { i += 1; continue; }
-                Some(replacement) => replacement.to_string(),
-                None => variant,
-            },
-        };
-        if variants.contains(&variant) { return Err(Throw::range_error("duplicate language variant")); }
-        variants.push(variant);
-        i += 1;
-    }
-    variants.sort();
+    let language_id_parts: Vec<String> = parts[..consumed].iter().map(|part| part.to_string()).collect();
+    let (language, script, region, variants) = intl_canonicalize_language_id(&language_id_parts)?;
+    let mut canonical = vec![language];
+    if let Some(script) = script { canonical.push(script); }
+    if let Some(region) = region { canonical.push(region); }
     canonical.extend(variants);
+    let mut i = consumed;
     let mut extensions = Vec::new();
     while i < parts.len() {
         let singleton = parts[i].to_ascii_lowercase();
@@ -241,50 +366,10 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
         }
         let mut subtags: Vec<String> = parts[start..i].iter().map(|part| part.to_ascii_lowercase()).collect();
         if singleton == "t" {
-            // tlang = language ["-" script] ["-" region] *("-" variant);
-            // the language/script/region prefix is skipped before scanning variants.
-            let mut start = 0;
-            if !subtags.is_empty() { start = 1; }
-            if subtags.get(start).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) { start += 1; }
-            if subtags.get(start).is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
-                || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) { start += 1; }
-            let mut variants = std::collections::HashSet::new();
-            for part in subtags[start..].iter() {
-                if ((5..=8).contains(&part.len()) || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit()))
-                    && !variants.insert(part.as_str()) {
-                    return Err(Throw::range_error("duplicate transformed-language variant"));
-                }
-            }
+            subtags = intl_canonicalize_transformed_extension(&subtags)?;
         }
         if singleton == "u" {
-            let mut attributes = Vec::new();
-            let mut keywords = Vec::new();
-            let mut j = 0;
-            while j < subtags.len() && subtags[j].len() > 2 {
-                attributes.push(subtags[j].clone());
-                j += 1;
-            }
-            attributes.sort();
-            while j < subtags.len() {
-                if subtags[j].len() != 2 { return Err(Throw::range_error("invalid Unicode locale extension")); }
-                let key = subtags[j].clone();
-                j += 1;
-                let value_start = j;
-                while j < subtags.len() && subtags[j].len() > 2 { j += 1; }
-                if !keywords.iter().any(|(old, _): &(String, Vec<String>)| old == &key) {
-                    let value = if key == "ca" && j == value_start + 1 && subtags[value_start] == "islamicc" {
-                        vec!["islamic".into(), "civil".into()]
-                    } else if key == "ca" && subtags[value_start..j] == ["ethiopic", "amete", "alem"] {
-                        vec!["ethioaa".into()]
-                    } else if ["kf", "kn"].contains(&key.as_str()) && subtags[value_start..j] == ["true"] {
-                        Vec::new()
-                    } else { subtags[value_start..j].to_vec() };
-                    keywords.push((key, value));
-                }
-            }
-            keywords.sort_by(|a, b| a.0.cmp(&b.0));
-            subtags = attributes;
-            for (key, values) in keywords { subtags.push(key); subtags.extend(values); }
+            subtags = intl_canonicalize_unicode_extension(&subtags)?;
         }
         extensions.push((singleton.clone(), subtags));
         if singleton == "x" && i < parts.len() { return Err(Throw::range_error("private use must be last")); }
@@ -295,6 +380,128 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
         canonical.extend(values);
     }
     Ok(canonical.join("-"))
+}
+
+// tlang = unicode_language_subtag ["-" unicode_script_subtag]
+//         ["-" unicode_region_subtag] *("-" unicode_variant_subtag)
+// tfield = tkey 1*("-" tvalue) ; tkey = alpha digit ; tvalue = 3*8alphanum
+// UTS 35 3.7.1 / RFC 6497. Unlike the primary language id, an invalid or
+// incomplete structure here is a hard error (transformed-ext-invalid.js),
+// tlang keeps lowercase casing throughout (transformed-ext-canonical.js:
+// "en-t-en-latn-ca" is already canonical), and "true" tvalues are kept.
+fn intl_canonicalize_transformed_extension(subtags: &[String]) -> Result<Vec<String>, Throw> {
+    let mut idx = 0;
+    if subtags.first().is_some_and(|part| ((2..=3).contains(&part.len()) || (5..=8).contains(&part.len()))
+        && part.bytes().all(|b| b.is_ascii_alphabetic())) {
+        idx = 1;
+        if subtags.get(idx).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) {
+            idx += 1;
+        }
+        if subtags.get(idx).is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+            || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) {
+            idx += 1;
+        }
+        let mut seen = std::collections::HashSet::new();
+        while idx < subtags.len() {
+            let part = &subtags[idx];
+            let is_variant = (5..=8).contains(&part.len()) || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit());
+            if !is_variant { break; }
+            if !seen.insert(part.clone()) { return Err(Throw::range_error("duplicate transformed-language variant")); }
+            idx += 1;
+        }
+        if idx < subtags.len() && subtags[idx].len() != 2 {
+            // Anything left over that isn't tkey-shaped means tlang itself
+            // didn't fully match the grammar (e.g. an over-length variant,
+            // an extlang-shaped subtag, or a malformed region).
+            return Err(Throw::range_error("invalid transformed language"));
+        }
+    }
+    // Otherwise the first subtag isn't tlang-shaped (e.g. it's already a
+    // "d0"-style tkey) -- there's no tlang, and idx stays 0 so the tfield
+    // loop below parses it, erroring itself if it isn't a valid tkey either.
+    let language_id_parts: Vec<String> = subtags[..idx].to_vec();
+    let mut tlang = Vec::new();
+    if !language_id_parts.is_empty() {
+        let (language, script, region, variants) = intl_canonicalize_language_id(&language_id_parts)?;
+        tlang.push(language.to_ascii_lowercase());
+        if let Some(script) = script { tlang.push(script.to_ascii_lowercase()); }
+        if let Some(region) = region { tlang.push(region.to_ascii_lowercase()); }
+        tlang.extend(variants);
+    }
+    let mut fields: Vec<(String, Vec<String>)> = Vec::new();
+    let mut j = idx;
+    while j < subtags.len() {
+        let key = subtags[j].clone();
+        if key.len() != 2 || !key.as_bytes()[0].is_ascii_alphabetic() || !key.as_bytes()[1].is_ascii_digit() {
+            return Err(Throw::range_error("invalid transform extension key"));
+        }
+        j += 1;
+        let value_start = j;
+        while j < subtags.len() && subtags[j].len() >= 3 { j += 1; }
+        if j == value_start { return Err(Throw::range_error("transform key without value")); }
+        let values = subtags[value_start..j].iter()
+            .map(|value| intl_bcp47_type_alias(&key, value).map(str::to_string).unwrap_or_else(|| value.clone()))
+            .collect();
+        fields.push((key, values));
+    }
+    fields.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut result = tlang;
+    for (key, values) in fields { result.push(key); result.extend(values); }
+    Ok(result)
+}
+
+// Unicode extension ("u") subtags: attributes (3-8 alphanum, sorted), then
+// key-value pairs (key = alphanum + alpha; value = one or more 3-8 alphanum
+// subtags), sorted by key. Each value is resolved against the BCP-47 keyword
+// registry and a value that canonicalizes to "true" is dropped; "sd"/"rg"
+// values additionally go through the CLDR subdivisionAlias table.
+fn intl_canonicalize_unicode_extension(subtags: &[String]) -> Result<Vec<String>, Throw> {
+    let mut attributes = Vec::new();
+    let mut j = 0;
+    while j < subtags.len() && subtags[j].len() > 2 {
+        attributes.push(subtags[j].clone());
+        j += 1;
+    }
+    attributes.sort();
+    let mut keywords: Vec<(String, Vec<String>)> = Vec::new();
+    while j < subtags.len() {
+        if subtags[j].len() != 2 || !subtags[j].as_bytes()[1].is_ascii_alphabetic() {
+            return Err(Throw::range_error("invalid Unicode locale extension key"));
+        }
+        let key = subtags[j].clone();
+        j += 1;
+        let value_start = j;
+        while j < subtags.len() && subtags[j].len() > 2 { j += 1; }
+        if keywords.iter().any(|(old, _)| old == &key) { continue; }
+        let mut values = subtags[value_start..j].to_vec();
+        if key == "sd" || key == "rg" {
+            if let [value] = &mut values[..] {
+                if let Some(replacement) = intl_alias(INTL_SUBDIVISION_ALIASES, value) {
+                    *value = replacement.to_string();
+                }
+            }
+        }
+        // A registry alias can span the whole (possibly multi-subtag) value,
+        // e.g. "ca" "ethiopic-amete-alem" -> "ethioaa" or "ca" "islamicc" ->
+        // "islamic-civil" (itself two subtags); try that before resolving
+        // subtag-by-subtag (e.g. "co" "phonebook" -> "phonebk" alone).
+        let joined = values.join("-");
+        if let Some(replacement) = intl_bcp47_type_alias(&key, &joined) {
+            values = replacement.split('-').map(str::to_string).collect();
+        } else {
+            for value in values.iter_mut() {
+                if let Some(replacement) = intl_bcp47_type_alias(&key, value) {
+                    *value = replacement.to_string();
+                }
+            }
+        }
+        if values.len() == 1 && values[0] == "true" { values.clear(); }
+        keywords.push((key, values));
+    }
+    keywords.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut result = attributes;
+    for (key, values) in keywords { result.push(key); result.extend(values); }
+    Ok(result)
 }
 
 fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Vec<String>, Throw> {
@@ -353,7 +560,35 @@ fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Ve
 /// resolvedOptions().locale and supportedLocalesOf() stay consistent; see
 /// intl402/fallback-locales-are-supported.js and
 /// intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
-fn intl_lookup_one(tag: &str) -> Option<&'static str> {
+/// `best_fit == false` is the BCP-47 Lookup algorithm: pure subtag
+/// truncation, no script inference, so resolvedOptions().locale always stays
+/// a literal string prefix of the request -- required by
+/// intl402/supportedLocalesOf-consistent-with-resolvedOptions.js, which
+/// classifies a request as "unsupported" the moment that isn't true. `best_fit
+/// == true` additionally consults the CLDR likely-subtags table (already
+/// generated for `Intl.Locale`'s own methods, `intl_likely_tag` in
+/// builtins_intl_locale_info.rs) for an explicit script hint before
+/// truncating a region away: this engine carries both "zh" (Hans) and
+/// "zh-Hant" as literal rows, and plain truncation alone would resolve
+/// "zh-TW"/"zh-HK"/"zh-US" down to bare "zh" even though CLDR says those
+/// regions are Traditional by default. This is a no-op for every language
+/// this engine has only one script for: the expanded tag's language-script
+/// pair only ever matches a literal row for Chinese, since no other data
+/// locale here keys on script. See intl402/NumberFormat/prototype/format/
+/// {signDisplay,unit,notation-compact,engineering-scientific}-zh-TW.js.
+fn intl_lookup_one(tag: &str, best_fit: bool) -> Option<&'static str> {
+    if best_fit && tag.contains('-') {
+        if let Some(expanded) = intl_likely_tag(tag) {
+            let mut parts = expanded.split('-');
+            let language = parts.next().unwrap_or("");
+            if let Some(script) = parts.next().filter(|s| s.len() == 4 && s.bytes().all(|b| b.is_ascii_alphabetic())) {
+                let scripted = format!("{language}-{script}");
+                if let Some(data) = INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(&scripted)) {
+                    return Some(data.locale);
+                }
+            }
+        }
+    }
     let mut candidate = tag;
     loop {
         if let Some(data) = INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(candidate)) {
@@ -367,10 +602,10 @@ fn intl_lookup_one(tag: &str) -> Option<&'static str> {
         .map(|data| data.locale)
 }
 
-fn intl_lookup(requested: &[String]) -> String {
+fn intl_lookup(requested: &[String], best_fit: bool) -> String {
     for tag in requested {
         let no_extension = tag.split("-u-").next().unwrap_or(tag);
-        if let Some(locale) = intl_lookup_one(no_extension) {
+        if let Some(locale) = intl_lookup_one(no_extension, best_fit) {
             return locale.to_string();
         }
     }
@@ -382,10 +617,22 @@ fn intl_lookup(requested: &[String]) -> String {
 /// locale (en-US) when no requested tag matches the data locale.
 fn intl_resolved_locale(requested: &[String], data_locale: &str) -> String {
     let data_language = data_locale.split('-').next().unwrap_or(data_locale);
+    // Only echo the request's own region/script verbatim when its bare
+    // language itself has a literal data row (e.g. "en" -> keep "en-GB").
+    // When the data locale is reachable only through intl_lookup_one's
+    // relaxed same-language-prefix fallback -- a bare language with no row
+    // of its own, only a more specific one (e.g. "zh" has no row, only
+    // "zh-Hans") -- echoing the bare request would make resolvedOptions()
+    // report it as fully "supported" while supportedLocalesOf (which never
+    // echoes, and matches by strict truncation only) disagrees. Returning
+    // the real data locale instead keeps both consistent. See
+    // intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
+    let data_language_has_own_row = INTL_NUMBER_DATA.iter()
+        .any(|data| data.locale.eq_ignore_ascii_case(data_language));
     for tag in requested {
         let base = tag.split("-u-").next().unwrap_or(tag);
         if base.split('-').next() == Some(data_language) {
-            return base.to_string();
+            return if data_language_has_own_row { base.to_string() } else { data_locale.to_string() };
         }
     }
     "en-US".to_string()

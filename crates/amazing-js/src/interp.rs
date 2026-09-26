@@ -1184,7 +1184,7 @@ impl Interpreter {
                 // `Runtime.evaluate` call is exactly this) would be
                 // invisible to a line breakpoint.
                 if let Some(hook) = self.debug_hook.clone() {
-                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
                 }
                 self.completion = self.eval_expr(e, &env)?;
                 continue;
@@ -1318,7 +1318,7 @@ impl Interpreter {
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         if let Some(hook) = self.debug_hook.clone() {
-            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
         }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
@@ -2466,6 +2466,34 @@ impl Interpreter {
                 if name == "location" && env.shares_binding_frame(&self.global_env, &name) {
                     let window = JsValue::Object(self.global_obj.clone());
                     return self.set_prop(&window, "location", value);
+                }
+                // A `var`-like global binding (declared or built in, e.g.
+                // `undefined`/`NaN`/`Infinity`) is mirrored onto the global
+                // object; Env::assign_raw applies the write when the mirrored
+                // property is writable but otherwise silently no-ops it while
+                // still reporting success, so a non-writable global never
+                // throws even in strict mode. Route through the object's own
+                // [[Set]] (set_with_receiver), which already has correct
+                // per-property writable/accessor semantics, and apply PutValue's
+                // strict/sloppy handling of an unsuccessful [[Set]] exactly as
+                // Reference::Property does below.
+                if let Some(global) = env.global_binding_object(&name) {
+                    let key = PropertyKey::from(name.as_str());
+                    let receiver = JsValue::Object(global.clone());
+                    if self.set_with_receiver(&global, &key, value.clone(), receiver)? {
+                        // Keep the env-level binding cell's mirror in sync;
+                        // harmless no-op re-write since we just confirmed it
+                        // succeeded (reads of a global non-lexical binding go
+                        // through the object property directly, not this
+                        // cell, but other bindings still fall back to it).
+                        let _ = env.assign(&name, value);
+                        return Ok(());
+                    } else if !self.strict_eval_context {
+                        // PutValue ignores an unsuccessful [[Set]] for sloppy references.
+                        return Ok(());
+                    } else {
+                        return Err(Throw::type_error(format!("Cannot assign to read only property '{name}'")));
+                    }
                 }
                 if !env.assign(&name, value.clone())? {
                     let global = JsValue::Object(self.global_obj.clone());
@@ -4120,7 +4148,13 @@ impl Interpreter {
             if Rc::ptr_eq(&o.0, &p.0) {
                 return Ok(JsValue::Bool(true));
             }
-            c = o.borrow().proto.clone()
+            // A Proxy (or WindowProxy) mid-chain must have its getPrototypeOf
+            // trap observed, same as the Get(b, "prototype") call above.
+            c = if let Some(result) = self.window_proxy_prototype(&o) {
+                match result? { JsValue::Object(p) => Some(p), _ => None }
+            } else if let Some(result) = self.proxy_get_prototype(&o) {
+                match result? { JsValue::Object(p) => Some(p), _ => None }
+            } else { o.borrow().proto.clone() };
         }
         Ok(JsValue::Bool(false))
     }
@@ -4155,6 +4189,7 @@ include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
 include!("builtins_binary_base64.rs");
 include!("builtins_intl_data.rs");
+include!("builtins_intl_bcp47_data.rs");
 include!("builtins_intl_unit_data.rs");
 include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");

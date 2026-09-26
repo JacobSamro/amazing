@@ -135,6 +135,71 @@ fn disk_log_survives_every_truncated_tail() {
     std::fs::remove_dir_all(root).unwrap();
 }
 #[test]
+fn disk_store_quarantines_corrupt_checkpoint_and_starts_fresh() {
+    // IA-REAL-2: a checkpoint file that exists but fails to parse used to make
+    // `DiskStore::open` return `Error::Corrupt` outright. A browser must never
+    // fail to open storage (and so never fail to load a page) because its
+    // on-disk store is damaged: quarantine it aside and start fresh instead.
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let root = std::env::temp_dir().join(format!("amazing-store-quarantine-corrupt-{}-{nonce}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("checkpoint.0"), b"not a real checkpoint").unwrap();
+    let key = EntryKey { bucket: bucket(), namespace: "n".into(), key: b"key".to_vec() };
+    let mut store = DiskStore::open(&root, 10000).unwrap();
+    assert_eq!(store.get(&key), None);
+    store.put(key.clone(), b"value".to_vec()).unwrap();
+    assert_eq!(store.get(&key), Some(b"value".to_vec()));
+    drop(store);
+    let parent = root.parent().unwrap();
+    let root_name = root.file_name().unwrap().to_str().unwrap().to_string();
+    let quarantined: Vec<_> = std::fs::read_dir(parent).unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(&format!("{root_name}.corrupt-")))
+        .collect();
+    assert_eq!(quarantined.len(), 1, "expected exactly one quarantined copy, found {quarantined:?}");
+    // Re-opening the (now fresh) path keeps the post-quarantine data.
+    assert_eq!(DiskStore::open(&root, 10000).unwrap().get(&key), Some(b"value".to_vec()));
+    std::fs::remove_dir_all(&root).unwrap();
+    for name in quarantined {
+        let _ = std::fs::remove_dir_all(parent.join(name));
+    }
+}
+#[test]
+fn disk_store_quarantines_unrecognized_format_version_and_starts_fresh() {
+    // IA-REAL-2: an on-disk store stamped with a format version this build
+    // does not recognize (e.g. written by a future or old build) must be
+    // treated the same as corrupt -- quarantined, never returned as an error
+    // that fails page load.
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let root = std::env::temp_dir().join(format!("amazing-store-quarantine-version-{}-{nonce}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mut bogus = Vec::new();
+    bogus.extend_from_slice(b"AMSTFMT1");
+    bogus.extend_from_slice(&99u32.to_le_bytes());
+    std::fs::write(root.join("format"), &bogus).unwrap();
+    let key = EntryKey { bucket: bucket(), namespace: "n".into(), key: b"key".to_vec() };
+    let mut store = DiskStore::open(&root, 10000).unwrap();
+    assert_eq!(store.get(&key), None);
+    store.put(key.clone(), b"value".to_vec()).unwrap();
+    assert_eq!(store.get(&key), Some(b"value".to_vec()));
+    drop(store);
+    let parent = root.parent().unwrap();
+    let root_name = root.file_name().unwrap().to_str().unwrap().to_string();
+    let quarantined: Vec<_> = std::fs::read_dir(parent).unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(&format!("{root_name}.corrupt-")))
+        .collect();
+    assert_eq!(quarantined.len(), 1, "expected exactly one quarantined copy, found {quarantined:?}");
+    std::fs::remove_dir_all(&root).unwrap();
+    for name in quarantined {
+        let _ = std::fs::remove_dir_all(parent.join(name));
+    }
+}
+#[test]
 fn web_storage_order_events_and_sessions() {
     let mut storage = WebStorage::new(100);
     let area = storage.local(bucket());

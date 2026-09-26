@@ -216,7 +216,6 @@ fn bindings_branches_loops_and_completion_match() {
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",
-        "changed = 1; class A { static method() {} }",
         "changed = 1; class A { static { 1; } }",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
@@ -424,6 +423,112 @@ fn generator_delegation_forwards_values_and_returns() {
     ";
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("1:false:42:true"));
+}
+
+#[test]
+fn generator_instance_is_iterable_via_symbol_iterator() {
+    // `for...of` (and spread, destructuring, etc.) reach a generator's
+    // `next` only through a real `GetIterator` call on the actual
+    // `Symbol.iterator` well-known symbol, never through a lookalike named
+    // property -- a generator instance's `[Symbol.iterator]` method must be
+    // reachable by that real symbol key.
+    let source = "
+        function* g() { yield 1; yield 2; }
+        var it = g();
+        var iterFn = it[Symbol.iterator];
+        var same = iterFn.call(it) === it;
+        var first = it.next().value;
+        same + ':' + first;
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("true:1"));
+}
+
+#[test]
+fn async_generator_interleaves_yield_and_await_in_order() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var resolve;
+        var pending = new Promise(function(r) { resolve = r; });
+        var log = '';
+        async function* g() {
+            log += 'a';
+            yield 1;
+            log += 'b';
+            var value = await pending;
+            log += 'c';
+            yield value + 1;
+            log += 'd';
+        }
+        var it = g();
+        var results = [];
+        it.next().then(function(r) { results.push(r.value + ':' + r.done); log += 'n1'; });
+        var beforeAwait = log;
+        it.next().then(function(r) { results.push(r.value + ':' + r.done); log += 'n2'; });
+        resolve(9);
+        it.next().then(function(r) { results.push(r.value + ':' + r.done); log += 'n3'; });
+        beforeAwait;
+    ";
+    let before_await = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    // The first `.next()` call ran the body synchronously up to (and
+    // including) the first `yield`, settling its own promise before
+    // `.then()` is even attached; the `.then()` reaction itself is a
+    // microtask and has not run yet at this point in the script.
+    assert_eq!(before_await, JsValue::str("a"));
+    // `resolve(9)` unblocks the second `.next()`'s await; its continuation
+    // (a microtask) resumes to the second `yield`, settles that call's own
+    // promise (queuing its `.then()` as a further microtask), and -- since
+    // the generator is idle again -- immediately drains the third, already
+    // queued `.next()` too, running it to completion within that same
+    // microtask before any `.then()` reaction gets to run.
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("abn1cdn2n3")));
+    let JsValue::Object(results) = interpreter.global_env.resolve("results").unwrap() else {
+        panic!("results is not an array");
+    };
+    assert_eq!(results.borrow().get_own("0"), Some(JsValue::str("1:false")));
+    assert_eq!(results.borrow().get_own("1"), Some(JsValue::str("10:false")));
+    assert_eq!(results.borrow().get_own("2"), Some(JsValue::str("undefined:true")));
+}
+
+#[test]
+fn async_generator_return_and_throw_before_start_complete_without_running_body() {
+    // Mirrors the sync generator's own pre-start `.return`/`.throw`
+    // short-circuit (`generator_resume`): per spec, calling either before
+    // the body has ever run completes the generator directly, without
+    // executing any of its code.
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = '';
+        async function* g() { log += 'ran'; yield 1; }
+        var it = g();
+        var results = [];
+        it.return(7).then(function(r) { results.push(r.value + ':' + r.done); });
+        var beforeMicrotasks = log;
+        beforeMicrotasks;
+    ";
+    let before = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(before, JsValue::str(""));
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("")));
+    let JsValue::Object(results) = interpreter.global_env.resolve("results").unwrap() else {
+        panic!("results is not an array");
+    };
+    assert_eq!(results.borrow().get_own("0"), Some(JsValue::str("7:true")));
+}
+
+#[test]
+fn async_generator_throw_settles_the_calls_own_promise() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        async function* g() { yield 1; }
+        var it = g();
+        var caught = null;
+        it.next().then(function() {
+            it.throw('boom').catch(function(e) { caught = e; });
+        });
+        1;
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("caught"), Some(JsValue::str("boom")));
 }
 
 #[test]
@@ -947,4 +1052,30 @@ fn async_iterator_close_preserves_body_throw_over_every_close_failure() {
             }
         }
     }
+}
+
+#[test]
+fn class_static_methods_and_accessors_install_on_the_constructor() {
+    // Found while isolating JSVM-7's generator/async-generator Test262 delta
+    // from unrelated noise: `compile_class` never read `ClassMethod::is_static`,
+    // so every static method/accessor was compiled and installed exactly like
+    // an instance one -- onto `prototype`, with `prototype` as its
+    // [[HomeObject]] -- leaving the constructor's own static members
+    // permanently `undefined`. A class with only static methods (no fields,
+    // no static blocks, both of which already force tree-walker fallback)
+    // was otherwise fully VM-eligible, so this was live, not masked.
+    let source = "
+        class Base { static tag() { return 'base'; } }
+        class C extends Base {
+            static m(a, b) { return arguments.length + ':' + (a + b); }
+            static get g() { return 42; }
+            static set g(v) { C.captured = v; }
+            static parent() { return super.tag(); }
+        }
+        var proto = C.prototype;
+        (typeof proto.m) + ':' + (typeof C.m) + ':' + C.m(1, 2) + ':'
+            + C.g + ':' + (C.g = 7, C.captured) + ':' + C.parent();
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("undefined:function:2:3:42:7:base"));
 }

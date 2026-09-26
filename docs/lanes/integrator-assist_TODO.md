@@ -1299,3 +1299,88 @@ Gate (Linux, `--host venus-001`, dev `855b2ca9` plus this series): workspace
 nextest 3279 passed/0 failed/15 skipped (79.8s); workspace doctests all
 passed (0 failures). Real-pages corpus: 52 pages/3 errors/2 fallback pages
 (measured twice, stable).
+
+## IA-TESTDRIVER: WPT testdriver backend (done, 5e0749cb)
+
+Implemented a WPT testdriver backend in the driver's WPT runner. Of
+`html/semantics/forms`'s 535 subtest failures, 177 came from the missing
+`test_driver_internal`/`testdriver-vendor.js`; `dom/nodes/moveBefore` was
+flagged as also failing on `action_sequence`.
+
+**`crates/amazing/src/cmd/wpt_harness.rs`**: `testdriver-vendor.js` is a
+per-implementation resource that does not exist anywhere in the pinned
+upstream WPT checkout -- every real browser ships its own. Before this
+ticket, a test file that loaded it failed `local_file`'s `canonicalize()`
+and aborted the *entire* file, losing every subtest as `error` rather than
+only the ones that actually call a `test_driver` action. `execute_page`'s
+script-loading loop now intercepts a request for
+`resources/testdriver-vendor.js` and serves an embedded string
+(`TESTDRIVER_VENDOR_JS`) instead of resolving it as a file.
+
+**`crates/amazing/src/runtime_host_integrator_assist.rs`**: the vendor
+script overrides `window.test_driver_internal`'s methods (which
+`testdriver.js` creates unconditionally, unguarded, near its own end) after
+it loads -- `click`, `send_keys`, `action_sequence` (pointer/key/wheel
+sources), `set_permission`, `delete_all_cookies`, `get_computed_label`,
+`get_computed_role`. Each routes to a new `IaNativeEntry::Td*` native call:
+
+- `click`/`send_keys`/`action_sequence` dispatch real trusted events via
+  `amazing_bindings::dispatch_user_agent_event`. `click` additionally invokes
+  the engine's real `Operation::HTMLElementClick`
+  (`input_activation_bindings`) so checkbox/radio toggling runs as a genuine
+  default action -- a hand-dispatched bare `"click"` `Event` does **not**
+  enter the DOM's activation-completion state machine
+  (`begin_html_click`/`finish_input_activation`), only the real click
+  operation does.
+- `get_computed_label`/`get_computed_role` go through `amazing_a11y::build`.
+- `set_permission`/`delete_all_cookies` are honest no-op/best-effort stubs:
+  no Permissions API or cookie store exists anywhere in the engine yet.
+
+**Blocker found and worked around, harness-only**: `testdriver.js`'s own
+`click()`/`send_keys()` client wrappers call `getClientRects`/
+`elementsFromPoint` *before* ever reaching `test_driver_internal` -- and a
+clean grep confirmed no CSSOM View geometry exists anywhere in the engine.
+Added a feature-detected polyfill (only installed if the real property is
+still missing, so a future real implementation from layout/dom-bindings
+automatically takes over), computed via
+`amazing_layout::layout_styled_document` with `FallbackTextSystem`/
+`NoReplacedElements`. Found and fixed a real bug in my own lookup while
+building it: inline-level elements (default `<input>`/`<label>`,
+`display: inline`) are placed via `LayoutBox.lines[].replaced`
+(`ReplacedFrag`), not `Flow::Blocks`/`.positioned` -- the initial version
+(mirroring `gui.rs`'s own hit-test, which has the same latent gap,
+unexercised there) missed this entirely, so every checkbox/label rect and
+hit-test came back empty until fixed.
+
+**Two real amazing-dom/amazing-bindings gaps found, filed to my own
+`questions.md` (out of this lane's owned paths, not fixed here)**:
+1. `input_activation_bindings::invoke`'s `HTMLElementClick` branch always
+   dispatches via `event_bindings::invoke(host, O::DispatchEvent, ...)`
+   (script-dispatch semantics), so the click is never trusted
+   (`amazing-dom/src/events.rs:617`). A driver-generated click should be
+   trusted, like a real browser's WebDriver "Element Click".
+2. `has_html_activation_behavior` already lists `<label>` as
+   activation-bearing and `begin_event_dispatch` finds it fine as the
+   click's activation target (`amazing-dom/src/events.rs:790-794`), but
+   `prepare_input_activation` returns `None` for anything that isn't
+   `<input>`, so label-click-forwards-to-its-control (`Dom::label_control`
+   already exists, `amazing-dom/src/forms.rs:901`) is simply not wired in.
+
+Both are covered by regression tests that assert the *current* behavior with
+a comment explaining exactly what to flip once each lands, so neither can
+silently regress further or get "fixed" by accident without anyone noticing
+the assertion needs updating.
+
+**Measured** (pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`,
+`html/semantics/forms` + `dom/nodes`, 782 testharness files): subtest pass
+count **10546 -> 10680 (+134)**, fail count unchanged at **989 (zero lost)**,
+file-level status counts unchanged (the gained passes are inside files whose
+overall status was already `fail`/`timeout` for unrelated reasons).
+`dom/nodes/moveBefore` itself: 52 files, **0 changed** -- its failures are
+shadow-DOM/CSS-animation/mutation-observer move-semantics issues unrelated
+to testdriver.
+
+Crate tests: 16/16 new unit tests pass; full `amazing` crate suite green
+(k-test). Final gate (Linux, `--host venus-001`, dev `8f2e57ee` plus this
+series): workspace nextest **3297 passed/0 failed/15 skipped** (65.2s), all
+doctests passed. One commit: `5e0749cb`.

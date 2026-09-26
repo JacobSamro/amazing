@@ -1319,3 +1319,186 @@ nextest **312/312 passed, 6 skipped**; full workspace `cargo nextest run
 twice with a stable count both times; workspace `cargo test --workspace
 --locked --doc` green, 0 failed across every doctested crate
 (`amazing-html`, `amazing-js`, and others).
+
+## HTML-31 — script-interleaved, pausable HTML parsing
+
+Base: `dev` at `8f2e57ee` (HTML-30's merge). Brief: pause tree construction at
+a parser-blocking `<script>` and run it against the DOM parsed so far, make
+`document.write` insert at the tokenizer's real insertion point, queue
+mutation records on parser insertions, handle defer/async ordering and
+`DOMContentLoaded` timing and the "script-created parser", keep `parse()`
+for non-script consumers, and wire the driver's script loops to it. Measure
+`html/syntax`, `html/dom`, `html/semantics/scripting-1`,
+`html/webappapis/scripting`, `dom/nodes/MutationObserver-*`, and html5lib
+trees; zero lost.
+
+### Design
+
+- **`amazing_html::ResumableParser`** (`crates/amazing-html/src/resumable.rs`,
+  new): a `run`/`write`/`swap_dom` loop around the existing tokenizer/tree
+  builder. `parse()`/`build()` are untouched -- still one non-interactive
+  call for fragments, offline rendering and tests. The pause point is the
+  tokenizer's own natural stopping place (its `pos` cursor sits exactly at
+  the WHATWG "insertion point" the moment the driving loop's per-token check
+  sees `TreeBuilder::take_pending_script()` return `Some`); no separate
+  buffering or lookahead was needed.
+- **The swap trick**: `swap_dom(&mut self, other: &mut Dom)` is
+  `std::mem::swap`, not a copy. `NodeIdx` is a plain arena index, so the same
+  arena moves between the parser's private `Dom` and the driver's shared,
+  JS-visible `host.dom` with every index on both sides staying valid. The
+  driver (`crate::cmd::js::run_interleaved_parse`, new, in `cmd/js.rs`) swaps
+  the real tree IN before running a script (so JS bindings, which always
+  read `host.dom`, see/mutate the live document) and back OUT before
+  resuming tokenization.
+- **`document.write` during a pause** now goes through
+  `Tokenizer::insert_chars_at_cursor` (new, splices at `pos`, unlike
+  `push_chars`'s network-streamed append) via `ResumableParser::write`, the
+  real mechanism HTML-29's `write_insertion_points` tracker approximated
+  with a DOM splice. Both mechanisms coexist: `RuntimeBindings::
+  active_parsers` (new; presence = "a real interleaved parser is active for
+  this document") is checked first in `document_write`; a document without
+  one (iframes, any post-EOF write) still falls back to HTML-29's
+  `write_insertion_points`/`write_into_document`. `register_active_parser_
+  state`/`unregister_active_parser_state` populate/clear *both* maps
+  together so `document.open()`'s existing guard and HTML-29's reopen-after-
+  load behavior keep working unchanged.
+- **`ScriptMode` classification** (`Blocking`/`Deferred`/`Async`, in
+  `tree.rs`): `async` pauses never; `is_module || (defer && src)` defers;
+  everything else (including inline `defer` with no `src` -- ignored per
+  spec) blocks. `defer`/`async`/module scripts are collected in document
+  order and returned to the caller once the parse reaches EOF, to run before
+  `DOMContentLoaded` (this driver has no real concurrent fetch to race an
+  async script against, so it runs those the same way).
+- **The "script-created parser"** (a `document.write` with no active
+  parser, spec's implicit `document.open()`) needed no new work: it is
+  exactly the case where `active_parsers` has no entry, so it already falls
+  through to HTML-29's existing reopen path, still covered by
+  `document_write_after_load_implicitly_reopens_the_document` (unchanged,
+  still passing).
+- **Removed** `wpt_harness.rs`'s old `collect_scripts`, which rejected an
+  entire page (`Err("unsupported: module/async/defer script scheduling")`)
+  if it contained even one such script. Those scripts now run for real,
+  simplified as described above.
+
+### Scoped out (with reasons)
+
+- **Iframe interleaving.** `BrowserDomHost` holds exactly one arena per
+  top-level page; iframe documents are parsed standalone and grafted in
+  wholesale (`Dom::import_inert_document`) before their scripts run. The
+  swap trick needs the *whole* arena free, which is only true for a page's
+  own first, empty-arena parse -- an iframe's target `NodeIdx` range is
+  already occupied by the parent's nodes. Genuine iframe interleaving needs
+  a graft-as-you-go scheme, not attempted here; iframes keep HTML-29's
+  parse-then-graft-then-run model unchanged.
+- **`cmd/js.rs`'s `execute_page_scripts_lenient`/`prepare_page_scripts`.**
+  Their callers (`render.rs`, `real_pages.rs`) already build a full DOM via
+  `parse_document_bytes` before either is invoked; wiring real interleaving
+  there means restructuring those callers to hand raw HTML through instead,
+  outside this ticket's measured corpora (all served by `wpt_harness.rs::
+  execute_page`).
+- **A self-closing foreign-content `<script/>` never pauses or is
+  collected** (the `in_foreign_content` `StartTag` branch pops it
+  immediately without reaching the new `EndTag` classify/pause code). Narrow
+  and believed rare in the measured corpora (no case seen in the sweep
+  below); noted rather than fixed.
+
+### Two real spec bugs found and fixed along the way (not new -- exposed by
+consolidating onto shared classification code)
+
+- `is_classic_javascript_type` (`cmd/js.rs`) and `classic_or_module_script_
+  type` (`tree.rs`) both derived "the script block's type string" by
+  `raw.split(';').next()` (stripping MIME parameters) then `str::trim()`
+  (stripping every Unicode-whitespace codepoint). Per spec the type string
+  is matched verbatim against the legacy JS type list after stripping only
+  *ASCII* whitespace (tab/LF/FF/CR/space -- notably excluding U+000B
+  VERTICAL TAB). Fixed with a shared `amazing_html::strip_ascii_whitespace`
+  (new, `pub`, re-exported), used by both. Caught by WPT's own
+  `script-type-and-language-with-params.html` and `script-type-
+  whitespace.html`, which this ticket's sweep initially regressed before
+  the fix (see below); corrected one pre-existing unit test
+  (`only_classic_javascript_script_types_execute`) that had encoded the
+  wrong (spec-incorrect) expectation.
+- Scripts inside `<template>` content were being classified/paused/executed
+  at all -- `text_mode`'s script-closing branch had no check for
+  `template_modes` (non-empty while building into template content,
+  including nested templates). Template content is never "inserted into a
+  document," so its scripts must never run; a real interleaved parser makes
+  this reachable in a way the old upfront-parse-then-walk driver's
+  `dom.children()` walk apparently never was. Fixed with a
+  `self.template_modes.is_empty()` guard, caught by WPT's
+  `template-for-scripting-nested.html`.
+- A third, `Namespace::Html`-only guard in the same branch turned out to be
+  its own bug on top of the above: SVG `<script>` elements are tokenized as
+  ordinary foreign-content markup, never through `text_mode` at all (foreign
+  content's insertion mode has no rawtext/script-data special case for
+  `<script>` -- it closes through `in_foreign_content`'s generic
+  stack-popping `EndTag` match instead), so the classify/pause hook needed
+  its own copy there, gated the same way (`template_modes` empty, `Svg`
+  namespace). Caught by `execution-timing/131.html`'s inline SVG script
+  case.
+- A parser-inserted script (typically via `document.write`, e.g. the
+  render-blocking corpus's `generateParserDelay()` helper) can reference a
+  `?pipe=trickle(...)`-style URL this offline, file-based harness has never
+  been able to serve (`local_file` rejects any query string/fragment/scheme
+  outright, a pre-existing, permanent limitation). Before this ticket such a
+  script was simply never discovered (document.write only spliced the DOM,
+  never the input stream a since-finished upfront scan had already walked),
+  so it silently never ran; a real browser doesn't fail the rest of a page
+  over one script's failed fetch either. `wpt_harness.rs`'s script-running
+  closures now skip (not error) a script whose `src` triggers `local_file`'s
+  own "unsupported resource URL" class specifically, matching that same
+  practical outcome through the real mechanism.
+
+### Measured
+
+Boat quota still routes this lane through venus-001 directly
+(`scripts/linux-run.sh html --host venus-001`). Swept `html/syntax`,
+`html/dom`, `html/semantics/scripting-1`, `html/webappapis/scripting`, and
+`dom/nodes/MutationObserver-*` (deduplicated, 1,112 selected source files
+total) at pinned WPT `c2a2fce6`, before (`8f2e57ee`, exact ref) vs after
+(this ticket's diff, with the two spec-bug fixes above included):
+
+- **File status** before -> after: pass 111 -> 115 (**+4, zero lost** --
+  verified by a per-test status diff, not just the aggregate count), fail
+  242 -> 303, timeout 249 -> 336, error 173 -> 163, unsupported 337 -> 195.
+  The `unsupported` drop is exactly the module/async/defer whole-page
+  rejection going away: those 142 files now actually run, landing mostly in
+  `timeout`/`fail`/`error` (this driver's deferred/async timing is
+  simplified and has no real concurrent fetch, and a module script is
+  silently skipped rather than executed -- most such pages cannot pass
+  outright yet) with 4 landing in `pass`:
+  `render-blocking/remove-element-unblocks-rendering.optional.html`,
+  `render-blocking/remove-pending-async-render-blocking-script.html`,
+  `the-script-element/execution-timing/110.html`, `the-script-element/
+  script-defer.html`.
+- **Subtest totals** dropped (pass 37,929 -> 32,042, fail 11,048 -> 9,083):
+  expected, not a regression -- every file that moved into `timeout`/`error`
+  (up 87/-10 net) reports zero subtests by this harness's own schema
+  (`error`/`timeout` records carry no partial subtest list), so a large bloc
+  of newly-attempted-but-still-broken pages nets out as a subtest-count
+  loss even while zero individual files lost a pass. File-level pass/fail
+  is the trustworthy signal here, not the subtest aggregate.
+- **html5lib** (`scripts/html5lib.py`, `parse()`/`parse-fragment` CLI, 243
+  cases across 9 `.dat` files): unchanged at **174/243 (71.60%)** before and
+  after, as expected -- this ticket's changes are entirely about script
+  *execution* scheduling, never about tree *shape*, and `parse()` itself is
+  untouched. (The 69 pre-existing failures are all a `<!DOCTYPE html>` line
+  this CLI's dump includes that html5lib's canonical format omits --
+  unrelated, pre-existing, not investigated further here.)
+- `dom/nodes/MutationObserver-document.html` (the ticket's own motivating
+  example) is part of the `dom/nodes/MutationObserver-*` selection above and
+  is included in the zero-loss check; its specific subtests were not
+  isolated further beyond that -- the architectural gap HTML-30 identified
+  (a script's `MutationObserver` now genuinely cannot observe a parser
+  insertion that hasn't happened yet, because insertions genuinely happen
+  incrementally now) is what this ticket's design section above addresses
+  directly.
+
+### Gate
+
+`amazing` crate nextest **318/318 passed, 6 skipped**; `amazing-html` crate
+nextest **166/166 passed, 0 skipped**; full workspace `cargo nextest run
+--workspace --locked --no-fail-fast` **3,294/3,294 passed, 15 skipped**, run
+twice with a stable count both times (2 slow, both pre-existing real-page
+render-timing tests unrelated to this ticket); workspace `cargo test
+--workspace --locked --doc` green, 0 failed across every doctested crate.

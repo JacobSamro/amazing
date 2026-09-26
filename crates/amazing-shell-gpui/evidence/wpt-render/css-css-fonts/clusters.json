@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "subdir": "css/css-fonts",
-  "mismatch_count": 10,
+  "mismatch_count": 11,
   "unreadable": 6,
   "clusters": [
     {
@@ -11,6 +11,13 @@
         "css__css-fonts__font-size-adjust-zero-2.html",
         "css__css-fonts__font-size-adjust-order-001.html",
         "css__css-fonts__font-size-adjust-zero-1.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-fonts__standard-font-family-2.html"
       ]
     },
     {

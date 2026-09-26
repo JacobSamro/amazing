@@ -248,6 +248,20 @@ impl Tokenizer {
         self.input_finished = true;
     }
 
+    /// HTML-31: `document.write`'s real behavior while the parser is paused
+    /// at a blocking script -- insert text into the input stream just before
+    /// the current position (the WHATWG "insertion point"), not appended at
+    /// the end like `push_chars` (which is for network-streamed input that
+    /// always arrives after what is already buffered). Safe to call between
+    /// `next_token`/`next_available` calls only; this engine only pauses
+    /// right after a tag closes, in `State::Data`, so there is never a
+    /// half-built tag/comment/reference straddling the splice point.
+    pub(crate) fn insert_chars_at_cursor(&mut self, chars: impl IntoIterator<Item = char>) {
+        let tail = self.input.split_off(self.pos);
+        self.input.extend(chars);
+        self.input.extend(tail);
+    }
+
     pub(crate) fn set_allow_cdata(&mut self, allow: bool) {
         self.allow_cdata = allow;
     }

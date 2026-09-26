@@ -85,11 +85,10 @@ fn intl_calendar_supported(value: &str) -> bool {
 
 fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let calendar_raw = i.get_prop(&options, "calendar")?;
     let calendar_present = !calendar_raw.is_undefined();
     if calendar_present {
@@ -109,6 +108,10 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         "gregorian" | "gregory" => "gregory", "islamicc" | "islamic-civil" => "islamic-civil",
         "ethiopic-amete-alem" | "ethioaa" => "ethioaa", other => other,
     }.to_string();
+    // intl_lookup has no observable side effects, so resolving it here
+    // (after localeMatcher is read, once its bool is known) rather than at
+    // the top does not change getter-call order for any other option.
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let numbering_default = intl_data(&locale).numbering_system;
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
@@ -165,7 +168,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let hour12 = i.get_prop(&options, "hour12")?;
     let hc_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
         .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
-    let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
+    let default_cycle = if ["en", "ar", "ko", "zh-Hant"].contains(&locale.as_str()) { "h12" } else { "h23" };
     // An explicit hour12 always overrides (and drops) the hc extension.
     let (hc_retained, hour_cycle) = if !hour12.is_undefined() {
         (None, if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string())
@@ -255,9 +258,9 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     let day = match state.day.as_deref() { Some("2-digit") => "dd", Some(_) => "d", None => "" };
     let year = match state.year.as_deref() { Some("2-digit") => "yy", Some(_) => "y", None => "" };
     let textual_month = ["MMM", "MMMM", "MMMMM"].contains(&month);
-    let fields: Vec<&str> = if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) {
+    let fields: Vec<&str> = if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) {
         [day, month, year].into_iter().filter(|part| !part.is_empty()).collect()
-    } else if ["ja", "zh-Hans"].contains(&state.locale.as_str()) {
+    } else if ["ja", "zh", "zh-Hans", "zh-Hant", "ko"].contains(&state.locale.as_str()) {
         [year, month, day].into_iter().filter(|part| !part.is_empty()).collect()
     } else {
         [month, day, year].into_iter().filter(|part| !part.is_empty()).collect()
@@ -270,7 +273,7 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
             date.push_str(year);
         }
     } else {
-        date.push_str(&fields.join(if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) { "." } else { "/" }));
+        date.push_str(&fields.join(if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) { "." } else { "/" }));
     }
     let mut time = String::new();
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }

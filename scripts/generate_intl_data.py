@@ -15,7 +15,7 @@ VERSION = "48.2.0"
 ARCHIVE_SHA256 = "4f28298550dea43439986cd9ffb0a69cb73ba7d0b34a3c474760905ce8ce9e70"
 ARCHIVE_URL = f"https://github.com/unicode-org/cldr-json/archive/refs/tags/{VERSION}.tar.gz"
 PREFIX = f"cldr-json-{VERSION}/cldr-json/"
-LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh-Hans", "ar", "hi", "ru")
+LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh", "zh-Hans", "zh-Hant", "ko", "sr", "ar", "hi", "ru")
 OUTPUT = Path("crates/amazing-js/src/builtins_intl_data.rs")
 
 
@@ -361,7 +361,7 @@ def main() -> None:
                              if len(code) == 3 and code.isascii() and code.isalpha()})
     lines += [
         "struct IntlCurrencyData { code: &'static str, digits: usize,",
-        "    symbols: [&'static str; 10], narrow_symbols: [&'static str; 10], names: [&'static str; 10],",
+        f"    symbols: [&'static str; {len(LOCALES)}], narrow_symbols: [&'static str; {len(LOCALES)}], names: [&'static str; {len(LOCALES)}],",
         "}",
         "const INTL_CURRENCY_DATA: &[IntlCurrencyData] = &[",
     ]
@@ -404,7 +404,6 @@ def main() -> None:
     for name, key in (
         ("INTL_LANGUAGE_ALIASES", "languageAlias"),
         ("INTL_SCRIPT_ALIASES", "scriptAlias"),
-        ("INTL_REGION_ALIASES", "territoryAlias"),
         ("INTL_VARIANT_ALIASES", "variantAlias"),
     ):
         lines.append(f"const {name}: &[(&str, &str)] = &[")
@@ -412,6 +411,77 @@ def main() -> None:
             replacement = entry["_replacement"].split()[0].replace("_", "-")
             lines.append(f"    ({rust_string(source)}, {rust_string(replacement)}),")
         lines.append("];")
+
+    # Region aliases keep every replacement candidate (space-separated, as
+    # CLDR has them) instead of just the first: most have exactly one, but a
+    # few ("SU", "CS", "NT", ...) list several, disambiguated at
+    # canonicalization time by the likely region for the tag's own
+    # language+script. See intl402/Intl/getCanonicalLocales/
+    # complex-region-subtag-replacement.js.
+    lines.append("const INTL_REGION_ALIASES: &[(&str, &str)] = &[")
+    for source, entry in sorted(aliases["territoryAlias"].items()):
+        replacement = entry["_replacement"].replace("_", "-")
+        lines.append(f"    ({rust_string(source)}, {rust_string(replacement)}),")
+    lines.append("];")
+
+    # Subdivision aliases back the "sd"/"rg" Unicode extension keys' values;
+    # only the first replacement candidate is ever observably used.
+    lines.append("const INTL_SUBDIVISION_ALIASES: &[(&str, &str)] = &[")
+    for source, entry in sorted(aliases["subdivisionAlias"].items()):
+        replacement = entry["_replacement"].split()[0]
+        lines.append(f"    ({rust_string(source)}, {rust_string(replacement)}),")
+    lines.append("];")
+
+    # Every Unicode ("u") and transformed ("t") extension key's type/tvalue
+    # aliases, pulled from the BCP-47 keyword registry CLDR ships
+    # (cldr-bcp47/bcp47/*.json): each maps a deprecated spelling (an
+    # explicit "alias" token, or a deprecated type's own name) to its
+    # canonical type name. Both directions can coexist (e.g. "islamicc" is
+    # itself deprecated *and* carries alias "islamic-civil", which agree).
+    # Lives in its own generated file: with every key/type/tvalue in the
+    # registry it would push builtins_intl_data.rs well past the 4,000-line
+    # budget.
+    key_type_aliases = set()
+    for filename, namespace in (
+        ("calendar.json", "u"), ("collation.json", "u"), ("measure.json", "u"),
+        ("timezone.json", "u"), ("number.json", "u"), ("segmentation.json", "u"),
+        ("variant.json", "u"), ("currency.json", "u"),
+        ("transform.json", "t"), ("transform-destination.json", "t"),
+        ("transform_hybrid.json", "t"), ("transform_ime.json", "t"),
+        ("transform_keyboard.json", "t"), ("transform_mt.json", "t"),
+        ("transform_private_use.json", "t"),
+    ):
+        registry = cldr(f"cldr-bcp47/bcp47/{filename}")["keyword"].get(namespace, {})
+        for key, types in registry.items():
+            if not isinstance(types, dict):
+                continue
+            for type_name, entry in types.items():
+                if not isinstance(entry, dict):
+                    continue
+                # A type deprecated in favor of a "_preferred" replacement (e.g.
+                # "islamicc" -> preferred "islamic-civil") sometimes ALSO carries
+                # an "_alias" pointing at that same preferred name (CLDR's data
+                # restates the link both ways). Only the preferred-direction
+                # mapping is meaningful there; processing "_alias" too would add
+                # the exact opposite (canonical-looking) mapping and turn the
+                # pair into a cycle. So "_alias" is skipped whenever this entry
+                # is itself deprecated with a preferred replacement.
+                if entry.get("_deprecated") and entry.get("_preferred"):
+                    key_type_aliases.add((key, type_name.lower(), entry["_preferred"].lower()))
+                else:
+                    for alias in entry.get("_alias", "").split():
+                        key_type_aliases.add((key, alias.lower(), type_name.lower()))
+    bcp47_lines = [
+        "// Generated by scripts/generate_intl_data.py. Do not edit.",
+        f"// Unicode CLDR JSON {VERSION}; archive SHA-256 {ARCHIVE_SHA256}.",
+        "const INTL_BCP47_KEY_TYPE_ALIASES: &[(&str, &str, &str)] = &[",
+    ]
+    for key, alias, canonical in sorted(key_type_aliases):
+        bcp47_lines.append(f"    ({rust_string(key)}, {rust_string(alias)}, {rust_string(canonical)}),")
+    bcp47_lines.append("];")
+    bcp47_path = args.output.parent / "builtins_intl_bcp47_data.rs"
+    bcp47_path.write_text("\n".join(bcp47_lines) + "\n")
+    print(f"{bcp47_path}: {len(bcp47_lines)} lines")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("\n".join(lines) + "\n")

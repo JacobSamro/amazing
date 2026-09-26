@@ -249,10 +249,17 @@ pub fn compute_states(dom: &Dom, node: NodeIdx, role: Role) -> AxStates {
         states.readonly = readonly;
     }
 
+    // A11Y-12: unlike `aria-pressed` (genuinely optional metadata, absent by
+    // default — see `wai-aria/pressed/pressed.tentative.html`'s "missing
+    // aria-pressed" case, which expects `"undefined"`), `aria-checked` has a
+    // real spec default of `false` for a checkable role with no native
+    // checked state either (confirmed by `wai-aria/checked/
+    // checked.tentative.html`'s "missing aria-checked" case, which expects
+    // `"false"`, not `"undefined"`).
     states.checked = match aria_tristate(dom, node, "aria-checked") {
         Tristate::Undefined => host::native_checked(dom, node)
             .map(|checked| if checked { Tristate::True } else { Tristate::False })
-            .unwrap_or(Tristate::Undefined),
+            .unwrap_or(Tristate::False),
         other => other,
     };
     states.pressed = aria_tristate(dom, node, "aria-pressed");

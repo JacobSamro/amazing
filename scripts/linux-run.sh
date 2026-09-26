@@ -101,6 +101,10 @@ LANE_LOCK="$LOCKDIR/$(basename "$0" .sh)-$LANE"
 until mkdir "$LANE_LOCK" 2>/dev/null; do
   holder="$(cat "$LANE_LOCK/pid" 2>/dev/null || true)"
   if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -rf "$LANE_LOCK"; continue; fi
+  # A holder killed between mkdir and writing its pid leaves a pid-less lock
+  # that no waiter could ever reclaim (2026-09-27: compositor and
+  # replaced-content hung behind one for an hour); reclaim it after 2 minutes.
+  if [ -z "$holder" ] && [ -n "$(find "$LANE_LOCK" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then rm -rf "$LANE_LOCK"; continue; fi
   sleep 5
 done
 echo "$$" > "$LANE_LOCK/pid"

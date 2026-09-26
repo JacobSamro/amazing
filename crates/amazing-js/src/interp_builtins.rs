@@ -2513,6 +2513,28 @@ fn native_object_value_of(
     native_object(i, JsValue::Undefined, vec![this])
 }
 
+thread_local! {
+    // Cycle protection for Array.prototype.join/toString: `var a=[]; a.push(a);
+    // a.join()` converts its own circular element via ToString(element),
+    // which is [[Get]] "join"/[[Call]] on the SAME array again. Without a
+    // guard that recurses without bound and overflows the real Rust call
+    // stack (a process crash, not a catchable JS error); real engines break
+    // the cycle by having the re-entrant call on a currently-joining array
+    // contribute nothing, so `a.join()` above is `""`, matching observed
+    // browser behavior. Keyed by object identity (std_weak_id), one stack per
+    // thread since the interpreter is single-threaded per realm/agent.
+    static ARRAY_JOIN_STACK: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+}
+
+/// Pops its identity off ARRAY_JOIN_STACK on drop, so every early `?` return
+/// inside native_array_join still unwinds the guard correctly.
+struct ArrayJoinGuard(bool);
+impl Drop for ArrayJoinGuard {
+    fn drop(&mut self) {
+        if self.0 { ARRAY_JOIN_STACK.with(|stack| { stack.borrow_mut().pop(); }); }
+    }
+}
+
 fn native_array_join(
     i: &mut Interpreter,
     this: JsValue,
@@ -2522,6 +2544,16 @@ fn native_array_join(
         return Err(Throw::type_error("Array.prototype.join called on null or undefined"));
     }
     let this = array_receiver(i, this)?;
+    let _guard = if let JsValue::Object(object) = &this {
+        let id = std_weak_id(object);
+        if ARRAY_JOIN_STACK.with(|stack| stack.borrow().contains(&id)) {
+            return Ok(JsValue::str(String::new()));
+        }
+        ARRAY_JOIN_STACK.with(|stack| stack.borrow_mut().push(id));
+        ArrayJoinGuard(true)
+    } else {
+        ArrayJoinGuard(false)
+    };
     let length = i.get_prop(&this, "length")?;
     let length = i.to_number(&length)?;
     let length = if length.is_nan() || length <= 0.0 { 0 } else {
