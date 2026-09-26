@@ -36,7 +36,7 @@
 
 // The standards parser is live in transport and Fetch policy.
 // The legacy public-field Url below is only an external-consumer shim.
-mod encoding;
+pub(crate) mod encoding;
 mod host;
 mod idna;
 mod parsed;
