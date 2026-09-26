@@ -1,0 +1,17 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("Request signal follows source and fetch rejects on abort");
+var controller = new AbortController();
+var request = new Request("data:text/plain,hello", {signal: controller.signal});
+assert_equals(request.signal === controller.signal, false);
+assert_equals(request.signal.aborted, false);
+var promise = fetch(request);
+controller.abort("custom abort");
+assert_equals(request.signal.aborted, true);
+promise.then(function() { throw new Error("fetch unexpectedly resolved"); }, function(error) {
+  assert_equals(error, "custom abort");
+  t.done();
+  done();
+});
+</script>

@@ -3,7 +3,7 @@
 #
 # One default sandbox runs the whole suite in ~13.6 minutes; four shards take
 # ~3.5. Each shard is its own lane (t262-shard-K) so the runs never share a
-# tree; boat-idle-reaper.py stops them 15 minutes after the run.
+# tree; each shard stops its sandbox as soon as its result is copied back.
 #
 # Usage: scripts/test262-boat.sh <ref> <tag> [--shards N] [--baseline BASE.json]
 #   Writes .agents/test262/t262-<shortsha>-<tag>.json (merged) and prints lost/gained
@@ -36,11 +36,13 @@ for K in $(seq 0 $((N - 1))); do
       cargo build -p amazing-js --example test262_host --release --locked 2>&1 | grep -E '^error' -A7 | head -20
       echo $RUNNER_B64 | base64 -d > /tmp/t262runner.py
       python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
-        --jobs \$JOBS --timeout 60 --shard $K/$N --output ~/amazing/out/shard.json >/dev/null 2>&1
+        --jobs \$JOBS --timeout 60 --shard $K/$N --output \$OUT/shard.json >/dev/null 2>&1
       echo shard-$K-exit=\$?" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
-    read -r H P ID < <("$REPO/scripts/boat-lane.py" ensure "t262-shard-$K")
+    read -r H P ID _ < <("$REPO/scripts/boat-lane.py" ensure "t262-shard-$K")
     scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-      -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/shard.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
+      -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/t262-shard-$K/shard.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
+    # Shards are single-use: stop now instead of billing 5 idle minutes.
+    "$REPO/scripts/boat-lane.py" stop "t262-shard-$K" >/dev/null 2>&1
   ) &
   pids+=($!)
 done

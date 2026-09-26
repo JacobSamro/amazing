@@ -1,0 +1,335 @@
+{
+ "schema": 1,
+ "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+ "selection": {
+  "kind": "sha256-path-stratified-subset",
+  "source": "css15b-manifest.json",
+  "category": "css-counter-styles",
+  "count": 80
+ },
+ "sparse_paths": [
+  "css/css-counter-styles"
+ ],
+ "tests": [
+  {
+   "id": "css-counter-styles__malayalam__css3-counter-styles-136.html",
+   "test": "css/css-counter-styles/malayalam/css3-counter-styles-136.html"
+  },
+  {
+   "id": "css-counter-styles__japanese-formal__css3-counter-styles-051.html",
+   "test": "css/css-counter-styles/japanese-formal/css3-counter-styles-051.html"
+  },
+  {
+   "id": "css-counter-styles__mongolian__css3-counter-styles-137.html",
+   "test": "css/css-counter-styles/mongolian/css3-counter-styles-137.html"
+  },
+  {
+   "id": "css-counter-styles__khmer__css3-counter-styles-163.html",
+   "test": "css/css-counter-styles/khmer/css3-counter-styles-163.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-formal__css3-counter-styles-088.html",
+   "test": "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-088.html"
+  },
+  {
+   "id": "css-counter-styles__armenian__css3-counter-styles-009.html",
+   "test": "css/css-counter-styles/armenian/css3-counter-styles-009.html"
+  },
+  {
+   "id": "css-counter-styles__tamil__css3-counter-styles-148.html",
+   "test": "css/css-counter-styles/tamil/css3-counter-styles-148.html"
+  },
+  {
+   "id": "css-counter-styles__upper-roman__css3-counter-styles-024a.html",
+   "test": "css/css-counter-styles/upper-roman/css3-counter-styles-024a.html"
+  },
+  {
+   "id": "css-counter-styles__malayalam__css3-counter-styles-135.html",
+   "test": "css/css-counter-styles/malayalam/css3-counter-styles-135.html"
+  },
+  {
+   "id": "css-counter-styles__upper-armenian__css3-counter-styles-107.html",
+   "test": "css/css-counter-styles/upper-armenian/css3-counter-styles-107.html"
+  },
+  {
+   "id": "css-counter-styles__counter-style-at-rule__descriptor-suffix.html",
+   "test": "css/css-counter-styles/counter-style-at-rule/descriptor-suffix.html"
+  },
+  {
+   "id": "css-counter-styles__kannada__css3-counter-styles-129.html",
+   "test": "css/css-counter-styles/kannada/css3-counter-styles-129.html"
+  },
+  {
+   "id": "css-counter-styles__korean-hanja-formal__css3-counter-styles-062.html",
+   "test": "css/css-counter-styles/korean-hanja-formal/css3-counter-styles-062.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-informal__css3-counter-styles-073.html",
+   "test": "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-073.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-formal__counter-simp-chinese-formal.html",
+   "test": "css/css-counter-styles/simp-chinese-formal/counter-simp-chinese-formal.html"
+  },
+  {
+   "id": "css-counter-styles__persian__css3-counter-styles-104.html",
+   "test": "css/css-counter-styles/persian/css3-counter-styles-104.html"
+  },
+  {
+   "id": "css-counter-styles__lower-roman__css3-counter-styles-020a.html",
+   "test": "css/css-counter-styles/lower-roman/css3-counter-styles-020a.html"
+  },
+  {
+   "id": "css-counter-styles__gujarati__css3-counter-styles-122.html",
+   "test": "css/css-counter-styles/gujarati/css3-counter-styles-122.html"
+  },
+  {
+   "id": "css-counter-styles__bengali__css3-counter-styles-118.html",
+   "test": "css/css-counter-styles/bengali/css3-counter-styles-118.html"
+  },
+  {
+   "id": "css-counter-styles__myanmar__css3-counter-styles-142.html",
+   "test": "css/css-counter-styles/myanmar/css3-counter-styles-142.html"
+  },
+  {
+   "id": "css-counter-styles__armenian__css3-counter-styles-008.html",
+   "test": "css/css-counter-styles/armenian/css3-counter-styles-008.html"
+  },
+  {
+   "id": "css-counter-styles__cambodian__css3-counter-styles-159.html",
+   "test": "css/css-counter-styles/cambodian/css3-counter-styles-159.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-formal__css3-counter-styles-087.html",
+   "test": "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-087.html"
+  },
+  {
+   "id": "css-counter-styles__thai__css3-counter-styles-153.html",
+   "test": "css/css-counter-styles/thai/css3-counter-styles-153.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-informal__css3-counter-styles-082.html",
+   "test": "css/css-counter-styles/trad-chinese-informal/css3-counter-styles-082.html"
+  },
+  {
+   "id": "css-counter-styles__lower-roman__css3-counter-styles-019.html",
+   "test": "css/css-counter-styles/lower-roman/css3-counter-styles-019.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-earthly-branch__css3-counter-styles-202.html",
+   "test": "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-202.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-formal__css3-counter-styles-078.html",
+   "test": "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-078.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-206.html",
+   "test": "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-206.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-earthly-branch__css3-counter-styles-201.html",
+   "test": "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-201.html"
+  },
+  {
+   "id": "css-counter-styles__lower-armenian__css3-counter-styles-114.html",
+   "test": "css/css-counter-styles/lower-armenian/css3-counter-styles-114.html"
+  },
+  {
+   "id": "css-counter-styles__korean-hangul-formal__css3-counter-styles-053.html",
+   "test": "css/css-counter-styles/korean-hangul-formal/css3-counter-styles-053.html"
+  },
+  {
+   "id": "css-counter-styles__hebrew__css3-counter-styles-015.html",
+   "test": "css/css-counter-styles/hebrew/css3-counter-styles-015.html"
+  },
+  {
+   "id": "css-counter-styles__khmer__css3-counter-styles-162.html",
+   "test": "css/css-counter-styles/khmer/css3-counter-styles-162.html"
+  },
+  {
+   "id": "css-counter-styles__oriya__css3-counter-styles-143.html",
+   "test": "css/css-counter-styles/oriya/css3-counter-styles-143.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-205.html",
+   "test": "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-205.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-formal__css3-counter-styles-077.html",
+   "test": "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-077.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-formal__counter-trad-chinese-formal.html",
+   "test": "css/css-counter-styles/trad-chinese-formal/counter-trad-chinese-formal.html"
+  },
+  {
+   "id": "css-counter-styles__japanese-informal__counter-japanese-informal.html",
+   "test": "css/css-counter-styles/japanese-informal/counter-japanese-informal.html"
+  },
+  {
+   "id": "css-counter-styles__kannada__css3-counter-styles-128.html",
+   "test": "css/css-counter-styles/kannada/css3-counter-styles-128.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-informal__counter-trad-chinese-informal.html",
+   "test": "css/css-counter-styles/trad-chinese-informal/counter-trad-chinese-informal.html"
+  },
+  {
+   "id": "css-counter-styles__japanese-informal__css3-counter-styles-043.html",
+   "test": "css/css-counter-styles/japanese-informal/css3-counter-styles-043.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-formal__css3-counter-styles-086.html",
+   "test": "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-086.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-formal__css3-counter-styles-076.html",
+   "test": "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-076.html"
+  },
+  {
+   "id": "css-counter-styles__korean-hanja-formal__css3-counter-styles-065.html",
+   "test": "css/css-counter-styles/korean-hanja-formal/css3-counter-styles-065.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-formal__css3-counter-styles-090.html",
+   "test": "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-090.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-earthly-branch__css3-counter-styles-203.html",
+   "test": "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-203.html"
+  },
+  {
+   "id": "css-counter-styles__devanagari__css3-counter-styles-121.html",
+   "test": "css/css-counter-styles/devanagari/css3-counter-styles-121.html"
+  },
+  {
+   "id": "css-counter-styles__lao__css3-counter-styles-133.html",
+   "test": "css/css-counter-styles/lao/css3-counter-styles-133.html"
+  },
+  {
+   "id": "css-counter-styles__gujarati__css3-counter-styles-123.html",
+   "test": "css/css-counter-styles/gujarati/css3-counter-styles-123.html"
+  },
+  {
+   "id": "css-counter-styles__tamil__css3-counter-styles-147.html",
+   "test": "css/css-counter-styles/tamil/css3-counter-styles-147.html"
+  },
+  {
+   "id": "css-counter-styles__kannada__css3-counter-styles-130.html",
+   "test": "css/css-counter-styles/kannada/css3-counter-styles-130.html"
+  },
+  {
+   "id": "css-counter-styles__hiragana-iroha__css3-counter-styles-034.html",
+   "test": "css/css-counter-styles/hiragana-iroha/css3-counter-styles-034.html"
+  },
+  {
+   "id": "css-counter-styles__hiragana__css3-counter-styles-032.html",
+   "test": "css/css-counter-styles/hiragana/css3-counter-styles-032.html"
+  },
+  {
+   "id": "css-counter-styles__counter-style-at-rule__empty-string-symbol.html",
+   "test": "css/css-counter-styles/counter-style-at-rule/empty-string-symbol.html"
+  },
+  {
+   "id": "css-counter-styles__cambodian__css3-counter-styles-160.html",
+   "test": "css/css-counter-styles/cambodian/css3-counter-styles-160.html"
+  },
+  {
+   "id": "css-counter-styles__myanmar__css3-counter-styles-141.html",
+   "test": "css/css-counter-styles/myanmar/css3-counter-styles-141.html"
+  },
+  {
+   "id": "css-counter-styles__hebrew__counter-hebrew-nested.html",
+   "test": "css/css-counter-styles/hebrew/counter-hebrew-nested.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-informal__css3-counter-styles-071.html",
+   "test": "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-071.html"
+  },
+  {
+   "id": "css-counter-styles__japanese-formal__css3-counter-styles-047.html",
+   "test": "css/css-counter-styles/japanese-formal/css3-counter-styles-047.html"
+  },
+  {
+   "id": "css-counter-styles__georgian__css3-counter-styles-014.html",
+   "test": "css/css-counter-styles/georgian/css3-counter-styles-014.html"
+  },
+  {
+   "id": "css-counter-styles__trad-chinese-informal__css3-counter-styles-085.html",
+   "test": "css/css-counter-styles/trad-chinese-informal/css3-counter-styles-085.html"
+  },
+  {
+   "id": "css-counter-styles__georgian__css3-counter-styles-011.html",
+   "test": "css/css-counter-styles/georgian/css3-counter-styles-011.html"
+  },
+  {
+   "id": "css-counter-styles__tibetan__css3-counter-styles-156.html",
+   "test": "css/css-counter-styles/tibetan/css3-counter-styles-156.html"
+  },
+  {
+   "id": "css-counter-styles__katakana__css3-counter-styles-038.html",
+   "test": "css/css-counter-styles/katakana/css3-counter-styles-038.html"
+  },
+  {
+   "id": "css-counter-styles__katakana-iroha__css3-counter-styles-039.html",
+   "test": "css/css-counter-styles/katakana-iroha/css3-counter-styles-039.html"
+  },
+  {
+   "id": "css-counter-styles__tibetan__css3-counter-styles-157.html",
+   "test": "css/css-counter-styles/tibetan/css3-counter-styles-157.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-decimal__css3-counter-styles-001.html",
+   "test": "css/css-counter-styles/cjk-decimal/css3-counter-styles-001.html"
+  },
+  {
+   "id": "css-counter-styles__japanese-formal__css3-counter-styles-049.html",
+   "test": "css/css-counter-styles/japanese-formal/css3-counter-styles-049.html"
+  },
+  {
+   "id": "css-counter-styles__katakana__css3-counter-styles-037.html",
+   "test": "css/css-counter-styles/katakana/css3-counter-styles-037.html"
+  },
+  {
+   "id": "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-204.html",
+   "test": "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-204.html"
+  },
+  {
+   "id": "css-counter-styles__myanmar__css3-counter-styles-140.html",
+   "test": "css/css-counter-styles/myanmar/css3-counter-styles-140.html"
+  },
+  {
+   "id": "css-counter-styles__hiragana-iroha__css3-counter-styles-033.html",
+   "test": "css/css-counter-styles/hiragana-iroha/css3-counter-styles-033.html"
+  },
+  {
+   "id": "css-counter-styles__korean-hanja-informal__css3-counter-styles-059.html",
+   "test": "css/css-counter-styles/korean-hanja-informal/css3-counter-styles-059.html"
+  },
+  {
+   "id": "css-counter-styles__hebrew__css3-counter-styles-016.html",
+   "test": "css/css-counter-styles/hebrew/css3-counter-styles-016.html"
+  },
+  {
+   "id": "css-counter-styles__simp-chinese-formal__css3-counter-styles-079.html",
+   "test": "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-079.html"
+  },
+  {
+   "id": "css-counter-styles__upper-roman__css3-counter-styles-025.html",
+   "test": "css/css-counter-styles/upper-roman/css3-counter-styles-025.html"
+  },
+  {
+   "id": "css-counter-styles__thai__css3-counter-styles-152.html",
+   "test": "css/css-counter-styles/thai/css3-counter-styles-152.html"
+  },
+  {
+   "id": "css-counter-styles__oriya__css3-counter-styles-144.html",
+   "test": "css/css-counter-styles/oriya/css3-counter-styles-144.html"
+  },
+  {
+   "id": "css-counter-styles__korean-hanja-informal__css3-counter-styles-060.html",
+   "test": "css/css-counter-styles/korean-hanja-informal/css3-counter-styles-060.html"
+  }
+ ]
+}

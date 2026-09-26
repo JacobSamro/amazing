@@ -366,7 +366,7 @@ fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, Pag
         .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == "reftest-wait")))
 }
 
-fn paint_host_surface(
+pub(crate) fn paint_host_surface(
     host: &Rc<RefCell<BrowserDomHost>>,
     html_path: &str,
     width: f32,
