@@ -109,9 +109,14 @@ if [ "$HOST" = boat ]; then
   # sync until the command exits; without it the reaper stopped a sandbox
   # mid-sync (low load, no cargo yet) and killed the run (2026-09-26).
   LEASE=".amazing-busy/$LANE.$$"
-  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" || {
+  # A new lane tree is seeded on the sandbox from the template's ~/amazing copy,
+  # so rsync sends only the lane's differences, not the whole 85 MB tree; twenty
+  # lanes doing full uploads at once saturated the Mac's uplink (2026-09-26).
+  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE &&
+    { [ -e amazing/wt/$LANE/Cargo.toml ] || [ ! -e amazing/Cargo.toml ] ||
+      tar -C amazing -cf - --exclude=./target --exclude=./wt --exclude=./out --exclude=./corpora . | tar -C amazing/wt/$LANE -xf -; }" || {
     echo "linux-run: cannot reach $BOAT_ID" >&2; exit 3; }
-  rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
+  rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
     --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" || {
     echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
   REMOTE="trap 'rm -f ~/$LEASE' EXIT
