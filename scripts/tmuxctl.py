@@ -1379,3 +1379,5 @@ if __name__ == "__main__":
     sys.exit(main())
 # JSD-2 (2026-09-26): the js-date lane takes RegExp while js-lang works on classes.
 LANE_GRANTS.setdefault("js-date", []).extend(["crates/amazing-regex", "crates/amazing-js/src/interp_regexp.rs", "crates/amazing-js/src/regexp_tests.rs"])
+# A11Y-6 (2026-09-26): a11y adopts its tree in the driver itself (integrator-assist is busy with live pages).
+LANE_GRANTS.setdefault("a11y", []).extend(["crates/amazing/src/runtime_host_a11y.rs", "crates/amazing/src/a11y_host.rs", "crates/amazing/Cargo.toml"])
