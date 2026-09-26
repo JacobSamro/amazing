@@ -35,6 +35,18 @@
 //! writing this), so `run_role_file`/`run_accname_file` apply directly — see
 //! `html_aam_selection` below.
 //!
+//! A11Y-12 adds a third selection, `core_aam_and_wai_aria_states_selection`:
+//! `core-aam/role/` (one contextual-role file, same pattern as above),
+//! `wai-aria/checked/`+`wai-aria/pressed/` (`AriaUtils.
+//! verifyPropertiesBySelector`, a new pattern — see `run_properties_file`),
+//! `wai-aria/aria-actions/` (mostly the ordinary label pattern, plus one pure
+//! IDL-reflection file with no accessibility computation at all), and
+//! `wai-aria/subtree/` (`AriaUtils.verifyAccessibilitySubtree`'s nested
+//! role/label/children shape — see `run_subtree_file`). `core-aam/aamtests/`
+//! (a Python pytest harness) and `core-aam/arianotify/` (all `-manual.html`)
+//! are not browser-runnable HTML fixtures at all and are excluded from the
+//! selection entirely, not counted as "unsupported" files.
+//!
 //! Opt-in: requires `AMAZING_WPT_ROOT` at the pinned revision
 //! (`scripts/ensure-wpt.sh` on a Linux sandbox sets up `~/corpora/wpt`). Run:
 //!
@@ -107,6 +119,34 @@ const KNOWN_GAP_ROLE_TESTNAMES: &[(&str, &str)] = &[
     ("roles-minimum.tentative.html", "el-div"),
 ];
 
+/// A11Y-12: `core-aam/role/` (contextual role mappings defined in Core AAM
+/// rather than HTML AAM, but the identical `AriaUtils.verifyRolesBySelector`/
+/// `verifyGenericRolesBySelector` pattern — `run_role_file` applies
+/// unchanged). `core-aam/aamtests/` (a Python pytest harness, not browser
+/// HTML at all) and `core-aam/arianotify/` (all `-manual.html`, interactive-
+/// only) are not part of this selection.
+const EXPECTED_CORE_AAM_ROLE_FILES: usize = 1;
+/// `wai-aria/checked/` and `wai-aria/pressed/`: `AriaUtils.
+/// verifyPropertiesBySelector(".ex-props")`, keyed off a
+/// `data-expectedproperties` JSON blob rather than a single role/label
+/// attribute — see `run_properties_file`.
+const EXPECTED_ARIA_CHECKED_FILES: usize = 1;
+const EXPECTED_ARIA_PRESSED_FILES: usize = 1;
+/// `wai-aria/aria-actions/`: three files use the ordinary
+/// `verifyLabelsBySelector` pattern (`run_accname_file` applies unchanged,
+/// once `accname.rs`'s name-from-content excludes a host's own
+/// `aria-actions` targets — see `is_aria_action_target`); `idl-reflection.
+/// tentative.html` is a pure `Element`/`ElementInternals` IDL-reflection
+/// test (no `.ex` markup, no accessibility computation at all — it needs a
+/// running JS engine with custom elements and shadow DOM, entirely outside
+/// what this static-markup runner builds) and is unsupported.
+const EXPECTED_ARIA_ACTIONS_FILES: usize = 4;
+const UNSUPPORTED_ARIA_ACTIONS_FILES: &[&str] = &["idl-reflection.tentative.html"];
+/// `wai-aria/subtree/`: `AriaUtils.verifyAccessibilitySubtree(selector,
+/// expectedTreeShape)`, a nested role/label/children-count shape rather than
+/// a flat per-element attribute — see `run_subtree_file`.
+const EXPECTED_ARIA_SUBTREE_FILES: usize = 1;
+
 /// `accname/name/` files whose expectation is only reachable by running the
 /// page's own `<script>` (a CSSOM mutation of a stylesheet rule, here) after
 /// load — this runner builds one static document from the markup and never
@@ -171,7 +211,20 @@ fn pinned_wpt_root() -> std::path::PathBuf {
         .ok()
         .filter(|out| out.status.success())
         .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned());
-    assert_eq!(head.as_deref(), Some(REVISION), "AMAZING_WPT_ROOT is not at the pinned revision");
+    if head.as_deref() == Some(REVISION) {
+        return root;
+    }
+    // The venus hosts (`scripts/linux-run.sh`, used while Boat's daily start
+    // quota is exhausted) have no git; `scripts/ensure-wpt.sh` gives them the
+    // pinned GitHub tarball instead and marks it with a `.pinned-<rev7>`
+    // sentinel file rather than a `.git` checkout. Accept that as equally
+    // valid proof of the pin.
+    let marker = root.join(format!(".pinned-{}", &REVISION[..7]));
+    assert!(
+        marker.exists(),
+        "AMAZING_WPT_ROOT is not at the pinned revision (no matching git HEAD and no {} marker)",
+        marker.display()
+    );
     root
 }
 
@@ -394,6 +447,374 @@ fn run_role_file(path: &Path, tally: &mut Tally) {
     if checked == 0 {
         tally.unsupported_files.push(file.into_owned());
     }
+}
+
+/// A flat `{"key": "value", ...}` JS-object literal (double-quoted keys and
+/// string values only, as `JSON.parse` on `data-expectedproperties` produces)
+/// — enough for the two pinned `wai-aria/checked/`/`wai-aria/pressed/` files,
+/// which never nest or use non-string values.
+fn parse_flat_json_object(input: &str) -> Vec<(String, String)> {
+    let inner = input.trim().trim_start_matches('{').trim_end_matches('}');
+    inner
+        .split(',')
+        .filter_map(|entry| {
+            let (key, value) = entry.split_once(':')?;
+            let key = key.trim().trim_matches('"').to_owned();
+            let value = value.trim().trim_matches('"').to_owned();
+            (!key.is_empty()).then_some((key, value))
+        })
+        .collect()
+}
+
+/// `Tristate` as the JSON string `AriaUtils.verifyPropertiesBySelector`'s
+/// fixtures expect — unlike `Tristate::as_str()` (which returns `None` for
+/// `Undefined`, the right shape for exposing a real absent ARIA property),
+/// `data-expectedproperties='{ "pressed": "undefined" }'` spells the absent
+/// case out as the literal string `"undefined"`.
+fn tristate_expected_str(value: amazing_a11y::Tristate) -> &'static str {
+    match value {
+        amazing_a11y::Tristate::Undefined => "undefined",
+        amazing_a11y::Tristate::False => "false",
+        amazing_a11y::Tristate::True => "true",
+        amazing_a11y::Tristate::Mixed => "mixed",
+    }
+}
+
+/// `AriaUtils.verifyPropertiesBySelector(".ex-props")` fixtures
+/// (`wai-aria/checked/checked.tentative.html`, `wai-aria/pressed/
+/// pressed.tentative.html`): `data-expectedproperties` is a small JSON object
+/// keyed by property name, checked against this crate's own typed
+/// `AxNode::states` instead of a real platform AT's exposed property string.
+/// Only the two keys these two pinned files use (`checked`, `pressed`) are
+/// implemented; any other key fails loudly rather than silently passing, so
+/// a future addition to this selection cannot go unnoticed.
+fn run_properties_file(path: &Path, tally: &mut Tally) {
+    let html = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    let css = inline_style_css(&html);
+    let doc = build_document(&html, &css, 800.0, Some(600.0));
+    let file = path.file_name().unwrap().to_string_lossy();
+    let mut checked = 0;
+    for node in doc.dom.tree_order(NodeIdx(0)) {
+        let classes = class_tokens(&doc.dom, node);
+        if !classes.contains(&"ex-props") {
+            continue;
+        }
+        let Some(expected_json) = doc.dom.get_attribute_ns(node, None, "data-expectedproperties") else {
+            continue;
+        };
+        checked += 1;
+        let testname = doc
+            .dom
+            .get_attribute_ns(node, None, "data-testname")
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{}: node {}", file, node.0));
+        let context = format!("{file}: {testname}");
+        let Some(ax_id) = doc.tree.find_dom(node) else {
+            tally.record(false, format!("{context} (no exposed AxNode for the .ex-props element)"));
+            continue;
+        };
+        let Some(ax_node) = doc.tree.node(ax_id) else {
+            tally.record(false, format!("{context} (dangling AxNodeId)"));
+            continue;
+        };
+        let mut problems = Vec::new();
+        for (key, expected_value) in parse_flat_json_object(&expected_json) {
+            let computed = match key.as_str() {
+                "checked" => tristate_expected_str(ax_node.states.checked),
+                "pressed" => tristate_expected_str(ax_node.states.pressed),
+                other => {
+                    problems.push(format!("unsupported property key {other:?}"));
+                    continue;
+                }
+            };
+            if computed != expected_value {
+                problems.push(format!("{key}: expected {expected_value:?}, got {computed:?}"));
+            }
+        }
+        let ok = problems.is_empty();
+        tally.record(ok, if ok { context } else { format!("{context} ({})", problems.join("; ")) });
+    }
+    if checked == 0 {
+        tally.unsupported_files.push(file.into_owned());
+    }
+}
+
+/// The small subset of JS object-literal syntax `AriaUtils.
+/// verifyAccessibilitySubtree`'s second argument uses in the one pinned file
+/// that calls it: `{ role: "...", label: "...", children: [ {...}, ... ] }`,
+/// with plain (unquoted) keys and double-quoted string values only.
+#[derive(Debug, Default, Clone)]
+struct ExpectedSubtree {
+    role: String,
+    label: String,
+    children: Vec<ExpectedSubtree>,
+}
+
+struct JsonyParser<'a> {
+    input: &'a str,
+    pos: usize,
+}
+
+impl<'a> JsonyParser<'a> {
+    fn new(input: &'a str) -> Self {
+        Self { input, pos: 0 }
+    }
+    fn peek(&self) -> Option<char> {
+        self.input[self.pos..].chars().next()
+    }
+    fn skip_ws(&mut self) {
+        while self.peek().is_some_and(char::is_whitespace) {
+            self.pos += 1;
+        }
+    }
+    /// Whitespace, then any number of trailing/interior commas and more
+    /// whitespace — called at the top of every object/array loop, so a
+    /// single comma between entries (or a trailing one before `}`/`]`) is
+    /// consumed without the caller needing to track separator state.
+    fn skip_ws_and_commas(&mut self) {
+        loop {
+            self.skip_ws();
+            if self.peek() == Some(',') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    fn expect(&mut self, ch: char) {
+        self.skip_ws();
+        assert_eq!(self.peek(), Some(ch), "expected {ch:?} at byte {} of {:?}", self.pos, self.input);
+        self.pos += 1;
+    }
+    fn parse_ident(&mut self) -> String {
+        self.skip_ws();
+        let start = self.pos;
+        while self.peek().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+            self.pos += 1;
+        }
+        self.input[start..self.pos].to_owned()
+    }
+    fn parse_string(&mut self) -> String {
+        self.expect('"');
+        let start = self.pos;
+        while self.peek().is_some_and(|c| c != '"') {
+            self.pos += 1;
+        }
+        let value = self.input[start..self.pos].to_owned();
+        self.expect('"');
+        value
+    }
+    fn parse_object(&mut self) -> ExpectedSubtree {
+        self.expect('{');
+        let mut tree = ExpectedSubtree::default();
+        loop {
+            self.skip_ws_and_commas();
+            if self.peek() == Some('}') {
+                break;
+            }
+            let key = self.parse_ident();
+            self.expect(':');
+            self.skip_ws();
+            match key.as_str() {
+                "role" => tree.role = self.parse_string(),
+                "label" => tree.label = self.parse_string(),
+                "children" => tree.children = self.parse_array(),
+                other => panic!("unexpected key {other:?} in verifyAccessibilitySubtree fixture"),
+            }
+        }
+        self.expect('}');
+        tree
+    }
+    fn parse_array(&mut self) -> Vec<ExpectedSubtree> {
+        self.expect('[');
+        let mut items = Vec::new();
+        loop {
+            self.skip_ws_and_commas();
+            if self.peek() == Some(']') {
+                break;
+            }
+            items.push(self.parse_object());
+        }
+        self.expect(']');
+        items
+    }
+}
+
+/// Extracts the selector and expected tree shape from a fixture's
+/// `AriaUtils.verifyAccessibilitySubtree("<selector>", {...})` call. `None`
+/// when the file has no such call at all (nothing for this runner to check).
+fn parse_verify_accessibility_subtree(html: &str) -> Option<(String, ExpectedSubtree)> {
+    let marker = "AriaUtils.verifyAccessibilitySubtree(";
+    let start = html.find(marker)? + marker.len();
+    let mut parser = JsonyParser::new(&html[start..]);
+    let selector = parser.parse_string();
+    parser.skip_ws();
+    if parser.peek() == Some(',') {
+        parser.pos += 1;
+    }
+    let tree = parser.parse_object();
+    Some((selector, tree))
+}
+
+/// Recursively compares a built `AxTree` subtree against an
+/// `ExpectedSubtree`, matching `aria-utils.js`'s own `_assertAccessibilitySubtree`:
+/// role, label (accessible name) and child count at every level, recursing
+/// into children only when the count itself matches (a length mismatch makes
+/// any deeper comparison meaningless). All real WPT subtests in this pinned
+/// file are aria-utils.js's own multi-assertion promise_test, so mismatches
+/// are collected into one report per file rather than one `Tally` entry per
+/// node.
+fn collect_subtree_mismatches(
+    tree: &amazing_a11y::AxTree,
+    id: amazing_a11y::AxNodeId,
+    expected: &ExpectedSubtree,
+    position: &str,
+    problems: &mut Vec<String>,
+) {
+    let Some(node) = tree.node(id) else {
+        problems.push(format!("{position}: dangling AxNodeId"));
+        return;
+    };
+    if node.role.as_str() != expected.role {
+        problems.push(format!("{position} role: expected {:?}, got {:?}", expected.role, node.role.as_str()));
+    }
+    if node.name != expected.label {
+        problems.push(format!("{position} label: expected {:?}, got {:?}", expected.label, node.name));
+    }
+    if node.children.len() != expected.children.len() {
+        problems.push(format!(
+            "{position} children.length: expected {}, got {}",
+            expected.children.len(),
+            node.children.len()
+        ));
+        return;
+    }
+    for (index, (child_id, child_expected)) in node.children.clone().into_iter().zip(&expected.children).enumerate()
+    {
+        collect_subtree_mismatches(tree, child_id, child_expected, &format!("{position}[{index}]"), problems);
+    }
+}
+
+fn run_subtree_file(path: &Path, tally: &mut Tally) {
+    let html = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    let file = path.file_name().unwrap().to_string_lossy();
+    let Some((selector, expected)) = parse_verify_accessibility_subtree(&html) else {
+        tally.unsupported_files.push(file.into_owned());
+        return;
+    };
+    let context = format!("{file}: accessibility tree for {selector}");
+    let Some(id) = selector.strip_prefix('#') else {
+        tally.unsupported_files.push(file.into_owned());
+        return;
+    };
+    let css = inline_style_css(&html);
+    let doc = build_document(&html, &css, 800.0, Some(600.0));
+    let Some(node) = doc
+        .dom
+        .tree_order(NodeIdx(0))
+        .into_iter()
+        .find(|&n| doc.dom.get_attribute_ns(n, None, "id") == Some(id))
+    else {
+        tally.record(false, format!("{context} (root selector not found in the DOM)"));
+        return;
+    };
+    let Some(ax_id) = doc.tree.find_dom(node) else {
+        tally.record(false, format!("{context} (no exposed AxNode for the root)"));
+        return;
+    };
+    let mut problems = Vec::new();
+    collect_subtree_mismatches(&doc.tree, ax_id, &expected, &selector, &mut problems);
+    let ok = problems.is_empty();
+    tally.record(ok, if ok { context } else { format!("{context} ({})", problems.join("; ")) });
+}
+
+#[test]
+#[ignore = "requires AMAZING_WPT_ROOT at the pinned WPT revision"]
+fn core_aam_and_wai_aria_states_selection() {
+    let root = pinned_wpt_root();
+
+    let core_aam_role_files = html_files(&root.join("core-aam/role"));
+    assert_eq!(
+        core_aam_role_files.len(),
+        EXPECTED_CORE_AAM_ROLE_FILES,
+        "core-aam/role/*.html count changed — update the pinned selection"
+    );
+    let checked_files = html_files(&root.join("wai-aria/checked"));
+    assert_eq!(
+        checked_files.len(),
+        EXPECTED_ARIA_CHECKED_FILES,
+        "wai-aria/checked/*.html count changed — update the pinned selection"
+    );
+    let pressed_files = html_files(&root.join("wai-aria/pressed"));
+    assert_eq!(
+        pressed_files.len(),
+        EXPECTED_ARIA_PRESSED_FILES,
+        "wai-aria/pressed/*.html count changed — update the pinned selection"
+    );
+    let aria_actions_files = html_files(&root.join("wai-aria/aria-actions"));
+    assert_eq!(
+        aria_actions_files.len(),
+        EXPECTED_ARIA_ACTIONS_FILES,
+        "wai-aria/aria-actions/*.html count changed — update the pinned selection"
+    );
+    let subtree_files = html_files(&root.join("wai-aria/subtree"));
+    assert_eq!(
+        subtree_files.len(),
+        EXPECTED_ARIA_SUBTREE_FILES,
+        "wai-aria/subtree/*.html count changed — update the pinned selection"
+    );
+
+    let mut tally = Tally::default();
+    for path in &core_aam_role_files {
+        run_role_file(path, &mut tally);
+    }
+    for path in checked_files.iter().chain(&pressed_files) {
+        run_properties_file(path, &mut tally);
+    }
+    for path in &aria_actions_files {
+        let name = path.file_name().unwrap().to_string_lossy();
+        if UNSUPPORTED_ARIA_ACTIONS_FILES.contains(&name.as_ref()) {
+            tally.unsupported_files.push(name.into_owned());
+            continue;
+        }
+        run_accname_file(path, &mut tally);
+    }
+    for path in &subtree_files {
+        run_subtree_file(path, &mut tally);
+    }
+
+    let mut actual_unsupported = tally.unsupported_files.clone();
+    actual_unsupported.sort();
+    let mut expected_unsupported: Vec<&str> = UNSUPPORTED_ARIA_ACTIONS_FILES.to_vec();
+    expected_unsupported.sort_unstable();
+    assert_eq!(
+        actual_unsupported,
+        expected_unsupported,
+        "unsupported-file set changed for the core-aam/wai-aria states selection"
+    );
+
+    println!(
+        "WPT core-aam/role + wai-aria/{{checked,pressed,aria-actions,subtree}}: {} passed, \
+         {} failed, {} logged, {} file(s) unsupported ({})",
+        tally.pass,
+        tally.fail,
+        tally.logged.len(),
+        tally.unsupported_files.len(),
+        tally.unsupported_files.join(", "),
+    );
+    if !tally.logged.is_empty() {
+        println!("Logged (spec-ambiguous, not scored):");
+        for entry in &tally.logged {
+            println!("  {entry}");
+        }
+    }
+    if !tally.failures.is_empty() {
+        println!("Failures:");
+        for failure in &tally.failures {
+            println!("  {failure}");
+        }
+    }
+    assert_eq!(tally.fail, 0, "{} subtest(s) failed; see stdout for detail", tally.fail);
 }
 
 #[test]
