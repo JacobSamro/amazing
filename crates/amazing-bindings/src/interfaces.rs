@@ -239,6 +239,8 @@ const DOCUMENT: &[Member] = &[
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
     getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
+    getter("embeds", O::DocumentEmbeds), getter("plugins", O::DocumentEmbeds),
+    getter("anchors", O::DocumentAnchors), getter("applets", O::DocumentApplets),
     getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
     getter("activeElement", O::DocumentActiveElement),
     method("hasFocus", O::DocumentHasFocus, 0),

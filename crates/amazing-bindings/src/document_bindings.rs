@@ -8,6 +8,7 @@ pub(crate) fn handles(op: O) -> bool {
         | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentLocation | O::DocumentGetElementById
         | O::FragmentGetElementById | O::DocumentGetElementsByName | O::DocumentForms
         | O::DocumentImages | O::DocumentLinks | O::DocumentScripts
+        | O::DocumentEmbeds | O::DocumentAnchors | O::DocumentApplets
         | O::DocumentActiveElement | O::DocumentHasFocus)
 }
 
@@ -82,7 +83,8 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
             match element { Some(element) => host.wrap_node(element), None => Ok(host.null()) }
         }
         O::DocumentGetElementsByName | O::DocumentForms | O::DocumentImages
-            | O::DocumentLinks | O::DocumentScripts => {
+            | O::DocumentLinks | O::DocumentScripts
+            | O::DocumentEmbeds | O::DocumentAnchors | O::DocumentApplets => {
             let filter = match op {
                 O::DocumentGetElementsByName => {
                     let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
@@ -90,6 +92,9 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
                 }
                 O::DocumentForms => CollectionFilter::HtmlTag("form".encode_utf16().collect()),
                 O::DocumentImages => CollectionFilter::HtmlTag("img".encode_utf16().collect()),
+                O::DocumentEmbeds => CollectionFilter::HtmlTag("embed".encode_utf16().collect()),
+                O::DocumentAnchors => CollectionFilter::Anchors,
+                O::DocumentApplets => CollectionFilter::Empty,
                 O::DocumentLinks => CollectionFilter::Links,
                 _ => CollectionFilter::HtmlTag("script".encode_utf16().collect()),
             };
