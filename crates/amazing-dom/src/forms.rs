@@ -559,16 +559,26 @@ impl Dom {
     }
     pub fn set_input_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
         let kind = self.input_type(node)?;
+        let text = selects_text(&kind);
         self.form_state_mut(node).last_type = Some(kind);
         match self.input_value_mode(node)? {
             ValueMode::Default | ValueMode::DefaultOn => {
                 if !self.has(node, "value") {
                     self.set_attribute(node, "value", "")?;
                 }
+                let changed =
+                    self.attribute_utf16(node, "value").as_deref() != Some(value.as_slice());
+                let len = value.len() as u32;
                 let attr = self
                     .get_attribute_node(node, None, "value")
                     .ok_or(DomError::InvalidStateError)?;
-                self.set_attr_value(attr, value)
+                self.set_attr_value(attr, value)?;
+                // Setting a changed text value moves the cursor to the end.
+                if changed && text {
+                    self.form_state_mut(node).selection =
+                        Some((len, len, SelectionDirection::None));
+                }
+                Ok(())
             }
             ValueMode::Filename if !value.is_empty() => Err(DomError::InvalidStateError),
             ValueMode::Filename => Ok(()),
@@ -582,11 +592,16 @@ impl Dom {
                     self.attr(node, "step"),
                 );
                 let changed = self.input_value(node)? != sanitized;
+                let len = sanitized.len() as u32;
                 let state = self.form_state_mut(node);
                 state.value = Some(sanitized);
                 state.dirty_value = true;
                 state.user_edited = false;
-                if changed { state.selection = None; }
+                // Setting a text control's value moves the text entry cursor to
+                // the end; setting it to the same value leaves the cursor alone.
+                if changed && text {
+                    state.selection = Some((len, len, SelectionDirection::None));
+                }
                 self.record_render_full(node, "input value state");
                 Ok(())
             }
@@ -1001,12 +1016,17 @@ impl Dom {
     }
     pub fn set_textarea_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
         self.require_tag(node, &["textarea"])?;
-        let changed = self.textarea_value(node)? != normalize_newlines(&value);
+        let normalized = normalize_newlines(&value);
+        let changed = self.textarea_value(node)? != normalized;
+        let len = normalized.len() as u32;
         let state = self.form_state_mut(node);
         state.value = Some(value);
         state.dirty_value = true;
         state.user_edited = false;
-        if changed { state.selection = None; }
+        // A changed value moves the cursor to the end (HTML "set the value").
+        if changed {
+            state.selection = Some((len, len, SelectionDirection::None));
+        }
         self.record_render_full(node, "textarea value state");
         Ok(())
     }
@@ -1212,7 +1232,7 @@ impl Dom {
         } as u32;
         Ok(self.form_state(node).and_then(|s| s.selection)
             .map(|(start, end, direction)| (start.min(len), end.min(len), direction))
-            .unwrap_or((len, len, SelectionDirection::None)))
+            .unwrap_or((0, 0, SelectionDirection::None)))
     }
     pub fn set_selection(
         &mut self,
