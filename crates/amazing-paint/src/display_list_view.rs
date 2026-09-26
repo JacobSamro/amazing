@@ -183,6 +183,10 @@ pub struct EffectNode {
     /// Stable DOM owner; absent only for the synthetic root in a bindable view.
     pub owner: Option<PaintNodeKey>,
     pub opacity: f32,
+    /// CSS `mix-blend-mode` for this group's layer; `Normal` is plain source-over.
+    pub blend: amazing_css::effects::BlendMode,
+    /// `isolation: isolate` opened the group even without opacity/transform/blend.
+    pub isolate: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -336,6 +340,8 @@ impl<'a> DisplayListView<'a> {
                 parent: 0,
                 owner: None,
                 opacity: 1.0,
+                blend: amazing_css::effects::BlendMode::Normal,
+                isolate: false,
             }],
             scrolls: vec![
                 ScrollNode {
@@ -383,6 +389,8 @@ impl<'a> DisplayListView<'a> {
                         parent: state.effect,
                         owner,
                         opacity: group.opacity,
+                        blend: group.blend,
+                        isolate: group.isolate,
                     });
                     state.effect = next;
                     if group.transform != Affine::IDENTITY {

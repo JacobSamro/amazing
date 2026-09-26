@@ -361,12 +361,14 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             .filter(|e| e.origin == origin && !matches!(e.state, State::WaitForOrigin))
             .count()
             >= self.limits.max_per_origin;
-        let method = options.method.to_ascii_uppercase();
+        let method = crate::headers::normalize_method(&options.method);
         if method.is_empty()
             || !method
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
-            || matches!(method.as_str(), "CONNECT" | "TRACE" | "TRACK")
+            || ["CONNECT", "TRACE", "TRACK"]
+                .iter()
+                .any(|m| method.eq_ignore_ascii_case(m))
         {
             return Err(NetError::UnsupportedMethod(method).into());
         }

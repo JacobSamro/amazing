@@ -3,7 +3,7 @@ use crate::{host::{InterfaceBrand, Operation as O, UrlReflection}, html_reflecti
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
+enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
 #[derive(Clone, Copy)]
 struct Spec { attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -47,9 +47,26 @@ fn spec(op: O) -> Option<Spec> {
         O::OListStart | O::OListSetStart => ("start", &["ol"], K::Signed(1)),
         O::OListReversed | O::OListSetReversed => ("reversed", &["ol"], K::Boolean),
         O::LIValue | O::LISetValue => ("value", &["li"], K::Signed(0)),
+        O::DirectoryCompact | O::DirectoryCompactSet => ("compact", &["dir"], K::Boolean),
+        O::FontColor | O::FontColorSet => ("color", &["font"], K::LegacyString),
+        O::FontFace | O::FontFaceSet => ("face", &["font"], K::String),
+        O::FontSize | O::FontSizeSet => ("size", &["font"], K::String),
+        O::FrameSetCols | O::FrameSetColsSet => ("cols", &["frameset"], K::String),
+        O::FrameSetRows | O::FrameSetRowsSet => ("rows", &["frameset"], K::String),
+        O::FrameName | O::FrameNameSet => ("name", &["frame"], K::String),
+        O::FrameScrolling | O::FrameScrollingSet => ("scrolling", &["frame"], K::String),
+        O::FrameSrc | O::FrameSrcSet => ("src", &["frame"], K::UsvUrl),
+        O::FrameBorder | O::FrameBorderSet => ("frameborder", &["frame"], K::String),
+        O::FrameLongDesc | O::FrameLongDescSet => ("longdesc", &["frame"], K::UsvUrl),
+        O::FrameNoResize | O::FrameNoResizeSet => ("noresize", &["frame"], K::Boolean),
+        O::FrameMarginHeight | O::FrameMarginHeightSet => ("marginheight", &["frame"], K::LegacyString),
+        O::FrameMarginWidth | O::FrameMarginWidthSet => ("marginwidth", &["frame"], K::LegacyString),
         _ => return None,
     };
-    let setter = matches!(op, O::ElementSetHref | O::ElementSetTarget | O::ElementSetRel
+    let setter = matches!(op, O::DirectoryCompactSet | O::FontColorSet | O::FontFaceSet | O::FontSizeSet
+        | O::FrameSetColsSet | O::FrameSetRowsSet | O::FrameNameSet | O::FrameScrollingSet | O::FrameSrcSet
+        | O::FrameBorderSet | O::FrameLongDescSet | O::FrameNoResizeSet | O::FrameMarginHeightSet
+        | O::FrameMarginWidthSet | O::ElementSetHref | O::ElementSetTarget | O::ElementSetRel
         | O::ElementSetDownload | O::ElementSetSrc | O::ImageSetAlt | O::ImageSetWidth
         | O::ImageSetHeight | O::ImageSetLoading | O::ImageSetSrcset | O::ImageSetSizes
         | O::ImageSetDecoding | O::SourceSetType | O::SourceSetMedia | O::SourceSetSrcset
@@ -109,6 +126,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
                     };
                     value.encode_utf16().collect()
                 }
+                Kind::LegacyString if host.is_nullish(value) && !host.is_undefined(value) => Vec::new(),
+                Kind::UsvUrl => String::from_utf16_lossy(&host.to_dom_string(value)?).encode_utf16().collect(),
                 _ => host.to_dom_string(value)?,
             };
             host.with_dom(|dom| html_reflection::set(dom, node, spec.attribute, units))?;
@@ -125,8 +144,9 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             .unwrap_or(1).min(65534) as f64)),
         Kind::Signed(default) => Ok(host.number(value.as_deref().and_then(html_reflection::signed_long)
             .unwrap_or(default) as f64)),
-        Kind::Url => {
+        Kind::Url | Kind::UsvUrl => {
             let Some(value) = value else { return host.string(&[]) };
+            let value = if matches!(spec.kind, Kind::UsvUrl) { String::from_utf16_lossy(&value).encode_utf16().collect() } else { value };
             let resolved = host.resolve_url(&value)?;
             host.string(&resolved)
         }
@@ -135,7 +155,7 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             &["eager", "lazy"]).unwrap_or_else(|| "eager".encode_utf16().collect())),
         Kind::Decoding => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
             &["sync", "async", "auto"]).unwrap_or_else(|| "auto".encode_utf16().collect())),
-        Kind::String => host.string(&value.unwrap_or_default()),
+        Kind::String | Kind::LegacyString => host.string(&value.unwrap_or_default()),
         Kind::TokenList => unreachable!(),
     }
 }

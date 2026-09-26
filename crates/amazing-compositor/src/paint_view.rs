@@ -1,6 +1,6 @@
 //! Bridge from the painter's read-only display-list view.
 //!
-//! RC-17's raw local raster leaves transforms, clips and opacity to the
+//! The raw local raster leaves transforms, clips, opacity, blend and isolation to the
 //! property trees. Unsupported paint commands use RC-16's baked range raster
 //! with a neutral property state.
 
@@ -37,6 +37,7 @@ pub fn add_paint_view_canvas_background(mode: PaintViewRasterMode, frame: &mut C
 pub struct PaintViewSource<'view, 'paint> {
     view: &'view DisplayListView<'paint>,
     mode: PaintViewRasterMode,
+    filter_inputs: Vec<PaintFilterInput>,
 }
 
 impl<'view, 'paint> PaintViewSource<'view, 'paint> {
@@ -47,7 +48,23 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
             Err(RawRasterError::UnseparableItem(_)) => PaintViewRasterMode::BakedFallback,
             Err(error) => panic!("raw paint-view probe failed: {error:?}"),
         };
-        Self { view, mode }
+        Self { view, mode, filter_inputs: Vec::new() }
+    }
+
+    /// Attach producer-resolved filters to raw paint groups. Construction is
+    /// atomic: unsupported spaces, nodes or baked sources return an error.
+    pub fn with_filters(
+        view: &'view DisplayListView<'paint>,
+        provider: &impl PaintFilterSource,
+    ) -> Result<Self, SceneError> {
+        let mut source = Self::new(view);
+        let inputs = provider.filter_inputs();
+        if !inputs.is_empty() && source.mode != PaintViewRasterMode::RawLocal {
+            return Err(SceneError::InvalidState);
+        }
+        paint_view_metadata_with_filters(view, inputs)?;
+        source.filter_inputs = inputs.to_vec();
+        Ok(source)
     }
 
     pub fn mode(&self) -> PaintViewRasterMode {
@@ -100,7 +117,7 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
     pub fn compositor(&self, width: u32, height: u32) -> Result<Compositor, SceneError> {
         match self.mode {
             PaintViewRasterMode::RawLocal => {
-                let (trees, chunks) = paint_view_metadata(self.view)?;
+                let (trees, chunks) = paint_view_metadata_with_filters(self.view, &self.filter_inputs)?;
                 let mut grouped: Vec<PaintChunk> = Vec::new();
                 for chunk in chunks {
                     if let Some(last) = grouped.last_mut() {
@@ -285,7 +302,7 @@ pub fn paint_view_metadata(
             .map_err(|_| SceneError::InvalidState)?;
     }
     for node in view.effects().iter().skip(1) {
-        trees
+        let id = trees
             .add_effect(
                 EffectId(node.parent as usize),
                 node.opacity,
@@ -293,6 +310,13 @@ pub fn paint_view_metadata(
                 None,
             )
             .map_err(|_| SceneError::InvalidState)?;
+        // RC-24 exports CSS blend values; retain them on the same effect ID
+        // so ancestry, opacity bindings and cached frames preserve the group.
+        trees.set_effect_operations(id, EffectOperations {
+            blend: resolve_css_blend(node.blend).map_err(|_| SceneError::InvalidState)?,
+            isolate: node.isolate,
+            ..Default::default()
+        }).map_err(|_| SceneError::InvalidState)?;
     }
     for node in view.scrolls().iter().skip(1) {
         let bounds = rect(node.bounds);

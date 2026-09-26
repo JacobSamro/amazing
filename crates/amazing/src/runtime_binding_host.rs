@@ -367,7 +367,7 @@ impl RuntimeBindingHost<'_> {
         let (JsValue::Object(old), JsValue::Object(new)) = (old, wrapper) else {
             return Ok(());
         };
-        let extensions = ["dataset", "style", "classList", "matches", "closest",
+        let extensions = ["style", "classList", "matches", "closest",
             "hasAttribute", "removeAttribute", "innerHTML", "innerText", "onclick", "click"];
         let properties = {
             let old = old.borrow();
@@ -456,6 +456,8 @@ impl RuntimeBindingHost<'_> {
                         html_element_interface(host.dom.name(node).unwrap_or(""))
                     } else if host.dom.namespace(node) == Some(Namespace::Svg) {
                         Interface::SVGElement
+                    } else if host.dom.namespace(node) == Some(Namespace::MathMl) {
+                        Interface::MathMLElement
                     } else { Interface::Element }
                 },
                 NodeKind::Text { .. } => Interface::Text,
@@ -488,6 +490,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FILTERED_NODE_LIST => Interface::NodeList,
             InterfaceBrand::NAMED_NODE_MAP => Interface::NamedNodeMap,
             InterfaceBrand::DOM_TOKEN_LIST => Interface::DOMTokenList,
+            InterfaceBrand::DOM_STRING_MAP => Interface::DOMStringMap,
             InterfaceBrand::LOCATION => Interface::Location,
             InterfaceBrand::DOM_STRING_LIST => Interface::DOMStringList,
             InterfaceBrand::DOM_EXCEPTION => Interface::DOMException,
@@ -773,6 +776,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         )
     }
     fn define_legacy_platform_object(&mut self, brand: InterfaceBrand, hooks: LegacyPlatformHooks) -> Result<(), Throw> {
+        if brand == InterfaceBrand::DOM_STRING_MAP { return self.dom_install_dataset_hooks(); }
         let state = self.state.clone();
         let count_op = hooks.supported_index_count;
         let count = Rc::new(move |handle: HostHandle| {
@@ -913,7 +917,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         )?;
         if brand == InterfaceBrand::LOCATION {
             self.materialize_location_unforgeables(&value)?;
-        } else if brand != InterfaceBrand::DOM_EXCEPTION {
+        } else if !Self::dom_uses_inherited_accessors(brand) {
             self.materialize_accessors(&value);
         }
         if brand == InterfaceBrand::NODE && key.slot == 0 {
@@ -1014,6 +1018,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 let length = if matches!(
                     operation,
                     Operation::EventConstructor
+                        | Operation::ProcessingInstructionConstructor
                         | Operation::CustomEventConstructor
                         | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor
@@ -1157,6 +1162,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             !function.is_arrow && !function.is_async && !function.is_generator
                 && !matches!(function.body, FunctionBody::HostNative(_, JsCallPolicy::CallOnly, _))
         }))
+    }
+    fn is_object_value(&mut self, value: &JsValue) -> Result<bool, Throw> {
+        Ok(value.is_object())
     }
     fn require_object(&mut self, value: &JsValue) -> Result<(), Throw> {
         if value.is_object() { Ok(()) } else { Err(Throw::type_error("Expected an object")) }
@@ -1666,6 +1674,9 @@ impl AbortHost for RuntimeBindingHost<'_> {
 }
 
 impl DocumentHost for RuntimeBindingHost<'_> {
+    fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        self.dom_document_default_view(document)
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();

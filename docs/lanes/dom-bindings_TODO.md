@@ -1809,3 +1809,208 @@ lost passes** across the seven-source selection (409 pass / 31 fail / 6 errors).
 Evidence: `crates/amazing-bindings/evidence/legacy-events/`.
 
 Next: routed DOMException conformance and event-handler content attributes.
+
+# DOM-B DOMException conformance ready
+
+Implementation `82bb3868`, fixed base `129cde71`. Explicit undefined uses the
+constructor defaults; native name/message/code accessors remain inherited.
+The existing constructor, 25 legacy constants and native thrown exceptions
+are covered by the full pinned WebIDL exception directory.
+
+Linux Boat gate: **2709 passed / 10 skipped**, workspace doctests **4/4**.
+Baseline owned/driver tests: **533 passed / 4 skipped**. Whole-directory WPT
+subtests **112→123 passed, 19→8 failed**, **11 gains / zero lost passes**.
+Files: **2→4 pass**, **4→2 fail**, **1 timeout**. The remaining eight failures
+need JS Error.isError/stack support; the iframe portion of exceptions.html is
+deferred for JSRT-9 → HTML-25 part 2. Its six local assertions now pass.
+
+Evidence: `crates/amazing-bindings/evidence/dom-exception/`.
+Windows deferred. Next: DOMStringMap, with numeric named-property hooks routed
+to JS runtime; handler scope/compiler facade also routed there.
+
+# DOM-B DOMStringMap native area ready
+
+Implementation `07a885b5`, fixed base `c7b0c3c2`. Live dataset reads/writes/deletes,
+ASCII name conversion, UTF-16 values, attribute-order names and SameObject wrappers
+now use native DOMStringMap. HTML, SVG and MathML expose the getter; arbitrary
+namespaces no longer receive the old legacy dataset extension.
+
+Linux isolated-target gate: **2733 passed / 10 skipped**, docs **4/4**;
+baseline owned/driver **537 passed / 4 skipped**. The full 55-source collection
+and global-attribute testharness selection improves **140→168 passing subtests**,
+**135→107 failing**, **28 gains / zero lost passes**. Files **15→22 pass**,
+**39→32 fail**, one harness error unchanged. All native dataset files pass except
+the two prototype-accessor setter assertions in dataset-binding.window.js.
+Those and numeric named-only set/define/delete discrimination are routed to JS.
+
+Evidence: `crates/amazing-bindings/evidence/dataset/` (includes excluded reftest
+inventory). The interrupted namespace gate was discarded; identical source was
+rerun through linux-run recovery and completed. Windows remains deferred.
+Next: inherited collection property surfaces; generic intrinsic array iteration
+needs a routed JS LengthOfArrayLike fix. Iframe Range remains deferred.
+
+# DOM-B collection own-property surfaces ready
+
+Implementation `12737f79`, fixed base `7b6678a2`. Collection length/value accessors
+remain inherited across HTMLCollection, form/options/radio collections, live/static
+NodeLists, NamedNodeMap, DOMTokenList and DOMStringList. An installed regression
+covers live key order, named visibility and mutation updates.
+
+Linux isolated-target workspace **2734 passed / 10 skipped**, docs **4/4**.
+Full55-source collection/global-attribute corpus: **168→175 passing subtests**,
+**107→100 failing**, **7 gains / zero lost passes**. Files **22→24 pass**,
+**32→30 fail**, one harness error unchanged. Baseline is dataset/after.json;
+evidence is `crates/amazing-bindings/evidence/collection-properties/`.
+
+Generic intrinsic array iteration and strict legacy assignment/deletion remain
+routed to JS. Continuing legacy document collections (embeds/plugins, anchors,
+applets). Windows and iframe-dependent Range remain deferred.
+
+# DOM-B document legacy collections ready
+
+Implementation `d8f5ac84`, fixed base `1f219daa`. Native document.embeds/plugins
+share the same live collection; anchors matches HTML a elements with a name
+attribute (including empty); applets remains an empty collection. Tests cover
+namespace exclusion, attribute mutation, canonical identity and document roots.
+
+Linux isolated-target workspace **2736 passed / 10 skipped**, docs **4/4**.
+The complete71-source document-accessor, obsolete-API and collection corpus
+improves **166→172 passing subtests**, **148→142 failing**, **6 gains / zero
+lost passes**. Files **27→29 pass**, **32→30 fail**, nine unsupported and three
+harness errors unchanged. Baseline owned/driver **543 passed / 4 skipped**.
+Evidence: `crates/amazing-bindings/evidence/document-collections/`.
+
+Continuing obsolete document/body color reflection and legacy no-op methods.
+Iframe Range and JS-dependent collection dispatch/iteration remain deferred.
+
+# DOM-B legacy document/body reflection ready
+
+Implementation `b73d7bcd`, fixed base `1122ea30`. The five obsolete document and
+body color IDL attributes reflect the same live body content attributes, preserve
+UTF-16, distinguish null from undefined, and ignore absent bodies/framesets after
+argument conversion. Document clear/captureEvents/releaseEvents and Window
+captureEvents/releaseEvents implement the specified no-op behavior.
+
+Linux isolated-target workspace **2739 passed / 10 skipped**, docs **4/4**.
+The complete 71-source document-accessor/obsolete/collection selection improves
+**172→197 passing subtests**, **142→117 failing**, **25 gains / zero lost passes**.
+Files **29→33 pass**, **30→26 fail**, nine unsupported and three harness errors
+unchanged. Three color cases still need iframe documents; native coverage proves
+the corresponding missing-body/frameset behavior without iframe dependencies.
+Evidence: `crates/amazing-bindings/evidence/legacy-document/`.
+
+Continuing a fresh bulk nodes/traversal/events/collections baseline. Iframe Range,
+JS-dependent named-property dispatch and generic array iteration remain deferred.
+
+# DOM-B listener registration and AbortSignal lifetime ready
+
+Implementation `f9fde9d7`, fixed base `93156830`. Listener callbacks and the
+complete options dictionary convert before null/duplicate/aborted early returns.
+Abort removal shares the signal's ordered algorithm list, preserves a duplicate
+registration's original signal, and releases callback roots only when removed.
+The recursive abort fixture no longer crashes.
+
+Linux isolated-target workspace **2744 passed /10 skipped**, docs **4/4**.
+All **510** testharness sources in dom/nodes, dom/traversal, dom/events and
+ dom/collections: **9812→9823 passing assertions**, **1263→1255 failing**,
+**11 gains /zero lost passes**. Files **214→217 pass**, **141→139 fail**,
+**28→27 errors**;100 timeouts and27 unsupported unchanged. Subtest errors6
+unchanged. Signal11/11, capture4/4 and passive5/5 now pass.
+
+Continuing DOMTokenList's140-failure classList cluster. Traversal's1600 passing
+assertions and7 cross-realm failures confirm that remaining traversal work and
+iframe Range remain deferred to JSRT-9/HTML-25 part2.
+
+# DOM-B DOMTokenList semantics ready
+
+Implementation `d6613150`, fixed base `54e681e4`. Token-list arguments convert
+before validation and live reads; contains/supports use their own validation
+rules. Empty add/remove calls normalize existing attributes, absent empty
+attributes stay absent, and replacement preserves ordered-set position and
+mutation/no-op semantics.
+
+Linux workspace **2747 passed /10 skipped**, docs **4/4**. Complete dom/nodes
+and dom/collections directories (**324 sources**): **7864→8004 passing**,
+**1007→867 failing assertions**, **140 gains /zero lost passes**. classList is
+**1420/1420**, previously1280/1420. Files151→152 pass,102→101 fail;
+37 timeouts,27 unsupported,7 harness errors and6 subtest errors unchanged.
+Baseline is dom-b-audit/after.json restricted to those two directories.
+
+Continuing document/Window association reflection: missing defaultView is the
+next non-iframe prerequisite in createElementNS's exception checks. Child realms
+and iframe-dependent Range remain deferred.
+
+# DOM-B document defaultView ready
+
+Implementation `cc808abd`, fixed base `56035411`. Document.defaultView uses
+an embedding hook to return its associated WindowProxy, or null for inert
+DOMImplementation/DOMParser/cloned documents. The current driver associates its
+single window with the active document; child-realm embedders can supply their
+own association through the default-Unsupported hook.
+
+Linux workspace **2749 passed /10 skipped**, doctests **4/4**. Complete
+node/collection corpus (**324 sources**): **8004→8114 passing assertions**,
+**867→757 failing**, **110 gains /zero lost passes**. File classifications
+unchanged:152 pass,101 fail,37 timeouts,27 unsupported,7 harness errors;
+6 subtest errors unchanged. All110 gains are createElementNS exception checks
+that access document.defaultView.DOMException. Remaining390 assertions in that
+file are XML/XHTML iframe cases and remain deferred.
+
+Continuing shadow event dispatch retargeting/cleanup. Inline handler compilation,
+iframe Range, and CSS selector escape/scoping dependencies remain deferred.
+
+# DOM-B shadow event retargeting ready
+
+Implementation `a4f60416`, fixed base `9e68980b`. FocusEvent/MouseEvent
+relatedTarget now uses native dispatch state; retargeting works against non-node
+targets, boundary suppression truncates the path, and cleanup uses shadow
+membership captured before callbacks. Adjusted related targets survive ordinary
+dispatch and redispatch instead of reverting to the original private node.
+
+Linux workspace **2753 passed /10 skipped**, doctests **4/4**. Fresh complete
+**168-source dom/events** corpus: **359→360 passing assertions**, **241→240
+failing**, **one gain /zero lost passes**. Files unchanged:51 pass,35 fail,
+20 harness errors and62 timeouts. Four added native/installed-driver regressions
+cover external targets, callback reparenting, redispatch, and identical original
+target/relatedTarget handling.
+
+Remaining relatedTarget fixture cases include net's XHR facade missing native
+EventTarget adoption, activation behavior, and a pinned-WPT/current-DOM early
+return discrepancy recorded in questions.md. Child realms/Range remain deferred.
+Continuing existing UI event modifier and numeric dictionary semantics.
+
+# DOM-B UI event modifiers ready
+
+Implementation `7e014f57`, fixed base `88f37385`. MouseEvent, WheelEvent and
+KeyboardEvent now retain all fourteen modifier flags and expose case-sensitive
+getModifierState. Numeric dictionary conversion applies the specified signed and
+unsigned widths, preserves fractional coordinates, rejects non-finite doubles,
+and includes inherited UIEvent.which and WheelEvent.momentum.
+
+Linux workspace **2758 passed /10 skipped**, doctests **4/4**. Complete
+**170-source dom/events + uievents/constructors** corpus: **360→376 passing
+assertions**, **260→244 failing**, **16 gains /zero lost passes**. Files:
+51→52 pass,37→36 fail,20 harness errors and62 timeouts unchanged.
+The modifier-state constructor fixture is now **16/16**.
+
+InputEvent target-range sequence conversion awaits a JS iterator/closing seam;
+iframe Range remains deferred. Continuing independent legacy element reflection.
+
+# DOM-B legacy element reflection ready
+
+Implementation `1cb4dbcf`, fixed base `e5f1a8c5`. Directory, font, frame and
+frameset elements now use their specified interfaces and fourteen reflected
+attributes, including boolean removal, USVString URL conversion and legacy
+null-to-empty-string setters. Installed-driver coverage checks cloning, live
+attributes, foreign-namespace/receiver rejection and UTF-16 conversion.
+
+Linux workspace **2759 passed /10 skipped**, doctests **4/4**. Complete
+node/collection/obsolete API directories (**333 sources**): **8144→8148 passes**,
+**767→763 failures**, **four gains /zero lost passes**. Files158→159 pass,
+104→103 fail;37 timeouts,27 unsupported,7 harness errors and6 subtest errors
+unchanged. Node-cloneNode.html now **135/135**.
+
+Initial gate exposed a test setup omission (no document URL for URL resolution);
+corrected fixture and full rerun passed. Frame child navigables and frameset
+Window handler forwarding remain deferred with their existing dependencies.
+Continuing ProcessingInstruction constructor and attribute APIs.
