@@ -252,6 +252,74 @@ fn write_chunks(stream: &mut TcpStream, request: &SeenRequest) {
     };
     let _ = stream.write_all(ending);
 }
+/// wptserve's `resources/cache.py` records, per request, which of a fixed
+/// set of conditional/no-cache request headers were observed, as a stashed
+/// list of dicts later retrieved verbatim (`&querystate`) by the test as
+/// JSON. The shared `state` stash only holds strings, so the list is kept
+/// encoded with control-character delimiters that never appear in header
+/// values (`\x1e` between entries, `\x1f` between an entry's pairs, `\x01`
+/// between a pair's key and value) and only turned into JSON on read.
+fn cache_state_decode(raw: &str) -> Vec<Vec<(String, String)>> {
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    raw.split('\u{1e}')
+        .map(|entry| {
+            if entry.is_empty() {
+                return Vec::new();
+            }
+            entry
+                .split('\u{1f}')
+                .filter_map(|pair| {
+                    pair.split_once('\u{1}')
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                })
+                .collect()
+        })
+        .collect()
+}
+fn cache_state_encode(entries: &[Vec<(String, String)>]) -> String {
+    entries
+        .iter()
+        .map(|entry| {
+            entry
+                .iter()
+                .map(|(k, v)| format!("{k}\u{1}{v}"))
+                .collect::<Vec<_>>()
+                .join("\u{1f}")
+        })
+        .collect::<Vec<_>>()
+        .join("\u{1e}")
+}
+fn cache_state_to_json(entries: &[Vec<(String, String)>]) -> String {
+    let mut out = String::from("[");
+    for (i, entry) in entries.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        for (j, (k, v)) in entry.iter().enumerate() {
+            if j > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!("\"{}\":\"{}\"", json_escape(k), json_escape(v)));
+        }
+        out.push('}');
+    }
+    out.push(']');
+    out
+}
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
 fn cors(request: &SeenRequest, headers: &mut Vec<(String, String)>) {
     headers.push(header(
         "Access-Control-Allow-Origin",
@@ -284,6 +352,80 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
             state.insert(key, value);
         }
         return reply(200, "OK", headers, b"done");
+    }
+    if fetch && name == "cache.py" {
+        let token = request.query("token").unwrap_or_default();
+        let stash_key = format!("cache:{token}");
+        if request.query("querystate").is_some() {
+            // Matches wptserve's `request.server.stash.take(token)`: a
+            // destructive read of the recorded per-request header state.
+            let recorded = cache_state_decode(state.remove(&stash_key).unwrap_or_default().as_str());
+            return reply(
+                200,
+                "OK",
+                vec![header("Content-Type", "text/plain")],
+                cache_state_to_json(&recorded).as_bytes(),
+            );
+        }
+        let content = request.query("content").unwrap_or_default();
+        let tag = request.query("tag");
+        let date = request.query("date");
+        let expires = request.query("expires");
+        let vary = request.query("vary");
+        let cc = request.query("cache_control");
+        let redirect = request.query("redirect");
+        let ignore = request.query("ignore").is_some();
+        let inm = request.header("if-none-match").map(str::to_owned);
+        let ims = request.header("if-modified-since").map(str::to_owned);
+        let pragma = request.header("pragma").map(str::to_owned);
+        let cache_control_header = request.header("cache-control").map(str::to_owned);
+
+        let mut recorded = cache_state_decode(state.remove(&stash_key).unwrap_or_default().as_str());
+        let mut entry: Vec<(String, String)> = Vec::new();
+        if !ignore {
+            if let Some(value) = &inm {
+                entry.push(("If-None-Match".into(), value.clone()));
+            }
+            if let Some(value) = &ims {
+                entry.push(("If-Modified-Since".into(), value.clone()));
+            }
+            if let Some(value) = &pragma {
+                entry.push(("Pragma".into(), value.clone()));
+            }
+            if let Some(value) = &cache_control_header {
+                entry.push(("Cache-Control".into(), value.clone()));
+            }
+        }
+        recorded.push(entry);
+        state.insert(stash_key, cache_state_encode(&recorded));
+
+        let quoted_tag = tag.as_ref().map(|t| format!("\"{t}\""));
+        let mut headers = vec![header("Access-Control-Allow-Origin", "*")];
+        if let Some(quoted_tag) = &quoted_tag {
+            headers.push(header("ETag", quoted_tag.clone()));
+        } else if let Some(date) = &date {
+            headers.push(header("Last-Modified", date.clone()));
+        }
+        if let Some(expires) = &expires {
+            headers.push(header("Expires", expires.clone()));
+        }
+        if let Some(vary) = &vary {
+            headers.push(header("Vary", vary.clone()));
+        }
+        if let Some(cc) = &cc {
+            headers.push(header("Cache-Control", cc.clone()));
+        }
+        if let Some(location) = &redirect {
+            headers.push(header("Location", location.clone()));
+            return reply(302, "Redirect", headers, b"");
+        }
+        let matched =
+            (inm.is_some() && inm == quoted_tag) || (ims.is_some() && ims == date);
+        if matched {
+            return reply(304, "Not Modified", headers, b"");
+        }
+        headers.push(header("Content-Type", "text/plain"));
+        return reply(200, "OK", headers, content.as_bytes());
     }
     if fetch && name == "stash-take.py" {
         let body = match request.query("key").and_then(|key| state.remove(&key)) {
