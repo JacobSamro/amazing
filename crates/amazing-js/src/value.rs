@@ -839,6 +839,26 @@ impl JsObject {
         }
     }
 
+    /// Initialize a fresh String wrapper in linear time. Its code-unit indices
+    /// use ordinary immutable descriptors, shared by every property operation.
+    pub(crate) fn initialize_string_data(&mut self, string: JsString) {
+        debug_assert!(self.props.is_empty());
+        self.props.extend(string.units().iter().enumerate().map(|(index, unit)| {
+            (PropertyKey::from(index.to_string()), Property {
+                value: JsValue::str_units(vec![*unit]), writable: false,
+                enumerable: true, configurable: false, getter: None, setter: None,
+            })
+        }));
+        self.props.push((PropertyKey::from("length"), Property {
+            value: JsValue::num(string.units().len() as f64), writable: false,
+            enumerable: false, configurable: false, getter: None, setter: None,
+        }));
+        self.props.push((PropertyKey::from("[[StringData]]"), Property {
+            value: JsValue::Str(string), writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }));
+    }
+
     pub fn array() -> JsObject {
         let mut o = Self::ordinary();
         o.exotic = Exotic::Array;

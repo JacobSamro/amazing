@@ -1036,9 +1036,14 @@ impl Interpreter {
     pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
         (match backend {
             ExecutionBackend::TreeWalk => self.run_program(p),
-            ExecutionBackend::Bytecode => vm::compile(p)
-                .map_err(|error| Throw::type_error(error.to_string()))?
-                .run(self, vm::DEFAULT_INSTRUCTION_LIMIT),
+            ExecutionBackend::Bytecode => {
+                let code = vm::compile(p).map_err(|error| Throw::type_error(error.to_string()))?;
+                let previous_strict = self.strict_eval_context;
+                self.strict_eval_context |= has_use_strict_directive(&p.body);
+                let result = code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                self.strict_eval_context = previous_strict;
+                result
+            },
         }).map_err(|th| self.normalize_throw(th))
     }
 
@@ -2323,12 +2328,8 @@ impl Interpreter {
                 };
                 if self.set_with_receiver(object, &key, value, base.clone())? {
                     Ok(())
-                } else if matches!(object.borrow().exotic, Exotic::Array)
-                    && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length")
-                    && object.borrow().own_prop("length").is_some_and(|property| property.writable)
-                {
-                    // A failed shrink leaves the first undeletable element in place.
-                    // Sloppy assignment ignores the unsuccessful [[Set]].
+                } else if !self.strict_eval_context {
+                    // PutValue ignores an unsuccessful [[Set]] for sloppy references.
                     Ok(())
                 } else {
                     Err(Throw::type_error("cannot assign to property"))

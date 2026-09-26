@@ -1018,7 +1018,7 @@ mod tests {
             "var p={x:1}, r={}; Reflect.set(p,'x',2,r)===true && p.x===1 && r.x===2",
             "var p={x:1}, q={}; Object.defineProperty(q,'x',{value:9,writable:false}); var r=Object.create(q); Reflect.set(p,'x',3,r)===true && r.x===3 && q.x===9",
             "var p={set x(v){this.y=v}}, r={}; Reflect.set(p,'x',7,r)===true && r.y===7 && !('y' in p)",
-            "var p={}; Object.defineProperty(p,'x',{value:1,writable:false}); var x=Object.create(p); try {x.x=2; false} catch(e) {x.x===1 && e instanceof TypeError}",
+            "var p={}; Object.defineProperty(p,'x',{value:1,writable:false}); var x=Object.create(p); x.x=2; x.x===1 && !Object.hasOwn(x,'x')",
             "var p={set x(v){this.y=v}}, r=Object.create(p); r.x=5; r.y===5 && !Object.hasOwn(r,'x')",
             "var p={set x(v){this.y=v}}, r=Object.create(p); Object.assign(r,{x:6}); r.y===6 && !Object.hasOwn(r,'x')",
             "Object.assign(5,{x:1}).x===1",
