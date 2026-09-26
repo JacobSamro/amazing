@@ -20,11 +20,20 @@ candidates' render+compare pipelines concurrently on separate threads (each
 subprocess call releases the GIL while waiting), useful for a full-fleet
 sweep across many WPT categories.
 
+SHELL-L5 turned this into a zero-loss gate: --baseline <path> diffs this
+run's per-test classifications against a previous report.json or --compact
+compact.json (either shape is accepted) and exits 2 if any previously-passing
+test regressed ("lost"). --compact additionally writes compact.json, an
+id -> classification map with none of report.json's per-test detail
+(relation/pixel counts/sha256/stdout) -- the file meant to be committed as a
+future --baseline, so evidence size does not grow with every run the way a
+full report.json would.
+
 Usage:
   wpt_render_compare.py --wpt-root DIR --subdir css/css-backgrounds \\
       --exe PATH/TO/amazing --out OUT_DIR
       [--width 800] [--height 600] [--timeout 20] [--limit N] [--jobs N]
-      [--font-set STRING]
+      [--baseline PATH] [--compact] [--font-set STRING]
 """
 from __future__ import annotations
 
@@ -386,6 +395,43 @@ def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, widt
     }
 
 
+def extract_classifications(data: dict) -> dict:
+    """Reads a test-id -> classification map out of either JSON shape this
+    tool produces: a full report.json (`tests` is a list of per-test dicts
+    with `id`/`classification`) or a --compact one (`tests` is already an
+    id -> classification map). --baseline accepts either."""
+    tests = data.get("tests", {})
+    if isinstance(tests, dict):
+        return dict(tests)
+    return {test["id"]: test["classification"] for test in tests}
+
+
+def compare_to_baseline(current: dict, baseline: dict) -> dict:
+    """Zero-loss-gate comparison: `lost` (was pass, now is not) is the only
+    bucket that should ever fail a gate. `gained` is the mirror image;
+    `changed` covers a reclassification that does not cross the pass
+    boundary (e.g. mismatch -> error); `new`/`removed` cover test ids only
+    one side has (a WPT update, a --limit change, or a discovery-filter fix
+    like the inline-event-handler one SHELL-L4 landed)."""
+    gained, lost, changed, unchanged = [], [], [], []
+    for test_id in sorted(set(current) & set(baseline)):
+        before, after = baseline[test_id], current[test_id]
+        if before == after:
+            unchanged.append(test_id)
+        elif before != "pass" and after == "pass":
+            gained.append(test_id)
+        elif before == "pass" and after != "pass":
+            lost.append(test_id)
+        else:
+            changed.append(test_id)
+    new = sorted(set(current) - set(baseline))
+    removed = sorted(set(baseline) - set(current))
+    return {
+        "gained": gained, "lost": lost, "changed": changed, "unchanged": unchanged,
+        "new": new, "removed": removed,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wpt-root", required=True)
@@ -400,6 +446,19 @@ def main() -> int:
         "--jobs", type=int, default=1,
         help="concurrent test pipelines (each spawns its own render-wpt subprocesses); "
              "1 = serial (default, matches the original behaviour)",
+    )
+    parser.add_argument(
+        "--baseline", default=None,
+        help="a previous report.json or --compact-written compact.json (either shape is accepted) "
+             "to diff this run against; prints gained/lost/changed/unchanged/new/removed test-id "
+             "counts and exits 2 if any previously-passing test is lost (a zero-loss gate).",
+    )
+    parser.add_argument(
+        "--compact", action="store_true",
+        help="also write compact.json next to report.json: {schema, subdir, wpt_revision, counts, "
+             "tests: {id: classification}} with none of report.json's per-test detail "
+             "(relation/pixel counts/sha256/stdout). Meant for committing as a future --baseline "
+             "instead of the full report, so evidence stays small as categories accumulate runs.",
     )
     parser.add_argument(
         "--font-set",
@@ -454,7 +513,7 @@ def main() -> int:
     for result in results:
         counts[result["classification"]] += 1
 
-    report = {
+    metadata = {
         "schema": 1,
         "wpt_revision": wpt_revision,
         "subdir": args.subdir,
@@ -462,11 +521,26 @@ def main() -> int:
         "font_set": args.font_set,
         "host": socket.gethostname(),
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "run_directory": str(run_directory),
-        "inventory": inventory,
-        "counts": counts,
-        "tests": results,
     }
+    report = {**metadata, "run_directory": str(run_directory), "inventory": inventory, "counts": counts, "tests": results}
+
+    baseline_compare = None
+    exit_code = 0
+    if args.baseline:
+        baseline_data = json.loads(Path(args.baseline).read_text())
+        baseline_map = extract_classifications(baseline_data)
+        current_map = {result["id"]: result["classification"] for result in results}
+        baseline_compare = compare_to_baseline(current_map, baseline_map)
+        report["baseline_compare"] = {"baseline": str(Path(args.baseline).resolve()), **baseline_compare}
+        counted = {key: len(value) for key, value in baseline_compare.items()}
+        print(
+            "Baseline compare ({}): gained={gained} lost={lost} changed={changed} "
+            "unchanged={unchanged} new={new} removed={removed}".format(args.subdir, **counted)
+        )
+        if baseline_compare["lost"]:
+            print(f"LOST (previously passing, now not): {', '.join(baseline_compare['lost'])}")
+            exit_code = 2
+
     report_path = run_directory / "report.json"
     report_path.write_text(json.dumps(report, indent=2))
     latest_path = out_dir / "report.json"
@@ -476,7 +550,21 @@ def main() -> int:
         "Counts: pass={pass} mismatch={mismatch} error={error} timeout={timeout} "
         "unsupported={unsupported} crash={crash}".format(**counts)
     )
-    return 0
+
+    if args.compact:
+        compact = {
+            **metadata,
+            "counts": counts,
+            "tests": {result["id"]: result["classification"] for result in results},
+        }
+        if baseline_compare is not None:
+            compact["baseline_compare"] = report["baseline_compare"]
+        compact_path = run_directory / "compact.json"
+        compact_path.write_text(json.dumps(compact, indent=2))
+        (out_dir / "compact.json").write_text(json.dumps(compact, indent=2))
+        print(f"Compact: {compact_path}")
+
+    return exit_code
 
 
 if __name__ == "__main__":
