@@ -155,7 +155,7 @@ fn object_integrity(
     let JsValue::Object(object) = &target else {
         return Ok(target);
     };
-    if i.legacy_for(object).is_some() {
+    if i.is_window_proxy(object) || i.legacy_for(object).is_some() {
         return Err(Throw::type_error("cannot seal a legacy platform object"));
     }
     if freeze && matches!(object.borrow().exotic, Exotic::TypedArray) {
@@ -201,7 +201,7 @@ fn object_integrity_test(
     let JsValue::Object(object) = &target else {
         return Ok(JsValue::Bool(true));
     };
-    if i.legacy_for(object).is_some() || object.borrow().extensible {
+    if i.is_window_proxy(object) || i.legacy_for(object).is_some() || object.borrow().extensible {
         return Ok(JsValue::Bool(false));
     }
     for key in i.own_property_keys(&target)? {
@@ -499,6 +499,9 @@ impl Interpreter {
     fn object_own_enumerable(&mut self, value: &JsValue, key: &PropertyKey) -> Result<bool, Throw> {
         match value {
             JsValue::Object(object) => {
+                if let Some(result) = self.window_proxy_own_property(object, key) {
+                    return Ok(result?.is_some_and(|property| property.enumerable));
+                }
                 let property = match binary_index_descriptor(object, key) {
                     Some(property) => property,
                     None => match key {
@@ -728,5 +731,57 @@ mod object_assignment_tests {
                     "{backend:?}: {prefix}");
             }
         }
+    }
+}
+
+// Complete the attributes of the runtime-owned intrinsic constructors after
+// installation. Other lanes retain ownership of their constructors/methods.
+impl Interpreter {
+    fn install_runtime_intrinsic_attributes(&mut self) {
+        for name in ["Object", "Function", "Array", "Boolean", "Promise", "Error",
+            "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError",
+            "AggregateError", "SuppressedError"] {
+            let Some(JsValue::Object(constructor)) = self.global_env.resolve(name) else { continue; };
+            symbol_method_length(&JsValue::Object(constructor.clone()), match name {
+                "AggregateError" => 2, "SuppressedError" => 3, _ => 1 });
+            let prototype = constructor.borrow().get_own("prototype");
+            if let Some(JsValue::Object(prototype)) = prototype {
+                constructor.borrow_mut().define("prototype",
+                    symbol_data(JsValue::Object(prototype.clone()), false, false)).unwrap();
+                for key in ["constructor", "name", "message"] {
+                    let property = prototype.borrow().own_prop(key).cloned();
+                    if let Some(mut property) = property {
+                        property.enumerable = false;
+                        prototype.borrow_mut().define(key, property).unwrap();
+                    }
+                }
+            }
+        }
+        if let Some(JsValue::Object(error)) = self.global_env.resolve("Error") {
+            if let Some(JsValue::Object(prototype)) = error.borrow().get_own("prototype") {
+                runtime_method_attributes(&prototype, "toString", 0);
+            }
+        }
+        if let Some(JsValue::Object(promise)) = self.global_env.resolve("Promise") {
+            for name in ["resolve", "reject", "all", "allSettled", "any", "race"] {
+                runtime_method_attributes(&promise, name, 1);
+            }
+        }
+        for (name, length) in [("then", 2), ("catch", 1), ("finally", 1)] {
+            runtime_method_attributes(&self.promise_proto, name, length);
+        }
+    }
+}
+
+fn runtime_method_attributes(object: &Obj, name: &str, length: u32) {
+    let property = object.borrow().own_prop(name).cloned();
+    if let Some(mut property) = property {
+        property.enumerable = false;
+        if let JsValue::Object(method) = &property.value {
+            method.borrow_mut().constructible = false;
+            method.borrow_mut().delete_own("prototype");
+        }
+        symbol_method_length(&property.value, length);
+        object.borrow_mut().define(name, property).unwrap();
     }
 }

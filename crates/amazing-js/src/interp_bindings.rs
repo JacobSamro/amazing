@@ -158,8 +158,15 @@ impl Interpreter {
     /// Inspect a private brand. A writable JS property cannot forge it.
     pub fn binding_host_handle(&self, value: &JsValue, brand: u64) -> Option<HostHandle> {
         let JsValue::Object(object) = value else { return None; };
+        let proxy_target = match &object.borrow().exotic {
+            Exotic::WindowProxy(state) => Some(state.borrow().target), _ => None,
+        };
+        if let Some(realm) = proxy_target {
+            let global = self.binding_realm_global(realm).ok()?;
+            return self.binding_host_handle(&global, brand);
+        }
         let identity = object.borrow().host_identity?;
-        (identity.realm == self.host_realm && identity.handle.brand == brand)
+        ((identity.realm == self.host_realm || self.realms.contains_key(&identity.realm)) && identity.handle.brand == brand)
             .then_some(identity.handle)
     }
 
@@ -295,21 +302,23 @@ impl Interpreter {
 
     pub fn binding_get_own_property(&mut self, object: &JsValue, name: &str) -> Result<Option<Property>, Throw> {
         let owner = Self::binding_owner(object)?;
+        if let Some(result) = self.window_proxy_own_property(&owner, &name.into()) { return result; }
         self.legacy_own_property(&owner, name, false)
     }
 
     pub fn binding_own_property_keys(&mut self, object: &JsValue) -> Result<Vec<String>, Throw> {
         let owner = Self::binding_owner(object)?;
-        Ok(self.legacy_own_keys(&owner, false)?.into_iter().map(|key| key.to_utf8_lossy()).collect())
+        Ok(self.own_property_keys(&JsValue::Object(owner))?.into_iter().filter_map(|key| key.as_string().map(|s| s.to_utf8_lossy())).collect())
     }
 
     pub fn binding_own_property_key_units(&mut self, object: &JsValue) -> Result<Vec<Vec<u16>>, Throw> {
         let owner = Self::binding_owner(object)?;
-        Ok(self.legacy_own_keys(&owner, false)?.into_iter().map(|key| key.units().to_vec()).collect())
+        Ok(self.own_property_keys(&JsValue::Object(owner))?.into_iter().filter_map(|key| key.as_string().map(|s| s.units().to_vec())).collect())
     }
 
     pub fn binding_delete_property(&mut self, object: &JsValue, name: &str) -> Result<bool, Throw> {
         let owner = Self::binding_owner(object)?;
+        if let Some(result) = self.window_proxy_delete(&owner, &name.into()) { return result; }
         match self.legacy_delete(&owner, name)? {
             Some(deleted) => Ok(deleted),
             None => {

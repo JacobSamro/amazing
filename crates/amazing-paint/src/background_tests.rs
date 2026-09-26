@@ -343,3 +343,83 @@ fn fractional_object_edges_and_backgrounds_share_pixel_center_coverage() {
     assert_eq!(image_surface.get_pixel(0, 2), Some([255, 0, 0, 255]));
     assert_eq!(image_surface.get_pixel(0, 6), Some([255; 4]));
 }
+
+#[test]
+fn linear_gradient_background_fills_the_positioning_area() {
+    let s = draw(&block(
+        &[("background-image", "linear-gradient(to right, red, blue)")],
+        8.0,
+        8.0,
+    ));
+    let left = s.get_pixel(1, 4).unwrap();
+    let right = s.get_pixel(6, 4).unwrap();
+    assert_eq!(left[3], 255, "gradient is opaque: {left:?}");
+    assert!(left[0] > left[2], "left edge is red-dominant: {left:?}");
+    assert!(right[2] > right[0], "right edge is blue-dominant: {right:?}");
+}
+
+#[test]
+fn repeating_gradient_tiles_through_background_size() {
+    let s = draw(&block(
+        &[
+            (
+                "background-image",
+                "repeating-linear-gradient(to right, red 0 2px, blue 2px 4px)",
+            ),
+            ("background-size", "4px 4px"),
+        ],
+        8.0,
+        4.0,
+    ));
+    assert_eq!(s.get_pixel(0, 1), Some([255, 0, 0, 255]));
+    assert_eq!(s.get_pixel(2, 1), Some([0, 0, 255, 255]));
+    assert_eq!(s.get_pixel(4, 1), Some([255, 0, 0, 255]));
+    assert_eq!(s.get_pixel(6, 1), Some([0, 0, 255, 255]));
+}
+
+#[test]
+fn first_listed_gradient_layer_paints_above_later_layers() {
+    let s = draw(&block(
+        &[
+            (
+                "background-image",
+                "linear-gradient(to right, red, red), linear-gradient(to right, blue, blue)",
+            ),
+            ("background-size", "4px 8px, 8px 8px"),
+            ("background-position", "left top, left top"),
+            ("background-repeat", "no-repeat"),
+        ],
+        8.0,
+        8.0,
+    ));
+    assert_eq!(s.get_pixel(1, 4), Some([255, 0, 0, 255]));
+    assert_eq!(s.get_pixel(6, 4), Some([0, 0, 255, 255]));
+}
+
+#[test]
+fn unsupported_gradient_syntax_paints_no_layer() {
+    for image in [
+        "linear-gradient(to right, red, blue, not-a-color)",
+        "linear-gradient(to right, red)",
+        "radial-gradient(to right, red, blue)",
+    ] {
+        let s = draw(&block(&[("background-image", image)], 8.0, 8.0));
+        assert_eq!(s.get_pixel(4, 4), Some([255; 4]), "{image}");
+    }
+}
+
+#[test]
+fn positioned_radial_background_gradient_uses_at_geometry() {
+    let s = draw(&block(
+        &[(
+            "background-image",
+            "radial-gradient(circle at 0 0, red, blue)",
+        )],
+        8.0,
+        8.0,
+    ));
+    let corner = s.get_pixel(0, 0).unwrap();
+    let far = s.get_pixel(7, 7).unwrap();
+    assert!(corner[0] > corner[2], "top-left is red-dominant: {corner:?}");
+    assert!(far[2] > far[0], "bottom-right is blue-dominant: {far:?}");
+}

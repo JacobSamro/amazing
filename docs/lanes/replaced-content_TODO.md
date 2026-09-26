@@ -958,3 +958,188 @@ The pushed RC-20 base is `f66be2b`. `LAYOUT-17` and the requested
 paint-local delta type is ready for their damage list when the owning lanes
 publish it. IA-ORACLE-PAINT's 31 ms p95 cannot be credited until that driver
 adopts the retained path and the Windows release trace measures it.
+
+## RC-21 — responsive/lazy images, scroll fetch and the COMP-14 owner mapping
+
+Landed on `lane/replaced-content-rc21`, merged dev `988b1c4d` (includes
+COMP-13b/14, IPC-10, CSS-15, DOM focus, IA-REAL-PAGES). Three owned changes:
+
+- **Paint scroll owners across reopened clips** (`a70711f0`). A stacking or
+  positioned context re-opens the overflow clips it inherits, so one CSS
+  scroller opened two `ScrollNode`s in a single display list. The duplicate
+  `(node, generation)` owner made `DisplayListView::property_owner_mapping`
+  return `None`, which made `RetainedPaintView::from_view` report
+  `AmbiguousPropertyOwner` for the COMP-14 effects-scroller oracle page. Paint
+  now reuses one scroll node per owner; clip nodes stay per scope. Regression:
+  `effects_scroller_property_owners_stay_unique_across_reopened_clips`.
+- **Script-detached `<img>` loading** (`c18d13f9`). `load_page_media_in_viewport`
+  now visits every live arena slot for an `img` the document walk cannot reach
+  (`new Image()`), so the request starts and a pending `decode()` promise can
+  settle; detached loading is always eager.
+- **Shell lazy fetch after scroll** (`a5734b23`, `cb84e972`, `b8f413ab`). Every
+  successful scroll (wheel, trackpad, keyboard, scrollbar drag) reads the
+  retained root scroll offset from COMP-13b and fetches deferred lazy images
+  whose laid-out box entered the viewport, then repaints the scrolled frame.
+  Layout already reserved each deferred box, so pixels paint into it until the
+  next DOM snapshot relayouts with the real intrinsic size.
+
+Boundaries, not silently credited: inline replaced content still forces the
+baked paint fallback, whose property trees are empty, so a page with an inline
+`<img>` has no compositor root scroll node and the lazy-scroll fetch currently
+exercises block-level images only until RC-17/paint makes inline replaced items
+separable in `raster_raw_local`. `new Image()` still needs the DOM-bindings
+legacy factory global; only the loader side is done. `image-orientation:none`
+through the sandboxed utility remains routed to IPC.
+
+**Linux-first gate** (per the 2026-09-26 orchestrator change; Windows render
+sweeps deferred). Base `988b1c4d`, Boat sandbox warm:
+
+- `cargo nextest run --workspace --locked --no-fail-fast`: **2,543 passed,
+  0 failed, 10 skipped**.
+- `cargo test --workspace --locked --doc`: **2 passed, 0 failed**.
+- `amazing-paint` includes the new regression; Linux paint was **126/126**
+  before the dev merge.
+- Pre-Linux-first Windows run at `b8f413ab`: shell
+  `scrolled_deferred_lazy_image_is_fetched_and_repainted` passed, shell
+  `--locked` build green. The shell is a Windows-only GPUI workspace and is not
+  part of the Linux workspace gate.
+
+The RC-21 pinned render (226) and testharness (117) selections and their
+reproduction scripts live in `tests/wpt-replaced-content/rc21/`. Both runners
+are Windows-only (`scripts/run-render-wpt.ps1` and the `wpt-harness` subcommand
+that byte-pins against the checkout), so no Linux corpus before/after is
+claimed here; the recorded Windows baseline is 185/6/9/26 render and the
+harness candidate 4/58/45/8/2. These are not conformance movement.
+
+## RC-22 — separable inline replaced content in the raw tile path (2026-09-26)
+
+Fixed on top of the RC-21 branch. `raster_raw_local` returned
+`UnseparableItem` for any `PaintContent` box whose lines carried a replaced
+fragment, so a page with an inline `<img>` fell back to the baked painter,
+which has empty property trees and therefore no compositor root scroll node.
+That is why the RC-21 scroll-triggered lazy fetch exercised block-level
+replaced images only.
+
+The full painter and the raw tile path now share `paint_replaced_fragments`:
+it resolves a line's replaced fragments (generated URL, SVG root, or provider
+image) against the **original** box, whose inline flow still carries the
+styled-fragment metadata, with an optional document-space offset. The raw
+content path paints replaced fragments from the original box at the tile
+offset and the shifted glyphs from a local line clone; it still skips group
+transforms, opacity and clips, which remain compositor-owned.
+`raster_raw_local` now accepts `PaintContent` items with or without replaced
+fragments. No pixels changed: the raw tile equals the full painter for the
+item, and `RetainedPaintView::from_view`/`apply_damage` accept such items.
+
+Linux gate at `d7d67c76`: workspace nextest **2,703 passed / 0 failed / 10
+skipped** with `--no-fail-fast`; separate workspace doctests **4 passed / 0
+failed**. The focused `amazing-paint` + `amazing` bulk run was **342 passed /
+4 skipped**, including the new paint regression
+`raw_tile_rasterizes_inline_replaced_content_and_retains_it` and the adapter
+test `inline_replaced_content_retains_and_keeps_the_root_scroll_owner`.
+
+Known adjacent gap, not claimed: the retained path's per-item resource set
+(`retained_paint::resources_for_box`) still records no resource for inline
+replaced fragments on a content item, unlike the old/new delta's `resources()`.
+Seeding and damage must agree before enabling retirement for them, so this
+stays a follow-up when the integrator-assist damage adapter lands.
+
+## RC-20 — gradient background-image layers (2026-09-26)
+
+Deferred from the RC-18/RC-19 reprioritization. `BackgroundLayer` now carries an
+optional serialized `<gradient>` function beside the existing `url()`.
+`paint` resolves a gradient layer through the same RC-18 `gradient::raster` at
+its used size: a gradient has no intrinsic dimensions, so `auto` resolves to the
+background positioning area and the tile is rasterized there; `cover`,
+`contain` and explicit sizes scale from the positioning area. URL layers keep
+the provider's decoded pixels and natural size. Layer order (first listed
+topmost), repeat modes, position, `background-origin`/`background-clip` and the
+shared per-frame sample budget stay in the existing loop. No CSS parsing and no
+duplicate rasterizer were added; unsupported gradient syntax paints no layer
+rather than guessing.
+
+Recognized functions: `linear-gradient`, `repeating-linear-gradient`,
+`radial-gradient`, `repeating-radial-gradient`, `conic-gradient`,
+`repeating-conic-gradient`. Nothing outside `amazing-paint` changed.
+
+Four new focused paint tests assert pixels: linear fill of the positioning area,
+repeating tiling through `background-size`, first-listed-layer-on-top ordering,
+and unsupported syntax painting nothing. Linux gate at `e3e475fd`: workspace
+nextest **2,707 passed / 0 failed / 10 skipped** with `--no-fail-fast`; separate
+workspace doctests **4 passed / 0 failed**. The focused `amazing-paint` crate run
+was **131 passed / 0 skipped**, including the four new cases.
+
+The ticket's frozen WPT gradient reftest selection and its two-round
+before/after are Windows-only and were not run under the Linux-first deferral,
+so RC-20 claims **zero WPT conformance credit**; the retained RC-18 focused 12,
+SVG 35 and gradient/scroll 4 selections are likewise unclaimed. Reproduction and
+rationale: `tests/wpt-replaced-content/rc20/README.md`. Per-paint gradient
+caching is a performance follow-up, not a correctness gap.
+
+## RC-23 — positioned and shaped radial/conic gradient geometry (2026-09-26)
+
+Follow-up to RC-18/RC-20 in `amazing-paint::gradient`. Any leading geometry part
+other than an exact `circle`/`ellipse` or a bare `from Ndeg` previously made the
+whole gradient paint nothing: the optional-geometry parser could not distinguish
+an unsupported geometry part from a color stop and fell through to treating it
+as a stop, which then failed and rejected the image.
+
+The first gradient part is now classified by whether it begins with a parseable
+color. If it does, it is a stop; if not, it must parse as valid geometry or the
+entire gradient is rejected. Supported geometry:
+
+- radial: `[circle|ellipse]? [closest-side|farthest-side|closest-corner|
+  farthest-corner|<length>]{0,2}? [at <position>]?`, defaulting to
+  farthest-corner. Explicit radii are `px`/`em`/`rem` and share circle/ellipse
+  sampling; corner keywords use a per-axis circle approximation for ellipses.
+- conic: `[from <angle>]? [at <position>]?`, `<angle>` in `deg`/`grad`/`rad`/
+  `turn`.
+- linear angles also accept `grad`/`rad`/`turn` now.
+
+`at <position>` reuses `crate::image::position` (keywords, percentages, px,
+edge-offset syntax). Percent radii, unsupported units, malformed positions and
+unknown keywords reject the gradient rather than guessing. No CSS, layout,
+compositor or driver source changed.
+
+Focused paint tests: positioned/shaped radial, explicit-radius radial, rotated
+conic, and a background-level positioned radial, plus a rejection table for
+percent radii, empty/oversized positions, duplicate size keywords and bad
+angles. Linux gate at `6988c124`: workspace nextest **2,737 passed / 0 failed /
+10 skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**134 passed / 0 skipped**.
+
+The ticket's WPT gradient selection and before/after remain Windows-only and
+deferred under Linux-first, so RC-23 claims **zero WPT conformance credit**;
+ellipse corner-keyword radii and percentage radii remain bounded approximations
+or rejections, recorded here rather than claimed conformant.
+
+## RC-24 — mix-blend-mode and isolation effect-group reference (2026-09-26)
+
+Answer to the compositor lane's COMP-15 request for a full-painter reference.
+`GroupEffect` and the public `DisplayListView::EffectNode` now carry a CSS
+`BlendMode` and an `isolate` flag. `effect_for` opens an effect group for a
+non-normal `mix-blend-mode` or `isolation: isolate`, and `composite_group`
+composites the group layer with the new integer
+`amazing_paint::blend_group(mode, src, dst, opacity)`: blend each channel
+against the backdrop, then source-over, per CSS Compositing and Blending.
+All 17 modes are implemented, including plus-lighter and the non-separable
+hue/saturation/color/luminosity formulas (W3C algorithm, rounded once);
+`Normal` reduces exactly to the shared `blend_source_over`. The blend math is
+integer so the reference is bit-deterministic across platforms, matching the
+existing source-over rule.
+
+Focused tests: separable blend modes against white/black, alpha/opacity
+compositing, non-separable color keeping the backdrop luminance, a
+paint-document multiply child over a gray parent, and `isolation: isolate`
+opening a group without changing normal pixels. No CSS, layout, compositor,
+driver or lockfile source changed.
+
+Linux gate at `608e546c`: workspace nextest **2,742 passed / 0 failed / 10
+skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**139 passed / 0 skipped**.
+
+Compositor handoff: `crates/amazing-compositor/src/paint_view.rs` still passes
+`BlendMode::Normal` to `trees.add_effect`; map `node.blend`/`node.isolate` into
+its `EffectOperations` and adopt a matching reference. Filters, backdrop-filter,
+clip-path and mask are not part of RC-24 and remain a separate paint slice.
+No WPT credit is claimed.

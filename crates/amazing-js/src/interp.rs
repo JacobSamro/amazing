@@ -234,6 +234,14 @@ pub struct Interpreter {
     native_stack: Vec<Obj>,
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     host_realm: u64,
+    realm_origin: String,
+    window_proxy: Option<Obj>,
+    window_access: Option<Rc<WindowProxyAccessHook>>,
+    agent_id: u64,
+    realms: HashMap<u64, RealmState>,
+    intrinsic_constructors: HashMap<String, (Obj, Obj)>,
+    entry_realm: Option<RealmHandle>,
+    realm_callers: Vec<RealmHandle>,
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
@@ -387,6 +395,14 @@ impl Interpreter {
             native_stack: Vec::new(),
             host_native_dispatch: None,
             host_realm,
+            realm_origin: String::new(),
+            window_proxy: None,
+            window_access: None,
+            agent_id: host_realm,
+            realms: HashMap::new(),
+            intrinsic_constructors: HashMap::new(),
+            entry_realm: None,
+            realm_callers: Vec::new(),
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
@@ -423,11 +439,15 @@ impl Interpreter {
         let window = JsValue::Object(i.global_obj.clone());
         i.global_obj.borrow_mut().set_own("window", window.clone());
         let _ = i.global_env.declare_var("window", window);
+        i.global_env.set_global_object(i.global_obj.clone());
+        i.stamp_realm_objects();
         i.install_builtins();
         i.install_regexp();
         i.install_location();
         i.install_history();
         i.install_storage();
+        i.stamp_realm_objects();
+        i.capture_intrinsic_constructors();
         i
     }
 
@@ -1038,17 +1058,24 @@ impl Interpreter {
             ExecutionBackend::TreeWalk => self.run_program(p),
             ExecutionBackend::Bytecode => {
                 let code = vm::compile(p).map_err(|error| Throw::type_error(error.to_string()))?;
+                let previous_entry = self.entry_realm;
+                let realm = self.binding_current_realm();
+                self.entry_realm.get_or_insert(realm);
                 let previous_strict = self.strict_eval_context;
                 self.strict_eval_context |= has_use_strict_directive(&p.body)
                     || (!self.in_eval && self.global_env.kind() == EnvKind::Module);
                 let result = code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
                 self.strict_eval_context = previous_strict;
+                self.entry_realm = previous_entry;
                 result
             },
         }).map_err(|th| self.normalize_throw(th))
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
+        let previous_entry = self.entry_realm;
+        let realm = self.binding_current_realm();
+        self.entry_realm.get_or_insert(realm);
         let previous_strict = self.strict_eval_context;
         if has_use_strict_directive(&p.body)
             || (!self.in_eval && self.global_env.kind() == EnvKind::Module) {
@@ -1056,6 +1083,7 @@ impl Interpreter {
         }
         let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
         self.strict_eval_context = previous_strict;
+        self.entry_realm = previous_entry;
         result
     }
 
@@ -1075,6 +1103,7 @@ impl Interpreter {
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
         let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
+        if self.in_eval { self.validate_eval_global_declarations(&p.body, &env)?; }
         self.hoist(&p.body, &env)?;
         self.in_eval = false;
         for s in &p.body {
@@ -1120,7 +1149,7 @@ impl Interpreter {
                 StmtKind::Function(f) => {
                     if let Some(n) = &f.name {
                         let v = self.make_function(f, env);
-                        if self.in_eval { env.var_scope().declare_var(&n.name, v)?; }
+                        if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
                         else { env.declare_var(&n.name, v)?; }
                     }
                 }
@@ -1176,14 +1205,7 @@ impl Interpreter {
         match binding {
             Binding::Ident(identifier) => {
                 if self.in_eval {
-                    let var_env = env.var_scope();
-                    if var_env.kind() == EnvKind::Global {
-                        let global = self.global_obj.borrow();
-                        if !global.extensible && global.own_prop(identifier.name.as_str()).is_none() {
-                            return Err(Throw::type_error("cannot declare global var on non-extensible object"));
-                        }
-                    }
-                    var_env.declare_var(&identifier.name, JsValue::Undefined)?;
+                    self.create_eval_binding(env, &identifier.name, None)?;
                 } else {
                     env.hoist_var(&identifier.name)?;
                 }
@@ -1404,6 +1426,7 @@ impl Interpreter {
     }
 
     fn drain_jobs(&mut self) -> Result<(), Throw> {
+        if self.depth != 0 { return Ok(()); }
         while let Some(job) = self.jobs.pop_front() {
             self.run_job(job)?;
         }
@@ -1888,6 +1911,11 @@ impl Interpreter {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
                     if let JsValue::Object(o) = o {
+                        if let Some(result) = self.window_proxy_delete(&o, &k) {
+                            let deleted = result?;
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
+                            return Ok(JsValue::Bool(deleted));
+                        }
                         if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
                             if o.borrow().own_prop(&k).is_some() {
                                 return Err(Throw::type_error("module namespace export cannot be deleted"));
@@ -2074,11 +2102,13 @@ impl Interpreter {
             In => {
                 let k = self.to_property_key(&a)?;
                 match b {
-                    JsValue::Object(o) => Ok(JsValue::Bool(match k.as_string() {
+                    JsValue::Object(o) => {
+                        if let Some(result) = self.window_proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
+                        Ok(JsValue::Bool(match k.as_string() {
                         _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
                         None => o.borrow().has_property(&k),
-                    })),
+                    })) },
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
             }
@@ -2171,6 +2201,9 @@ impl Interpreter {
         if env.is_uninitialized(name) {
             return Err(Throw::reference_error(format!("{name} is uninitialized")));
         }
+        if let Some(global) = env.global_binding_object(name) {
+            return self.get_prop(&JsValue::Object(global), name).map(Some);
+        }
         if let Some(value) = env.resolve(name) {
             return Ok(Some(value));
         }
@@ -2190,6 +2223,11 @@ impl Interpreter {
     ) -> Result<(Reference, JsValue), Throw> {
         match &target.kind {
             ExprKind::Ident(identifier) => {
+                if let Some(global) = env.global_binding_object(&identifier.name) {
+                    let global = JsValue::Object(global);
+                    let value = self.get_prop(&global, &identifier.name)?;
+                    return Ok((Reference::Property(global, identifier.name.clone().into()), value));
+                }
                 if let Some(value) = env.resolve(&identifier.name) {
                     Ok((Reference::Binding(identifier.name.clone()), value))
                 } else if self.global_obj.borrow().has_property(&identifier.name) {
@@ -2404,7 +2442,7 @@ impl Interpreter {
         let argv = self.eval_args(args, e)?;
         let previous_direct_eval = self.direct_eval_call;
         let previous_direct_eval_env = self.direct_eval_env.take();
-        self.direct_eval_call = !optional && matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval");
+        self.direct_eval_call = !optional && matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval") && self.is_intrinsic_eval(&f);
         self.direct_eval_env = self.direct_eval_call.then(|| e.clone());
         let result = self.call_value(&f, this, argv);
         self.direct_eval_call = previous_direct_eval;
@@ -2459,12 +2497,13 @@ impl Interpreter {
         self.call_value_with_new_target(f, this, args, None).map_err(|th| self.normalize_throw(th))
     }
 
-    fn call_value_with_new_target(
+    fn call_value_with_new_target_inner(
         &mut self,
         f: &JsValue,
         this: JsValue,
         args: Vec<JsValue>,
         new_target: Option<JsValue>,
+        caller_realm: RealmHandle,
     ) -> Result<JsValue, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
@@ -2479,7 +2518,7 @@ impl Interpreter {
         let interpreted = matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_));
         let this = if interpreted && !fun.is_arrow && !strict_function {
             match this {
-                JsValue::Null | JsValue::Undefined => JsValue::Object(self.global_obj.clone()),
+                JsValue::Null | JsValue::Undefined => self.global_env.global_scope().resolve_this(),
                 JsValue::Object(_) => this,
                 primitive => native_object(self, JsValue::Undefined, vec![primitive])?,
             }
@@ -2575,11 +2614,7 @@ impl Interpreter {
                     self.hoist(&b.body, &e)?;
                     let completion = self.exec_stmts(&b.body, &e)?;
                     if derived {
-                        match completion {
-                            Flow::Return(value) if value.is_object() => Ok(value),
-                            Flow::Return(value) if !value.is_undefined() => Err(Throw::type_error("derived constructor returned a non-object")),
-                            _ => e.resolve_this_checked(),
-                        }
+                        self.complete_derived_constructor(completion, &e, caller_realm)
                     } else {
                         match completion {
                             Flow::Return(value) => Ok(value),
@@ -2682,6 +2717,9 @@ impl Interpreter {
         if !o.borrow().constructible {
             return Err(Throw::type_error("function is not a constructor"));
         }
+        if Self::is_bound_function(f) {
+            return self.invoke_bound_function(f, args, Some(new_target));
+        }
         let derived = o.borrow().derived_constructor.is_some();
         if derived {
             let result = self.call_value_with_new_target(
@@ -2696,17 +2734,14 @@ impl Interpreter {
                 Err(Throw::type_error("derived constructor returned a non-object"))
             };
         }
-        let target = match &new_target {
-            JsValue::Object(target) => target,
-            _ => return Err(Throw::type_error("newTarget is not an object")),
-        };
-        let proto = match target.borrow().get_own("prototype") {
-            Some(JsValue::Object(p)) => p,
-            _ => self.object_proto.clone(),
+        if !new_target.is_object() { return Err(Throw::type_error("newTarget is not an object")); }
+        let proto = match self.get_prop(&new_target, "prototype")? {
+            JsValue::Object(p) => p,
+            _ => self.constructor_fallback_prototype(f, &new_target),
         };
         let obj = Obj(Rc::new(RefCell::new({
             let mut x = JsObject::ordinary();
-            x.proto = Some(proto);
+            x.proto = Some(proto.clone());
             x.constructed = true;
             x
         })));
@@ -2721,10 +2756,8 @@ impl Interpreter {
             // subclass still supplies its prototype through newTarget; in
             // particular, a canonical DOM wrapper must retain its identity.
             if matches!(fun.body, FunctionBody::Native(_) | FunctionBody::HostNative(..)) && new_target != *f {
-                if let JsValue::Object(prototype) = self.get_prop(&new_target, "prototype")? {
-                    if let JsValue::Object(result) = &v {
-                        result.borrow_mut().proto = Some(prototype);
-                    }
+                if let JsValue::Object(result) = &v {
+                    result.borrow_mut().proto = Some(proto);
                 }
             }
             Ok(v)
@@ -2856,6 +2889,7 @@ impl Interpreter {
             )
         };
         if let JsValue::Object(o) = &f {
+            o.borrow_mut().class_constructor = true;
             if o.borrow().get_own("prototype").is_none() {
                 let prototype = Obj(Rc::new(RefCell::new({
                     let mut object = JsObject::ordinary();
@@ -3260,272 +3294,6 @@ impl Interpreter {
         name
     }
 
-    fn get_prop(&mut self, v: &JsValue, k: impl Into<PropertyKey>) -> Result<JsValue, Throw> {
-        self.get_prop_receiver(v, &k.into(), v.clone())
-    }
-
-    fn get_prop_receiver(
-        &mut self,
-        v: &JsValue,
-        key: &PropertyKey,
-        receiver: JsValue,
-    ) -> Result<JsValue, Throw> {
-        let text = key.as_string().map(|name| name.to_utf8_lossy());
-        let k = text.as_deref().unwrap_or("");
-        match v {
-            JsValue::Object(o) => {
-                if let Exotic::ModuleNamespace(exports) = &o.borrow().exotic {
-                    if let Some(name) = key.as_string() {
-                        return match exports.get(&name.to_utf8_lossy()).cloned() {
-                            Some(cell) => cell.read(), None => Ok(JsValue::Undefined),
-                        };
-                    }
-                }
-                if let Some(result) = binary_get_index(self, o, key) { return result; }
-                if key.as_string().is_some() {
-                if let Some(node) = Self::dom_dataset_id(o) {
-                    let name = Self::dataset_attribute_name(k);
-                    return Ok(dom_host(self)?
-                        .borrow()
-                        .get_attribute(node, &name)
-                        .flatten()
-                        .map(JsValue::str)
-                        .unwrap_or(JsValue::Undefined));
-                }
-                if let Some(node) = Self::dom_style_id(o) {
-                    if let Some(value) = dom_host(self)?.borrow().get_style(node, k) {
-                        return Ok(JsValue::str(value));
-                    }
-                }
-                if let Some(node) = dom_node_id(o) {
-                    if node == 0 && (k == "body" || k == "documentElement") {
-                        let selector = if k == "body" { "body" } else { "html" };
-                        let id = dom_host(self)?.borrow_mut().query_selector(selector);
-                        return Ok(id
-                            .map(|id| self.make_dom_element(id))
-                            .unwrap_or(JsValue::Null));
-                    }
-                    if node != 0 && (k == "id" || k == "className") {
-                        let name = if k == "className" { "class" } else { "id" };
-                        let value = dom_host(self)?
-                            .borrow()
-                            .get_attribute(node, name)
-                            .flatten()
-                            .unwrap_or_default();
-                        return Ok(JsValue::str(value));
-                    }
-                }
-                if k == "size" {
-                    let size = match &o.borrow().exotic {
-                        Exotic::Map(state) => Some(state.entries.len()),
-                        Exotic::Set(state) => Some(state.entries.len()),
-                        _ => None,
-                    };
-                    if let Some(size) = size {
-                        return Ok(JsValue::num(size as f64));
-                    }
-                }
-                }
-                let property = match key.as_string() {
-                    Some(name) if self.legacy_for(o).is_some() => self.legacy_own_property(o, name, false)?,
-                    _ => o.borrow().own_prop(key).cloned(),
-                };
-                let prototype = o.borrow().proto.clone();
-                if let Some(property) = property {
-                    if let Some(getter) = property.getter {
-                        self.call_value(&getter, receiver, Vec::new())
-                    } else {
-                        Ok(property.value)
-                    }
-                } else if let Some(p) = prototype {
-                    self.get_prop_receiver(&JsValue::Object(p), key, receiver)
-                } else {
-                    Ok(JsValue::Undefined)
-                }
-            }
-            JsValue::Str(s) => {
-                if k == "length" {
-                    Ok(JsValue::num(s.len() as f64))
-                } else if let Ok(n) = k.parse::<usize>() {
-                    Ok(s.units().get(n).map(|u| JsValue::str_units(vec![*u]))
-                        .unwrap_or(JsValue::Undefined))
-                } else {
-                    self.get_prop_receiver(&JsValue::Object(self.string_proto.clone()), key, receiver)
-                }
-            }
-            JsValue::Symbol(_) => self.get_prop_receiver(&JsValue::Object(self.symbol_proto.clone()), key, receiver),
-            JsValue::Num(_) => self.get_prop_receiver(&JsValue::Object(self.number_proto.clone()), key, receiver),
-            JsValue::Bool(_) => self.get_prop_receiver(&JsValue::Object(self.boolean_proto.clone()), key, receiver),
-            JsValue::BigInt(_) => self.get_prop_receiver(&JsValue::Object(self.bigint_proto.clone()), key, receiver),
-            JsValue::Null | JsValue::Undefined => Ok(JsValue::Undefined),
-        }
-    }
-    fn set_prop(&mut self, v: &JsValue, key: impl Into<PropertyKey>, x: JsValue) -> Result<(), Throw> {
-        let key = key.into();
-        let text = key.as_string().map(|name| name.to_utf8_lossy());
-        let k = text.as_deref().unwrap_or("");
-        let o = match v {
-            JsValue::Object(o) => o.clone(),
-            _ => return Err(Throw::type_error("cannot set property on primitive")),
-        };
-        if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
-            return Err(Throw::type_error("module namespace properties cannot be assigned"));
-        }
-        if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
-        if let Some(forward_to) = self.binding_put_forwards_target(&o, k) {
-            let target = self.get_prop(v, k)?;
-            self.set_prop(&target, forward_to, x)?;
-            return Ok(());
-        }
-        if let Some(name) = key.as_string() {
-        if let Some(node) = Self::dom_style_id(&o) {
-            let value = self.to_string(&x)?;
-            dom_mutation(self, |host| host.set_style(node, k, &value))?;
-            return Ok(());
-        }
-        if let Some(node) = Self::dom_dataset_id(&o) {
-            let name = Self::dataset_attribute_name(k);
-            let value = self.to_string(&x)?;
-            dom_mutation(self, |host| host.set_attribute(node, &name, &value))?;
-            return Ok(());
-        }
-        if let Some(node) = dom_node_id(&o) {
-            if node != 0 && (k == "id" || k == "className") {
-                let name = if k == "className" { "class" } else { "id" };
-                let value = self.to_string(&x)?;
-                dom_mutation(self, |host| host.set_attribute(node, name, &value))?;
-                return Ok(());
-            }
-        }
-        if self.legacy_set(&o, name, x.clone())? { return Ok(()); }
-        }
-        if o.borrow().own_prop(&key).is_none()
-            && (matches!(&key, PropertyKey::Symbol(_)) || self.legacy_for(&o).is_some()) {
-            let mut cursor = o.borrow().proto.clone();
-            while let Some(prototype) = cursor {
-                let descriptor = prototype.borrow().own_prop(&key).cloned();
-                if let Some(descriptor) = descriptor {
-                    if let Some(setter) = descriptor.setter {
-                        self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
-                        return Ok(());
-                    }
-                    if descriptor.getter.is_some() || !descriptor.writable {
-                        return Err(Throw::type_error("property has no writable setter"));
-                    }
-                    break;
-                }
-                cursor = prototype.borrow().proto.clone();
-            }
-        }
-        if let Some(property) = o.borrow().own_prop(&key).cloned() {
-            if let Some(setter) = property.setter {
-                self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
-                return Ok(());
-            }
-            if !property.writable {
-                return Err(Throw::type_error("cannot assign to a read-only property"));
-            }
-            if property.getter.is_some() {
-                return Err(Throw::type_error("property has no setter"));
-            }
-        } else if !o.borrow().extensible {
-            return Err(Throw::type_error("object is not extensible"));
-        }
-        if k == "length" && matches!(o.borrow().exotic, Exotic::Array) {
-            let n = self.to_number(&x)?;
-            if !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
-                return Err(Throw::range_error("invalid array length"));
-            }
-        }
-        let existing = o.borrow().own_prop(&key).cloned();
-        if let Some(mut property) = existing {
-            property.value = x;
-            o.borrow_mut().define(&key, property).unwrap();
-        } else {
-            o.borrow_mut().set_own(&key, x);
-        }
-        if let Ok(n) = k.parse::<usize>() {
-            if matches!(o.borrow().exotic, Exotic::Array) {
-                let len = match o.borrow().get_own("length") {
-                    Some(JsValue::Num(n)) => n,
-                    _ => 0.0,
-                };
-                if n as f64 + 1.0 > len {
-                    let mut property = o.borrow().own_prop("length").cloned().unwrap();
-                    property.value = JsValue::num(n as f64 + 1.0);
-                    o.borrow_mut().define("length", property).unwrap();
-                }
-            }
-        }
-        Ok(())
-    }
-    fn enumerable_keys(&mut self, v: &JsValue) -> Result<Vec<crate::value::JsString>, Throw> {
-        match v {
-            JsValue::Object(o) if binary_own_keys(o).is_some() => Ok(binary_own_keys(o).unwrap().into_iter().filter_map(|key| match key {
-                PropertyKey::String(name) if binary_index_descriptor(o, &PropertyKey::String(name.clone())).flatten().is_some()
-                    || o.borrow().own_prop(&name).is_some_and(|p| p.enumerable) => Some(name), _ => None,
-            }).collect()),
-            JsValue::Object(o) => self.legacy_own_keys(o, true),
-            JsValue::Str(s) => Ok((0..s.len()).map(|i| i.to_string().into()).collect()),
-            _ => Ok(Vec::new()),
-        }
-    }
-    fn next_for_in_key(&mut self, state: &mut ForInState) -> Result<Option<crate::value::JsString>, Throw> {
-        while let Some(object) = state.object.clone() {
-            if !state.object_was_visited {
-                state.remaining_keys = self.own_property_keys(&JsValue::Object(object.clone()))?
-                    .into_iter().filter_map(|key| match key {
-                        PropertyKey::String(name) => Some(name),
-                        PropertyKey::Symbol(_) => None,
-                    }).collect();
-                state.object_was_visited = true;
-            }
-            while let Some(key) = state.remaining_keys.pop_front() {
-                if state.visited_keys.contains(&key) { continue; }
-                let property = match binary_index_descriptor(&object, &PropertyKey::String(key.clone())) {
-                    Some(descriptor) => descriptor,
-                    None => self.legacy_own_property(&object, key.clone(), false)?,
-                };
-                if let Some(property) = property {
-                    state.visited_keys.insert(key.clone());
-                    if property.enumerable { return Ok(Some(key)); }
-                }
-            }
-            state.object = object.borrow().proto.clone();
-            state.object_was_visited = false;
-        }
-        Ok(None)
-    }
-    fn own_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
-        match v {
-            JsValue::Object(object) if binary_own_keys(object).is_some() => Ok(binary_own_keys(object).unwrap()),
-            JsValue::Object(object) => {
-                let strings = self.legacy_own_keys(object, false)?
-                    .into_iter().map(PropertyKey::String);
-                let symbols = object.borrow().own_property_keys().into_iter()
-                    .filter(|key| matches!(key, PropertyKey::Symbol(_)));
-                Ok(strings.chain(symbols).collect())
-            }
-            JsValue::Str(value) => {
-                let mut keys: Vec<_> = (0..value.len())
-                    .map(|index| PropertyKey::from(index.to_string())).collect();
-                keys.push(PropertyKey::from("length"));
-                Ok(keys)
-            }
-            _ => Ok(Vec::new()),
-        }
-    }
-    fn enumerable_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
-        let mut keys: Vec<_> = self.enumerable_keys(v)?.into_iter()
-            .map(PropertyKey::String).collect();
-        if let JsValue::Object(object) = v {
-            keys.extend(object.borrow().own_property_keys().into_iter().filter(|key| {
-                matches!(key, PropertyKey::Symbol(_))
-                    && object.borrow().own_prop(key).is_some_and(|property| property.enumerable)
-            }));
-        }
-        Ok(keys)
-    }
     fn array_length(&self, v: &JsValue) -> usize {
         if let JsValue::Object(o) = v { if let Some(BinaryState::View(view)) = binary_state(o) { if view.kind.is_some() { return binary_length(&view); } } }
         match v {
@@ -3888,12 +3656,19 @@ impl Interpreter {
 
 include!("interp_helpers.rs");
 include!("interp_async.rs");
+include!("interp_realms.rs");
+include!("interp_eval_declarations.rs");
+include!("interp_window_proxy.rs");
+include!("interp_property_access.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_array.rs");
+include!("interp_array_protocol.rs");
 include!("interp_object_extra.rs");
+include!("interp_errors.rs");
+include!("interp_bound.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");
@@ -3922,3 +3697,5 @@ include!("builtins_std_json_global.rs");
 include!("structured_clone.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
+
+include!("interp_realm_tests.rs");

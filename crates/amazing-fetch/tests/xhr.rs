@@ -118,8 +118,10 @@ fn open_and_initial_state_matrix() {
     assert_eq!(x.state(), XhrState::Unsent);
     assert_eq!(open(&mut x, "GET", "a", true).unwrap().len(), 1);
     assert_eq!(x.state(), XhrState::Opened);
+    // abort-during-open.any.js and abort-event-abort.any.js: abort() in OPENED
+    // with the send() flag unset is a no-op and fires no event.
     assert_eq!(x.abort(), Vec::<XhrEvent>::new());
-    assert_eq!(x.state(), XhrState::Unsent);
+    assert_eq!(x.state(), XhrState::Opened);
     assert!(open(&mut x, "BAD METHOD", "a", true).is_err());
     assert_eq!(
         open(&mut x, "TRACE", "a", true),
@@ -129,7 +131,10 @@ fn open_and_initial_state_matrix() {
         open(&mut x, "GET", "http://:bad", true),
         Err(XhrError::SyntaxUrl)
     );
-    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 1);
+    // State is already OPENED (the abort() above was a no-op), so this open()
+    // does not transition state and fires no readystatechange per spec step
+    // "if state was not opened, fire readystatechange".
+    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 0);
 }
 // open-method-case-insensitive.htm and open-method-case-sensitive.htm.
 #[test]
