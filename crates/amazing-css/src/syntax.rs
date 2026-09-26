@@ -82,14 +82,29 @@ impl<'a> Lexer<'a> {
         Some(c)
     }
 
-    /// Consumes an escape sequence assuming cursor sits on the `\`.
-    /// Returns the decoded char, or `None` when the escape is invalid
-    /// (caller emits the backslash as a literal).
+    /// CSS Syntax 3 SS4.3.7 "consume an escaped code point". Consumes an
+    /// escape sequence assuming cursor sits on the `\`. Returns the decoded
+    /// char, or `None` only when this is not a valid escape at all (a
+    /// backslash directly followed by a newline) -- the caller then leaves
+    /// the `\` unconsumed. Every other case (hex escape, EOF right after the
+    /// `\`, or a literal escaped character) always yields a code point, per
+    /// spec, so this must not be conflated with "not an escape": an earlier
+    /// version returned `None` for a NUL/surrogate/out-of-range hex value
+    /// and for EOF too, which desynced the caller's position (the hex
+    /// branch had already consumed the whole escape before returning
+    /// `None`) and, for EOF, decoded a trailing lone `\` as a literal
+    /// backslash instead of U+FFFD (CSS-29; `querySelector`'s CSS escapes
+    /// WPT selection, e.g. `#eof\` must NOT match an id of literal `eof\`).
     fn escape(&mut self) -> Option<char> {
         debug_assert_eq!(self.peek(), Some('\\'));
         match self.peek_at(1) {
-            None => None, // trailing backslash at EOF
-            Some('\n') => None,
+            None => {
+                // Backslash at EOF: a parse error, but the spec's own EOF
+                // branch still returns U+FFFD, not "not an escape".
+                self.pos += 1;
+                Some('\u{FFFD}')
+            }
+            Some('\n') => None, // not a valid escape; caller leaves the `\` unconsumed.
             Some(c) if c.is_ascii_hexdigit() => {
                 self.pos += 1; // past '\'
                 let mut value: u32 = 0;
@@ -108,7 +123,10 @@ impl<'a> Lexer<'a> {
                 if matches!(self.peek(), Some(' ') | Some('\t') | Some('\n')) {
                     self.pos += 1;
                 }
-                char::from_u32(value).filter(|&c| c != '\0')
+                // A NUL, a surrogate, or a value past the maximum allowed
+                // code point all become U+FFFD (`char::from_u32` already
+                // rejects surrogates and out-of-range values for us).
+                Some(char::from_u32(value).filter(|&c| c != '\0').unwrap_or('\u{FFFD}'))
             },
             Some(_) => {
                 self.pos += 1; // past '\'
@@ -316,9 +334,40 @@ impl<'a> Lexer<'a> {
 
 fn is_whitespace(c: char) -> bool { matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{000C}') }
 
+/// CSS Syntax 3 SS3.3 "Preprocessing the input stream": normalize CRLF, lone
+/// CR, and FF to a single LF, and replace any NUL with U+FFFD, before
+/// tokenizing. Without this, a hex escape's trailing whitespace check (which
+/// only ever sees an already-normalized LF, never a CR/CRLF/FF) can eat one
+/// half of a real CRLF pair and mis-tokenize whatever follows, and a literal
+/// NUL byte in the source is left as-is instead of becoming the replacement
+/// character real UAs show (CSS-29; `querySelector`'s CSS escapes WPT
+/// selection exercises both).
+fn preprocess_input(src: &str) -> String {
+    if !src.contains(['\r', '\u{000C}', '\0']) {
+        return src.to_owned(); // fast path: nothing to normalize
+    }
+    let mut out = String::with_capacity(src.len());
+    let mut chars = src.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                out.push('\n');
+            }
+            '\u{000C}' => out.push('\n'),
+            '\0' => out.push('\u{FFFD}'),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Tokenizes an entire stylesheet source into a flat token vector.
 pub fn tokenize(src: &str) -> Vec<Token> {
-    let mut lx = Lexer::new(src);
+    let preprocessed = preprocess_input(src);
+    let mut lx = Lexer::new(&preprocessed);
     let mut out = Vec::new();
     loop {
         let tok = match lx.peek() {
@@ -352,6 +401,15 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                 lx.pos += 1;
                 match lx.peek() {
                     Some(c) if is_ident_char(c) => Token::Hash(lx.ident()),
+                    // CSS Syntax 3 SS4.3.2 "consume a hash token": a hash
+                    // token also starts when the next two code points are a
+                    // valid escape (a backslash not directly followed by a
+                    // newline -- EOF counts as valid too, matching escape()'s
+                    // own EOF branch). Without this, `#\30 foo`-style escaped
+                    // id selectors tokenized as a lone `Delim('#')` and never
+                    // reached `ident()`/`escape()` at all (CSS-29;
+                    // `querySelector`'s CSS escapes WPT selection covers this).
+                    Some('\\') if lx.peek_at(1) != Some('\n') => Token::Hash(lx.ident()),
                     _ => Token::Delim('#'),
                 }
             },
@@ -361,6 +419,9 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                     Some(c) if is_ident_start(c) => {
                         Token::AtKeyword(lx.ident())
                     },
+                    // Same escape-start gap as the hash token above:
+                    // `@\65 dia`-style escaped at-keywords must still count.
+                    Some('\\') if lx.peek_at(1) != Some('\n') => Token::AtKeyword(lx.ident()),
                     _ => Token::Delim('@'),
                 }
             },

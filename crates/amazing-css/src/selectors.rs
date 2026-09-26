@@ -163,6 +163,10 @@ pub enum Pseudo {
     Required,
     Optional,
     Open,
+    /// Constraint validation (Phase 2 subset, CSS-29): attribute-heuristic
+    /// only -- see `is_invalid`/`is_validity_candidate`.
+    Invalid,
+    Valid,
 }
 
 // ---------------------------------------------------------------------------
@@ -609,6 +613,8 @@ impl<'t> SelParser<'t> {
             "required" => Pseudo::Required,
             "optional" => Pseudo::Optional,
             "open" => Pseudo::Open,
+            "invalid" => Pseudo::Invalid,
+            "valid" => Pseudo::Valid,
             _ => return None, // unknown pseudo-class invalidates the selector
         };
         Some(Simple::Pseudo(pseudo))
@@ -917,19 +923,22 @@ pub fn matches(dom: &Dom, el: NodeIdx, sel: &Selector) -> bool {
 }
 
 /// Match with an explicit scoping root; absent roots use the document element.
-pub(crate) fn matches_in_scope(
-    dom: &Dom,
-    el: NodeIdx,
-    sel: &Selector,
-    scope: Option<NodeIdx>,
-) -> bool {
+///
+/// CSS-29: made crate-external `pub` (was `pub(crate)`) so a caller outside
+/// `amazing-css` can bind `:scope` to something other than the document root
+/// -- e.g. `Element.closest()`, whose DOM algorithm matches each inclusive
+/// ancestor with `:scope` bound to the ORIGINAL context element throughout
+/// the walk, not to whichever ancestor is currently being tested. Wiring
+/// that into `closest()` itself is outside this crate (see
+/// `.agents/css/questions.md`), but the primitive it needs now exists here.
+pub fn matches_in_scope(dom: &Dom, el: NodeIdx, sel: &Selector, scope: Option<NodeIdx>) -> bool {
     if sel.pseudo_element().is_some() {
         return false;
     }
     match_rightward(dom, el, sel, sel.compounds.len() - 1, scope)
 }
 
-pub(crate) fn matches_pseudo_in_scope(
+pub fn matches_pseudo_in_scope(
     dom: &Dom,
     el: NodeIdx,
     sel: &Selector,
@@ -1225,6 +1234,116 @@ fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
         Pseudo::Optional => supports_required(dom, el) && attr_of(dom, el, "required").is_none(),
         Pseudo::Open => matches!(dom.name(el), Some("details" | "dialog"))
             && attr_of(dom, el, "open").is_some(),
+        // Constraint validation, Phase 2 subset: no live form/widget state,
+        // so validity is read from attributes only -- `required` plus an
+        // empty effective value for input/select/textarea, or (per the HTML
+        // Standard's own `:invalid`/`:valid` matching rule for `fieldset`
+        // and `form`) whether any non-barred descendant control is invalid.
+        // Pattern/type-format/min-max mismatches are out of scope here.
+        Pseudo::Invalid => is_invalid(dom, el),
+        Pseudo::Valid => is_validity_candidate(dom, el) && !is_invalid(dom, el),
+    }
+}
+
+fn is_invalid(dom: &Dom, el: NodeIdx) -> bool {
+    match dom.name(el) {
+        Some("input") => {
+            supports_required(dom, el)
+                && attr_of(dom, el, "disabled").is_none()
+                && attr_of(dom, el, "required").is_some()
+                && attr_of(dom, el, "value").unwrap_or("").is_empty()
+        }
+        Some("select") => {
+            attr_of(dom, el, "disabled").is_none()
+                && attr_of(dom, el, "required").is_some()
+                && select_effective_value(dom, el).is_empty()
+        }
+        Some("textarea") => {
+            attr_of(dom, el, "disabled").is_none()
+                && attr_of(dom, el, "required").is_some()
+                && element_text_content(dom, el).is_empty()
+        }
+        // The HTML Standard: a `fieldset`/`form` element matches `:invalid`
+        // when it has a descendant that is both a candidate for constraint
+        // validation and itself invalid -- it has no value of its own.
+        Some("fieldset") | Some("form") => has_invalid_descendant(dom, el),
+        _ => false,
+    }
+}
+
+fn has_invalid_descendant(dom: &Dom, el: NodeIdx) -> bool {
+    let mut pending: Vec<NodeIdx> = dom.children(el).collect();
+    while let Some(node) = pending.pop() {
+        if matches!(dom.name(node), Some("input" | "select" | "textarea")) && is_invalid(dom, node)
+        {
+            return true;
+        }
+        pending.extend(dom.children(node));
+    }
+    false
+}
+
+/// Elements `:valid`/`:invalid` apply to at all (candidates for constraint
+/// validation, minus the always-barred input types and disabled controls).
+fn is_validity_candidate(dom: &Dom, el: NodeIdx) -> bool {
+    match dom.name(el) {
+        Some("input") => {
+            !attr_of(dom, el, "type").is_some_and(|kind| {
+                ["hidden", "reset", "button"]
+                    .iter()
+                    .any(|excluded| kind.eq_ignore_ascii_case(excluded))
+            }) && attr_of(dom, el, "disabled").is_none()
+        }
+        Some("select" | "textarea" | "button") => attr_of(dom, el, "disabled").is_none(),
+        Some("output" | "fieldset" | "form") => true,
+        _ => false,
+    }
+}
+
+/// A `<select>`'s effective value: the `value` attribute (or else text
+/// content) of its `selected` option, or of its first `<option>` descendant
+/// if none is marked `selected`, or the empty string if it has none.
+fn select_effective_value(dom: &Dom, el: NodeIdx) -> String {
+    let mut options = Vec::new();
+    collect_options(dom, el, &mut options);
+    let chosen = options
+        .iter()
+        .find(|&&o| attr_of(dom, o, "selected").is_some())
+        .or_else(|| options.first())
+        .copied();
+    match chosen {
+        Some(opt) => attr_of(dom, opt, "value")
+            .map(str::to_owned)
+            .unwrap_or_else(|| element_text_content(dom, opt)),
+        None => String::new(),
+    }
+}
+
+fn collect_options(dom: &Dom, node: NodeIdx, out: &mut Vec<NodeIdx>) {
+    for child in dom.children(node) {
+        if dom.name(child) == Some("option") {
+            out.push(child);
+        } else {
+            collect_options(dom, child, out);
+        }
+    }
+}
+
+fn element_text_content(dom: &Dom, el: NodeIdx) -> String {
+    let mut out = String::new();
+    collect_text(dom, el, &mut out);
+    out
+}
+
+fn collect_text(dom: &Dom, node: NodeIdx, out: &mut String) {
+    match &dom.get(node).kind {
+        amazing_dom::NodeKind::Text { data } | amazing_dom::NodeKind::CDATASection { data } => {
+            out.push_str(data)
+        }
+        _ => {}
+    }
+    for child in dom.children(node) {
+        collect_text(dom, child, out);
     }
 }
 
@@ -1956,5 +2075,150 @@ mod tests {
         // …but a descendant walk may pass through it.
         let p = dom.create_element(html, "p");
         assert!(matches(&dom, p, &parse_selector("* p").unwrap()));
+    }
+
+    /// CSS-29: CSS Syntax 3 SS4.3.7 "consume an escaped code point", exercised
+    /// through `#id` selectors the way WPT's own
+    /// `dom/nodes/ParentNode-querySelector-escapes.html` does -- give an
+    /// element the literal (already-decoded) `id`, then check whether an
+    /// escaped selector spelling decodes to that same string.
+    #[test]
+    fn id_selector_escapes_decode_per_css_syntax_4_3_7() {
+        fn el_with_id(id: &str) -> (Dom, NodeIdx) {
+            let mut dom = Dom::new();
+            let e = dom.create_element(NodeIdx(0), "span");
+            dom.set_attrs(e, vec![("id".into(), id.into())]);
+            (dom, e)
+        }
+        fn matches_selector(id: &str, selector: &str) -> bool {
+            let (dom, e) = el_with_id(id);
+            let parsed = parse_selector(selector)
+                .unwrap_or_else(|| panic!("failed to parse selector: {selector:?}"));
+            matches(&dom, e, &parsed)
+        }
+
+        // Hex escape terminated by a consumed trailing whitespace, or by a
+        // non-hex character, or capped at 6 digits.
+        assert!(matches_selector("0nextIsWhiteSpace", "#\\30 nextIsWhiteSpace"));
+        assert!(matches_selector("0nextIsNotHexLetters", "#\\30nextIsNotHexLetters"));
+        assert!(matches_selector("0connectHexMoreThan6Hex", "#\\000030connectHexMoreThan6Hex"));
+        assert!(matches_selector("0spaceMoreThan6Hex", "#\\000030 spaceMoreThan6Hex"));
+
+        // Special-replacement hex values: NUL, surrogates, out-of-range --
+        // all become U+FFFD, never the raw value and never "not an escape".
+        assert!(matches_selector("zero\u{fffd}", "#zero\\0"));
+        assert!(!matches_selector("zero\u{0}", "#zero\\0"));
+        assert!(matches_selector("zero\u{fffd}", "#zero\\000000"));
+        // (There is no companion "does NOT match the raw surrogate" assertion:
+        // a lone surrogate is not a valid Unicode scalar value, so Rust
+        // cannot even express that `char`/`&str` literal to compare against.)
+        assert!(matches_selector("\u{fffd}surrogateFirst", "#\\d83d surrogateFirst"));
+        assert!(matches_selector("outOfRange\u{fffd}", "#outOfRange\\110000"));
+        assert!(matches_selector("outOfRange\u{fffd}", "#outOfRange\\110030"));
+        assert!(!matches_selector("outOfRange\u{30}", "#outOfRange\\110030"));
+        // Exactly the maximum allowed code point is valid, not replaced.
+        assert!(matches_selector("\u{10ffff}", "#\\10fFfF"));
+        assert!(matches_selector("\u{10ffff}0", "#\\10fFfF0"));
+
+        // A lone backslash right at EOF decodes to U+FFFD (a parse error,
+        // but still a code point per spec), never a literal `\`: this must
+        // NOT match an id containing a real trailing backslash.
+        assert!(!matches_selector("eof\\", "#eof\\"));
+
+        // Escaping any other character just yields that character literally.
+        assert!(matches_selector(".comma", "#\\.comma"));
+        assert!(matches_selector("hello", "#hel\\6Co"));
+        assert!(matches_selector("&B", "#\\26 B"));
+
+        // CRLF and form-feed normalize to one consumed whitespace after a
+        // hex escape (CSS Syntax 3 SS3.3 input preprocessing), not two
+        // separate characters that would otherwise truncate the ident.
+        assert!(matches_selector("spaces", "#spac\\65\r\ns"));
+        assert!(matches_selector("spaces", "#sp\\61\tc\\65\u{c}s"));
+
+        // A literal NUL byte in the selector source itself (not an escape)
+        // also becomes U+FFFD via the same preprocessing step.
+        assert!(matches_selector("\u{fffd}", "#\u{0}"));
+    }
+
+    /// CSS-29: `:invalid`/`:valid`, Phase 2 attribute-only subset (no live
+    /// form/widget state). Mirrors the shape of `dom/nodes/Element-closest.html`'s
+    /// `do_test(":invalid", "test11", "test2")` fixture: a form containing a
+    /// required-and-empty `<input>` sibling to a `<fieldset>` that itself
+    /// contains a required `<select>` (validly filled) and a required-and-empty
+    /// `<input>` -- both the form and the fieldset must report `:invalid`
+    /// because they have an invalid descendant, even though neither has a
+    /// "value" of its own.
+    #[test]
+    fn invalid_and_valid_pseudo_classes_read_required_and_empty_value() {
+        let invalid = parse_selector(":invalid").unwrap();
+        let valid = parse_selector(":valid").unwrap();
+
+        // A plain required-and-empty input is :invalid, not :valid.
+        {
+            let mut dom = Dom::new();
+            let input = dom.create_element(NodeIdx(0), "input");
+            dom.set_attrs(input, vec![("required".into(), "".into())]);
+            assert!(matches(&dom, input, &invalid));
+            assert!(!matches(&dom, input, &valid));
+        }
+        // A required input WITH a value is :valid.
+        {
+            let mut dom = Dom::new();
+            let input = dom.create_element(NodeIdx(0), "input");
+            dom.set_attrs(
+                input,
+                vec![("required".into(), "".into()), ("value".into(), "x".into())],
+            );
+            assert!(matches(&dom, input, &valid));
+            assert!(!matches(&dom, input, &invalid));
+        }
+        // A non-required input is always :valid (no pattern/type checks here).
+        {
+            let mut dom = Dom::new();
+            let input = dom.create_element(NodeIdx(0), "input");
+            assert!(matches(&dom, input, &valid));
+            assert!(!matches(&dom, input, &invalid));
+        }
+        // A required select whose selected option has a non-empty implied
+        // value (text content, no `value` attribute) is :valid.
+        {
+            let mut dom = Dom::new();
+            let select = dom.create_element(NodeIdx(0), "select");
+            dom.set_attrs(select, vec![("required".into(), "".into())]);
+            let option = dom.create_element(select, "option");
+            dom.set_attrs(option, vec![("selected".into(), "".into())]);
+            dom.create_text(option, "Test11");
+            assert!(matches(&dom, select, &valid));
+            assert!(!matches(&dom, select, &invalid));
+        }
+        // fieldset/form propagate invalidity from a descendant control, per
+        // the HTML Standard's own :valid/:invalid rule for those two
+        // elements (they have no value of their own).
+        {
+            let mut dom = Dom::new();
+            let form = dom.create_element(NodeIdx(0), "form");
+            let required_input = dom.create_element(form, "input");
+            dom.set_attrs(required_input, vec![("required".into(), "".into())]);
+            let fieldset = dom.create_element(form, "fieldset");
+            let select = dom.create_element(fieldset, "select");
+            dom.set_attrs(select, vec![("required".into(), "".into())]);
+            let option = dom.create_element(select, "option");
+            dom.set_attrs(option, vec![("selected".into(), "".into())]);
+            dom.create_text(option, "ok");
+            let empty_input = dom.create_element(fieldset, "input");
+            dom.set_attrs(empty_input, vec![("required".into(), "".into())]);
+
+            assert!(matches(&dom, form, &invalid), "form has an invalid descendant");
+            assert!(!matches(&dom, form, &valid));
+            assert!(
+                matches(&dom, fieldset, &invalid),
+                "fieldset has an invalid descendant (the empty required input)"
+            );
+            assert!(!matches(&dom, fieldset, &valid));
+            // The select itself is validly filled.
+            assert!(matches(&dom, select, &valid));
+            assert!(!matches(&dom, select, &invalid));
+        }
     }
 }
