@@ -1090,7 +1090,8 @@ impl NetworkService {
                 WebSocketEvent::Open { id, .. }
                 | WebSocketEvent::Message { id, .. }
                 | WebSocketEvent::Close { id, .. }
-                | WebSocketEvent::Error { id, .. } => *id,
+                | WebSocketEvent::Error { id, .. }
+                | WebSocketEvent::Sent { id, .. } => *id,
             };
             if let Some(id) = self
                 .websockets

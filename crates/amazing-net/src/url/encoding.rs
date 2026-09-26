@@ -38,7 +38,7 @@ pub fn percent_encode(input: &str, set: PercentEncodeSet) -> String {
     }
     result
 }
-pub(super) fn percent_decode(input: &str) -> Vec<u8> {
+pub(crate) fn percent_decode(input: &str) -> Vec<u8> {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
