@@ -1763,3 +1763,22 @@ User-directed dependency: **JSRT-9 child realms after the await fix, then HTML-2
 part 2**. Deferred, not blocked. Continue independent nodes, traversal, events,
 collections, and queued IPC-11 MessageEvent/shared EventTarget work. Windows
 source upload failed; this is Linux diagnostic evidence, not a Windows gate.
+
+## IPC-11 DOM-side MessageEvent and shared targets ready (2026-09-26)
+
+Implementation `2f5ca997` + `aa2024f3`, fixed base `536d0bdc`. Native MessageEvent,
+retained payload/source/ports, frozen arrays, legacy initialization, trusted
+message dispatch, and optional external target mapping now share the DOM event
+registry. Exact API contract and IPC adoption request are in
+`crates/amazing-bindings/evidence/messageevent/README.md` and lane questions.
+IPC still owns switching its temporary MessageEvent/global/listener adapter to
+this contract; this commit does not claim installed messaging gains.
+
+Linux Boat final gate: workspace **2531 passed, 10 skipped**, docs **2/2**;
+owned/driver iteration **514 passed, 4 skipped**, owned docs **0**. Seven-source
+pinned selection before/after: **2 pass / 3 fail / 2 unsupported**, **234 passing /
+206 failing / 6 error subtests**, zero losses or gains. Fixed-source raw evidence
+is in `crates/amazing-bindings/evidence/messageevent/`.
+
+Next independent DOM-B event cluster: UIEvent dictionary Window validation,
+conversion order, signed-long detail, and related-target validation/root cleanup.
