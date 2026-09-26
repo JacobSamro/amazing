@@ -10,15 +10,15 @@ lanes never pay for time they do not use.
 
 Lanes share pooled sandboxes (2026-09-26). One sandbox per lane kept 24
 sandboxes billed while agents were thinking, not building; related lanes now
-share one, each in its own ~/amazing/wt/<lane> tree against one shared
-CARGO_TARGET_DIR. Cargo's build-directory lock serializes their compiles, so
-two lanes never fight over the 4 vCPUs, and dependencies stay warm for all.
+share one, each in its own ~/amazing/wt/<lane> tree with its own
+CARGO_TARGET_DIR (see target_of).
 `pool-report` measures each pool's busy time and overlap from
 .agents/.boat-runs.log (written by linux-run.sh) so hot pools can be split or
 moved to a larger type.
 
 Usage:
-  boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool>"
+  boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool> <target>"
+  boat-lane.py heal <lane>                      restart it if its lazy filesystem died; print as ensure
   boat-lane.py stop <lane>
   boat-lane.py list
   boat-lane.py pool-report [--hours 2]
@@ -65,6 +65,18 @@ POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 
 def pool_of(lane: str) -> str:
     return POOL_OF.get(lane, lane)
+
+
+def target_of(lane: str) -> str:
+    """Each lane needs its own CARGO_TARGET_DIR. Cargo hashes workspace members
+    relative to the workspace root, so two lanes' trees on one sandbox produce
+    the same artifact names; with one shared target a lane linked another
+    lane's stale rlib (compositor, 2026-09-26). The pool's first lane keeps the
+    template's warm ~/amazing/target; the others build their own once."""
+    pool = POOL_OF.get(lane)
+    if pool is None or POOLS[pool][0] == lane:
+        return "amazing/target"
+    return f"amazing/targets/{lane}"
 STOPPED = {"archived", "stopped"}
 
 
@@ -109,6 +121,38 @@ def wait_ready(sid: str, limit: int = 300) -> dict:
     raise SystemExit(f"boat-lane: {sid} not ready after {limit}s")
 
 
+KEY = os.path.expanduser("~/.ssh/ascii_box_ed25519")
+
+
+def healthy(d: dict) -> bool:
+    """A resumed sandbox serves /home/user from ascii-lazyfs (FUSE). Under load
+    right after a resume that daemon can die, leaving every path failing with
+    "Transport endpoint is not connected" until the sandbox restarts."""
+    host, port = d["sshEndpoint"].rsplit(":", 1)
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+             "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+             "-o", "ConnectTimeout=20", "-i", KEY, "-p", port, f"user@{host}",
+             "stat -c %s ~/.amazing-env >/dev/null && mkdir -p ~/amazing/wt && touch ~/amazing/wt/.probe"],
+            capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
+    return r.returncode == 0
+
+
+def heal(lane: str) -> dict:
+    """Restart the lane's sandbox when its lazy filesystem has died."""
+    sid = load_map().get(pool_of(lane))
+    d = wait_ready(sid)
+    if healthy(d):
+        return d
+    print(f"boat-lane: {sid} filesystem broken (lazyfs); restarting it", file=sys.stderr)
+    boat("stop", sid, timeout=240)
+    boat("resume", sid, "--no-auto-stop", timeout=240)
+    return wait_ready(sid)
+
+
 def ensure(lane: str, size: str) -> dict:
     # Parallel shard runs create sandboxes at once; serialize map updates.
     MAP.parent.mkdir(parents=True, exist_ok=True)
@@ -150,7 +194,12 @@ def main() -> int:
         size = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--type" else "default"
         d = ensure(lane, size)
         host, port = d["sshEndpoint"].rsplit(":", 1)
-        print(f"user@{host} {port} {d['id']} {pool_of(lane)}")
+        print(f"user@{host} {port} {d['id']} {pool_of(lane)} {target_of(lane)}")
+        return 0
+    if cmd == "heal":
+        d = heal(sys.argv[2])
+        host, port = d["sshEndpoint"].rsplit(":", 1)
+        print(f"user@{host} {port} {d['id']} {pool_of(sys.argv[2])} {target_of(sys.argv[2])}")
         return 0
     if cmd == "stop":
         sid = load_map().get(pool_of(sys.argv[2]))
