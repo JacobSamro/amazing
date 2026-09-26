@@ -1398,17 +1398,22 @@ cherry-picked into this branch by mistake and is now committed lane-clean.
 Linux (venus-001) `cargo nextest run -p amazing-css --locked`: **310/310**,
 CSS doctests 0. Commits `1d4b4d11` (counter styles) and `13e1d722` (focus).
 
-**Render-corpus handoff (not measured this session).** The css15b manifest
-(`crates/amazing-css/evidence/css15b-manifest.json`, 219 cases) pins WPT
-`53bc812da2ed81179ebd1ba76b2d197cc4747d12`, but the win-001 WPT checkout at
-`C:\Users\server\target\css\wpt` is at `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`
-and currently has `css-pseudo` but **not** `css-counter-styles` or
-`css-conditional`. The committed baseline `css15b-before.json` is 48 pass / 171
-mismatch / 0 error (pseudo 31/49, counter styles 4/76, conditional 13/46).
-A fresh after-run needs those two directories restored at the manifest revision
-(and the manifest/checkout pin reconciled) before its numbers are comparable to
-the baseline. The `4/76` counter-style sub-count is the population this ticket
-targets; no after count is claimed until that sweep runs.
+**Render result (counter-styles selection).** `css/css-counter-styles` was
+restored at the pinned revision via a blob-filtered sparse checkout on the Mac
+and transferred to win-001. Running `run-render-wpt.ps1` with the 80-case
+`crates/amazing-css/evidence/css15b-counter-manifest.json` (a counter-styles-only
+subset of the css15b manifest) against the candidate executable gives
+**73 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash**, up from
+the committed baseline's **4 pass / 76 mismatch**: 69 gains, zero regressions.
+Evidence: `crates/amazing-css/evidence/css15b-counter-after.json`. The 7
+remaining are 3 Hebrew cases (RTL/bidi and `counter-hebrew-nested`), 1
+`korean-hanja-informal` case, and 3 Chinese `counter-*` `counter()` cases
+(not `::marker`), which are followed up separately.
+
+The full 219-case css15b corpus (css-pseudo/counter-styles/conditional) still
+needs `css/css-conditional` restored at the manifest revision for a comparable
+all-category after-run; the counter-styles directory and selection above are the
+part this ticket owns and has now measured.
 
 ## Next CSS-15 bulk css/ WPT sweep
 
