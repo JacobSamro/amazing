@@ -436,10 +436,38 @@ passing variants, zero lost** (identical input SHA-256
 selection unchanged at 1,311/1,341 pass. `built-ins/Error/prototype/stack`
 selection: 27/35 pass (see above). Linux `amazing-js` crate nextest:
 343/343 passed, 1 skipped; its doctest 1/1 passed -- re-verified after the
-`symbol_method`/message-enumerable fixes. Linux workspace `cargo nextest run
---workspace --locked --no-fail-fast && cargo test --workspace --locked
---doc` was re-gated after all fixes in this ticket; see the lane's final
-report for the exact count.
+`symbol_method`/message-enumerable fixes.
+
+Commit `dcfcd9d6` was then merged with `origin/dev` (commit `04b835de`) at
+the orchestrator's request, to pick up a Boat sandbox SSH-endpoint fallback
+fix needed to run the gate at all. The merge conflicted in
+`interp_install.rs` (Error.isError install: kept this lane's `stack`
+accessor block, took dev's `runtime_method_attributes`-based isError
+install) and `interp_builtins.rs` (`native_error_value`: took dev's
+`runtime_error_object`/`runtime_install_error_cause` refactor wholesale, since
+it already installs `"message"` via `symbol_data(..., true, true)` --
+`{enumerable:false}` -- superseding this ticket's hand-rolled fix with the
+same result plus §20.5.7.1 `cause` support; `Object.prototype.toString`'s
+exotic-tag chain: merged both sides' checks, since dev's added `[[DateValue]]`
+-> "Date" but silently dropped this ticket's `[[BigIntData]]` -> "BigInt"
+check, which is still exercised elsewhere in the crate). The merge also
+surfaced one build break outside those two conflicts: dev's own Error-family
+refactor (commit `05262079`, js-runtime's) had independently added a second,
+weaker `native_error_is_error` (no `host_error_brand` hook) in the new
+`interp_errors.rs`, name-colliding with this ticket's fuller one in
+`interp_builtins.rs`; removed the weaker duplicate (fixup commit `a7fa4a92`)
+since nothing referenced it and the installed one already subsumes it
+(`Exotic::Error` OR `host_error_brand`).
+
+Post-merge (`a7fa4a92`) re-verification on the same Boat sandbox: Linux
+workspace `cargo nextest run --workspace --locked --no-fail-fast`: **2,934/2,934
+passed** (1 slow, 11 skipped); `cargo test --workspace --locked --doc`: all
+green, including `amazing_js` and `amazing_html`. Targeted directories
+improved slightly from dev's unrelated changes, confirming zero loss:
+`built-ins/Error/prototype/stack` 27 -> **29/35** pass (the 2
+`host.createRealm`-unsupported cases are gone, now otherwise resolved);
+`built-ins/Temporal` 3,813 -> **3,815/4,603** pass; `built-ins/String` 1,311
+-> **1,315/1,341** pass.
 
 Remaining `built-ins/Error/prototype/stack` gaps (5 Proxy-dependent files, 1
 `getter-foreign-new-target.js` needing `Reflect.construct` foreign-new-target
