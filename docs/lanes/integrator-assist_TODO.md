@@ -1384,3 +1384,61 @@ Crate tests: 16/16 new unit tests pass; full `amazing` crate suite green
 (k-test). Final gate (Linux, `--host venus-001`, dev `8f2e57ee` plus this
 series): workspace nextest **3297 passed/0 failed/15 skipped** (65.2s), all
 doctests passed. One commit: `5e0749cb`.
+
+## IA-REAL-3: real-pages re-run + A11Y-14 AxTreeWatcher wiring (done, next commit)
+
+Rebased on local dev `ff5f0094` (picks up NET-41's `delete_all_cookies`
+cookie-store override alongside IA-TESTDRIVER's vendor script, A11Y-14's
+`AxTreeWatcher`/shadow-DOM-aware accname, LFG-4's grid fixes, and the
+"never `git stash`" rule this ticket's own work honored).
+
+**Re-ran the real-pages corpus** (`tests/real-pages`, 52 pages) on the
+rebased head: **52 pages, 2 errors, 2 fallback pages, 0 crashes, 0 panics, 0
+timeouts** (slowest `news-home.html`, 3.4s). Storage's IA-REAL-2 fix for the
+"IndexedDB open: Corrupt" scheduler failure is confirmed landed -- no page
+fails at scheduler init any more. Compared with IA-REAL-2's last recorded
+baseline (52 pages/3 errors/2 fallback pages): one whole error cluster is
+now gone -- `app-chat.html`'s `new WebSocket(...)` no longer throws
+`TypeError: Invalid document URL` (net's `fetch_base()` fallback gap from
+that ticket's own filing is resolved). The CSS/parse warning cluster
+(`121x UnsupportedSvg` etc.) is still absent, as it was last run.
+
+**Classified the two remaining failures** (both the same cluster, already
+filed and confirmed still current, not re-filed): `app-kanban.html`
+(`document.body.animate(...)`) and `app-mail.html`
+(`navigator.clipboard.writeText(...)`) both throw `TypeError: value is not
+callable` -- dom-bindings' own already-open `Element.prototype.animate`/
+`navigator.clipboard` gaps from the original IA-REAL-PAGES triage thread.
+No script-error cluster, layout/paint mismatch, or missing-API cluster in
+this run is in this lane's owned paths to fix.
+
+**Wired A11Y-14's `AxTreeWatcher` into the live render loop**, at the call
+site its own doc comment (`runtime_host_a11y.rs`) names for this file: "a
+`gui` frame, a `BrowserDomHost`, or `amazing wpt-harness`'s `test_driver`
+hooks". `IaRuntime` (`runtime_host_integrator_assist.rs`) now holds one
+`AxTreeWatcher`; a new `td_record_ax_checkpoint` helper rebuilds/diffs it
+from the live document's current DOM/style/layout and is called once at the
+end of `click`, `send_keys` and `action_sequence` -- after each testdriver
+action's own dispatch has fully settled, matching the granularity
+`deliver_mutations` already coalesces mutation-observer callbacks to (one
+call per batch of applied mutations, not per character or per tick).
+Draining the resulting events into a live consumer (CDP's
+`Accessibility.nodesUpdated`) stays devtools' own file to wire, per A11Y-14's
+doc comment and `.agents/devtools/questions.md` -- this ticket only wires
+the producer side.
+
+Found and filed (not fixed, out of this lane's paths) while building this: a
+real `amazing-a11y` gap where `host::native_checked`
+(`crates/amazing-a11y/src/host.rs:140-154`) reads the `checked` **content
+attribute**, not a checkbox/radio's live checkedness, so a real
+click-driven toggle currently produces no `StateChanged` ax event at all.
+The regression test for this ticket's own wiring uses an explicit
+`aria-checked` attribute toggle instead, to prove the wiring works
+independent of that fix.
+
+Crate tests: 17/17 unit tests pass in `runtime_host_integrator_assist`
+(one new test for the `AxTreeWatcher` wiring); full `amazing` crate suite
+green (225 passed/0 failed/4 ignored). Final gate on venus-001 (dev
+`ff5f0094` plus this series): workspace nextest **3369 passed/0 failed/17
+skipped** (64.6s, includes the real-pages corpus test itself), all doctests
+passed. Zero lost.
