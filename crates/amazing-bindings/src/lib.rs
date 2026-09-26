@@ -48,6 +48,7 @@ mod web_bindings;
 mod location_bindings;
 pub mod fetch_interfaces;
 mod attr_bindings;
+mod dataset_bindings;
 mod character_data_bindings;
 mod tokenlist;
 mod html_reflection;

@@ -10,11 +10,12 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    BoxModel, ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams,
-    EvaluateResult, ExceptionDetails, FrameInfo, FrameResourceTree, FrameTree, HostError,
-    HostInfo, LayoutMetrics, KeyEvent, LifecycleEvent, LogEntry, MatchedRule, MediaQuery,
+    BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
+    EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
+    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, InterceptedRequest,
+    KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery,
     MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
-    PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
+    PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
     ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use crate::json::Json;
@@ -57,6 +58,54 @@ pub struct MockScript {
     pub ignore_input: Option<bool>,
     /// Node returned by `DOM.getNodeForLocation`.
     pub hit_test: Option<EngineNodeId>,
+    /// Fetch interception state from the last `set_fetch_enabled`.
+    pub fetch_enabled: bool,
+    /// Fetch patterns from the last `set_fetch_enabled`.
+    pub fetch_patterns: Vec<FetchPattern>,
+    /// Whether the client asked to handle auth challenges.
+    pub fetch_handle_auth: bool,
+    /// Requests paused for Fetch interception.
+    pub intercepted: VecDeque<InterceptedRequest>,
+    /// Decisions recorded by `resolve_intercepted_request`.
+    pub fetch_decisions: Vec<(String, FetchDecision)>,
+    /// Response bodies for `getResponseBody`: (request_id, bytes, mime).
+    pub response_bodies: Vec<(String, Vec<u8>, String)>,
+    /// Request post data for `getRequestPostData`: (request_id, text).
+    pub request_post_data: Vec<(String, String)>,
+    /// Last `Emulation.setDeviceMetricsOverride` value.
+    pub device_metrics: Option<DeviceMetrics>,
+    /// Last `Emulation.setUserAgentOverride` value.
+    pub user_agent_override: Option<String>,
+    /// Last `Emulation.setGeolocationOverride` (`Some(None)` clears it).
+    pub geolocation_override: Option<Option<(f64, f64, f64)>>,
+    /// Last `Emulation.setTimezoneOverride` value.
+    pub timezone_override: Option<String>,
+    /// Last `Emulation.setLocaleOverride` (`Some(None)` clears it).
+    pub locale_override: Option<Option<String>>,
+    /// Last `Emulation.setEmulatedMedia` value.
+    pub emulated_media: Option<(Option<String>, Vec<MediaFeature>)>,
+    /// Last `Emulation.setScrollbarsHidden` value.
+    pub scrollbars_hidden: Option<bool>,
+    /// Last `Emulation.setTouchEmulationEnabled` value.
+    pub touch_emulation: Option<(bool, Option<u32>)>,
+    /// Last `Emulation.setCPUThrottlingRate` value.
+    pub cpu_throttling_rate: Option<f64>,
+    /// Last `Emulation.setScriptExecutionDisabled` value.
+    pub script_execution_disabled: Option<bool>,
+    /// Last `Overlay.enable`/`disable` state.
+    pub overlay_enabled: Option<bool>,
+    /// Last `Overlay.setInspectMode` value.
+    pub inspect_mode: Option<String>,
+    /// Last `Overlay.highlightNode` node.
+    pub highlighted_node: Option<EngineNodeId>,
+    /// Last `Overlay.highlightRect` rectangle.
+    pub highlighted_rect: Option<Rect>,
+    /// Last `Overlay.highlightQuad` quad.
+    pub highlighted_quad: Option<Quad>,
+    /// Last `Overlay.highlight*` configuration.
+    pub highlight_config: Option<HighlightConfig>,
+    /// Set by `Overlay.hideHighlight`.
+    pub highlight_hidden: Option<bool>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -112,6 +161,30 @@ impl Default for MockScript {
             inserted_text: Vec::new(),
             ignore_input: None,
             hit_test: Some(EngineNodeId(4)),
+            fetch_enabled: false,
+            fetch_patterns: Vec::new(),
+            fetch_handle_auth: false,
+            intercepted: VecDeque::new(),
+            fetch_decisions: Vec::new(),
+            response_bodies: Vec::new(),
+            request_post_data: Vec::new(),
+            device_metrics: None,
+            user_agent_override: None,
+            geolocation_override: None,
+            timezone_override: None,
+            locale_override: None,
+            emulated_media: None,
+            scrollbars_hidden: None,
+            touch_emulation: None,
+            cpu_throttling_rate: None,
+            script_execution_disabled: None,
+            overlay_enabled: None,
+            inspect_mode: None,
+            highlighted_node: None,
+            highlighted_rect: None,
+            highlighted_quad: None,
+            highlight_config: None,
+            highlight_hidden: None,
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -250,6 +323,23 @@ impl MockScript {
             let target = self.targets.remove(index);
             self.push_target_event(TargetEventKind::Destroyed, target);
         }
+    }
+
+    /// Queues a request paused for Fetch interception.
+    pub fn push_intercepted(&mut self, item: InterceptedRequest) {
+        self.intercepted.push_back(item);
+    }
+
+    /// Registers a response body for `Network.getResponseBody`.
+    pub fn set_response_body(&mut self, request_id: &str, bytes: Vec<u8>, mime: &str) {
+        self.response_bodies
+            .push((request_id.to_string(), bytes, mime.to_string()));
+    }
+
+    /// Registers request post data for `Network.getRequestPostData`.
+    pub fn set_request_post_data(&mut self, request_id: &str, text: &str) {
+        self.request_post_data
+            .push((request_id.to_string(), text.to_string()));
     }
 }
 
@@ -628,6 +718,178 @@ impl DevToolsSession for MockSession {
             .unwrap()
             .inserted_text
             .push(text.to_string());
+        Ok(())
+    }
+
+    fn get_response_body(
+        &mut self,
+        request_id: &str,
+    ) -> Result<Option<ResourceContent>, HostError> {
+        let script = self.script.lock().unwrap();
+        Ok(script
+            .response_bodies
+            .iter()
+            .find(|(id, _, _)| id == request_id)
+            .map(|(_, bytes, mime)| ResourceContent {
+                mime_type: mime.clone(),
+                bytes: bytes.clone(),
+            }))
+    }
+
+    fn get_request_post_data(&mut self, request_id: &str) -> Result<Option<String>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .request_post_data
+            .iter()
+            .find(|(id, _)| id == request_id)
+            .map(|(_, text)| text.clone()))
+    }
+
+    fn set_fetch_enabled(
+        &mut self,
+        enabled: bool,
+        patterns: &[FetchPattern],
+        handle_auth: bool,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.fetch_enabled = enabled;
+        script.fetch_patterns = patterns.to_vec();
+        script.fetch_handle_auth = handle_auth;
+        Ok(())
+    }
+
+    fn drain_intercepted_requests(&mut self) -> Vec<InterceptedRequest> {
+        self.script.lock().unwrap().intercepted.drain(..).collect()
+    }
+
+    fn resolve_intercepted_request(
+        &mut self,
+        request_id: &str,
+        decision: &FetchDecision,
+    ) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .fetch_decisions
+            .push((request_id.to_string(), decision.clone()));
+        Ok(())
+    }
+
+    fn set_device_metrics_override(&mut self, metrics: &DeviceMetrics) -> Result<(), HostError> {
+        self.script.lock().unwrap().device_metrics = Some(metrics.clone());
+        Ok(())
+    }
+
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().device_metrics = None;
+        Ok(())
+    }
+
+    fn set_user_agent_override(
+        &mut self,
+        user_agent: &str,
+        _accept_language: Option<&str>,
+        _platform: Option<&str>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().user_agent_override = Some(user_agent.to_string());
+        Ok(())
+    }
+
+    fn set_geolocation_override(
+        &mut self,
+        position: Option<(f64, f64, f64)>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().geolocation_override = Some(position);
+        Ok(())
+    }
+
+    fn set_timezone_override(&mut self, timezone_id: &str) -> Result<(), HostError> {
+        self.script.lock().unwrap().timezone_override = Some(timezone_id.to_string());
+        Ok(())
+    }
+
+    fn set_locale_override(&mut self, locale: Option<&str>) -> Result<(), HostError> {
+        self.script.lock().unwrap().locale_override = Some(locale.map(str::to_string));
+        Ok(())
+    }
+
+    fn set_emulated_media(
+        &mut self,
+        media: Option<&str>,
+        features: &[MediaFeature],
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().emulated_media =
+            Some((media.map(str::to_string), features.to_vec()));
+        Ok(())
+    }
+
+    fn set_scrollbars_hidden(&mut self, hidden: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().scrollbars_hidden = Some(hidden);
+        Ok(())
+    }
+
+    fn set_touch_emulation_enabled(
+        &mut self,
+        enabled: bool,
+        max_touch_points: Option<u32>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().touch_emulation = Some((enabled, max_touch_points));
+        Ok(())
+    }
+
+    fn set_cpu_throttling_rate(&mut self, rate: f64) -> Result<(), HostError> {
+        self.script.lock().unwrap().cpu_throttling_rate = Some(rate);
+        Ok(())
+    }
+
+    fn set_script_execution_disabled(&mut self, value: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().script_execution_disabled = Some(value);
+        Ok(())
+    }
+
+    fn overlay_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().overlay_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_inspect_mode(
+        &mut self,
+        mode: &str,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().inspect_mode = Some(mode.to_string());
+        Ok(())
+    }
+
+    fn highlight_node(
+        &mut self,
+        node: EngineNodeId,
+        config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_node = Some(node);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn highlight_rect(&mut self, rect: Rect, config: &HighlightConfig) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_rect = Some(rect);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn highlight_quad(&mut self, quad: Quad, config: &HighlightConfig) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_quad = Some(quad);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn hide_highlight(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().highlight_hidden = Some(true);
         Ok(())
     }
 

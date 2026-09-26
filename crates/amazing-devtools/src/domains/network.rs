@@ -1,6 +1,6 @@
 //! The `Network` domain: request/response/loading events from the engine.
 
-use super::{headers, object};
+use super::{encode_body, headers, object};
 use crate::host::{NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent};
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
@@ -25,6 +25,32 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Network.setBypassServiceWorker" => {
             request.optional_bool("bypass", false)?;
             Ok(DispatchOutcome::empty())
+        }
+        "Network.getResponseBody" => {
+            let request_id = request.string_param("requestId")?;
+            let body = session
+                .dev
+                .get_response_body(request_id)
+                .map_err(CdpError::from)?;
+            let (body, base64_encoded) = match body {
+                Some(content) => encode_body(content),
+                None => (String::new(), false),
+            };
+            Ok(DispatchOutcome::result(object(vec![
+                ("body", Json::String(body)),
+                ("base64Encoded", Json::Bool(base64_encoded)),
+            ])))
+        }
+        "Network.getRequestPostData" => {
+            let request_id = request.string_param("requestId")?;
+            let post = session
+                .dev
+                .get_request_post_data(request_id)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "postData",
+                Json::String(post.unwrap_or_default()),
+            )])))
         }
         other => Err(CdpError::method_not_found(other)),
     }

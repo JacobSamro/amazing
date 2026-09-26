@@ -50,6 +50,7 @@ pub struct EnabledDomains {
     pub css: bool,
     pub network: bool,
     pub log: bool,
+    pub fetch: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -152,6 +153,11 @@ impl SessionState {
                 events.push(domains::log::entry_event(&item));
             }
         }
+        if enabled.fetch {
+            for item in self.dev.drain_intercepted_requests() {
+                events.push(domains::fetch::request_paused(&item));
+            }
+        }
         events
     }
 }
@@ -169,8 +175,11 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "DOM" => domains::dom::dispatch(session, request),
         "CSS" => domains::css::dispatch(session, request),
         "Input" => domains::input::dispatch(session, request),
+        "Emulation" => domains::emulation::dispatch(session, request),
+        "Overlay" => domains::overlay::dispatch(session, request),
         "Network" => domains::network::dispatch(session, request),
         "Log" => domains::log::dispatch(session, request),
+        "Fetch" => domains::fetch::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }

@@ -16,6 +16,7 @@
 pub mod events;
 pub mod focus;
 pub mod attr;
+pub mod dataset;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
