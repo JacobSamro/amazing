@@ -17,6 +17,7 @@ use amazing_bindings::{
 };
 use amazing_dom::{Dom, DomError, NodeIdx, NodeKind, Namespace, abort::AbortSignalId};
 use amazing_bindings::{Blob, BlobPart, File, FormData};
+use amazing_bindings::host::FormNavigationRequest;
 use amazing_bindings::storage_interfaces::{StorageInterface as SI, MemberKind as SM};
 use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
 use amazing_js::value::Exotic;
@@ -44,6 +45,7 @@ use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
 #[path = "runtime_host_compositor.rs"] pub(crate) mod compositor;
+#[path = "runtime_host_html.rs"] pub(crate) mod html;
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
@@ -57,6 +59,11 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    IFrameContentDocument,
+    IFrameContentWindow,
+    IFrameSrcGet,
+    IFrameSrcSet,
+    OptionConstructor,
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
 }
@@ -101,6 +108,8 @@ struct BindingState {
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
+    frames: html::FrameRuntime,
+    pending_form_selection_events: Vec<NodeIdx>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
     net: NetRuntime,
 }
@@ -117,6 +126,9 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn take_form_selection_events(&self) -> Vec<NodeIdx> {
+        std::mem::take(&mut self.state.borrow_mut().pending_form_selection_events)
+    }
     pub(crate) fn set_image_loader_states(&self, js: &mut Interpreter, media: &crate::page::PageMedia) -> Result<(), Throw> {
         let snapshots = media.image_snapshots();
         let mut states = HashMap::new();
@@ -170,6 +182,7 @@ impl RuntimeBindings {
 
     pub(crate) fn set_document_url(&self, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
+        self.navigate_iframes();
     }
 
     pub(crate) fn set_document_metadata(&self, character_set: &str, content_type: &str, referrer: &str) {
@@ -482,6 +495,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::COLLECTION => Interface::HTMLCollection,
             InterfaceBrand::FORM_CONTROLS => Interface::HTMLFormControlsCollection,
             InterfaceBrand::OPTIONS => Interface::HTMLOptionsCollection,
+            InterfaceBrand::SELECTED_OPTIONS => Interface::HTMLCollection,
             InterfaceBrand::RADIO_NODE_LIST => Interface::RadioNodeList,
             InterfaceBrand::VALIDITY_STATE => Interface::ValidityState,
             InterfaceBrand::CUSTOM_ELEMENT_REGISTRY => Interface::CustomElementRegistry,
@@ -579,6 +593,8 @@ pub(crate) fn install(
         storage: None,
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
+        frames: html::FrameRuntime::default(),
+        pending_form_selection_events: Vec::new(),
         messaging: None,
         net: NetRuntime::new(),
     }));
@@ -596,7 +612,7 @@ pub(crate) fn install(
         };
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
-            NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
+            NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
             NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
@@ -608,6 +624,11 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
+            NativeEntry::IFrameContentWindow => adapter.iframe_content_window(this),
+            NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
+            NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
+            NativeEntry::OptionConstructor => adapter.option_constructor(&args),
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
@@ -624,6 +645,8 @@ pub(crate) fn install(
     adapter.install_storage_interfaces()?;
     adapter.install_messaging()?;
     adapter.install_canvas()?;
+    adapter.install_iframe_members()?;
+    adapter.install_html_form_globals()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;
@@ -790,6 +813,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 Operation::HTMLCollectionSupportedIndexCount => dom.collection_length(handle.slot as usize),
                 Operation::FormCollectionSupportedIndexCount => dom.form_controls(NodeIdx(handle.slot as u32)).map(|items| items.len()),
                 Operation::OptionsSupportedIndexCount => dom.select_options(NodeIdx(handle.slot as u32)).map(|items| items.len()),
+                Operation::SelectedOptionsSupportedIndexCount => dom.selected_options(NodeIdx(handle.slot as u32)).map(|items| items.len()),
                 Operation::RadioNodeListSupportedIndexCount => dom.radio_list_items(handle.slot as usize).map(|items| items.len()),
                 Operation::NodeListSupportedIndexCount => match brand {
                     InterfaceBrand::NODE_LIST => Ok(dom.children(NodeIdx(handle.slot as u32)).count()),
@@ -1323,6 +1347,49 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.js.binding_location_navigate(url, replace);
         self.state.borrow_mut().document_url = Some(url.to_owned());
         Ok(())
+    }
+    fn form_selection_changed(&mut self, node: NodeIdx) -> Result<(), Throw> {
+        let mut state = self.state.borrow_mut();
+        if !state.pending_form_selection_events.contains(&node) {
+            state.pending_form_selection_events.push(node);
+        }
+        Ok(())
+    }
+    fn form_submit_event(&mut self, form: NodeIdx, submitter: Option<NodeIdx>) -> Result<bool, Throw> {
+        let prototype = self.js.binding_object_prototype();
+        let options = self.create_object(Some(&prototype))?;
+        self.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        self.js.binding_define_data_property(&options, "cancelable", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str("submit"), options])?;
+        let submitter = match submitter {
+            Some(node) => self.wrap_node(node)?,
+            None => JsValue::Null,
+        };
+        self.js.binding_define_data_property(&event, "submitter", submitter,
+            BindingPropertyFlags::METHOD)?;
+        let target = self.wrap_node(form)?;
+        let allowed = invoke(self, Operation::DispatchEvent, target, &[event])?;
+        Ok(matches!(allowed, JsValue::Bool(true)))
+    }
+    fn form_data_event(&mut self, form: NodeIdx, data: FormData) -> Result<FormData, Throw> {
+        let form_data = self.form_data_new(data)?;
+        let prototype = self.js.binding_object_prototype();
+        let options = self.create_object(Some(&prototype))?;
+        self.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str("formdata"), options])?;
+        self.js.binding_define_data_property(&event, "formData", form_data.clone(),
+            BindingPropertyFlags::METHOD)?;
+        let target = self.wrap_node(form)?;
+        invoke(self, Operation::DispatchEvent, target, &[event])?;
+        self.form_data_record(&form_data)
+    }
+    fn form_navigate(&mut self, request: FormNavigationRequest) -> Result<(), Throw> {
+        self.navigate_form(request)
     }
     fn location_reload(&mut self) -> Result<(), Throw> {
         self.js.binding_location_reload();
