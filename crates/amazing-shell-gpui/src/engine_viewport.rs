@@ -658,7 +658,7 @@ impl EngineViewport {
     ) -> Result<bool, String> {
         static CLOCK: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
         let now_ms = CLOCK.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.;
-        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else { return Ok(false) };
+        let (Some(_), Some(scene)) = (&self.page, &self.compositor) else { return Ok(false) };
         let result = {
             let mut scene = scene.borrow_mut();
             self.scroll_controller.borrow_mut()
@@ -668,6 +668,55 @@ impl EngineViewport {
         if !matches!(result, amazing_compositor::ScrollInputResult::Scrolled { .. }) {
             return Ok(false);
         }
+        self.rebuild_retained_frame()?;
+        Ok(true)
+    }
+
+    /// Animates a transform property (e.g. a CSS `transform` transition) on
+    /// the live viewport through the same retained, cached-tile frame path
+    /// `scroll_input` uses, instead of a full DOM-to-paint repaint (COMP-18).
+    pub fn animate_transform(
+        &self,
+        id: amazing_compositor::TransformId,
+        matrix: amazing_compositor::Matrix4,
+    ) -> Result<(), String> {
+        let Some(scene) = &self.compositor else { return Ok(()) };
+        scene
+            .borrow_mut()
+            .compositor_mut()
+            .set_transform(id, matrix)
+            .map_err(|error| error.to_string())?;
+        self.rebuild_retained_frame()
+    }
+
+    /// Animates an effect's opacity (e.g. a CSS `opacity` transition) on the
+    /// live viewport through the same retained, cached-tile frame path
+    /// `scroll_input` uses, instead of a full DOM-to-paint repaint (COMP-18).
+    pub fn animate_opacity(
+        &self,
+        id: amazing_compositor::EffectId,
+        opacity: f32,
+    ) -> Result<(), String> {
+        let Some(scene) = &self.compositor else { return Ok(()) };
+        scene
+            .borrow_mut()
+            .compositor_mut()
+            .set_opacity(id, opacity)
+            .map_err(|error| error.to_string())?;
+        self.rebuild_retained_frame()
+    }
+
+    /// Rebuilds the retained scroll/animation frame from the compositor's
+    /// current property state, reusing cached tiles whenever the scene's
+    /// tile set is still valid (`build_cached_frame`), and only falling back
+    /// to a full `DisplayListView` rebuild when a tile was actually evicted.
+    /// Shared by `scroll_input`, `animate_transform` and `animate_opacity` so
+    /// scroll, transform and opacity property updates all reuse tiles
+    /// instead of repainting (COMP-18).
+    fn rebuild_retained_frame(&self) -> Result<(), String> {
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else {
+            return Ok(());
+        };
         let mut fallback = false;
         let mut frame = {
             let mut scene = scene.borrow_mut();
@@ -701,7 +750,7 @@ impl EngineViewport {
         let presented = self.scroll_presenter.borrow_mut().present(&frame)
             .map_err(|error| error.to_string())?;
         *self.scroll_frame.borrow_mut() = Some(presented);
-        Ok(true)
+        Ok(())
     }
 
     /// Fetch deferred lazy images the root scroll offset has brought into view,
@@ -2355,7 +2404,9 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    use std::time::Duration;
+    use std::path::Path;
+    use std::time::{Duration, Instant};
+    use amazing_compositor::PaintViewRasterMode;
 
     #[test]
     fn engine_demo_produces_an_opaque_non_white_surface() {
@@ -2927,5 +2978,134 @@ mod tests {
             .expect("loaded image");
         assert_eq!(image.image.pixels[0..4], [255, 0, 0, 255]);
         assert!(viewport.scroll_element().is_some());
+    }
+
+    /// COMP-18: prepends the same `fixed`/`scroller`/`moving`/`fade` scaffold
+    /// COMP-17's compositor-crate frame-time trace uses inside each real-page
+    /// fixture's own `<body>`, so `scroll`/`transform`/`opacity` keep the same
+    /// deterministic property ids (`ScrollId(2)`, `TransformId(1)`,
+    /// `EffectId(2)`) that pipeline already relies on. Building through
+    /// `EngineViewport::from_document` runs the shell's own DOM-to-paint
+    /// pipeline (`render_dom_with_resources`), not the compositor crate's
+    /// `PaintViewSource`/`DisplayListView` directly, so this proves the real
+    /// shell wiring (`scroll_input`/`animate_transform`/`animate_opacity`,
+    /// which all now share `rebuild_retained_frame`) reuses tiles instead of
+    /// repainting on 3 real pages. See
+    /// `evidence/comp18/shell-frame-time.md` for the committed numbers.
+    #[test]
+    fn shell_viewport_frame_time_trace() {
+        const SCAFFOLD: &str = "<div class='fixed'>Fixed</div><section class='scroller'>\
+            <div class='moving'>Move</div><div class='fade'>Fade</div>\
+            <p>Overflow content</p><p>More overflow content</p></section>";
+        let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/real-pages");
+        let base_css = std::fs::read_to_string(root_dir.join("assets/base.css"))
+            .expect("real-pages base.css fixture");
+        let scroll = amazing_compositor::ScrollId(2);
+        let transform = amazing_compositor::TransformId(1);
+        let effect = amazing_compositor::EffectId(2);
+        println!(
+            "page,scenario,frames,full_paint_us,retained_call_us,build_cache_hits,direct_tiles"
+        );
+        for page in ["app-kanban", "docs-guide", "news-section"] {
+            let raw = std::fs::read_to_string(root_dir.join("pages").join(format!("{page}.html")))
+                .unwrap_or_else(|error| panic!("read {page}.html: {error}"));
+            let real_body = raw.split_once("<body>").map_or(raw.as_str(), |(_, rest)| rest);
+            let html = format!("<body>{SCAFFOLD}{real_body}");
+            let css = format!(
+                "body{{margin:0;background:white}}\
+                 .fixed{{position:fixed;left:2px;top:2px;background:red}}\
+                 .scroller{{width:300px;height:180px;overflow:scroll;background:#ddd}}\
+                 .moving{{will-change:transform;transform:translate(3px,4px);\
+                     background:blue;width:120px;height:80px}}\
+                 .fade{{opacity:.5;background:green;width:120px;height:80px}}\
+                 {base_css}"
+            );
+            let viewport = EngineViewport::from_document(&html, &css);
+            let scene = viewport.compositor.as_ref().unwrap_or_else(|| {
+                panic!("{page}: expected a live compositor scene")
+            });
+            assert_eq!(
+                scene.borrow().mode(),
+                PaintViewRasterMode::RawLocal,
+                "{page}: expected the fast raw-raster path"
+            );
+            let page_ref = viewport.page.as_ref().expect("retained page");
+            let images = amazing_paint::image::StyledImages {
+                images: &page_ref.resources,
+                styles: &page_ref.styles,
+            };
+            const STEPS: u32 = 8;
+            for scenario in ["scroll", "transform", "opacity"] {
+                let mut full_us: u128 = 0;
+                let mut retained_us: u128 = 0;
+                let mut build_cache_hits = 0;
+                for index in 0..STEPS {
+                    let start = Instant::now();
+                    let _ = amazing_paint::paint_document_with_text_resources_and_controls(
+                        &page_ref.root,
+                        VIEWPORT_WIDTH,
+                        VIEWPORT_HEIGHT,
+                        &page_ref.text,
+                        &images,
+                        &amazing_paint::controls::NoControls,
+                    );
+                    full_us += start.elapsed().as_micros();
+                    let start = Instant::now();
+                    match scenario {
+                        "scroll" => {
+                            assert!(viewport
+                                .scroll_input(
+                                    amazing_compositor::ScrollInput::ScrollTo {
+                                        node: scroll,
+                                        target: (0., (index + 1) as f32),
+                                        behavior: amazing_compositor::ScrollBehavior::Instant,
+                                    },
+                                    false,
+                                )
+                                .unwrap_or_else(|error| panic!("{page}/scroll: {error}")));
+                        }
+                        "transform" => viewport
+                            .animate_transform(
+                                transform,
+                                amazing_compositor::Matrix4::translation(
+                                    (index + 1) as f32, 4., 0.,
+                                ),
+                            )
+                            .unwrap_or_else(|error| panic!("{page}/transform: {error}")),
+                        "opacity" => viewport
+                            .animate_opacity(effect, 0.5 + index as f32 / 100.)
+                            .unwrap_or_else(|error| panic!("{page}/opacity: {error}")),
+                        _ => unreachable!(),
+                    }
+                    retained_us += start.elapsed().as_micros();
+                    // The property update above already ran through the
+                    // compositor's own `build_cached_frame` inside
+                    // `rebuild_retained_frame`; re-running it here (cheap,
+                    // untimed: no raster happens on a hit) directly proves
+                    // that call reused tiles rather than rerastering --
+                    // `Ok` means every tile the frame needed was already
+                    // cached and non-dirty (`quad.rs`'s `build_frame_inner`
+                    // returns `Err(MissingCachedTile)` otherwise).
+                    let recheck = scene
+                        .borrow_mut()
+                        .compositor_mut()
+                        .build_cached_frame(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+                    assert!(
+                        recheck.is_ok(),
+                        "{page}/{scenario} step {index} rerasterized: {recheck:?}"
+                    );
+                    build_cache_hits += 1;
+                }
+                let direct_tiles = viewport
+                    .scroll_frame
+                    .borrow()
+                    .as_ref()
+                    .map(|frame| frame.direct_tiles);
+                println!(
+                    "{page},{scenario},{STEPS},{full_us},{retained_us},\
+                     {build_cache_hits},direct_tiles={direct_tiles:?}"
+                );
+            }
+        }
     }
 }
