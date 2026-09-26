@@ -355,6 +355,8 @@ pub(crate) fn invoke<H: BindingHost>(
         if op == O::CreateEvent {
             let class = match event_type.to_ascii_lowercase().as_str() {
                 "compositionevent" => EventClass::Composition,
+                "hashchangeevent" => EventClass::HashChange,
+                "beforeunloadevent" => EventClass::BeforeUnload,
                 "focusevent" => EventClass::Focus,
                 "keyboardevent" => EventClass::Keyboard,
                 "mouseevent" | "mouseevents" => EventClass::Mouse,

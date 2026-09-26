@@ -123,6 +123,11 @@ impl RuntimeBindingHost<'_> {
             EventClass::Keyboard => Interface::KeyboardEvent,
             EventClass::Composition => Interface::CompositionEvent,
             EventClass::Message => Interface::MessageEvent,
+            EventClass::HashChange => Interface::HashChangeEvent,
+            EventClass::PopState => Interface::PopStateEvent,
+            EventClass::PageTransition => Interface::PageTransitionEvent,
+            EventClass::BeforeUnload => Interface::BeforeUnloadEvent,
+
         })
     }
 
@@ -148,6 +153,60 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn navigation_events_keep_native_payload_identity_and_legacy_return_value() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'navigation event check ' + step; }
+            const payload = {}, order = [];
+            const pop = new PopStateEvent('popstate', {
+                get bubbles() { order.push('bubbles'); return true; },
+                get cancelable() { order.push('cancelable'); return true; },
+                get composed() { order.push('composed'); return true; },
+                get hasUAVisualTransition() { order.push('transition'); return true; },
+                get state() { order.push('state'); return payload; }
+            });
+            check(order.join(',') === 'bubbles,cancelable,composed,transition,state');
+            check(pop instanceof Event && pop instanceof PopStateEvent && !(pop instanceof UIEvent));
+            check(pop.state === payload && pop.hasUAVisualTransition && pop.bubbles && pop.composed);
+            const target = new EventTarget(); let seen = 0;
+            target.addEventListener('popstate', function(e) { check(e === pop && e.state === payload); seen++; });
+            target.dispatchEvent(pop); target.dispatchEvent(pop); check(seen === 2);
+            check(new PopStateEvent('x', {state: undefined}).state === null);
+            check(new PopStateEvent('x', {state: 7}).state === 7);
+            const hash = new HashChangeEvent('hashchange', {oldURL: '\uD800', newURL: '#relative'});
+            check(hash.oldURL === '\uFFFD' && hash.newURL === '#relative');
+            const legacyHash = document.createEvent('hAsHcHaNgEeVeNt');
+            check(legacyHash instanceof HashChangeEvent && legacyHash.oldURL === '' && legacyHash.newURL === '');
+            const page = new PageTransitionEvent('pageshow', {persisted: true});
+            check(page instanceof Event && page.persisted && !page.bubbles && !page.cancelable);
+            check(!new PageTransitionEvent('pageshow').persisted);
+            const before = document.createEvent('BeforeUnloadEvent');
+            check(before instanceof BeforeUnloadEvent && before.returnValue === '');
+            before.initEvent('beforeunload', false, true); before.returnValue = false;
+            check(before.returnValue === 'false' && !before.defaultPrevented);
+            before.preventDefault(); check(before.returnValue === 'false' && before.defaultPrevented);
+            before.returnValue = '\uD800'; check(before.returnValue === '\uD800');
+            let rejected = false;
+            try { new BeforeUnloadEvent(); } catch (e) { rejected = e instanceof TypeError; }
+            check(rejected);
+            for (const constructor of [HashChangeEvent, PopStateEvent, PageTransitionEvent]) check(constructor.length === 1);
+            for (const pair of [[HashChangeEvent, 'oldURL'], [PopStateEvent, 'state'],
+                [PageTransitionEvent, 'persisted'], [BeforeUnloadEvent, 'returnValue']]) {
+                rejected = false;
+                try { Object.getOwnPropertyDescriptor(pair[0].prototype, pair[1]).get.call(new Event('x')); }
+                catch (e) { rejected = e instanceof TypeError; }
+                check(rejected);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn processing_instruction_constructor_and_attributes_share_native_character_data() {

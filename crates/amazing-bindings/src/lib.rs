@@ -30,6 +30,7 @@ mod factories;
 mod collections;
 mod traversal_bindings;
 mod event_bindings;
+mod navigation_event_bindings;
 mod message_event_bindings;
 pub use message_event_bindings::{dispatch_message_event, MessageEventPayload};
 mod focus_bindings;

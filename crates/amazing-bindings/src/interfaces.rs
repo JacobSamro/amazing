@@ -1124,6 +1124,17 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::KeyboardEventConstructor), members: KEYBOARD_EVENT },
     D { interface: I::MessageEvent, name: "MessageEvent", parent: Some(I::Event),
         constructor: Some(O::MessageEventConstructor), members: MESSAGE_EVENT },
+    D { interface: I::HashChangeEvent, name: "HashChangeEvent", parent: Some(I::Event),
+        constructor: Some(O::HashChangeEventConstructor), members: &[
+            getter("oldURL", O::HashChangeOldURL), getter("newURL", O::HashChangeNewURL)] },
+    D { interface: I::PopStateEvent, name: "PopStateEvent", parent: Some(I::Event),
+        constructor: Some(O::PopStateEventConstructor), members: &[
+            getter("state", O::PopStateState), getter("hasUAVisualTransition", O::PopStateHasUAVisualTransition)] },
+    D { interface: I::PageTransitionEvent, name: "PageTransitionEvent", parent: Some(I::Event),
+        constructor: Some(O::PageTransitionEventConstructor), members: &[getter("persisted", O::PageTransitionPersisted)] },
+    D { interface: I::BeforeUnloadEvent, name: "BeforeUnloadEvent", parent: Some(I::Event),
+        constructor: None, members: &[getter("returnValue", O::BeforeUnloadReturnValue),
+            setter("returnValue", O::BeforeUnloadSetReturnValue)] },
     D { interface: I::CompositionEvent, name: "CompositionEvent", parent: Some(I::UIEvent),
         constructor: Some(O::CompositionEventConstructor), members: COMPOSITION_EVENT },
     D {

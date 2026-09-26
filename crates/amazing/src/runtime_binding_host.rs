@@ -1019,6 +1019,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     operation,
                     Operation::EventConstructor
                         | Operation::ProcessingInstructionConstructor
+                        | Operation::HashChangeEventConstructor
+                        | Operation::PopStateEventConstructor
+                        | Operation::PageTransitionEventConstructor
                         | Operation::CustomEventConstructor
                         | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor

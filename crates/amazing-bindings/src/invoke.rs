@@ -231,6 +231,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::traversal_bindings::handles(operation) {
         return crate::traversal_bindings::invoke(host, operation, receiver, args);
     }
+    if crate::navigation_event_bindings::handles(operation) {
+        return crate::navigation_event_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::event_bindings::handles(operation) {
         return crate::event_bindings::invoke(host, operation, receiver, args);
     }
