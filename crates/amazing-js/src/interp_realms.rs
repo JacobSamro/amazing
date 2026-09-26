@@ -177,7 +177,10 @@ impl Interpreter {
             let direct = std::mem::replace(&mut i.direct_eval_call, false);
             let environment = i.direct_eval_env.take();
             let completion = i.completion.clone();
+            let global = i.global_env.global_scope();
+            let active_environment = std::mem::replace(&mut i.global_env, global);
             let result = i.run_script(source);
+            i.global_env = active_environment;
             i.strict_eval_context = strict;
             i.in_eval = in_eval;
             i.direct_eval_call = direct;
@@ -280,6 +283,9 @@ impl Interpreter {
 impl Interpreter {
     fn call_value_with_new_target(&mut self, function: &JsValue, receiver: JsValue,
         args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+        if Self::is_bound_function(function) {
+            return self.invoke_bound_function(function, args, new_target);
+        }
         // [[Call]] rejects class constructors before entering their realm.
         if new_target.is_none() && matches!(function, JsValue::Object(object) if object.borrow().class_constructor) {
             return Err(Throw::type_error("class constructor requires new"));

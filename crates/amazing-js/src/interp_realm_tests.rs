@@ -245,4 +245,38 @@ mod realm_tests {
         }
     }
 
+    #[test]
+    fn dynamic_code_uses_realm_globals_during_module_evaluation() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var untouched = {toString() { throw new Error('coercion'); }};
+            eval(untouched) === untouched && eval(42) === 42 && eval() === undefined
+        "#).unwrap(), JsValue::Bool(true));
+        i.run_script("var visible = 'global';").unwrap();
+        let mut linker = crate::module::ModuleLinker::new(|_: &str, _: &str| Err("missing".into()));
+        linker.link("root", r#"
+            let visible = 'module';
+            export const indirect = (0, eval)('visible');
+            export const indirectStrict = (0, eval)('"use strict"; visible');
+            export const dynamic = Function('return visible')();
+            export const receiver = Function('return this')() === globalThis;
+            export const direct = eval('visible');
+        "#).unwrap();
+        let result = linker.evaluate("root", &mut i).unwrap();
+        for key in ["indirect", "indirectStrict", "dynamic"] {
+            assert_eq!(result[key], JsValue::str("global"), "{key}");
+        }
+        assert_eq!(result["receiver"], JsValue::Bool(true));
+        assert_eq!(result["direct"], JsValue::str("module"));
+        let global = i.global_env.clone();
+        let active_module = EnvHandle::new(EnvKind::Module, Some(global.clone()));
+        active_module.declare_lexical("visible", JsValue::str("temporary module"), true).unwrap();
+        i.global_env = active_module.clone();
+        assert_eq!(i.binding_eval_in_realm(i.binding_current_realm(), "visible").unwrap(), JsValue::str("global"));
+        assert!(i.binding_eval_in_realm(i.binding_current_realm(), "throw 1").is_err());
+        assert!(Rc::ptr_eq(&i.global_env.0, &active_module.0));
+        i.global_env = global;
+    }
+
+
 }

@@ -1125,32 +1125,9 @@ fn native_function_bind(
 }
 
 fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let data = native_data(i)?;
-    let target = data
-        .borrow()
-        .get_own("target")
-        .ok_or_else(|| Throw::type_error("invalid bound function"))?;
-    let receiver = data.borrow().get_own("this").unwrap_or(JsValue::Undefined);
-    let bound_args = data
-        .borrow()
-        .get_own("args")
-        .map(|value| i.iterate(&value))
-        .transpose()?
-        .unwrap_or_default();
-    let arguments = bound_args.into_iter().chain(args).collect();
-    if let Some(new_target) = i.current_new_target() {
-        let bound = i.native_stack.last().cloned().map(JsValue::Object);
-        let new_target = if bound.as_ref() == Some(&new_target) { target.clone() } else { new_target };
-        i.construct_with_new_target(&target, arguments, new_target)
-    } else {
-        let direct = i.direct_eval_call;
-        let eval_env = i.direct_eval_env.take();
-        i.direct_eval_call = false;
-        let result = i.call_value(&target, receiver, arguments);
-        i.direct_eval_call = direct;
-        i.direct_eval_env = eval_env;
-        result
-    }
+    let function = i.native_stack.last().cloned().map(JsValue::Object)
+        .ok_or_else(|| Throw::type_error("missing bound function"))?;
+    i.invoke_bound_function(&function, args, i.current_new_target())
 }
 
 fn namespace_define_allowed(
@@ -1261,18 +1238,23 @@ fn native_date_to_string(
 }
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    // PerformEval returns non-String inputs unchanged, without coercion.
+    let input = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let JsValue::Str(source) = input else { return Ok(input); };
+    let source = source.to_utf8_lossy();
     let direct = i.direct_eval_call;
     let program = if i.strict_eval_context && direct {
         crate::parser::parse_script_strict(&source)
     } else {
         crate::parse_script(&source)
     }.map_err(|error| Throw::syntax_error(error.to_string()))?;
-    let caller = i.direct_eval_env.take().unwrap_or_else(|| i.global_env.clone());
+    let global = i.global_env.global_scope();
+    let caller = if direct { i.direct_eval_env.take().unwrap_or_else(|| global.clone()) }
+        else { global.clone() };
     let strict = (direct && i.strict_eval_context) || has_use_strict_directive(&program.body);
     i.direct_eval_env = Some(if strict {
         EnvHandle::new(EnvKind::Function, Some(caller))
-    } else if direct { caller } else { i.global_env.clone() });
+    } else if direct { caller } else { global });
     let previous = i.in_eval;
     let previous_strict = i.strict_eval_context;
     let previous_direct = i.direct_eval_call;
@@ -3342,7 +3324,7 @@ fn native_function_constructor(
     if let ast::StmtKind::Function(function) = &script.body[0].kind {
         let previous_strict = i.strict_eval_context;
         i.strict_eval_context = false;
-        let value = i.make_function(function, &i.global_env);
+        let value = i.make_function(function, &i.global_env.global_scope());
         i.strict_eval_context = previous_strict;
         Ok(value)
     } else {

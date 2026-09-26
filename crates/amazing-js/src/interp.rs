@@ -2518,7 +2518,7 @@ impl Interpreter {
         let interpreted = matches!(&fun.body, FunctionBody::Block(_) | FunctionBody::Expr(_) | FunctionBody::Bytecode(_));
         let this = if interpreted && !fun.is_arrow && !strict_function {
             match this {
-                JsValue::Null | JsValue::Undefined => self.global_env.resolve_this(),
+                JsValue::Null | JsValue::Undefined => self.global_env.global_scope().resolve_this(),
                 JsValue::Object(_) => this,
                 primitive => native_object(self, JsValue::Undefined, vec![primitive])?,
             }
@@ -2716,6 +2716,9 @@ impl Interpreter {
         }
         if !o.borrow().constructible {
             return Err(Throw::type_error("function is not a constructor"));
+        }
+        if Self::is_bound_function(f) {
+            return self.invoke_bound_function(f, args, Some(new_target));
         }
         let derived = o.borrow().derived_constructor.is_some();
         if derived {
@@ -3664,6 +3667,7 @@ include!("interp_builtins.rs");
 include!("interp_array.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
+include!("interp_bound.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");

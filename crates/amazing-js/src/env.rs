@@ -468,6 +468,19 @@ impl EnvHandle {
         self.0.borrow().kind
     }
 
+    /// The realm global environment, independent of an active module/eval scope.
+    pub(crate) fn global_scope(&self) -> EnvHandle {
+        let mut current = self.clone();
+        loop {
+            let (kind, parent) = {
+                let frame = current.0.borrow();
+                (frame.kind, frame.parent.clone())
+            };
+            if kind == EnvKind::Global { return current; }
+            match parent { Some(parent) => current = parent, None => return current }
+        }
+    }
+
     /// Variable declarations in sloppy direct eval target the nearest var environment.
     pub fn var_scope(&self) -> EnvHandle {
         let mut current = self.clone();

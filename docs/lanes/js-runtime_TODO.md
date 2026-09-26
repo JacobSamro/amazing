@@ -618,3 +618,20 @@ js-runtime_intrinsic_audit_evidence.json.
 Next: dynamic code must use the realm global environment during module
 execution, and bound function exotica must forward calls/construction without
 an extra realm entry, prototype allocation, or observable argument iteration.
+
+## JSRT-11 dynamic code and bound-function realm execution (completed, 2026-09-26)
+
+Indirect eval, Function, and host realm eval use the realm's global environment
+even while a module environment is active. Host eval restores the prior environment
+on return or throw. Eval returns non-String inputs without coercion. Bound calls
+and construction forward to their target without an extra realm entry or prototype
+allocation, and consume stored arguments as a private List.
+
+On fixed base af6364b1, Linux passed 2,751 workspace tests (10 skipped) in
+59.342 seconds plus four doctests. Full pinned Test262: 32,182 → 32,189 passing
+files and 62,215 → 62,224 variants, with zero lost passes at timeout60/jobs4.
+Evidence: js-runtime_realm_execution_evidence.json.
+
+References: ECMA-262 §19.2.1.1 PerformEval and §10.4.1 Bound Function Exotic Objects.
+Next bulk area: generic Array object operations, callback boxing, species results,
+sparse holes, and throwing Set/Delete semantics.
