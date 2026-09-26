@@ -1489,7 +1489,17 @@ impl RuntimeBindingHost<'_> {
                     }
                     self.storage_dispatch(request,"upgradeneeded",Some(old),Some(new))?;
                     self.storage_schedule(StorageJob::TransactionComplete{transaction:transaction_slot})?;
-                    self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
+                    // Do NOT eagerly schedule the open request's "success" here: per spec,
+                    // it must not fire until this versionchange transaction has actually
+                    // auto-committed. TransactionComplete defers itself (see `waiting`
+                    // below) whenever a request placed against the transaction (e.g. an
+                    // `add()` inside `onupgradeneeded`) hasn't been delivered yet, which
+                    // reschedules it to the *back* of the queue -- behind an already-queued
+                    // RequestSuccess for this same open request, so "success" fired before
+                    // the store the upgrade created was actually committed to the database,
+                    // and every later `db.transaction(...)` in that success handler saw a
+                    // pre-upgrade schema ("Object store not found"). TransactionComplete's
+                    // commit branch schedules RequestSuccess itself once it truly commits.
                 },
                 StorageJob::TransactionComplete{transaction}=>{
                     let queued={let state=self.state.borrow();match state.storage.as_ref().unwrap().objects.get(transaction){
@@ -1511,23 +1521,37 @@ impl RuntimeBindingHost<'_> {
                     let (connection,id,value)={let mut state=self.state.borrow_mut();
                         match state.storage.as_mut().unwrap().objects.get_mut(transaction){Some(StorageObject::Transaction{connection,id,value,..})=>(*connection,*id,value.take()),_=>return Ok(JsValue::Undefined)}};
                     if let Some(value)=value {
+                        // The open request (if any) whose `.transaction` is this versionchange
+                        // transaction: its "success"/"error" event must fire only now, after
+                        // the transaction has actually committed or aborted -- not eagerly when
+                        // the upgrade started (see OpenUpgrade above).
+                        let open_request={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
+                            let wrapper=storage.wrappers.get(&transaction);
+                            storage.objects.iter().enumerate().find_map(|(index,object)|match object{
+                                StorageObject::Request{source:JsValue::Null,transaction:value,..}
+                                    if wrapper.is_some_and(|wrapper|self.js.binding_same_value(wrapper,value))=>Some(index),
+                                _=>None,
+                            })};
                         let result=self.state.borrow().storage.as_ref().unwrap().idb.borrow_mut().finish(connection,id,value,true);
-                        match result {Ok(())=>self.storage_dispatch(transaction,"complete",None,None)?,Err(error)=>{
-                            self.storage_dispatch(transaction,"abort",None,None)?;
-                            let open_request={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
-                                let wrapper=storage.wrappers.get(&transaction);
-                                storage.objects.iter().enumerate().find_map(|(index,object)|match object{
-                                    StorageObject::Request{source:JsValue::Null,transaction:value,..}
-                                        if wrapper.is_some_and(|wrapper|self.js.binding_same_value(wrapper,value))=>Some(index),
-                                    _=>None,
-                                })};
-                            if let Some(request)=open_request {
-                                self.state.borrow_mut().storage.as_mut().unwrap().pending.retain(|job|
-                                    !matches!(job,StorageJob::RequestSuccess{request:slot,..} if *slot==request));
-                                let error=self.storage_idb_error(error).0;
-                                self.storage_schedule(StorageJob::RequestError{request,error})?;
-                            }
-                        }}
+                        match result {
+                            Ok(())=>{
+                                self.storage_dispatch(transaction,"complete",None,None)?;
+                                if let Some(request)=open_request {
+                                    let database={let state=self.state.borrow();match state.storage.as_ref().unwrap().objects.get(request){
+                                        Some(StorageObject::Request{result,..})=>result.clone(),_=>JsValue::Undefined}};
+                                    self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
+                                }
+                            },
+                            Err(error)=>{
+                                self.storage_dispatch(transaction,"abort",None,None)?;
+                                if let Some(request)=open_request {
+                                    self.state.borrow_mut().storage.as_mut().unwrap().pending.retain(|job|
+                                        !matches!(job,StorageJob::RequestSuccess{request:slot,..} if *slot==request));
+                                    let error=self.storage_idb_error(error).0;
+                                    self.storage_schedule(StorageJob::RequestError{request,error})?;
+                                }
+                            },
+                        }
                     }
                 },
                 StorageJob::StorageEvent(delivery)=>self.dispatch_storage_event(delivery)?,
@@ -2009,5 +2033,78 @@ mod storage_binding_tests {
         for step in 1..20 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
         assert_eq!(scheduler.run_script("log.join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe())),
             JsValue::str("own-accessor-ran:true"));
+    }
+
+    // STORE-7 regression: root cause of the "Object store not found" cluster
+    // (idbcursor-direction.any.js, idbcursor_{update,delete}_objectstore.any.js,
+    // idbindex_get(Key).any.js). `OpenUpgrade` used to schedule the open
+    // request's "success" job unconditionally, right after scheduling its
+    // versionchange transaction's `TransactionComplete`. `TransactionComplete`
+    // defers itself (reschedules to the *back* of the queue) whenever a request
+    // placed against the transaction -- like the `add()` a real upgradeneeded
+    // handler makes -- hasn't been delivered yet. That reschedule landed behind
+    // the open request's already-queued RequestSuccess job, so "success" fired
+    // -- and ran the test's `db.transaction(...)` -- before the transaction that
+    // created the store had actually committed. Fixed by having
+    // `TransactionComplete`'s commit branch schedule RequestSuccess itself, the
+    // same way its abort branch already schedules RequestError. Reproduces two
+    // independent `createdb`-shaped opens wired the way WPT's
+    // resources/support.js wires them (`auto_fail` + `addEventListener` +
+    // Object.defineProperty on "on<event>"), each running the same
+    // two-openCursor-then-done shape as `cursor_direction()`.
+    #[test]
+    fn indexeddb_two_independent_auto_fail_wired_cursor_tests_both_complete() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            function auto_fail(rq,evt){ \
+                rq.__handled=rq.__handled||{}; \
+                rq.addEventListener(evt,function(e){ \
+                    if(!rq.__handled[evt]) log.push('UNREACHED:'+evt); \
+                }); \
+                Object.defineProperty(rq,'on'+evt,{configurable:true,set:function(h){ \
+                    rq.__handled[evt]=true; \
+                    if(h) rq.addEventListener(evt,h); \
+                }}); \
+            } \
+            function createdb(name){ \
+                var rq=indexedDB.open(name,1); \
+                ['upgradeneeded','success','blocked','error'].forEach(function(evt){auto_fail(rq,evt)}); \
+                return rq; \
+            } \
+            function cursor_direction(name,tag){ \
+                var db; \
+                var rq=createdb(name); \
+                rq.onupgradeneeded=function(e){ \
+                    db=e.target.result; \
+                    var os=db.createObjectStore('test'); \
+                    os.add('data','key'); \
+                }; \
+                rq.onsuccess=function(e){ \
+                    var count=0; \
+                    var os=db.transaction('test','readonly').objectStore('test'); \
+                    var rq1=os.openCursor(); \
+                    rq1.onsuccess=function(e){ \
+                        var cursor=e.target.result; \
+                        log.push(tag+':1:'+(cursor?cursor.value:'null')); \
+                        count++; if(count>=2) log.push(tag+':done'); \
+                    }; \
+                    var rq2=db.transaction('test','readonly').objectStore('test').openCursor(); \
+                    rq2.onsuccess=function(e){ \
+                        var cursor=e.target.result; \
+                        log.push(tag+':2:'+(cursor?cursor.value:'null')); \
+                        count++; if(count>=2) log.push(tag+':done'); \
+                    }; \
+                }; \
+            } \
+            cursor_direction('cd-a','a'); \
+            cursor_direction('cd-b','b');").unwrap();
+        for step in 1..40 {
+            scheduler.pump_at(Duration::from_millis(step*10),false).unwrap_or_else(|error|{
+                let log=scheduler.run_script("log.join('|')").unwrap_or_else(|_|JsValue::str("<unreadable>"));
+                panic!("pump step {step} threw {}; log so far: {log:?}",error.describe());
+            });
+        }
+        let log=scheduler.run_script("log.slice().sort().join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe()));
+        assert_eq!(log,JsValue::str("a:1:data|a:2:data|a:done|b:1:data|b:2:data|b:done"));
     }
 }
