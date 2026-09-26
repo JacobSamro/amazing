@@ -499,8 +499,10 @@ impl Interpreter {
             for (name, arity) in [
                 ("add", 3), ("and", 3), ("compareExchange", 4), ("exchange", 3),
                 ("isLockFree", 1), ("load", 2), ("notify", 3), ("or", 3),
-                ("store", 3), ("sub", 3), ("wait", 4), ("waitAsync", 4), ("xor", 3),
+                ("pause", 0), ("store", 3), ("sub", 3), ("wait", 4), ("waitAsync", 4), ("xor", 3),
             ] { binary_method(self, object, name, binary_atomics, arity); }
+            let _ = object.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
+                binary_property(JsValue::str("Atomics")));
         }
         self.define_global("Atomics", atomics);
     }
@@ -1170,11 +1172,60 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     }
 }
 
+fn binary_wait_async_result(i: &mut Interpreter, async_value: bool, value: JsValue) -> Result<JsValue, Throw> {
+    let object = i.object_value();
+    i.set_prop(&object, "async", JsValue::Bool(async_value))?;
+    i.set_prop(&object, "value", value)?;
+    Ok(object)
+}
+
+fn binary_wait_async_promise(i: &mut Interpreter, settle: Option<&str>) -> Result<JsValue, Throw> {
+    let constructor = i.global_env.resolve("Promise").ok_or_else(|| Throw::type_error("Promise unavailable"))?;
+    match settle {
+        Some(text) => {
+            let resolve = i.get_prop(&constructor, "resolve")?;
+            i.call_value(&resolve, constructor, vec![JsValue::str(text)])
+        }
+        None => {
+            let executor = Interpreter::native("executor", binary_noop_promise_executor, &i.function_proto);
+            i.construct(&constructor, vec![executor])
+        }
+    }
+}
+fn binary_noop_promise_executor(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::Undefined)
+}
+
+fn binary_wait_async(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
+    value_arg: Option<&JsValue>, timeout_arg: Option<&JsValue>,
+) -> Result<JsValue, Throw> {
+    let old = binary_read(view, kind, index * kind.size(), true)?;
+    let equal = if kind.big() {
+        let value = i.to_bigint(value_arg.unwrap_or(&JsValue::Undefined))?;
+        matches!(&old, JsValue::BigInt(current) if current.as_ref() == &value)
+    } else {
+        let value = i.to_number(value_arg.unwrap_or(&JsValue::Undefined))?;
+        matches!(&old, JsValue::Num(current) if *current == value)
+    };
+    if !equal { return binary_wait_async_result(i, false, JsValue::str("not-equal")); }
+    let timeout = i.to_number(timeout_arg.unwrap_or(&JsValue::Undefined))?;
+    let timeout = if timeout.is_nan() { f64::INFINITY } else { timeout };
+    if timeout <= 0.0 { return binary_wait_async_result(i, false, JsValue::str("timed-out")); }
+    // This engine has no other agent to call Atomics.notify, so a finite wait
+    // settles as "timed-out"; an infinite wait stays pending.
+    let promise = if timeout.is_finite() { binary_wait_async_promise(i, Some("timed-out"))? }
+        else { binary_wait_async_promise(i, None)? };
+    binary_wait_async_result(i, true, promise)
+}
+
 fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
     if name == "isLockFree" {
         let size = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
         return Ok(JsValue::Bool(matches!(size.trunc() as i64, 1 | 2 | 4 | 8)));
+    }
+    if name == "pause" {
+        return Ok(JsValue::Undefined);
     }
     let target = args.first().cloned().unwrap_or(JsValue::Undefined);
     let (view, kind) = binary_typed(&target)?;
@@ -1182,12 +1233,20 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         && !matches!(kind, BinaryKind::Int32 | BinaryKind::BigInt64)) {
         return Err(Throw::type_error("invalid Atomics TypedArray"));
     }
+    // Mutability is checked before any argument coercion for the read-modify-write
+    // operations. Atomics.load is a pure read and notify/waitAsync are handled below.
+    if matches!(name.as_str(), "add" | "and" | "compareExchange" | "exchange" | "or" | "store" | "sub" | "xor")
+        && view.buffer.borrow().immutable
+    {
+        return Err(Throw::type_error("immutable ArrayBuffer"));
+    }
     if matches!(name.as_str(), "wait" | "waitAsync" | "notify") && !view.buffer.borrow().shared {
         return Err(Throw::type_error("Atomics wait/notify requires SharedArrayBuffer"));
     }
     let index = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
     if index >= binary_length(&view) { return Err(Throw::range_error("Atomics index outside TypedArray")); }
     if name == "wait" { return Err(Throw::type_error("Atomics.wait cannot block this agent")); }
+    if name == "waitAsync" { return binary_wait_async(i, &view, kind, index, args.get(2), args.get(3)); }
     if name == "notify" { return Ok(JsValue::num(0.0)); }
     let offset = index * kind.size();
     let old = binary_read(&view, kind, offset, true)?;
@@ -1229,7 +1288,10 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         _ => return Err(Throw::type_error("unknown Atomics operation")),
     };
     binary_write(&view, kind, offset, true, next)?;
-    Ok(if name == "store" { JsValue::num(input) } else { old })
+    Ok(if name == "store" {
+        // Atomics.store returns ToIntegerOrInfinity(value); -0 normalises to +0.
+        JsValue::num(if input == 0.0 { 0.0 } else { input.trunc() })
+    } else { old })
 }
 
 #[cfg(test)]
