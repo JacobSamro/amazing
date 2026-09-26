@@ -114,7 +114,50 @@ available on the build hosts; add one when the WPT corpus lands.
   in the log), 4 unsupported files (3 pre-existing WebDriver-driven role
   files + the 1 script-dependent accname file). Crate: 95 passed, 1 skipped
   (release-profile-gated), 1 doctest. Workspace gate (run twice, stable):
-  2914 passed, 0 failed, 11 skipped; all doctests green. Commit TBD.
+  2914 passed, 0 failed, 11 skipped; all doctests green. Commit `b7f42f07`,
+  merged into `dev` as `4caf9b2b`.
+- [x] **A11Y-8 — live-tree updates.** Incremental AX tree diffs on DOM
+  mutation, shaped for devtools' CDP-15 `Accessibility.nodesUpdated` seam
+  (`amazing-devtools::host::drain_ax_nodes_updated`) and a later AT-SPI
+  bridge on Linux. `crates/amazing-a11y/src/event.rs`'s A11Y-4 `diff()`
+  already rebuilt-then-diffed two whole trees by `dom_node` identity, but
+  folded every difference on a persisting node into one opaque `Changed`
+  event with a `text_changed` bool — not enough for a consumer that needs to
+  know *which* aspect changed (CDP's own AXNode fields, or an AT-SPI signal,
+  which is one D-Bus call per aspect: name, role, state, active-descendant,
+  …). Replaced `AxEventKind::Changed` with one kind per aspect —
+  `NameChanged`, `DescriptionChanged`, `RoleChanged`, `StateChanged`,
+  `PropertyChanged`, `ActiveDescendantChanged` — and a persisting node now
+  emits one `AxEvent` per aspect that actually differs (zero, one, or
+  several), each carrying `previous_name`/`previous_role` where relevant.
+  Found and fixed one bug this surfaced: `AxProperties::raw` mirrors every
+  non-empty `aria-*` attribute verbatim regardless of whether it also has a
+  typed field, so comparing the whole `properties` struct made almost any
+  `aria-label`/`aria-pressed`/… edit spuriously co-fire `PropertyChanged`
+  alongside the real `NameChanged`/`StateChanged` — `properties_changed()`
+  now compares the typed fields with `raw` excluded (documented gap: an
+  `aria-*` attribute with no dedicated typed field changing produces no
+  event of its own; the well-known ones already have a typed field).
+  Added `event::rebuild_and_diff(dom, styled, layout, previous: &AxTree) ->
+  (AxTree, Vec<AxEvent>)`, the incremental-on-mutation entry point: rebuilds
+  the whole tree (Stage 1 has no incremental style/layout invalidation yet)
+  and diffs it against the previous checkpoint, which is also what makes
+  "name invalidation" correct for free — if node A's `aria-labelledby`
+  target's text changes, A's own name is recomputed fresh on the rebuild and
+  reported as A's own `NameChanged` even though A's subtree never changed
+  (`name_invalidation_propagates_through_a_labelledby_reference` in
+  `event_tests.rs`). `crates/amazing/src/runtime_host_a11y.rs` gained
+  `diff_ax_tree`, a thin wrapper mirroring `build_ax_tree`, for a future
+  driver caller. Filed the CDP-15 hookup itself (deduplicating per-node,
+  dropping `Removed` since CDP's push event has no removal concept) in
+  `.agents/devtools/questions.md` — `runtime_host_devtools.rs` is the
+  devtools lane's file. AT-SPI investigation deferred to whichever ticket
+  first needs a real Linux AT-SPI bridge; the granular `AxEventKind` split is
+  already shaped for its per-aspect signal model.
+  Crate: 102 passed, 0 failed, 1 skipped (release-profile-gated), 1 doctest.
+  `amazing` crate: `runtime_host_a11y` tests pass (2/2, including the new
+  `diff_ax_tree` one). Workspace gate (run twice, stable): 3051 passed, 0
+  failed, 13 skipped; all doctests green both runs. Commit TBD.
 
 ## WPT corpus status
 
