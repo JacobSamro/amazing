@@ -127,7 +127,16 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
     while i < parts.len() && ((5..=8).contains(&parts[i].len())
         || (parts[i].len() == 4 && parts[i].as_bytes()[0].is_ascii_digit())) {
         let variant = parts[i].to_ascii_lowercase();
-        let variant = intl_alias(INTL_VARIANT_ALIASES, &variant).unwrap_or(&variant).to_string();
+        // CLDR stores generic variant deprecations under the "und" language,
+        // for example "und-arevela" -> "und".
+        let variant = match intl_alias(INTL_VARIANT_ALIASES, &variant) {
+            Some(replacement) => replacement.to_string(),
+            None => match intl_alias(INTL_LANGUAGE_ALIASES, &format!("und-{variant}")) {
+                Some("und") => { i += 1; continue; }
+                Some(replacement) => replacement.to_string(),
+                None => variant,
+            },
+        };
         if variants.contains(&variant) { return Err(Throw::range_error("duplicate language variant")); }
         variants.push(variant);
         i += 1;
@@ -152,8 +161,15 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
         }
         let mut subtags: Vec<String> = parts[start..i].iter().map(|part| part.to_ascii_lowercase()).collect();
         if singleton == "t" {
+            // tlang = language ["-" script] ["-" region] *("-" variant);
+            // the language/script/region prefix is skipped before scanning variants.
+            let mut start = 0;
+            if !subtags.is_empty() { start = 1; }
+            if subtags.get(start).is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic())) { start += 1; }
+            if subtags.get(start).is_some_and(|part| (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+                || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))) { start += 1; }
             let mut variants = std::collections::HashSet::new();
-            for part in subtags.iter().take_while(|part| part.len() != 2) {
+            for part in subtags[start..].iter() {
                 if ((5..=8).contains(&part.len()) || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit()))
                     && !variants.insert(part.as_str()) {
                     return Err(Throw::range_error("duplicate transformed-language variant"));
@@ -358,8 +374,8 @@ fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
     let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let values: Vec<&str> = match key.as_str() {
         "calendar" => INTL_KNOWN_CALENDARS.to_vec(),
-        "collation" => vec![],
-        "currency" => INTL_SUPPORTED_CURRENCIES.to_vec(),
+        "collation" => INTL_SUPPORTED_COLLATIONS.split(' ').filter(|value| !value.is_empty()).collect(),
+        "currency" => INTL_ALL_CURRENCIES.split(' ').filter(|value| !value.is_empty()).collect(),
         "numberingSystem" => INTL_SUPPORTED_NUMBERING_SYSTEMS.split(' ').collect(),
         "timeZone" => tz_supported_ids(),
         "unit" => INTL_SIMPLE_UNITS.to_vec(),
@@ -645,6 +661,16 @@ mod intl_tests {
         let mut i = Interpreter::new();
         let result = i.run_script("try { Intl.getCanonicalLocales('en_US') } catch (e) { e.constructor.name }").unwrap();
         assert_eq!(i.to_string(&result).unwrap(), "RangeError");
+    }
+
+    #[test]
+    fn deprecated_und_variants_are_removed() {
+        let mut i = Interpreter::new();
+        let result = i.run_script("Intl.getCanonicalLocales('hy-arevela').join(',')").unwrap();
+        assert_eq!(i.to_string(&result).unwrap(), "hy");
+        let duplicate = i.run_script(
+            "try { new Intl.Locale('de-t-en-emodeng-emodeng'); } catch (e) { e.constructor.name; }").unwrap();
+        assert_eq!(i.to_string(&duplicate).unwrap(), "RangeError");
     }
 
     #[test]

@@ -93,6 +93,18 @@ def main() -> None:
     lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
                  + rust_string(" ".join(simple_systems)) + ";")
 
+    collation_codes = set()
+    for locale in LOCALES:
+        types = cldr(f"cldr-localenames-full/main/{locale}/localeDisplayNames.json")["main"][locale]["localeDisplayNames"]["types"]
+        collation_codes |= set(types.get("collation", {}))
+    lines.append("const INTL_SUPPORTED_COLLATIONS: &str = "
+                 + rust_string(" ".join(sorted(collation_codes))) + ";")
+    lines.append("const INTL_ALL_CURRENCIES: &str = "
+                 + rust_string(" ".join(sorted({code
+                     for locale in LOCALES
+                     for code in cldr(f"cldr-numbers-full/main/{locale}/currencies.json")["main"][locale]["numbers"]["currencies"]
+                     if len(code) == 3 and code.isascii() and code.isalpha()}))) + ";")
+
     lines += [
         "struct IntlCompactData { locale: &'static str, style: &'static str,",
         "    magnitude: u32, divisor: u32, suffix: &'static str }",
