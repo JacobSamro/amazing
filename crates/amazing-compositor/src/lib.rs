@@ -25,6 +25,8 @@ pub use effects::*;
 mod hit;
 mod paint_delta;
 mod paint_view;
+mod paint_filters;
+pub use paint_filters::*;
 mod property;
 mod property_binding;
 mod quad;
