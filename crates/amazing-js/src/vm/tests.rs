@@ -718,3 +718,16 @@ fn merged_class_accessors_and_arrow_arguments() {
         }
     }
 }
+
+#[test]
+fn compiled_method_and_generator_boundaries_preserve_eval_strictness_and_names() {
+    for source in [
+        "function* g() {} var d=Object.getOwnPropertyDescriptor(g,'name'); d.value==='g' && !d.writable && !d.enumerable && d.configurable",
+        "var o={m(){ let x; eval('var x'); }}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
+        "var o={*m(p=eval('var arguments')){let arguments;}}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
+        "'use strict'; var o={m(){return function(){return typeof this;};}}; o.m().call('x')==='string'",
+    ] {
+        let mut interpreter=Interpreter::new();
+        assert_eq!(interpreter.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+    }
+}

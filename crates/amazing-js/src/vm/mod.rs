@@ -951,9 +951,10 @@ impl FunctionCode {
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
-        handle
-            .borrow_mut()
-            .set_own("name", JsValue::str(name.as_str()));
+        handle.borrow_mut().define("name", Property {
+            value: JsValue::str(name.as_str()), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("function name property");
         if !self.0.is_arrow && (!self.0.is_async || self.0.is_generator)
             && (!self.0.is_method || self.0.is_generator) {
             let mut prototype = JsObject::ordinary();

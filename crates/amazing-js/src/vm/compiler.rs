@@ -37,8 +37,10 @@ pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
 
 /// Compile a method body with the same path used for function declarations.
 /// Callers retain the AST body when an instruction is not yet supported.
-pub(crate) fn compile_class_method(method: &ast::ClassMethod) -> Result<FunctionCode, CompileError> {
-    Compiler::new(false).compile_function(&ast::FunctionItem {
+pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
         name: None,
         params: method.params.clone(),
         body: method.body.clone(),
@@ -47,10 +49,12 @@ pub(crate) fn compile_class_method(method: &ast::ClassMethod) -> Result<Function
     }, method.span)
 }
 
-pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span)
+pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, strict: bool)
     -> Result<FunctionCode, CompileError>
 {
-    Compiler::new(false).compile_function(function, span)
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(function, span)
 }
 
 struct Compiler {
@@ -81,11 +85,46 @@ impl Compiler {
         }
     }
 
+    // Parameter initializers currently execute in the shared evaluator. Require
+    // the same supported expression subset so direct eval cannot silently use
+    // a different environment at the bytecode function boundary.
+    fn validate_parameters(&self, params: &[ast::Param]) -> Result<(), CompileError> {
+        let mut probe = Self::new(true);
+        probe.strict = self.strict;
+        for param in params {
+            probe.validate_binding_expressions(&param.binding)?;
+            if let Some(default) = &param.default { probe.expression(default)?; }
+        }
+        Ok(())
+    }
+
+    fn validate_binding_expressions(&mut self, binding: &Binding) -> Result<(), CompileError> {
+        match binding {
+            Binding::Ident(_) => {}
+            Binding::Array(elements) => {
+                for element in elements.iter().flatten() { self.validate_binding_expressions(element)?; }
+            }
+            Binding::Object(properties) => {
+                for (key, value) in properties {
+                    if let ast::BindingKey::Computed(key) = key { self.expression(key)?; }
+                    self.validate_binding_expressions(value)?;
+                }
+            }
+            Binding::Rest(binding) => self.validate_binding_expressions(binding)?,
+            Binding::Default(binding, default) => {
+                self.validate_binding_expressions(binding)?;
+                self.expression(default)?;
+            }
+        }
+        Ok(())
+    }
+
     fn compile_function(
         &self,
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
+        self.validate_parameters(&function.params)?;
         let params = function.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || has_use_strict_directive(&function.body.body);
@@ -122,6 +161,7 @@ impl Compiler {
         if arrow.is_generator {
             return Err(self.error(span, "generator arrow"));
         }
+        self.validate_parameters(&arrow.params)?;
         let params = arrow.params.clone();
         let mut child = Self::new(true);
         child.strict = self.strict || matches!(&arrow.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
@@ -694,9 +734,9 @@ impl Compiler {
                 args,
                 optional: false,
             } => {
-                if self.is_generator && matches!(&callee.kind,
+                if matches!(&callee.kind,
                     ExprKind::Ident(name) if name.name == "eval") {
-                    return Err(self.error(expression.span, "generator direct eval"));
+                    return Err(self.error(expression.span, "direct eval"));
                 }
                 let (callee, this) = match &callee.kind {
                     ExprKind::Member {

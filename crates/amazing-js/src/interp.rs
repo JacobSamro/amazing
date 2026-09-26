@@ -2874,7 +2874,7 @@ impl Interpreter {
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
         if f.is_generator {
-            if let Ok(code) = vm::compile_function_item(f, f.body.span) {
+            if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
                 return code.instantiate(self, e);
             }
         }
@@ -2938,7 +2938,7 @@ impl Interpreter {
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
         if m.kind != ast::MethodKind::Constructor {
-            if let Ok(code) = vm::compile_class_method(m) {
+            if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {
                     let mut function = function.borrow_mut();
