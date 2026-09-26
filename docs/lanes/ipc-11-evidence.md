@@ -148,3 +148,44 @@ Zero regressions. Fixed files: `with-options/null-transfer`,
 conformance gaps are logged as cross-lane requests in `questions.md` (Date
 `valueOf`/`getTime`, DOMException, element event-handler content attributes,
 `__defineGetter__`), plus an `@@iterator` helper request.
+
+## IPC-11e — transfer ports, sequence conversion, bounded drain (code `53884517`)
+
+Base `aef9d5be`; merged head after `dev` merges `7eb81e02` (pooled Boat
+sandboxes, Linux-first).
+
+**Landed.** `Window.postMessage` delivers the wrapped transfer ports on the
+`MessageEvent` instead of an always-empty array. Transfer lists use WebIDL
+`sequence<object>` conversion (`Array.isArray`): a primitive or a plain
+array-like object is a `TypeError`. `messaging_drain` delivers only the
+messages queued when the checkpoint began, so a handler that posts again cannot
+starve timers or the event loop.
+
+**Linux workspace gate** (pooled Boat `pool-sys`, merged head `7eb81e02`,
+one call: build + tests + corpus attempt):
+
+| Command | Result |
+| --- | --- |
+| `cargo nextest run --workspace --locked --no-fail-fast` | **2704/2704 passed**, 10 skipped, exit 0 |
+| `cargo test --workspace --locked --doc` | **4/4** passed, exit 0 |
+
+The pooled sandbox has no WPT checkout (`NO_WPT`), so the corpus was measured
+on venus-001 (see below), same `webmessaging/` selection.
+
+**WPT `webmessaging/`** (95 `.html`, `c2a2fce6`), `9744fd00` → `4aa97770`
+(IPC-11d) → `53884517` (IPC-11e):
+
+| Level | pass | fail | timeout | error |
+| --- | --- | --- | --- | --- |
+| files before | 27 | 29 | 11 | 28 |
+| files after 11d | 33 | 24 | 10 | 28 |
+| files after 11e | 38 | 19 | 10 | 28 |
+| subtests before | 51 | 54 | 0 | 0 |
+| subtests after 11d | 58 | 48 | 0 | 0 |
+| subtests after 11e | 64 | 42 | 0 | 0 |
+
+11e fixed `MessageEvent/onmessage/postMessage` infinite loop, `with-options/
+message-channel-transferable`, `with-ports/025` (`1 as ports`), `/026`
+(`{length:1}`), `/027` (both subtests). Zero regressions. Raw JSON:
+[ipc-11e-webmessaging/](ipc-11e-webmessaging/). Cumulative 11d+11e: files
+27→38 pass, subtests 51→64 pass.

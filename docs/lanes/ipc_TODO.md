@@ -74,6 +74,18 @@ Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
   `docs/lanes/ipc-11d-webmessaging/`. Remaining gaps are cross-lane
   (`questions.md`).
 
+### 11e. Transfer ports, sequence conversion, bounded drain (`53884517`, head `7eb81e02`)
+
+- `Window.postMessage` delivers the wrapped transfer ports on the message event.
+- Transfer lists use WebIDL `sequence<object>` conversion: primitive/array-like
+  transfer is a TypeError.
+- Message delivery is bounded per checkpoint so a self-posting handler cannot
+  starve the event loop.
+- WPT `webmessaging/`: files 33→38 pass (from 27 before 11d), subtests 58→64
+  pass; zero regressions. Linux workspace 2704/2704 + 4/4 doctests.
+- Raw `docs/lanes/ipc-11e-webmessaging/`; cumulative table in
+  `docs/lanes/ipc-11-evidence.md`.
+
 ### 11c. Follow-ups
 
 - Cross-process JS endpoint: the `ipc-demo-child` renderer is a navigation
