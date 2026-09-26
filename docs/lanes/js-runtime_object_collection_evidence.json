@@ -1,0 +1,106 @@
+{
+  "ticket": "JSRT-8 Object property collection",
+  "base": "4b8555a2a862e7a0a58f56f628e48d7ea4738497",
+  "code_commit": "e0d61eb8",
+  "integration_head": "6936733c01b77e827b5d2aa1805025109329dd0a",
+  "platform": "venus-003 Linux (corpus comparison, not Windows gate)",
+  "settings": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 8,
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": false,
+      "createRealm": false,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "filter": "",
+    "limit": 0
+  },
+  "before": {
+    "host_sha256": "3f77c66490562f432b899f312236d31d8b8f35b2b982661f1b2035aac0f202a9",
+    "classification_sha256": "d32171a040e3df433c3c57208cbadde433971198216e8e56d4a7852329b37998",
+    "elapsed_seconds": 573.382,
+    "files": {
+      "pass": 30404,
+      "fail": 22456,
+      "timeout": 22,
+      "unsupported": 696,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 58777,
+      "fail": 42983,
+      "timeout": 44,
+      "unsupported": 1114,
+      "skipped": 0
+    }
+  },
+  "after": {
+    "host_sha256": "19a42f107b6dc1ad39f99ecd3e35f9ba4a07f11ba7829f9c0232c114d19972e8",
+    "classification_sha256": "8d05d80314c82f99220c82c0398464f4a17d3d5ff7ba8341d3d76c212ec04c14",
+    "elapsed_seconds": 608.504,
+    "files": {
+      "pass": 30415,
+      "fail": 22445,
+      "timeout": 22,
+      "unsupported": 696,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 58799,
+      "fail": 42961,
+      "timeout": 43,
+      "unsupported": 1115,
+      "skipped": 0
+    }
+  },
+  "gained_files": [
+    "built-ins/Object/entries/getter-making-future-key-nonenumerable.js",
+    "built-ins/Object/entries/getter-removing-future-key.js",
+    "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-1-3.js",
+    "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-1-4.js",
+    "built-ins/Object/getOwnPropertyDescriptor/15.2.3.3-1.js",
+    "built-ins/Object/getOwnPropertyDescriptor/primitive-string.js",
+    "built-ins/Object/getOwnPropertyDescriptors/primitive-strings.js",
+    "built-ins/Object/values/exception-not-object-coercible.js",
+    "built-ins/Object/values/getter-making-future-key-nonenumerable.js",
+    "built-ins/Object/values/getter-removing-future-key.js",
+    "staging/sm/object/getOwnPropertyDescriptor.js"
+  ],
+  "lost_files": [],
+  "lost_variants": [],
+  "other_variant_status_changes": [
+    {
+      "path": "staging/sm/regress/regress-1507322-deep-weakmap.js",
+      "variant": "strict",
+      "before": "timeout",
+      "after": "unsupported"
+    }
+  ],
+  "validation": {
+    "linux_nextest": {
+      "passed": 323,
+      "skipped": 1
+    },
+    "linux_doctests": 1,
+    "windows_js_nextest": {
+      "passed": 323,
+      "skipped": 1
+    },
+    "windows_doctests": 2,
+    "windows_updated_workspace": "pending 6936733c gate"
+  }
+}
