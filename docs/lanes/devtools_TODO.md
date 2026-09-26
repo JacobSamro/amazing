@@ -192,3 +192,15 @@ doctests 4 passed.
   drained from the engine. New seam type `SecurityState` and
   `security_state`/`drain_security_states`/`set_ignore_certificate_errors`/
   `handle_certificate_error`.
+
+## CDP-8 — Runtime depth — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target), measured together with
+CDP-9 in the same bulk pass: `amazing-devtools` 89/89 nextest (0 skipped) and
+1 doctest; workspace 2808 passed, 0 failed, 10 skipped, doctests 4 passed.
+
+`Runtime.compileScript`, `runScript`, `getIsolateId`, `getHeapUsage`,
+`globalLexicalScopeNames`, `queryObjects`, `setAsyncCallStackDepth` and
+`discardConsoleEntries`. New seam type `HeapUsage` plus `compile_script`,
+`run_script`, `get_isolate_id`, `get_heap_usage`, `global_lexical_scope_names`,
+`query_objects`, `set_async_call_stack_depth` and `discard_console_entries`.

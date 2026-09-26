@@ -252,6 +252,13 @@ pub struct CallFunctionParams {
     pub object_group: Option<String>,
 }
 
+/// `Runtime.getHeapUsage` result, in bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct HeapUsage {
+    pub used_heap_size: f64,
+    pub total_heap_size: f64,
+}
+
 /// CDP `Runtime.ExceptionDetails`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExceptionDetails {
@@ -913,6 +920,47 @@ pub trait DevToolsSession: Send {
     }
     /// Drops a remote object handle.
     fn release_object(&mut self, _object_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Compiles a script and returns its `scriptId` (`Runtime.compileScript`).
+    fn compile_script(
+        &mut self,
+        _source: &str,
+        _url: Option<&str>,
+        _persist: bool,
+    ) -> Result<String, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Runs a script previously returned by `compileScript`.
+    fn run_script(&mut self, _script_id: &str) -> Result<EvaluateResult, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The JS isolate id, if the engine exposes one.
+    fn get_isolate_id(&mut self) -> Result<Option<String>, HostError> {
+        Ok(None)
+    }
+    /// Heap usage (`Runtime.getHeapUsage`).
+    fn get_heap_usage(&mut self) -> Result<HeapUsage, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Names in the global lexical scope.
+    fn global_lexical_scope_names(&mut self) -> Result<Vec<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// An object handle holding the objects whose prototype is
+    /// `prototype_object_id` (`Runtime.queryObjects`).
+    fn query_objects(
+        &mut self,
+        _prototype_object_id: &str,
+    ) -> Result<Option<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Depth of async stack traces to capture.
+    fn set_async_call_stack_depth(&mut self, _depth: u32) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Drops buffered console entries (`Runtime.discardConsoleEntries`).
+    fn discard_console_entries(&mut self) -> Result<(), HostError> {
         Ok(())
     }
 

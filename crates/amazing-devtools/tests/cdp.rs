@@ -964,3 +964,50 @@ fn page_endpoint_reports_performance_and_security() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_runs_compiled_scripts_and_reports_heap() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let compiled = client.result(
+        "Runtime.compileScript",
+        obj! { "expression" => s("1+1"), "sourceURL" => s("test.js"), "persistScript" => Json::Bool(true) },
+    );
+    assert_eq!(compiled.get("scriptId").unwrap().as_str(), Some("script-1"));
+
+    let run = client.result("Runtime.runScript", obj! { "scriptId" => s("script-1") });
+    assert_eq!(
+        run.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(1.0)
+    );
+
+    let isolate = client.result("Runtime.getIsolateId", empty());
+    assert_eq!(isolate.get("id").unwrap().as_str(), Some("isolate-1"));
+
+    let heap = client.result("Runtime.getHeapUsage", empty());
+    assert_eq!(heap.get("usedSize").unwrap().as_f64(), Some(1000.0));
+    assert_eq!(heap.get("totalSize").unwrap().as_f64(), Some(2000.0));
+
+    let names = client.result("Runtime.globalLexicalScopeNames", empty());
+    assert_eq!(names.get("names").unwrap().as_array().unwrap().len(), 2);
+
+    let objects = client.result("Runtime.queryObjects", obj! { "prototypeObjectId" => s("p1") });
+    assert_eq!(
+        objects.get("objects").unwrap().get("objectId").unwrap().as_str(),
+        Some("objects-1")
+    );
+
+    client.result("Runtime.setAsyncCallStackDepth", obj! { "maxDepth" => n(4.0) });
+    client.result("Runtime.discardConsoleEntries", empty());
+
+    let script = host.script();
+    let script = script.lock().unwrap();
+    assert_eq!(script.compiled_sources, ["1+1"]);
+    assert_eq!(script.async_call_stack_depth, Some(4));
+    assert_eq!(script.discard_console_count, 1);
+    drop(script);
+
+    shutdown.store(true, Ordering::Relaxed);
+}
