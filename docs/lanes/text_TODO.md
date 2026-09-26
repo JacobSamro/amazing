@@ -755,3 +755,42 @@ did not widen the pinned selection this round; carrying that forward as the next
 
 Gate: crate nextest `amazing-text-provider` 80/80 (2 skipped). Final gate: workspace
 nextest and doctests (see status.json for the exact numbers/SHA).
+
+## TEXT-21: standard/system-UI generic font families (largest css-fonts cluster)
+
+Coordinator ask: fix the largest remaining css-fonts mismatch cluster in bulk using
+`scripts/linux-render-wpt.sh text css/css-fonts` against the baseline in
+`crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json` (18 pass / 14 mismatch,
+32 selected self-contained reftests), plus the span-scoped upright-bidi item.
+
+**Cluster fixed: CSS Fonts 4 standard/system-UI generic families
+(`ui-serif`/`ui-sans-serif`/`ui-monospace`/`ui-rounded`) were never registered.**
+7 of the 8 `standard-font-family-*` mismatches (largest cluster) were `rel=mismatch`
+reftests asserting these keyword families render *differently* from the
+unstyled default -- they were rendering byte-identical because
+`register_linux_system_faces`/`local_font_path` (`crates/amazing/src/font_loader.rs`)
+only registered `serif`/`sans-serif`/`system-ui`/`monospace`, so a page requesting
+`font: 72px 'ui-serif'` (a generic keyword even though quoted, per spec) fell
+through to the engine's undifferentiated last-resort default -- identical to
+having no `font-family` at all. Registered all four `ui-*` names to the same
+sans/serif/mono buckets as their non-`ui-` counterparts (`ui-rounded` rides
+with sans -- Linux has no distinct rounded system design, matching other
+engines' non-Apple fallback), in both `register_linux_system_faces` and
+`local_font_path`, plus the analogous Windows aliases in
+`crates/amazing/src/page.rs`'s `register_system_text_faces` (untested this
+ticket -- win-001 gates are deferred).
+
+`standard-font-family-11` ("ui-serif works", no bold/no font-synthesis
+override) still mismatches: this sandbox has only one registered serif font
+file, so `ui-serif` and the plain default both resolve to the exact same face
+-- an environment font-availability limit, not a code bug, the same class of
+gap as the already-routed `font-unicode-PUA-primary-font` case.
+
+**Not chased this ticket** (budget): `font-size-adjust-zero-1/2`,
+`font-size-adjust-order-001` (a `font-size-adjust: 0` interaction, possibly
+line-height/metrics related), `rlh-in-monospace` (root em / `rlh` unit
+sizing), `font-variant-emoji-1`. Flagged for the next `css-fonts` pass.
+
+Updated baseline: `crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json`,
+**18 pass / 14 mismatch -> 25 pass / 7 mismatch** (32 selected). Crate gate:
+`amazing`/`amazing-text-provider` nextest 357/357 (8 skipped).

@@ -8,9 +8,9 @@
     "device_scale": 1
   },
   "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
-  "host": "box-node-0833a32b11cde471",
-  "generated": "2026-09-26T15:50:49Z",
-  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-fonts/run-20260926T155043Z-72814",
+  "host": "box-node-ce6d9e7f751a330d",
+  "generated": "2026-09-26T16:44:49Z",
+  "run_directory": "/home/user/amazing/out/text/wpt-render/css-css-fonts/run-20260926T164425Z-157896",
   "inventory": {
     "document_files": 875,
     "testharness_files": 163,
@@ -28,8 +28,8 @@
     }
   },
   "counts": {
-    "pass": 22,
-    "mismatch": 10,
+    "pass": 25,
+    "mismatch": 7,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -108,17 +108,17 @@
     },
     {
       "id": "css__css-fonts__standard-font-family-19.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-19-notref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 5783,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
+      "actual_sha256": "5ac4e036f0bbb251e905b6bd50e56604f059d747282c67046ee9b825dcf9b3ec",
       "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "diff_sha256": "6165f7360c147ec923f644135b1276b468f7d3296bf50830340ea7cc2d5e3127",
+      "detail": "maxDifference=255/0; totalPixels=5783/0"
     },
     {
       "id": "css__css-fonts__font-size-zero-1.html",
@@ -139,14 +139,14 @@
       "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-5-notref.html",
-      "differing_pixels": 4185,
+      "differing_pixels": 3633,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "6132cae834c7f3e0db375ee18c9a368a682a529e2bf97aac0055ac222fbb2887",
-      "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "a5d113d707fbc72541a4d7e8715930a5508aafe49232e4259dc298e4b74ec998",
-      "detail": "maxDifference=255/0; totalPixels=4185/0"
+      "actual_sha256": "3893d9228910086eef983917d7e08144d7ad84542826434fa82095a9a959676a",
+      "reference_sha256": "5ac4e036f0bbb251e905b6bd50e56604f059d747282c67046ee9b825dcf9b3ec",
+      "diff_sha256": "7aa02462943e5f489f9d04af176d1c5ec16a965c5f3b9746bc267138f800b1bf",
+      "detail": "maxDifference=255/0; totalPixels=3633/0"
     },
     {
       "id": "css__css-fonts__font-kerning-01.html",
@@ -206,17 +206,17 @@
     },
     {
       "id": "css__css-fonts__standard-font-family-13.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-13-notref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 5783,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
+      "actual_sha256": "5ac4e036f0bbb251e905b6bd50e56604f059d747282c67046ee9b825dcf9b3ec",
       "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "diff_sha256": "6165f7360c147ec923f644135b1276b468f7d3296bf50830340ea7cc2d5e3127",
+      "detail": "maxDifference=255/0; totalPixels=5783/0"
     },
     {
       "id": "css__css-fonts__font-variant-emoji-2.html",
@@ -237,14 +237,14 @@
       "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-17-notref.html",
-      "differing_pixels": 4185,
+      "differing_pixels": 3633,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "6132cae834c7f3e0db375ee18c9a368a682a529e2bf97aac0055ac222fbb2887",
-      "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "a5d113d707fbc72541a4d7e8715930a5508aafe49232e4259dc298e4b74ec998",
-      "detail": "maxDifference=255/0; totalPixels=4185/0"
+      "actual_sha256": "3893d9228910086eef983917d7e08144d7ad84542826434fa82095a9a959676a",
+      "reference_sha256": "5ac4e036f0bbb251e905b6bd50e56604f059d747282c67046ee9b825dcf9b3ec",
+      "diff_sha256": "7aa02462943e5f489f9d04af176d1c5ec16a965c5f3b9746bc267138f800b1bf",
+      "detail": "maxDifference=255/0; totalPixels=3633/0"
     },
     {
       "id": "css__css-fonts__font-feature-settings-tibetan.html",
@@ -332,17 +332,17 @@
     },
     {
       "id": "css__css-fonts__standard-font-family-12.html",
-      "classification": "mismatch",
+      "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-12-notref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 6526,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
+      "actual_sha256": "089847a5d9d3f6d09efd3399a12f719fce93eae5da855eeb7536d0608fc5daf0",
       "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "diff_sha256": "60dd914bcbb0caef1bc1f2a206af9e480926084e0f2d5a0f7aff52302398a047",
+      "detail": "maxDifference=255/0; totalPixels=6526/0"
     },
     {
       "id": "css__css-fonts__font-size-zero-3.html",
@@ -363,14 +363,14 @@
       "classification": "pass",
       "relation": "mismatch",
       "reference_href": "standard-font-family-4-notref.html",
-      "differing_pixels": 4185,
+      "differing_pixels": 8001,
       "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "6132cae834c7f3e0db375ee18c9a368a682a529e2bf97aac0055ac222fbb2887",
+      "actual_sha256": "5b07a9061393cedde307145058b9919f71f230855aa5f2065a19361c447cdf65",
       "reference_sha256": "e0fcf60f84f912a5ca319b4e83a2f12fd9da7fb7496fd2d419493a9dc6d331c9",
-      "diff_sha256": "a5d113d707fbc72541a4d7e8715930a5508aafe49232e4259dc298e4b74ec998",
-      "detail": "maxDifference=255/0; totalPixels=4185/0"
+      "diff_sha256": "ea644bf2d302371854a525c3ba094ed26e9bc05810a8e854de21db590dbe0299",
+      "detail": "maxDifference=255/0; totalPixels=8001/0"
     },
     {
       "id": "css__css-fonts__synthetic-bold-space-width.html",
@@ -395,8 +395,8 @@
       "max_difference": 0,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
-      "actual_sha256": "cd810cb2e55e655f4f7737704f250243df5bc6515d5c0cf56be873400c22b2bb",
-      "reference_sha256": "cd810cb2e55e655f4f7737704f250243df5bc6515d5c0cf56be873400c22b2bb",
+      "actual_sha256": "9798d41f69de942fb267c0a27fba7a056a9eda8e3445a5d363396d8921a9b67c",
+      "reference_sha256": "9798d41f69de942fb267c0a27fba7a056a9eda8e3445a5d363396d8921a9b67c",
       "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
       "detail": "maxDifference=0/0; totalPixels=0/0"
     },
