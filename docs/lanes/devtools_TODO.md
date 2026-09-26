@@ -154,7 +154,7 @@ doctests 4 passed.
 
 ## CDP-5 — Emulation domain — done
 
-Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
+Source `85e6f5c9`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
 nextest (0 skipped) and 1 doctest; workspace 2746 passed, 0 failed, 10 skipped,
 doctests 4 passed.
 
@@ -165,3 +165,15 @@ doctests 4 passed.
 `setScriptExecutionDisabled`. New seam types `DeviceMetrics` and `MediaFeature`;
 the seam methods are advisory and default to success. New protocol helpers
 `u64_param`/`bool_param`.
+
+## CDP-6 — Overlay domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 80/80
+nextest (0 skipped) and 1 doctest; workspace 2749 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+`Overlay.enable`/`disable`, `setInspectMode`, `highlightNode`,
+`highlightRect`, `highlightQuad`, `hideHighlight` and the `setShow*` toggles.
+New seam types `Rgba` and `HighlightConfig`; `highlight_*` default to
+`Unsupported` while the enable/mode/hide methods are advisory. The `setShow*`
+flags are validated and accepted as engine hints.

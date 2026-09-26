@@ -658,6 +658,31 @@ pub struct MediaFeature {
     pub value: String,
 }
 
+/// A CDP RGBA color (`Overlay.*` highlight colors).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rgba {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub alpha: f64,
+}
+
+/// CDP `Overlay.HighlightConfig`, reduced to the node-highlight inputs an
+/// engine needs. Unset colors fall back to the engine's own defaults.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HighlightConfig {
+    pub content_color: Option<Rgba>,
+    pub padding_color: Option<Rgba>,
+    pub border_color: Option<Rgba>,
+    pub margin_color: Option<Rgba>,
+    pub event_target_color: Option<Rgba>,
+    pub shape_color: Option<Rgba>,
+    pub show_info: bool,
+    pub show_styles: bool,
+    pub show_rulers: bool,
+    pub show_extension_lines: bool,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -1106,6 +1131,41 @@ pub trait DevToolsSession: Send {
     }
     /// Enables or disables script execution.
     fn set_script_execution_disabled(&mut self, _value: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    // --- Overlay ----------------------------------------------------------
+    /// Enables or disables the inspector overlay.
+    fn overlay_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Sets the inspect mode (`"none"`, `"searchForNode"`, `"searchForUAShadowDOM"`,
+    /// `"captureAreaScreenshot"`, `"showDistances"`).
+    fn set_inspect_mode(
+        &mut self,
+        _mode: &str,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Highlights one node with the given configuration.
+    fn highlight_node(
+        &mut self,
+        _node: EngineNodeId,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Highlights a viewport rectangle.
+    fn highlight_rect(&mut self, _rect: Rect, _config: &HighlightConfig) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Highlights a page quad.
+    fn highlight_quad(&mut self, _quad: Quad, _config: &HighlightConfig) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Clears the current highlight.
+    fn hide_highlight(&mut self) -> Result<(), HostError> {
         Ok(())
     }
 
