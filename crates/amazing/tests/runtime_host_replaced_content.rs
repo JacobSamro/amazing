@@ -9,6 +9,82 @@ use runtime_host_replaced_content::{
     apply_layout_paint_damage, seed_retained_paint, LayoutPaintDamage,
 };
 
+fn has_inline_replaced(box_: &LayoutBox) -> bool {
+    if box_.lines.iter().any(|line| !line.replaced.is_empty()) {
+        return true;
+    }
+    let mut found = false;
+    match &box_.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+            for child in children {
+                found |= has_inline_replaced(child);
+            }
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
+    }
+    for child in &box_.positioned {
+        found |= has_inline_replaced(child);
+    }
+    found
+}
+
+#[test]
+fn inline_replaced_content_retains_and_keeps_the_root_scroll_owner() {
+    // RC-21 boundary: a page with an inline `<img>` used to force the baked
+    // paint fallback (no property trees, no compositor scroll node). The raw
+    // tile path now holds the inline replaced item, so the view keeps its root
+    // scroll owner and retained seeding succeeds.
+    struct AnyReplaced;
+    impl amazing_layout::ReplacedElementProvider for AnyReplaced {
+        fn intrinsic_size(&self, _: NodeIdx) -> Option<amazing_layout::IntrinsicSize> {
+            Some(amazing_layout::IntrinsicSize {
+                width: 2.0,
+                height: 1.0,
+            })
+        }
+    }
+    let dom = amazing_html::parse("<body><p>A<img src='pixel.png'>B</p><div class='tall'></div></body>");
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+        &dom,
+        "body{margin:0}p{margin:0}.tall{height:400px}",
+        64.0,
+        Some(32.0),
+        &text,
+        &AnyReplaced,
+    );
+    assert!(
+        has_inline_replaced(&root),
+        "layout produced an inline replaced line"
+    );
+    let view = DisplayListView::with_dom_generations(
+        &root,
+        64,
+        32,
+        &text,
+        &amazing_paint::NoImages,
+        &amazing_paint::controls::NoControls,
+        &dom,
+    );
+    let owners = view
+        .property_owner_mapping()
+        .expect("unique property owners");
+    assert!(
+        !owners.scrolls.is_empty(),
+        "the document viewport scroll owner survives inline replaced content"
+    );
+    seed_retained_paint(
+        &root,
+        64,
+        32,
+        &text,
+        &amazing_paint::NoImages,
+        &amazing_paint::controls::NoControls,
+        &dom,
+    )
+    .expect("inline replaced content retains without the baked fallback");
+}
+
 #[test]
 fn picture_source_mutation_invalidates_only_following_images() {
     let mut dom = Dom::new();
