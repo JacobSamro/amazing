@@ -284,3 +284,28 @@ deduplicating `StringTable`, referenced by index from `documentURL`/
 inversion (`nodes.parentIndex`, computed by inverting each node's
 `children`). `MockHost` scripts a 4-node document over the same fixed
 `html`/`body`/`div#main`/text fixture other domains use.
+
+## CDP-13 — Storage, DOMStorage and IndexedDB domains — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools`
+108/108 nextest (0 skipped) and 1 doctest; workspace 2884 passed, 0 failed,
+10 skipped, doctests 4 passed.
+
+Three real CDP domains, grouped under one ticket per the brief's `Storage
+(cookies/localStorage/IndexedDB list/clear via seam)` scope:
+
+- `Storage`: `getCookies`/`setCookies`/`clearCookies`. New seam type
+  `Cookie` and `get_cookies`/`set_cookies`/`clear_cookies`.
+- `DOMStorage`: `enable`/`disable`, `getDOMStorageItems`,
+  `setDOMStorageItem`, `removeDOMStorageItem`, `clear`. New seam type
+  `DomStorageId` (security origin plus local-vs-session flag) and
+  `get_dom_storage_items`/`set_dom_storage_item`/`remove_dom_storage_item`/
+  `clear_dom_storage`. New `EnabledDomains::dom_storage` flag (tracked for
+  parity with real CDP; not yet gating any push event).
+- `IndexedDB`: `enable`/`disable`, `requestDatabaseNames`,
+  `clearObjectStore`, `deleteDatabase` — the ticket's `list`/`clear` scope;
+  `requestDatabase`/`requestData` row-level browsing is a later ticket. New
+  `EnabledDomains::indexed_db` flag (same parity purpose).
+
+`MockHost` scripts a cookie jar, a `localStorage` map keyed by security
+origin, and an IndexedDB database-name map keyed by security origin.

@@ -1260,3 +1260,89 @@ fn page_endpoint_captures_a_dom_snapshot() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_lists_and_clears_cookies_storage_and_indexed_db() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let cookies = client.result("Storage.getCookies", empty());
+    let cookie_list = cookies.get("cookies").unwrap().as_array().unwrap();
+    assert_eq!(cookie_list[0].get("name").unwrap().as_str(), Some("sid"));
+    assert_eq!(cookie_list[0].get("httpOnly").unwrap().as_bool(), Some(true));
+
+    client.result(
+        "Storage.setCookies",
+        obj! { "cookies" => Json::Array(vec![obj! { "name" => s("a"), "value" => s("b") }]) },
+    );
+    assert_eq!(host.script().lock().unwrap().cookies[0].name, "a");
+
+    client.result("Storage.clearCookies", empty());
+    assert!(host.script().lock().unwrap().cookies.is_empty());
+
+    client.result("DOMStorage.enable", empty());
+    let storage_id = obj! {
+        "securityOrigin" => s("https://example.com"),
+        "isLocalStorage" => Json::Bool(true),
+    };
+    let items = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    let entries = items.get("entries").unwrap().as_array().unwrap();
+    assert_eq!(entries[0].as_array().unwrap()[0].as_str(), Some("theme"));
+
+    client.result(
+        "DOMStorage.setDOMStorageItem",
+        obj! { "storageId" => storage_id.clone(), "key" => s("lang"), "value" => s("en") },
+    );
+    let updated = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    assert_eq!(updated.get("entries").unwrap().as_array().unwrap().len(), 2);
+
+    client.result(
+        "DOMStorage.removeDOMStorageItem",
+        obj! { "storageId" => storage_id.clone(), "key" => s("theme") },
+    );
+    let after_remove = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id.clone() },
+    );
+    assert_eq!(after_remove.get("entries").unwrap().as_array().unwrap().len(), 1);
+
+    client.result("DOMStorage.clear", obj! { "storageId" => storage_id.clone() });
+    let after_clear = client.result(
+        "DOMStorage.getDOMStorageItems",
+        obj! { "storageId" => storage_id },
+    );
+    assert!(after_clear.get("entries").unwrap().as_array().unwrap().is_empty());
+
+    client.result("IndexedDB.enable", empty());
+    let names = client.result(
+        "IndexedDB.requestDatabaseNames",
+        obj! { "securityOrigin" => s("https://example.com") },
+    );
+    assert_eq!(
+        names.get("databaseNames").unwrap().as_array().unwrap()[0].as_str(),
+        Some("app-db")
+    );
+
+    client.result(
+        "IndexedDB.deleteDatabase",
+        obj! { "securityOrigin" => s("https://example.com"), "databaseName" => s("app-db") },
+    );
+    let names_after = client.result(
+        "IndexedDB.requestDatabaseNames",
+        obj! { "securityOrigin" => s("https://example.com") },
+    );
+    assert!(names_after.get("databaseNames").unwrap().as_array().unwrap().is_empty());
+    assert_eq!(
+        host.script().lock().unwrap().deleted_databases,
+        [("https://example.com".to_string(), "app-db".to_string())]
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+}

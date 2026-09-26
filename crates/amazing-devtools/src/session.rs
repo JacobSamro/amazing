@@ -54,6 +54,8 @@ pub struct EnabledDomains {
     pub security: bool,
     pub accessibility: bool,
     pub debugger: bool,
+    pub dom_storage: bool,
+    pub indexed_db: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -203,6 +205,9 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Profiler" => domains::profiler::dispatch(session, request),
         "HeapProfiler" => domains::heap_profiler::dispatch(session, request),
         "DOMSnapshot" => domains::dom_snapshot::dispatch(session, request),
+        "Storage" => domains::storage::dispatch(session, request),
+        "DOMStorage" => domains::dom_storage::dispatch(session, request),
+        "IndexedDB" => domains::indexed_db::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }

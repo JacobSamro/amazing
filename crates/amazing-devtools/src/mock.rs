@@ -10,15 +10,15 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    AxNode, BoxModel, ConsoleEvent, CpuProfile, CpuProfileNode, DeviceMetrics, DevToolsHost,
-    DevToolsSession, DomSnapshotDocument, DomSnapshotNode, EngineNodeId, EvaluateParams,
-    EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo, FrameResourceTree,
-    FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage, InterceptedRequest, KeyEvent,
-    LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent,
-    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent,
-    PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
-    ScreenshotParams, ScriptInfo, ScriptLocation, SecurityState, TargetEvent, TargetEventKind,
-    TargetInfo, TouchEvent, Viewport,
+    AxNode, BoxModel, ConsoleEvent, Cookie, CpuProfile, CpuProfileNode, DeviceMetrics,
+    DevToolsHost, DevToolsSession, DomSnapshotDocument, DomSnapshotNode, DomStorageId,
+    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern,
+    FrameInfo, FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
+    InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule,
+    MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
+    NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor, Quad, Rect,
+    RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, ScriptInfo,
+    ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use std::collections::HashMap;
 use crate::json::Json;
@@ -190,6 +190,17 @@ pub struct MockScript {
     pub heap_object_lookup: RemoteObject,
     /// Documents returned by `DOMSnapshot.captureSnapshot`.
     pub dom_snapshot: Vec<DomSnapshotDocument>,
+    /// Cookie jar returned by `Storage.getCookies`; replaced wholesale by
+    /// `Storage.setCookies`, emptied by `Storage.clearCookies`.
+    pub cookies: Vec<Cookie>,
+    /// `localStorage`/`sessionStorage` items, keyed by security origin
+    /// (`DOMStorage.getDOMStorageItems` et al.).
+    pub dom_storage: HashMap<String, Vec<(String, String)>>,
+    /// IndexedDB database names, keyed by security origin
+    /// (`IndexedDB.requestDatabaseNames`).
+    pub indexed_databases: HashMap<String, Vec<String>>,
+    /// Count of `IndexedDB.deleteDatabase` calls.
+    pub deleted_databases: Vec<(String, String)>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -428,6 +439,33 @@ impl Default for MockScript {
                     },
                 ],
             }],
+            cookies: vec![Cookie {
+                name: "sid".into(),
+                value: "abc123".into(),
+                domain: "example.com".into(),
+                path: "/".into(),
+                expires: -1.0,
+                http_only: true,
+                secure: true,
+                same_site: "Lax".into(),
+            }],
+            dom_storage: {
+                let mut storage = HashMap::new();
+                storage.insert(
+                    "https://example.com".to_string(),
+                    vec![("theme".to_string(), "dark".to_string())],
+                );
+                storage
+            },
+            indexed_databases: {
+                let mut databases = HashMap::new();
+                databases.insert(
+                    "https://example.com".to_string(),
+                    vec!["app-db".to_string()],
+                );
+                databases
+            },
+            deleted_databases: Vec::new(),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -1401,6 +1439,106 @@ impl DevToolsSession for MockSession {
         _computed_styles: &[String],
     ) -> Result<Vec<DomSnapshotDocument>, HostError> {
         Ok(self.script.lock().unwrap().dom_snapshot.clone())
+    }
+
+    fn get_cookies(&mut self) -> Result<Vec<Cookie>, HostError> {
+        Ok(self.script.lock().unwrap().cookies.clone())
+    }
+
+    fn set_cookies(&mut self, cookies: &[Cookie]) -> Result<(), HostError> {
+        self.script.lock().unwrap().cookies = cookies.to_vec();
+        Ok(())
+    }
+
+    fn clear_cookies(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().cookies.clear();
+        Ok(())
+    }
+
+    fn get_dom_storage_items(
+        &mut self,
+        storage_id: &DomStorageId,
+    ) -> Result<Vec<(String, String)>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .dom_storage
+            .get(&storage_id.security_origin)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn set_dom_storage_item(
+        &mut self,
+        storage_id: &DomStorageId,
+        key: &str,
+        value: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        let items = script.dom_storage.entry(storage_id.security_origin.clone()).or_default();
+        if let Some(entry) = items.iter_mut().find(|(existing, _)| existing == key) {
+            entry.1 = value.to_string();
+        } else {
+            items.push((key.to_string(), value.to_string()));
+        }
+        Ok(())
+    }
+
+    fn remove_dom_storage_item(
+        &mut self,
+        storage_id: &DomStorageId,
+        key: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        if let Some(items) = script.dom_storage.get_mut(&storage_id.security_origin) {
+            items.retain(|(existing, _)| existing != key);
+        }
+        Ok(())
+    }
+
+    fn clear_dom_storage(&mut self, storage_id: &DomStorageId) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .dom_storage
+            .insert(storage_id.security_origin.clone(), Vec::new());
+        Ok(())
+    }
+
+    fn request_database_names(&mut self, security_origin: &str) -> Result<Vec<String>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .indexed_databases
+            .get(security_origin)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn clear_object_store(
+        &mut self,
+        _security_origin: &str,
+        _database_name: &str,
+        _object_store_name: &str,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    fn delete_database(
+        &mut self,
+        security_origin: &str,
+        database_name: &str,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        if let Some(names) = script.indexed_databases.get_mut(security_origin) {
+            names.retain(|name| name != database_name);
+        }
+        script
+            .deleted_databases
+            .push((security_origin.to_string(), database_name.to_string()));
+        Ok(())
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {

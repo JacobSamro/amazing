@@ -9,9 +9,11 @@ pub mod css;
 pub mod debugger;
 pub mod dom;
 pub mod dom_snapshot;
+pub mod dom_storage;
 pub mod emulation;
 pub mod fetch;
 pub mod heap_profiler;
+pub mod indexed_db;
 pub mod input;
 pub mod log;
 pub mod network;
@@ -21,6 +23,7 @@ pub mod performance;
 pub mod profiler;
 pub mod runtime;
 pub mod security;
+pub mod storage;
 pub mod target;
 
 use crate::host::{
