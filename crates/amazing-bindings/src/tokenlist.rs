@@ -59,15 +59,14 @@ fn serialize(tokens: &[Vec<u16>]) -> Vec<u16> {
 fn invalid_token<H: BindingHost>(host: &mut H, error: DomError) -> H::Error {
     match host.with_dom::<()>(|_| Err(error)) { Err(error) => error, Ok(()) => unreachable!() }
 }
-fn token<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<Vec<u16>, H::Error> {
-    let units = host.to_dom_string(value)?;
+fn validate_token<H: BindingHost>(host: &mut H, units: &[u16]) -> Result<(), H::Error> {
     if units.is_empty() { return Err(invalid_token(host, DomError::SyntaxError)); }
     if units.iter().any(|unit| whitespace(*unit)) { return Err(invalid_token(host, DomError::InvalidCharacterError)); }
-    Ok(units)
+    Ok(())
 }
-fn required_token<H: BindingHost>(host: &mut H, args: &[H::Value], index: usize) -> Result<Vec<u16>, H::Error> {
+fn required_string<H: BindingHost>(host: &mut H, args: &[H::Value], index: usize) -> Result<Vec<u16>, H::Error> {
     let value = args.get(index).ok_or_else(|| host.type_error("Not enough arguments"))?;
-    token(host, value)
+    host.to_dom_string(value)
 }
 pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
@@ -90,17 +89,19 @@ pub(crate) fn invoke<H: BindingHost>(
         set_attribute_value(host, element, &attribute, units)?;
         return Ok(host.undefined());
     }
-    let original = attribute_value(host, element, &attribute)?;
-    let mut current = tokens(&original);
-    if op == O::TokenListLength { return Ok(host.number(current.len() as f64)); }
+    if op == O::TokenListLength {
+        let current = tokens(&attribute_value(host, element, &attribute)?);
+        return Ok(host.number(current.len() as f64));
+    }
     if matches!(op, O::TokenListItem | O::TokenListIndexedGetter) {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let number = host.to_number(value)?;
         let index = if number.is_finite() { number.trunc().rem_euclid(4_294_967_296.0) as usize } else { 0 };
+        let current = tokens(&attribute_value(host, element, &attribute)?);
         return match current.get(index) { Some(token) => host.string(token), None => Ok(host.null()) };
     }
     if op == O::TokenListSupports {
-        let value = required_token(host, args, 0)?;
+        let value = required_string(host, args, 0)?;
         if attribute != "rel" {
             return Err(host.type_error("This DOMTokenList has no supported tokens"));
         }
@@ -118,14 +119,23 @@ pub(crate) fn invoke<H: BindingHost>(
         };
         return Ok(host.boolean(supported));
     }
+    // WebIDL conversion completes before validation or reading the live set:
+    // a later argument can throw or mutate the associated content attribute.
     let converted = if matches!(op, O::TokenListAdd | O::TokenListRemove) {
-        args.iter().map(|arg| token(host, arg)).collect::<Result<Vec<_>, _>>()?
+        args.iter().map(|arg| host.to_dom_string(arg)).collect::<Result<Vec<_>, _>>()?
     } else if op == O::TokenListReplace {
-        vec![required_token(host, args, 0)?, required_token(host, args, 1)?]
-    } else { vec![required_token(host, args, 0)?] };
-    if converted.is_empty() { return Ok(host.undefined()); }
-    let first = &converted[0];
-    let present = current.contains(first);
+        if args.len() < 2 { return Err(host.type_error("Not enough arguments")); }
+        vec![required_string(host, args, 0)?, required_string(host, args, 1)?]
+    } else { vec![required_string(host, args, 0)?] };
+    if op == O::TokenListReplace && converted.iter().any(Vec::is_empty) {
+        return Err(invalid_token(host, DomError::SyntaxError));
+    }
+    if op != O::TokenListContains {
+        for token in &converted { validate_token(host, token)?; }
+    }
+    let mut current = tokens(&attribute_value(host, element, &attribute)?);
+    let first = converted.first();
+    let present = first.is_some_and(|token| current.contains(token));
     let result = match op {
         O::TokenListContains => return Ok(host.boolean(present)),
         O::TokenListAdd => {
@@ -137,6 +147,7 @@ pub(crate) fn invoke<H: BindingHost>(
             None
         }
         O::TokenListToggle => {
+            let first = first.unwrap();
             let force = args.get(1).map(|v| host.to_boolean(v));
             let add = force.unwrap_or(!present);
             if force.is_some() && add == present { return Ok(host.boolean(add)); }
@@ -145,15 +156,25 @@ pub(crate) fn invoke<H: BindingHost>(
             Some(add)
         }
         O::TokenListReplace => {
-            if present {
-                let replacement = &converted[1];
-                if current.contains(replacement) { current.retain(|token| token != first); }
-                else if let Some(slot) = current.iter_mut().find(|token| *token == first) { *slot = replacement.clone(); }
-            }
-            Some(present)
+            if !present { return Ok(host.boolean(false)); }
+            let first = first.unwrap();
+            let replacement = &converted[1];
+            // Infra ordered-set replacement retains the earlier of the two
+            // positions when both old and new tokens already exist.
+            let old = current.iter().position(|token| token == first).unwrap();
+            if let Some(new) = current.iter().position(|token| token == replacement) {
+                if old != new {
+                    current[old.min(new)] = replacement.clone();
+                    current.remove(old.max(new));
+                }
+            } else { current[old] = replacement.clone(); }
+            Some(true)
         }
         _ => unreachable!(),
     };
-    set_attribute_value(host, element, &attribute, serialize(&current))?;
+    let absent = host.with_dom(|dom| Ok(dom.get_attribute_node(element, None, &attribute).is_none()))?;
+    if !current.is_empty() || !absent {
+        set_attribute_value(host, element, &attribute, serialize(&current))?;
+    }
     Ok(match result { Some(value) => host.boolean(value), None => host.undefined() })
 }

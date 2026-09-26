@@ -3,7 +3,7 @@ use amazing_dom::{collection::CollectionFilter, DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::NodeBaseURI | O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
-        | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
+        | O::DocumentDefaultView | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
         | O::DocumentURI | O::DocumentCharacterSet | O::DocumentContentType
         | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentLocation | O::DocumentGetElementById
         | O::FragmentGetElementById | O::DocumentGetElementsByName | O::DocumentForms
@@ -34,6 +34,9 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
         _ => Err(DomError::TypeError),
     })?;
     match op {
+        O::DocumentDefaultView => match host.document_default_view(node)? {
+            Some(view) => Ok(view), None => Ok(host.null()),
+        },
         O::DocumentLocation => match host.document_location(node)? {
             Some(location) => Ok(location), None => Ok(host.null()),
         },
