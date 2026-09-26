@@ -168,6 +168,10 @@ LANE_PATHS = {
 # Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
 # exception the orchestrator deliberately made. Remove one when its ticket lands.
 LANE_GRANTS = {
+    # WASM-2b: the WebAssembly JS API lives in its own amazing-js file, plus the
+    # dependency line and one install line where builtins are installed.
+    "wasm": ["crates/amazing-js/src/builtins_wasm", "crates/amazing-js/Cargo.toml",
+             "crates/amazing-js/src/interp_builtins.rs", "Cargo.lock"],
     # LFG-2: abspos grid children need the positioned-layout path; shared with
     # the layout lane, so both merge dev before touching it (2026-09-26).
     "layout-flexgrid": ["crates/amazing-layout/src/position.rs",
