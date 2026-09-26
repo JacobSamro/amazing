@@ -47,7 +47,20 @@ CMD="$*"
 # (scripts/boat-lane.py: one sandbox per lane from the amazing-builder template,
 # stopped by boat-idle-reaper.py after 15 idle minutes). The venus hosts remain
 # available with --host venus-001 / venus-003.
-[ -z "$HOST" ] && HOST=boat
+if [ -z "$HOST" ]; then
+  # Boat needs the amazing-builder template; without it (for example after
+  # delete-on-stop data retention removed it) fall back to the venus hosts.
+  if "$HOME/.ascii/bin/boat" snapshots --json 2>/dev/null | grep -q '"name":"amazing-builder"'; then
+    HOST=boat
+  else
+    case "$LANE" in
+      js-lang|js-vm|js-binary) HOST=venus-001 ;;
+      js-runtime|js-stdlib|integrator-primary) HOST=venus-003 ;;
+      *) HOST=venus-001 ;;
+    esac
+    echo "linux-run: Boat template missing, using $HOST" >&2
+  fi
+fi
 case "$HOST" in
   boat) SLOTS=0 JOBS=0 ;;
   venus-001) SLOTS=3 JOBS=10 ;;
