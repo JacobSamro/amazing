@@ -125,8 +125,9 @@ scriptable target events (`push_target_created`/`push_target_destroyed`).
 
 ## CDP-3 — Input domain and DOM hit testing — done
 
-Linux gate on Boat `bx_xbhqabax`: `amazing-devtools` 72/72 nextest (0 skipped)
-and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped, doctests 4 passed.
+Source `f4c33c86`. Linux gate on Boat `bx_xbhqabax`: `amazing-devtools` 72/72
+nextest (0 skipped) and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped,
+doctests 4 passed.
 
 - `Input`: `setIgnoreInputEvents`, `dispatchMouseEvent`, `dispatchKeyEvent`,
   `dispatchTouchEvent`, `insertText`. New seam types `MouseEvent`, `KeyEvent`,
