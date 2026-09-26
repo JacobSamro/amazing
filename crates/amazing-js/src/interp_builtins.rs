@@ -2781,7 +2781,7 @@ fn native_string_split(
     }
     let separator = args.first().cloned().unwrap_or(JsValue::Undefined);
     // Step 2: an object separator's @@split method takes precedence, if present.
-    if !separator.is_null() && !separator.is_undefined() {
+    if separator.is_object() {
         let splitter = i.get_prop(&separator, WellKnownSymbol::Split.symbol())?;
         if !splitter.is_null() && !splitter.is_undefined() {
             if callable_function(&splitter).is_none() {
@@ -3015,8 +3015,8 @@ fn native_string_slice(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
 
 fn native_string_substring(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
-    let start = string_position(i, args.first(), 0.0, source.len())?;
-    let end = string_position(i, args.get(1), source.len() as f64, source.len())?;
+    let start = string_position(i, args.first().filter(|value| !value.is_undefined()), 0.0, source.len())?;
+    let end = string_position(i, args.get(1).filter(|value| !value.is_undefined()), source.len() as f64, source.len())?;
     let (a, b) = if start <= end { (start, end) } else { (end, start) };
     Ok(JsValue::str_units(source.units()[a..b].to_vec()))
 }
@@ -3128,9 +3128,6 @@ fn native_string_replace(
 ) -> Result<JsValue, Throw> {
     let source = string_this_units(i, this)?;
     let search_value = args.first().cloned().unwrap_or(JsValue::Undefined);
-    if regexp_data(&search_value).is_some() {
-        return regexp_replace(i, &source, &args);
-    }
     if search_value.is_object() {
         let replacer = i.get_prop(&search_value, WellKnownSymbol::Replace.symbol())?;
         if !replacer.is_null() && !replacer.is_undefined() {
