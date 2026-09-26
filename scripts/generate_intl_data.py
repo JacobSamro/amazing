@@ -15,7 +15,7 @@ VERSION = "48.2.0"
 ARCHIVE_SHA256 = "4f28298550dea43439986cd9ffb0a69cb73ba7d0b34a3c474760905ce8ce9e70"
 ARCHIVE_URL = f"https://github.com/unicode-org/cldr-json/archive/refs/tags/{VERSION}.tar.gz"
 PREFIX = f"cldr-json-{VERSION}/cldr-json/"
-LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh-Hans", "ar", "hi", "ru")
+LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh", "zh-Hans", "zh-Hant", "ko", "sr", "ar", "hi", "ru")
 OUTPUT = Path("crates/amazing-js/src/builtins_intl_data.rs")
 
 
@@ -361,7 +361,7 @@ def main() -> None:
                              if len(code) == 3 and code.isascii() and code.isalpha()})
     lines += [
         "struct IntlCurrencyData { code: &'static str, digits: usize,",
-        "    symbols: [&'static str; 10], narrow_symbols: [&'static str; 10], names: [&'static str; 10],",
+        f"    symbols: [&'static str; {len(LOCALES)}], narrow_symbols: [&'static str; {len(LOCALES)}], names: [&'static str; {len(LOCALES)}],",
         "}",
         "const INTL_CURRENCY_DATA: &[IntlCurrencyData] = &[",
     ]

@@ -165,7 +165,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let hour12 = i.get_prop(&options, "hour12")?;
     let hc_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
         .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
-    let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
+    let default_cycle = if ["en", "ar", "ko", "zh-Hant"].contains(&locale.as_str()) { "h12" } else { "h23" };
     // An explicit hour12 always overrides (and drops) the hc extension.
     let (hc_retained, hour_cycle) = if !hour12.is_undefined() {
         (None, if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string())
@@ -255,9 +255,9 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     let day = match state.day.as_deref() { Some("2-digit") => "dd", Some(_) => "d", None => "" };
     let year = match state.year.as_deref() { Some("2-digit") => "yy", Some(_) => "y", None => "" };
     let textual_month = ["MMM", "MMMM", "MMMMM"].contains(&month);
-    let fields: Vec<&str> = if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) {
+    let fields: Vec<&str> = if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) {
         [day, month, year].into_iter().filter(|part| !part.is_empty()).collect()
-    } else if ["ja", "zh-Hans"].contains(&state.locale.as_str()) {
+    } else if ["ja", "zh", "zh-Hans", "zh-Hant", "ko"].contains(&state.locale.as_str()) {
         [year, month, day].into_iter().filter(|part| !part.is_empty()).collect()
     } else {
         [month, day, year].into_iter().filter(|part| !part.is_empty()).collect()
@@ -270,7 +270,7 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
             date.push_str(year);
         }
     } else {
-        date.push_str(&fields.join(if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) { "." } else { "/" }));
+        date.push_str(&fields.join(if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) { "." } else { "/" }));
     }
     let mut time = String::new();
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
