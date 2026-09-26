@@ -95,7 +95,7 @@ impl ActiveAxis {
 
     pub(super) fn stretch(&self, sizes: &mut [f32], kinds: &[TrackSize], available: f32, gap: f32) {
         let autos = kinds.iter().enumerate().filter_map(|(i, kind)|
-            (!self.collapsed[i] && *kind == TrackSize::Auto).then_some(i)).collect::<Vec<_>>();
+            (!self.collapsed[i] && kind.has_auto_max()).then_some(i)).collect::<Vec<_>>();
         let spare = available - sizes.iter().sum::<f32>() - self.gaps(gap);
         if spare > 0.0 && !autos.is_empty() {
             let each = spare / autos.len() as f32;
