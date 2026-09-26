@@ -54,6 +54,7 @@ mod gradient;
 pub mod display_list_view;
 pub mod filter;
 pub mod image;
+pub mod mask;
 pub mod paint;
 pub mod surface;
 pub mod text;
