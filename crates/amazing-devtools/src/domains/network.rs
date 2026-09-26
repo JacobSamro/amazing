@@ -18,7 +18,29 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             Ok(DispatchOutcome::empty())
         }
         "Network.setCacheDisabled" => {
-            request.optional_bool("cacheDisabled", false)?;
+            let disabled = request.bool_param("cacheDisabled")?;
+            session.dev.set_cache_disabled(disabled).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "Network.setExtraHTTPHeaders" => {
+            let headers_param = request
+                .params
+                .get("headers")
+                .ok_or_else(|| CdpError::invalid_params("headers is required"))?;
+            let entries = headers_param
+                .as_object()
+                .ok_or_else(|| CdpError::invalid_params("headers must be an object"))?;
+            let mut headers = Vec::with_capacity(entries.len());
+            for (name, value) in entries {
+                let value = value
+                    .as_str()
+                    .ok_or_else(|| CdpError::invalid_params("header values must be strings"))?;
+                headers.push((name.clone(), value.to_owned()));
+            }
+            session
+                .dev
+                .set_extra_http_headers(&headers)
+                .map_err(CdpError::from)?;
             Ok(DispatchOutcome::empty())
         }
         "Network.clearBrowserCache" => Ok(DispatchOutcome::empty()),
