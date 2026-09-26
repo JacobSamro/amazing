@@ -22,9 +22,13 @@ fn has_use_strict_directive(statements: &[Stmt]) -> bool {
 }
 
 /// Compile the entire AST before any binding mutation or JavaScript execution.
-pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
+/// `is_module` forces strict mode even without a directive: module code is
+/// always strict, per spec (matching `run_program`'s own runtime check of
+/// `self.global_env.kind() == EnvKind::Module`, which this mirrors at compile
+/// time since the compiler has no `Interpreter` to ask).
+pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileError> {
     let mut c = Compiler::new(false);
-    c.strict = has_use_strict_directive(&ast.body);
+    c.strict = is_module || has_use_strict_directive(&ast.body);
     c.hoist_functions(&ast.body)?;
     for statement in &ast.body {
         c.statement(statement)?;
@@ -171,8 +175,9 @@ impl Compiler {
     }
 
     fn compile_method(
-        &self,
+        &mut self,
         method: &ast::ClassMethod,
+        class_method: bool,
     ) -> Result<FunctionCode, CompileError> {
         let function = ast::FunctionItem {
             name: None,
@@ -181,7 +186,16 @@ impl Compiler {
             is_async: method.is_async,
             is_generator: method.is_generator,
         };
-        let mut code = self.compile_function(&function, method.span)?;
+        // A *class* method's body is always strict, per spec, regardless of
+        // the enclosing (possibly sloppy) code -- matching the tree
+        // walker's `method_value` (`class_method || ...`). This function is
+        // also reused for plain object-literal methods (`{ f() {} }`), which
+        // carry no such rule and must keep the enclosing scope's strictness.
+        let previous_strict = self.strict;
+        if class_method { self.strict = true; }
+        let result = self.compile_function(&function, method.span);
+        self.strict = previous_strict;
+        let mut code = result?;
         Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
         Ok(code)
     }
@@ -198,7 +212,12 @@ impl Compiler {
         // this compiler, and `super()`/`super.prop` inside the constructor
         // and methods are resolved at execution time from [[HomeObject]]
         // and the constructor's derived-constructor metadata (see MakeClass).
+        // The heritage expression and every computed member key are always
+        // evaluated in strict mode, per spec, even when the class sits
+        // inside sloppy code (matching the tree walker's `eval_class`).
+        self.emit(Instruction::EnterStrict);
         let super_class = class.super_class.as_ref().map(|expr| self.expression(expr)).transpose()?;
+        self.emit(Instruction::ExitStrict);
         let constructor = class.members.iter().find_map(|member| match member {
             ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
             _ => None,
@@ -214,13 +233,22 @@ impl Compiler {
             is_async: false,
             is_generator: false,
         };
-        let constructor = self.compile_function(&function, span)?;
+        // A class constructor's body is always strict too (it is never
+        // reached through `compile_method`, since it is not a `ClassMember`
+        // method compiled by the loop below).
+        let previous_strict = self.strict;
+        self.strict = true;
+        let constructor = self.compile_function(&function, span);
+        self.strict = previous_strict;
+        let constructor = constructor?;
         let mut methods = Vec::new();
         for member in &class.members {
             if let ast::ClassMember::Method(method) = member {
                 if method.kind == ast::MethodKind::Constructor { continue; }
+                self.emit(Instruction::EnterStrict);
                 let key = self.object_key(&method.key, method.key_utf16.as_deref(), method.span)?;
-                let code = self.compile_method(method)?;
+                self.emit(Instruction::ExitStrict);
+                let code = self.compile_method(method, true)?;
                 methods.push(ClassMethodCode { key, kind: method.kind, code });
             }
         }
@@ -574,6 +602,18 @@ impl Compiler {
                         self.emit(Instruction::SpreadObject(dst, source));
                         continue;
                     };
+                    // A non-computed literal `__proto__: value` sets
+                    // [[Prototype]] instead of creating an own property,
+                    // matching the tree walker's `ExprKind::Object` evaluation.
+                    let key_is_proto = matches!(&property.key, ast::PropKey::Ident(name) if name.name == "__proto__")
+                        || matches!(&property.key, ast::PropKey::Str(s) if s == "__proto__");
+                    let is_proto_literal = key_is_proto && matches!(&property.value, ast::PropValue::Init(_));
+                    if is_proto_literal {
+                        let ast::PropValue::Init(value) = &property.value else { unreachable!() };
+                        let value = self.expression(value)?;
+                        self.emit(Instruction::SetPrototype(dst, value));
+                        continue;
+                    }
                     let key = self.object_key(
                         &property.key,
                         property.key_utf16.as_deref(),
@@ -590,7 +630,7 @@ impl Compiler {
                             return Err(self.error(property.span, "cover initialized name"));
                         }
                         ast::PropValue::Method(method) => {
-                            let code = self.compile_method(method)?;
+                            let code = self.compile_method(method, false)?;
                             self.emit(Instruction::SetObjectMethod(dst, key, code, method.kind));
                             continue;
                         }
@@ -646,7 +686,7 @@ impl Compiler {
                 optional: false,
             } => {
                 let object = self.expression(obj)?;
-                let key = self.member_key(prop)?;
+                let key = self.member_key(object, prop, false)?;
                 self.emit(Instruction::GetMember(dst, object, key));
             }
             ExprKind::Paren(inner) => return self.expression(inner),
@@ -704,7 +744,7 @@ impl Compiler {
                         optional: false,
                     } => {
                         let object = self.expression(obj)?;
-                        let key = self.member_key(prop)?;
+                        let key = self.member_key(object, prop, false)?;
                         let function = self.register(callee.span)?;
                         self.emit(Instruction::GetMember(function, object, key));
                         let this = if matches!(&obj.kind, ExprKind::Super) {
@@ -865,7 +905,7 @@ impl Compiler {
                 optional: false,
             } => {
                 let object = self.expression(obj)?;
-                let key = self.member_key(prop)?;
+                let key = self.member_key(object, prop, true)?;
                 self.emit(Instruction::ResolveMember(slot, old, object, key));
             }
             _ => return Err(self.error(target.span, "assignment target")),
@@ -873,11 +913,36 @@ impl Compiler {
         Ok((slot, old))
     }
 
-    fn member_key(&mut self, prop: &ast::MemberProp) -> Result<KeyOperand, CompileError> {
+    /// `object` is the already-evaluated base of the member access.
+    /// `require_coercible` matches an asymmetry that already exists in the
+    /// tree walker: a plain read or a call target's property lookup
+    /// (`eval_expr`'s `ExprKind::Member`, and the call-target arm of
+    /// `call_expr`) calls `get_prop` directly, which is lenient -- a
+    /// null/undefined base yields `undefined` rather than throwing -- while
+    /// an assignment target (`resolve_reference`) throws TypeError instead.
+    /// When strict, the check runs _after_ a computed key expression is
+    /// evaluated for its own side effects (e.g. a call) but _before_ the raw
+    /// value is converted with `ToPropertyKey` (which can itself run user
+    /// code via `toString`/`valueOf`) -- the part the VM previously got
+    /// backwards for compound assignment.
+    fn member_key(
+        &mut self,
+        object: Register,
+        prop: &ast::MemberProp,
+        require_coercible: bool,
+    ) -> Result<KeyOperand, CompileError> {
         match prop {
-            ast::MemberProp::Ident(name) => Ok(KeyOperand::Static(name.name.as_str().into())),
+            ast::MemberProp::Ident(name) => {
+                if require_coercible {
+                    self.emit(Instruction::RequireObjectCoercible(object));
+                }
+                Ok(KeyOperand::Static(name.name.as_str().into()))
+            }
             ast::MemberProp::Computed(expression) => {
                 let register = self.expression(expression)?;
+                if require_coercible {
+                    self.emit(Instruction::RequireObjectCoercible(object));
+                }
                 self.emit(Instruction::ToKey(register));
                 Ok(KeyOperand::Dynamic(register))
             }

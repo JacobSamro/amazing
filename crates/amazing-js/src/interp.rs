@@ -257,6 +257,14 @@ pub struct Interpreter {
     completion: JsValue,
     frames: Vec<CallFrame>,
     strict_eval_context: bool,
+    /// Saved `strict_eval_context` values for the VM's `EnterStrict`/
+    /// `ExitStrict` instructions, which bracket a class's heritage
+    /// expression and computed member keys -- always strict, per spec,
+    /// even when the enclosing (sloppy) code is compiled around them.
+    /// The tree walker does this with a plain local save/restore
+    /// (`eval_class`); the VM has no native call frame there, so it needs
+    /// an explicit stack instead.
+    vm_strict_stack: Vec<bool>,
     direct_eval_call: bool,
     direct_eval_env: Option<EnvHandle>,
     in_eval: bool,
@@ -418,6 +426,7 @@ impl Interpreter {
             completion: JsValue::Undefined,
             frames: Vec::new(),
             strict_eval_context: false,
+            vm_strict_stack: Vec::new(),
             direct_eval_call: false,
             direct_eval_env: None,
             in_eval: false,
@@ -1059,7 +1068,8 @@ impl Interpreter {
         (match backend {
             ExecutionBackend::TreeWalk => self.run_program(p),
             ExecutionBackend::Bytecode => {
-                let code = vm::compile(p).map_err(|error| Throw::type_error(error.to_string()))?;
+                let is_module = !self.in_eval && self.global_env.kind() == EnvKind::Module;
+                let code = vm::compile(p, is_module).map_err(|error| Throw::type_error(error.to_string()))?;
                 let previous_entry = self.entry_realm;
                 let realm = self.binding_current_realm();
                 self.entry_realm.get_or_insert(realm);
@@ -1093,7 +1103,8 @@ impl Interpreter {
         let direct_eval_env = self.direct_eval_env.take();
         if direct_eval_env.is_none() && vm_eligibility::eligible(p)
             && std::env::var_os("AMAZING_JS_VM").is_some() {
-            match vm::compile(p) {
+            let is_module = !self.in_eval && self.global_env.kind() == EnvKind::Module;
+            match vm::compile(p, is_module) {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
                     return code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
@@ -2823,7 +2834,16 @@ impl Interpreter {
             home: None,
             proto_for_new: None,
         });
-        o.proto = Some(self.function_proto.clone());
+        // An arrow has no `[[Prototype]]` special-case of its own: it is
+        // %AsyncFunction.prototype% when async, matching `make_function`
+        // and the VM's `instantiate` (arrows are never generators, so that
+        // combination does not apply here). This had been hardcoded to
+        // `function_proto` for every arrow, sync or async.
+        o.proto = Some(if a.is_async {
+            self.async_function_proto.clone()
+        } else {
+            self.function_proto.clone()
+        });
         o.strict_function = self.strict_eval_context || matches!(&a.body, ast::ArrowBody::Block(block) if has_use_strict_directive(&block.body));
         let handle = Obj(Rc::new(RefCell::new(o)));
         if let Some(frame) = self.frames.last() {

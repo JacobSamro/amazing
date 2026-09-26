@@ -142,6 +142,20 @@ enum Instruction {
     StoreReference(usize, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
+    /// A non-computed literal `__proto__: value` property definition sets
+    /// [[Prototype]] instead of creating an own property (`B.3.1`).
+    SetPrototype(Register, Register),
+    /// Throws TypeError if the register holds null/undefined. Emitted before
+    /// a member access's key conversion so a nullish base is rejected before
+    /// `ToPropertyKey` gets a chance to run user code, matching the tree
+    /// walker's `resolve_reference` ordering.
+    RequireObjectCoercible(Register),
+    /// Brackets a class's heritage expression and each computed member key:
+    /// both are always evaluated in strict mode, per spec, even when the
+    /// surrounding code is sloppy (matching the tree walker's `eval_class`,
+    /// which saves/restores `strict_eval_context` around the whole class).
+    EnterStrict,
+    ExitStrict,
     SetObjectMethod(Register, KeyOperand, FunctionCode, crate::ast::MethodKind),
     SpreadObject(Register, Register),
     NewArray(Register),
@@ -420,6 +434,19 @@ impl Program {
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
                     Instruction::RegExp(dst, regex) => registers[*dst] = i.make_regexp(regex.clone())?,
+                    Instruction::RequireObjectCoercible(register) => {
+                        if registers[*register].is_null() || registers[*register].is_undefined() {
+                            return Err(Throw::type_error("cannot access a property on nullish value"));
+                        }
+                    }
+                    Instruction::EnterStrict => {
+                        i.vm_strict_stack.push(i.strict_eval_context);
+                        i.strict_eval_context = true;
+                    }
+                    Instruction::ExitStrict => {
+                        i.strict_eval_context = i.vm_strict_stack.pop()
+                            .unwrap_or(i.strict_eval_context);
+                    }
                     Instruction::ToKey(register) => {
                         registers[*register] = match i.to_property_key(&registers[*register])? {
                             PropertyKey::String(key) => JsValue::Str(key),
@@ -445,26 +472,43 @@ impl Program {
                         registers[*dst] = i.current_new_target().unwrap_or(JsValue::Undefined);
                     }
                     Instruction::LoadSuperHome(dst) => {
-                        let home = i.current_home()
+                        // `[[HomeObject]]` of the active frame; not exposed as
+                        // a shared accessor (only `current_new_target` is),
+                        // so vm/mod.rs -- a child module of interp.rs -- reads
+                        // the private `frames` field directly.
+                        let home = i.frames.last().and_then(|frame| frame.home.clone())
                             .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
                         let prototype = home.borrow().proto.clone()
                             .ok_or_else(|| Throw::type_error("super prototype is null"))?;
                         registers[*dst] = JsValue::Object(prototype);
                     }
                     Instruction::SuperCall(dst, arguments) => {
-                        let super_constructor = i.current_super_constructor().ok_or_else(|| {
-                            Throw::syntax_error("super() used outside a derived constructor")
-                        })?;
+                        let super_constructor = i.frames.last().and_then(|frame| frame.super_constructor.clone())
+                            .ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
                         let new_target = i.current_new_target()
                             .ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
                         let args = expand_arguments(&registers, spreads, arguments)?;
                         let result = i.construct_with_new_target(&super_constructor, args, new_target)?;
                         env.initialize_this(result.clone())?;
-                        i.set_current_this(result.clone());
+                        if let Some(frame) = i.frames.last_mut() {
+                            frame.this = result.clone();
+                        }
                         registers[*dst] = result;
                     }
                     Instruction::ResolveName(slot, dst, name) => {
-                        let (reference, value) = if let Some(value) = env.resolve(name) {
+                        // Matches the tree walker's `resolve_reference`: a
+                        // non-lexical global binding (e.g. `NaN`, `undefined`,
+                        // a `var`-declared global) is fetched and stored back
+                        // through the global *object*'s property, not the env
+                        // binding cell directly, so a non-writable property
+                        // throws in strict mode (`set_with_receiver`/
+                        // `put_reference`'s `Reference::Property` arm) instead
+                        // of silently no-oping through `env.assign`.
+                        let (reference, value) = if let Some(global) = env.global_binding_object(name) {
+                            let global = JsValue::Object(global);
+                            let value = i.get_prop(&global, name)?;
+                            (Reference::Property(global, name.clone().into()), value)
+                        } else if let Some(value) = env.resolve(name) {
                             (Reference::Binding(name.clone()), value)
                         } else if i.global_obj.borrow().has_property(name) {
                             let global = JsValue::Object(i.global_obj.clone());
@@ -530,6 +574,14 @@ impl Program {
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
                         target.borrow_mut().define(&key, Property::data(registers[*src].clone()))
                             .map_err(|_| Throw::type_error("could not define object property"))?;
+                    }
+                    Instruction::SetPrototype(object, src) => {
+                        let JsValue::Object(target) = &registers[*object] else { unreachable!() };
+                        match &registers[*src] {
+                            JsValue::Object(prototype) => target.borrow_mut().proto = Some(prototype.clone()),
+                            JsValue::Null => target.borrow_mut().proto = None,
+                            _ => {}
+                        }
                     }
                     Instruction::SetObjectMethod(object, key, code, kind) => {
                         let key = key.resolve(&registers)?;
@@ -724,6 +776,11 @@ impl Program {
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };
+                        // A class constructor throws TypeError when called
+                        // without `new` (matching the tree walker, which sets
+                        // this in its own class evaluation); this had never
+                        // been set for a VM-compiled class of any kind.
+                        callable.borrow_mut().class_constructor = true;
                         if let Some(super_class) = &class.super_class {
                             let super_value = registers[super_class.register].clone();
                             // Matches the tree walker's ClassDefinitionEvaluation: a
@@ -1013,6 +1070,18 @@ impl FunctionCode {
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
+        if self.0.is_arrow {
+            // An arrow inherits `new.target` and the super constructor
+            // lexically from the frame that creates it, matching the tree
+            // walker's `make_arrow` (interp.rs). Without this, a VM-compiled
+            // arrow's own `new.target`/`super()` resolve to nothing instead
+            // of the enclosing (derived) constructor's.
+            if let Some(frame) = i.frames.last() {
+                let mut arrow = handle.borrow_mut();
+                arrow.lexical_super_constructor = frame.super_constructor.clone();
+                arrow.lexical_new_target = frame.new_target.clone();
+            }
+        }
         // `JsObject::function` already defines `name` and `length` with the
         // spec descriptors; do not overwrite them here.
         if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
@@ -1028,6 +1097,24 @@ impl FunctionCode {
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
+            if !self.0.is_generator {
+                // MakeConstructor(F, false, prototype): an ordinary function's
+                // own `prototype.constructor` links back to F, matching the
+                // tree walker's `make_function`. Without this, `new F()`
+                // instances resolve `.constructor` through Object.prototype
+                // instead of F, breaking every consumer that identifies a
+                // thrown/constructed value by its constructor (Test262Error
+                // included) -- this had been silently missing for every
+                // VM-compiled ordinary function, not just classes.
+                prototype.borrow_mut().define("constructor", Property {
+                    value: JsValue::Object(handle.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).ok();
+            }
             // Function `prototype` is a non-enumerable data property
             // (`{writable:true, enumerable:false, configurable:false}`).
             handle
@@ -1057,12 +1144,16 @@ impl FunctionCode {
         derived: Option<DerivedConstructor>,
         new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
-        let bound_this = if is_arrow {
-            parent.resolve_this()
-        } else {
-            this
-        };
-        let env = EnvHandle::new(EnvKind::Function, Some(parent));
+        // An arrow's own environment owns no `this`/`super`/TDZ state of its
+        // own: it is `EnvKind::Arrow`, transparent to `resolve_this_checked`,
+        // `initialize_this` and `mark_this_uninitialized`, which all walk
+        // through it to the enclosing (possibly still-uninitialized, in a
+        // derived constructor) frame -- matching the tree walker's
+        // `FunctionBody::Block`/`Expr`. `bind_this` must never run for an
+        // arrow: on a Function-kind env it would wrongly look "already
+        // initialized" to `initialize_this`, and even harmlessly it would
+        // freeze a `this` read before the enclosing `super()` runs.
+        let env = EnvHandle::new(if is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(parent));
         // A derived constructor's `this` starts uninitialized (TDZ until
         // `super()` runs); an implicit one (no explicit `constructor` member)
         // forwards its own arguments to the super call itself, matching the
@@ -1077,19 +1168,42 @@ impl FunctionCode {
                     &meta.parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
                 )?;
                 env.initialize_this(bound.clone())?;
-                i.set_current_this(bound);
+                if let Some(frame) = i.frames.last_mut() {
+                    frame.this = bound;
+                }
             }
-        } else {
-            env.bind_this(bound_this);
+        } else if !is_arrow {
+            env.bind_this(this);
         }
+        // Sloppy-mode duplicate simple parameter names are legal (the last
+        // one wins); only strict functions reject them, at parse time,
+        // before the compiler ever sees them. Parameters are mutable function
+        // bindings, not lexical declarations: body `var` declarations reuse
+        // them (and must not throw as a redeclaration) and sloppy duplicate
+        // names overwrite -- matching the tree walker's `bind_params`. Each
+        // name is allocated once via `declare_uninitialized` (kept lexical
+        // just long enough that nothing else can race a binding into this
+        // frame), given its value with `initialize_parameter` (also used for
+        // repeats), and only after every parameter is bound does
+        // `finish_parameter_initialization` flip each to non-lexical so a
+        // later `var`/function-declaration hoist of the same name is a no-op
+        // instead of a "already declared" syntax error.
+        let mut declared_params = std::collections::HashSet::new();
         for (index, name) in self.0.params.iter().enumerate() {
-            env.declare_lexical(
-                name,
-                args.get(index).cloned().unwrap_or(JsValue::Undefined),
-                true,
-            )?;
+            let value = args.get(index).cloned().unwrap_or(JsValue::Undefined);
+            if declared_params.insert(name.clone()) {
+                env.declare_uninitialized(name, true)?;
+            }
+            env.initialize_parameter(name, value)?;
         }
-        if !is_arrow {
+        for name in &declared_params {
+            env.finish_parameter_initialization(name);
+        }
+        // Per spec, no `arguments` object is created when a parameter is
+        // already named `arguments` (matching the tree walker's `bind_params`,
+        // which returns early in that case); otherwise `declare_var` below
+        // would also throw on redeclaring the lexical parameter binding.
+        if !is_arrow && !declared_params.contains("arguments") {
             // An arguments object is an ordinary object, not an Array exotic
             // (matching the tree walker): indexed data properties, a
             // non-enumerable writable `length`, and Symbol.iterator.
