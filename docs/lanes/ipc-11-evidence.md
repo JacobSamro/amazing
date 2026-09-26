@@ -39,7 +39,6 @@ include every messaging message): decoder **8,382,072** cases, dispatcher
 **11,972,412** cases, zero panics.
 
 ## WPT `webmessaging/` selection
-
 95 `.html` files under `webmessaging/`, run through `amazing wpt-harness`
 against the shared sparse checkout on venus-001 (now carrying `webmessaging/`).
 Raw per-file JSON: [ipc-11-webmessaging/](ipc-11-webmessaging/).
@@ -85,3 +84,12 @@ when a queued id is granted, and release clients on disconnect/crash. See
   `EventTarget`s; IPC's classes are stubs until then.
 - Storage owns `amazing_storage::locks` and the `navigator.locks` adapter; IPC
   owns the storage-process coordinator seam.
+
+## Windows gate
+
+`scripts/win-run.sh ipc -- 'cargo nextest run --workspace --locked --no-fail-fast; cargo test --workspace --locked --doc'`
+on win-001 (win-002 offline) did not complete: extraction failed with
+`No space left on device` and cargo then loaded a partial tree. No Windows
+numbers are claimed. The exact-source workspace gate on `9744fd00` is queued
+once the host has space or win-002 returns; the failure and the stale-archive
+gap in `win-run.sh` are filed in `questions.md`.
