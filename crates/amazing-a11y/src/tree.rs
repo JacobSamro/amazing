@@ -460,7 +460,7 @@ fn resolve_references(dom: &Dom, ids: &HashMap<String, NodeIdx>, tree: &mut AxTr
     }
 }
 
-fn collect_indices(dom: &Dom) -> (HashMap<String, NodeIdx>, HashMap<String, Vec<NodeIdx>>) {
+pub(crate) fn collect_indices(dom: &Dom) -> (HashMap<String, NodeIdx>, HashMap<String, Vec<NodeIdx>>) {
     let mut ids = HashMap::new();
     let mut labels: HashMap<String, Vec<NodeIdx>> = HashMap::new();
     for node in dom.tree_order(NodeIdx(0)) {
@@ -641,20 +641,24 @@ impl<'a> Builder<'a> {
     /// ignored on a focusable element or one with a global ARIA attribute, in
     /// which case the implicit role applies.
     fn resolved_role(&self, node: NodeIdx) -> Role {
-        let explicit = role::explicit_role(self.dom, node);
-        let Some(explicit) = explicit else {
-            return role::implicit_role(self.dom, node);
-        };
-        if explicit.is_presentational()
-            && (host::is_focusable(self.dom, node) || role::has_global_aria(self.dom, node))
-        {
-            let implicit = role::implicit_role(self.dom, node);
-            if implicit.is_presentational() || implicit == Role::None {
-                return Role::Generic;
+        let explicit = role::explicit_role(self.dom, &self.ids, node);
+        let role = match explicit {
+            None => role::implicit_role(self.dom, &self.ids, node),
+            Some(explicit)
+                if explicit.is_presentational()
+                    && (host::is_focusable(self.dom, node)
+                        || role::has_global_aria(self.dom, node)) =>
+            {
+                let implicit = role::implicit_role(self.dom, &self.ids, node);
+                if implicit.is_presentational() || implicit == Role::None {
+                    Role::Generic
+                } else {
+                    implicit
+                }
             }
-            return implicit;
-        }
-        explicit
+            Some(explicit) => explicit,
+        };
+        role::apply_minimum_role(self.dom, node, role)
     }
 
     fn push_node(&mut self, node: NodeIdx, parent: Option<AxNodeId>) -> Option<AxNodeId> {
@@ -687,7 +691,7 @@ impl<'a> Builder<'a> {
                 )
             };
             let states = aria::compute_states(self.dom, node, role);
-            let properties = aria::compute_properties(self.dom, node, role);
+            let properties = aria::compute_properties(self.dom, &self.ids, node, role);
             (name, description, states, properties)
         };
         let bounds = self.bounds.get(node);

@@ -57,7 +57,8 @@ pub fn role_of_tag(html: &str, tag: &str) -> Option<Role> {
 pub fn implicit_role_of_tag(html: &str, tag: &str) -> Option<Role> {
     let doc = document(html);
     let node = dom_of_tag(&doc, tag)?;
-    Some(implicit_role(&doc.dom, node))
+    let (ids, _labels) = crate::tree::collect_indices(&doc.dom);
+    Some(implicit_role(&doc.dom, &ids, node))
 }
 
 /// Resolved role (`role` attribute if valid, else implicit) of the first element
@@ -65,7 +66,8 @@ pub fn implicit_role_of_tag(html: &str, tag: &str) -> Option<Role> {
 pub fn role_for_tag(html: &str, tag: &str) -> Option<Role> {
     let doc = document(html);
     let node = dom_of_tag(&doc, tag)?;
-    Some(role_for(&doc.dom, node))
+    let (ids, _labels) = crate::tree::collect_indices(&doc.dom);
+    Some(role_for(&doc.dom, &ids, node))
 }
 
 /// The exposed accessibility node backed by the element with the given `id`.
