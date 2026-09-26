@@ -1,6 +1,6 @@
 //! Bridge from the painter's read-only display-list view.
 //!
-//! RC-17's raw local raster leaves transforms, clips and opacity to the
+//! The raw local raster leaves transforms, clips, opacity, blend and isolation to the
 //! property trees. Unsupported paint commands use RC-16's baked range raster
 //! with a neutral property state.
 
@@ -285,7 +285,7 @@ pub fn paint_view_metadata(
             .map_err(|_| SceneError::InvalidState)?;
     }
     for node in view.effects().iter().skip(1) {
-        trees
+        let id = trees
             .add_effect(
                 EffectId(node.parent as usize),
                 node.opacity,
@@ -293,6 +293,13 @@ pub fn paint_view_metadata(
                 None,
             )
             .map_err(|_| SceneError::InvalidState)?;
+        // RC-24 exports CSS blend values; retain them on the same effect ID
+        // so ancestry, opacity bindings and cached frames preserve the group.
+        trees.set_effect_operations(id, EffectOperations {
+            blend: resolve_css_blend(node.blend).map_err(|_| SceneError::InvalidState)?,
+            isolate: node.isolate,
+            ..Default::default()
+        }).map_err(|_| SceneError::InvalidState)?;
     }
     for node in view.scrolls().iter().skip(1) {
         let bounds = rect(node.bounds);
