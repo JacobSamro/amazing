@@ -94,3 +94,102 @@ block.rs, or the paint/reflow pipeline) — not routed to another lane.**
 Filed as the layout lane's next ticket (LAYOUT-24) in `docs/lanes/layout_TODO.md`
 and `.agents/layout/questions.md`, ahead of LAYOUT-24's previously-planned
 "inline positioned ancestors" scope.
+
+## Resolution (LAYOUT-24, 2026-09-27)
+
+Root cause, confirmed with fresh empirical instrumentation (temporary
+`AMAZING_TABLE_DEBUG`-gated `eprintln!`s in `prepare_sizes` and
+`table::layout`, removed before the fix landed): `table::intrinsic` (the
+function `crate::flex::min_content_width`/`max_content_width` call for any
+`Role::Table` box, including via a table wrapper's `max_content_inner_width`
+fold) hardcodes `intrinsic_with_text(b, fonts, None)` — it always measures
+every cell with fallback glyph-width heuristics, never the real shaped text
+that the *same* table's live `table::layout` → `constraints()` call always
+receives. For `table-anonymous-objects-059.xht`'s green (abspos) table this
+produced a shrink-to-fit `preferred` of 643.2px, while `table::layout`'s own
+`constraints()` call for the *same* table (once laid out at that width)
+reported a true shaped max-content sum of 809.16px — the wrapper resolved
+~166px too narrow, and `auto_widths`'s proportional-interpolation branch (used
+whenever available space is between the min- and max-content sums, which is
+correct per CSS2.1 §17.5.2.2, not a bug in `auto_widths` itself) then squeezed
+every column to a share of that too-small width, causing the observed
+overlap: columns narrower than their real shaped content, text bleeding into
+the next column and thus into the red reference underneath it.
+
+This affects only `table::intrinsic`'s callers, not `table::layout`'s: the
+"correct box-tree dump" observation above is explained by `cmd_layout`'s debug
+tool passing `text: None` everywhere (`amazing_layout::block::
+layout_root_in_viewport(&mut root, width, None, &fonts)`), which made the
+wrapper's fallback-based shrink-to-fit estimate *and* the debug dump's own
+measurement both use the same (wrong-for-real-rendering) fallback metrics,
+so the dump looked internally consistent while the real render (`amazing
+render`, which does pass a real `TextSystem`) was not.
+
+Fix, in `position.rs`/`table.rs` only (`flex.rs`/`grid.rs` untouched, so no
+layout-flexgrid coordination was needed):
+- `table::intrinsic_with_text` (previously private, `text` hardcoded to
+  `None` at its one call site) is now `pub(crate)`, letting a caller with real
+  `text` in scope use it directly instead of the text-less `intrinsic`.
+- `position.rs`'s `intrinsic_content_widths` (the shrink-to-fit clamp's sole
+  caller) now calls a new recursive helper, `shaped_intrinsic_width`, instead
+  of going straight to `crate::flex::min_content_width`/`max_content_width`.
+  It descends through `Flow::Blocks` block-flow ancestors (so a `<table>`
+  nested under a generic wrapper `<div>` is found, not just when `box_` is
+  itself the table wrapper) and calls `table::intrinsic_with_text` for any
+  `Role::Table` box it finds, threading the same real `text` the shrink-to-fit
+  box already has. Everything else (flex/grid containers, non-table leaves)
+  falls through unchanged to the original `flex::min/max_content_width`.
+- An earlier version of this fix also applied real-text shaping to inline
+  runs found while descending (not just tables), matching what
+  `intrinsic_content_widths`'s pre-existing top-level check already did for
+  `box_` itself. That version fixed `abspos-008` but *also* introduced 17 new
+  losses elsewhere in the `tables` corpus (e.g.
+  `table-anonymous-objects-017.xht`: a previously-exact `a bc d` one-line
+  layout started wrapping "d" to a second line, exposing a red reference
+  pixel that should stay covered) — real shaped text made some short inline
+  runs measure narrower than the fallback estimate did, tipping a
+  previously-fitting line into wrapping. That part was reverted; the shipped
+  fix only changes measurement for the `Role::Table` leaf, not inline runs
+  found while descending.
+
+Measured effect (Boat `bx_cp5jbn5z`/pool-layout, workspace 3267 passed/14
+skipped, `cargo test --workspace --locked --doc` clean, both before this fix
+was applied and after, at `512912d5`):
+- `position`: `abspos-008` now matches exactly (0 differing pixels, previously
+  a loss) — 1 pass recovered, no new losses. Removed from `gate.sh`'s
+  `accepted` dict.
+- `tables`: pass count unchanged (271, same as the LFG-3-regressed baseline)
+  — **not fully recovered** — but the target cases are structurally fixed,
+  not merely reduced in severity by coincidence:
+  `table-anonymous-objects-059.xht` differing pixels 26,103 → 8,929 (-66%),
+  `-098.xht` 26,686 → 9,544 (-64%), `-018.xht` 1,139 → 1,056 (-7%). Visual
+  inspection (`actual.png` vs `reference.png`, converted from the render
+  pipeline's `.ppm.gz` output) confirms the overlap/bleed-through defect
+  itself is gone — both render as clean, non-overlapping green text. The
+  residual mismatch is a **separate, pre-existing** ~1px cumulative rounding
+  drift in `auto_widths`'s column-width distribution (measured directly:
+  glyph run start-x is identical for column 1 in both images at one text row,
+  then off by exactly 1px for columns 2/3 at another row), which a strict
+  `allowed_differing_pixels: 0` comparison turns into thousands of differing
+  anti-aliased glyph-edge pixels even though the visual difference is a
+  hairline. Confirmed pre-existing and unrelated to LFG-3/LAYOUT-24:
+  `fixed-table-layout-003a03.xht`/`-003a04.xht` already had exactly 2
+  differing pixels before this fix, unchanged after. Filed separately as
+  **LAYOUT-26** (table column-width rounding precision vs. reference
+  browsers) rather than expanded into this ticket, since it predates LFG-3
+  and affects tables generally, not just shrink-to-fit ones.
+- `writing`/`ruby`/`retained`: unchanged (0 net movement; same accepted cases,
+  no new losses). These corpora's documented LAYOUT-24 exceptions were not
+  confirmed via the same table-specific pixel-tracing this write-up used for
+  `tables`/`position`, so it is possible some of them share LAYOUT-26's
+  rounding-drift mechanism rather than the fixed `table::intrinsic` bug —
+  left for LAYOUT-26 or a future pass to re-triage now that the structural
+  bug is out of the way.
+- Full workspace + doctests clean both before and after (no regressions);
+  `gate.sh` reported zero unexplained (`CORPUS GATE HELD`) losses across all
+  five corpora on the shipped fix.
+
+`gate.sh`'s `accepted` dict is otherwise unchanged (same case lists for
+`tables`/`writing`/`ruby`/`retained`, since none of those flipped to `pass`),
+with `abspos-008` removed from `position` and the comment block updated to
+describe the fix and the LAYOUT-26 follow-up.

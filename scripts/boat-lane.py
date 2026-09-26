@@ -5,7 +5,7 @@ Each lane gets one persistent sandbox deployed from the `amazing-builder`
 template (Rust 1.97.1, libvpx 1.16, nextest, PyYAML, the pinned Test262
 checkout, and a warm target directory). The lane -> sandbox id map lives in
 .agents/.boat-lanes.json. A stopped sandbox is resumed; a missing one is
-created. scripts/boat-idle-reaper.py stops sandboxes idle for 15 minutes, so
+created. scripts/boat-idle-reaper.py stops sandboxes idle for 30 minutes, so
 lanes never pay for time they do not use.
 
 Lanes share pooled sandboxes (2026-09-26). One sandbox per lane kept 24

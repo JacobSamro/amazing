@@ -80,6 +80,18 @@ fn run_page(binary: &str, page: &Path, out_dir: &Path, timeout: Duration) -> Row
         .arg(page)
         .arg(&out)
         .arg("1024")
+        // IA-REAL-2: without this, every spawned page hits the driver's
+        // ambient, real profile path (`runtime_host_storage.rs::storage_
+        // profile_path`, since a spawned release/debug binary is neither
+        // `cfg!(test)` nor `NEXTEST=1`). Pooled Linux hosts are shared across
+        // lanes and days, so that path can carry stale/incompatible on-disk
+        // state from unrelated earlier sessions (observed: a leftover
+        // directory at `~/.local/share/amazing/storage/idb` from a different
+        // storage format, read by the current code as `IndexedDB open:
+        // Corrupt` -- filed to storage's questions.md). Point every page at
+        // this run's own disposable directory instead, matching the
+        // isolation the crate's in-process unit tests already get for free.
+        .env("AMAZING_STORAGE_DIR", out_dir.join("storage"))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

@@ -468,9 +468,56 @@ fn intrinsic_content_widths(
     let border = values::resolve_borders(&box_.style, box_.font_size);
     let chrome = padding.left + padding.right + border.left + border.right;
     (
-        (crate::flex::min_content_width(box_, fonts) - chrome).max(0.0),
-        (crate::flex::max_content_width(box_, fonts) - chrome).max(0.0),
+        (shaped_intrinsic_width(box_, fonts, text, true) - chrome).max(0.0),
+        (shaped_intrinsic_width(box_, fonts, text, false) - chrome).max(0.0),
     )
+}
+
+/// Like `crate::flex::min_content_width`/`max_content_width`, but keeps
+/// descending through generic block-flow ancestors (not just when `box_`
+/// itself is a table wrapper) so a `Role::Table` box anywhere in the subtree
+/// is measured with real shaped text (LAYOUT-24). `flex::min/max_content_width`
+/// always measures a table with `table::intrinsic`'s hardcoded `text: None`
+/// (fallback glyph-width heuristics), which can diverge sharply from that
+/// same table's own live `constraints()` call inside `table::layout` (which
+/// always receives real `text`); a shrink-to-fit box (e.g. an abspos `<div>`
+/// wrapping a `<table>`, directly or nested under other generic blocks) sized
+/// from the fallback estimate alone can resolve narrower than the table
+/// needs, squeezing its columns below their true max-content width once laid
+/// out for real. Deliberately narrow: only the `Role::Table` leaf gets real
+/// text here (an inline run's own top-level shaped check, in
+/// `intrinsic_content_widths` above, is unaffected and unchanged) — an
+/// earlier version of this fix also shaped nested inline runs and traded the
+/// table regression for new off-by-a-few-px wrapping regressions elsewhere in
+/// the corpus, so that part was dropped. Flex and grid containers are left to
+/// the original, unchanged `flex`/`grid` functions (out of this fix's scope;
+/// text-accuracy there is layout-flexgrid's concern, not amazing-layout's).
+fn shaped_intrinsic_width(
+    box_: &LayoutBox,
+    fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
+    minimum: bool,
+) -> f32 {
+    if crate::table_tree::role(box_) == crate::table_tree::Role::Table {
+        let (mn, mx) = crate::table::intrinsic_with_text(box_, fonts, text);
+        return if minimum { mn } else { mx };
+    }
+    if let Flow::Blocks(children) = &box_.flow {
+        return children
+            .iter()
+            .map(|child| {
+                let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
+                shaped_intrinsic_width(child, fonts, text, minimum)
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0)
+            })
+            .fold(0.0f32, f32::max);
+    }
+    if minimum {
+        crate::flex::min_content_width(box_, fonts)
+    } else {
+        crate::flex::max_content_width(box_, fonts)
+    }
 }
 
 fn absolute_origin(

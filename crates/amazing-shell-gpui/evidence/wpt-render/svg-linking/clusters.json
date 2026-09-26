@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "subdir": "svg/linking",
+  "mismatch_count": 5,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "svg__linking__reftests__use-descendant-combinator-002.html",
+        "svg__linking__reftests__use-nested-symbol-001.html",
+        "svg__linking__reftests__use-keyframes.html",
+        "svg__linking__reftests__use-symbol-rendered-001.html",
+        "svg__linking__reftests__use-descendant-combinator-001.html"
+      ]
+    }
+  ]
+}

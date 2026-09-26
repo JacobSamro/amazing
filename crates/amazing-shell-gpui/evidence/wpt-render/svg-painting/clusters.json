@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "subdir": "svg/painting",
+  "mismatch_count": 4,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "svg__painting__reftests__non-scaling-stroke-003.html",
+        "svg__painting__reftests__non-scaling-stroke-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "svg__painting__reftests__non-scaling-stroke-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "svg__painting__reftests__non-scaling-stroke-008.html"
+      ]
+    }
+  ]
+}

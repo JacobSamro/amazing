@@ -1084,3 +1084,238 @@ run twice with a stable count both times; workspace `cargo test --workspace
 --locked --doc` **31/31 crate doctest targets green, 0 failed** (4 crates
 with real doctests — `amazing_a11y`, `amazing_devtools`, `amazing_html`,
 `amazing_js` — 1 each, plus 27 crates with 0 doctests).
+
+## HTML-29 — spec-correct `document.write`, the `FixtureServer` Content-Type gap dom-bindings hit, and an `about:blank` origin gap
+
+Three fixes, all in this lane's own iframe/write code, per the ticket:
+
+- **`document.write`/`writeln`/`open`/`close` now track a real parser
+  insertion point** instead of always appending at the end of the body.
+  `BindingState` (`runtime_binding_host.rs`) gained
+  `write_insertion_points: HashMap<NodeIdx, (NodeIdx, Option<NodeIdx>)>`: a
+  present entry for a document means its parser is "active" (matching
+  `Dom::pre_insert`'s own `(parent, before)` signature for where the next
+  write lands); no entry means a `write()` call must implicitly perform
+  `document.open()`'s full-document replace first, per spec. All of the
+  actual logic lives in `runtime_host_html.rs`
+  (`begin_document_parsing_state`/`narrow_write_insertion_point_state`/
+  `end_document_parsing_state`, `reopen_document`, the rewritten
+  `write_into_document`/`document_open`/`document_close`); the shared driver
+  files only gained the one field + one constructor line
+  (`runtime_binding_host.rs`), three thin forwarding methods
+  (`js_scheduler.rs`'s `DriverScheduler`, mechanically identical to its
+  existing `set_document_metadata`-style wrappers), and one `node: NodeIdx`
+  field on `PageScript` (`cmd/js.rs`) so a script's own tree position is
+  available when narrowing the point.
+  - Every real top-level script-running loop now brackets itself:
+    `begin_document_parsing` before the loop, `narrow_write_insertion_point`
+    before each script (its own `(parent, next_sibling)` at that moment --
+    the parser's insertion point while it is the one running), and
+    `end_document_parsing` once the load event has fired -- in the WPT
+    harness (`cmd/wpt_harness.rs::execute_page`), the two real-page paths
+    (`cmd/js.rs::execute_page_scripts_lenient`/`prepare_page_scripts`), and
+    an iframe's own top-level scripts
+    (`js_scheduler.rs::dispatch_pending_iframe_loads` wrapping
+    `setup_iframe_window`, which itself narrows per script).
+  - A nested `write()` from a script a write() itself introduced narrows the
+    point to its own position, then the outer point is restored once all of
+    that write's scripts have run, so a second `write()` call from the
+    *original* script still lands in sequence after the first, not after
+    whatever the nested script wrote.
+  - Calling `write()`/`open()` with no parser active (e.g. from a
+    `setTimeout` firing after `load`) now really performs the full-document
+    replace (`reopen_document`: a fresh, empty
+    `<html><head></head><body></body></html>` via
+    `import_fragment`+`Dom::replace_all` -- deliberately **without** a
+    `<!doctype html>`, since `import_fragment` copies a source document's
+    top-level nodes into a `DocumentFragment` one at a time and a
+    `DocumentType` is never a valid `DocumentFragment` child; a real
+    `open()` doesn't add one either) instead of appending next to whatever
+    the document already had.
+  - New tests in `runtime_host_html.rs`:
+    `document_write_from_a_top_level_script_inserts_at_the_parser_insertion_point`
+    (a script between two `<div>`s writes a third; it lands between them,
+    not after both -- the writing `<script>` element itself stays in the
+    tree, per spec, so the real children order is `a, <script>, written,
+    b`) and `document_write_after_load_implicitly_reopens_the_document`.
+    The three existing HTML-28 `document.write`/`open`/`close` tests needed
+    no changes and still pass unmodified.
+- **Fixed the cross-realm iframe `createElement`/`localName` bug
+  dom-bindings reported** (488 failing subtests, `dom/nodes/
+  Document-createElement*.html`'s XML/XHTML-document parametrizations;
+  `.agents/dom-bindings/questions.md`, `docs/lanes/dom-bindings_TODO.md`).
+  It was misdiagnosed as a per-realm accessor/prototype install gap in
+  `setup_iframe_window`/`ensure_realm`; that code was already correct
+  (confirmed with a Rust unit test using `set_frame_resource_resolver`
+  directly, which passed both before and after this fix). The real bug:
+  `cmd/wpt_harness.rs`'s `FixtureServer::serve_fixture` -- the local
+  loopback HTTP server backing every WPT-harness fetch, including
+  child-iframe navigations -- sent **no `Content-Type` header at all**.
+  `content_type()` (`runtime_host_html.rs`) only falls back to
+  extension-based sniffing for a resolver-backed or `file:` fetch, neither
+  true for this loopback path, so every XML/XHTML iframe fetched through it
+  failed to navigate ("iframe response has no supported media type"),
+  leaving `contentDocument`/`contentWindow.document` pointing at a document
+  that never loaded -- not a wrapping/realm bug at all. Fixed by giving
+  `serve_fixture` a real extension-derived `Content-Type` (html/htm,
+  xhtml/xht, xml, svg, js/mjs, json, css, txt, and common image/media
+  types, defaulting to `application/octet-stream`), mirroring the real WPT
+  server's own mapping closely enough for this corpus. Measured directly:
+  `dom/nodes/Document-createElement.html` 49/147 → **147/147** (full fix);
+  `dom/nodes/Document-createElementNS.html` ~206/596 → **376/596** (the
+  remaining 220 failures are a separate, unrelated `createElementNS`
+  DOMException-shape bug, routed to dom-bindings in `.agents/html/
+  questions.md` rather than fixed here -- out of this lane's ownership).
+- **Fixed an `about:blank` origin gap in `ensure_realm`**, found while
+  reproducing the above (a bare, no-`src` `<iframe>`'s `contentWindow`
+  access threw `"cross-origin WindowProxy access requires host permission"`
+  even though an unsandboxed `about:blank` iframe is same-origin with its
+  creator, per spec -- `ensure_realm` special-cased only `about:srcdoc`,
+  leaving `about:blank` to fall through to `ParsedUrl::parse("about:blank")`'s
+  own (mismatched/opaque) origin, tripping JSRT-9's WindowProxy
+  cross-origin gate. Fixed by extending the existing `about:srcdoc`
+  parent-origin-inheritance branch to `about:blank` too. New test:
+  `bare_iframe_with_no_src_is_about_blank_and_same_origin_with_its_parent`.
+- **Measured** (Boat `pool-dom`, same 2,154-file `html/dom` +
+  `html/semantics` (minus forms) + `html/webappapis/scripting` corpus,
+  before = `html28-after2.jsonl` (HTML-28's final state, `dev` head
+  `70009676`), after = this ticket's diff (`html28-html29-after.jsonl`, the
+  `document.write` and `FixtureServer` fixes; the `about:blank` fix landed
+  after this sweep started and was not separately re-swept -- it is covered
+  by the crate/workspace gate instead): whole-file pass unchanged at
+  **187/2154** (this corpus's WPT files are almost never single-feature, so
+  a subtest-level gain rarely flips an entire file to "pass"); **subtest
+  pass 21,955 → 24,662 (+2,707), zero files with fewer passing subtests
+  than before**. `error`-status files rose 298 → 323 (`fail`/`timeout` fell
+  728 → 708 and 523 → 518): checked a sample (`html/semantics/scripting-1/
+  the-script-element/module/*`, `iframe_sandbox_popups_*`) -- these are
+  files whose iframe now actually navigates (fixed) but then hits this
+  harness's pre-existing "unsupported: module/async/defer script
+  scheduling" limit or a sandboxed-popup case, which now errors out
+  immediately instead of the iframe fetch hanging until the harness
+  timeout; a `timeout`→`error` move with strictly more passing subtests is
+  forward progress, not a regression.
+- **Not attempted this ticket** (next-largest real clusters on this
+  corpus, left for a future sweep): the `createElementNS` DOMException
+  bug and remaining `HTMLMediaElement`/`TextTrack` cases (both
+  dom-bindings/replaced-content scope, not re-triaged here since neither
+  changed by this ticket's diff), async/defer/module script scheduling
+  (this harness's pre-existing limitation, now the more visible cause of
+  several `error`-status files above), and the `timeout` bucket generally.
+
+Linux gate on this head: `amazing` crate nextest **291/291 passed, 6
+skipped** (5 new tests over HTML-28's 257 -- one further iframe realm test,
+one Content-Type regression test, two `document.write` insertion-point
+tests, one `about:blank` origin test); full workspace `cargo nextest run
+--workspace --locked --no-fail-fast` **3,135/3,135 passed, 14 skipped**, run
+twice with a stable count both times; workspace `cargo test --workspace
+--locked --doc` green, 0 failed.
+
+## HTML-30 — venus/Boat-outage tooling fixes; MutationObserver, a11y-filed
+parser bug and forms-cluster items all investigated and found out of scope
+
+Brief's three items, based on `ff56cfc9`, during the fleet's Boat daily-start
+quota outage (venus-001/venus-003 used in place of Boat throughout, via
+`scripts/linux-run.sh html --host venus-001`):
+
+- **`dom/nodes/MutationObserver-document.html` (3 fails): investigated, not
+  fixed, scoped as a future ticket.** Not a "tree builder bypasses the
+  record-queueing DOM entry point" bug -- `Dom::attach_before`/`attach_last`
+  (`amazing-dom/src/lib.rs`) already call `queue_tree_record` on every
+  parser insertion. The real cause is architectural: `amazing_html::parse()`
+  parses a document's entire source into a full DOM tree in one upfront call
+  before any of its scripts run (a separate loop, in `cmd/js.rs`/
+  `cmd/wpt_harness.rs`). This test's premise is a real streaming parser: a
+  script creates a `MutationObserver` on `document`, then the parser
+  *resumes* and inserts a later `<script>` (and its text child) that must
+  still be ahead of the parser at observer-creation time. Here, every node
+  -- including everything after the observing script -- already exists in
+  the tree (mutation records queued and gone) long before that script runs.
+  Fixing this needs genuine incremental/streaming HTML parsing (pausing at
+  each classic `<script>`, running it synchronously, resuming on the rest of
+  the source) threaded through every script-running call site, not a
+  cluster-style bulk fix. Full repro and reasoning in `.agents/html/
+  questions.md` (2026-09-27 entry); routing there rather than attempting a
+  rearchitecture inside this ticket.
+- **The a11y-filed parser bug (A11Y-10, "element dropped after unclosed
+  `<p>...<p>`"): investigated, corrected, routed to a11y, not a
+  `amazing-html` bug.** Reproduced the exact WPT file
+  (`html-aam/roles-minimum.tentative.html`) through `amazing parse`: the DOM
+  tree is fully correct -- `el-div` (the first plain `<div>` right after the
+  auto-closed `<p>`) is body's child, a sibling of both `<p>` elements, with
+  its text intact; every later attributed `<div>` is also correctly placed.
+  `amazing a11y-tree` on the same file shows the accessibility tree skips
+  only `el-div` itself while every attributed sibling div appears --
+  consistent with a "generic element with no distinguishing content"
+  flattening rule in `amazing-a11y`'s role computation
+  (`crates/amazing-a11y/src/tree.rs`) applying where this test expects it
+  not to. Not fixed here (out of this lane's ownership); corrected and
+  routed to a11y in `.agents/html/questions.md`.
+- **Next-largest cluster in `html/semantics/forms`: measured fresh, found
+  out of scope, routed by cluster rather than fixed.** Getting a fresh
+  measurement at all first required fixing two venus-compatibility gaps
+  exposed by the Boat outage, both fleet-wide-valuable and committed with
+  this ticket:
+  - `crates/amazing/src/cmd/wpt_harness.rs`: `supervise()`'s checkout-pin
+    check and `source()`'s per-resource byte-diff check both shell out to
+    `git`, which fails unconditionally on venus (`scripts/ensure-wpt.sh`'s
+    checkout there is a git-less GitHub tarball extraction, marked instead
+    with an empty `.pinned-<rev7>` sentinel file). Added
+    `checkout_is_marker_pinned(root)`, accepted as an alternative proof of
+    pinning in both checks -- no behavior change on a real git checkout
+    (Boat).
+  - `crates/amazing/src/cmd/measure-wpt-dom.py` had the same gap at all 6 of
+    its `git(...)` call sites (`inventory()`'s `ls-tree` file enumeration,
+    two `git show` byte checks, `rev-parse HEAD`, and the harness-content
+    `git show`). Added a Python port of the same marker check; when
+    marker-pinned, `list_tree()` walks the suite's on-disk tree instead of
+    `git ls-tree` (the tarball's on-disk state at that path already *is*
+    the pinned tree) and every `git show` byte-diff check is skipped
+    outright (no git object database exists there to diff against, and the
+    tarball content already is the pinned content).
+  - With both fixed, ran the 468-file `html/semantics/forms` selection
+    fresh at this ticket's head (superseding stale HTML-26-era data, which
+    spot-checking showed no longer matched current behavior): file status
+    pass=135/fail=222/timeout=38/error=19/unsupported=54; subtests
+    pass=3,213/fail=535. Raw output: `.agents/html/
+    html30-forms-after.jsonl`.
+  - Clustered the 535 subtest failures by normalized message. Every cluster
+    large enough to matter turned out to be outside `amazing-html`'s own
+    ownership: the three largest (177 subtests / ~53 files) are all
+    `test_driver.send_keys()`/`.click()`/`.Actions()` calls hitting WPT's
+    upstream `testdriver.js` fallback ("... is not implemented by
+    testdriver-vendor.js") -- nothing in `amazing` implements
+    `window.test_driver_internal` at all, a real but sizeable
+    WebDriver-style input-simulation gap with no current lane owner, not a
+    per-corpus bulk fix; `input.files` returning `undefined` instead of
+    `null` (21 subtests, 1 file) and label click-delegation edge cases (17
+    subtests, 1 file) are dom-bindings' `amazing-bindings`/`amazing-dom`;
+    `getComputedStyle is not defined` (17 subtests / ~10 files, all
+    `customizable-select`/textarea) is css/layout/dom-bindings territory;
+    `requestSubmit()`'s reentrancy guard and related bugs are dom-bindings'
+    `amazing-bindings/src/interfaces.rs`; the remaining "SyntaxError" bucket
+    (14/9) is a grab-bag, mostly `<input pattern>` RegExp Unicode-property-
+    escape / `v`-flag syntax (js-lang/regex ownership). No
+    `amazing-html`/`amazing-encoding`-owned cluster was found. Full
+    per-cluster breakdown and routing in `.agents/html/questions.md`
+    (2026-09-27 entries).
+- **Cross-lane merge-integration fix** (one line, needed to build, outside
+  this lane's normal ownership): `runtime_host_devtools.rs::
+  collect_module_scripts` constructed `PageScript` directly and hadn't
+  picked up HTML-29's new `node: NodeIdx` field, so `dev` at `ff56cfc9`
+  failed to build `amazing` at all (`E0063`). Fixed by passing the
+  function's own `node` parameter (already in scope).
+
+All three brief items were investigated in full rather than force-fitted
+into this crate's ownership; the two committable, fleet-wide-valuable
+deliverables are the venus-compatibility fixes (unblocking `wpt-harness` and
+`measure-wpt-dom.py`-based sweeps on venus during any future Boat outage)
+and a fresh, accurate `html/semantics/forms` baseline replacing stale
+HTML-26-era numbers.
+
+Linux gate on this head (`ff56cfc9` + this ticket's diff): `amazing` crate
+nextest **312/312 passed, 6 skipped**; full workspace `cargo nextest run
+--workspace --locked --no-fail-fast` **3,277/3,277 passed, 15 skipped**, run
+twice with a stable count both times; workspace `cargo test --workspace
+--locked --doc` green, 0 failed across every doctested crate
+(`amazing-html`, `amazing-js`, and others).

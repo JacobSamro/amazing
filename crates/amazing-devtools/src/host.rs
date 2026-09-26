@@ -760,17 +760,33 @@ pub struct ScriptInfo {
     pub hash: String,
 }
 
+/// One CDP `Debugger.Scope` (`Debugger.CallFrame.scopeChain`'s elements).
+/// `object` is a real, live `RemoteObject` — `Runtime.getProperties`/
+/// `callFunctionOn` resolve its `objectId` back to the actual engine value
+/// the same way any other object reference in this crate does, not a
+/// snapshot or a fake.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Scope {
+    /// `"global"`, `"local"`, `"closure"`, `"block"`, `"catch"`, `"with"`,
+    /// `"eval"`, `"module"`, `"script"`.
+    pub scope_type: String,
+    pub object: RemoteObject,
+}
+
 /// One CDP `Debugger.CallFrame`, simplified to the fields a front end needs
 /// to show a stack and evaluate in a frame's scope. Chrome's full schema also
-/// carries a scope chain and a `this` value; the driver can add those later
-/// without breaking this seam (`evaluateOnCallFrame` already returns a full
-/// `EvaluateResult`).
+/// carries a `this` value and generator/async detail; the driver can add
+/// those later without breaking this seam (`evaluateOnCallFrame` already
+/// returns a full `EvaluateResult`). `scope_chain` was added in CDP-22 (see
+/// the driver's own doc comment for what it actually contains, given this
+/// engine's single-threaded, non-suspending debug model).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CallFrame {
     pub call_frame_id: String,
     pub function_name: String,
     pub location: ScriptLocation,
     pub url: String,
+    pub scope_chain: Vec<Scope>,
 }
 
 /// `Debugger.paused` data.

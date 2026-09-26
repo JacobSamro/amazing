@@ -7,10 +7,20 @@ baseline. Source data is each category's clusters.json
 by scripts/wpt_render_summary.py.
 
 Usage: wpt_render_questions.py <evidence-dir> <main-checkout-dir> [--date YYYY-MM-DD]
+  [--ticket LABEL] [--only-lane LANE] [--slug-prefix PREFIX]
   <evidence-dir> is crates/amazing-shell-gpui/evidence/wpt-render (one
-  <slug>/{report,clusters}.json per category).
+  <slug>/{report,clusters}.json, or {compact,clusters}.json for a
+  --compact-baselined category, per category).
   <main-checkout-dir> is the repo checkout that holds .agents/ (gitignored,
   not the lane worktree) -- e.g. /Users/jMac/Projects/OpenSource/amazing.
+  --ticket names the run in the appended line (default "SHELL-L4, Linux
+  render baseline"); --only-lane appends for exactly one owning lane instead
+  of recomputing and re-appending for all five, so a later, smaller run (a
+  new corpus subtree, not every category) does not add noise to lanes it
+  did not touch. --slug-prefix restricts which evidence subdirectories count
+  at all (e.g. "svg-"), so a small addition's clusters are not drowned out by
+  the top-3-by-count selection across a lane's whole, much larger, existing
+  category set.
 """
 from __future__ import annotations
 
@@ -33,15 +43,30 @@ def main() -> int:
     date = time.strftime("%Y-%m-%d", time.gmtime())
     if "--date" in sys.argv:
         date = sys.argv[sys.argv.index("--date") + 1]
+    ticket = "SHELL-L4, Linux render baseline"
+    if "--ticket" in sys.argv:
+        ticket = sys.argv[sys.argv.index("--ticket") + 1]
+    only_lane = None
+    if "--only-lane" in sys.argv:
+        only_lane = sys.argv[sys.argv.index("--only-lane") + 1]
+    slug_prefix = None
+    if "--slug-prefix" in sys.argv:
+        slug_prefix = sys.argv[sys.argv.index("--slug-prefix") + 1]
 
     per_lane: dict[str, list[dict]] = {lane: [] for lane in LANES}
     for slug_dir in sorted(evidence_dir.iterdir()):
+        if slug_prefix and not slug_dir.name.startswith(slug_prefix):
+            continue
         clusters_path = slug_dir / "clusters.json"
         report_path = slug_dir / "report.json"
+        if not report_path.is_file():
+            report_path = slug_dir / "compact.json"
         if not (clusters_path.is_file() and report_path.is_file()):
             continue
         lane = owning_lane(slug_dir.name)
         if lane not in per_lane:
+            continue
+        if only_lane and lane != only_lane:
             continue
         report = json.loads(report_path.read_text())
         clustered = json.loads(clusters_path.read_text())
@@ -65,7 +90,7 @@ def main() -> int:
             example = entry["examples"][0] if entry["examples"] else "?"
             parts.append(f"({rank}) {entry['subdir']}: {entry['signature']} -- {entry['count']} cases, e.g. {example}")
         line = (
-            f"- {date} shell (SHELL-L4, Linux render baseline, no win-001 sweep involved): "
+            f"- {date} shell ({ticket}, no win-001 sweep involved): "
             f"top mismatch clusters for your owned categories: {'; '.join(parts)}. "
             f"Full per-test reports and diff/actual/reference sha256: "
             f"crates/amazing-shell-gpui/evidence/wpt-render/<category>/{{report,clusters}}.json "

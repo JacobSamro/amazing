@@ -107,3 +107,34 @@ fn two_keyword_display_computes_to_existing_short_forms() {
         assert_eq!(result.typed("display"), Some(&ComputedValue::Display(variant)), "{specified}");
     }
 }
+
+// CSS-28: `place-content`/`place-items`/`place-self` reach their
+// `align-*`/`justify-*` longhands through the full cascade, not just
+// `expand_declaration`'s unit tests -- this is what layout-flexgrid's grid
+// abspos static-position code reads.
+#[test]
+fn place_shorthands_reach_computed_style_through_the_full_cascade() {
+    let result = style("place-items", "center");
+    assert_eq!(result.get("align-items"), Some("center"));
+    assert_eq!(result.get("justify-items"), Some("center"));
+
+    let result = style("place-self", "start end");
+    assert_eq!(result.get("align-self"), Some("start"));
+    assert_eq!(result.get("justify-self"), Some("end"));
+
+    let result = style("place-content", "safe center");
+    assert_eq!(result.get("align-content"), Some("safe center"));
+    assert_eq!(result.get("justify-content"), Some("safe center"));
+
+    // A longhand declared after the shorthand in source order wins for
+    // that longhand only -- ordinary shorthand/longhand cascade order, not
+    // special-cased for `place-*`.
+    let mut dom = Dom::new();
+    let element = dom.create_element(NodeIdx(0), "div");
+    let sheet = parse_stylesheet(
+        "div { place-items: center; justify-items: end; }",
+    );
+    let result = compute(&dom, &[sheet]).get(element).unwrap().clone();
+    assert_eq!(result.get("align-items"), Some("center"));
+    assert_eq!(result.get("justify-items"), Some("end"));
+}

@@ -1438,7 +1438,18 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
         options.word_option = Some(match word_break {
             amazing_text::WordBreak::Normal => LineBreakWordOption::Normal,
             amazing_text::WordBreak::BreakAll => LineBreakWordOption::BreakAll,
-            amazing_text::WordBreak::KeepAll => LineBreakWordOption::KeepAll,
+            // `manual` behaves like `keep-all` everywhere ICU's own word
+            // option applies (CJK ideograph adjacency); the two diverge for
+            // complex-context/dictionary-segmented scripts (Thai, Lao,
+            // Khmer, ...), where `KeepAll` does not suppress ICU's
+            // dictionary-assisted word-internal breaks (verified: it still
+            // produced them for Thai). `manual`'s extra reach for those
+            // scripts is filtered separately below, since the ICU line
+            // segmenter has no option to disable dictionary segmentation
+            // itself.
+            amazing_text::WordBreak::KeepAll | amazing_text::WordBreak::Manual => {
+                LineBreakWordOption::KeepAll
+            }
         });
         opportunities.extend(
             LineSegmenter::new_auto(options)
@@ -1450,6 +1461,19 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
                         || style_at_break(text, spans, *offset).is_some_and(|style| {
                             style.line_break == line_break && style.word_break == word_break
                         })
+                })
+                .filter(|offset| {
+                    // CSS Text 4 `word-break: manual`: "words are not broken
+                    // by the UA for line-wrapping purposes" beyond breaks
+                    // defined by an explicit separator (whitespace, soft
+                    // hyphen -- handled by `break_kind` below) or a
+                    // mandatory break. Drop every other opportunity ICU's
+                    // dictionary segmentation contributed for complex-
+                    // context scripts.
+                    word_break != amazing_text::WordBreak::Manual
+                        || *offset == text.len()
+                        || mandatory_break_before(text, *offset)
+                        || is_whitespace_adjacent(text, *offset)
                 })
                 .filter_map(|offset| {
                     break_kind(text, spans, offset).map(|kind| BreakOpportunity { offset, kind })
@@ -1559,6 +1583,17 @@ fn mandatory_break_before(text: &str, offset: usize) -> bool {
             '\n' | '\r' | '\u{000b}' | '\u{000c}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
         )
     })
+}
+
+/// True when the character immediately before or after `offset` is
+/// whitespace. Used by `word-break: manual` to keep only the break
+/// opportunities an explicit separator justifies.
+fn is_whitespace_adjacent(text: &str, offset: usize) -> bool {
+    text[..offset]
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
+        || text[offset..].chars().next().is_some_and(char::is_whitespace)
 }
 
 fn visual_clusters(
@@ -4419,6 +4454,65 @@ mod tests {
                     kind: BreakKind::Mandatory,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn word_break_manual_suppresses_dictionary_segmented_breaks_like_keep_all() {
+        // "กรุงเทพคือสวยงาม" (Bangkok is beautiful) has no spaces; ICU's
+        // default (Normal) word segmentation still finds dictionary-based
+        // word-internal break opportunities for Thai. CSS Text 4's
+        // `word-break: manual` generalizes `keep-all` to exactly this case
+        // and must suppress every one of them, leaving only the mandatory
+        // break at the end of the text.
+        let provider = TextProvider::new();
+        let text = "กรุงเทพคือสวยงาม";
+
+        let normal_spans = [TextSpan {
+            range: 0..text.len(),
+            source: 1,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let normal = provider
+            .shape(Paragraph {
+                text,
+                spans: &normal_spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert!(
+            normal.breaks.len() > 1,
+            "expected dictionary-segmented breaks under word-break: normal, got {:?}",
+            normal.breaks
+        );
+
+        let manual_spans = [TextSpan {
+            range: 0..text.len(),
+            source: 1,
+            style: TextStyle {
+                word_break: WordBreak::Manual,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let manual = provider
+            .shape(Paragraph {
+                text,
+                spans: &manual_spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert_eq!(
+            manual.breaks,
+            vec![BreakOpportunity {
+                offset: text.len(),
+                kind: BreakKind::Mandatory,
+            }]
         );
     }
 

@@ -1217,3 +1217,85 @@ deadline_shape` + the other 4 new tests, 5/5 clean reruns after the fix.
 Workspace nextest: 3053 passed/13 skipped/0 failed (64.1s) -- up from
 3052 passed/1 failed before the fix (zero losses, one flake resolved).
 Workspace doctests: all passed (0 failures).
+
+## IA-REAL-2 (2026-09-27)
+
+Re-ran the 52-page real-pages corpus on `dev 855b2ca9` (a lot landed since
+IA-REAL-PAGES/IA-LIVE-3: Proxy, document.write, Observable in flight, IDB,
+websockets, css-grid) and compared against the IA-LIVE-3 baseline.
+
+**Before (dev 855b2ca9, first run):** 52 pages, **52 errors, 0 fallback
+pages** -- every single page failed at scheduler init with `TypeError:
+IndexedDB open: Corrupt`, before any page script even ran. This was new: none
+of IA-REAL-PAGES/IA-LIVE-2/IA-LIVE-3's runs of this same corpus ever saw a
+storage error.
+
+Root-caused as two things stacking, both explained in full (with the exact
+throw site and a byte-level repro) in `.agents/storage/questions.md`:
+1. `install_storage_interfaces()` (storage's own adapter,
+   `crates/amazing/src/runtime_host_storage.rs`) now eagerly allocates
+   `indexedDB`/`caches`/`navigator.storage`/`locks`/`storageBuckets` --
+   `storage_ensure()` runs for every HTML page at scheduler init, regardless
+   of whether the page's script ever touches storage.
+2. `storage_ensure()`'s isolation heuristic only isolates *in-process* tests
+   (`cfg!(test)`/`NEXTEST=1`). `real_pages.rs`/`live_pages.rs` spawn the real
+   `amazing` binary as a child process per page (so a crash attributes to one
+   page), and that child is a plain release/debug bin -- neither condition
+   holds, so it falls through to the ambient, real
+   `$HOME/.local/share/amazing/storage` profile path. On the shared
+   `venus-001` host that path already held a stale directory named `idb`
+   (containing a file called `log`, 4+ days old -- a leftover from an
+   earlier/incompatible on-disk format), and the current `DiskStore::open`
+   reads that as `Corrupt` rather than starting fresh.
+
+**Fixed here (driver-owned, my own test harness, not storage's adapter):**
+`crates/amazing/tests/real_pages.rs` and `tests/live_pages.rs` now set
+`AMAZING_STORAGE_DIR` on each spawned page's `Command` to that run's own
+disposable temp directory, mirroring the isolation `cfg!(test)` already gives
+in-process unit tests. Did not touch `runtime_host_storage.rs` (storage's own
+adapter file) or `amazing-storage` -- filed the design gap (eager
+install-time allocation turning any stale/foreign profile directory into a
+hard failure for every page, rather than degrading gracefully) to storage's
+`questions.md` with the exact repro instead.
+
+**After the fix (same dev 855b2ca9, same corpus):** 52 pages, **3 errors, 2
+fallback pages** -- identical to the IA-LIVE-3 baseline
+(`app-chat.html`: `TypeError: Invalid document URL`;
+`app-kanban.html`/`app-mail.html`: `TypeError: value is not callable`). No
+new driver-owned regressions from Proxy/document.write/Observable/IDB/
+websockets/css-grid landing. The `121x UnsupportedSvg` CSS/parse-warning
+cluster from IA-LIVE-3's run is now gone entirely (0 warnings) -- an
+improvement, not investigated further since it's not a regression.
+
+**Routed the 3 remaining errors** (previously undiagnosed beyond "unrelated
+to IA-LIVE-3's APIs") with root causes and exact repros, since this ticket
+asked for engine problems with repros:
+- `app-chat.html` (`new WebSocket('ws://127.0.0.1:9/')`): net had already
+  confirmed (2026-09-26T19:40:00Z) the constructor should "exist and not
+  throw synchronously," but on `855b2ca9` it *does* throw
+  `TypeError: Invalid document URL`. Traced to `fetch_base()`
+  (`crates/amazing/src/runtime_host_net.rs:1176`), which requires
+  `document_url` to parse as an `HttpUrl` with no fallback for a document
+  loaded from a bare local file path (exactly what this corpus, and any real
+  `file://` browsing, sets via `set_location_url`) -- even though the sibling
+  helper `fetch_local_file()` two functions below it already has that
+  fallback. Filed to net's `questions.md` with the exact line and repro.
+- `app-kanban.html` (`document.body.animate(...)`) and `app-mail.html`
+  (`navigator.clipboard.writeText(...)`): both are dom-bindings' own
+  already-filed, still-open gaps (`Element.prototype.animate`,
+  `navigator.clipboard`) from the original IA-REAL-PAGES triage thread in
+  their `questions.md` -- confirmed still current, not re-filed.
+
+**Infra found while gating:** the `linux-run.sh` lane->host table sends
+`integrator-assist` to `k-test`, whose container is missing a capability
+needed by `amazing-ipc-platform`/`amazing-process`'s sealed-shared-memory and
+crash-reaping tests -- 11 failures, all
+`Io(Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })`.
+Confirmed non-code by forcing `--host venus-001` on the identical commit:
+clean. Filed to my own `questions.md` for the orchestrator (k-test is also
+the assigned host for dom-bindings/html/net/storage/a11y/devtools).
+
+Gate (Linux, `--host venus-001`, dev `855b2ca9` plus this series): workspace
+nextest 3279 passed/0 failed/15 skipped (79.8s); workspace doctests all
+passed (0 failures). Real-pages corpus: 52 pages/3 errors/2 fallback pages
+(measured twice, stable).

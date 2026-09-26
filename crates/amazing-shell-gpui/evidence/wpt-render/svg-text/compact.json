@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "svg/text",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-cecced7cc643a3f2",
+  "generated": "2026-09-26T18:58:55Z",
+  "counts": {
+    "pass": 20,
+    "mismatch": 2,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": {
+    "svg__text__reftests__tspan-opacity-mixed-direction.svg": "pass",
+    "svg__text__reftests__no-background.svg": "pass",
+    "svg__text__reftests__text-bidi-controls-anchors-1.svg": "pass",
+    "svg__text__reftests__xml-lang-attribute.svg": "mismatch",
+    "svg__text__reftests__text-path-transformed.html": "pass",
+    "svg__text__reftests__lang-attribute.svg": "mismatch",
+    "svg__text__reftests__textpath-path-attr-precedence-over-href.svg": "pass",
+    "svg__text__reftests__textpath-path-attr.svg": "pass",
+    "svg__text__reftests__text-transform-002.html": "pass",
+    "svg__text__reftests__multiple-textpaths.svg": "pass",
+    "svg__text__reftests__textpath-path-attr-use-up-to-first-error.svg": "pass",
+    "svg__text__reftests__text-path-transformed-002.html": "pass",
+    "svg__text__reftests__textpath-pathlength-css-display-none.tentative.svg": "pass",
+    "svg__text__reftests__text-xml-space-001.svg": "pass",
+    "svg__text__reftests__textpath-combining-marks.html": "pass",
+    "svg__text__reftests__text-transform-001.html": "pass",
+    "svg__text__reftests__textpath-letter-spacing-01.svg": "pass",
+    "svg__text__reftests__rtl-text-path.html": "pass",
+    "svg__text__reftests__no-margin-border-padding.svg": "pass",
+    "svg__text__reftests__text-bidi-controls-anchors-2.svg": "pass",
+    "svg__text__reftests__textpath-path-attr-empty-fallback.svg": "pass",
+    "svg__text__reftests__textpath-path-attr-invalid-path-fallback.svg": "pass"
+  }
+}

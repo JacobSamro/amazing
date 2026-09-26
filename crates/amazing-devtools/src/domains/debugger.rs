@@ -1,16 +1,16 @@
 //! The `Debugger` domain: breakpoints, stepping, call frames and sources.
 //!
 //! Chrome's `CallFrame`/`Location`/`Scope` schema carries a lot of optional
-//! detail (a scope chain, `this`, generator state, async stack traces, …);
-//! this crate keeps the seam to what a front end needs to show a stack and
-//! evaluate in a frame ([`crate::host::CallFrame`],
-//! [`crate::host::ScriptLocation`]), matching every other domain here. The
-//! engine that implements [`crate::host::DevToolsSession`] for this seam is
-//! the JS engine itself (see `.agents/js-runtime/questions.md`).
+//! detail (`this`, generator state, async stack traces, …); this crate keeps
+//! the seam to what a front end needs to show a stack and evaluate in a
+//! frame ([`crate::host::CallFrame`], [`crate::host::ScriptLocation`],
+//! [`crate::host::Scope`] — added in CDP-22), matching every other domain
+//! here. The engine that implements [`crate::host::DevToolsSession`] for this
+//! seam is the JS engine itself (see `.agents/js-runtime/questions.md`).
 
-use super::{empty_array, object};
+use super::{object, remote_object};
 use crate::domains::runtime::evaluate_result;
-use crate::host::{CallFrame, PausedEvent, ScriptInfo, ScriptLocation};
+use crate::host::{CallFrame, PausedEvent, Scope, ScriptInfo, ScriptLocation};
 use crate::json::Json;
 use crate::protocol::{event, CdpError, CdpRequest};
 use crate::session::{DispatchOutcome, SessionState};
@@ -113,6 +113,14 @@ fn location_json(location: &ScriptLocation) -> Json {
     object(fields)
 }
 
+/// Serializes a `Debugger.Scope`.
+fn scope_json(scope: &Scope) -> Json {
+    object(vec![
+        ("type", Json::String(scope.scope_type.clone())),
+        ("object", remote_object(&scope.object)),
+    ])
+}
+
 /// Serializes a `Debugger.CallFrame`.
 fn call_frame_json(frame: &CallFrame) -> Json {
     object(vec![
@@ -120,7 +128,10 @@ fn call_frame_json(frame: &CallFrame) -> Json {
         ("functionName", Json::String(frame.function_name.clone())),
         ("location", location_json(&frame.location)),
         ("url", Json::String(frame.url.clone())),
-        ("scopeChain", empty_array()),
+        (
+            "scopeChain",
+            Json::Array(frame.scope_chain.iter().map(scope_json).collect()),
+        ),
     ])
 }
 

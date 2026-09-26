@@ -37,6 +37,20 @@ fn differential(source: &str, names: &[&str]) {
 }
 
 #[test]
+fn inline_cache_tracks_shape_and_descriptor_changes() {
+    for source in [
+        "var o={x:1}; var n=o.x; o.x=2; n+o.x",
+        "var o={x:1}; o.x; Object.defineProperty(o,'x',{value:7,writable:false}); o.x",
+        "var o={x:1}; o.x; Reflect.deleteProperty(o,'x'); o.x=8; o.x",
+        "var o={x:1}; o.x; Object.defineProperty(o,'x',{get:function(){return 9}}); o.x",
+        "var o={x:1}; o.x; o.x='abc'; o.x",
+        "var o={id:7}; o.id; o['[[DomNode]]']=1; o.id",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
 fn primitive_and_operator_differential_corpus() {
     for source in [
         "",
@@ -201,9 +215,9 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A extends Object {}",
         "changed = 1; class A { x=7; }",
         "changed = 1; class A { static method() {} }",
+        "changed = 1; class A { static { 1; } }",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
@@ -260,7 +274,7 @@ fn bytecode_functions_and_closures() {
 
 #[test]
 fn compiled_program_can_outlive_ast_and_be_reused() {
-    let code = compile(&parse_script("counter = counter + 1; counter;").unwrap()).unwrap();
+    let code = compile(&parse_script("counter = counter + 1; counter;").unwrap(), false).unwrap();
     assert!(code.instruction_count() > 1);
     let mut interpreter = Interpreter::new();
     interpreter.run_script("var counter = 40;").unwrap();
@@ -275,6 +289,7 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
             "var counter = 0; while (counter < 3) { let local = counter; counter++; } counter;",
         )
         .unwrap(),
+        false,
     )
     .unwrap();
     let mut interpreter = Interpreter::new();
@@ -343,6 +358,7 @@ fn heap_frame_resumes_through_catch_and_finally() {
             "var x = 0; try { x = 1; throw 7; } catch (e) { x += e; } finally { x++; } x",
         )
         .unwrap(),
+        false,
     )
     .unwrap();
     let mut interpreter = Interpreter::new();
@@ -558,7 +574,7 @@ fn fuel_stops_backedges_and_vm_state_is_clean_after_error() {
     let mut interpreter = Interpreter::new();
     interpreter.completion = JsValue::str("saved");
     let code =
-        compile(&parse_script("let x = 0; while (true) { let local = 3; x++; }").unwrap()).unwrap();
+        compile(&parse_script("let x = 0; while (true) { let local = 3; x++; }").unwrap(), false).unwrap();
     let error = code.run(&mut interpreter, 100).unwrap_err();
     assert!(error.describe().contains("instruction limit"));
     assert_eq!(interpreter.completion, JsValue::str("saved"));
@@ -572,7 +588,7 @@ fn fuel_stops_backedges_and_vm_state_is_clean_after_error() {
 
 #[test]
 fn zero_budget_does_not_mutate_bindings() {
-    let code = compile(&parse_script("var x = 1;").unwrap()).unwrap();
+    let code = compile(&parse_script("var x = 1;").unwrap(), false).unwrap();
     let mut interpreter = Interpreter::new();
     assert!(code.run(&mut interpreter, 0).is_err());
     assert!(interpreter.global_env.resolve("x").is_none());
@@ -607,7 +623,7 @@ fn compiler_limits_deep_manually_constructed_ast() {
     }
     ast.body
         .push(Stmt::new(StmtKind::Expression(expression), ast.span));
-    assert!(compile(&ast).unwrap_err().message.contains("limit"));
+    assert!(compile(&ast, false).unwrap_err().message.contains("limit"));
 }
 
 #[test]
@@ -688,6 +704,96 @@ fn shared_members_arrays_and_objects_match_tree_walker() {
 }
 
 #[test]
+fn ordinary_constructor_and_member_access_gaps_match_tree_walker() {
+    // These are not derived-class features, but the VM only became eligible
+    // to run these programs once classes with `extends` stopped forcing a
+    // fallback: they surfaced as VM-vs-interpreter regressions in the JSVM-6
+    // Test262 gate and were fixed alongside it.
+    for source in [
+        // An ordinary VM-compiled function's `prototype.constructor` must
+        // link back to it (MakeConstructor), or `new F()` instances resolve
+        // `.constructor` through Object.prototype instead of F.
+        "function F() {} (new F()).constructor === F",
+        // A class constructor throws TypeError when called without `new`.
+        "class C {} (function () { try { C(); return 'no throw'; } \
+         catch (e) { return e instanceof TypeError; } })()",
+        // Arrow functions lexically inherit `new.target` from the enclosing
+        // (possibly derived) constructor, set at the arrow's *creation* time.
+        "function F() { var capture = () => new.target; return capture(); } \
+         new F() === F",
+        // Arrow `super()`/`super.prop` inside a derived constructor must
+        // resolve through the same lexical inheritance.
+        "class A { constructor(x) { this.x = x; } } \
+         class B extends A { constructor(x) { (() => super(x))(); this.y = x + 1; } } \
+         var b = new B(1); b.x + b.y",
+        // `__proto__: null` in an object literal sets [[Prototype]] instead
+        // of creating an own property; `__proto__: <object>` sets it too.
+        "var o = { __proto__: null }; [Object.getPrototypeOf(o) === null, \
+         Object.getOwnPropertyDescriptor(o, '__proto__') === undefined].join(',')",
+        "var proto = { tag: 1 }; var o = { __proto__: proto }; Object.getPrototypeOf(o) === proto",
+        // Sloppy-mode duplicate simple parameter names: the last one wins,
+        // and no `arguments` object is created when a param is named that.
+        "function f(a, a) { return a; } f(1, 2)",
+        "function f(arguments) { return arguments; } f(9)",
+        // Member-access evaluation order on a computed key: the key
+        // expression's own side effect (a call) still runs even though the
+        // base is nullish, but converting the *result* to a property key
+        // must not run before the nullish check on the base.
+        "(function () { \
+           var base = null; var prop = { toString() { throw new TypeError('should not run'); } }; \
+           try { base[prop] = 1; return 'no throw'; } catch (e) { return e instanceof TypeError && e.message !== 'should not run'; } \
+         })()",
+        "(function () { \
+           var seen = false; var base = null; var prop = function () { seen = true; throw new RangeError('key'); }; \
+           try { base[prop()] = 1; return 'no throw'; } catch (e) { return seen && e instanceof RangeError; } \
+         })()",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
+fn derived_classes_match_tree_walker() {
+    for source in [
+        // Explicit super() call, own field assignment after it.
+        "class A { constructor(x) { this.x = x; } } \
+         class B extends A { constructor(x) { super(x); this.y = x + 1; } } \
+         var b = new B(1); b.x + b.y",
+        // Implicit constructor forwards its arguments to super().
+        "class A { constructor(x, y) { this.x = x; this.y = y; } } \
+         class B extends A {} \
+         var b = new B(2, 3); b.x + b.y",
+        // super.method() call: property lookup on the prototype chain, `this` receiver.
+        "class A { greet() { return 'A' + this.tag; } } \
+         class B extends A { constructor() { super(); this.tag = '!'; } greet() { return super.greet() + 'B'; } } \
+         (new B()).greet()",
+        // super.prop plain read (not a call).
+        "class A { get value() { return 1; } } \
+         class B extends A { constructor() { super(); } read() { return super.value; } } \
+         (new B()).read()",
+        // instanceof through the prototype chain, and constructor-chain
+        // (static) inheritance from ClassDefinitionEvaluation.
+        "class A {} class A2 extends A {} class B extends A2 {} var b = new B(); \
+         [b instanceof A, b instanceof A2, Object.getPrototypeOf(B) === A2].join(',')",
+        // new.target through an implicit super() call.
+        "class A { constructor() { this.nt = new.target === B; } } \
+         class B extends A {} (new B()).nt",
+        // super() spread arguments.
+        "class A { constructor(x, y) { this.sum = x + y; } } \
+         class B extends A { constructor(xs) { super(...xs); } } \
+         (new B([2, 5])).sum",
+        // Explicit object return from a derived constructor wins over `this`.
+        "class A {} class B extends A { constructor() { super(); return { tag: 'override' }; } } \
+         (new B()).tag",
+        // this used before super() throws a ReferenceError, matching the tree walker.
+        "class A {} class B extends A { constructor() { this.x = 1; super(); } } \
+         (function () { try { new B(); return 'no throw'; } catch (e) { return e instanceof ReferenceError; } })()",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
 fn long_finite_loop_finishes_with_default_fuel() {
     let source = "var count = 0; for (var index = 0; index < 65536; index++) { count++; } count";
     differential(source, &[]);
@@ -697,7 +803,7 @@ fn long_finite_loop_finishes_with_default_fuel() {
 fn deep_binary_expression_rejects_before_execution() {
     let source = format!("changed = 1; {}", vec!["'verse'"; 100].join(" + "));
     let program = parse_script(&source).unwrap();
-    assert!(compile(&program).is_err());
+    assert!(compile(&program, false).is_err());
     let mut interpreter = Interpreter::new();
     assert!(interpreter
         .run_program_with_backend(&program, ExecutionBackend::Bytecode)
@@ -747,7 +853,7 @@ fn rank_test262_first_blockers() {
                                 "large source"
                             } else {
                                 match parse_script(&source) {
-                                    Ok(ast) => match compile(&ast) {
+                                    Ok(ast) => match compile(&ast, false) {
                                         Ok(_) => "compiled",
                                         Err(error) => error.message,
                                     },

@@ -117,11 +117,13 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         .and_then(|line| line.strip_prefix("GET "))
         .and_then(|line| line.split_once(' '))
         .map(|(path, _)| path.to_owned());
+    let mut served_name = String::new();
     let body = path.as_deref().and_then(|path| {
         let name = path.split(['?', '#']).next()?.strip_prefix('/')?;
         if name.contains('%') || name.contains('\\') || name.split('/').any(|part| part == "..") {
             return None;
         }
+        served_name = name.to_owned();
         if let Some((generated_name, bytes)) = generated
             && name == generated_name.trim_start_matches('/')
         {
@@ -137,9 +139,39 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         Some(bytes) if bytes.len() <= FIXTURE_LIMIT => ("200 OK", bytes),
         _ => ("404 Not Found", Vec::new()),
     };
+    // A real WPT server sends a `Content-Type` header derived from the
+    // resource's extension; this fixture previously sent none at all, so
+    // `content_type()` (`runtime_host_html.rs`) had nothing to sniff and its
+    // own extension fallback never runs for a fetch through this server
+    // (that fallback only triggers for a resolver-backed or `file:` fetch,
+    // neither of which this loopback HTTP fetch is). That silently failed
+    // every navigation to a non-HTML child document (XML/XHTML iframes:
+    // "iframe response has no supported media type"), which is what made
+    // `iframe.contentWindow.document`'s elements look broken (e.g.
+    // `localName` never actually ran on a real element) -- the child
+    // document simply never loaded. Mirrors the WPT server's own
+    // mime-type mapping closely enough for what this corpus actually needs.
+    let content_type = match Path::new(&served_name).extension().and_then(|ext| ext.to_str()) {
+        Some("html" | "htm") => "text/html",
+        Some("xhtml" | "xht") => "application/xhtml+xml",
+        Some("xml") => "application/xml",
+        Some("svg") => "image/svg+xml",
+        Some("js" | "mjs") => "text/javascript",
+        Some("json") => "application/json",
+        Some("css") => "text/css",
+        Some("txt") => "text/plain",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("wasm") => "application/wasm",
+        _ => "application/octet-stream",
+    };
     let _ = write!(
         stream,
-        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         bytes.len()
     );
     let _ = stream.write_all(&bytes);
@@ -400,7 +432,13 @@ fn local_file(root: &Path, base: &Path, source: &str) -> Result<PathBuf, String>
 }
 fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    if !scaffold {
+    // A marker-pinned (non-git, venus tarball) checkout already proved its
+    // provenance once in `supervise`; there is no git object database to
+    // `git show` a comparison from, and re-extracting the same tarball
+    // per resource would defeat the point of pinning it once. Skip the
+    // per-resource byte check there, same as `supervise`'s own checkout
+    // check.
+    if !scaffold && !checkout_is_marker_pinned(root) {
         // Verify every executed HTML/JS resource, not just checkout HEAD.
         let relative = path
             .strip_prefix(root)
@@ -692,7 +730,14 @@ fn execute_page(
         .canonicalize()
         .map_err(|e| e.to_string())?;
     let mut installed = false;
+    // HTML-29: opens the top-level document's `document.write` parser-
+    // active window for the duration of its own top-level script phase,
+    // narrowed to right after each script as it runs, and closed once its
+    // load event has fired below -- matching the window during which a
+    // real parser has an insertion point at all.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let (text, label, harness) = match script.src {
             Some(src) => {
                 let path = local_file(&root, file.parent().unwrap(), &src)?;
@@ -746,6 +791,7 @@ fn execute_page(
             .dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
+    scheduler.end_document_parsing(0);
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut frame = 0_u64;
@@ -851,17 +897,32 @@ fn execute_page(
     Ok(())
 }
 
+/// The venus build hosts have no git; `scripts/ensure-wpt.sh` extracts the
+/// pinned revision from a GitHub tarball there instead, and marks it with an
+/// empty `.pinned-<rev7>` file (its own convention -- see that script). A
+/// `git` command always fails against that checkout even though it is
+/// correctly pinned, so both pin checks below (the checkout-level one in
+/// `supervise` and the per-resource one in `source`) accept this marker as
+/// an alternative proof to a real git checkout at exactly `REVISION`.
+fn checkout_is_marker_pinned(root: &Path) -> bool {
+    root.join(format!(".pinned-{}", &REVISION[..7])).exists()
+}
+
 fn supervise(options: &Options, args: &[String], report: &mut Report) -> Result<(), String> {
     if !options.scaffold {
-        let revision = Command::new("git")
-            .arg("-C")
-            .arg(&options.root)
-            .args(["rev-parse", "HEAD"])
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !revision.status.success()
-            || String::from_utf8_lossy(&revision.stdout).trim() != REVISION
-        {
+        let pinned = if checkout_is_marker_pinned(&options.root) {
+            true
+        } else {
+            let revision = Command::new("git")
+                .arg("-C")
+                .arg(&options.root)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .map_err(|e| e.to_string())?;
+            revision.status.success()
+                && String::from_utf8_lossy(&revision.stdout).trim() == REVISION
+        };
+        if !pinned {
             return Err(format!("WPT checkout must be pinned at {REVISION}"));
         }
         report.verified = true;
