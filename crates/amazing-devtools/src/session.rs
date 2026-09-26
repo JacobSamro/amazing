@@ -175,6 +175,9 @@ impl SessionState {
             }
         }
         if enabled.accessibility {
+            if let Some(root) = self.dev.drain_ax_load_complete() {
+                events.push(domains::accessibility::load_complete(&root));
+            }
             let updated = self.dev.drain_ax_nodes_updated();
             if !updated.is_empty() {
                 events.push(domains::accessibility::nodes_updated(&updated));

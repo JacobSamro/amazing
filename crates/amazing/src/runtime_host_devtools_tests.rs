@@ -2100,3 +2100,209 @@ fn end_to_end_network_enable_then_live_navigate_fires_the_fetch_path_events() {
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
 }
+
+/// CDP-25: `Accessibility.enable` queues a real `loadComplete` with the
+/// current tree's root, then `getFullAXTree`/`getPartialAXTree`/
+/// `getChildAXNodes`/`queryAXTree` all read the live tree through
+/// `AxTreeWatcher`, end to end over a real WebSocket client.
+#[test]
+fn end_to_end_accessibility_enable_full_partial_child_and_query_ax_tree() {
+    let host = spawn_test_host(
+        "http://example.test/a11y.html",
+        "<title>A11y</title><body><nav><a href=\"#\">Home</a></nav><h1>Welcome</h1><button>Go</button><p>Body text</p></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let mut events = Vec::new();
+    let (_, more) = client.result_and_events("Accessibility.enable", Json::Object(Vec::new()));
+    events.extend(more);
+    // The server's poll loop only flushes an event queued during command N's
+    // own dispatch after N's reply is written, so `loadComplete` (queued by
+    // `enable` itself) is only observed on this next command — the same
+    // nudge pattern every other event-based test in this file uses.
+    let (full, more) = client.result_and_events("Accessibility.getFullAXTree", Json::Object(Vec::new()));
+    events.extend(more);
+    let load_complete = events
+        .iter()
+        .find(|event| event.get("method").and_then(Json::as_str) == Some("Accessibility.loadComplete"))
+        .unwrap_or_else(|| panic!("no Accessibility.loadComplete after enable: {events:?}"));
+    let root = load_complete.get("params").and_then(|params| params.get("root")).expect("loadComplete.root");
+    assert!(
+        root.get("nodeId").and_then(Json::as_str).is_some_and(|id| !id.is_empty()),
+        "loadComplete root should carry a real AXNodeId: {root}"
+    );
+    let nodes = full.get("nodes").and_then(Json::as_array).expect("nodes array");
+    assert!(nodes.len() > 1, "expected more than just the root: {nodes:?}");
+    let role_of = |node: &Json| -> String {
+        node.get("role").and_then(|r| r.get("value")).and_then(Json::as_str).unwrap_or_default().to_owned()
+    };
+    let name_of = |node: &Json| -> String {
+        node.get("name").and_then(|r| r.get("value")).and_then(Json::as_str).unwrap_or_default().to_owned()
+    };
+    assert!(nodes.iter().any(|n| role_of(n) == "navigation"), "{nodes:?}");
+    let heading = nodes.iter().find(|n| role_of(n) == "heading").unwrap_or_else(|| panic!("no heading: {nodes:?}"));
+    assert_eq!(name_of(heading), "Welcome");
+    let button = nodes.iter().find(|n| role_of(n) == "button").unwrap_or_else(|| panic!("no button: {nodes:?}"));
+    assert_eq!(name_of(button), "Go");
+
+    // getPartialAXTree with fetchRelatives: true against the <button>'s real
+    // DOM nodeId (via DOM.getDocument/querySelector, the same nodeId
+    // registry every other domain's node params resolve through).
+    let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
+    let root_dom_id =
+        document.get("root").and_then(|root| root.get("nodeId")).and_then(Json::as_f64).expect("root nodeId") as u64;
+    let button_query = client.result(
+        "DOM.querySelector",
+        Json::Object(vec![
+            ("nodeId".into(), Json::Number(root_dom_id as f64)),
+            ("selector".into(), Json::String("button".into())),
+        ]),
+    );
+    let button_dom_id = button_query.get("nodeId").and_then(Json::as_f64).expect("button nodeId") as u64;
+
+    let partial = client.result(
+        "Accessibility.getPartialAXTree",
+        Json::Object(vec![
+            ("nodeId".into(), Json::Number(button_dom_id as f64)),
+            ("fetchRelatives".into(), Json::Bool(true)),
+        ]),
+    );
+    let partial_nodes = partial.get("nodes").and_then(Json::as_array).expect("nodes array");
+    assert!(
+        partial_nodes.iter().any(|n| role_of(n) == "button" && name_of(n) == "Go"),
+        "{partial_nodes:?}"
+    );
+    assert!(
+        partial_nodes.len() > 1,
+        "fetchRelatives: true should include at least one ancestor besides the node itself: {partial_nodes:?}"
+    );
+
+    // getChildAXNodes against the root's own AXNodeId: same child count as
+    // getFullAXTree's root childIds, each with its own childIds filled in.
+    let root_ax_id = nodes[0].get("nodeId").and_then(Json::as_str).expect("root ax id").to_owned();
+    let root_child_ids = nodes[0].get("childIds").and_then(Json::as_array).map(<[Json]>::len).unwrap_or(0);
+    let children = client.result(
+        "Accessibility.getChildAXNodes",
+        Json::Object(vec![("id".into(), Json::String(root_ax_id))]),
+    );
+    let child_nodes = children.get("nodes").and_then(Json::as_array).expect("nodes array");
+    assert_eq!(child_nodes.len(), root_child_ids, "{child_nodes:?}");
+
+    // queryAXTree: by role alone, and by accessible name alone.
+    let by_role = client.result(
+        "Accessibility.queryAXTree",
+        Json::Object(vec![("role".into(), Json::String("BUTTON".into()))]),
+    );
+    let by_role_nodes = by_role.get("nodes").and_then(Json::as_array).expect("nodes array");
+    assert_eq!(by_role_nodes.len(), 1, "role match should be case-insensitive: {by_role_nodes:?}");
+    assert_eq!(name_of(&by_role_nodes[0]), "Go");
+
+    // "Welcome" alone also matches the heading's own static-text child (same
+    // accessible name), so combine it with a role filter to pin down the
+    // heading exactly — proving the two filters are applied together (AND),
+    // not as independent alternatives.
+    let by_name_and_role = client.result(
+        "Accessibility.queryAXTree",
+        Json::Object(vec![
+            ("accessibleName".into(), Json::String("Welcome".into())),
+            ("role".into(), Json::String("heading".into())),
+        ]),
+    );
+    let by_name_and_role_nodes = by_name_and_role.get("nodes").and_then(Json::as_array).expect("nodes array");
+    assert_eq!(by_name_and_role_nodes.len(), 1, "{by_name_and_role_nodes:?}");
+    assert_eq!(role_of(&by_name_and_role_nodes[0]), "heading");
+    assert_eq!(name_of(&by_name_and_role_nodes[0]), "Welcome");
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-25: `Accessibility.nodesUpdated` reflects a real DOM mutation made
+/// between two tree reads (this driver has no continuous mutation-observer
+/// hook, so a checkpoint is only actually recorded when a client asks to
+/// look at the tree — see `PageOwner::refresh_ax_tree`'s doc comment), and
+/// never reports a `Removed` node (real CDP signals DOM removal through
+/// `DOM.*` instead).
+#[test]
+fn end_to_end_accessibility_nodes_updated_reflects_a_mutation_between_two_reads() {
+    let host = spawn_test_host(
+        "http://example.test/a11y-live.html",
+        "<title>Live</title><body><h1>old</h1><button>bye</button></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    let mut events = Vec::new();
+    let (_, more) = client.result_and_events("Accessibility.enable", Json::Object(Vec::new()));
+    events.extend(more);
+
+    // Baseline checkpoint: first read after enable, nothing to diff against.
+    let (_, more) = client.result_and_events("Accessibility.getFullAXTree", Json::Object(Vec::new()));
+    events.extend(more);
+    assert!(
+        !events.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Accessibility.nodesUpdated")),
+        "the first read after enable should not itself report an update: {events:?}"
+    );
+
+    // Mutate the heading's text and remove the button through the real JS
+    // realm, then read again — this is the checkpoint the mutation is
+    // observed on.
+    client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![(
+            "expression".into(),
+            Json::String(
+                "document.querySelector('h1').textContent = 'new'; document.querySelector('button').remove();"
+                    .into(),
+            ),
+        )]),
+    );
+    let (_, more) = client.result_and_events("Accessibility.getFullAXTree", Json::Object(Vec::new()));
+    events.extend(more);
+    // Nudge another poll cycle so the nodesUpdated queued by that read's own
+    // checkpoint is flushed before this test starts asserting (same timing
+    // quirk `loadComplete` has in the other new test).
+    let (_, more) =
+        client.result_and_events("Runtime.evaluate", Json::Object(vec![("expression".into(), Json::String("1 + 1".into()))]));
+    events.extend(more);
+
+    let updates = events
+        .iter()
+        .filter(|event| event.get("method").and_then(Json::as_str) == Some("Accessibility.nodesUpdated"))
+        .flat_map(|event| {
+            event
+                .get("params")
+                .and_then(|p| p.get("nodes"))
+                .and_then(Json::as_array)
+                .map(<[Json]>::to_vec)
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+    assert!(!updates.is_empty(), "expected at least one nodesUpdated node: {events:?}");
+    let heading_update = updates
+        .iter()
+        .find(|node| node.get("role").and_then(|r| r.get("value")).and_then(Json::as_str) == Some("heading"))
+        .unwrap_or_else(|| panic!("no updated heading node: {updates:?}"));
+    assert_eq!(
+        heading_update.get("name").and_then(|n| n.get("value")).and_then(Json::as_str),
+        Some("new"),
+        "{heading_update}"
+    );
+    assert!(
+        !updates.iter().any(|node| node.get("role").and_then(|r| r.get("value")).and_then(Json::as_str) == Some("button")),
+        "a removed node should not surface through nodesUpdated: {updates:?}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}

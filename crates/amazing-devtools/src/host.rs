@@ -1804,6 +1804,17 @@ pub trait DevToolsSession: Send {
     fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
         Vec::new()
     }
+    /// The accessibility tree's root, once, the first time it becomes ready
+    /// after `Accessibility.enable` (`Accessibility.loadComplete`; CDP-25).
+    /// Real Chrome fires this once per page load, mirroring the load-complete
+    /// event a browser sends assistive technology; this driver's honest
+    /// stand-in fires it once per `enable` against whatever tree is current
+    /// at that moment, since it has no separate "page finished loading"
+    /// signal of its own to key off instead. `None` when nothing is queued
+    /// (already drained, or `enable` was never called).
+    fn drain_ax_load_complete(&mut self) -> Option<AxNode> {
+        None
+    }
 }
 
 /// The browser as a whole. The driver implements this once.
