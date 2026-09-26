@@ -2191,3 +2191,71 @@ Queued/deferred from this ticket: PointerEvent (click still constructs
 navigation, popovers, file pickers), event-handler content attributes (JS
 compiler seam). Continuing with the WebSocket JS interface on net's
 already-landed transport seam (NET-8/NET-19; see questions.md 2026-09-26T19:40Z).
+
+## DOM-B legacy createEvent aliases: DeviceMotionEvent/DeviceOrientationEvent/DragEvent/StorageEvent/TextEvent
+
+WebSocket (NET-8/NET-19) was already landed by `net`, so this ticket picked
+the next-largest in-lane WPT `dom/` failure cluster instead, per the bulk
+corpus scan across `dom/ranges`, `dom/traversal`, `dom/nodes` and
+`dom/collections` (408 files). Two candidate clusters were routed away, not
+fixed here, because the actual bug sites are outside `amazing-dom`/
+`amazing-bindings` (see `questions.md`, 2026-09-26T18:05Z entries):
+
+- `ParentNode-querySelector-escapes.html` (40 fails) — CSS hex/punctuation
+  escape decoding lives in `amazing_css::selectors::parse_selector`, which
+  `RuntimeBindingHost::SelectorEngine::parse_selector` calls after only
+  splitting the selector list on quote/paren/bracket depth. Routed to `css`.
+- `Document-createEvent.https.html`'s `MessageEvent` alias mismatch (3 of its
+  24 original fails) — `message_event_bindings::create_legacy` and the real
+  `new MessageEvent()` constructor both route through the identical
+  `wrap_platform_object(..., InterfaceBrand::EVENT)` →
+  `interface_for`/`dom_event_interface` → `self.prototype(Interface::MessageEvent)`
+  lookup that every other legacy alias (including `CustomEvent`) resolves
+  correctly through, but `Object.getPrototypeOf(document.createEvent("MessageEvent"))`
+  is confirmed (via an `amazing domrun` probe) to NOT be reference-equal to
+  `window.MessageEvent.prototype`, unlike the constructor path. No
+  dom-bindings-owned divergence between the two call sites was found; routed
+  to js-runtime/js-vm as a likely `binding_wrap_host` host-object identity
+  issue in `amazing-js`.
+
+The fixable, in-lane part of the same cluster: `document.createEvent()`'s
+legacy alias table (`event_bindings.rs`) already *validated* the aliases
+`DeviceMotionEvent`, `DeviceOrientationEvent`, `DragEvent`, `StorageEvent` and
+`TextEvent` (real interfaces per the DOM Standard's create() legacy factory
+table that this engine doesn't otherwise implement) but then fell through to
+`_ => event.class()`, leaving the created event with the *generic* `Event`
+class — so `Object.getPrototypeOf(ev)` was `Event.prototype`, not the named
+interface's own prototype, and none of those five interfaces were even
+registered as `window.X` globals. Fixed by:
+
+- Five new `EventClass` variants (`amazing-dom/src/events.rs`):
+  `DeviceMotion`, `DeviceOrientation`, `Drag`, `Storage`, `Text`.
+- Five new `Interface` variants (`amazing-bindings/src/host.rs`) and matching
+  `D{}` descriptors (`interfaces.rs`), each `constructor: None` (matching the
+  existing `BeforeUnloadEvent` pattern — WPT only checks prototype identity,
+  never `new X()`, for these) with empty `members` (no IDL surface beyond the
+  inherited base is exercised by any pinned test).
+- `event_bindings.rs`'s class-mapping switch now maps all five lowercase
+  alias names to their new `EventClass`, and
+  `crates/amazing/src/runtime_host_dom_bindings.rs::dom_event_interface`
+  (additive-grant file) maps each new `EventClass` to its new `Interface`, so
+  the existing dynamic `wrap_platform_object` dispatch picks the right
+  prototype the same way it already does for `HashChangeEvent`/
+  `CompositionEvent`/etc.
+- Extended `tests_legacy_events.rs`'s alias-preservation test with the five
+  new class/name pairs (exact/lower/upper case, per its existing loop shape).
+
+`amazing-dom` 363/363, `amazing-bindings` 117/117 (both include the extended
+test). WPT `dom/nodes/Document-createEvent.https.html`: 270 pass / 21 fail+error
+→ 270 pass / 3 fail + 6 precondition-skips (TouchEvent's "expose legacy touch
+event APIs" `assert_implements_optional` gate — expected/optional since this
+engine doesn't implement touch events; not a regression or a bug). Full
+4-directory corpus (`dom/ranges`+`dom/traversal`+`dom/nodes`+`dom/collections`,
+408 files) before/after, **zero lost passes** (confirmed after excluding the
+handful of hard-timeout-truncated combinatorial `Range-*` files — same
+"timeout, partial subtests retained" status before and after, unrelated to
+this change — where a fixed wall-clock deadline makes the exact retained
+subtest count non-deterministic across runs on a shared sandbox), **+15
+gained** (exactly the 5 interfaces × 3 case variants). Evidence:
+`crates/amazing-bindings/evidence/dom-b-audit/` (`before-createevent` =
+`cluster-scan`, `after-createevent`).
