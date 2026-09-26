@@ -625,3 +625,91 @@ console calls (needs an engine-side change to `native_log` to stop joining
 arguments before the driver sees them — a js-runtime-owned seam);
 `ownProperties=false` vs `true`; stylesheet/image `Network.*` events;
 `Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-19 — DOM.getBoxModel/getContentQuads and Overlay highlight — done
+
+Coordinator's ticket named `DOM.getDocument`, `querySelector`,
+`getOuterHTML`, `DOM.setAttributeValue` and `CSS.getComputedStyleForNode` —
+all five were already implemented in CDP-16/17. This ticket's actual delta,
+confirmed by grepping the driver for zero hits on "highlight"/"Overlay"
+before starting, was `DOM.getBoxModel`/`getContentQuads` and every
+`Overlay.*` highlight method — both already fully dispatch-wired in
+`amazing-devtools` from an earlier generic-protocol ticket (`domains/dom.rs`,
+`domains/overlay.rs`), defaulting to `Unsupported`/`Ok(())` since the driver
+never implemented them. Pure driver-side work; no `amazing-devtools` change
+needed.
+
+- **`DOM.getBoxModel`**: a new `find_box_for_node` walks the same fallback
+  layout tree `hit_test_node`/`full_ax_tree` already use (style compute +
+  `amazing_layout::layout_styled_document` with `FallbackTextSystem`/
+  `NoReplacedElements`), matching by node identity (`LayoutBox::node ==
+  Some(target)`) instead of by point — mirrors `hit_test`'s traversal order
+  (checks `positioned` descendants first) but doesn't need paint-order
+  tie-breaking since only one node can match. A new `box_model_from`
+  converts the found box into a CDP `BoxModel`: `border_box`/`content_box`
+  are already resolved by layout; the padding box is the border box inset
+  by the box's own resolved `border` (thickness) `Sides`; the margin box is
+  the border box outset by `margin` (`SidesM::unwrap_or(0.0)` — an
+  unresolved auto margin reports as `0`, the same simplification this file
+  already uses elsewhere).
+- **`DOM.getContentQuads`** wraps `get_box_model` in a one-element `Vec` —
+  the dispatch layer already extracts just `model.content` per node
+  (confirmed by reading `domains/dom.rs`'s existing `"DOM.getContentQuads"`
+  arm before writing this — it was already spec-correct: "content quads",
+  not border quads, matching real Chrome), so no per-line-box splitting was
+  needed to make the numbers agree; both share the same documented
+  `Flow::Inlines` gap `hit_test`/`find_box_for_node` already have.
+- **`Overlay.highlightNode`** validates the node resolves to real box
+  geometry by calling `get_box_model` and discarding the result, so an
+  unknown or box-less node (a `display: none` element, which produces no
+  `LayoutBox` at all) reports `HostError::NotFound` exactly as a real
+  highlight request against a non-existent target would fail.
+  `highlightRect`/`highlightQuad` now answer `Ok(())` directly from
+  `DriverPageSession` (no page-thread round trip — there's no engine state
+  to check arbitrary coordinates against, and real Chrome accepts any rect/
+  quad too, so this is not a shortcut around real validation, there simply
+  isn't any to do). `overlay_enabled`/`setInspectMode`/`hideHighlight` were
+  *already* answering `Ok(())` from the trait's own defaults, unnoticed
+  until this ticket read the actual default bodies closely — no override
+  needed. **No compositor overlay layer exists in this engine**, so none of
+  the four highlight methods paint anything; there is no pixel difference a
+  screenshot could prove, which is why `DOM.getBoxModel`'s real geometry is
+  the proof instead.
+- Proof — one end-to-end WebSocket CDP client test chaining the "already
+  done" DOM/CSS methods onto the new box-model/Overlay ones against a
+  single live node (`end_to_end_box_model_and_overlay_highlight_on_the_live_
+  page`): `getDocument` → `querySelector` → `getOuterHTML` (contains the
+  text) → `setAttributeValue` → `getOuterHTML` again (contains the new
+  attribute) → `getComputedStyleForNode` → `getBoxModel` (asserts the real
+  box-model arithmetic: a 100×50 content box with 2px padding + 5px border
+  on every side reports a 114×64 border box, and a further 3px margin
+  reports a 120-wide margin box — pure box-model math, independent of where
+  the absolutely-positioned element actually landed on the page) →
+  `getContentQuads` (one 100-wide content quad) → `highlightNode` (succeeds)
+  → `hideHighlight` → `highlightNode` on a `display: none` sibling (a real
+  CDP error, checked with a new `Client::raw` helper that returns the whole
+  reply instead of assuming success, since `result()`/`result_and_events()`
+  both panic on an `"error"` reply by design).
+- A real bug the test caught mid-write: the first draft of the test asserted
+  `getContentQuads` returned the *border*-box quad (114 wide); it actually
+  returns the *content*-box quad (100 wide) — not a driver bug, a
+  misreading of `domains/dom.rs`'s already-existing, already-correct
+  dispatch code (which literally is named "content quads"). Fixed the test,
+  not the driver.
+
+Known limitations, newly documented: no compositor overlay layer exists, so
+`Overlay.*` highlighting is validate-only with no visual effect;
+`getBoxModel`/`getContentQuads`/`highlightNode` share `hit_test`'s
+`Flow::Inlines` gap (a node that only contributes to an inline line box is
+not found); an unresolved auto margin reports as `0` in the margin box.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` + `amazing-
+devtools` crate nextest combined 387/387 (0 failed) + both crates' doctests
+green; workspace nextest 3113 passed, 0 failed, 13 skipped; all workspace
+doctests passed. Committed as `4f01de21`. No cross-lane seam needed.
+
+Boundary candidates for a future ticket: a real compositor overlay layer to
+actually paint highlights (would need the `compositor` lane); per-line-box
+`getContentQuads` for inline content; per-argument `RemoteObject`s for
+console calls; `ownProperties=false` vs `true`; stylesheet/image
+`Network.*` events; `Debugger.*` stepping/breakpoints (js-runtime).
