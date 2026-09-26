@@ -35,7 +35,7 @@ https://en.wikipedia.org/wiki/World_Wide_Web
 # Code hosting and package pages
 https://github.com/rust-lang/rust
 https://github.com/rust-lang/cargo
-https://crates.io/crates/serde
+https://crates.io/
 
 # Shop product / category pages (public, no cart or login)
 https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html

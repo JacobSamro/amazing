@@ -194,7 +194,19 @@ fn live_pages_corpus() {
 
     let out_dir = std::env::temp_dir().join(format!("amazing-live-pages-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).expect("create output dir");
-    let binary = env!("CARGO_BIN_EXE_amazing");
+    // Pooled sandboxes share ~/amazing/target across lanes, so another lane's
+    // `cargo build -p amazing` can replace CARGO_BIN_EXE_amazing mid-run (seen:
+    // the first pages used this branch's URL-aware binary, later pages a
+    // sibling's file-only one). Prefer a binary pinned by the run command
+    // (`AMAZING_LIVE_PAGES_BIN`) and run a private copy either way, so the whole
+    // corpus uses the code this test was built with.
+    let source_binary = std::env::var_os("AMAZING_LIVE_PAGES_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_amazing")));
+    let stable_binary = out_dir.join(if cfg!(windows) { "amazing-live.exe" } else { "amazing-live" });
+    std::fs::copy(&source_binary, &stable_binary)
+        .unwrap_or_else(|error| panic!("copy {}: {error}", source_binary.display()));
+    let binary = stable_binary.to_str().expect("binary path is UTF-8");
     let timeout = Duration::from_secs(150);
 
     let mut rows = Vec::new();
