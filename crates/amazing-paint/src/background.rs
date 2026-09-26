@@ -34,6 +34,10 @@ pub enum BackgroundSize {
 #[derive(Debug, Clone)]
 pub struct BackgroundLayer {
     pub url: Option<String>,
+    /// Serialized CSS `<gradient>` image function for this layer, if any. At
+    /// most one of `url`/`gradient` is set; paint rasterizes gradients through
+    /// the shared `gradient::raster` path.
+    pub gradient: Option<String>,
     pub repeat_x: Repeat,
     pub repeat_y: Repeat,
     pub position: (ObjectPosition, ObjectPosition),
@@ -79,6 +83,7 @@ impl BackgroundPlan {
             ));
             layers.push(BackgroundLayer {
                 url: url(value),
+                gradient: gradient(value),
                 repeat_x,
                 repeat_y,
                 position,
@@ -192,6 +197,26 @@ fn url(value: &str) -> Option<String> {
         }
     }
     (!result.is_empty()).then_some(result)
+}
+/// Serialized `<gradient>` image function for a background layer. CSS owns
+/// tokenization, color parsing and value preservation; this only recognizes the
+/// function name and returns the bounded original text for the shared raster.
+fn gradient(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.len() > MAX_VALUE_BYTES || !value.ends_with(')') {
+        return None;
+    }
+    let name = value.get(..value.find('(')?)?.trim().to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "linear-gradient"
+            | "repeating-linear-gradient"
+            | "radial-gradient"
+            | "repeating-radial-gradient"
+            | "conic-gradient"
+            | "repeating-conic-gradient"
+    )
+    .then(|| value.to_owned())
 }
 fn area(value: &str, default: BoxArea) -> BoxArea {
     match value.trim().to_ascii_lowercase().as_str() {
