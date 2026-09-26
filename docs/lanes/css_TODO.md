@@ -1647,11 +1647,93 @@ crate **335/335**, workspace nextest **2746/2746** (10 skipped), doctests
 **4/4**, zero failures. WPT CSS reftest sweeps and all render gates remain
 deferred under Linux-first (2026-09-26).
 
+## CSS-24 — Color 5 `none`-propagation, color-mix() expansion, calc-size() nesting (base `5b923bf7`)
+
+Commit `2ef1d3b2`. The queued Color 5 work from CSS-23's report, done as one
+area: `none`-channel missing-component propagation through absolute colors
+and `color-mix()` interpolation, expanded `color-mix()` space/hue-method
+coverage, and `calc-size()` nesting.
+
+- **`none` in absolute color functions** (CSS Color 4 §4.4): previously
+  supported only in the relative-color forms (`rgb(from ... )` etc, CSS-21).
+  Now also accepted directly in `rgb()`/`rgba()` (modern space syntax only —
+  the legacy comma syntax predates `none` and does not accept it), `hsl()`,
+  `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, and the predefined
+  `color()` function, via shared helpers (`channel_or_none`/`alpha_or_none`
+  in `color.rs`; `none_component`/`is_none` plus the existing `hue`/`alpha`
+  in `color_advanced.rs`).
+- **`color-mix()` missing-component propagation** (CSS Color 4 §13): a
+  channel missing (`none`) in exactly one operand now takes the other
+  operand's value directly rather than being averaged in as a literal 0.
+  Alpha follows the same substitution rule for its own value, but rgb/polar
+  channels that are *not* themselves missing still mix by the normal
+  premultiplied weighted average.
+  - This needed `none_mask` (which detects whether an operand is written
+    literally in the mix's own space, so a `none` there means *that*
+    channel is missing) to recognize `rgb()`/`rgba()` (as `srgb`) and
+    `color(<space> ...)` (as `srgb`/`srgb-linear`/`xyz`/`xyz-d65`/`xyz-d50`,
+    with `xyz`/`xyz-d65` treated as aliases) — it previously matched only
+    the six polar/lab-family function names (`hsl`/`hwb`/`lab`/`lch`/
+    `oklab`/`oklch`) and silently gave every other space's `none` the
+    established none-is-0 treatment instead of propagating it.
+  - It also needed the premultiplication weights (`w1`/`w2`) to use each
+    operand's *effective* alpha — substituted from the other operand's
+    alpha when its own is missing — rather than the literal 0 the parser
+    stores for a `none` alpha; using the raw 0 zeroed out that operand's
+    contribution to every other channel instead of leaving it unaffected
+    by the missing alpha specifically.
+- **`color-mix()` expanded interpolation spaces**: `lab`, `oklab`, `xyz`,
+  `xyz-d65`, `xyz-d50`, `hsl`, `hwb`, `oklch` (previously only `srgb`,
+  `srgb-linear`, `lch`), plus the `shorter | longer | increasing |
+  decreasing hue` interpolation methods (§12.2, `shorter` default) via a new
+  `HueMethod` enum and `mix_hue`/`parse_mix_method`. The achromatic/moot
+  test for a polar operand's hue is space-specific: `hwb`'s is
+  `white + black >= 100%`, not "chroma channel near zero" — `hwb(_, 0%,
+  0%)` is fully chromatic, not achromatic.
+- **`calc-size()` nesting** (CSS Values 5 §11): now parses inside
+  `min()`/`max()`/`clamp()`, not just at the top level or as its own basis
+  argument. `math.rs` extracts `calc_size_body` (the shared
+  basis-comma-calc-sum-closeparen logic) out of `calc_size_function`, and
+  `atom()`'s generic `Token::Function` branch special-cases `calc-size`
+  before the shared `self.expression()` path, since a `<calc-size-basis>`
+  can start with a bare keyword (`auto`, `any`, ...) that `expression()`
+  cannot parse.
+- New test file `tests/css24_color5_gaps.rs` (12 tests): absolute-`none`
+  coverage per function family, missing-component propagation (rgb
+  channels, alpha, hue), the expanded-space round-trip invariant (mixing a
+  color with itself in every newly supported space reproduces it exactly),
+  the hsl circular-hue-path check (red/blue mixes through magenta, not a
+  desaturated middle), all four hue-interpolation methods, the hwb
+  achromatic distinction, and `calc-size()` nesting through the cascade. Two
+  channel-level comparisons use a ±1 byte tolerance (`assert_close`) since
+  they compare two independently-rounded computation paths (a full
+  `color-mix()` against a directly-parsed literal reference), not the same
+  code path twice.
+
+Boundary (not claimed): missing-component propagation for `color-mix()`
+only recognizes an operand as "written in the mix's own space" when it is a
+*literal* same-space color function (not `from`-relative, not a different
+space, not a custom property reference) — cross-space operands and any
+operand that isn't a direct literal keep the established none-is-0
+treatment, matching the scope `none_mask`'s doc comment states. `display-p3`
+and the other gamma-encoded predefined spaces are not added to
+`color-mix()`'s interpolation-space list (CSS Color 4 doesn't require them
+for mixing — only the listed rectangular/polar set — and no page-real-world
+priority was found for adding them speculatively).
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `2ef1d3b2`): CSS
+crate **335 → 347**, workspace nextest **2906/2906** (10 skipped), doctests
+**ok** across all 31 doc-tested crates, zero failures. Sandbox disk hit 0 GB
+free mid-gate (other lanes sharing the pool's caches); resolved by purging
+this lane's own `debug/incremental` plus the pool-shared
+`target/debug/incremental` — both are cargo-rebuildable caches, not
+committed work, per the same disk-hygiene principle AGENTS.md states for
+win-001. WPT CSS reftest sweeps and all render gates remain deferred under
+Linux-first (2026-09-26).
+
 ## Next
 
-The remaining CSS Color 5 relative-color refinement (`none`-channel missing-
-component propagation instead of resolving to zero) and `calc-size()` nesting
-inside other math functions, per the prior report's queue; then CSS-15's
-queued bulk `css/` WPT sweep triage continues to be the largest single
-source of measured corpus movement once WPT render sweeps come back online
-off Linux-first.
+CSS-25: build a Linux runner for the pinned WPT parse/computed-value
+testharness tests (`css/*/parsing/*-valid.html`, `*-invalid.html`,
+`*-computed.html`) driving `amazing-css` directly, covering css-color,
+css-values, css-cascade, mediaqueries and css-conditional. In progress.
