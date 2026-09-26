@@ -282,6 +282,12 @@ pub struct Interpreter {
     pending_history_update: Option<(String, bool, JsValue)>,
     history_state: JsValue,
     last_event_default_prevented: bool,
+    /// CDP-20's minimal debugger seam (`crate::debug_hook`): if set, called
+    /// before every statement. `None` by default, so hosts that never
+    /// install a hook pay nothing beyond the `Option` check.
+    debug_hook: Option<crate::debug_hook::SharedDebugHook>,
+    current_script_id: String,
+    current_script_url: String,
 }
 
 impl Interpreter {
@@ -450,6 +456,9 @@ impl Interpreter {
             pending_history_update: None,
             history_state: JsValue::Null,
             last_event_default_prevented: false,
+            debug_hook: None,
+            current_script_id: String::new(),
+            current_script_url: String::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -681,6 +690,26 @@ impl Interpreter {
 
     pub fn last_event_default_prevented(&self) -> bool {
         self.last_event_default_prevented
+    }
+
+    /// Installs (or, with `None`, removes) CDP-20's minimal debugger hook —
+    /// see `crate::debug_hook`. Cloning the `Rc` is cheap; call this once
+    /// per realm, not per script.
+    pub fn set_debug_hook(&mut self, hook: Option<crate::debug_hook::SharedDebugHook>) {
+        self.debug_hook = hook;
+    }
+
+    /// Tags every subsequent `on_statement` callback with `id`/`url` until
+    /// the next call. The interpreter does not itself track "which script is
+    /// this statement in" (a tree-walking interpreter has no script-level
+    /// frame of its own), so the host must call this immediately before
+    /// running a script it wants attributed correctly; an inline event
+    /// handler or a timer/microtask callback keeps whatever the last
+    /// top-level script set, which is an honest simplification, not real
+    /// per-callback script identity (see the driver's own doc comment).
+    pub fn set_current_script(&mut self, id: impl Into<String>, url: impl Into<String>) {
+        self.current_script_id = id.into();
+        self.current_script_url = url.into();
     }
 
     /// Opt into driver-owned time and checkpoints before running page code.
@@ -1129,6 +1158,15 @@ impl Interpreter {
         self.in_eval = false;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
+                // Bypasses `exec_stmt` for perf (no `Flow` unwrapping needed
+                // for a plain top-level expression statement), so CDP-20's
+                // debug hook is called explicitly here too — otherwise every
+                // top-level `expr;` statement (extremely common: every bare
+                // `Runtime.evaluate` call is exactly this) would be
+                // invisible to a line breakpoint.
+                if let Some(hook) = self.debug_hook.clone() {
+                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+                }
                 self.completion = self.eval_expr(e, &env)?;
                 continue;
             }
@@ -1260,6 +1298,9 @@ impl Interpreter {
     }
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        if let Some(hook) = self.debug_hook.clone() {
+            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+        }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
             StmtKind::Expression(e) => {
