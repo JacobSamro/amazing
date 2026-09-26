@@ -1,0 +1,55 @@
+{
+  "captured_on": "2026-09-26",
+  "lane": "shell",
+  "ticket": "SHELL-L2",
+  "host": "pool-desktop Boat sandbox (Xvfb + Mesa lavapipe software Vulkan, no GPU)",
+  "capture_tool": "scripts/linux-shell-capture.sh",
+  "note": "Per-capture *.json (executable sha256, commit tree, shell args, display size, window id, capture time) is produced by the capture script alongside each PNG.",
+  "entries": [
+    {
+      "png": "shell-newtab.png",
+      "json": "shell-newtab.json",
+      "description": "Default six-tab startup layout (amazing://status active). Chrome (tabs, address bar, bookmarks bar, window controls) renders correctly with legible text; engine-viewport body text renders as solid blocks (no glyphs) -- see the fonts finding below."
+    },
+    {
+      "png": "shell-docs-index.png",
+      "json": "shell-docs-index.json",
+      "description": "tests/real-pages/pages/docs-index.html opened via --url (file:// navigation). Title 'Amazing Docs' and the file:// address both reflected correctly in the tab/address bar/status line; nav highlighting and a 2x3 card grid layout render correctly."
+    },
+    {
+      "png": "shell-app-dashboard.png",
+      "json": "shell-app-dashboard.json",
+      "description": "tests/real-pages/pages/app-dashboard.html via --url. Loads and renders without error."
+    },
+    {
+      "png": "shell-docs-guide.png",
+      "json": "shell-docs-guide.json",
+      "description": "tests/real-pages/pages/docs-guide.html via --url. Loads and renders without error; too short to overflow the ~960x570 engine viewport (used as the scroll no-op baseline before scroll-fixture.html was added)."
+    },
+    {
+      "png": "shell-scroll-top.png",
+      "json": "shell-scroll-top.json",
+      "description": "scroll-fixture.html (this directory) at initial scroll position, via --url. A vertical scrollbar is visible, proving the content overflows the viewport. None of the tests/real-pages fixtures were tall enough to demonstrate scrolling, so this small fixture was added to actually exercise it."
+    },
+    {
+      "png": "shell-scroll-scrolled.png",
+      "json": "shell-scroll-scrolled.json",
+      "description": "Same fixture after `scripts/linux-shell-capture.sh --scroll 15` (15 synthetic scroll-wheel-down clicks via xdotool, sent through XTest on the real pointer -- xdotool's --window/XSendEvent form is invisible to GPUI's XInput2 raw-input handling on Linux, so the capture script was fixed to warp the real pointer first). The scrollbar thumb has moved to the bottom, the list has scrolled past its start, and the page's tail marker paragraph is now visible: scroll wheel input is correctly wired end to end on Linux."
+    },
+    {
+      "png": "shell-https-example.png",
+      "json": "shell-https-example.json",
+      "description": "--url https://example.com/ -- a live network fetch over TLS from the sandbox, not a local fixture. Tab title 'Example Domain', address bar and status line show the https:// URL, page box/heading/paragraph/link-button layout renders correctly. Confirms http(s) navigation works end to end on Linux, not just file://."
+    },
+    {
+      "png": "shell-crash-app-mail.png",
+      "json": "shell-crash-app-mail.json",
+      "description": "tests/real-pages/pages/app-mail.html via --url panics on load: 'raw paint-view probe failed: RasterFailed(8)' at crates/amazing-compositor/src/paint_view.rs:49. This is a CPU-side probe into a 1x1 Surface (PaintViewSource::new), not a GPU/lavapipe failure, so it should reproduce on any platform. RawRasterError variants other than UnseparableItem currently panic instead of falling back to BakedFallback mode. PNG is a blank black Xvfb root capture since the app exited before any window appeared. Filed in .agents/shell/questions.md for the compositor lane (paint_view.rs is jointly granted); not fixed here."
+    },
+    {
+      "png": "shell-crash-docs-reference.png",
+      "json": "shell-crash-docs-reference.json",
+      "description": "tests/real-pages/pages/docs-reference.html via --url hits the same panic with a different item index: 'RasterFailed(34)'. Confirms the paint_view.rs crash is content-dependent (which display-list item triggers it) and not specific to one fixture."
+    }
+  ]
+}
