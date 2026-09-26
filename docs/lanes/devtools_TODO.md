@@ -98,7 +98,7 @@ the ADR 0005 path is available to the driver.
 
 ## CDP-2 — inspector read paths and target lifecycle push — done
 
-Source commit pending; base `dev` `0c117657` merged as `f1de15ad`. Linux gate on
+Source commit `4519210c`; base `dev` `0c117657` merged as `f1de15ad`. Linux gate on
 Boat `bx_xbhqabax`: `amazing-devtools` 69/69 nextest (0 skipped) and 1 doctest;
 workspace 2641 passed, 0 failed, 10 skipped, doctests 3 passed.
 
