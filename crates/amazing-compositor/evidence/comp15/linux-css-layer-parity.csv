@@ -1,4 +1,4 @@
 fixture,mode,items,chunks,layers,promoted,squashed,exact,layer_rounding,losses
-warning: function `cyclic` is never used
-  --> crates/amazing-css/src/counter_styles.rs:36:4
-   |
+ia-reflow,RawLocal,4,1,1,0,0,262144,0,0
+ia-effects-scroller,RawLocal,14,4,4,3,0,262144,0,0
+article,RawLocal,16,1,1,0,0,262144,0,0

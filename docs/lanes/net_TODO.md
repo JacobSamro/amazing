@@ -1662,3 +1662,26 @@ nextest **2704 passed / 0 failed / 10 skipped**, workspace doctests **4 passed /
 50 subtests**. The remaining four non-passing files are the unchanged cross-lane
 residuals (js-runtime promise realm, js-vm generators, harness HTTPS origins,
 dom-bindings inert Document). NET-31 ends at this driver-isolation boundary.
+
+## NET-32 — wire method normalization
+
+Fixed base `9719506f` (merge of local dev `86c44031`). `amazing-net` uppercased
+every request method when building the wire request line (`dispatch.rs`,
+`http.rs`, `http2.rs`), so a non-standard method lost its spelling on the wire
+even though Fetch (`model.rs`) and XHR (`xhr.rs`) had already applied the Fetch
+"normalize method" rule (uppercase only DELETE/GET/HEAD/OPTIONS/POST/PUT).
+`xhr/open-method-case-sensitive.htm` compared the echoed `x-request-method` with
+the original spelling and failed 7 of 9 cases.
+
+Added `amazing_net::headers::normalize_method` and used it at all three wire
+sites. The dispatcher's CONNECT/TRACE/TRACK rejection now compares
+case-insensitively against the preserved spelling instead of relying on the
+uppercase copy. Unit test
+`method_normalization_only_uppercases_standard_methods`.
+
+Linux gate (one `scripts/linux-run.sh net` call): workspace nextest **2735 passed
+/ 0 failed / 10 skipped**, workspace doctests **4 passed / 0 failed**, the 38-file
+`fetch/api` + `xhr` corpus unchanged at **34/38 files, 588 pass / 19 fail / 1
+timeout**, and `xhr/open-method-case-sensitive.htm` **2/9 -> 9/9**. This is a
+Fetch/XHR transport fix, not just XHR: any custom method reaches the wire
+verbatim. NET-32 ends at this normalization boundary.

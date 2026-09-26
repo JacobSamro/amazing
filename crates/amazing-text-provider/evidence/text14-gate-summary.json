@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-14",
+  "implementation_commit": "0e4afdd0",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "host": "Boat sandbox (pool-layout), Linux/fontconfig/freetype, per-lane target",
+  "base_commit": "9719506f",
+  "note": "Focused five-case font-kerning selection rendered through `amazing render-wpt <page> <out.ppm> 800 600` with AMAZING_WPT_ROOT set, then exact PPM compare. These five upstream cases allow zero differing pixels, so the byte/image equality is the upstream assertion. The lane-local comparator is text14-reftest.py; the upstream HTML/font subset is fetched from the pinned revision and is not committed. Before and after ran on the same sandbox and target.",
+  "selection": {
+    "scope": "css/css-fonts/font-kerning-01.html .. font-kerning-05.html (every kerning case in the 40-case expanded selection)",
+    "before_file": "text14-kern-before.json",
+    "after_file": "text14-kern-after.json",
+    "before_counts": { "pass": 3, "mismatch": 2, "total": 5 },
+    "after_counts": { "pass": 5, "mismatch": 0, "total": 5 },
+    "classification_changes": [
+      { "id": "css-fonts__font-kerning-02.html", "from": "mismatch", "to": "pass" },
+      { "id": "css-fonts__font-kerning-03.html", "from": "mismatch", "to": "pass" }
+    ],
+    "gains": [
+      "css-fonts__font-kerning-02.html",
+      "css-fonts__font-kerning-03.html"
+    ],
+    "losses": [],
+    "notes": "font-kerning-02 (horizontal `normal` vs `kern on`) and -03 (vertical upright `normal` vs `vkrn on`) each differed by exactly 345 pixels before, in the `.high` line only; both now match with identical actual/reference PPM SHA-256. font-kerning-01 (@supports), -04 (horizontal `none`/both off) and -05 (vertical upright `none`/both off) were already passing and retain their exact hashes."
+  },
+  "gates": {
+    "linux_crate_nextest": "amazing-text + amazing-text-provider 68 passed, 1 skipped",
+    "linux_crate_doctests": "green (0 tests)",
+    "linux_workspace_nextest": "2736 passed, 10 skipped, 0 failed",
+    "linux_workspace_doctests": "4 passed, 0 failed"
+  },
+  "routing": [
+    {
+      "owner": "primary",
+      "finding": "The full 15/40/48-case pixel selections need either a shared Linux render runner or a WPT checkout provisioned in the Boat template; only the focused five-case subset could run on Linux. Filed in .agents/text/questions.md."
+    },
+    {
+      "owner": "layout",
+      "finding": "The four css-fonts/matching variable-axis cases still need layout's font-synthesis:none in TextStyle.synthesis. Unchanged by TEXT-14."
+    }
+  ]
+}

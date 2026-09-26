@@ -1,5 +1,5 @@
 use crate::host::{AbortHost, BindingHost, InterfaceBrand, Operation as O, PlatformKey};
-use amazing_dom::{abort::AbortSignalId, events::{EventTarget, ListenerOptions}, DomError};
+use amazing_dom::{abort::{AbortAlgorithm, AbortSignalId}, events::{EventTarget, ListenerOptions}, DomError};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::AbortControllerConstructor | O::AbortControllerSignal | O::AbortControllerAbort
@@ -11,7 +11,7 @@ fn key<H: BindingHost>(host: &H, id: AbortSignalId) -> PlatformKey {
     PlatformKey { arena: host.node_platform_key(host.current_document()).arena,
         slot: id.0 as u64, generation: 1 }
 }
-fn signal<H: BindingHost>(host: &mut H, value: &H::Value, brand: InterfaceBrand)
+pub(crate) fn signal<H: BindingHost>(host: &mut H, value: &H::Value, brand: InterfaceBrand)
     -> Result<AbortSignalId, H::Error> {
     let key = host.platform_object(value, brand).ok_or_else(|| host.type_error("Expected an AbortSignal"))?;
     if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
@@ -38,7 +38,15 @@ fn propagate<H: AbortHost>(host: &mut H, id: AbortSignalId, value: H::Value)
     let deliveries = host.with_dom(|dom| dom.abort_signal(id, root))?;
     if deliveries.is_empty() { host.release_value(root); return Ok(()); }
     for delivery in deliveries {
-        for algorithm in delivery.algorithms { host.run_abort_algorithm(algorithm, &value)?; }
+        for algorithm in delivery.algorithms {
+            match algorithm {
+                AbortAlgorithm::Host(id) => host.run_abort_algorithm(id, &value)?,
+                AbortAlgorithm::RemoveEventListener(id) => {
+                    let removed = host.with_dom(|dom| Ok(dom.events_mut().remove_listener_id(id)))?;
+                    if let Some(callback) = removed { host.release_value(callback); }
+                }
+            }
+        }
         crate::event_bindings::dispatch_abort_event(host, delivery.signal)?;
     }
     Ok(())

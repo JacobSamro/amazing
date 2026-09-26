@@ -3,6 +3,68 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        // The current embedding associates its one WindowProxy with the active
+        // document. DOMImplementation, DOMParser and clones create inert docs.
+        Ok((document == self.current_document()).then(|| self.js.binding_global_object()))
+    }
+
+    pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
+        matches!(brand, InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP
+            | InterfaceBrand::COLLECTION | InterfaceBrand::FORM_CONTROLS
+            | InterfaceBrand::OPTIONS | InterfaceBrand::RADIO_NODE_LIST
+            | InterfaceBrand::NODE_LIST | InterfaceBrand::STATIC_NODE_LIST
+            | InterfaceBrand::FILTERED_NODE_LIST | InterfaceBrand::NAMED_NODE_MAP
+            | InterfaceBrand::DOM_TOKEN_LIST | InterfaceBrand::DOM_STRING_LIST)
+    }
+
+    pub(super) fn dom_install_dataset_hooks(&mut self) -> Result<(), Throw> {
+        let state = self.state.clone();
+        let names = Rc::new(move |handle: HostHandle| {
+            let state = state.borrow();
+            let mut host = state.host.borrow_mut();
+            if handle.arena != state.arena || handle.generation != 1
+                || handle.brand != InterfaceBrand::DOM_STRING_MAP.0
+                || handle.slot >= host.dom.node_count() as u64 {
+                return Err(Throw::type_error("Invalid DOMStringMap"));
+            }
+            host.dom.dataset_names(NodeIdx(handle.slot as u32))
+                .map_err(|_| Throw::type_error("Invalid DOMStringMap element"))
+        });
+        let get_state = self.state.clone();
+        let named_getter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16]| {
+            let mut adapter = RuntimeBindingHost { js, state: get_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetGet, receiver, &[name])
+        });
+        let set_state = self.state.clone();
+        let named_setter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16], value: JsValue| {
+            let mut adapter = RuntimeBindingHost { js, state: set_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetSet, receiver, &[name, value])?;
+            Ok(())
+        });
+        let delete_state = self.state.clone();
+        let named_deleter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16]| {
+            let mut adapter = RuntimeBindingHost { js, state: delete_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetDelete, receiver, &[name])?;
+            Ok(true)
+        });
+        self.js.binding_define_legacy_platform_object(InterfaceBrand::DOM_STRING_MAP.0, RuntimeLegacyHooks {
+            supported_index_count: Rc::new(|_| Ok(0)), supported_names: Some(names),
+            indexed_getter: Rc::new(|_, _, _| Ok(JsValue::Undefined)),
+            named_getter: Some(named_getter), indexed_setter: None,
+            named_setter: Some(named_setter), named_deleter: Some(named_deleter),
+            unenumerable_names: false, override_builtins: true,
+        });
+        Ok(())
+    }
+
+
     pub(super) fn dom_frozen_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
         let array = self.js.binding_create_array(values)?;
         let JsValue::Object(object) = &array else { unreachable!() };
@@ -72,6 +134,11 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn install_window_event_target(&mut self) -> Result<(), Throw> {
+        let global = self.js.binding_global_object();
+        for name in ["captureEvents", "releaseEvents"] {
+            let function = self.native(name, 0, NativeEntry::Operation(Operation::WindowLegacyNoop), HostCallPolicy::CallOnly);
+            self.define_data_property(&global, name, function, true, true, true)?;
+        }
         let prototype = self.prototype(Interface::EventTarget)
             .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
         self.js.binding_set_global_prototype(&prototype)
@@ -81,6 +148,462 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn processing_instruction_constructor_and_attributes_share_native_character_data() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(value) { step++; if (!value) throw 'PI check ' + step; }
+            const pi = new ProcessingInstruction('xml', 'a="&amp;" b="two"');
+            check(ProcessingInstruction.length === 1 && pi instanceof CharacterData);
+            check(pi.ownerDocument === document && pi.target === 'xml');
+            check(pi.getAttribute('a') === '&' && pi.hasAttributes());
+            check(pi.getAttributeNames().join(',') === 'a,b');
+            const observer = new MutationObserver(function() {});
+            observer.observe(pi, {characterData: true, characterDataOldValue: true, attributes: true});
+            pi.setAttribute('a', '<"&>');
+            check(pi.data === 'a="&lt;&quot;&amp;&gt;" b="two"');
+            let records = observer.takeRecords();
+            check(records.length === 1 && records[0].type === 'characterData' && records[0].target === pi);
+            check(records[0].oldValue === 'a="&amp;" b="two"');
+            check(pi.toggleAttribute('a', true) && observer.takeRecords().length === 0);
+            check(!pi.toggleAttribute('a', undefined));
+            check(pi.toggleAttribute('a') && pi.getAttributeNames().join(',') === 'b,a');
+            const names = pi.getAttributeNames(); names.push('extra');
+            check(pi.getAttributeNames().length === 2);
+            pi.data = 'raw="new"';
+            check(pi.getAttribute('b') === null && pi.getAttribute('raw') === 'new');
+            pi.appendData(' broken'); check(!pi.hasAttributes());
+            pi.setAttribute('$', '\uD800');
+            check(pi.getAttribute('$') === '\uD800' && pi.cloneNode().getAttribute('$') === '\uD800');
+            let calls = '', rejected = false;
+            try { pi.setAttribute({toString() {calls += 'n'; return 'bad name';}},
+                {toString() {calls += 'v'; return 'x';}}); }
+            catch (e) { rejected = e instanceof DOMException && e.name === 'InvalidCharacterError'; }
+            check(rejected && calls === 'nv');
+            calls = ''; rejected = false;
+            try { ProcessingInstruction.prototype.setAttribute.call(document.createTextNode(''),
+                {toString() { calls += 'x'; return 'a';}}, 'b'); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && calls === '');
+            rejected = false;
+            try { pi.setAttribute({toString() { calls += 'x'; return 'a';}}); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && calls === '');
+            for (const args of [[], ['0'], ['x', '?>']]) {
+                rejected = false;
+                try { Reflect.construct(ProcessingInstruction, args); }
+                catch (e) { rejected = args.length === 0 ? e instanceof TypeError : e instanceof DOMException; }
+                check(rejected);
+            }
+            check(new ProcessingInstruction('target', undefined).data === '');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn legacy_elements_reflect_attributes_and_keep_interface_identity_when_cloned() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url("https://example.test/base/");
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(value) { step++; if (!value) throw 'legacy element reflection check ' + step; }
+            const groups = [
+                ['dir', HTMLDirectoryElement, ['compact']],
+                ['font', HTMLFontElement, ['color', 'face', 'size']],
+                ['frameset', HTMLFrameSetElement, ['cols', 'rows']],
+                ['frame', HTMLFrameElement, ['name', 'scrolling', 'src', 'frameBorder',
+                    'longDesc', 'noResize', 'marginHeight', 'marginWidth']]
+            ];
+            for (const group of groups) {
+                const tag = group[0], ctor = group[1], element = document.createElement(tag);
+                check(element instanceof ctor && element instanceof HTMLElement);
+                check(!(element instanceof HTMLUnknownElement));
+                for (const prop of group[2]) {
+                    const attr = prop.toLowerCase();
+                    const descriptor = Object.getOwnPropertyDescriptor(ctor.prototype, prop);
+                    check(descriptor.enumerable && descriptor.configurable);
+                    const boolean = prop === 'compact' || prop === 'noResize';
+                    check(element[prop] === (boolean ? false : ''));
+                    element[prop] = boolean ? 'false' : 'https://example.test/path';
+                    check(element.getAttribute(attr) === (boolean ? '' : 'https://example.test/path'));
+                    check(element[prop] === (boolean ? true : 'https://example.test/path'));
+                    element.setAttribute(attr, boolean ? 'false' : 'https://example.test/next');
+                    check(element[prop] === (boolean ? true : 'https://example.test/next'));
+                    const clone = element.cloneNode(true);
+                    check(clone instanceof ctor && clone[prop] === element[prop]);
+                    element.removeAttribute(attr);
+                    check(element[prop] === (boolean ? false : ''));
+                    let converted = false, rejected = false;
+                    try { descriptor.set.call(document.createElement('div'), {toString() { converted = true; return 'x'; }}); }
+                    catch (e) { rejected = e instanceof TypeError; }
+                    check(rejected && !converted);
+                    rejected = false;
+                    try { descriptor.get.call(document.createElementNS('urn:test', tag)); }
+                    catch (e) { rejected = e instanceof TypeError; }
+                    check(rejected);
+                    if (boolean) {
+                        element[prop] = 1; element[prop] = 0;
+                        check(!element.hasAttribute(attr));
+                    } else {
+                        element[prop] = null;
+                        const legacy = prop === 'color' || prop === 'marginHeight' || prop === 'marginWidth';
+                        check(element.getAttribute(attr) === (legacy ? '' : 'null'));
+                        element[prop] = undefined;
+                        check(element.getAttribute(attr) === 'undefined');
+                        element[prop] = '\uD800';
+                        check(element.getAttribute(attr) === (prop === 'src' || prop === 'longDesc' ? '\uFFFD' : '\uD800'));
+                    }
+                }
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn installed_modifier_queries_and_numeric_dictionaries_follow_webidl() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('event dictionary types'); }
+            const mouse = new MouseEvent('x', {clientX: 1.5, clientY: -0,
+                button: 65535, buttons: -1, modifierAltGraph: true, modifierCapsLock: true});
+            check(mouse.clientX === 1.5 && Object.is(mouse.clientY, -0));
+            check(mouse.button === -1 && mouse.buttons === 65535);
+            check(mouse.getModifierState('AltGraph') && mouse.getModifierState('CapsLock'));
+            check(!mouse.getModifierState('Alt') && !mouse.getModifierState('altgraph'));
+            const key = new KeyboardEvent('x', {location: -1, keyCode: 4294967297,
+                charCode: NaN, which: 4294967298, modifierFn: true});
+            check(key.location === 4294967295 && key.keyCode === 1 && key.charCode === 0);
+            check(key.which === 2 && key.getModifierState('Fn'));
+            const wheel = new WheelEvent('x', {deltaMode: -1, deltaX: 0.25, momentum: true, ctrlKey: true});
+            check(wheel.deltaMode === 4294967295 && wheel.deltaX === 0.25 && wheel.momentum);
+            check(wheel.getModifierState('Control'));
+            let rejected = 0;
+            try { new MouseEvent('x', {clientX: Infinity}); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { new WheelEvent('x', {deltaX: NaN}); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { MouseEvent.prototype.getModifierState.call(key, 'Control'); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { mouse.getModifierState(); } catch (e) { if (e instanceof TypeError) rejected++; }
+            check(rejected === 4);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn focus_and_mouse_related_targets_follow_native_shadow_dispatch_state() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('shadow event target'); }
+            const host = document.createElement('div');
+            const root = host.attachShadow({mode: 'closed'});
+            const inner = root.appendChild(document.createElement('span'));
+            const external = new EventTarget();
+            for (const Constructor of [FocusEvent, MouseEvent]) {
+                const event = new Constructor('probe', {relatedTarget: inner});
+                check(event.relatedTarget === inner);
+                let observed = false;
+                external.addEventListener('probe', value => {
+                    observed = value.relatedTarget === host && value.target === external;
+                }, {once: true});
+                external.dispatchEvent(event);
+                check(observed && event.relatedTarget === host && event.target === external);
+                root.dispatchEvent(event);
+                check(event.relatedTarget === null && event.target === null);
+                check(event.currentTarget === null && event.composedPath().length === 0);
+            }
+            const event = new FocusEvent('move', {relatedTarget: external});
+            inner.addEventListener('move', () => host.appendChild(inner), {once: true});
+            inner.dispatchEvent(event);
+            check(inner.parentNode === host && event.target === null && event.relatedTarget === null);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn document_default_view_preserves_window_identity_and_inert_document_nulls() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('document defaultView'); }
+            check(document.defaultView === window);
+            check(document.defaultView.document === document);
+            check(document.defaultView.DOMException === DOMException);
+            check(new Document().defaultView === null);
+            check(document.implementation.createHTMLDocument('').defaultView === null);
+            check(document.implementation.createDocument(null, 'root').defaultView === null);
+            check(document.cloneNode(false).defaultView === null);
+            const getter = Object.getOwnPropertyDescriptor(Document.prototype, 'defaultView').get;
+            let rejected = false;
+            try { getter.call({}); } catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            for (const [uri, name, expected, code] of [
+                [null, '1foo', 'InvalidCharacterError', 5],
+                [null, 'p:foo', 'NamespaceError', 14],
+                ['urn:test', 'xml:foo', 'NamespaceError', 14]]) {
+                let caught;
+                try { document.createElementNS(uri, name); } catch (error) { caught = error; }
+                check(caught.name === expected && caught.code === code);
+                check(caught.constructor === document.defaultView.DOMException);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn token_list_reads_live_state_after_argument_conversion() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('token list conversion'); }
+            const element = document.createElement('div');
+            const list = element.classList;
+            element.className = 'old';
+            list.add({toString() { element.className = 'fresh'; return 'added'; }});
+            check(list.value === 'fresh added');
+            check(list.item({valueOf() { element.className = 'changed'; return 0; }}) === 'changed');
+            let marker = {};
+            let caught;
+            try { list.add('', {toString() { throw marker; }}); } catch (error) { caught = error; }
+            check(caught === marker && list.value === 'changed');
+            element.removeAttribute('class');
+            list.remove('missing');
+            check(!element.hasAttribute('class'));
+            check(list.contains('') === false && list.contains('a b') === false);
+            element.className = 'c b a';
+            check(list.replace('c', 'a') && list.value === 'a b');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn abortable_listeners_handle_recursive_dispatch_dependents_and_conversion_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('listener registration'); }
+            const target = new EventTarget();
+            const controller = new AbortController();
+            const signal = AbortSignal.any([controller.signal]);
+            let calls = 0;
+            target.addEventListener('x', () => {
+                calls++;
+                if (calls === 6) controller.abort();
+                target.dispatchEvent(new Event('x'));
+            }, {signal});
+            target.dispatchEvent(new Event('x'));
+            check(calls === 6);
+            let reads = '';
+            const options = {
+                get capture() { reads += 'c'; return false; },
+                get once() { reads += 'o'; return false; },
+                get passive() { reads += 'p'; return false; },
+                get signal() { reads += 's'; return signal; }
+            };
+            target.addEventListener('x', null, options);
+            check(reads === 'cops');
+            let rejected = false;
+            try { target.addEventListener('x', null, {signal: null}); }
+            catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            const later = new AbortController();
+            let once = 0;
+            target.addEventListener('once', () => once++, {once: true, signal: later.signal});
+            target.dispatchEvent(new Event('once'));
+            later.abort();
+            target.dispatchEvent(new Event('once'));
+            check(once === 1);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn legacy_document_and_body_colors_share_attributes_and_noops_ignore_arguments() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('legacy document reflection'); }
+            const doc = document.implementation.createHTMLDocument('legacy');
+            const body = doc.body;
+            for (const [documentName, bodyName, attribute] of [
+                ['fgColor', 'text', 'text'], ['bgColor', 'bgColor', 'bgcolor'],
+                ['linkColor', 'link', 'link'], ['vlinkColor', 'vLink', 'vlink'],
+                ['alinkColor', 'aLink', 'alink']]) {
+                doc[documentName] = 'red';
+                check(body[bodyName] === 'red' && body.getAttribute(attribute) === 'red');
+                body[bodyName] = null;
+                check(doc[documentName] === '' && body.getAttribute(attribute) === '');
+                body[bodyName] = undefined;
+                check(doc[documentName] === 'undefined');
+            }
+            body.remove();
+            let conversions = 0;
+            doc.fgColor = {toString() { conversions++; return 'ignored'; }};
+            check(conversions === 1 && doc.fgColor === '');
+            doc.body = body;
+            check(doc.fgColor === 'undefined');
+            const poison = {toString() { throw new Error('must not coerce'); }};
+            for (const name of ['clear', 'captureEvents', 'releaseEvents']) {
+                check(doc[name](poison) === undefined && doc[name].length === 0);
+            }
+            check(window.captureEvents(poison) === undefined);
+            check(window.releaseEvents(poison) === undefined);
+            let rejected = false;
+            try { doc.clear.call({}); } catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn document_collections_are_live_alias_correct_and_rooted_in_their_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('document collection conformance'); }
+            const doc = document.implementation.createHTMLDocument('collections');
+            for (const name of ['images', 'embeds', 'plugins', 'links', 'forms', 'scripts', 'anchors', 'applets']) {
+                check(doc[name] instanceof HTMLCollection && doc[name] === doc[name]);
+                check(doc[name].length === 0);
+            }
+            check(doc.embeds === doc.plugins);
+            const embeds = doc.embeds;
+            const anchors = doc.anchors;
+            const embed = doc.createElement('embed');
+            embed.id = 'plugin';
+            doc.body.appendChild(embed);
+            check(embeds.length === 1 && embeds[0] === embed && embeds.namedItem('plugin') === embed);
+            const foreign = doc.createElementNS('urn:foreign', 'embed');
+            doc.body.appendChild(foreign);
+            check(embeds.length === 1);
+            const anchor = doc.createElement('a');
+            doc.body.appendChild(anchor);
+            check(anchors.length === 0);
+            anchor.setAttribute('name', '');
+            check(anchors.length === 1 && anchors[0] === anchor);
+            anchor.setAttribute('href', '');
+            check(doc.links.length === 1);
+            anchor.removeAttribute('name');
+            check(anchors.length === 0 && doc.links.length === 1);
+            doc.body.appendChild(doc.createElement('applet'));
+            doc.body.appendChild(doc.createElement('object'));
+            check(doc.applets.length === 0);
+            embed.remove();
+            check(embeds.length === 0);
+            const other = document.implementation.createHTMLDocument('other');
+            other.body.appendChild(embed);
+            check(embeds.length === 0 && other.embeds.length === 1);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn collection_members_stay_on_prototypes_and_live_keys_track_mutations() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('collection own properties'); }
+            const root = document.createElement('div');
+            for (const list of [root.children, root.childNodes, root.attributes, root.classList]) {
+                check(Object.getOwnPropertyNames(list).length === 0);
+                check(list.length === 0 && !list.hasOwnProperty('length'));
+            }
+            root.setAttribute('data-name', 'one');
+            const attrs = root.attributes;
+            check(Object.getOwnPropertyNames(attrs).join(',') === '0,data-name');
+            check(Object.keys(attrs).join(',') === '0');
+            root.removeAttribute('data-name');
+            check(attrs.length === 0 && Object.getOwnPropertyNames(attrs).length === 0);
+            const children = root.children;
+            const nodes = root.childNodes;
+            const child = document.createElement('span');
+            child.id = 'named';
+            root.appendChild(child);
+            check(children.length === 1 && nodes.length === 1);
+            check(Object.getOwnPropertyNames(children).join(',') === '0,named');
+            check(Object.getOwnPropertyNames(nodes).join(',') === '0');
+            check(Object.keys(children).join(',') === '0');
+            check(children.named === child && children[0] === child);
+            child.remove();
+            check(children.length === 0 && nodes.length === 0);
+            check(Object.getOwnPropertyNames(children).length === 0);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn dataset_is_live_same_object_with_named_property_descriptors() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('dataset conformance'); }
+            check(document.createElementNS('urn:random', 'element').dataset === undefined);
+            check(document.createElementNS(null, 'element').dataset === undefined);
+            for (const element of [document.createElement('div'),
+                document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                document.createElementNS('http://www.w3.org/1998/Math/MathML', 'math')]) {
+                const map = element.dataset;
+                check(map === element.dataset && map instanceof DOMStringMap);
+                element.setAttribute('data-first-name', 'Ada');
+                check(map.firstName === 'Ada');
+                map.firstName = null;
+                check(element.getAttribute('data-first-name') === 'null');
+                const desc = Object.getOwnPropertyDescriptor(map, 'firstName');
+                check(desc.value === 'null' && desc.writable && desc.enumerable && desc.configurable);
+                check(Object.keys(map).join(',') === 'firstName');
+                element.setAttribute('data-to-string', 'override');
+                check(map.toString === 'override');
+                check(delete map.firstName && !element.hasAttribute('data-first-name'));
+                map[''] = 'empty';
+                check(element.getAttribute('data-') === 'empty');
+                let rejected = false;
+                try { map['bad-name'] = 'x'; }
+                catch (error) { rejected = error instanceof DOMException && error.name === 'SyntaxError'; }
+                check(rejected);
+                Object.defineProperty(map, 'defined', {value: 42, configurable: true});
+                check(element.getAttribute('data-defined') === '42');
+                element.removeAttribute('data-defined');
+                check(map.defined === undefined);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn dom_exception_uses_inherited_accessors_and_native_error_identity() {
