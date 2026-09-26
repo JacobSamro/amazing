@@ -1487,3 +1487,11 @@ reproduces candidate4 case/hash projections exactly: writing230→243/1112 (+13/
 299→303/449 (+4/-0). Tables310→309: sole loss th-text-align.html is routed to CSS
 (default th alignment must inherit non-start values rather than unconditional
 UA center). Do not mark done or merge until the raw loss is resolved/approved.
+
+## LAYOUT-23 — positioned axis constraints (active)
+
+Frozen complete static css-position and CSS2/positioning selection645:
+226pass,410mismatch,9unsupported;126 script exclusions. Baseline engine749555ca.
+Implement containing-block direction, static edges, shrink-to-fit, automatic
+margins and replaced sizing in bulk; retain writing1112,ruby118,tables386,union449.
+LAYOUT-22 remains held on its CSS-owned th default regression.
