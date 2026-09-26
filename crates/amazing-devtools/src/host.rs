@@ -713,6 +713,31 @@ impl Default for SecurityState {
     }
 }
 
+/// One node of the CDP `Accessibility.AXNode` tree. The driver builds these
+/// from its own accessibility-tree representation (for this engine, the a11y
+/// lane's `amazing-a11y::AxTree`); this crate stays independent of that crate
+/// and only defines the CDP-shaped seam.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AxNode {
+    /// The CDP `AXNodeId` (a string, distinct from DOM node ids).
+    pub ax_node_id: String,
+    /// Whether the node is pruned from the tree (still present so tools can
+    /// show ignored subtrees on request).
+    pub ignored: bool,
+    /// The computed ARIA role, e.g. `"button"`, `"WebArea"`, `"generic"`.
+    pub role: Option<String>,
+    /// The computed accessible name.
+    pub name: Option<String>,
+    /// The computed accessible description.
+    pub description: Option<String>,
+    /// The computed value, for widgets that have one (inputs, sliders, …).
+    pub value: Option<String>,
+    /// The originating DOM node, if any (the synthetic root may have none).
+    pub node: Option<EngineNodeId>,
+    /// Child `AXNodeId`s, in tree order.
+    pub child_ids: Vec<String>,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -1263,6 +1288,44 @@ pub trait DevToolsSession: Send {
     /// Resolves a certificate error (`eventId` plus the CDP action code).
     fn handle_certificate_error(&mut self, _event_id: i64, _action: i32) -> Result<(), HostError> {
         Ok(())
+    }
+
+    // --- Accessibility ------------------------------------------------------
+    /// Enables/disables accessibility-tree tracking (`Accessibility.enable`/
+    /// `disable`). Advisory; the driver may use it to start or stop building
+    /// the tree.
+    fn accessibility_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// The full accessibility tree, root first (`Accessibility.getFullAXTree`).
+    /// `depth` limits how many levels below the root are expanded; `None`
+    /// means the whole tree.
+    fn get_full_ax_tree(&mut self, _depth: Option<u32>) -> Result<Vec<AxNode>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The accessibility subtree rooted at `node`, plus its ancestors when
+    /// `fetch_relatives` is set (`Accessibility.getPartialAXTree`).
+    fn get_partial_ax_tree(
+        &mut self,
+        _node: EngineNodeId,
+        _fetch_relatives: bool,
+    ) -> Result<Vec<AxNode>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The direct children of an accessibility node by its `AXNodeId`
+    /// (`Accessibility.getChildAXNodes`).
+    fn get_child_ax_nodes(&mut self, _ax_node_id: &str) -> Result<Vec<AxNode>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Accessibility nodes under `node` (the whole tree when `None`) matching
+    /// an optional accessible name and/or role (`Accessibility.queryAXTree`).
+    fn query_ax_tree(
+        &mut self,
+        _node: Option<EngineNodeId>,
+        _accessible_name: Option<&str>,
+        _role: Option<&str>,
+    ) -> Result<Vec<AxNode>, HostError> {
+        Err(HostError::Unsupported)
     }
 
     // --- Events -----------------------------------------------------------

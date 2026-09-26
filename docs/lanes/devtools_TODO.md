@@ -193,14 +193,33 @@ doctests 4 passed.
   `security_state`/`drain_security_states`/`set_ignore_certificate_errors`/
   `handle_certificate_error`.
 
-## CDP-8 — Runtime depth — done
-
-Linux gate on Boat `bx_xbhqabax` (per-lane target), measured together with
-CDP-9 in the same bulk pass: `amazing-devtools` 89/89 nextest (0 skipped) and
-1 doctest; workspace 2808 passed, 0 failed, 10 skipped, doctests 4 passed.
+## CDP-8 — Runtime depth — in progress
 
 `Runtime.compileScript`, `runScript`, `getIsolateId`, `getHeapUsage`,
 `globalLexicalScopeNames`, `queryObjects`, `setAsyncCallStackDepth` and
 `discardConsoleEntries`. New seam type `HeapUsage` plus `compile_script`,
 `run_script`, `get_isolate_id`, `get_heap_usage`, `global_lexical_scope_names`,
 `query_objects`, `set_async_call_stack_depth` and `discard_console_entries`.
+
+## CDP-9 — Accessibility domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target), measured together with
+CDP-8 in the same bulk pass: `amazing-devtools` 89/89 nextest (0 skipped) and
+1 doctest; workspace 2808 passed, 0 failed, 10 skipped, doctests 4 passed.
+
+`Accessibility.enable`/`disable`, `getFullAXTree`, `getPartialAXTree`,
+`getChildAXNodes` and `queryAXTree`. New seam type `AxNode` (CDP
+`Accessibility.AXNode` shape: `ax_node_id`, `ignored`, `role`, `name`,
+`description`, `value`, the originating `EngineNodeId` and `child_ids`) plus
+`accessibility_enabled`/`get_full_ax_tree`/`get_partial_ax_tree`/
+`get_child_ax_nodes`/`query_ax_tree`. `getPartialAXTree` and `queryAXTree`
+resolve `nodeId`/`backendNodeId` through the same node-identity path as `DOM`
+and `Overlay`.
+
+This crate does not depend on `amazing-a11y`; the seam is CDP-shaped only, so
+the driver converts its own `amazing_a11y::AxTree` (role, computed name/
+description, DOM node, children) into `AxNode`s when it adopts this trait —
+same pattern as every other domain here. No push events
+(`Accessibility.nodesUpdated`) yet; a CDP-10 candidate once the driver's tree
+invalidation is wired up, alongside `Debugger`/`Profiler`/`HeapProfiler`,
+`Tracing`, `DOMSnapshot`, `Storage` and `permessage-deflate`.
