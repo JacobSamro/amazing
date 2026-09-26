@@ -109,6 +109,7 @@ pub(crate) fn execute_page_scripts_lenient(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
     probe: Option<&str>,
+    viewport: (f32, f32),
 ) -> LenientScriptResult {
     let mut errors = Vec::new();
     let mut probe_lines = Vec::new();
@@ -132,6 +133,9 @@ pub(crate) fn execute_page_scripts_lenient(
         }
     };
     scheduler.set_location_url(page);
+    // IA-LIVE-3: give matchMedia the real per-page viewport instead of the
+    // interpreter's hardcoded default (runtime_host_integrator_assist.rs).
+    scheduler.set_viewport(viewport.0, viewport.1);
     // IA-LIVE-2: a real page's script phase can burn far more wall time than
     // any single sub-operation's own timeout suggests. Each blocking
     // synchronous network primitive underneath (external <script src> fetch,
