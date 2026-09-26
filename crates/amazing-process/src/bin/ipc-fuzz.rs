@@ -76,6 +76,13 @@ const DECODERS: &[Target] = decoder_targets![
     HistoryDiscard,
     HistoryLifecycleEvent,
     HistoryAck,
+    ChannelRegistration,
+    BroadcastPost,
+    MessageDelivery,
+    PortPair,
+    PortPost,
+    PortStart,
+    PortClose,
 ];
 fn snapshot_decode(bytes: &[u8]) -> u64 {
     match amazing_process::gpu_snapshot_wire::decode_snapshot(bytes) {
@@ -160,6 +167,9 @@ fn storage(bytes: &[u8]) -> u64 {
 fn history(bytes: &[u8]) -> u64 {
     requests(bytes, HistoryProxy::validate_request, 4)
 }
+fn messaging(bytes: &[u8]) -> u64 {
+    requests(bytes, MessagingProxy::validate_request, 8)
+}
 fn demo_echo(bytes: &[u8]) -> u64 {
     requests(bytes, DemoEchoProxy::validate_request, 1)
 }
@@ -182,6 +192,7 @@ const DISPATCHERS: &[Target] = &[
     ("UtilityDecoder", utility),
     ("StorageService", storage),
     ("HistoryLifecycle", history),
+    ("MessagingRequests", messaging),
     ("DemoEcho", demo_echo),
     ("SandboxProbe", sandbox_probe),
     ("Ping", ping),

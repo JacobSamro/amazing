@@ -143,6 +143,37 @@ interface! {pub interface HistoryLifecycle(14) => HistoryProxy, HistoryReceiver 
     fn discard(request:HistoryDiscard) -> bool = 4;
 }}
 
+// Cross-document messaging. The browser mints every client and port id; a
+// renderer only names its own client. Payloads are bounded structured-clone
+// graphs; port `0` in a delivery means a BroadcastChannel message.
+pub const MESSAGING_VERSION: u16 = 1;
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct MessagingClient {client:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct ChannelRegistration {
+    client:u64, partition:StoragePartition, name:String
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct BroadcastPost {
+    client:u64, partition:StoragePartition, name:String, payload:ByteBuf
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct MessageDelivery {
+    client:u64, port:u64, payload:ByteBuf
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortPair {a:u64, b:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortPost {
+    client:u64, port:u64, payload:ByteBuf, transfer:Vec<u64>
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortStart {client:u64, port:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortClose {client:u64, port:u64}}
+interface! {pub interface MessagingService(15) => MessagingProxy, MessagingReceiver {
+    fn subscribe(request:ChannelRegistration) -> bool = 1;
+    fn unsubscribe(request:ChannelRegistration) -> bool = 2;
+    fn broadcast(request:BroadcastPost) -> Vec<MessageDelivery> = 3;
+    fn create_ports(request:MessagingClient) -> PortPair = 4;
+    fn start_port(request:PortStart) -> Vec<MessageDelivery> = 5;
+    fn post_port(request:PortPost) -> Option<MessageDelivery> = 6;
+    fn close_port(request:PortClose) -> u64 = 7;
+    fn disconnect(request:MessagingClient) -> Vec<u64> = 8;
+}}
+
 impl Frame {
     pub fn validate(&self) -> Result<(), amazing_ipc::Error> {
         let len = usize::try_from(self.width)
