@@ -135,3 +135,23 @@ js-runtime gap found — every `amazing_js` API needed was already public.
 Linux workspace gate: 2901/2901 nextest (10 skipped) + doctests (amazing-html
 1, amazing-js 1, rest 0), all green. Evidence in
 `docs/lanes/ipc-11c-followup-evidence.md`.
+
+### IPC-12. Sealed-frame EPERM on Ubuntu 24.04 / kernel 6.8
+
+**Done (commit `d1efc373`).** `amazing-ipc-platform`'s sealed shared-frame
+path failed with EPERM on worker-3 (Ubuntu 24.04, 6.8.0-71-generic) but
+passed on venus-001 (kernel 7.0). `strace` plus an isolated `ctypes` probe
+against libc pinned the cause: on this kernel, once a memfd has
+`F_SEAL_WRITE` set, a `MAP_SHARED` mapping is rejected with EPERM even when
+requesting `PROT_READ` only, contrary to the documented seal semantics
+(which describe it as blocking only writable shared mappings). Fixed by
+switching `FrameView::from_fd`'s read-only mapping to `MAP_PRIVATE`, which
+is observationally identical for an immutably-sealed memfd (no writer can
+exist) and is accepted on every kernel. One fix, since every consumer of a
+sealed frame -- in-process `local_view` and the cross-process
+`HandleChannel::receive` path `amazing-process` uses throughout -- goes
+through this same function; fixed all 11 originally failing tests. Added a
+regression test exercising the cross-process fd-passing path directly.
+Linux workspace gate on both hosts: worker-3 2902/2902 nextest (10 skipped) +
+doctests; venus-001 2902/2902 nextest (10 skipped) + doctests; both green,
+zero regressions. Evidence in `docs/lanes/ipc-12-evidence.md`.
