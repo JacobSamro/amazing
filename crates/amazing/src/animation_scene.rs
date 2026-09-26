@@ -43,7 +43,17 @@ impl AnimationScene {
         sheets: &[Stylesheet],
         now_ms: f64,
     ) -> Result<AnimationFrameOutput, String> {
-        let styled = amazing_css::compute(dom, sheets);
+        self.frame_with_environment(dom, sheets, &amazing_css::MediaEnvironment::default(), now_ms)
+    }
+
+    pub(crate) fn frame_with_environment(
+        &mut self,
+        dom: &Dom,
+        sheets: &[Stylesheet],
+        environment: &amazing_css::MediaEnvironment,
+        now_ms: f64,
+    ) -> Result<AnimationFrameOutput, String> {
+        let styled = amazing_css::compute_with_environment(dom, sheets, environment);
         self.frame_from_styles(dom, &styled, sheets, now_ms)
     }
 

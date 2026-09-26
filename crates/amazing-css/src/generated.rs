@@ -34,6 +34,7 @@ enum Item {
     Text(String),
     Attr(String, Option<String>),
     Counter(String, String),
+    MarkerCounter(String, String),
     Counters(String, String, String),
     Image(String),
     OpenQuote,
@@ -384,60 +385,11 @@ fn quote_pairs(css: &str) -> Option<Vec<(String, String)>> {
     )
 }
 
-fn format_counter(n: i32, style: &str) -> String {
-    match style.to_ascii_lowercase().as_str() {
-        "decimal-leading-zero" if (0..10).contains(&n) => format!("0{n}"),
-        "lower-roman" | "upper-roman" if (1..4000).contains(&n) => {
-            let mut number = n;
-            let mut result = String::new();
-            for (value, numeral) in [
-                (1000, "m"),
-                (900, "cm"),
-                (500, "d"),
-                (400, "cd"),
-                (100, "c"),
-                (90, "xc"),
-                (50, "l"),
-                (40, "xl"),
-                (10, "x"),
-                (9, "ix"),
-                (5, "v"),
-                (4, "iv"),
-                (1, "i"),
-            ] {
-                while number >= value {
-                    result.push_str(numeral);
-                    number -= value;
-                }
-            }
-            if style.starts_with("upper") {
-                result.to_ascii_uppercase()
-            } else {
-                result
-            }
-        }
-        "lower-alpha" | "lower-latin" | "upper-alpha" | "upper-latin" if n > 0 => {
-            let mut n = n as u32;
-            let mut letters = String::new();
-            while n > 0 {
-                n -= 1;
-                letters.insert(0, char::from(b'a' + (n % 26) as u8));
-                n /= 26;
-            }
-            if style.starts_with("upper") {
-                letters.to_ascii_uppercase()
-            } else {
-                letters
-            }
-        }
-        _ => n.to_string(),
-    }
-}
-
 #[derive(Default)]
 struct State {
     counters: HashMap<String, Vec<i32>>,
     reversed: HashMap<String, Vec<bool>>,
+    counter_styles: crate::counter_styles::CounterStyles,
     quote_depth: usize,
 }
 
@@ -538,14 +490,19 @@ fn evaluate(
             Item::Counter(name, style) => {
                 ensure_counter(state, name);
                 let number = state.counters.get(name).and_then(|v| v.last()).copied().unwrap_or(0);
-                format_counter(number, style)
+                state.counter_styles.format(number, style)
+            }
+            Item::MarkerCounter(name, style) => {
+                ensure_counter(state, name);
+                let number = state.counters.get(name).and_then(|v| v.last()).copied().unwrap_or(0);
+                state.counter_styles.marker(number, style)
             }
             Item::Counters(name, separator, style) => {
                 ensure_counter(state, name);
                 state.counters.get(name).filter(|values| !values.is_empty()).map(|values| {
                     values
                         .iter()
-                        .map(|value| format_counter(*value, style))
+                        .map(|value| state.counter_styles.format(*value, style))
                         .collect::<Vec<_>>()
                         .join(separator)
                 })
@@ -682,10 +639,7 @@ fn resolve_pseudo(
                 "circle" => vec![Item::Text("◦ ".into())],
                 "square" => vec![Item::Text("▪ ".into())],
                 "none" => Vec::new(),
-                counter_style => vec![
-                    Item::Counter("list-item".into(), counter_style.into()),
-                    Item::Text(". ".into()),
-                ],
+                counter_style => vec![Item::MarkerCounter("list-item".into(), counter_style.into())],
             }
         });
         ContentValue { items, alt: None }
@@ -738,8 +692,17 @@ fn walk(dom: &Dom, node: NodeIdx, out: &mut StyledDom, state: &mut State) {
     }
 }
 
-pub(crate) fn resolve_document(dom: &Dom, out: &mut StyledDom) {
-    walk(dom, NodeIdx(0), out, &mut State::default());
+pub(crate) fn resolve_document(
+    dom: &Dom,
+    out: &mut StyledDom,
+    sheets: &[crate::Stylesheet],
+    environment: &crate::MediaEnvironment,
+) {
+    let mut state = State {
+        counter_styles: crate::counter_styles::CounterStyles::new(sheets, environment),
+        ..Default::default()
+    };
+    walk(dom, NodeIdx(0), out, &mut state);
 }
 
 pub(crate) fn valid_property(property: &str, css: &str) -> bool {
