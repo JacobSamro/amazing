@@ -307,7 +307,7 @@ fn std_regexp_match_records(i: &mut Interpreter, regex: &JsValue, source: &crate
         let Some(matched) = matched else { break };
         if values.len() >= 100_000 { return Err(Throw::range_error("matchAll collection limit")); }
         let empty = matched.range.is_empty();
-        values.push(regexp_result(i, source, matched)?);
+        values.push(regexp_result(i, source, matched, regex_inner.group_names(), regex_inner.flags().has_indices)?);
         if empty {
             let last_token = i.get_prop(regex, "lastIndex")?;
             let last = i.to_number(&last_token)?;

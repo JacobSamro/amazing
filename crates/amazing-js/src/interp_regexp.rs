@@ -78,6 +78,16 @@ impl Interpreter {
             let _ = object
                 .borrow_mut()
                 .define("length", regexp_property(JsValue::num(2.0), false));
+            let escape = Self::native("escape", native_regexp_escape, &self.function_proto);
+            if let JsValue::Object(o) = &escape {
+                o.borrow_mut().constructible = false;
+                let _ = o
+                    .borrow_mut()
+                    .define("length", regexp_property(JsValue::num(1.0), false));
+            }
+            let _ = object
+                .borrow_mut()
+                .define("escape", regexp_property(escape, true));
         }
         let _ = self
             .regexp_proto
@@ -104,6 +114,7 @@ impl Interpreter {
         for name in [
             "source",
             "flags",
+            "hasIndices",
             "global",
             "ignoreCase",
             "multiline",
@@ -120,6 +131,41 @@ impl Interpreter {
             let mut prop = regexp_property(JsValue::Undefined, false);
             prop.getter = Some(getter);
             let _ = self.regexp_proto.borrow_mut().define(name, prop);
+        }
+        for (symbol, tag_name, fun) in [
+            (
+                WellKnownSymbol::Match,
+                "[Symbol.match]",
+                native_regexp_symbol_match as crate::value::NativeFn,
+            ),
+            (
+                WellKnownSymbol::Search,
+                "[Symbol.search]",
+                native_regexp_symbol_search,
+            ),
+            (
+                WellKnownSymbol::MatchAll,
+                "[Symbol.matchAll]",
+                native_regexp_symbol_match_all,
+            ),
+            (
+                WellKnownSymbol::Split,
+                "[Symbol.split]",
+                native_regexp_symbol_split,
+            ),
+        ] {
+            let method = Self::native(tag_name, fun, &self.function_proto);
+            if let JsValue::Object(o) = &method {
+                o.borrow_mut().constructible = false;
+                let length = if symbol == WellKnownSymbol::Split { 2.0 } else { 1.0 };
+                let _ = o
+                    .borrow_mut()
+                    .define("length", regexp_property(JsValue::num(length), false));
+            }
+            let _ = self
+                .regexp_proto
+                .borrow_mut()
+                .define(symbol.symbol(), regexp_property(method, true));
         }
         self.define_global("RegExp", constructor);
     }
@@ -172,6 +218,7 @@ fn native_regexp_getter(
         }
         let mut result = String::new();
         for (property, flag) in [
+            ("hasIndices", 'd'),
             ("global", 'g'),
             ("ignoreCase", 'i'),
             ("multiline", 'm'),
@@ -200,6 +247,7 @@ fn native_regexp_getter(
     let flags = regex.flags();
     Ok(match key {
         "source" => JsValue::Str(regexp_source(regex.pattern_utf16())),
+        "hasIndices" => JsValue::Bool(flags.has_indices),
         "global" => JsValue::Bool(flags.global),
         "ignoreCase" => JsValue::Bool(flags.ignore_case),
         "multiline" => JsValue::Bool(flags.multiline),
@@ -226,6 +274,108 @@ fn native_regexp_to_string(
     let flags = i.to_string(&flags)?;
     Ok(JsValue::str(format!("/{source}/{flags}")))
 }
+/// EncodeForRegExpEscape ( c ): appends the escaped form of one code point.
+fn encode_for_regexp_escape(c: u32, out: &mut Vec<u16>) {
+    const CONTROL_ESCAPES: &[(u32, u16)] = &[
+        (9, b't' as u16),
+        (10, b'n' as u16),
+        (11, b'v' as u16),
+        (12, b'f' as u16),
+        (13, b'r' as u16),
+    ];
+    let is_syntax_or_solidus = matches!(
+        char::from_u32(c),
+        Some('^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '/')
+    );
+    if is_syntax_or_solidus {
+        out.push(0x5c);
+        out.extend(char_utf16(c));
+        return;
+    }
+    if let Some(&(_, escape)) = CONTROL_ESCAPES.iter().find(|&&(code, _)| code == c) {
+        out.push(0x5c);
+        out.push(escape);
+        return;
+    }
+    // otherPunctuators, plus WhiteSpace/LineTerminator (ECMA-262 regex `\s`
+    // class, which is exactly WhiteSpace union LineTerminator), plus lone
+    // surrogates.
+    let is_other_punctuator = matches!(
+        char::from_u32(c),
+        Some(',' | '-' | '=' | '<' | '>' | '#' | '&' | '!' | '%' | ':' | ';' | '@' | '~' | '\'' | '`' | '"')
+    );
+    let is_whitespace_or_line_terminator = matches!(
+        c,
+        9..=13 | 32 | 0xA0 | 0x1680 | 0x2000..=0x200A | 0x2028 | 0x2029 | 0x202F | 0x205F | 0x3000 | 0xFEFF
+    );
+    let is_lone_surrogate = (0xD800..=0xDFFF).contains(&c);
+    if is_other_punctuator || is_whitespace_or_line_terminator || is_lone_surrogate {
+        if c <= 0xFF {
+            out.extend(format!("\\x{c:02x}").encode_utf16());
+        } else {
+            for unit in char_utf16(c) {
+                out.extend(format!("\\u{unit:04x}").encode_utf16());
+            }
+        }
+        return;
+    }
+    out.extend(char_utf16(c));
+}
+/// StringToCodePoints: decodes UTF-16 code units into Unicode code points,
+/// combining valid surrogate pairs and passing lone surrogates through as
+/// their own numeric value (never substituting U+FFFD).
+fn units_to_code_points(units: &[u16]) -> Vec<u32> {
+    let mut out = Vec::with_capacity(units.len());
+    let mut i = 0;
+    while i < units.len() {
+        let unit = units[i];
+        if (0xD800..=0xDBFF).contains(&unit) {
+            if let Some(&low) = units.get(i + 1) {
+                if (0xDC00..=0xDFFF).contains(&low) {
+                    out.push(0x10000 + ((unit as u32 - 0xD800) << 10) + (low as u32 - 0xDC00));
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+        out.push(unit as u32);
+        i += 1;
+    }
+    out
+}
+/// UTF16EncodeCodePoint: a valid code point becomes 1-2 UTF-16 units; a
+/// lone surrogate value (not a real code point) is passed through as-is.
+fn char_utf16(c: u32) -> Vec<u16> {
+    match char::from_u32(c) {
+        Some(ch) => {
+            let mut buf = [0u16; 2];
+            ch.encode_utf16(&mut buf)[..].to_vec()
+        }
+        None => vec![c as u16],
+    }
+}
+fn native_regexp_escape(
+    _i: &mut Interpreter,
+    _this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let JsValue::Str(s) = &value else {
+        return Err(Throw::type_error("RegExp.escape argument must be a string"));
+    };
+    let code_points = units_to_code_points(s.units());
+    let mut out = Vec::new();
+    for (index, c) in code_points.into_iter().enumerate() {
+        let is_decimal_digit = (0x30..=0x39).contains(&c);
+        let is_ascii_letter = (0x41..=0x5A).contains(&c) || (0x61..=0x7A).contains(&c);
+        if index == 0 && (is_decimal_digit || is_ascii_letter) {
+            out.extend(format!("\\x{c:02x}").encode_utf16());
+        } else {
+            encode_for_regexp_escape(c, &mut out);
+        }
+    }
+    Ok(JsValue::str_units(out))
+}
 fn regexp_match(
     i: &mut Interpreter,
     this: &JsValue,
@@ -237,19 +387,24 @@ fn regexp_match(
     let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
     regexp_match_with(i, this, regex.flags(), &mut matcher)
 }
+/// ToLength(? Get(rx, "lastIndex")), clamped exactly as RegExpBuiltinExec
+/// requires (NaN or negative becomes 0; huge values saturate at 2**53-1).
+fn regexp_last_index(i: &mut Interpreter, this: &JsValue) -> Result<usize, Throw> {
+    let value = i.get_prop(this, "lastIndex")?;
+    let number = i.to_number(&value)?;
+    Ok(if number.is_nan() || number <= 0.0 {
+        0
+    } else {
+        number.floor().min(9_007_199_254_740_991.0) as usize
+    })
+}
 fn regexp_match_with(
     i: &mut Interpreter,
     this: &JsValue,
     flags: amazing_regex::Flags,
     matcher: &mut amazing_regex::Matcher<'_>,
 ) -> Result<Option<amazing_regex::Match>, Throw> {
-    let value = i.get_prop(this, "lastIndex")?;
-    let number = i.to_number(&value)?;
-    let index = if number.is_nan() || number <= 0.0 {
-        0
-    } else {
-        number.floor().min(9_007_199_254_740_991.0) as usize
-    };
+    let index = regexp_last_index(i, this)?;
     let stateful = flags.global || flags.sticky;
     let result = matcher
         .exec(if stateful { index } else { 0 })
@@ -267,20 +422,128 @@ fn regexp_result(
     i: &mut Interpreter,
     source: impl Into<crate::value::JsString>,
     matched: amazing_regex::Match,
+    group_names: &[(Box<str>, usize)],
+    has_indices: bool,
 ) -> Result<JsValue, Throw> {
     let source = source.into();
     let units = regexp_units(&source)?;
     let mut values = Vec::new();
-    for capture in matched.captures {
+    for capture in &matched.captures {
         values.push(match capture {
-            Some(r) => JsValue::str_units(units[r].to_vec()),
+            Some(r) => JsValue::str_units(units[r.clone()].to_vec()),
             None => JsValue::Undefined,
         });
     }
     let array = array_values(i, values)?;
     i.set_prop(&array, "index", JsValue::num(matched.range.start as f64))?;
     i.set_prop(&array, "input", JsValue::str(source))?;
-    i.set_prop(&array, "groups", JsValue::Undefined)?;
+    let groups = if group_names.is_empty() {
+        JsValue::Undefined
+    } else {
+        let mut object = JsObject::ordinary();
+        object.proto = None;
+        let groups = JsValue::object(object);
+        // A name may be declared by more than one `(?<name>...)` in
+        // different alternatives (only one can ever participate at once):
+        // pick whichever of its declarations actually matched.
+        let mut seen: Vec<&str> = Vec::new();
+        for (name, _) in group_names {
+            if seen.contains(&name.as_ref()) {
+                continue;
+            }
+            seen.push(name.as_ref());
+            let value = group_names
+                .iter()
+                .filter(|(n, _)| n.as_ref() == name.as_ref())
+                .find_map(|(_, idx)| matched.captures.get(*idx).and_then(|c| c.clone()))
+                .map(|r| JsValue::str_units(units[r].to_vec()))
+                .unwrap_or(JsValue::Undefined);
+            i.set_prop(&groups, name.as_ref(), value)?;
+        }
+        groups
+    };
+    i.set_prop(&array, "groups", groups)?;
+    if has_indices {
+        let indices = regexp_indices_array(i, &matched, group_names)?;
+        i.set_prop(&array, "indices", indices)?;
+    }
+    Ok(array)
+}
+/// Builds a `groups` object from captures already materialized as
+/// `JsString`s (the default-`exec` fast path in `regexp_replace`, which
+/// skips building a full match-result object per match). Same dedup rule as
+/// `regexp_result`'s `groups`: a name declared on more than one
+/// mutually-exclusive alternative picks whichever declaration's capture
+/// actually participated.
+fn regexp_named_captures(
+    i: &mut Interpreter,
+    group_names: &[(Box<str>, usize)],
+    captures: &[Option<crate::value::JsString>],
+) -> Result<JsValue, Throw> {
+    let mut object = JsObject::ordinary();
+    object.proto = None;
+    let groups = JsValue::object(object);
+    let mut seen: Vec<&str> = Vec::new();
+    for (name, _) in group_names {
+        if seen.contains(&name.as_ref()) {
+            continue;
+        }
+        seen.push(name.as_ref());
+        let value = group_names
+            .iter()
+            .filter(|(n, _)| n.as_ref() == name.as_ref())
+            .find_map(|(_, idx)| captures.get(*idx).and_then(|c| c.clone()))
+            .map(JsValue::str)
+            .unwrap_or(JsValue::Undefined);
+        i.set_prop(&groups, name.as_ref(), value)?;
+    }
+    Ok(groups)
+}
+/// MakeIndicesArray ( S, indices, groupNames, hasGroups ): a match array's
+/// `.indices` property, parallel to the match array itself, with a `[start,
+/// end]` UTF-16 code-unit pair per participating capture (`undefined` for
+/// non-participating ones) and its own `.groups` object when named groups
+/// are present.
+fn regexp_indices_array(
+    i: &mut Interpreter,
+    matched: &amazing_regex::Match,
+    group_names: &[(Box<str>, usize)],
+) -> Result<JsValue, Throw> {
+    let mut entries = Vec::with_capacity(matched.captures.len());
+    for capture in &matched.captures {
+        entries.push(match capture {
+            Some(r) => array_values(
+                i,
+                vec![JsValue::num(r.start as f64), JsValue::num(r.end as f64)],
+            )?,
+            None => JsValue::Undefined,
+        });
+    }
+    let array = array_values(i, entries.clone())?;
+    let groups = if group_names.is_empty() {
+        JsValue::Undefined
+    } else {
+        let mut object = JsObject::ordinary();
+        object.proto = None;
+        let groups = JsValue::object(object);
+        let mut seen: Vec<&str> = Vec::new();
+        for (name, _) in group_names {
+            if seen.contains(&name.as_ref()) {
+                continue;
+            }
+            seen.push(name.as_ref());
+            let value = group_names
+                .iter()
+                .filter(|(n, _)| n.as_ref() == name.as_ref())
+                .find_map(|(_, idx)| {
+                    entries.get(*idx).cloned().filter(|v| !v.is_undefined())
+                })
+                .unwrap_or(JsValue::Undefined);
+            i.set_prop(&groups, name.as_ref(), value)?;
+        }
+        groups
+    };
+    i.set_prop(&array, "groups", groups)?;
     Ok(array)
 }
 // RegExpExec(R, S) (21.2.5.2.1): reads "exec" and calls it when callable --
@@ -314,11 +577,11 @@ fn regexp_exec_call(
         }
         return Ok(result);
     }
-    if regexp_data(this).is_none() {
+    let Some(regex) = regexp_data(this) else {
         return Err(Throw::type_error("incompatible RegExp receiver"));
-    }
+    };
     match regexp_match(i, this, source.clone())? {
-        Some(m) => regexp_result(i, source.clone(), m),
+        Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
         None => Ok(JsValue::Null),
     }
 }
@@ -343,12 +606,12 @@ fn native_regexp_exec(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    if regexp_data(&this).is_none() {
+    let Some(regex) = regexp_data(&this) else {
         return Err(Throw::type_error("incompatible RegExp receiver"));
-    }
+    };
     let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
     match regexp_match(i, &this, &source)? {
-        Some(m) => regexp_result(i, &source, m),
+        Some(m) => regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices),
         None => Ok(JsValue::Null),
     }
 }
@@ -358,18 +621,361 @@ fn native_regexp_test(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    // RegExpExec delegates to an overridden exec before falling back to slots.
-    let exec = i.get_prop(&this, "exec")?;
+    let result = regexp_exec_abstract(i, &this, &source)?;
+    Ok(JsValue::Bool(!result.is_null()))
+}
+/// RegExpExec ( R, S ): call an overridden `exec` if one is callable,
+/// validating its return shape, else fall back to the built-in matching
+/// algorithm. Shared by `test`, `Symbol.match`, `Symbol.search` and the
+/// `Symbol.matchAll` iterator's `next`.
+fn regexp_exec_abstract(
+    i: &mut Interpreter,
+    regexp: &JsValue,
+    source: &crate::value::JsString,
+) -> Result<JsValue, Throw> {
+    if !regexp.is_object() {
+        return Err(Throw::type_error("RegExp receiver must be an object"));
+    }
+    let exec = i.get_prop(regexp, "exec")?;
     if callable_function(&exec).is_some() {
-        let result = i.call_value(&exec, this, vec![JsValue::str(source)])?;
+        let result = i.call_value(&exec, regexp.clone(), vec![JsValue::str(source.clone())])?;
         if !result.is_object() && !result.is_null() {
             return Err(Throw::type_error(
                 "RegExp exec must return an object or null",
             ));
         }
-        return Ok(JsValue::Bool(!result.is_null()));
+        return Ok(result);
     }
-    Ok(JsValue::Bool(regexp_match(i, &this, &source)?.is_some()))
+    let regex =
+        regexp_data(regexp).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
+    match regexp_match(i, regexp, source.clone())? {
+        Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
+        None => Ok(JsValue::Null),
+    }
+}
+/// SpeciesConstructor(R, %RegExp%): the constructor `matchAll` builds its
+/// clone from, honoring an overridden `constructor` or `[Symbol.species]`.
+fn regexp_species_constructor(i: &mut Interpreter, this: &JsValue) -> Result<JsValue, Throw> {
+    let default_ctor = i
+        .regexp_proto
+        .borrow()
+        .get_own("constructor")
+        .unwrap_or(JsValue::Undefined);
+    if !this.is_object() {
+        return Err(Throw::type_error("RegExp receiver must be an object"));
+    }
+    let ctor = i.get_prop(this, "constructor")?;
+    if ctor.is_undefined() {
+        return Ok(default_ctor);
+    }
+    if !ctor.is_object() {
+        return Err(Throw::type_error("RegExp constructor must be an object"));
+    }
+    let species = i.get_prop(&ctor, WellKnownSymbol::Species.symbol())?;
+    if species.is_undefined() || species.is_null() {
+        return Ok(default_ctor);
+    }
+    if callable_function(&species).is_none() {
+        return Err(Throw::type_error("[Symbol.species] must be a constructor"));
+    }
+    Ok(species)
+}
+/// RegExp.prototype[Symbol.match] ( string ) (§22.2.6.8).
+fn native_regexp_symbol_match(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error(
+            "RegExp.prototype[Symbol.match] receiver must be an object",
+        ));
+    }
+    let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let global = i.get_prop(&this, "global")?.to_boolean();
+    if !global {
+        return regexp_exec_abstract(i, &this, &s);
+    }
+    let full_unicode =
+        i.get_prop(&this, "unicode")?.to_boolean() || i.get_prop(&this, "unicodeSets")?.to_boolean();
+    i.set_prop(&this, "lastIndex", JsValue::num(0.0))?;
+    let mut results = Vec::new();
+    loop {
+        let result = regexp_exec_abstract(i, &this, &s)?;
+        if result.is_null() {
+            break;
+        }
+        let match_0 = i.get_prop(&result, "0")?;
+        let match_str = i.to_js_string(&match_0)?;
+        if results.len() >= 100_000 {
+            return Err(Throw::range_error("RegExp match collection limit"));
+        }
+        let empty = match_str.units().is_empty();
+        results.push(JsValue::str(match_str));
+        if empty {
+            let last_index = regexp_last_index(i, &this)?;
+            let advanced = amazing_regex::advance_index(s.units(), last_index, full_unicode);
+            i.set_prop(&this, "lastIndex", JsValue::num(advanced as f64))?;
+        }
+    }
+    if results.is_empty() {
+        Ok(JsValue::Null)
+    } else {
+        array_values(i, results)
+    }
+}
+/// RegExp.prototype[Symbol.search] ( string ) (§22.2.6.9).
+fn native_regexp_symbol_search(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error(
+            "RegExp.prototype[Symbol.search] receiver must be an object",
+        ));
+    }
+    let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let previous_last_index = i.get_prop(&this, "lastIndex")?;
+    if !i.binding_same_value(&previous_last_index, &JsValue::num(0.0)) {
+        i.set_prop(&this, "lastIndex", JsValue::num(0.0))?;
+    }
+    let result = regexp_exec_abstract(i, &this, &s)?;
+    let current_last_index = i.get_prop(&this, "lastIndex")?;
+    if !i.binding_same_value(&current_last_index, &previous_last_index) {
+        i.set_prop(&this, "lastIndex", previous_last_index)?;
+    }
+    if result.is_null() {
+        return Ok(JsValue::num(-1.0));
+    }
+    i.get_prop(&result, "index")
+}
+/// Internal state keys for a `%RegExpStringIteratorPrototype%`-shaped object.
+/// Non-enumerable/non-configurable own properties, since this crate models
+/// iterator internal slots as instance properties rather than a new `Exotic`
+/// variant (see the Map/Set iterators in interp_symbol.rs for the same
+/// convention).
+const RSI_MATCHER: &str = "%RegExpStringIterator.matcher%";
+const RSI_STRING: &str = "%RegExpStringIterator.string%";
+const RSI_GLOBAL: &str = "%RegExpStringIterator.global%";
+const RSI_UNICODE: &str = "%RegExpStringIterator.unicode%";
+const RSI_DONE: &str = "%RegExpStringIterator.done%";
+fn regexp_iter_state(value: JsValue) -> crate::value::Property {
+    crate::value::Property {
+        value,
+        writable: true,
+        enumerable: false,
+        configurable: false,
+        getter: None,
+        setter: None,
+    }
+}
+fn regexp_string_iterator(
+    i: &Interpreter,
+    matcher: JsValue,
+    string: crate::value::JsString,
+    global: bool,
+    unicode: bool,
+) -> JsValue {
+    let mut object = JsObject::ordinary();
+    object.proto = Some(i.object_proto.clone());
+    let _ = object.define(RSI_MATCHER, regexp_iter_state(matcher));
+    let _ = object.define(RSI_STRING, regexp_iter_state(JsValue::str(string)));
+    let _ = object.define(RSI_GLOBAL, regexp_iter_state(JsValue::Bool(global)));
+    let _ = object.define(RSI_UNICODE, regexp_iter_state(JsValue::Bool(unicode)));
+    let _ = object.define(RSI_DONE, regexp_iter_state(JsValue::Bool(false)));
+    let next = Interpreter::native("next", native_regexp_string_iterator_next, &i.function_proto);
+    if let JsValue::Object(o) = &next {
+        o.borrow_mut().constructible = false;
+        o.borrow_mut().delete_own("prototype");
+    }
+    let _ = object.define("next", regexp_property(next, true));
+    let self_iter = Interpreter::native(
+        "[Symbol.iterator]",
+        native_iterator_self_placeholder,
+        &i.function_proto,
+    );
+    if let JsValue::Object(o) = &self_iter {
+        o.borrow_mut().constructible = false;
+        o.borrow_mut().delete_own("prototype");
+    }
+    let _ = object.define(WellKnownSymbol::Iterator.symbol(), regexp_property(self_iter, true));
+    let _ = object.define(
+        WellKnownSymbol::ToStringTag.symbol(),
+        regexp_property(JsValue::str("RegExp String Iterator"), false),
+    );
+    JsValue::object(object)
+}
+fn native_iterator_self_placeholder(
+    _: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(this)
+}
+fn regexp_iter_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
+    let mut object = JsObject::ordinary();
+    object.proto = Some(i.object_proto.clone());
+    object.set_own("value", value);
+    object.set_own("done", JsValue::Bool(done));
+    JsValue::object(object)
+}
+fn native_regexp_string_iterator_next(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else {
+        return Err(Throw::type_error(
+            "incompatible RegExp String Iterator receiver",
+        ));
+    };
+    let Some(matcher) = object.borrow().get_own(RSI_MATCHER) else {
+        return Err(Throw::type_error(
+            "incompatible RegExp String Iterator receiver",
+        ));
+    };
+    if object
+        .borrow()
+        .get_own(RSI_DONE)
+        .is_some_and(|d| d.to_boolean())
+    {
+        return Ok(regexp_iter_result(i, JsValue::Undefined, true));
+    }
+    let string = object.borrow().get_own(RSI_STRING).unwrap_or(JsValue::Undefined);
+    let string = i.to_js_string(&string)?;
+    let global = object
+        .borrow()
+        .get_own(RSI_GLOBAL)
+        .is_some_and(|v| v.to_boolean());
+    let full_unicode = object
+        .borrow()
+        .get_own(RSI_UNICODE)
+        .is_some_and(|v| v.to_boolean());
+    let result = regexp_exec_abstract(i, &matcher, &string)?;
+    if result.is_null() {
+        object.borrow_mut().set_own(RSI_DONE, JsValue::Bool(true));
+        return Ok(regexp_iter_result(i, JsValue::Undefined, true));
+    }
+    if !global {
+        object.borrow_mut().set_own(RSI_DONE, JsValue::Bool(true));
+        return Ok(regexp_iter_result(i, result, false));
+    }
+    let match_0 = i.get_prop(&result, "0")?;
+    let match_str = i.to_js_string(&match_0)?;
+    if match_str.units().is_empty() {
+        let last_index = regexp_last_index(i, &matcher)?;
+        let advanced = amazing_regex::advance_index(string.units(), last_index, full_unicode);
+        i.set_prop(&matcher, "lastIndex", JsValue::num(advanced as f64))?;
+    }
+    Ok(regexp_iter_result(i, result, false))
+}
+/// RegExp.prototype[Symbol.matchAll] ( string ) (§22.2.6.7).
+fn native_regexp_symbol_match_all(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error(
+            "RegExp.prototype[Symbol.matchAll] receiver must be an object",
+        ));
+    }
+    let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let ctor = regexp_species_constructor(i, &this)?;
+    let flags_value = i.get_prop(&this, "flags")?;
+    let flags = i.to_js_string(&flags_value)?;
+    let matcher = i.construct(&ctor, vec![this.clone(), JsValue::str(flags.clone())])?;
+    let last_index = regexp_last_index(i, &this)?;
+    i.set_prop(&matcher, "lastIndex", JsValue::num(last_index as f64))?;
+    let global = flags.units().contains(&(b'g' as u16));
+    let full_unicode = flags.units().contains(&(b'u' as u16)) || flags.units().contains(&(b'v' as u16));
+    Ok(regexp_string_iterator(i, matcher, s, global, full_unicode))
+}
+/// RegExp.prototype[Symbol.split] ( string, limit )
+fn native_regexp_symbol_split(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error(
+            "RegExp.prototype[Symbol.split] receiver must be an object",
+        ));
+    }
+    let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let limit_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let ctor = regexp_species_constructor(i, &this)?;
+    let flags_value = i.get_prop(&this, "flags")?;
+    let flags = i.to_js_string(&flags_value)?;
+    let flag_units = flags.units();
+    let unicode_matching =
+        flag_units.contains(&(b'u' as u16)) || flag_units.contains(&(b'v' as u16));
+    let sticky = flag_units.contains(&(b'y' as u16));
+    let new_flags = if sticky {
+        flags.clone()
+    } else {
+        let mut units = flags.units().to_vec();
+        units.push(b'y' as u16);
+        crate::value::JsString::from_units(units)
+    };
+    let splitter = i.construct(&ctor, vec![this.clone(), JsValue::str(new_flags)])?;
+    let units = s.units().to_vec();
+    let size = units.len();
+    let lim = if limit_value.is_undefined() {
+        u32::MAX as usize
+    } else {
+        i.to_uint32(&limit_value)? as usize
+    };
+    if lim == 0 {
+        return array_values(i, Vec::new());
+    }
+    if size == 0 {
+        let z = regexp_exec_abstract(i, &splitter, &s)?;
+        if !z.is_null() {
+            return array_values(i, Vec::new());
+        }
+        return array_values(i, vec![JsValue::str(s)]);
+    }
+    let mut results = Vec::new();
+    let mut p = 0usize;
+    let mut q = 0usize;
+    while q < size {
+        i.set_prop(&splitter, "lastIndex", JsValue::num(q as f64))?;
+        let z = regexp_exec_abstract(i, &splitter, &s)?;
+        if z.is_null() {
+            q = amazing_regex::advance_index(&units, q, unicode_matching);
+            continue;
+        }
+        let last_index = regexp_last_index(i, &splitter)?;
+        let e = last_index.min(size);
+        if e == p {
+            q = amazing_regex::advance_index(&units, q, unicode_matching);
+            continue;
+        }
+        results.push(JsValue::str_units(units[p..q].to_vec()));
+        if results.len() == lim {
+            return array_values(i, results);
+        }
+        p = e;
+        let length_value = i.get_prop(&z, "length")?;
+        let length = i.to_number(&length_value)?;
+        let number_of_captures = if length.is_finite() && length > 1.0 {
+            (length as usize) - 1
+        } else {
+            0
+        };
+        for idx in 1..=number_of_captures {
+            let capture = i.get_prop(&z, idx.to_string())?;
+            results.push(capture);
+            if results.len() == lim {
+                return array_values(i, results);
+            }
+        }
+        q = p;
+    }
+    results.push(JsValue::str_units(units[p..size].to_vec()));
+    array_values(i, results)
 }
 fn native_string_match(
     i: &mut Interpreter,
@@ -488,7 +1094,12 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
                         .chain(m.captures.iter().skip(1).map(|r| r.clone()
                             .map(|r| crate::value::JsString::from_units(units[r].to_vec()))))
                         .collect::<Vec<_>>();
-                    (matched, m.range.start, captures, JsValue::Undefined)
+                    let named = if regex.group_names().is_empty() {
+                        JsValue::Undefined
+                    } else {
+                        regexp_named_captures(i, regex.group_names(), &captures)?
+                    };
+                    (matched, m.range.start, captures, named)
                 }
             }
         } else {
@@ -567,10 +1178,12 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
         } else {
             let range = m.position..(m.position + m.matched.units().len()).min(units.len());
             out.extend_from_slice(&regexp_substitution(
+                i,
                 &text,
                 &m.captures,
                 &units,
                 range,
+                m.named.as_ref(),
             )?);
         }
         end = (m.position + m.matched.units().len()).min(units.len());
@@ -585,10 +1198,12 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
     Ok(JsValue::str_units(out))
 }
 fn regexp_substitution(
+    i: &mut Interpreter,
     text: &crate::value::JsString,
     captures: &[Option<crate::value::JsString>],
     input: &[u16],
     range: std::ops::Range<usize>,
+    named: Option<&JsValue>,
 ) -> Result<Vec<u16>, Throw> {
     let mut out = Vec::new();
     let mut chars = text.units().iter().copied().peekable();
@@ -616,6 +1231,39 @@ fn regexp_substitution(
             Some(0x27) => {
                 chars.next();
                 out.extend_from_slice(&input[range.end..]);
+            }
+            Some(0x3c) if named.is_some() => {
+                let mut look = chars.clone();
+                look.next();
+                let mut name_units = Vec::new();
+                let mut closed = false;
+                while let Some(&u) = look.peek() {
+                    if u == 0x3e {
+                        closed = true;
+                        break;
+                    }
+                    name_units.push(u);
+                    look.next();
+                }
+                if closed {
+                    let name = String::from_utf16_lossy(&name_units);
+                    chars.next();
+                    for _ in 0..name_units.len() {
+                        chars.next();
+                    }
+                    chars.next();
+                    // Get(namedCaptures, groupName): undefined (missing name,
+                    // or a name absent from a custom `exec`'s own `groups`
+                    // object) contributes the empty string, not an error.
+                    if let Some(named) = named {
+                        let value = i.get_prop(named, &name)?;
+                        if !value.is_undefined() {
+                            out.extend_from_slice(i.to_js_string(&value)?.units());
+                        }
+                    }
+                } else {
+                    out.push(0x24);
+                }
             }
             Some(d @ 0x30..=0x39) => {
                 let one = (d - 0x30) as usize;

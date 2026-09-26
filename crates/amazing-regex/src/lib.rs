@@ -9,6 +9,7 @@
 
 mod parser;
 mod unicode_casefold;
+mod unicode_props;
 mod unicode_sets;
 mod vm;
 
@@ -40,6 +41,7 @@ impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Flags {
+    pub has_indices: bool,
     pub global: bool,
     pub ignore_case: bool,
     pub multiline: bool,
@@ -59,6 +61,7 @@ impl Flags {
         let mut f = Self::default();
         for c in text.chars() {
             let slot = match c {
+                'd' => &mut f.has_indices,
                 'g' => &mut f.global,
                 'i' => &mut f.ignore_case,
                 'm' => &mut f.multiline,
@@ -85,6 +88,7 @@ impl Flags {
     }
     pub fn as_string(self) -> String {
         [
+            (self.has_indices, 'd'),
             (self.global, 'g'),
             (self.ignore_case, 'i'),
             (self.multiline, 'm'),
@@ -106,6 +110,7 @@ pub struct Regex {
     flags: Flags,
     program: vm::Program,
     captures: usize,
+    group_names: Box<[(Box<str>, usize)]>,
 }
 impl PartialEq for Regex {
     fn eq(&self, other: &Self) -> bool {
@@ -137,7 +142,7 @@ impl Regex {
         Self::compile_utf16(pattern, Flags::parse_utf16(flags)?)
     }
     fn compile_utf16(pattern: &[u16], flags: Flags) -> Result<Self, Error> {
-        let (ast, captures) = parser::parse_utf16(pattern, flags)?;
+        let (ast, captures, group_names) = parser::parse_utf16(pattern, flags)?;
         let program = vm::compile(&ast, captures, flags)?;
         Ok(Self {
             pattern: String::from_utf16_lossy(pattern),
@@ -145,7 +150,13 @@ impl Regex {
             flags,
             program,
             captures,
+            group_names: group_names.into(),
         })
+    }
+    /// Named capturing groups in declaration order, each with its 1-based
+    /// capture index; empty when the pattern has none.
+    pub fn group_names(&self) -> &[(Box<str>, usize)] {
+        &self.group_names
     }
     pub fn flags(&self) -> Flags {
         self.flags

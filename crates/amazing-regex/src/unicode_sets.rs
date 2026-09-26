@@ -70,13 +70,10 @@ fn sets() -> &'static Sets {
 }
 
 pub(crate) fn supported(property: &str) -> bool {
-    property == "ASCII_Hex_Digit" || sets().contains_key(property)
+    sets().contains_key(property)
 }
 
 pub(crate) fn contains(property: &str, sequence: &[u32]) -> bool {
-    if property == "ASCII_Hex_Digit" {
-        return matches!(sequence, [0x30..=0x39 | 0x41..=0x46 | 0x61..=0x66]);
-    }
     sets().get(property).is_some_and(|entries| {
         entries
             .binary_search_by(|item| item.as_slice().cmp(sequence))
