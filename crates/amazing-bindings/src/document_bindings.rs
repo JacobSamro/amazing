@@ -3,11 +3,12 @@ use amazing_dom::{collection::CollectionFilter, DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::NodeBaseURI | O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
-        | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
+        | O::DocumentDefaultView | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
         | O::DocumentURI | O::DocumentCharacterSet | O::DocumentContentType
         | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentLocation | O::DocumentGetElementById
         | O::FragmentGetElementById | O::DocumentGetElementsByName | O::DocumentForms
         | O::DocumentImages | O::DocumentLinks | O::DocumentScripts
+        | O::DocumentEmbeds | O::DocumentAnchors | O::DocumentApplets
         | O::DocumentActiveElement | O::DocumentHasFocus)
 }
 
@@ -33,6 +34,9 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
         _ => Err(DomError::TypeError),
     })?;
     match op {
+        O::DocumentDefaultView => match host.document_default_view(node)? {
+            Some(view) => Ok(view), None => Ok(host.null()),
+        },
         O::DocumentLocation => match host.document_location(node)? {
             Some(location) => Ok(location), None => Ok(host.null()),
         },
@@ -82,7 +86,8 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
             match element { Some(element) => host.wrap_node(element), None => Ok(host.null()) }
         }
         O::DocumentGetElementsByName | O::DocumentForms | O::DocumentImages
-            | O::DocumentLinks | O::DocumentScripts => {
+            | O::DocumentLinks | O::DocumentScripts
+            | O::DocumentEmbeds | O::DocumentAnchors | O::DocumentApplets => {
             let filter = match op {
                 O::DocumentGetElementsByName => {
                     let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
@@ -90,6 +95,9 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
                 }
                 O::DocumentForms => CollectionFilter::HtmlTag("form".encode_utf16().collect()),
                 O::DocumentImages => CollectionFilter::HtmlTag("img".encode_utf16().collect()),
+                O::DocumentEmbeds => CollectionFilter::HtmlTag("embed".encode_utf16().collect()),
+                O::DocumentAnchors => CollectionFilter::Anchors,
+                O::DocumentApplets => CollectionFilter::Empty,
                 O::DocumentLinks => CollectionFilter::Links,
                 _ => CollectionFilter::HtmlTag("script".encode_utf16().collect()),
             };

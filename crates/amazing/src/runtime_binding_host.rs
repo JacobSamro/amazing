@@ -1018,6 +1018,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 let length = if matches!(
                     operation,
                     Operation::EventConstructor
+                        | Operation::ProcessingInstructionConstructor
                         | Operation::CustomEventConstructor
                         | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor
@@ -1161,6 +1162,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             !function.is_arrow && !function.is_async && !function.is_generator
                 && !matches!(function.body, FunctionBody::HostNative(_, JsCallPolicy::CallOnly, _))
         }))
+    }
+    fn is_object_value(&mut self, value: &JsValue) -> Result<bool, Throw> {
+        Ok(value.is_object())
     }
     fn require_object(&mut self, value: &JsValue) -> Result<(), Throw> {
         if value.is_object() { Ok(()) } else { Err(Throw::type_error("Expected an object")) }
@@ -1670,6 +1674,9 @@ impl AbortHost for RuntimeBindingHost<'_> {
 }
 
 impl DocumentHost for RuntimeBindingHost<'_> {
+    fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        self.dom_document_default_view(document)
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();
