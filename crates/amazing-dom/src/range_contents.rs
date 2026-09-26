@@ -64,6 +64,8 @@ impl Dom {
         self.nodes[copy.0 as usize].attribute_order = self.get(node).attribute_order.clone();
         self.nodes[copy.0 as usize].character_data_units =
             self.get(node).character_data_units.clone();
+        self.nodes[copy.0 as usize].processing_instruction_attributes =
+            self.get(node).processing_instruction_attributes.clone();
         self.nodes[copy.0 as usize].prefix = self.get(node).prefix.clone();
         self.clone_form_state(node, copy);
         if self.is_html_template(node) {

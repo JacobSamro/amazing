@@ -72,7 +72,7 @@ pub(crate) fn request_bytes(url: &ParsedUrl, options: &FetchOptions) -> Result<V
     if !matches!(url.scheme(), "http" | "https") {
         return Err(NetError::UnsupportedScheme(url.scheme().into()));
     }
-    let method = options.method.to_ascii_uppercase();
+    let method = crate::headers::normalize_method(&options.method);
     if !matches!(method.as_str(), "GET" | "POST") {
         return Err(NetError::UnsupportedMethod(method));
     }

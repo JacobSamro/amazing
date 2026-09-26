@@ -1,0 +1,24 @@
+{
+  "source": "1cb4dbcf5c7310c84fedfe69e8c959447d520ab4",
+  "base": "e5f1a8c5",
+  "platform": "Linux Boat pool-dom isolated lane target",
+  "workspace_pass": 2759,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "baseline_owned_pass": 567,
+  "baseline_owned_skip": 4,
+  "corpus_files": 333,
+  "before_pass": 8144,
+  "after_pass": 8148,
+  "before_fail": 767,
+  "after_fail": 763,
+  "gained_subtests": 4,
+  "lost_subtests": 0,
+  "measured_at": "2026-09-26T13:30:56Z",
+  "tested_source_sha256": {
+    "crates/amazing-bindings/src/element_reflection.rs": "e80768d1ebf070e6da048324c4b8e47ffda68f7371064b0f10cc23e5e0621968",
+    "crates/amazing-bindings/src/host.rs": "608eb5aa1593f119069ea4d46e1d1348f0b18d7694f937f66f5a7bb0f7f8f430",
+    "crates/amazing-bindings/src/interfaces.rs": "e69f53998db77e71c64c96c6803c3c65c35a428682a697224169562166e939b6",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "dbad052db70b932f1ed6161a184e8af3e62f545c5285d3f66f01c650ec6015b2"
+  }
+}

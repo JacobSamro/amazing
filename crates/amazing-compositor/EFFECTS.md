@@ -58,8 +58,8 @@ existing IA reflow/effects-scroller pages and article. The four HTML files under
 comparison. They are prepared fixtures, not claimed passing WPT results.
 
 Full CSS effect parity is pending the replaced-content lane's full painter
-implementation and raw effect metadata. The current painter exports opacity
-only and explicitly defers filters and blend modes. CSS property registration
+implementation and raw effect metadata. The current painter exports opacity, blend and isolation; RC-24 imports those
+values. It still lacks filter/backdrop/clip/mask metadata and reference rendering. CSS property registration
 and the effect-only style classifier, plus driver scheduling and GPU snapshot
 transport adoption, are routed to their owners. No completed COMP-15 CSS gate
 is claimed by these native APIs.
@@ -97,3 +97,30 @@ add premultiplied color and alpha, clamp both at one, then return straight RGBA.
 Its 500-case numerical grid, translucent group cross-fade, cached presentation
 and V2 snapshot round-trip cover the retained operator independently of CSS
 full-painter adoption.
+
+## Filter/backdrop producer import
+
+`PaintFilterSource` supplies a batch of `PaintFilterInput` values keyed to
+existing, non-root paint effect IDs. `PaintViewSource::with_filters` snapshots
+and validates the entire batch before exposing a source.
+`paint_view_metadata_with_filters` imports the values without changing blend,
+isolation, opacity or ancestry. Empty input preserves the ordinary path.
+
+The producer resolves CSS lists with `resolve_css_filters`, current color,
+relative lengths and backdrop border bounds before submission. Each list keeps
+its order. Duplicate/unknown/root IDs, invalid kernels, missing backdrop bounds,
+nonfinite/empty bounds, and baked sources fail explicitly. No partial import
+escapes. Filter-only elements must already have painter effect groups; the
+adapter cannot synthesize topology from CSS.
+
+Only `PaintFilterSpace::Raster` is supported: filters act on the post-transform
+render-pass image. `Local` requests fail until local reference-space handling
+exists. A producer may only label values Raster when this execution order is
+equivalent to its intended effect; it must rebuild/recompute values and bounds
+when transforms or scrolling change that reference space. This is not permission
+to relabel arbitrary transformed CSS blur/drop-shadow as raster-space filters.
+
+Current painter EffectNode has no filter/backdrop fields, so this interface is
+prepared for the producer adapter, not wired to live CSS filter painting.
+Native import tests cover ten filter operations, backdrop bounds/cached pixels,
+and invalid batches; they are not independent full-painter filter comparisons.
