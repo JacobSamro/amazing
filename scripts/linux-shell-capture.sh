@@ -37,7 +37,7 @@ SHELL_ARGS="$*"
 
 # The shell has its own lockfile and GPUI dependency graph, so it builds into
 # its own target dir next to the lane's.
-"$REPO/scripts/linux-run.sh" "$LANE" "${REF_ARGS[@]}" -- "
+"$REPO/scripts/linux-run.sh" "$LANE" ${REF_ARGS[@]+"${REF_ARGS[@]}"} -- "
 set -u
 cd crates/amazing-shell-gpui || exit 3
 export CARGO_TARGET_DIR=\$HOME/amazing/target-shell-$LANE

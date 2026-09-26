@@ -2558,6 +2558,8 @@ fn main() {
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
     let start_with_video = std::env::args().any(|argument| argument == "--video");
     let start_with_secure_video = std::env::args().any(|argument| argument == "--secure-video");
+    let start_url = parse_flag_value("--url");
+    let start_size = parse_flag_value("--size").and_then(|value| parse_size_flag(&value));
     let (secure_receiver, secure_status) = if start_with_secure_video {
         match spawn_secure_video_source() {
             Ok(receiver) => (Some(receiver), "CONNECTING SECURE VIDEO…".to_string()),
@@ -2580,7 +2582,8 @@ fn main() {
             KeyBinding::new("ctrl-j", ShowDownloads, None),
             KeyBinding::new("escape", DismissChrome, None),
         ]);
-        let bounds = Bounds::centered(None, size(px(1080.0), px(760.0)), cx);
+        let (window_width, window_height) = start_size.unwrap_or((1080.0, 760.0));
+        let bounds = Bounds::centered(None, size(px(window_width), px(window_height)), cx);
         cx.open_window(
             WindowOptions {
                 titlebar: None,
@@ -2641,6 +2644,10 @@ fn main() {
                     if start_with_sidebar {
                         shell.specs_collapsed = false;
                     }
+                    if let Some(url) = start_url.clone() {
+                        shell.address = url;
+                        shell.commit_navigation();
+                    }
                     shell
                 })
             },
@@ -2648,6 +2655,31 @@ fn main() {
         .expect("open Amazing GPUI shell");
         cx.activate(true);
     });
+}
+
+/// Reads `--flag value` or `--flag=value` from the process argv. Used for
+/// `--url` and `--size`, which captures pass to open a specific page/size
+/// without touching the interactive default-tab layout.
+fn parse_flag_value(flag: &str) -> Option<String> {
+    let mut arguments = std::env::args();
+    let prefix = format!("{flag}=");
+    while let Some(argument) = arguments.next() {
+        if argument == flag {
+            return arguments.next();
+        }
+        if let Some(value) = argument.strip_prefix(&prefix) {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// Parses a `--size WxH` value such as `1280x800` into `(width, height)`.
+fn parse_size_flag(value: &str) -> Option<(f32, f32)> {
+    let (width, height) = value.split_once(['x', 'X'])?;
+    let width: f32 = width.trim().parse().ok()?;
+    let height: f32 = height.trim().parse().ok()?;
+    (width > 0.0 && height > 0.0).then_some((width, height))
 }
 
 fn normalize_address(value: &str) -> Option<String> {
@@ -2737,6 +2769,15 @@ fn presentation_gap_exceeds_cadence(presentation_ms: &[u64], next_ms: u64) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn size_flag_parses_widthxheight_and_rejects_bad_input() {
+        assert_eq!(parse_size_flag("1280x800"), Some((1280.0, 800.0)));
+        assert_eq!(parse_size_flag("640X480"), Some((640.0, 480.0)));
+        assert_eq!(parse_size_flag("0x480"), None);
+        assert_eq!(parse_size_flag("nope"), None);
+        assert_eq!(parse_size_flag("800x"), None);
+    }
 
     #[test]
     fn reference_shell_state_starts_on_status_with_specs_collapsed() {
