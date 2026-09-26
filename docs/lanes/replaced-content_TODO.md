@@ -1010,3 +1010,36 @@ are Windows-only (`scripts/run-render-wpt.ps1` and the `wpt-harness` subcommand
 that byte-pins against the checkout), so no Linux corpus before/after is
 claimed here; the recorded Windows baseline is 185/6/9/26 render and the
 harness candidate 4/58/45/8/2. These are not conformance movement.
+
+## RC-22 — separable inline replaced content in the raw tile path (2026-09-26)
+
+Fixed on top of the RC-21 branch. `raster_raw_local` returned
+`UnseparableItem` for any `PaintContent` box whose lines carried a replaced
+fragment, so a page with an inline `<img>` fell back to the baked painter,
+which has empty property trees and therefore no compositor root scroll node.
+That is why the RC-21 scroll-triggered lazy fetch exercised block-level
+replaced images only.
+
+The full painter and the raw tile path now share `paint_replaced_fragments`:
+it resolves a line's replaced fragments (generated URL, SVG root, or provider
+image) against the **original** box, whose inline flow still carries the
+styled-fragment metadata, with an optional document-space offset. The raw
+content path paints replaced fragments from the original box at the tile
+offset and the shifted glyphs from a local line clone; it still skips group
+transforms, opacity and clips, which remain compositor-owned.
+`raster_raw_local` now accepts `PaintContent` items with or without replaced
+fragments. No pixels changed: the raw tile equals the full painter for the
+item, and `RetainedPaintView::from_view`/`apply_damage` accept such items.
+
+Linux gate at `d7d67c76`: workspace nextest **2,703 passed / 0 failed / 10
+skipped** with `--no-fail-fast`; separate workspace doctests **4 passed / 0
+failed**. The focused `amazing-paint` + `amazing` bulk run was **342 passed /
+4 skipped**, including the new paint regression
+`raw_tile_rasterizes_inline_replaced_content_and_retains_it` and the adapter
+test `inline_replaced_content_retains_and_keeps_the_root_scroll_owner`.
+
+Known adjacent gap, not claimed: the retained path's per-item resource set
+(`retained_paint::resources_for_box`) still records no resource for inline
+replaced fragments on a content item, unlike the old/new delta's `resources()`.
+Seeding and damage must agree before enabling retirement for them, so this
+stays a follow-up when the integrator-assist damage adapter lands.
