@@ -170,3 +170,23 @@ Final source `642ffc69` (halo fix `5196e881`, dev base `4518bea7`): Boat
 Evidence: `crates/amazing-compositor/evidence/comp15/linux.md`. Native recovery
 is complete and ready to merge. Windows is deferred and no longer a blocker.
 Full COMP-15 remains pending painter reference effects/metadata and adoption.
+
+### COMP-15 CSS value adoption and plus-lighter
+
+CSS filter/backdrop/isolation/blend deltas now have an atomic typed converter;
+relative lengths and resource/reference-space decisions remain with producers.
+All 17 CSS blend values map, including new premultiplied plus-lighter. The
+driver refuses effect deltas before committing accompanying opacity or cached
+style while painter metadata is unavailable.
+
+Linux final on fixed base `4c5e877f`: **2723/2723 workspace**, **10 skipped**,
+**4/4 doctests**; compositor **82/82**, **0 doctests**. Four curated fixture files:
+**37 resolved values, 14 explicit fallbacks, 0 failures**. IA before/after remains
+**1/4/1 layers**, **262144 exact pixels/page**, **0 losses**. Details:
+`crates/amazing-compositor/evidence/comp15/linux-css-adoption.md`.
+
+This adoption area is complete. Next COMP-15 item remains importing painter
+effects/reference spaces and measuring the four fixtures against independent
+full paint. The current painter exposes opacity only, so full COMP-15 and
+unmodified WPT effect conformance remain open; no additional owned ticket is
+listed in the brief.
