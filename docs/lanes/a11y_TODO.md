@@ -38,8 +38,21 @@ available on the build hosts; add one when the WPT corpus lands.
   offsets. Commit `e7bccba5`.
 - [x] **A11Y-4 — live regions and events.** live-region resolution, `aria-relevant`
   gating and an `AxEvent` diff stream. Commit `21316489`.
-- [ ] **A11Y-5 — resolved relationships.** resolve `aria-describedby`/`aria-details`/
-  `aria-errormessage`/`aria-controls`/`aria-flowto`/`aria-owns` id references to
-  tree node ids and expose an `AxTree::relation` accessor.
+- [x] **A11Y-5 — resolved relationships.** `AxRelations` resolves
+  `aria-labelledby`/`describedby`/`details`/`errormessage` (single)/`controls`/
+  `flowto`/`owns` id references to tree node ids, via `AxNode::relations` and
+  `AxTree::relations(id)`. Resolution runs after `Builder::finish`, against the
+  final pruned tree, so a reference to a node presentational flattening
+  removed drops out instead of pointing at a stale pre-prune id;
+  `aria-activedescendant` was moved to the same pass (it had the identical
+  latent staleness since A11Y-2, just never hit by that ticket's fixtures).
+  Commit `9adfb13d`.
 - [ ] **A11Y-6 — driver adoption** (with `integrator-assist`), then a CDP
   `Accessibility.getFullAXTree` backing for `devtools`.
+
+## WPT corpus status
+
+No `accname/` or `html-aam/` WPT checkout exists on the Linux sandbox as of
+A11Y-5 (checked `find / -iname '*wpt*'`; only `wpt-html`, `wpt-render`,
+`wpt-replaced-content`, `wpt-integrator-assist` are present). This lane
+continues to gate on its own table-driven fixtures until one is added.
