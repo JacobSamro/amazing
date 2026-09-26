@@ -233,6 +233,20 @@ fn prepare_stretch(box_: &mut LayoutBox, containing_block: Rect, text: Option<&d
     let padding = values::resolve_padding_with_units(&box_.style, units, containing_block.w);
     let border = values::resolve_borders(&box_.style, box_.font_size);
 
+    // Stretch sizes the margin box against the definite positioned
+    // containing block, allowing percentages to propagate to descendants.
+    for (property, available, margin, chrome) in [
+        ("width", containing_block.w - left.unwrap_or(0.0) - right.unwrap_or(0.0), margins.left.unwrap_or(0.0) + margins.right.unwrap_or(0.0),
+            padding.left + padding.right + border.left + border.right),
+        ("height", containing_block.h - top.unwrap_or(0.0) - bottom.unwrap_or(0.0), margins.top.unwrap_or(0.0) + margins.bottom.unwrap_or(0.0),
+            padding.top + padding.bottom + border.top + border.bottom),
+    ] {
+        if box_.style.get(property).is_some_and(|value| matches!(value, "stretch" | "-webkit-fill-available")) {
+            box_.style.set(property, &format!("{}px", (available - margin - chrome).max(0.0)));
+        }
+    }
+    box_.containing_block_height = Some(containing_block.h);
+
     let width_auto = box_
         .style
         .get("width")

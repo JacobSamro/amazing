@@ -516,3 +516,54 @@ fn contents_pre_spaces_keep_their_own_style_at_line_start() {
         near(first_letter.x, expected);
     }
 }
+
+
+#[test]
+fn rtl_column_wrapping_combines_direction_and_wrap_reverse() {
+    for wrap in ["wrap", "wrap-reverse"] {
+        let (dom, root) = page(
+            "<body><div id=c><i id=a></i><i></i><i id=b></i></div></body>",
+            &format!("#c{{display:flex;direction:rtl;flex-flow:column {wrap};width:100px;height:40px}}i{{width:30px;height:20px}}"), false);
+        let a = get(&root, id(&dom, "a"));
+        let b = get(&root, id(&dom, "b"));
+        assert_eq!(a.border_box.x > b.border_box.x, wrap == "wrap");
+    }
+}
+
+#[test]
+fn lanes_auto_fit_collapses_internal_empty_tracks_in_both_axes() {
+    for axis in ["columns", "rows"] {
+        let place = if axis == "columns" { "column" } else { "row" };
+        let (dom, root) = page(
+            "<body><div id=c><i id=a></i><i id=b></i></div></body>",
+            &format!("#c{{display:grid-lanes;grid-template-{axis}:repeat(auto-fit,50px);width:150px;height:150px}}i{{width:50px;height:50px}}#a{{grid-{place}:1}}#b{{grid-{place}:3}}"), false);
+        let a = get(&root, id(&dom, "a"));
+        let b = get(&root, id(&dom, "b"));
+        near(if axis == "columns" { b.border_box.x-a.border_box.x } else { b.border_box.y-a.border_box.y }, 50.0);
+    }
+}
+
+#[test]
+fn positioned_stretch_is_definite_for_percentage_descendants() {
+    let dom = amazing_html::parse("<body><div id=modal><div id=dialog><div id=wrapper><div id=content><div id=inner></div></div></div></div></div></body>");
+    let sheet = amazing_css::parse_stylesheet("#modal{position:fixed;top:10px;bottom:20px;left:0;width:100px}#dialog,#wrapper,#inner{height:100%;width:100px}#wrapper{position:relative}#content{position:absolute;top:0;bottom:0;width:100px}");
+    let styled = amazing_css::compute(&dom, &[sheet]);
+    let mut root = box_tree::build_layout_tree(&dom, &styled, &font::FontSource::fallback());
+    // CSS currently rejects stretch at declaration parsing (routed to CSS).
+    // Exercise layout's computed-style seam without changing that ownership.
+    let modal = &mut root.positioned[0];
+    modal.style = modal.style.iter().map(|(name, value)|
+        (name.to_owned(), if name == "height" { "stretch".to_owned() } else { value.to_owned() }))
+        .collect();
+    block::layout_root_in_viewport(&mut root, 200.0, Some(300.0), &font::FontSource::fallback());
+    near(get(&root, id(&dom, "inner")).border_box.h, 270.0);
+}
+
+#[test]
+fn row_lanes_subgrid_chrome_matches_grid_sizing() {
+    let html = "<body><div id=outer><div id=c><section id=s><i>A</i><i>B</i></section></div></div></body>";
+    let css = "#outer{display:flex;width:200px}#c{grid-template-rows:repeat(2,60px);gap:10px}#s{display:grid;grid-template-rows:subgrid;grid-row:1/-1;grid-auto-flow:column;border:9px solid;padding:6px}i{width:80px;padding:8px;border:1px solid}";
+    let (grid_dom, grid) = page(html, &format!("{css}#c{{display:grid}}"), false);
+    let (lanes_dom, lanes) = page(html, &format!("{css}#c{{display:grid-lanes}}"), false);
+    near(get(&lanes, id(&lanes_dom, "s")).border_box.w, get(&grid, id(&grid_dom, "s")).border_box.w);
+}

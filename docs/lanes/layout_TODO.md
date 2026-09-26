@@ -1288,3 +1288,50 @@ pinned baseline under `crates/amazing-layout/evidence/layout18/`, fix grid and t
 run the candidate win-001 render sweep and win-002 crate/workspace gate. The
 integrator-assist article-width oracle command ran successfully on win-002,
 but its p95 output needs recapture in durable evidence before a final report.
+
+### LAYOUT-18 resumed — repetition and intrinsic contributions
+
+Source `8ebd1dcb` resolves automatic repeat counts with surrounding fixed
+repetitions, shared named-line expansion, and post-placement auto-fit collapse.
+Collapsed tracks keep their explicit line indices but contribute neither size
+nor extra gutters/distributed spacing. Source `83e497a0` treats cyclic preferred
+percentage widths as auto during intrinsic measurement, avoids double-counting
+item padding/borders in grid/subgrid/grid-lanes contributions, and stretches
+minmax tracks with an auto maximum. Linux iteration: 298 passing tests, one
+skipped timing diagnostic, zero doctests. Windows candidate evidence is pending;
+these are not final gate numbers.
+
+Next sizing area identified by source review: ordinary block layout does not
+consume `box-sizing:border-box` when resolving width/height constraints.
+Coordinate that implementation with flex/grid's materialized content sizes and
+intrinsic min/max constraints; do not simply subtract chrome in one caller.
+
+
+### LAYOUT-18 restart recovery and lost-pass repairs
+
+The recovered source-locked Windows run at `2287c1bf` completed all selections:
+full flex/grid **614 -> 656** passes (47 gains, five losses); retained
+**276 -> 277** (two gains, one loss); routed values **4 -> 7** (three gains,
+zero losses). All 1,912 results rendered, with no errors or timeouts. The
+workspace gate correctly did not run after these losses. Reports and ID-level
+comparisons remain under `evidence/layout18/` with their original classifications.
+
+All six losses reproduced with both the saved pre-merge and merged renderers.
+The repair covers physical flex cross-start (writing mode and direction XOR
+wrap-reverse), Grid Lanes' pre-placement auto-fit occupancy heuristic and
+collapsed-gutter sizing, and materializing row-lane intrinsic widths without
+adding border/padding twice. Positioned stretch resolves against its inset
+space and supplies a definite percentage-height basis. Linux iteration after
+repair: **302 passed, one skipped, zero doctests**. Windows repair evidence is
+pending; these counts are not final gates.
+
+The retained `intrinsic-height-abspos-stretch-percentage-child` loss also needs
+CSS: its parser rejects `stretch` and `-webkit-fill-available`. The old actual
+image is unchanged; only its now-correct 100vh reference changed. The layout
+half has a computed-style regression test; the parser request is in lane
+questions. Do not mark this ticket ready until the original WPT passes or the
+integrator explicitly accepts the owner-tagged loss.
+
+Rules: [Flex cross-start](https://www.w3.org/TR/css-flexbox-1/#flex-wrap-property),
+[Grid Lanes auto-fit](https://www.w3.org/TR/css-grid-3/#repeat-auto-fit),
+[positioned available space](https://www.w3.org/TR/css-position-3/#abspos-layout).
