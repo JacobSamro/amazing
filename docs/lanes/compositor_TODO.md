@@ -308,3 +308,31 @@ a transform under another transform; `mask-image` under a transform
 (untested, no corpus case); `clip-path`/`mask-image` as a live CSS delta and
 a painter `mask-image` renderer (routed to CSS/replaced-content, unchanged
 from COMP-15).
+
+### COMP-17 real-page frame-time report for the shell
+
+`real_page_frame_time_report` repeats COMP-15's scroll/transform/opacity/
+filter frame-time trace on 5 real-page fixtures from `tests/real-pages/pages/`
+(`app-kanban`, `docs-guide`, `news-section`, `shop-category`, `wiki-portal`)
+instead of one synthetic page, by prepending the same `fixed`/`scroller`/
+`moving`/`fade` scaffold inside each fixture's own `<body>` so the scaffold
+keeps the deterministic property ids `retained_real_page_property_trace`
+already relies on, while the fixture's own body content drives realistic
+scene scale. Pages were picked by probing which fixtures resolve to
+`PaintViewRasterMode::RawLocal` with the scaffold attached; pages with a
+`<form>`/table `border-collapse` always fall back to `BakedFallback` (already
+covered by COMP-15's fallback tests) and `app-dashboard` falls back for an
+undiagnosed reason despite having only `<img>` content.
+
+Measured: compositor **93/93** (was 92/92); workspace **3152 passed,
+0 failed, 14 skipped** (was 3151); doctests **4/4**, unchanged. All 20
+page/scenario combinations report **zero tile uploads** and a `build_frame`
+cost between 0.9% and 2.0% of a full repaint (well inside the 10% bound
+COMP-15 established), across 5 real pages instead of 1 synthetic one. Zero
+lost parity cases; no other corpus touched by this ticket. Evidence:
+`crates/amazing-compositor/evidence/comp17/real-page-frame-time.md`.
+
+Still open: `app-dashboard`'s `BakedFallback` reason on img-only content;
+pages that always fall back (`border-collapse` tables, form controls) have
+no retained tiled path and so no frame-time story beyond "full repaint every
+frame."
