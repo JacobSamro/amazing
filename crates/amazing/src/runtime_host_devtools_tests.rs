@@ -1426,3 +1426,219 @@ fn end_to_end_device_metrics_override_and_insert_text() {
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
 }
+
+/// CDP-22: `Debugger.stepOver` and a real `scopeChain` on paused frames.
+/// `stepOver` shares `Debugger.pause`'s exact one-shot mechanism (see
+/// `PageOwner::debugger_step_over`'s doc comment for why this driver cannot
+/// tell them apart), and the paused event's `scopeChain` carries a real,
+/// live `"global"` scope object — `Runtime.getProperties` on it reflects
+/// genuine `globalThis` state set just before the pause, not a snapshot.
+#[test]
+fn end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals() {
+    let host = spawn_test_host(
+        "http://example.test/step.html",
+        "<title>Step</title><body><script>var a = 1;</script></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    client.result("Debugger.enable", Json::Object(Vec::new()));
+    client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("globalThis.probe = 42;".into()))]),
+    );
+
+    // Same "nudge" pattern CDP-20's own Debugger test uses: every event here
+    // is queued synchronously during its triggering command but only
+    // flushed by the server's poll loop *after* that command's own reply.
+    let evaluate_and_collect = |client: &mut Client, expression: &str| -> Vec<Json> {
+        let (_, mut more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String(expression.into()))]),
+        );
+        let (_, nudge) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("0;".into()))]),
+        );
+        more.extend(nudge);
+        more
+    };
+
+    client.result("Debugger.stepOver", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "1;");
+    let paused: Vec<Json> = more
+        .iter()
+        .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+        .cloned()
+        .collect();
+    assert_eq!(paused.len(), 1, "stepOver should force a pause on the next statement: {more:?}");
+    let params = paused[0].get("params").expect("params");
+    let frames = params.get("callFrames").and_then(Json::as_array).expect("callFrames");
+    assert_eq!(frames.len(), 1, "{frames:?}");
+    let scope_chain = frames[0].get("scopeChain").and_then(Json::as_array).expect("scopeChain");
+    assert_eq!(scope_chain.len(), 1, "{scope_chain:?}");
+    assert_eq!(scope_chain[0].get("type").and_then(Json::as_str), Some("global"), "{scope_chain:?}");
+    let object_id = scope_chain[0]
+        .get("object")
+        .and_then(|object| object.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("the global scope's object should carry a real objectId")
+        .to_owned();
+
+    let properties = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(object_id)),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    let descriptors = properties.get("result").and_then(Json::as_array).expect("result array");
+    let probe = descriptors
+        .iter()
+        .find(|descriptor| descriptor.get("name").and_then(Json::as_str) == Some("probe"))
+        .unwrap_or_else(|| panic!("no probe property on the global scope object: {descriptors:?}"));
+    assert_eq!(
+        probe.get("value").and_then(|value| value.get("value")).and_then(Json::as_f64),
+        Some(42.0),
+        "the scope chain's global object should be live, not a snapshot: {probe}"
+    );
+
+    // Debugger.resume clears a still-pending step just like it clears a
+    // pending pause (they arm the same flag).
+    client.result("Debugger.stepOver", Json::Object(Vec::new()));
+    client.result("Debugger.resume", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "2;");
+    assert!(
+        !more.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")),
+        "resume should have cleared the pending step: {more:?}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-22 completeness: `Runtime.evaluate`/`callFunctionOn`'s
+/// `returnByValue: true` now serializes objects/arrays structurally instead
+/// of minting an unwanted `objectId`, and `Runtime.getProperties` with
+/// `ownProperties: false` now walks the prototype chain instead of silently
+/// behaving exactly like `true`.
+#[test]
+fn end_to_end_runtime_return_by_value_and_inherited_properties() {
+    let host = spawn_test_host("http://example.test/runtime.html", "<title>Runtime</title>");
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    // returnByValue on Runtime.evaluate: a nested array/object is serialized
+    // structurally, with no objectId minted.
+    let evaluated = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![
+            ("expression".into(), Json::String("[1, 'two', { three: 3 }]".into())),
+            ("returnByValue".into(), Json::Bool(true)),
+        ]),
+    );
+    let result = evaluated.get("result").expect("result");
+    assert!(result.get("objectId").is_none(), "returnByValue should not mint an objectId: {result}");
+    let array = result.get("value").and_then(Json::as_array).expect("array value");
+    assert_eq!(array.len(), 3, "{array:?}");
+    assert_eq!(array[0].as_f64(), Some(1.0), "{array:?}");
+    assert_eq!(array[1].as_str(), Some("two"), "{array:?}");
+    assert_eq!(array[2].get("three").and_then(Json::as_f64), Some(3.0), "{array:?}");
+
+    // returnByValue on Runtime.callFunctionOn: same serialization path,
+    // against a real live object this time (not a fresh literal).
+    let object_result = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("({ x: 1, y: 2 })".into()))]),
+    );
+    let object_id = object_result
+        .get("result")
+        .and_then(|result| result.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("a plain object should have a real objectId when not returned by value")
+        .to_owned();
+    let called = client.result(
+        "Runtime.callFunctionOn",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(object_id)),
+            (
+                "functionDeclaration".into(),
+                Json::String("function() { return { sum: this.x + this.y }; }".into()),
+            ),
+            ("returnByValue".into(), Json::Bool(true)),
+        ]),
+    );
+    let called_result = called.get("result").expect("result");
+    assert!(called_result.get("objectId").is_none(), "{called_result}");
+    assert_eq!(
+        called_result.get("value").and_then(|value| value.get("sum")).and_then(Json::as_f64),
+        Some(3.0),
+        "{called_result}"
+    );
+
+    // getProperties(ownProperties: false) walks the prototype chain.
+    let with_proto = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![(
+            "expression".into(),
+            Json::String(
+                "(() => { const o = Object.create({ inherited: 99 }); o.own = 1; return o; })()".into(),
+            ),
+        )]),
+    );
+    let with_proto_id = with_proto
+        .get("result")
+        .and_then(|result| result.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("objectId")
+        .to_owned();
+
+    let own_only = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(with_proto_id.clone())),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    let own_descriptors = own_only.get("result").and_then(Json::as_array).expect("result array");
+    assert!(
+        !own_descriptors.iter().any(|d| d.get("name").and_then(Json::as_str) == Some("inherited")),
+        "ownProperties: true should not see the prototype's own property: {own_descriptors:?}"
+    );
+
+    let with_inherited = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(with_proto_id)),
+            ("ownProperties".into(), Json::Bool(false)),
+        ]),
+    );
+    let all_descriptors = with_inherited.get("result").and_then(Json::as_array).expect("result array");
+    let own_prop = all_descriptors
+        .iter()
+        .find(|d| d.get("name").and_then(Json::as_str) == Some("own"))
+        .unwrap_or_else(|| panic!("own property missing: {all_descriptors:?}"));
+    assert_eq!(own_prop.get("isOwn").and_then(Json::as_bool), Some(true), "{own_prop}");
+    let inherited_prop = all_descriptors
+        .iter()
+        .find(|d| d.get("name").and_then(Json::as_str) == Some("inherited"))
+        .unwrap_or_else(|| panic!("inherited property missing from an ownProperties:false walk: {all_descriptors:?}"));
+    assert_eq!(inherited_prop.get("isOwn").and_then(Json::as_bool), Some(false), "{inherited_prop}");
+    assert_eq!(
+        inherited_prop.get("value").and_then(|value| value.get("value")).and_then(Json::as_f64),
+        Some(99.0),
+        "{inherited_prop}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}

@@ -272,6 +272,59 @@
 //!   `value` property); a `contenteditable` element or nothing focused
 //!   returns `HostError::Unsupported`, since there is no rich-text insertion
 //!   point to append to.
+//!
+//! CDP-22 adds `Debugger.stepOver` and real `scopeChain` on paused frames,
+//! plus two `Runtime.callFunctionOn`/`getProperties` completeness fixes
+//! (`returnByValue`, inherited properties) — all still built entirely on the
+//! exec_stmt debug hook and object-registry machinery CDP-20/CDP-18 already
+//! added, with no further `amazing-js` changes.
+//!
+//! * **`Debugger.stepOver` shares `Debugger.pause`'s exact one-shot-flag
+//!   mechanism.** [`DebugHook::on_statement`] reports only
+//!   `(script_id, url, line)`, with no call-stack depth, so this driver has
+//!   no way to tell "the next statement in this same frame" apart from "the
+//!   next statement anywhere" — an honest simplification, not a silently-
+//!   approximated feature. A real stepOver needs the interpreter to expose
+//!   call-stack depth to the hook, filed alongside the existing true-pause
+//!   gap in `.agents/js-runtime/questions.md`. `stepInto`/`stepOut` are left
+//!   at the trait's `Unsupported` default, unchanged from CDP-20 — there is
+//!   still no suspended call stack for either to act on.
+//! * **`Debugger.paused`'s call frames now carry a real `scopeChain`.**
+//!   [`DriverDebugHook::on_statement`] itself still cannot build one (it only
+//!   has plain `Rc<RefCell<_>>` cells, no interpreter/object-registry
+//!   access — see that struct's own doc comment); [`PageOwner::
+//!   drain_debugger_paused`] fills it in afterward, since it runs on
+//!   `PageOwner` and has both. The only scope this driver can honestly offer
+//!   is `"global"` — this engine's tree-walking interpreter has no reified
+//!   per-call local/closure environment record reachable from outside a
+//!   running call, so there is no real per-frame "local"/"closure" scope
+//!   object to hand back. The global object itself is real and live, not a
+//!   snapshot: it is minted through the same [`PageOwner::remote_object`]
+//!   registration `Runtime.evaluate` uses, so `Runtime.getProperties` on it
+//!   reflects genuine `globalThis` state at the moment of the pause.
+//! * **`Runtime.evaluate`/`callFunctionOn`'s `returnByValue: true` is now
+//!   honored.** It was accepted (the field exists on both param structs)
+//!   but silently ignored before this ticket — every object result got an
+//!   `objectId` reference regardless of the flag.
+//!   [`PageOwner::remote_object_by_value`] serializes a plain object/array
+//!   structurally instead (own *enumerable* properties through getters,
+//!   `Array.isArray`-detected element order for arrays), depth-capped at 5
+//!   rather than cycle-tracked (no pointer-identity check for `JsValue::
+//!   Object`'s `Rc` exists in this driver) — an honest safety net for a
+//!   self-referential object, not a full structured-clone. `BigInt`/`Symbol`
+//!   values inside a by-value result are nulled, matching the existing
+//!   "can't carry either verbatim" limitation elsewhere in this file.
+//! * **`Runtime.getProperties`'s `ownProperties: false` now walks the
+//!   prototype chain** instead of silently behaving like `true` always did.
+//!   There is no `[[Prototype]]` accessor in `amazing-js`'s own binding
+//!   surface for an arbitrary object (`interp_bindings.rs` only has
+//!   `binding_object_prototype`/`binding_set_global_prototype`, both for the
+//!   *global* object's own prototype specifically) — [`PageOwner::
+//!   get_properties`] instead reuses real JS (`Object.getPrototypeOf`)
+//!   through the same `run_script` + `binding_call` idiom `callFunctionOn`
+//!   already uses, walking up to 20 levels (a safety net against a
+//!   corrupted/cyclic chain, not a real spec limit) and tagging each
+//!   inherited property `is_own: false`.
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -288,7 +341,7 @@ use amazing_devtools::host::{
     ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
     LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
     NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
-    Quad, RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams,
+    Quad, RemoteObject, ResourceContent, Scope, Screenshot, ScreenshotFormat, ScreenshotParams,
     ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
@@ -344,6 +397,7 @@ enum PageCommand {
     RemoveBreakpoint(String, Reply<()>),
     DebuggerPause(Reply<()>),
     DebuggerResume(Reply<()>),
+    DebuggerStepOver(Reply<()>),
     GetScriptSource(String, Reply<String>),
     DrainScriptsParsed(Reply<Vec<ScriptInfo>>),
     DrainDebuggerPaused(Reply<Vec<PausedEvent>>),
@@ -878,6 +932,11 @@ impl DebugHook for DriverDebugHook {
             // `line` is `amazing_js`'s 1-based line; CDP's `Location.lineNumber` is 0-based.
             location: ScriptLocation { script_id: script_id.to_owned(), line_number: line.saturating_sub(1), column_number: None },
             url: url.to_owned(),
+            // Filled in by `PageOwner::drain_debugger_paused` (CDP-22), which
+            // has the interpreter/object-registry access this hook does not
+            // (see this struct's own doc comment on why state only flows
+            // through plain data here).
+            scope_chain: Vec::new(),
         };
         let reason = if hit_ids.is_empty() { "other" } else { "Breakpoint" };
         self.paused.borrow_mut().push_back(PausedEvent {
@@ -1415,6 +1474,113 @@ impl PageOwner {
         }
     }
 
+    /// CDP-22 completeness fix: `Runtime.evaluate`/`callFunctionOn`'s
+    /// `returnByValue: true` was accepted (`EvaluateParams`/
+    /// `CallFunctionParams` both carry the field) but never honored — every
+    /// object result got an `objectId` reference regardless. This serializes
+    /// a plain object/array structurally into `RemoteObject::value` instead,
+    /// matching CDP's "serialize instead of a handle" semantics; no
+    /// `objectId` is minted, since real Chrome does not hand out a reference
+    /// for a by-value result either. Primitives already carry `value`
+    /// unconditionally (see [`Self::remote_object`]), so they pass through
+    /// unchanged.
+    fn remote_object_by_value(&mut self, value: &amazing_js::value::JsValue) -> RemoteObject {
+        use amazing_js::value::JsValue;
+        match value {
+            JsValue::Object(_) => {
+                let is_array = self.js_is_array(value);
+                let json = self.js_value_to_json(value, 0);
+                RemoteObject {
+                    object_type: "object".to_owned(),
+                    subtype: if is_array { Some("array".to_owned()) } else { None },
+                    description: Some(format!("{value:?}")),
+                    value: Some(json),
+                    ..RemoteObject::undefined()
+                }
+            }
+            other => self.remote_object(other),
+        }
+    }
+
+    /// `Array.isArray(value)`, run through the exact same `run_script` +
+    /// `binding_call` idiom `Runtime.callFunctionOn` already uses to invoke
+    /// a function against a live value — there is no `binding_is_array` in
+    /// `amazing-js`'s own binding surface, so this reuses real JS instead of
+    /// asking js-runtime for a new one.
+    fn js_is_array(&mut self, value: &amazing_js::value::JsValue) -> bool {
+        use amazing_js::value::JsValue;
+        match self.scheduler.run_script("Array.isArray") {
+            Ok(is_array_fn) => matches!(
+                self.scheduler.js.binding_call(&is_array_fn, JsValue::Undefined, vec![value.clone()]),
+                Ok(JsValue::Bool(true))
+            ),
+            Err(_) => false,
+        }
+    }
+
+    /// Structurally serializes `value` for [`Self::remote_object_by_value`].
+    /// Depth-capped at 5 rather than cycle-tracked — an honest safety net
+    /// against a self-referential object (this driver has no pointer-
+    /// identity check for `JsValue::Object`'s `Rc`), not a full structured-
+    /// clone. Arrays walk `length`/indices (real element order); plain
+    /// objects walk own *enumerable* string-keyed properties through
+    /// getters, matching what `JSON.stringify` would produce — non-
+    /// enumerable properties and `BigInt`/`Symbol` values are dropped/
+    /// nulled the same way `JSON.stringify` drops or throws on them (nulled
+    /// here rather than erroring, an intentionally lenient choice for a
+    /// debugging tool).
+    fn js_value_to_json(&mut self, value: &amazing_js::value::JsValue, depth: u32) -> amazing_devtools::json::Json {
+        use amazing_devtools::json::Json;
+        use amazing_js::value::JsValue;
+        match value {
+            JsValue::Undefined | JsValue::Null => Json::Null,
+            JsValue::Bool(b) => Json::Bool(*b),
+            JsValue::Num(n) => Json::number(*n),
+            JsValue::Str(s) => Json::String(s.to_utf8_lossy()),
+            JsValue::BigInt(_) | JsValue::Symbol(_) => Json::Null,
+            JsValue::Object(_) => {
+                if depth >= 5 {
+                    return Json::Null;
+                }
+                if self.js_is_array(value) {
+                    let length = match self.scheduler.js.binding_get_property(value, "length") {
+                        Ok(JsValue::Num(n)) if n.is_finite() && n >= 0.0 => n as usize,
+                        _ => 0,
+                    };
+                    let mut items = Vec::with_capacity(length.min(10_000));
+                    for index in 0..length {
+                        let item = self
+                            .scheduler
+                            .js
+                            .binding_get_property(value, &index.to_string())
+                            .unwrap_or(JsValue::Undefined);
+                        items.push(self.js_value_to_json(&item, depth + 1));
+                    }
+                    Json::Array(items)
+                } else {
+                    let keys = self.scheduler.js.binding_own_property_keys(value).unwrap_or_default();
+                    let mut fields = Vec::with_capacity(keys.len());
+                    for key in keys {
+                        let property = match self.scheduler.js.binding_get_own_property(value, &key) {
+                            Ok(Some(property)) if property.enumerable => property,
+                            _ => continue,
+                        };
+                        let field_value = match &property.getter {
+                            Some(getter) => self
+                                .scheduler
+                                .js
+                                .binding_call(getter, value.clone(), Vec::new())
+                                .unwrap_or(JsValue::Undefined),
+                            None => property.value.clone(),
+                        };
+                        fields.push((key, self.js_value_to_json(&field_value, depth + 1)));
+                    }
+                    Json::Object(fields)
+                }
+            }
+        }
+    }
+
     fn navigate(&mut self, url: &str) -> Result<FrameInfo, HostError> {
         let override_width = self.override_width;
         let override_fixed_height = self.override_fixed_height;
@@ -1461,7 +1627,8 @@ impl PageOwner {
     fn evaluate(&mut self, params: &EvaluateParams) -> EvaluateResult {
         match self.scheduler.run_script(&params.expression) {
             Ok(value) => {
-                let object = self.remote_object(&value);
+                let object =
+                    if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
                 EvaluateResult::value(object)
             }
             Err(thrown) => {
@@ -1481,20 +1648,20 @@ impl PageOwner {
         }
     }
 
-    /// `Runtime.getProperties`: own-property enumeration only — CDP's
-    /// `ownProperties=false` (include inherited) is not distinguished, see
-    /// the module's "Known limitations". Accessor properties are read
-    /// through their getter, matching what a DevTools Properties panel shows.
-    fn get_properties(&mut self, object_id: &str, _own_only: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
-        let object = self.objects.get(object_id).cloned().ok_or(HostError::NotFound)?;
+    /// The properties [`Self::get_properties`] reports for one level of an
+    /// object's own-property table (either `object_id`'s own properties, or
+    /// one prototype's own properties during the chain walk below), each
+    /// tagged `is_own` for the caller. Accessor properties are read through
+    /// their getter, matching what a DevTools Properties panel shows.
+    fn own_properties(&mut self, object: &amazing_js::value::JsValue, is_own: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
         let keys = self
             .scheduler
             .js
-            .binding_own_property_keys(&object)
+            .binding_own_property_keys(object)
             .map_err(|thrown| HostError::Internal(thrown.describe()))?;
         let mut properties = Vec::with_capacity(keys.len());
         for key in keys {
-            let property = match self.scheduler.js.binding_get_own_property(&object, &key) {
+            let property = match self.scheduler.js.binding_get_own_property(object, &key) {
                 Ok(Some(property)) => property,
                 Ok(None) => continue,
                 Err(thrown) => return Err(HostError::Internal(thrown.describe())),
@@ -1514,8 +1681,42 @@ impl PageOwner {
                 writable: property.writable,
                 configurable: property.configurable,
                 enumerable: property.enumerable,
-                is_own: true,
+                is_own,
             });
+        }
+        Ok(properties)
+    }
+
+    /// `Runtime.getProperties`. `own_only=true` (CDP's `ownProperties: true`,
+    /// the common "expand this object" case) lists just `object_id`'s own
+    /// properties (`is_own: true`). `own_only=false` (CDP-22 completeness
+    /// fix) also walks the prototype chain, one level at a time
+    /// (`is_own: false` on each), stopping at `null`/a non-object or after
+    /// 20 levels — a safety net against a corrupted/cyclic chain, not a real
+    /// spec limit. There is no `[[Prototype]]` accessor in `amazing-js`'s own
+    /// binding surface for an arbitrary object (only
+    /// `binding_object_prototype`/`binding_set_global_prototype`, both for
+    /// the *global* prototype specifically — see `interp_bindings.rs`), so
+    /// the walk reuses real JS (`Object.getPrototypeOf`) through the same
+    /// `run_script` + `binding_call` idiom `call_function_on` already uses,
+    /// rather than asking js-runtime for a new binding.
+    fn get_properties(&mut self, object_id: &str, own_only: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
+        let object = self.objects.get(object_id).cloned().ok_or(HostError::NotFound)?;
+        let mut properties = self.own_properties(&object, true)?;
+        if !own_only {
+            let get_prototype = self
+                .scheduler
+                .run_script("(function() { return Object.getPrototypeOf(this); })")
+                .map_err(|thrown| HostError::Internal(thrown.describe()))?;
+            let mut current = object;
+            for _ in 0..20 {
+                let prototype = match self.scheduler.js.binding_call(&get_prototype, current.clone(), Vec::new()) {
+                    Ok(value @ amazing_js::value::JsValue::Object(_)) => value,
+                    _ => break,
+                };
+                properties.extend(self.own_properties(&prototype, false)?);
+                current = prototype;
+            }
         }
         Ok(properties)
     }
@@ -1527,7 +1728,8 @@ impl PageOwner {
     /// argument (`object_id` handles resolve to the live value; JSON
     /// `value`s go through [`json_to_js_value`]) and invokes it through the
     /// same `binding_call` embedding entry point `get_properties` uses for
-    /// accessors.
+    /// accessors. `returnByValue` (CDP-22 completeness fix) is honored the
+    /// same way `evaluate` honors it — see [`Self::remote_object_by_value`].
     fn call_function_on(&mut self, params: &CallFunctionParams) -> Result<EvaluateResult, HostError> {
         let this = match &params.object_id {
             Some(id) => self.objects.get(id).cloned().unwrap_or(amazing_js::value::JsValue::Undefined),
@@ -1543,7 +1745,8 @@ impl PageOwner {
         }
         match self.scheduler.js.binding_call(&function, this, args) {
             Ok(value) => {
-                let object = self.remote_object(&value);
+                let object =
+                    if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
                 Ok(EvaluateResult::value(object))
             }
             Err(thrown) => Ok(self.evaluate_exception(thrown)),
@@ -2035,6 +2238,20 @@ impl PageOwner {
         Ok(())
     }
 
+    /// `Debugger.stepOver`. [`DebugHook::on_statement`] only reports
+    /// `(script_id, url, line)` — no call-stack depth — so this driver has
+    /// no way to tell "the next statement in this same frame" apart from
+    /// "the next statement anywhere". Rather than pretend otherwise, it arms
+    /// the exact same one-shot flag `debugger_pause` does: an honest
+    /// simplification, not a silently-approximated feature. A real stepOver
+    /// needs the interpreter to expose call-stack depth to the hook, a
+    /// bigger interpreter-level change (see `.agents/js-runtime/
+    /// questions.md`).
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        *self.pause_requested.borrow_mut() = true;
+        Ok(())
+    }
+
     fn get_script_source(&self, script_id: &str) -> Result<String, HostError> {
         self.scripts
             .iter()
@@ -2047,8 +2264,36 @@ impl PageOwner {
         self.scripts_parsed.drain(..).collect()
     }
 
+    /// Drains queued `Debugger.paused` events, then fills each call frame's
+    /// `scope_chain` (CDP-22) — [`DriverDebugHook::on_statement`] cannot do
+    /// this itself (it only has plain `Rc<RefCell<_>>` cells, no interpreter/
+    /// object-registry access; see that struct's doc comment), but
+    /// `PageOwner` does. The only scope this driver can honestly offer is
+    /// `"global"`: this engine's tree-walking interpreter has no reified
+    /// per-call local/closure environment records reachable from outside a
+    /// running call, so there is no real "local"/"closure" scope object to
+    /// hand back — see the module's "Known limitations". The global object
+    /// itself is real and live, though: it goes through the same
+    /// `remote_object` registration `Runtime.evaluate` uses, so
+    /// `Runtime.getProperties` on it reflects genuine `globalThis` state,
+    /// not a snapshot.
     fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
-        self.debugger_paused.borrow_mut().drain(..).collect()
+        let mut events: Vec<PausedEvent> = self.debugger_paused.borrow_mut().drain(..).collect();
+        if events.is_empty() {
+            return events;
+        }
+        let global_scope = match self.scheduler.run_script("globalThis") {
+            Ok(value) => Some(Scope { scope_type: "global".to_owned(), object: self.remote_object(&value) }),
+            Err(_) => None,
+        };
+        if let Some(scope) = global_scope {
+            for event in &mut events {
+                for frame in &mut event.call_frames {
+                    frame.scope_chain = vec![scope.clone()];
+                }
+            }
+        }
+        events
     }
 
     fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
@@ -2283,6 +2528,9 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::DebuggerResume(reply) => {
                 let _ = reply.send(page.debugger_resume());
+            }
+            PageCommand::DebuggerStepOver(reply) => {
+                let _ = reply.send(page.debugger_step_over());
             }
             PageCommand::GetScriptSource(script_id, reply) => {
                 let _ = reply.send(page.get_script_source(&script_id));
@@ -2562,6 +2810,12 @@ impl DevToolsSession for DriverPageSession {
     /// execution to actually resume — see "Known limitations".
     fn debugger_resume(&mut self) -> Result<(), HostError> {
         request(&self.sender, PageCommand::DebuggerResume)
+    }
+
+    /// `Debugger.stepOver`: see `PageOwner::debugger_step_over`'s doc
+    /// comment for why this shares `Debugger.pause`'s exact mechanism.
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerStepOver)
     }
 
     fn get_script_source(&mut self, script_id: &str) -> Result<String, HostError> {
