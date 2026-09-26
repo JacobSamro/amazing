@@ -4,31 +4,54 @@ mod corpus;
 fn real_painter_filter_directory(){assert_eq!(corpus::run(false),0);}
 
 #[test]
+fn transformed_filter_clip_and_backdrop_groups_match_full_paint() {
+    assert_eq!(corpus::run_transformed(), 0);
+}
+
+/// COMP-16 gave a group with its own transform, sitting directly under the
+/// identity root and unnested with any other filter/backdrop/clip group, a
+/// single inverse-mapped composite (see the corpus above). These remaining
+/// cases still need the exact full-paint fallback: an oversized filter is
+/// rejected on its own terms; the rest would need composing two groups'
+/// local surfaces (or a second, different transform) rather than one
+/// inverse-mapped sample, which the retained compositor does not do.
+#[test]
 fn transformed_clipped_and_oversize_filters_use_exact_full_paint_fallback() {
     use amazing_compositor::*;
     use amazing_paint::{controls::NoControls,display_list_view::DisplayListView,
         paint_document_with_text_resources_and_controls,NoImages};
     use amazing_text::FallbackTextSystem;
-    for declaration in [
-        "filter:blur(2px);transform:translate(3px,4px)",
-        "backdrop-filter:blur(2px);transform:scale(1.1)",
-        "filter:blur(2px);clip-path:circle(40%);transform:translate(1px,1px)",
-        "filter:invert(1);clip-path:inset(3px round 2px);transform:translate(1px,1px)",
-        "clip-path:ellipse(40% 30%);transform:scale(1.1)",
-        "filter:blur(129px)",
+    for (html, css) in [
+        ("<body><div></div></body>",
+         "body{margin:0;background:blue}div{width:16px;height:16px;background:red;filter:blur(129px)}"),
+        // A transformed group's own blur reads neighboring source pixels
+        // outward by its outset; that read is not yet transform-sampled
+        // (see `PainterFilterSource::from_view`'s outset check).
+        ("<body><div></div></body>",
+         "body{margin:0;background:blue}div{width:16px;height:16px;background:red;filter:blur(2px);transform:rotate(5deg)}"),
+        // Two qualifying groups, nested, the outer one transformed.
+        ("<body><div class=outer><div class=inner></div></div></body>",
+         "body{margin:0;background:blue}.outer{width:24px;height:24px;background:red;filter:blur(2px);transform:rotate(5deg)}.inner{width:12px;height:12px;background:green;clip-path:inset(2px)}"),
+        // The filtered group's own transform sits under an ancestor
+        // transform, not directly under the identity root.
+        ("<body><div class=outer><div class=inner></div></div></body>",
+         "body{margin:0;background:blue}.outer{width:24px;height:24px;background:red;transform:translate(2px,2px)}.inner{width:12px;height:12px;background:green;filter:blur(2px);transform:rotate(5deg)}"),
+        // A plain, further transform nested inside a transformed filter
+        // group: its content would need a second, different sample.
+        ("<body><div class=outer><div class=inner></div></div></body>",
+         "body{margin:0;background:blue}.outer{width:24px;height:24px;background:red;filter:blur(2px);transform:translate(2px,2px)}.inner{width:12px;height:12px;background:green;transform:rotate(5deg)}"),
     ] {
         let text=FallbackTextSystem::new();
-        let css=format!("body{{margin:0;background:blue}}div{{width:16px;height:16px;background:red;{declaration}}}");
-        let root=amazing_layout::layout_document_with_text("<body><div></div></body>",&css,32.,&text);
+        let root=amazing_layout::layout_document_with_text(html,css,32.,&text);
         let view=DisplayListView::new(&root,32,32,&text,&NoImages,&NoControls);
         let source=PaintViewSource::new(&view);
-        assert_eq!(source.mode(),PaintViewRasterMode::BakedFallback,"{declaration}");
+        assert_eq!(source.mode(),PaintViewRasterMode::BakedFallback,"{css}");
         assert!(source.property_bindings().is_none());
         let mut compositor=source.compositor(32,32).unwrap();
         let frame=source.build_frame(&mut compositor,32,32).unwrap();
         let actual=ReferenceCpuPresenter::default().present(&frame).unwrap();
         let expected=paint_document_with_text_resources_and_controls(&root,32,32,&text,&NoImages,&NoControls);
-        assert_eq!(actual,expected,"{declaration}");
+        assert_eq!(actual,expected,"{css}");
     }
 }
 #[test]

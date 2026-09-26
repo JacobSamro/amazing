@@ -429,8 +429,22 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
             ("{{ports[https][0]}}", "443"),
             ("{{ports[https][1]}}", "8443"),
             ("{{domains[www2]}}", "www2.web-platform.test"),
+            ("{{domains[www1]}}", "www1.web-platform.test"),
+            ("{{domains[www]}}", "www.web-platform.test"),
+            ("{{hosts[][www]}}", "www.web-platform.test"),
             ("{{hosts[alt][]}}", "not-web-platform.test"),
+            ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
             ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
+            // NET-38: websockets/constants.sub.js builds its ws:// / wss://
+            // base URL from these; any value routes through StdResolver's
+            // *.web-platform.test host match regardless of the port number.
+            ("{{ports[ws][0]}}", "80"),
+            ("{{ports[wss][0]}}", "443"),
+            ("{{ports[h2][0]}}", "443"),
+            ("{{ports[http-local][0]}}", "80"),
+            ("{{ports[http-public][0]}}", "80"),
+            ("{{ports[https-local][0]}}", "443"),
+            ("{{ports[https-public][0]}}", "443"),
         ] {
             text = text.replace(placeholder, value);
         }

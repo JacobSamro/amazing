@@ -8,7 +8,11 @@ mod font_relative_metrics;
 mod font_variant_synthesis;
 mod font_variations;
 mod line_break_objects;
+mod text_emphasis;
+mod text_transform;
 pub use font_display::FontDisplayPeriods;
+pub use text_emphasis::text_emphasis_mark;
+pub use text_transform::apply_text_transform;
 
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,

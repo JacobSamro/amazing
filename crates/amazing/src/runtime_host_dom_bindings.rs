@@ -389,7 +389,7 @@ mod tests {
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
         js.set_dom_host(host.clone());
         let bindings = super::super::install(&mut js, host).unwrap();
-        bindings.set_document_url("https://example.test/base/");
+        bindings.set_document_url(&mut js, "https://example.test/base/");
         let result = js.run_script(r#"
             let step = 0;
             function check(v) { step++; if (!v) throw 'obsolete reflection check ' + step; }

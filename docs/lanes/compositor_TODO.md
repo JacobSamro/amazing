@@ -276,3 +276,63 @@ zero-reraster guarantee scroll/transform/opacity already had, now proven for
 filter animation too. Compositor 91/91, workspace 3019/11 skipped, doctests
 4/4, all unchanged. Evidence:
 `crates/amazing-compositor/evidence/comp15/filter-frame-time.md`.
+
+### COMP-16 matrix-aware compositing for transformed filter/clip/backdrop groups
+
+A group whose own resolved `transform` sits directly under the identity root,
+with no other filter/backdrop/clip group nested above or below it and no
+further, different transform inside its own subtree, now composites through
+`EffectOperations::local_transform`: `build_frame` renders its own tiles at
+identity into its local surface; `DrawQuad::Pass` filters/clips that surface
+exactly as before, then samples it into its parent with one `Matrix4::unmap`
+per destination pixel (nearest), matching `composite_group`'s own transform
+sampling. `clip_path` is tested at the exact fractional sample point rather
+than the local surface's integer centers, matching the painter's own mask
+test there; an off-by-rounding mismatch at that boundary under scale/rotate
+was caught by the new corpus before it shipped. Blur/drop-shadow (nonzero
+outset) under a transform, two nested qualifying groups, and a transform
+under another transform all still fall back to `BakedFallback` -- transform-
+sampling an outward neighbor read, or composing two matrices/local surfaces,
+is follow-up work.
+
+Measured: compositor **92/92** (was 91/91); new transformed-effects corpus
+(4 transforms × 5 filter/backdrop/clip cases) **20/20, 0 losses**; existing
+32-case filter/backdrop/clip-path corpus **32/32, 0 losses**, unchanged; blend
+corpus, CSS value corpus, IA oracle pages all unchanged. Workspace
+**3151 passed, 0 failed, 14 skipped**; doctests **4/4**. Zero lost parity
+cases. Evidence:
+`crates/amazing-compositor/evidence/comp16/transformed-groups.md`.
+
+Still open: blur/drop-shadow under a transform; nested qualifying groups;
+a transform under another transform; `mask-image` under a transform
+(untested, no corpus case); `clip-path`/`mask-image` as a live CSS delta and
+a painter `mask-image` renderer (routed to CSS/replaced-content, unchanged
+from COMP-15).
+
+### COMP-17 real-page frame-time report for the shell
+
+`real_page_frame_time_report` repeats COMP-15's scroll/transform/opacity/
+filter frame-time trace on 5 real-page fixtures from `tests/real-pages/pages/`
+(`app-kanban`, `docs-guide`, `news-section`, `shop-category`, `wiki-portal`)
+instead of one synthetic page, by prepending the same `fixed`/`scroller`/
+`moving`/`fade` scaffold inside each fixture's own `<body>` so the scaffold
+keeps the deterministic property ids `retained_real_page_property_trace`
+already relies on, while the fixture's own body content drives realistic
+scene scale. Pages were picked by probing which fixtures resolve to
+`PaintViewRasterMode::RawLocal` with the scaffold attached; pages with a
+`<form>`/table `border-collapse` always fall back to `BakedFallback` (already
+covered by COMP-15's fallback tests) and `app-dashboard` falls back for an
+undiagnosed reason despite having only `<img>` content.
+
+Measured: compositor **93/93** (was 92/92); workspace **3152 passed,
+0 failed, 14 skipped** (was 3151); doctests **4/4**, unchanged. All 20
+page/scenario combinations report **zero tile uploads** and a `build_frame`
+cost between 0.9% and 2.0% of a full repaint (well inside the 10% bound
+COMP-15 established), across 5 real pages instead of 1 synthetic one. Zero
+lost parity cases; no other corpus touched by this ticket. Evidence:
+`crates/amazing-compositor/evidence/comp17/real-page-frame-time.md`.
+
+Still open: `app-dashboard`'s `BakedFallback` reason on img-only content;
+pages that always fall back (`border-collapse` tables, form controls) have
+no retained tiled path and so no frame-time story beyond "full repaint every
+frame."
