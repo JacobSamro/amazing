@@ -82,6 +82,14 @@ DEFAULT_SESSION_PREFIX = "termirust-amazing-"
 # files (ARCHITECTURE.md, README.md, todo.md, root Cargo.toml) belong to the
 # integrator alone and appear in no lane.
 LANE_PATHS = {
+    # 2026-09-26 fleet expansion: six more lanes split off existing areas or
+    # started on independent Stage 4/5 crates.
+    "js-date": ["crates/amazing-js/src/builtins_date"],
+    "js-intl": ["crates/amazing-js/src/builtins_intl"],
+    "layout-flexgrid": ["crates/amazing-layout/src/flex", "crates/amazing-layout/src/grid"],
+    "wasm": ["crates/amazing-wasm/"],
+    "a11y": ["crates/amazing-a11y/"],
+    "devtools": ["crates/amazing-devtools/"],
     # amazing-js is split between two lanes. js-lang owns the front half
     # (lexing, parsing, AST) and amazing-regex; js-runtime owns the execution
     # half. ast.rs is the contract: js-lang owns it and only adds to it.
