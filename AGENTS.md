@@ -106,6 +106,10 @@ seconds from the `amazing-builder` template with a warm `target/`, Rust 1.97.1,
 libvpx 1.16, nextest and the pinned Test262). `scripts/boat-lane.py list` shows them;
 `scripts/boat-idle-reaper.py` stops any sandbox idle for 15 minutes and the next run
 resumes it. The venus hosts stay available with `--host venus-001|venus-003`.
+**Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
+`boat data-retention`, `boat billing`, ...): the account, its templates and its retention
+settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in
+`questions.md`.
 Same interface, same `$CARGO_TARGET_DIR`, `$JOBS` and `$TEST262_ROOT`; outputs go to
 `~/amazing/out` on the sandbox.
 

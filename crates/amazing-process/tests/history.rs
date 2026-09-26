@@ -142,7 +142,7 @@ fn renderer_cannot_forge_ids_origin_or_unbounded_snapshot() {
         Err(HistoryError::Invalid)
     );
     let oversized = HistorySnapshot {
-        history_state: vec![0; 1024 * 1024 + 1],
+        history_state: Some(vec![0; 1024 * 1024 + 1]),
         ..Default::default()
     };
     assert_eq!(
@@ -156,7 +156,7 @@ fn renderer_cannot_forge_ids_origin_or_unbounded_snapshot() {
     )
     .unwrap();
     let saved = HistorySnapshot {
-        history_state: b"{value:1}".to_vec(),
+        history_state: Some(b"{value:1}".to_vec()),
         navigation_state: b"nav".to_vec(),
         persisted_user_state: b"form".to_vec(),
         scroll: vec![(1, 0, 90)],
@@ -167,6 +167,105 @@ fn renderer_cannot_forge_ids_origin_or_unbounded_snapshot() {
     );
     h.save_snapshot(5, first.document, saved.clone()).unwrap();
     assert_eq!(h.active_entry(1).unwrap().snapshot, saved);
+}
+
+#[test]
+fn discarded_document_can_reload_but_cannot_push_state() {
+    let mut h = SessionHistory::new(90, 1).unwrap();
+    let first = commit(
+        &mut h,
+        5,
+        1,
+        None,
+        CommitKind::Navigate,
+        "https://example.test/",
+    );
+    h.discard(first.document).unwrap();
+    assert_eq!(
+        h.begin(5, 1, Some(first.document), CommitKind::Push),
+        Err(HistoryError::Stale)
+    );
+    let ticket = h
+        .begin(5, 1, Some(first.document), CommitKind::Reload)
+        .unwrap();
+    let reloaded = h
+        .commit(ticket, first.url.clone(), HistorySnapshot::default())
+        .unwrap();
+    assert_eq!(reloaded.step, first.step);
+    assert_ne!(reloaded.document, first.document);
+}
+
+#[test]
+fn top_level_navigation_can_freeze_child_before_parent() {
+    let mut h = SessionHistory::new(91, 1).unwrap();
+    let parent = commit(
+        &mut h,
+        5,
+        1,
+        None,
+        CommitKind::Navigate,
+        "https://example.test/",
+    );
+    h.add_child(1, 2).unwrap();
+    let child = commit(
+        &mut h,
+        5,
+        2,
+        None,
+        CommitKind::Navigate,
+        "https://example.test/frame",
+    );
+    let ticket = h
+        .begin(5, 1, Some(parent.document), CommitKind::Navigate)
+        .unwrap();
+    for document in [child.document, parent.document] {
+        let epoch = h.document(document).unwrap().epoch;
+        let freeze = h
+            .freeze_request(document, 5, epoch, Eligibility::default(), 4096, 100)
+            .unwrap();
+        h.freeze_ack(
+            amazing_process::protocol::HistoryAck {
+                document,
+                epoch: freeze.epoch,
+                quiescent: true,
+                events: vec![
+                    HistoryLifecycleEvent::PageHidePersisted(()),
+                    HistoryLifecycleEvent::VisibilityHidden(()),
+                ],
+            },
+            101,
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        h.document(child.document).unwrap().status,
+        DocumentStatus::Frozen
+    );
+    assert_eq!(
+        h.document(parent.document).unwrap().status,
+        DocumentStatus::Frozen
+    );
+    h.cancel(&ticket).unwrap();
+}
+
+#[test]
+fn optional_history_state_round_trips_without_interpreting_bytes() {
+    let absent = HistoryActivate {
+        document: 1,
+        epoch: 2,
+        history_state: None,
+    };
+    let present = HistoryActivate {
+        history_state: Some(ByteBuf(vec![0, 255, 1, 0])),
+        ..absent.clone()
+    };
+    for value in [absent, present] {
+        let encoded = amazing_ipc::codec::encode(&value).unwrap();
+        assert_eq!(
+            amazing_ipc::codec::decode::<HistoryActivate>(&encoded).unwrap(),
+            value
+        );
+    }
 }
 
 #[test]
@@ -205,7 +304,8 @@ fn bfcache_demo_freeze_restore_eviction_and_crash() {
     assert!(proxy
         .activate(HistoryActivate {
             document: entry.document,
-            epoch
+            epoch,
+            history_state: None,
         })
         .unwrap());
     let request = h

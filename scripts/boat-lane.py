@@ -44,7 +44,10 @@ def boat(*args: str, timeout: int = 180) -> dict:
     ).stdout
     rows = [json.loads(l) for l in out.splitlines() if l.startswith("{")]
     for row in rows:
-        if row.get("event") == "error" or (row.get("status", 0) or 0) >= 400:
+        status = row.get("status")
+        # `status` is an HTTP code on errors but a word ("resuming", "forking")
+        # on progress rows.
+        if row.get("event") == "error" or (isinstance(status, int) and status >= 400):
             raise SystemExit(f"boat-lane: boat {' '.join(args)}: {row.get('error') or row}")
     return rows[-1] if rows else {}
 
