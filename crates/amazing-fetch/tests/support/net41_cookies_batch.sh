@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
-# NET-41 batch driver: run a candidate selection of single-page-navigable
+# NET-41/42 batch driver: run a candidate selection of single-page-navigable
 # cookies/ WPT files through the installed wpt-harness at the pinned WPT
-# revision, against the std-only WPT resource shim (AMAZING_WPT_SHIM_ADDR).
-# Most of cookies/ (samesite/, partitioned-cookies/, third-party-cookies/,
-# domain/ child-window flows) needs real multi-page/testdriver navigation
-# this single-page harness cannot do; those are left out. This list is the
-# subset that is at least a single top-level document exercising
-# document.cookie and/or a Set-Cookie round trip through fetch/XHR -- some
-# may still report "unsupported" if they turn out to need an iframe/child
-# window after all, which the harness reports explicitly rather than hanging.
+# revision. Most of cookies/ (samesite/, partitioned-cookies/,
+# third-party-cookies/, domain/ child-window flows) needs real
+# multi-page/testdriver navigation this single-page harness cannot do; those
+# are left out. This list is the subset that is at least a single top-level
+# document exercising document.cookie and/or a Set-Cookie round trip through
+# fetch/XHR -- some may still report "unsupported" if they turn out to need
+# an iframe/child window after all, which the harness reports explicitly
+# rather than hanging.
+#
+# NET-42: deliberately does NOT set AMAZING_WPT_SHIM_ADDR/AMAZING_WPT_SHIM_ROOT
+# (unlike net26/net36/net37's batch scripts). Setting either one makes
+# wpt_harness.rs::execute() switch the document to `http://web-platform.test/
+# <test>` and route every relative fetch() through dispatch.rs's
+# web-platform.test DNS override to that shim -- and the shim started here
+# (amazing-net's `wpt_shim` example, i.e. `WptServer`, a fetch/api+xhr+
+# websocket resource double) has no route for `/cookies/resources/cookie.py`
+# (that's `respond_cookie_py`, implemented only inside wpt_harness.rs's own
+# `serve_fixture`). The result was a silent stall on every fetch() to
+# cookie.py: 17 of 23 files timed out with harness_status:2 and an empty
+# subtests array (the connection was accepted but never answered, so neither
+# testharness.js's own per-test timeout nor the outer harness supervisor saw
+# anything to report). Leaving these two variables unset makes execute() use
+# its normal FixtureServer/serve_fixture loopback path instead, which serves
+# cookie.py, testdriver-vendor.js and everything else this corpus needs
+# directly -- confirmed by running these files directly with no env vars set
+# and getting real pass/fail data in well under a second each.
 # Usage: net41_cookies_batch.sh <wpt-root> [timeout_ms]
 set -u
 WPT="${1:?usage: net41_cookies_batch.sh <wpt-root> [timeout_ms]}"
@@ -18,22 +36,8 @@ BIN="$TARGET/debug/amazing"
 OUT="${OUT:-$HOME/amazing/out}"
 mkdir -p "$OUT"
 
-cargo build -q -p amazing-net --example wpt_shim --locked
 cargo build -q -p amazing --locked
-
-SHIM_URL_FILE="$OUT/net41-cookies-shim-url.txt"
-rm -f "$SHIM_URL_FILE"
-"$TARGET/debug/examples/wpt_shim" --serve >"$SHIM_URL_FILE" 2>/dev/null &
-SHIM_PID=$!
-trap 'kill "$SHIM_PID" 2>/dev/null' EXIT
-for _ in $(seq 1 200); do [ -s "$SHIM_URL_FILE" ] && break; sleep 0.05; done
-base=$(cat "$SHIM_URL_FILE" 2>/dev/null)
-if [ -z "$base" ]; then echo "SHIM-FAILED"; exit 3; fi
-export AMAZING_WPT_SHIM_ADDR="${base#http://}"
-AMAZING_WPT_SHIM_ADDR="${AMAZING_WPT_SHIM_ADDR%/}"
-export AMAZING_WPT_SHIM_ADDR
-export AMAZING_WPT_SHIM_ROOT="$WPT"
-echo "SHIM $AMAZING_WPT_SHIM_ADDR root=$AMAZING_WPT_SHIM_ROOT"
+unset AMAZING_WPT_SHIM_ADDR AMAZING_WPT_SHIM_ROOT
 
 FILES=(
 cookies/attributes/expires.html

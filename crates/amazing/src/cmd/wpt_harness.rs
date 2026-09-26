@@ -112,7 +112,7 @@ struct FixtureServer {
 }
 
 impl FixtureServer {
-    fn start(root: PathBuf, generated: Option<(String, Vec<u8>)>) -> Result<Self, String> {
+    fn start(root: PathBuf, generated: Option<(String, Vec<u8>)>, scaffold: bool) -> Result<Self, String> {
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
         listener
             .set_nonblocking(true)
@@ -140,7 +140,7 @@ impl FixtureServer {
                         let root = root.clone();
                         let generated = generated.clone();
                         connections.push(std::thread::spawn(move || {
-                            serve_fixture(stream, &root, generated.as_ref());
+                            serve_fixture(stream, &root, generated.as_ref(), scaffold);
                         }));
                     }
                     Ok(_) => {}
@@ -188,7 +188,7 @@ impl Drop for FixtureServer {
     }
 }
 
-fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>) {
+fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>, scaffold: bool) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
     let mut request = Vec::new();
     while !request.ends_with(b"\r\n\r\n") && request.len() < 16384 {
@@ -259,7 +259,29 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         if !file.starts_with(root) || file.metadata().ok()?.len() > FIXTURE_LIMIT as u64 {
             return None;
         }
-        std::fs::read(file).ok()
+        let bytes = std::fs::read(file).ok()?;
+        // NET-42: this generic static-file path served every `.sub.` file's
+        // raw, unsubstituted disk bytes -- including the top-level page
+        // itself, when navigated through `FixtureServer` (no
+        // `AMAZING_WPT_SHIM_ADDR`) rather than skipped entirely (the shim
+        // path never navigates or compares bytes at all). `execute()`
+        // compares the navigated page's rendered bytes against `source()`'s
+        // substituted `expected_html`, so every `.sub.` file failed with
+        // "fixture navigation differed from pinned page bytes" the moment a
+        // real navigation was involved. Apply the same table `source()`
+        // uses, on the same `!scaffold` condition.
+        if !scaffold && name.contains(".sub.") {
+            return Some(match String::from_utf8(bytes) {
+                Ok(mut text) => {
+                    apply_sub_substitution(&mut text);
+                    text.into_bytes()
+                }
+                // Binary `.sub.` resource (shouldn't occur in this corpus):
+                // serve unmodified rather than losing the response entirely.
+                Err(error) => error.into_bytes(),
+            });
+        }
+        Some(bytes)
     });
     let (status, bytes) = match body {
         Some(bytes) if bytes.len() <= FIXTURE_LIMIT => ("200 OK", bytes),
@@ -790,34 +812,48 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
     }
     if !scaffold && path.file_name().is_some_and(|name|
         name.to_string_lossy().contains(".sub.")) {
-        for (placeholder, value) in [
-            ("{{host}}", "web-platform.test"),
-            ("{{ports[http][0]}}", "80"),
-            ("{{ports[http][1]}}", "8001"),
-            ("{{ports[https][0]}}", "443"),
-            ("{{ports[https][1]}}", "8443"),
-            ("{{domains[www2]}}", "www2.web-platform.test"),
-            ("{{domains[www1]}}", "www1.web-platform.test"),
-            ("{{domains[www]}}", "www.web-platform.test"),
-            ("{{hosts[][www]}}", "www.web-platform.test"),
-            ("{{hosts[alt][]}}", "not-web-platform.test"),
-            ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
-            ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
-            // NET-38: websockets/constants.sub.js builds its ws:// / wss://
-            // base URL from these; any value routes through StdResolver's
-            // *.web-platform.test host match regardless of the port number.
-            ("{{ports[ws][0]}}", "80"),
-            ("{{ports[wss][0]}}", "443"),
-            ("{{ports[h2][0]}}", "443"),
-            ("{{ports[http-local][0]}}", "80"),
-            ("{{ports[http-public][0]}}", "80"),
-            ("{{ports[https-local][0]}}", "443"),
-            ("{{ports[https-public][0]}}", "443"),
-        ] {
-            text = text.replace(placeholder, value);
-        }
+        apply_sub_substitution(&mut text);
     }
     Ok(text)
+}
+
+/// The `.sub.` placeholder table (WPT's `.sub.` template convention), shared
+/// between `source()` (the top document's own `<script src>`/page bytes,
+/// read straight off disk) and `serve_fixture`'s generic static-file path
+/// (NET-42: an iframe/subresource `.sub.` file, or the top-level `.sub.`
+/// HTML page itself when navigated through `FixtureServer` rather than the
+/// `AMAZING_WPT_SHIM_ADDR` shim -- `execute()`'s real-navigation branch
+/// calls `fetch_page()` and compares the rendered bytes against this same
+/// substituted text, so both call sites must apply the identical table or
+/// every `.sub.` file fails with "fixture navigation differed from pinned
+/// page bytes").
+fn apply_sub_substitution(text: &mut String) {
+    for (placeholder, value) in [
+        ("{{host}}", "web-platform.test"),
+        ("{{ports[http][0]}}", "80"),
+        ("{{ports[http][1]}}", "8001"),
+        ("{{ports[https][0]}}", "443"),
+        ("{{ports[https][1]}}", "8443"),
+        ("{{domains[www2]}}", "www2.web-platform.test"),
+        ("{{domains[www1]}}", "www1.web-platform.test"),
+        ("{{domains[www]}}", "www.web-platform.test"),
+        ("{{hosts[][www]}}", "www.web-platform.test"),
+        ("{{hosts[alt][]}}", "not-web-platform.test"),
+        ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
+        ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
+        // NET-38: websockets/constants.sub.js builds its ws:// / wss://
+        // base URL from these; any value routes through StdResolver's
+        // *.web-platform.test host match regardless of the port number.
+        ("{{ports[ws][0]}}", "80"),
+        ("{{ports[wss][0]}}", "443"),
+        ("{{ports[h2][0]}}", "443"),
+        ("{{ports[http-local][0]}}", "80"),
+        ("{{ports[http-public][0]}}", "80"),
+        ("{{ports[https-local][0]}}", "443"),
+        ("{{ports[https-public][0]}}", "443"),
+    ] {
+        *text = text.replace(placeholder, value);
+    }
 }
 /// Window variant of WPT AnyHtmlHandler at revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
 /// Template and metadata rules: tools/serve/serve.py AnyHtmlHandler and
@@ -931,7 +967,7 @@ fn execute(options: &Options) -> Result<(), String> {
         let generated =
             (options.test.ends_with(".any.js") || options.test.ends_with(".window.js"))
                 .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
-        let fixture = FixtureServer::start(root.clone(), generated)?;
+        let fixture = FixtureServer::start(root.clone(), generated, options.scaffold)?;
         let url = fixture.url(&options.test);
         let page = fetch_page(&mut navigator, &url, true, None)?;
         if page.rendered != expected_html.as_bytes() {
