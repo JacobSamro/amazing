@@ -974,6 +974,12 @@ fn binary_typed_static(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
 fn binary_construct_typed_object(i: &mut Interpreter, constructor: &JsValue, len: usize) -> Result<(JsValue, BinaryView, BinaryKind), Throw> {
     let result = i.construct(constructor, vec![JsValue::num(len as f64)])?;
     let (view, kind) = binary_typed(&result)?;
+    // Spec's TypedArrayCreate: a custom constructor (subclass or explicit
+    // `this`) that returns a shorter-than-requested instance is an error,
+    // not something callers silently work around by skipping tail elements.
+    if binary_length(&view) < len {
+        return Err(Throw::type_error("TypedArray constructor returned a short array"));
+    }
     Ok((result, view, kind))
 }
 
@@ -1025,7 +1031,11 @@ fn binary_array(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Th
 
 fn binary_typed_iterator(i: &mut Interpreter, view: BinaryView, kind: BinaryKind, iteration: BinaryIteratorKind) -> Result<JsValue, Throw> {
     let mut raw = JsObject::ordinary();
-    raw.proto = Some(i.object_proto.clone());
+    // CreateArrayIterator is shared machinery for Array and %TypedArray%: the
+    // result's [[Prototype]] is the SAME %ArrayIteratorPrototype% object used
+    // by Array.prototype.values/keys/entries, not a bare Object.prototype.
+    raw.proto = Some(i.std_sequence_iterator_proto(SequenceIteratorKind::ArrayValues)
+        .unwrap_or_else(|| i.object_proto.clone()));
     let object = Obj(Rc::new(RefCell::new(raw)));
     binary_method(i, &object, "next", binary_typed_iterator_next, 0);
     let self_iter = Interpreter::native("[Symbol.iterator]", binary_typed_iterator_self, &i.function_proto);
@@ -1121,12 +1131,14 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 binary_relative(i, args.get(1), length as i64)?
             } else if name == "lastIndexOf" { length.saturating_sub(1) } else { 0 };
             // Coercing fromIndex can detach or shrink the buffer. A view that is
-            // no longer usable reports "not found" rather than throwing.
+            // no longer usable reports "not found" rather than throwing. The
+            // search itself still walks `values`/`length` captured above,
+            // before fromIndex coercion: the spec reads TypedArrayLength once,
+            // up front, and neither shrinking nor growing the buffer during
+            // fromIndex coercion changes the window that gets searched.
             if binary_view_out_of_bounds(&view) || binary_length(&view) == 0 {
                 return Ok(if name == "includes" { JsValue::Bool(false) } else { JsValue::num(-1.0) });
             }
-            let values = binary_typed_values(&view, kind)?;
-            let length = values.len();
             let start = start.min(length);
             let found = if name == "lastIndexOf" { values.iter().enumerate().rev().find(|(j, v)| *j <= start && i.strict_eq(v, &needle)).map(|(j, _)| j) }
                 else { values.iter().enumerate().find(|(j, v)| *j >= start && (i.strict_eq(v, &needle) || name == "includes" && matches!((v, &needle), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()))).map(|(j, _)| j) };
@@ -1206,20 +1218,23 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(this)
         }
         "with" => {
-            // ToIntegerOrInfinity(index), then coerce value, then validate the
-            // index against the current length (value coercion may resize).
+            // Spec order: a negative index resolves against the length
+            // captured before any coercion (`length`, above); ToIntegerOrInfinity
+            // (index) runs, then the value is coerced (either may resize a
+            // resizable ArrayBuffer); only then is the resolved absolute index
+            // validated against the CURRENT bounds. The result ignores
+            // @@species and always uses this kind's intrinsic constructor.
             let raw_index = i.to_number(&arg(0))?;
             let relative = if raw_index.is_nan() { 0.0 } else { raw_index.trunc() };
             let value = if kind.big() { Interpreter::bigint_value(i.to_bigint(&arg(1))?) }
                 else { JsValue::num(i.to_number(&arg(1))?) };
-            let current_length = binary_length(&view);
-            let target = if relative < 0.0 { current_length as f64 + relative } else { relative };
-            if target < 0.0 || target as usize >= current_length {
+            let target = if relative < 0.0 { length as f64 + relative } else { relative };
+            if target < 0.0 || binary_view_out_of_bounds(&view) || target as usize >= binary_length(&view) {
                 return Err(Throw::range_error("index outside TypedArray"));
             }
             let mut copy = binary_typed_values(&view, kind)?;
             copy[target as usize] = value;
-            binary_typed_species_from_values(i, &this, kind, copy)
+            binary_typed_from_values(i, kind, copy)
         }
         "sort" | "toSorted" => {
             if name == "sort" && view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }

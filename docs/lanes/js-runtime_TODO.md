@@ -871,3 +871,42 @@ to js-vm), the `ownKeys`/invariant gaps above, and full defineProperty-trap
 routing for `Object.freeze`/`seal` (extensibility and per-key attribute
 changes are trap-routed; the TypedArray/array-length special cases are not
 re-verified against a Proxy target).
+
+## TypedArray regression fix (2026-09-27, blocking origin/dev push)
+
+The JSB-6/7/8 merge landed on `dev` alongside JSRT-15 and regressed 11
+Test262 files in `crates/amazing-js/src/builtins_binary.rs`, all pre-existing
+bugs in that lane's new TypedArray code, unmasked rather than caused by
+Proxy. Fixed in `builtins_binary.rs`:
+
+- `binary_typed_iterator` (backs `%TypedArray%.prototype.{entries,keys,values}`)
+  set `[[Prototype]]` to `Object.prototype` instead of the shared
+  `%ArrayIteratorPrototype%` that `CreateArrayIterator` uses for both Array
+  and TypedArray iterators — now reuses
+  `std_sequence_iterator_proto(SequenceIteratorKind::ArrayValues)`, the same
+  object `Array.prototype.values/keys/entries` share.
+- `binary_construct_typed_object` (shared by `%TypedArray%.from` and `.of`)
+  never checked the constructed instance was at least as long as requested;
+  `.of`'s call site had its own redundant check, `.from`'s did not and
+  silently dropped tail elements instead of throwing. Moved the check into
+  the shared helper so every caller gets it once.
+- `includes`/`indexOf`/`lastIndexOf` re-read `values`/`length` from the view
+  *after* coercing `fromIndex`, so a `fromIndex` `valueOf` that grows a
+  resizable `ArrayBuffer` let the search see the newly grown region. The
+  spec reads `TypedArrayLength` once, before `fromIndex` coercion, and
+  searches that fixed window regardless of a later resize; now reuses the
+  `values`/`length` already captured at the top of `binary_typed_method`.
+- `with()` resolved a negative index against the *current*
+  (post-value-coercion) length instead of the length captured before any
+  coercion, and used `@@species` for the result contrary to the current
+  spec text (which always constructs the TypedArray's own intrinsic kind,
+  ignoring species).
+
+Verified via a full unsharded Test262 run (`linux-run.sh js-runtime --ref
+9767ca91`, not `test262-boat.sh` — see `questions.md` for a stale-shard bug
+found in that script) diffed against `.agents/test262/baseline.json`: the
+`built-ins/TypedArray*` tree loses only one pre-existing timeout
+(`staging/sm/TypedArray/sort_modifications.js`), all 11 originally-reported
+files pass. Full details in
+`docs/lanes/js-runtime_typedarray_regression_evidence.json`. Workspace
+nextest 3285 passed/15 skipped, doctests all `ok`.
