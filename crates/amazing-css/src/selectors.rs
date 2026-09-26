@@ -151,10 +151,11 @@ pub enum Pseudo {
     Link,
     /// Privacy: never matches anything in this engine.
     Visited,
-    /// Interactive states have no input in a static render: never match.
+    /// Interactive pointer states have no input in a static render: never match.
     Hover,
     Active,
     Focus,
+    FocusVisible,
     FocusWithin,
     Enabled,
     Disabled,
@@ -331,7 +332,11 @@ pub fn parse_selector(src: &str) -> Option<Selector> {
                 && !matches!(
                     simple,
                     Simple::Pseudo(
-                        Pseudo::Hover | Pseudo::Active | Pseudo::Focus | Pseudo::FocusWithin
+                        Pseudo::Hover
+                            | Pseudo::Active
+                            | Pseudo::Focus
+                            | Pseudo::FocusVisible
+                            | Pseudo::FocusWithin
                     ) | Simple::Matches(_)
                         | Simple::Where(_)
                         | Simple::Negation(_)
@@ -596,6 +601,7 @@ impl<'t> SelParser<'t> {
             "hover" => Pseudo::Hover,
             "active" => Pseudo::Active,
             "focus" => Pseudo::Focus,
+            "focus-visible" => Pseudo::FocusVisible,
             "focus-within" => Pseudo::FocusWithin,
             "enabled" => Pseudo::Enabled,
             "disabled" => Pseudo::Disabled,
@@ -1198,9 +1204,17 @@ fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
         Pseudo::Link => {
             matches!(dom.name(el), Some("a") | Some("area")) && attr_of(dom, el, "href").is_some()
         }
-        // Never matches (privacy) / no interaction state in static rendering.
-        Pseudo::Visited | Pseudo::Hover | Pseudo::Active | Pseudo::Focus | Pseudo::FocusWithin => {
-            false
+        // Privacy: `:visited` never matches in this engine. Pointer states
+        // have no input in a static render.
+        Pseudo::Visited | Pseudo::Hover | Pseudo::Active => false,
+        // Focus states read the DOM's programmatic focus record. `:focus-visible`
+        // follows the DOM's visibility flag, with the text-field exception: an
+        // editable text control is always focus-visible while focused.
+        Pseudo::Focus => dom.is_focused(el),
+        Pseudo::FocusWithin => dom.is_focus_within(el),
+        Pseudo::FocusVisible => {
+            dom.is_focused(el)
+                && (dom.is_focus_visible(el) || is_text_control(dom, el))
         }
         // Form-control state: our DOM has no widget model, so only the
         // explicit `disabled`/`checked` attributes are observable.
@@ -1294,6 +1308,27 @@ fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
         .iter()
         .find(|kv| kv.0 == name)
         .map(|(_, v)| v.as_str())
+}
+
+/// Editable text controls are always `:focus-visible` when focused
+/// (Selectors 4 §8.4.3): text-ish `<input>`, `<textarea>`, and contenteditable.
+fn is_text_control(dom: &Dom, el: NodeIdx) -> bool {
+    match dom.name(el) {
+        Some("textarea") => true,
+        Some("input") => !attr_of(dom, el, "type").is_some_and(|kind| {
+            [
+                "hidden", "range", "color", "submit", "image", "reset", "button",
+                "checkbox", "radio", "file",
+            ]
+            .iter()
+            .any(|excluded| kind.eq_ignore_ascii_case(excluded))
+        }),
+        _ => attr_of(dom, el, "contenteditable").is_some_and(|value| {
+            value.is_empty()
+                || value.eq_ignore_ascii_case("true")
+                || value.eq_ignore_ascii_case("plaintext-only")
+        }),
+    }
 }
 
 fn attr_is(dom: &Dom, el: NodeIdx, name: &str, want: &str) -> bool {
@@ -1436,6 +1471,51 @@ mod tests {
         assert!(!check(optional, ":required"));
         assert!(!check(hidden, ":optional"));
         assert!(!check(unrelated, ":optional"));
+    }
+
+    #[test]
+    fn focus_pseudo_classes_follow_dom_focus_state() {
+        let mut dom = Dom::new();
+        let doc = NodeIdx(0);
+        let html = dom.create_element(doc, "html");
+        let body = dom.create_element(html, "body");
+        let div = dom.create_element(body, "div");
+        let button = dom.create_element(div, "button");
+        let input = dom.create_element(div, "input");
+        let check = |dom: &Dom, node, selector| matches(dom, node, &parse_selector(selector).unwrap());
+
+        // No focus recorded yet: none of the focus states match.
+        assert!(!check(&dom, button, ":focus"));
+        assert!(!check(&dom, body, ":focus-within"));
+
+        // Programmatic focus without keyboard use: `:focus` matches, `:focus-visible`
+        // does not, and ancestors match `:focus-within`.
+        dom.set_active_element(doc, Some(button), false);
+        assert!(check(&dom, button, ":focus"));
+        assert!(!check(&dom, button, ":focus-visible"));
+        assert!(check(&dom, div, ":focus-within"));
+        assert!(check(&dom, body, ":focus-within"));
+        assert!(!check(&dom, input, ":focus"));
+
+        // Keyboard focus makes `:focus-visible` match. `set_active_element`
+        // no-ops when the same element is already focused, so blur first.
+        dom.set_active_element(doc, None, false);
+        dom.set_active_element(doc, Some(button), true);
+        assert!(check(&dom, button, ":focus-visible"));
+
+        // A focused text control is always `:focus-visible`, even without the
+        // keyboard-visibility flag.
+        dom.set_active_element(doc, Some(input), false);
+        assert!(check(&dom, input, ":focus"));
+        assert!(check(&dom, input, ":focus-visible"));
+        assert!(!check(&dom, button, ":focus-within"));
+        assert!(check(&dom, div, ":focus-within"));
+
+        // Moving focus off the subtree clears the ancestor state.
+        dom.set_active_element(doc, None, false);
+        assert!(!check(&dom, input, ":focus"));
+        assert!(!check(&dom, div, ":focus-within"));
+        assert!(!check(&dom, body, ":focus-within"));
     }
 
     #[test]
