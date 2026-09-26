@@ -53,7 +53,8 @@ RUNS = MAIN / ".agents" / ".boat-runs.log"
 POOLS = {
     "pool-js-a": ["js-runtime"],
     "pool-js-vm": ["js-vm"],  # split 2026-09-26: 60% busy, 23% overlap with js-runtime
-    "pool-js-b": ["js-lang", "js-date"],
+    "pool-js-b": ["js-lang"],
+    "pool-js-date": ["js-date"],  # split 2026-09-26: 57% busy, 24% overlap with js-lang
     "pool-js-lib": ["js-binary", "js-stdlib", "js-intl"],
     "pool-dom": ["dom-bindings", "html", "integrator-assist"],
     "pool-layout": ["layout", "layout-flexgrid", "css", "text"],
