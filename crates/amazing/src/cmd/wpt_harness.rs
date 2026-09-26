@@ -319,6 +319,15 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
 /// real HTTP (`serve_fixture`, above) -- `cookie-test.js`'s
 /// `getAndExpireCookiesForDefaultPathTest()` calls `test_driver.delete_all_cookies()`
 /// from both a top-level document and a hidden iframe.
+/// The top document's `testdriver-vendor.js`: IA-TESTDRIVER's driver
+/// (`TESTDRIVER_VENDOR_JS`) followed by NET-41's cookie-store-backed
+/// `delete_all_cookies` (`TESTDRIVER_VENDOR_OVERRIDE`), which replaces the
+/// former's no-op stub. Iframes/subresources get only the latter via
+/// `serve_fixture`, as before.
+fn testdriver_vendor_source() -> String {
+    format!("{TESTDRIVER_VENDOR_JS}\n{TESTDRIVER_VENDOR_OVERRIDE}")
+}
+
 const TESTDRIVER_VENDOR_OVERRIDE: &str = r#"window.test_driver_internal.delete_all_cookies = async function(context = null) {
     return document.__amazingDeleteAllCookies;
 };
@@ -1049,7 +1058,7 @@ fn execute_page(
                 {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (TESTDRIVER_VENDOR_JS.to_string(), src.clone(), false)
+                    (testdriver_vendor_source(), src.clone(), false)
                 }
                 Some(src) => {
                     // HTML-31: a parser-inserted script (typically from
@@ -1107,7 +1116,7 @@ fn execute_page(
                 if !options.scaffold && normalized == TESTDRIVER_VENDOR_PATH {
                     // IA-TESTDRIVER: not in the pinned upstream checkout; see
                     // `TESTDRIVER_VENDOR_JS`.
-                    (TESTDRIVER_VENDOR_JS.to_string(), src.clone())
+                    (testdriver_vendor_source(), src.clone())
                 } else {
                     // Same "unsupported resource URL" skip as the blocking-script
                     // closure above, for a deferred/async script's own `src`.
