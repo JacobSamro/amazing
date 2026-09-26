@@ -137,20 +137,32 @@ impl PainterFilterSource {
 /// `(rx, ry)` pair is always equal; a mismatch there is defensive and falls
 /// back rather than guessing.
 pub(crate) fn import_clip(mask: amazing_paint::clip::ClipMask) -> Option<EffectClip> {
-    let amazing_paint::clip::ClipMask { x, y, width, height, radii } = mask;
-    let (rx, ry) = radii[0];
-    if radii.iter().all(|r| *r == (rx, ry)) && rx > 0. && ry > 0.
-        && width == rx * 2. && height == ry * 2.
-    {
-        return Some(EffectClip::Ellipse { center: (x + rx, y + ry), radii: (rx, ry) });
+    match mask {
+        amazing_paint::clip::ClipMask::Rect { x, y, width, height, radii } => {
+            let (rx, ry) = radii[0];
+            if radii.iter().all(|r| *r == (rx, ry)) && rx > 0. && ry > 0.
+                && width == rx * 2. && height == ry * 2.
+            {
+                return Some(EffectClip::Ellipse { center: (x + rx, y + ry), radii: (rx, ry) });
+            }
+            if radii.iter().any(|(rx, ry)| rx != ry) {
+                return None;
+            }
+            Some(EffectClip::Inset {
+                rect: Rect::new(x, y, width, height),
+                radii: [radii[0].0, radii[1].0, radii[2].0, radii[3].0],
+            })
+        }
+        // `polygon()`/a straight-edged `path()`: the painter's mask is
+        // already a closed vertex loop plus winding rule, which maps
+        // directly onto this retained type's own `Polygon` variant.
+        amazing_paint::clip::ClipMask::Polygon { points, len, even_odd } => {
+            Some(EffectClip::Polygon {
+                points: points[..len as usize].to_vec(),
+                rule: if even_odd { FillRule::EvenOdd } else { FillRule::NonZero },
+            })
+        }
     }
-    if radii.iter().any(|(rx, ry)| rx != ry) {
-        return None;
-    }
-    Some(EffectClip::Inset {
-        rect: Rect::new(x, y, width, height),
-        radii: [radii[0].0, radii[1].0, radii[2].0, radii[3].0],
-    })
 }
 pub(crate) fn import_filter(op: amazing_paint::filter::FilterOp) -> FilterOperation {
     use amazing_paint::filter::FilterOp as P;
