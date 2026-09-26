@@ -1,0 +1,10 @@
+source=40c722aa-layout22-candidate4
+target=/home/user/amazing/target
+1a8d2ca9f795acaf8ea278fbb57d30f19b4d95bbd00487ab53569c905d306635  crates/amazing-layout/src/block.rs
+d1b64ad1e559b2619a942bd917f318ff6c1d7d9f6165f1b8269d0f4c9a668f6a  crates/amazing-layout/src/box_tree.rs
+5f57ec59881892168408334579593ed0fed6b206ce00bc331c6f0459f95d0e94  crates/amazing-layout/src/inline.rs
+c71a5cf41e118b17c68cc91a35923a076f3a587753334042500c89259e5aeef1  crates/amazing-layout/src/inline_alignment.rs
+3e3f875e713845d5781c019f6373e1d8e8dd33c02e1d02210ff07e1636f9d84a  crates/amazing-layout/src/inline_bidi.rs
+eee5b979e19174fcec826d763405f3eb9433cf308549098f541257434a44141e  crates/amazing-layout/src/inline_combine.rs
+975282f213176e740bcf863f9e6b426371c859aefa2c5b8a5bab301ec2571d4d  crates/amazing-layout/src/lib.rs
+82c44f388fb12c452e9eff4cf23b0466b2382c32545c86d3883cbf743b9ed8df  Cargo.lock

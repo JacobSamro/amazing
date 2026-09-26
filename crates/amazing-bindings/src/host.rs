@@ -197,7 +197,18 @@ pub enum Interface {
     WheelEvent,
     KeyboardEvent,
     CompositionEvent,
+    HashChangeEvent,
+    PopStateEvent,
+    PageTransitionEvent,
+    BeforeUnloadEvent,
+    ErrorEvent,
+    PromiseRejectionEvent,
     MessageEvent,
+    DeviceMotionEvent,
+    DeviceOrientationEvent,
+    DragEvent,
+    StorageEvent,
+    TextEvent,
     MutationObserver,
     MutationRecord,
     DOMException,
@@ -228,7 +239,21 @@ pub enum FormAttribute {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    HTMLElementClick,
+    HTMLElementOnClick,
+    HTMLElementSetOnClick,
+    InputIndeterminate,
+    InputSetIndeterminate,
+    ErrorEventConstructor,
+    PromiseRejectionEventConstructor,
+    ErrorEventGet(&'static str),
+    PromiseRejectionEventGet(&'static str),
+    LegacyReflectGet(Interface, &'static str, LegacyReflectionKind),
+    LegacyReflectSet(Interface, &'static str, LegacyReflectionKind),
     FormAttributeGet(FormAttribute), FormAttributeSet(FormAttribute),
     URLConstructor, URLCanParse, URLParse, URLHref, URLSetHref,
     URLOrigin, URLProtocol, URLSetProtocol, URLUsername, URLSetUsername,
@@ -662,6 +687,17 @@ pub enum Operation {
     WheelEventConstructor,
     KeyboardEventConstructor,
     CompositionEventConstructor,
+    HashChangeEventConstructor,
+    PopStateEventConstructor,
+    PageTransitionEventConstructor,
+    HashChangeOldURL,
+    HashChangeNewURL,
+    PopStateState,
+    PopStateHasUAVisualTransition,
+    PageTransitionPersisted,
+    BeforeUnloadReturnValue,
+    BeforeUnloadSetReturnValue,
+
     MessageEventConstructor,
     MessageEventGet(&'static str),
     MessageEventInit,

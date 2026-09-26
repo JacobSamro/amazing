@@ -45,7 +45,14 @@ pub enum DispatchOrigin {
     UserAgent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventClass { Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message }
+pub enum EventClass {
+    Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message, HashChange, PopState,
+    PageTransition, BeforeUnload, Error, PromiseRejection,
+    // Legacy `document.createEvent()` aliases (dom.spec.whatwg.org's create() legacy factory
+    // table) that are otherwise-unimplemented interfaces: distinct classes so the wrapped
+    // object gets that interface's own prototype rather than falling back to plain Event's.
+    DeviceMotion, DeviceOrientation, Drag, Storage, Text,
+}
 
 #[derive(Clone, Debug)]
 pub enum EventExtra { Boolean(bool), Number(f64), String(Vec<u16>), Root(Option<CallbackId>) }
@@ -63,6 +70,7 @@ pub struct MessageEventData {
 #[derive(Debug, Clone)]
 pub struct Event {
     event_type: String,
+    event_type_units: Option<Vec<u16>>,
     initialized: bool,
     class: EventClass,
     extras: std::collections::HashMap<&'static str, EventExtra>,
@@ -84,12 +92,19 @@ pub struct Event {
     path: Vec<EventTarget>,
     path_closed_roots: Vec<Vec<NodeIdx>>,
 }
+fn event_type_parts(units: &[u16]) -> (String, Option<Vec<u16>>) {
+    match String::from_utf16(units) {
+        Ok(text) => (text, None),
+        Err(_) => (String::from_utf16_lossy(units), Some(units.to_vec())),
+    }
+}
 impl Event {
     /// Timestamp is monotonic time since the embedding's time origin. The DOM
     /// model does not invent a scheduler or use wall-clock/SystemTime.
     pub fn new(event_type: impl Into<String>, init: EventInit, timestamp: Duration) -> Self {
         Self {
             event_type: event_type.into(),
+            event_type_units: None,
             initialized: true,
             class: EventClass::Event,
             extras: std::collections::HashMap::new(),
@@ -112,8 +127,47 @@ impl Event {
             path_closed_roots: vec![],
         }
     }
+    /// UTF-8 display projection; use event_type_utf16 for lossless DOMString data.
     pub fn event_type(&self) -> &str {
         &self.event_type
+    }
+    pub fn event_type_utf16(&self) -> Vec<u16> {
+        self.event_type_units.clone().unwrap_or_else(|| self.event_type.encode_utf16().collect())
+    }
+    fn set_type_utf16(&mut self, units: &[u16]) {
+        (self.event_type, self.event_type_units) = event_type_parts(units);
+    }
+    pub fn new_utf16(units: &[u16], init: EventInit, timestamp: Duration) -> Self {
+        let mut event = Self::new("", init, timestamp);
+        event.set_type_utf16(units);
+        event
+    }
+    pub fn new_custom_utf16(units: &[u16], init: EventInit, timestamp: Duration, detail: Option<CallbackId>) -> Self {
+        let mut event = Self::new_custom("", init, timestamp, detail);
+        event.set_type_utf16(units);
+        event
+    }
+    pub fn new_message_utf16(units: &[u16], init: EventInit, timestamp: Duration, data: MessageEventData) -> Self {
+        let mut event = Self::new_message("", init, timestamp, data);
+        event.set_type_utf16(units);
+        event
+    }
+    pub fn init_event_utf16(&mut self, units: &[u16], bubbles: bool, cancelable: bool) {
+        if self.dispatching { return; }
+        self.init_event("", bubbles, cancelable);
+        self.set_type_utf16(units);
+    }
+    pub fn init_custom_event_utf16(&mut self, units: &[u16], bubbles: bool, cancelable: bool,
+        detail: Option<CallbackId>) -> Option<Option<CallbackId>> {
+        let previous = self.init_custom_event("", bubbles, cancelable, detail)?;
+        self.set_type_utf16(units);
+        Some(previous)
+    }
+    pub fn init_message_event_utf16(&mut self, units: &[u16], bubbles: bool, cancelable: bool,
+        data: MessageEventData) -> Option<MessageEventData> {
+        let previous = self.init_message_event("", bubbles, cancelable, data)?;
+        self.set_type_utf16(units);
+        Some(previous)
     }
     pub fn class(&self) -> EventClass { self.class }
     pub fn set_class(&mut self, class: EventClass) { self.class = class; }
@@ -232,6 +286,7 @@ impl Event {
             return;
         }
         self.event_type = event_type.into();
+        self.event_type_units = None;
         self.initialized = true;
         self.init.bubbles = bubbles;
         self.init.cancelable = cancelable;
@@ -336,7 +391,9 @@ struct Listener {
     id: ListenerId,
     target: EventTarget,
     event_type: String,
+    event_type_units: Option<Vec<u16>>,
     callback: CallbackId,
+    handler: bool,
     capture: bool,
     once: bool,
     passive: bool,
@@ -367,6 +424,7 @@ pub struct Dispatch {
     active_entry: Option<PathEntry>,
     finished: bool,
     clear_targets: bool,
+    input_activation: Option<crate::forms::InputActivation>,
     exceptions: Vec<String>,
 }
 impl Dispatch {
@@ -392,6 +450,7 @@ pub struct EventInvocation {
     pub phase: EventPhase,
     /// The listener has been removed from the native registry before invocation.
     pub once: bool,
+    pub handler: bool,
 }
 impl EventTargets {
     /// Changes whenever the effective listener set changes. A compositor can
@@ -405,15 +464,47 @@ impl EventTargets {
 
     pub fn listener_id(&self, target: EventTarget, event_type: &str, callback: CallbackId,
         capture: bool) -> Option<ListenerId> {
-        self.listeners.iter().find(|listener| listener.target == target
-            && listener.event_type == event_type && listener.callback == callback
-            && listener.capture == capture).map(|listener| listener.id)
+        self.listener_id_utf16(target, &event_type.encode_utf16().collect::<Vec<_>>(), callback, capture)
     }
-
+    pub fn listener_id_utf16(&self, target: EventTarget, units: &[u16], callback: CallbackId,
+        capture: bool) -> Option<ListenerId> {
+        let (event_type, event_type_units) = event_type_parts(units);
+        self.listeners.iter().find(|listener| !listener.handler && listener.target == target
+            && listener.event_type == event_type && listener.event_type_units == event_type_units
+            && listener.callback == callback && listener.capture == capture).map(|listener| listener.id)
+    }
     pub fn listener_callbacks(&self, target: EventTarget, event_type: &str, capture: bool) -> Vec<CallbackId> {
-        self.listeners.iter().filter(|listener| listener.target == target
-            && listener.event_type == event_type && listener.capture == capture)
+        self.listener_callbacks_utf16(target, &event_type.encode_utf16().collect::<Vec<_>>(), capture)
+    }
+    pub fn listener_callbacks_utf16(&self, target: EventTarget, units: &[u16], capture: bool) -> Vec<CallbackId> {
+        let (event_type, event_type_units) = event_type_parts(units);
+        self.listeners.iter().filter(|listener| !listener.handler && listener.target == target
+            && listener.event_type == event_type && listener.event_type_units == event_type_units && listener.capture == capture)
             .map(|listener| listener.callback).collect()
+    }
+    pub fn event_handler(&self, target: EventTarget, event_type: &str) -> Option<CallbackId> {
+        self.listeners.iter().find(|listener| listener.handler && listener.target == target
+            && listener.event_type == event_type).map(|listener| listener.callback)
+    }
+    /// Replacement preserves the registration position. Clearing and setting
+    /// again creates a new registration at the end of the listener list.
+    pub fn set_event_handler(&mut self, target: EventTarget, event_type: &str,
+        callback: Option<CallbackId>) -> Option<CallbackId> {
+        let old = self.listeners.iter().position(|listener| listener.handler
+            && listener.target == target && listener.event_type == event_type);
+        self.listener_generation = self.listener_generation.wrapping_add(1);
+        if let Some(index) = old {
+            let previous = self.listeners[index].callback;
+            if let Some(callback) = callback { self.listeners[index].callback = callback; }
+            else { self.listeners.remove(index); }
+            return Some(previous);
+        }
+        if let Some(callback) = callback {
+            let id = ListenerId(self.next_listener); self.next_listener += 1;
+            self.listeners.push(Listener { id, target, event_type: event_type.into(), event_type_units: None,
+                callback, handler: true, capture: false, once: false, passive: false });
+        }
+        None
     }
     pub fn create_event(&mut self, event: Event) -> EventId {
         let id = EventId(self.events.len());
@@ -429,58 +520,40 @@ impl EventTargets {
     pub fn event_mut(&mut self, id: EventId) -> &mut Event {
         &mut self.events[id.0]
     }
-    pub fn add_listener(
-        &mut self,
-        tree: &impl EventTree,
-        target: EventTarget,
-        event_type: &str,
-        callback: Option<CallbackId>,
-        options: ListenerOptions,
-    ) -> Option<ListenerId> {
+    pub fn add_listener(&mut self, tree: &impl EventTree, target: EventTarget, event_type: &str,
+        callback: Option<CallbackId>, options: ListenerOptions) -> Option<ListenerId> {
+        self.add_listener_utf16(tree, target, &event_type.encode_utf16().collect::<Vec<_>>(), callback, options)
+    }
+    pub fn add_listener_utf16(&mut self, tree: &impl EventTree, target: EventTarget, units: &[u16],
+        callback: Option<CallbackId>, options: ListenerOptions) -> Option<ListenerId> {
         let callback = callback?;
-        if let Some(existing) = self.listeners.iter().find(|l| {
-            l.target == target
-                && l.event_type == event_type
-                && l.callback == callback
-                && l.capture == options.capture
-        }) {
-            return Some(existing.id);
-        }
+        let (event_type, event_type_units) = event_type_parts(units);
+        if let Some(existing) = self.listeners.iter().find(|listener| !listener.handler && listener.target == target
+            && listener.event_type == event_type && listener.event_type_units == event_type_units
+            && listener.callback == callback && listener.capture == options.capture) { return Some(existing.id); }
+        let passive = options.passive.unwrap_or_else(|| tree.default_passive(target, &event_type));
         let id = ListenerId(self.next_listener);
         self.next_listener += 1;
-        self.listeners.push(Listener {
-            id,
-            target,
-            event_type: event_type.into(),
-            callback,
-            capture: options.capture,
-            once: options.once,
-            passive: options
-                .passive
-                .unwrap_or_else(|| tree.default_passive(target, event_type)),
-        });
+        self.listeners.push(Listener { id, target, event_type, event_type_units, callback,
+            capture: options.capture, once: options.once, passive, handler: false });
         self.listener_generation = self.listener_generation.wrapping_add(1);
         Some(id)
     }
-    pub fn remove_listener(
-        &mut self,
-        target: EventTarget,
-        event_type: &str,
-        callback: Option<CallbackId>,
-        capture: bool,
-    ) -> Vec<CallbackId> {
+    pub fn remove_listener(&mut self, target: EventTarget, event_type: &str,
+        callback: Option<CallbackId>, capture: bool) -> Vec<CallbackId> {
+        self.remove_listener_utf16(target, &event_type.encode_utf16().collect::<Vec<_>>(), callback, capture)
+    }
+    pub fn remove_listener_utf16(&mut self, target: EventTarget, units: &[u16],
+        callback: Option<CallbackId>, capture: bool) -> Vec<CallbackId> {
+        let (event_type, event_type_units) = event_type_parts(units);
         let mut removed = Vec::new();
-        self.listeners.retain(|l| {
-            let matches = l.target == target
-                && l.event_type == event_type
-                && Some(l.callback) == callback
-                && l.capture == capture;
-            if matches { removed.push(l.callback); }
+        self.listeners.retain(|listener| {
+            let matches = !listener.handler && listener.target == target && listener.event_type == event_type
+                && listener.event_type_units == event_type_units && Some(listener.callback) == callback && listener.capture == capture;
+            if matches { removed.push(listener.callback); }
             !matches
         });
-        if !removed.is_empty() {
-            self.listener_generation = self.listener_generation.wrapping_add(1);
-        }
+        if !removed.is_empty() { self.listener_generation = self.listener_generation.wrapping_add(1); }
         removed
     }
     pub fn remove_listener_id(&mut self, id: ListenerId) -> Option<CallbackId> {
@@ -553,6 +626,7 @@ impl EventTargets {
             active_entry: None,
             finished: false,
             clear_targets,
+            input_activation: None,
             exceptions: vec![],
         })
     }
@@ -573,11 +647,13 @@ impl EventTargets {
                     };
                     if listener.capture != dispatch.capturing
                         || listener.event_type != self.event(dispatch.event).event_type
+                        || listener.event_type_units != self.event(dispatch.event).event_type_units
                     {
                         continue;
                     }
                     let callback = listener.callback;
                     let once = listener.once;
+                    let handler = listener.handler;
                     let passive = listener.passive;
                     if once {
                         let _ = self.remove_listener_id(id);
@@ -594,6 +670,7 @@ impl EventTargets {
                         related_target: entry.adjusted_related,
                         phase: event.phase,
                         once,
+                        handler,
                     });
                 }
             }
@@ -676,16 +753,28 @@ impl Dom {
         &mut self, target: EventTarget, event_type: &str,
         callback: Option<CallbackId>, options: ListenerOptions,
     ) -> Option<ListenerId> {
+        self.add_event_listener_utf16(target, &event_type.encode_utf16().collect::<Vec<_>>(), callback, options)
+    }
+    pub fn add_event_listener_utf16(&mut self, target: EventTarget, units: &[u16],
+        callback: Option<CallbackId>, options: ListenerOptions) -> Option<ListenerId> {
         let mut events = std::mem::take(&mut self.events);
-        let result = events.add_listener(self, target, event_type, callback, options);
+        let result = events.add_listener_utf16(self, target, units, callback, options);
         self.events = events;
         result
+    }
+    /// Complete only after next_listener has cleaned up the dispatch state.
+    /// The returned node needs trusted input then change events from bindings.
+    pub fn finish_input_activation(&mut self, dispatch: &mut Dispatch) -> Option<NodeIdx> {
+        if !dispatch.finished { return None; }
+        let state = dispatch.input_activation.take()?;
+        let canceled = self.events.event(dispatch.event).default_prevented();
+        self.complete_input_activation(state, canceled)
     }
     pub fn begin_event_dispatch(
         &mut self, target: EventTarget, event: EventId, origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
         let mut events = std::mem::take(&mut self.events);
-        let result = events.begin_dispatch(self, target, event, origin);
+        let mut result = events.begin_dispatch(self, target, event, origin);
         if result.is_ok() {
             let roots = events.event(event).raw_path().iter().map(|target| match target {
                 EventTarget::Node(node) => self.shadow_including_ancestors(*node).into_iter()
@@ -696,6 +785,15 @@ impl Dom {
             events.event_mut(event).set_closed_path_roots(roots);
         }
         self.events = events;
+        if let Ok(dispatch) = &mut result {
+            let event = self.events.event(event);
+            if matches!(event.class(), EventClass::Mouse | EventClass::Wheel) && event.event_type() == "click" {
+                let target = dispatch.path.iter().filter(|entry| entry.at_target || event.bubbles())
+                    .filter_map(|entry| match entry.invocation { EventTarget::Node(node) => Some(node), _ => None })
+                    .find(|node| self.has_html_activation_behavior(*node));
+                dispatch.input_activation = target.and_then(|node| self.prepare_input_activation(node));
+            }
+        }
         result
     }
 }

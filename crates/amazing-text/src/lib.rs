@@ -116,6 +116,33 @@ pub enum Hyphens {
     Auto,
 }
 
+/// CSS Text Module `text-transform`'s case keyword. Mutually exclusive with
+/// itself (only one of `capitalize`/`uppercase`/`lowercase` can be set at a
+/// time), but independent of, and combinable with, `full-width` and
+/// `full-size-kana` -- see `TextTransform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TextTransformCase {
+    #[default]
+    None,
+    Capitalize,
+    Uppercase,
+    Lowercase,
+}
+
+/// The resolved value of the CSS `text-transform` property. Grammar is
+/// `none | [ capitalize | uppercase | lowercase ] || full-width ||
+/// full-size-kana`: the `case` keyword and the two width/kana keywords are
+/// independent axes that combine. This type only carries the resolved
+/// value; a caller resolves the property text itself (e.g. from
+/// `ComputedStyle`) and applies it via
+/// `amazing_text_provider::apply_text_transform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TextTransform {
+    pub case: TextTransformCase,
+    pub full_width: bool,
+    pub full_size_kana: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LineBreak {
     #[default]

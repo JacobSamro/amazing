@@ -73,3 +73,32 @@ The six runnable pinned `storage/buckets/*.any.js` files are the gate
 (`idlharness-worker.https.any.js` needs `idlharness.js` resources absent from the
 pinned checkout). Raw reports are under
 `crates/amazing-storage/evidence/store6/`.
+
+## STORE-8: fleet-wide event-loop regression, fixed
+
+A cross-lane bisection blamed the IA-FRAME-PHASES render hook
+(`crates/amazing/src/js_scheduler.rs`) for the pinned IndexedDB selection
+falling from 0 timeouts to 441. Both that path and `amazing-dom`'s event loop
+were read and instrumented and are sound. The real bug was this lane's own
+STORE-6 commit: `IDBDatabase` member access re-derived its `BucketKey` via a
+live `idb::Connection` lookup that threw `TypeError: IDBDatabase is closed` on
+every access after first close — including the idempotent second `close()`
+call and the read-only getters WPT's support helpers call during cleanup.
+Fixed by caching `BucketKey` on `StorageObject::Database` at open time. Raw
+reports and full writeup: `crates/amazing-storage/evidence/store8/`.
+
+## STORE-7: "Object store not found" cluster, fixed
+
+`IDBOpenDBRequest`'s "success" event could fire before its versionchange
+transaction had actually committed (`TransactionComplete`'s self-reschedule,
+triggered whenever a request placed inside the transaction was still
+undelivered, could land behind the open request's already-queued
+`RequestSuccess`), so a handler reading `db.transaction(...)` right after
+`onsuccess` saw a pre-upgrade schema and threw `NotFoundError`. Fixed by having
+`TransactionComplete`'s commit branch schedule `RequestSuccess` itself, instead
+of `OpenUpgrade` scheduling it eagerly — mirroring the abort branch's existing
+`RequestError` scheduling. Pinned 32-file selection: 115 pass / 75 fail → 164
+pass / 26 fail, 0 timeouts, zero lost passes. Residual clusters (Array
+join/toString cycle protection routed to js-runtime; partial `idbindex_get(Key)`/
+`idbcursor_{update,delete}_objectstore` improvements; a few unchanged
+pre-existing fails) are listed in `crates/amazing-storage/evidence/store7/README.md`.

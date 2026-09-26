@@ -22,9 +22,13 @@ PAGES = ROOT / "pages"
 
 
 def svg(width: int, height: int, fill: str, label: str) -> str:
+    # A leading <title> mirrors ordinary real-world accessible SVG authoring
+    # (and is a genuinely unrecognized element to this engine's byte decoder,
+    # exercising RC-30's "unknown elements are skipped, not fatal" policy).
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        f'viewBox="0 0 {width} {height}"><rect width="{width}" height="{height}" fill="{fill}"/>'
+        f'viewBox="0 0 {width} {height}"><title>{label}</title>'
+        f'<rect width="{width}" height="{height}" fill="{fill}"/>'
         f'<text x="8" y="{height // 2 + 4}" font-family="sans-serif" font-size="12" '
         f'fill="#ffffff">{label}</text></svg>\n'
     )

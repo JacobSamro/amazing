@@ -1,0 +1,761 @@
+linux-run[layout]: boat from /Users/jMac/Projects/OpenSource/amazing-wt/layout (97d79da4, with uncommitted edits)
+linux-run[layout]: boat sandbox bx_cp5jbn5z (pool-layout)
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-layout)
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+   Compiling amazing-paint v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-paint)
+   Compiling amazing-compositor v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-compositor)
+   Compiling amazing-canvas v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-canvas)
+   Compiling amazing-bindings v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-bindings)
+   Compiling amazing-process v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-process)
+warning: unused import: `LockOptions as WireLockOptions`
+ --> crates/amazing-process/src/storage.rs:4:69
+  |
+4 |     LockClient, LockInfo as WireLockInfo, LockMode as WireLockMode, LockOptions as WireLockOptions,
+  |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-process` (lib) generated 1 warning (run `cargo fix --lib -p amazing-process` to apply 1 suggestion)
+   Compiling amazing v0.0.1 (/home/user/amazing/wt/layout/crates/amazing)
+warning: unused imports: `Command`, `ExitCode`, and `ExitStatus`
+ --> crates/amazing/src/cmd/launch.rs:2:20
+  |
+2 | use std::process::{Command, ExitCode, ExitStatus};
+  |                    ^^^^^^^  ^^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::gui`
+ --> crates/amazing/src/cmd/launch.rs:3:5
+  |
+3 | use crate::gui;
+  |     ^^^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_host_storage.rs:3:25
+  |
+3 | use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
+  |                         ^^^^^^^^
+
+warning: unused import: `self`
+ --> crates/amazing/src/runtime_host_storage.rs:5:267
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{B...
+  |                                                                   ^^^^
+
+warning: unused imports: `PageMedia`, `load_page_media`, and `load_page_text`
+  --> crates/amazing/src/main.rs:23:12
+   |
+23 | use page::{PageMedia, load_page_media, load_page_text};
+   |            ^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates/amazing/src/runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates/amazing/src/runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `frame` is never used
+  --> crates/amazing/src/animation_scene.rs:40:19
+   |
+24 | impl AnimationScene {
+   | ------------------- method in this implementation
+...
+40 |     pub(crate) fn frame(
+   |                   ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `set_document_content_type` and `pump_now_with_render` are never used
+   --> crates/amazing/src/js_scheduler.rs:67:19
+    |
+ 42 | impl DriverScheduler {
+    | -------------------- methods in this implementation
+...
+ 67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+300 |     pub(crate) fn pump_now_with_render(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `scroll_y`, `history_index`, `history_length`, and `history` are never read
+   --> crates/amazing/src/navigator.rs:333:9
+    |
+330 | pub struct NavigationResult<T> {
+    |            ---------------- fields in this struct
+...
+333 |     pub scroll_y: i32,
+    |         ^^^^^^^^
+334 |     pub history_index: usize,
+    |         ^^^^^^^^^^^^^
+335 |     pub history_length: usize,
+    |         ^^^^^^^^^^^^^^
+336 |     pub history: Vec<String>,
+    |         ^^^^^^^
+
+warning: method `history_index` is never used
+   --> crates/amazing/src/navigator.rs:372:12
+    |
+350 | impl Navigator {
+    | -------------- method in this implementation
+...
+372 |     pub fn history_index(&self) -> Option<usize> {
+    |            ^^^^^^^^^^^^^
+
+warning: field `decoding` is never read
+  --> crates/amazing/src/page.rs:30:5
+   |
+24 | struct PageImage {
+   |        --------- field in this struct
+...
+30 |     decoding: amazing_media::loading::Decoding,
+   |     ^^^^^^^^
+
+warning: method `has_pending_lazy` is never used
+  --> crates/amazing/src/page.rs:66:19
+   |
+57 | impl PageMedia {
+   | -------------- method in this implementation
+...
+66 |     pub(crate) fn has_pending_lazy(&self) -> bool {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: function `load_page_text` is never used
+  --> crates/amazing/src/page.rs:90:15
+   |
+90 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+
+warning: struct `PixelMismatch` is never constructed
+  --> crates/amazing/src/render_oracle.rs:64:19
+   |
+64 | pub(crate) struct PixelMismatch {
+   |                   ^^^^^^^^^^^^^
+
+warning: function `first_pixel_mismatch` is never used
+  --> crates/amazing/src/render_oracle.rs:71:15
+   |
+71 | pub(crate) fn first_pixel_mismatch(candidate: &Surface, full: &Surface) -> Option<PixelMismatch> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates/amazing/src/runtime_binding_host.rs:71:17
+   |
+71 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+71 -     FontFaceSet(NodeIdx, Option<JsValue>),
+71 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `create_inert_document`, `set_document_content_type`, and `dispatch_window_event` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:165:19
+    |
+119 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+...
+165 |     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+182 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+200 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates/amazing/src/runtime_host_storage.rs:87:5
+   |
+84 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+87 |     cache: Rc<RefCell<PersistentCacheStorage>>,
+   |     ^^^^^
+
+warning: field `bucket` is never read
+   --> crates/amazing/src/runtime_host_storage.rs:129:20
+    |
+129 |     CacheStorage { bucket: String },
+    |     ------------   ^^^^^^
+    |     |
+    |     field in this variant
+
+warning: variant `Cache` is never constructed
+   --> crates/amazing/src/runtime_host_storage.rs:130:5
+    |
+119 | enum StorageObject {
+    |      ------------- variant in this enum
+...
+130 |     Cache { name: String },
+    |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates/amazing/src/runtime_host_storage.rs:404:8
+    |
+252 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+404 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: methods `fetch_request_record`, `fetch_response_record`, and `fetch_response_new` are never used
+   --> crates/amazing/src/runtime_host_net.rs:91:19
+    |
+ 66 | impl RuntimeBindingHost<'_> {
+    | --------------------------- methods in this implementation
+...
+ 91 |     pub(crate) fn fetch_request_record(&self, value: &JsValue) -> Result<ApiRequest, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+...
+ 99 |     pub(crate) fn fetch_response_record(&self, value: &JsValue) -> Result<ApiResponse, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+107 |     pub(crate) fn fetch_response_new(&mut self, response: ApiResponse) -> Result<JsValue, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: method `messaging_peer_owner` is never used
+   --> crates/amazing/src/runtime_host_messaging.rs:345:8
+    |
+122 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+345 |     fn messaging_peer_owner(&self, port: PortId) -> Option<ClientId> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ScrollFrame` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:31:19
+   |
+31 | pub(crate) struct ScrollFrame {
+   |                   ^^^^^^^^^^^
+
+warning: struct `DomScrollEvent` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:36:19
+   |
+36 | pub(crate) struct DomScrollEvent {
+   |                   ^^^^^^^^^^^^^^
+
+warning: methods `on_scroll_input`, `on_scroll_vsync`, `take_scroll_events`, `cancel_animation`, and `compositor` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:89:19
+    |
+ 41 | impl RetainedPropertyScene {
+    | -------------------------- methods in this implementation
+...
+ 89 |     pub(crate) fn on_scroll_input(
+    |                   ^^^^^^^^^^^^^^^
+...
+129 |     pub(crate) fn on_scroll_vsync(
+    |                   ^^^^^^^^^^^^^^^
+...
+145 |     pub(crate) fn take_scroll_events(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+226 |     pub(crate) fn cancel_animation(
+    |                   ^^^^^^^^^^^^^^^^
+...
+247 |     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    |                   ^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `save_snapshot` and `renderer_crashed` are never used
+   --> crates/amazing/src/runtime_host_ipc.rs:642:12
+    |
+408 | impl Driver {
+    | ----------- methods in this implementation
+...
+642 |     pub fn save_snapshot(
+    |            ^^^^^^^^^^^^^
+...
+723 |     pub fn renderer_crashed(&mut self, tab_id: u64) -> Result<Vec<u64>, String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: `amazing` (bin "amazing") generated 29 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 6 suggestions)
+    Finished `release` profile [optimized] target(s) in 46.88s
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-layout)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.15s
+────────────
+ Nextest run ID 12a741e7-7317-4086-b104-26913959d6bd with nextest profile: default
+    Starting 337 tests across 1 binary (1 test skipped)
+        PASS [   0.002s] (  1/337) amazing-layout block::tests::inline_block_last_baseline_skips_orthogonal_child
+        PASS [   0.002s] (  2/337) amazing-layout block::tests::calc_height_constraint_needs_a_definite_percentage_basis
+        PASS [   0.015s] (  3/337) amazing-layout block::tests::bfc_auto_height_includes_a_negative_trailing_margin
+        PASS [   0.015s] (  4/337) amazing-layout block::tests::min_height_below_content_allows_the_trailing_margin_to_escape
+        PASS [   0.017s] (  5/337) amazing-layout block::tests::empty_blocks_keep_one_adjoining_margin_group
+        PASS [   0.019s] (  6/337) amazing-layout block::tests::min_height_that_raises_auto_height_traps_the_trailing_margin
+        PASS [   0.012s] (  7/337) amazing-layout block::tests::mixed_sign_sibling_margins_collapse_by_positive_plus_negative_extrema
+        PASS [   0.018s] (  8/337) amazing-layout block::tests::negative_top_margin_shrinks_an_auto_height_parent
+        PASS [   0.012s] (  9/337) amazing-layout box_tree::tests::block_inside_inline_hoists_in_order
+        PASS [   0.023s] ( 10/337) amazing-layout block::tests::overflow_clip_does_not_establish_a_block_formatting_context
+        PASS [   0.021s] ( 11/337) amazing-layout box_tree::tests::bare_rtc_text_spans_anonymous_ideographic_base
+        PASS [   0.012s] ( 12/337) amazing-layout box_tree::tests::body_is_root_with_block_children
+        PASS [   0.012s] ( 13/337) amazing-layout box_tree::tests::br_becomes_break_marker
+        PASS [   0.016s] ( 14/337) amazing-layout box_tree::tests::computed_ruby_container_display_uses_ruby_fixup
+        PASS [   0.015s] ( 15/337) amazing-layout box_tree::tests::computed_ruby_role_overrides_html_tag_default
+        PASS [   0.016s] ( 16/337) amazing-layout box_tree::tests::computed_ruby_text_display_creates_annotations
+        PASS [   0.013s] ( 17/337) amazing-layout box_tree::tests::first_letter_splits_initial_text_run
+        PASS [   0.012s] ( 18/337) amazing-layout box_tree::tests::first_line_color_stops_at_the_line_break
+        PASS [   0.018s] ( 19/337) amazing-layout box_tree::tests::display_none_subtree_skipped
+        PASS [   0.012s] ( 20/337) amazing-layout box_tree::tests::font_size_em_chain_compounds
+        PASS [   0.014s] ( 21/337) amazing-layout box_tree::tests::font_width_and_oblique_angle_keep_fractional_css_values
+        PASS [   0.017s] ( 22/337) amazing-layout box_tree::tests::generated_flex_container_wraps_its_text_in_an_item
+        PASS [   0.024s] ( 23/337) amazing-layout box_tree::tests::generated_before_and_after_follow_children
+        PASS [   0.013s] ( 24/337) amazing-layout box_tree::tests::generated_image_uses_url_intrinsic_dimensions
+        PASS [   0.029s] ( 25/337) amazing-layout box_tree::tests::generated_content_becomes_flex_items
+        PASS [   0.013s] ( 26/337) amazing-layout box_tree::tests::generated_images_on_one_origin_keep_distinct_paint_keys
+        PASS [   0.012s] ( 27/337) amazing-layout box_tree::tests::inter_block_whitespace_vanishes
+        PASS [   0.014s] ( 28/337) amazing-layout box_tree::tests::list_style_image_uses_generated_url_fragment
+        PASS [   0.014s] ( 29/337) amazing-layout box_tree::tests::marker_image_without_intrinsic_size_uses_one_em_square
+        PASS [   0.030s] ( 30/337) amazing-layout box_tree::tests::generated_inline_wrappers_sort_around_block_children
+        PASS [   0.012s] ( 31/337) amazing-layout box_tree::tests::mixed_content_makes_anonymous_blocks
+        PASS [   0.021s] ( 32/337) amazing-layout box_tree::tests::marker_ignores_author_display_for_its_formatting_context
+        PASS [   0.010s] ( 33/337) amazing-layout box_tree::tests::non_breaking_space_is_not_css_collapsible_whitespace
+        PASS [   0.012s] ( 34/337) amazing-layout box_tree::tests::nested_spans_flatten_to_words_at_own_font_size
+        PASS [   0.014s] ( 35/337) amazing-layout box_tree::tests::nested_descendants_keep_one_paired_inline_bidi_scope
+        PASS [   0.021s] ( 36/337) amazing-layout box_tree::tests::nested_after_boxes_have_distinct_tree_order
+        PASS [   0.014s] ( 37/337) amazing-layout box_tree::tests::outside_marker_does_not_change_flow_children
+        PASS [   0.016s] ( 38/337) amazing-layout box_tree::tests::ruby_fixup_groups_consecutive_anonymous_inline_content
+        PASS [   0.018s] ( 39/337) amazing-layout box_tree::tests::ruby_annotation_container_spans_all_base_columns
+        PASS [   0.017s] ( 40/337) amazing-layout box_tree::tests::ruby_keeps_paired_base_and_annotation_structure
+        PASS [   0.010s] ( 41/337) amazing-layout box_tree::tests::upright_sideways_text_keeps_rtl_direction
+        PASS [   0.012s] ( 42/337) amazing-layout box_tree::tests::source_order_follows_insert_before_not_arena_id
+        PASS [   0.018s] ( 43/337) amazing-layout box_tree::tests::ruby_parentheses_are_suppressed_by_the_ua_display_rule
+        PASS [   0.010s] ( 44/337) amazing-layout box_tree::tests::upright_vertical_text_forces_used_ltr_direction
+        PASS [   0.015s] ( 45/337) amazing-layout contents_tests::contents_body_has_only_anonymous_viewport_host
+        PASS [   0.032s] ( 46/337) amazing-layout contents_tests::anonymous_line_owns_its_atomic_subtrees_after_block_sibling
+        PASS [   0.050s] ( 47/337) amazing-layout contents_tests::contents_absolute_descendants_use_nearest_real_positioned_box
+        PASS [   0.022s] ( 48/337) amazing-layout contents_tests::contents_does_not_resurrect_display_none_descendants
+        PASS [   0.045s] ( 49/337) amazing-layout contents_tests::contents_cells_join_before_anonymous_table_repair
+        PASS [   0.022s] ( 50/337) amazing-layout contents_tests::contents_keeps_text_inheritance_but_not_its_decoration_or_bidi_box
+        PASS [   0.039s] ( 51/337) amazing-layout contents_tests::contents_empty_boxes_and_style_edges_do_not_add_inline_space
+        PASS [   0.012s] ( 52/337) amazing-layout contents_tests::contents_pre_text_does_not_preserve_a_collapsible_space_from_its_sibling
+        PASS [   0.033s] ( 53/337) amazing-layout contents_tests::contents_pre_spaces_keep_their_own_style_at_line_start
+        PASS [   0.031s] ( 54/337) amazing-layout contents_tests::contents_text_stays_one_anonymous_flex_item_across_wrappers
+        PASS [   0.124s] ( 55/337) amazing-layout contents_tests::contents_blocks_ignore_wrapper_size_margin_float_and_position
+        PASS [   0.049s] ( 56/337) amazing-layout contents_tests::contents_unusual_elements_suppress_subtrees_but_buttons_unbox
+        PASS [   0.028s] ( 57/337) amazing-layout contents_tests::inline_block_contains_its_float_and_child_margins
+        PASS [   0.024s] ( 58/337) amazing-layout contents_tests::inline_block_is_one_unbreakable_box_with_shrink_to_fit_width
+        PASS [   0.070s] ( 59/337) amazing-layout contents_tests::contents_promotes_flex_and_grid_items_in_source_order
+        PASS [   0.023s] ( 60/337) amazing-layout contents_tests::inline_block_top_and_bottom_vertical_align_share_line_edges
+        PASS [   0.033s] ( 61/337) amazing-layout contents_tests::inline_flex_and_grid_boxes_share_one_parent_line
+        PASS [   0.027s] ( 62/337) amazing-layout contents_tests::inline_flex_intrinsic_width_includes_row_items_and_gaps
+        PASS [   0.045s] ( 63/337) amazing-layout contents_tests::inline_block_uses_last_line_baseline_or_bottom_margin_edge
+        PASS [   0.023s] ( 64/337) amazing-layout contents_tests::inline_flex_uses_its_first_item_baseline_in_parent_line
+        PASS [   0.020s] ( 65/337) amazing-layout contents_tests::positioned_stretch_is_definite_for_percentage_descendants
+        PASS [   0.028s] ( 66/337) amazing-layout contents_tests::lanes_auto_fit_collapses_internal_empty_tracks_in_both_axes
+        PASS [   0.038s] ( 67/337) amazing-layout contents_tests::inline_grid_lanes_uses_combined_track_intrinsic_width
+        PASS [   0.032s] ( 68/337) amazing-layout contents_tests::reshaped_atomic_line_moves_absolute_but_not_fixed_descendants
+        PASS [   0.013s] ( 69/337) amazing-layout flex::tests::align_center_centers_on_cross_axis
+        PASS [   0.015s] ( 70/337) amazing-layout flex::tests::align_self_baseline_uses_the_same_group_as_align_items
+        PASS [   0.013s] ( 71/337) amazing-layout flex::tests::anonymous_text_becomes_an_item
+        PASS [   0.033s] ( 72/337) amazing-layout contents_tests::rtl_column_wrapping_combines_direction_and_wrap_reverse
+        PASS [   0.002s] ( 73/337) amazing-layout flex::tests::calc_size_minimum_transforms_intrinsic_basis
+        PASS [   0.013s] ( 74/337) amazing-layout flex::tests::auto_left_margin_pushes_item_right
+        PASS [   0.040s] ( 75/337) amazing-layout contents_tests::row_lanes_subgrid_chrome_matches_grid_sizing
+        PASS [   0.003s] ( 76/337) amazing-layout flex::tests::cyclic_percent_min_width_contributes_only_its_length_to_intrinsic_size
+        PASS [   0.016s] ( 77/337) amazing-layout flex::tests::baseline_aligned_flex_items_share_their_text_baseline
+        PASS [   0.015s] ( 78/337) amazing-layout flex::tests::column_direction_stacks_and_stretches_width
+        PASS [   0.015s] ( 79/337) amazing-layout flex::tests::column_gap_separates_items
+        PASS [   0.015s] ( 80/337) amazing-layout flex::tests::equal_grow_splits_free_space_evenly
+        PASS [   0.012s] ( 81/337) amazing-layout flex::tests::justify_center_centers_the_row
+        PASS [   0.015s] ( 82/337) amazing-layout flex::tests::justify_space_between_pins_to_edges
+        PASS [   0.002s] ( 83/337) amazing-layout flex::tests::safe_alignment_uses_position_when_space_is_available
+        PASS [   0.015s] ( 84/337) amazing-layout flex::tests::order_property_reorders_visual_placement
+        PASS [   0.015s] ( 85/337) amazing-layout flex::tests::oversized_items_shrink_to_fit
+        PASS [   0.015s] ( 86/337) amazing-layout flex::tests::proportional_grow_is_two_to_one
+        PASS [   0.019s] ( 87/337) amazing-layout flex::tests::sideways_lr_auto_width_uses_intrinsic_block_extent_for_column_reverse
+        PASS [   0.015s] ( 88/337) amazing-layout flex::tests::sideways_lr_row_reverse_uses_the_bottom_as_flex_start
+        PASS [   0.012s] ( 89/337) amazing-layout flex::tests::single_flex_line_fills_cross_size_even_with_align_content_center
+        PASS [   0.012s] ( 90/337) amazing-layout flex::tests::stretch_is_default_and_fills_height
+        PASS [   0.016s] ( 91/337) amazing-layout flex::tests::vertical_rl_column_reverse_runs_left_to_right
+        PASS [   0.016s] ( 92/337) amazing-layout flex::tests::wrap_makes_two_lines
+        PASS [   0.017s] ( 93/337) amazing-layout flex::tests::wrap_reverse_places_first_row_at_cross_end
+        PASS [   0.048s] ( 94/337) amazing-layout flex::tests::sideways_lr_row_follows_the_logical_inline_direction
+        PASS [   0.015s] ( 95/337) amazing-layout float_tests::bfc_border_box_avoids_a_float_starting_below_its_top
+        PASS [   0.015s] ( 96/337) amazing-layout float_tests::bfc_height_takes_maximum_of_float_bottom_and_normal_trailing_margin
+        PASS [   0.013s] ( 97/337) amazing-layout float_tests::empty_float_does_not_increase_explicit_zero_line_height
+        PASS [   0.016s] ( 98/337) amazing-layout float_tests::float_auto_width_uses_shrink_to_fit_and_contains_its_own_floats
+        PASS [   0.019s] ( 99/337) amazing-layout float_tests::cleared_empty_margin_group_stays_inside_its_parent
+        PASS [   0.013s] (100/337) amazing-layout float_tests::float_margins_do_not_absorb_unused_width_or_collapse
+        PASS [   0.015s] (101/337) amazing-layout float_tests::floated_inline_flex_keeps_its_inner_formatting_context
+        PASS [   0.023s] (102/337) amazing-layout float_tests::inline_float_is_blockified_and_lines_recover_full_width_below_it
+        PASS [   0.046s] (103/337) amazing-layout float_tests::clear_selects_side_and_preserves_trailing_margin_contract
+        PASS [   0.002s] (104/337) amazing-layout font::tests::advances_per_char
+        PASS [   0.020s] (105/337) amazing-layout float_tests::nested_normal_blocks_share_floats_but_bfc_contains_and_isolates_them
+        PASS [   0.002s] (106/337) amazing-layout font::tests::blank_and_missing_outlines_are_none
+        PASS [   0.002s] (107/337) amazing-layout font::tests::all_off_curve_contour_gets_synthetic_anchor
+        PASS [   0.017s] (108/337) amazing-layout float_tests::opposing_floats_pack_and_drop_without_advancing_normal_blocks
+        PASS [   0.002s] (109/337) amazing-layout font::tests::char_to_outline_end_to_end
+        PASS [   0.002s] (110/337) amazing-layout font::tests::composite_of_two_squares
+        PASS [   0.002s] (111/337) amazing-layout font::tests::composite_x_y_scale_and_2x2
+        PASS [   0.002s] (112/337) amazing-layout font::tests::fallback_measure_sanity
+        PASS [   0.002s] (113/337) amazing-layout font::tests::idrangeoffset_lookup_path
+        PASS [   0.002s] (114/337) amazing-layout font::tests::implied_midpoints_between_off_curve_points
+        PASS [   0.002s] (115/337) amazing-layout font::tests::line_height_floor_engages
+        PASS [   0.002s] (116/337) amazing-layout font::tests::measure_exact_float_compare
+        PASS [   0.002s] (117/337) amazing-layout font::tests::metrics_roundtrip
+        PASS [   0.002s] (118/337) amazing-layout font::tests::parses_synthetic_font
+        PASS [   0.002s] (119/337) amazing-layout font::tests::rejects_missing_required_table
+        PASS [   0.002s] (120/337) amazing-layout font::tests::rejects_truncated_and_garbage
+        PASS [   0.002s] (121/337) amazing-layout font::tests::repeat_flag_run_decodes
+        PASS [   0.002s] (122/337) amazing-layout font::tests::scaled_metrics_ttf_values
+        PASS [   0.002s] (123/337) amazing-layout font::tests::self_referential_composite_hits_depth_cap
+        PASS [   0.002s] (124/337) amazing-layout font::tests::sfnt_version_variants
+        PASS [   0.002s] (125/337) amazing-layout font::tests::short_and_long_loca_agree
+        PASS [   0.002s] (126/337) amazing-layout font::tests::square_outline_decoded
+        PASS [   0.002s] (127/337) amazing-layout font::tests::triangle_outline_decoded
+        PASS [   0.002s] (128/337) amazing-layout font::tests::truncated_glyf_rejected_while_font_parses
+        PASS [   0.002s] (129/337) amazing-layout font_features::tests::kerning_maps_both_orientations_and_explicit_settings_win
+        PASS [   0.002s] (130/337) amazing-layout font_features::tests::letter_spacing_suppresses_optional_ligatures_before_explicit_settings
+        PASS [   0.002s] (131/337) amazing-layout font_features::tests::variant_none_preserves_required_ligatures_and_explicit_settings_win
+        PASS [   0.023s] (132/337) amazing-layout float_tests::unbreakable_first_word_moves_below_an_obstructing_float
+        PASS [   0.010s] (133/337) amazing-layout grid::tests::align_content_centers_rows_in_definite_height
+        PASS [   0.013s] (134/337) amazing-layout grid::tests::auto_fit_collapses_empty_flexible_tracks_and_gutters
+        PASS [   0.002s] (135/337) amazing-layout grid::tests::auto_repeat_counts_fixed_repeats_and_only_one_trailing_gap
+        PASS [   0.012s] (136/337) amazing-layout grid::tests::auto_fit_rows_collapse_with_definite_height
+        PASS [   0.010s] (137/337) amazing-layout grid::tests::auto_fit_spanning_items_keep_every_covered_track
+        PASS [   0.002s] (138/337) amazing-layout grid::tests::definite_items_and_locked_rows_precede_auto_placement
+        PASS [   0.023s] (139/337) amazing-layout grid::tests::auto_fit_internal_holes_preserve_line_numbers_and_distribution
+        PASS [   0.015s] (140/337) amazing-layout grid::tests::column_subgrid_inherits_tracks_gap_and_parent_line_names
+        PASS [   0.019s] (141/337) amazing-layout grid::tests::center_alignment_offsets_within_the_area
+        PASS [   0.015s] (142/337) amazing-layout grid::tests::grid_lanes_accepts_column_subgrid_child
+        PASS [   0.013s] (143/337) amazing-layout grid::tests::grid_lanes_align_content_moves_the_whole_stacking_range
+        PASS [   0.002s] (144/337) amazing-layout grid::tests::grid_lanes_chooses_shortest_with_cursor_tolerance_and_span
+        PASS [   0.023s] (145/337) amazing-layout grid::tests::fr_tracks_split_leftover_after_fixed_tracks
+        PASS [   0.028s] (146/337) amazing-layout grid::tests::dense_backflow_differs_from_sparse_cursor
+        PASS [   0.013s] (147/337) amazing-layout grid::tests::grid_lanes_fill_reverse_mirrors_the_stacking_axis
+        PASS [   0.002s] (148/337) amazing-layout grid::tests::grid_safe_alignment_keeps_its_requested_position
+        PASS [   0.015s] (149/337) amazing-layout grid::tests::grid_lanes_places_items_in_shortest_columns
+        PASS [   0.015s] (150/337) amazing-layout grid::tests::grid_lanes_row_orientation_stacks_into_shortest_row
+        PASS [   0.002s] (151/337) amazing-layout grid::tests::implicit_tracks_cycle_the_auto_list
+        PASS [   0.015s] (152/337) amazing-layout grid::tests::grid_order_changes_auto_placement_without_changing_item_storage
+        PASS [   0.013s] (153/337) amazing-layout grid::tests::justify_content_distributes_free_columns_space
+        PASS [   0.017s] (154/337) amazing-layout grid::tests::implicit_rows_and_auto_columns_created_on_demand
+        PASS [   0.012s] (155/337) amazing-layout grid::tests::minmax_auto_maxima_stretch_in_both_axes
+        PASS [   0.002s] (156/337) amazing-layout grid::tests::nested_repeat_is_rejected_before_recursive_track_expansion
+        PASS [   0.023s] (157/337) amazing-layout grid::tests::intrinsic_track_contributions_include_chrome_only_once
+        PASS [   0.013s] (158/337) amazing-layout grid::tests::negative_line_numbers_anchor_to_explicit_grid_end
+        PASS [   0.021s] (159/337) amazing-layout grid::tests::normal_grid_empty_items_stretch_to_definite_row_tracks
+        PASS [   0.020s] (160/337) amazing-layout grid::tests::percentage_items_do_not_expand_intrinsic_track_maxima_to_container_width
+        PASS [   0.002s] (161/337) amazing-layout grid::tests::slot_combination_resolves_negatives_before_ordering
+        PASS [   0.014s] (162/337) amazing-layout grid::tests::percentage_tracks_resolve_against_content_width
+        PASS [   0.002s] (163/337) amazing-layout grid::tests::spanning_intrinsic_contribution_excludes_internal_gap_and_fixed_tracks
+        PASS [   0.010s] (164/337) amazing-layout grid::tests::stretch_fills_area_through_padding
+        PASS [   0.013s] (165/337) amazing-layout grid::tests::span_keyword_covers_two_columns_and_wraps_next_item
+        PASS [   0.013s] (166/337) amazing-layout grid::tests::subgrid_child_sizing_contributes_to_parent_auto_track
+        PASS [   0.002s] (167/337) amazing-layout grid::tests::top_level_tokens_keep_repeat_groups_together
+        PASS [   0.028s] (168/337) amazing-layout grid::tests::repeat_fixed_count_and_auto_fill
+        PASS [   0.002s] (169/337) amazing-layout grid::tests::track_size_parsing_forms
+        PASS [   0.002s] (170/337) amazing-layout inline::tests::atomic_only_vertical_line_uses_containing_block_writing_mode
+        PASS [   0.003s] (171/337) amazing-layout inline::tests::br_forces_break_and_strips_leading_space
+        PASS [   0.002s] (172/337) amazing-layout inline::tests::combined_text_trims_collapsible_edges_but_keeps_middle_space
+        PASS [   0.015s] (173/337) amazing-layout grid::tests::subgrid_explicit_gap_adjusts_child_tracks_and_positions
+        PASS [   0.002s] (174/337) amazing-layout inline::tests::oversized_word_overflows_but_places
+        PASS [   0.015s] (175/337) amazing-layout grid::tests::subgrid_padding_consumes_parent_edge_track_space
+        PASS [   0.002s] (176/337) amazing-layout inline::tests::shaped_letter_spacing_has_no_trailing_gap
+        PASS [   0.002s] (177/337) amazing-layout inline::tests::shaped_word_spacing_adds_to_the_surviving_separator
+        PASS [   0.002s] (178/337) amazing-layout inline::tests::short_text_is_one_line_with_baseline
+        PASS [   0.002s] (179/337) amazing-layout inline::tests::space_between_items_survives_item_boundary
+        PASS [   0.002s] (180/337) amazing-layout inline::tests::unbreakable_opening_bracket_and_atomic_wrap_together
+        PASS [   0.002s] (181/337) amazing-layout inline::tests::whitespace_only_content_makes_no_lines
+        PASS [   0.004s] (182/337) amazing-layout inline::tests::splitting_an_atomic_preserves_only_provider_breaks
+        PASS [   0.003s] (183/337) amazing-layout inline::tests::words_wrap_greedily_at_the_edge
+        PASS [   0.023s] (184/337) amazing-layout grid::tests::two_by_two_px_tracks_gaps_and_stretch
+        PASS [   0.025s] (185/337) amazing-layout inline_replaced_tests::border_box_sizing_and_minimums_account_for_chrome_once
+        PASS [   0.026s] (186/337) amazing-layout inline_replaced_tests::chrome_contributes_to_wrapping_baseline_and_paint_metadata
+        PASS [   0.029s] (187/337) amazing-layout inline_replaced_tests::bidi_reorder_moves_content_and_decoration_geometry_together
+        PASS [   0.036s] (188/337) amazing-layout inline_replaced_tests::defaults_and_html_sizing_attributes_are_deterministic
+        PASS [   0.027s] (189/337) amazing-layout inline_replaced_tests::existing_provider_overrides_control_defaults_without_creating_a_ratio
+        PASS [   0.037s] (190/337) amazing-layout inline_replaced_tests::hidden_and_display_none_controls_have_no_fragment
+        PASS [   0.028s] (191/337) amazing-layout inline_replaced_tests::inline_block_controls_and_images_remain_on_the_text_line
+        PASS [   0.012s] (192/337) amazing-layout inline_replaced_tests::invalid_provider_geometry_falls_back_for_controls_and_omits_images
+        PASS [   0.084s] (193/337) amazing-layout inline_replaced_tests::image_css_dimensions_resolve_auto_axes_from_natural_ratio
+        PASS [   0.101s] (194/337) amazing-layout inline_replaced_tests::image_min_max_preserves_ratio_or_obeys_opposing_constraints
+        PASS [   0.139s] (195/337) amazing-layout inline_replaced_tests::direct_and_nested_controls_are_atomic_and_keep_identity
+        PASS [   0.063s] (196/337) amazing-layout inline_replaced_tests::nowrap_keeps_atomic_only_inline_run_on_one_line
+        PASS [   0.010s] (197/337) amazing-layout inline_replaced_tests::repeated_layout_re_resolves_percentage_without_accumulating_chrome
+        PASS [   0.015s] (198/337) amazing-layout position::tests::absolute_child_does_not_size_block_parent
+        PASS [   0.033s] (199/337) amazing-layout inline_replaced_tests::percentages_use_containing_block_not_wrapper_or_float_band
+        PASS [   0.064s] (200/337) amazing-layout inline_replaced_tests::percentage_heights_require_definite_parent_and_survive_anonymous_blocks
+        PASS [   0.012s] (201/337) amazing-layout position::tests::absolute_descendant_of_inline_content_is_retained_out_of_flow
+        PASS [   0.027s] (202/337) amazing-layout position::tests::absolute_children_are_not_flex_or_grid_items
+        PASS [   0.013s] (203/337) amazing-layout position::tests::absolute_uses_nearest_positioned_padding_box_and_right_bottom
+        PASS [   0.015s] (204/337) amazing-layout position::tests::auto_insets_use_static_slot_after_preceding_block
+        PASS [   0.013s] (205/337) amazing-layout position::tests::dual_insets_stretch_auto_width_and_height
+        PASS [   0.015s] (206/337) amazing-layout position::tests::fixed_uses_viewport_and_negative_insets_are_preserved
+        PASS [   0.014s] (207/337) amazing-layout position::tests::percentage_relative_and_absolute_insets_use_containing_block_axes
+        PASS [   0.019s] (208/337) amazing-layout position::tests::percentage_relative_top_with_auto_containing_height_is_auto
+        PASS [   0.016s] (209/337) amazing-layout position::tests::rtl_overconstraint_uses_right_inset
+        PASS [   0.022s] (210/337) amazing-layout position::tests::relative_offset_keeps_following_sibling_in_original_slot
+        PASS [   0.013s] (211/337) amazing-layout position::tests::scrollable_overflow_includes_absolute_but_excludes_fixed
+        PASS [   0.044s] (212/337) amazing-layout position::tests::grid_child_static_position_uses_content_box_self_alignment
+        PASS [   0.010s] (213/337) amazing-layout replaced_tests::block_replaced_content_uses_intrinsic_box_dimensions
+        PASS [   0.012s] (214/337) amazing-layout replaced_tests::inline_replaced_content_participates_in_line_geometry
+        PASS [   0.021s] (215/337) amazing-layout retained::generation_tests::new_dom_generation_never_reuses_old_box_cache
+        PASS [   0.023s] (216/337) amazing-layout retained::tests::changed_containment_output_dirties_ancestors
+        PASS [   0.045s] (217/337) amazing-layout position::tests::static_absolute_child_uses_inline_block_content_origin
+        PASS [   0.029s] (218/337) amazing-layout retained::tests::contained_block_relayouts_child_and_owns_before_after_damage
+        PASS [   0.015s] (219/337) amazing-layout retained::tests::css_style_delta_feeds_retained_opacity_update
+        PASS [   0.019s] (220/337) amazing-layout retained::tests::opacity_updates_retained_style_without_changing_geometry
+        PASS [   0.011s] (221/337) amazing-layout retained::tests::text_input_requires_full_rebuild_even_without_style_changes
+        PASS [   0.019s] (222/337) amazing-layout retained::tests::oracle_rejects_a_misclassified_geometry_change
+        PASS [   0.023s] (223/337) amazing-layout retained::tests::unchanged_containment_output_stops_dirty_ancestors
+        PASS [   0.019s] (224/337) amazing-layout retained::tests::width_change_rebuilds_and_reports_geometry
+        PASS [   0.021s] (225/337) amazing-layout ruby_tests::multiple_levels_keep_independent_pairing_and_spans
+        PASS [   0.037s] (226/337) amazing-layout ruby_tests::annotation_under_and_alternate_have_distinct_sides
+        PASS [   0.035s] (227/337) amazing-layout ruby_tests::intra_level_spaces_pair_with_empty_space_on_missing_levels
+        PASS [   0.045s] (228/337) amazing-layout ruby_tests::identical_raw_annotation_auto_hides_but_visibility_hidden_keeps_measure
+        PASS [   0.034s] (229/337) amazing-layout ruby_tests::orphan_ruby_parts_form_one_anonymous_container
+        PASS [   0.041s] (230/337) amazing-layout ruby_tests::nested_ruby_keeps_annotations_out_of_outer_base_text
+        PASS [   0.027s] (231/337) amazing-layout ruby_tests::ruby_alignment_stretches_word_spaces_not_latin_letters
+        FAIL [   0.013s] (232/337) amazing-layout ruby_tests::ruby_max_content_width_includes_annotation_and_contextual_overhang
+  stdout ───
+
+    running 1 test
+    test ruby_tests::ruby_max_content_width_includes_annotation_and_contextual_overhang ... FAILED
+
+    failures:
+
+    failures:
+        ruby_tests::ruby_max_content_width_includes_annotation_and_contextual_overhang
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 337 filtered out; finished in 0.01s
+
+  stderr ───
+
+    thread 'ruby_tests::ruby_max_content_width_includes_annotation_and_contextual_overhang' (336880) panicked at crates/amazing-layout/src/ruby_tests.rs:30:5:
+    500 != 55
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.015s] (233/337) amazing-layout ruby_tests::ruby_segments_restart_pairing_after_annotations
+        PASS [   0.045s] (234/337) amazing-layout ruby_tests::over_and_under_vertical_ruby_use_right_and_left_sides_in_both_flows
+        PASS [   0.015s] (235/337) amazing-layout shaped_text_tests::atomic_inline_participates_in_visual_bidi_order
+        PASS [   0.014s] (236/337) amazing-layout shaped_text_tests::bidi_scope_survives_a_br_paragraph_boundary
+        PASS [   0.011s] (237/337) amazing-layout shaped_text_tests::block_lengths_use_element_and_root_font_metrics
+        PASS [   0.010s] (238/337) amazing-layout shaped_text_tests::break_all_uses_provider_cluster_opportunities_for_wrapping
+        PASS [   0.010s] (239/337) amazing-layout shaped_text_tests::collapsed_whitespace_retains_original_dom_offsets
+        PASS [   0.012s] (240/337) amazing-layout shaped_text_tests::collapsible_space_runs_coalesce_across_dom_text_nodes
+        PASS [   0.011s] (241/337) amazing-layout shaped_text_tests::consecutive_preserved_breaks_create_an_empty_line_box
+        PASS [   0.013s] (242/337) amazing-layout shaped_text_tests::inherited_relative_font_size_is_not_resolved_twice
+        PASS [   0.016s] (243/337) amazing-layout shaped_text_tests::horizontal_ruby_places_half_size_annotation_above_its_base
+        PASS [   0.010s] (244/337) amazing-layout shaped_text_tests::nowrap_suppresses_soft_provider_breaks
+        PASS [   0.013s] (245/337) amazing-layout shaped_text_tests::inline_background_geometry_follows_visual_bidi_order
+        PASS [   0.010s] (246/337) amazing-layout shaped_text_tests::pre_keeps_trailing_spaces_in_the_cluster_and_source_stream
+        PASS [   0.017s] (247/337) amazing-layout shaped_text_tests::one_ruby_pair_stays_together_between_surrounding_inline_text
+        PASS [   0.011s] (248/337) amazing-layout shaped_text_tests::pre_line_preserves_segment_breaks_but_collapses_spaces
+        PASS [   0.010s] (249/337) amazing-layout shaped_text_tests::preserved_newline_wraps_without_losing_dom_source_offsets
+        PASS [   0.019s] (250/337) amazing-layout shaped_text_tests::precomputed_style_entry_point_matches_document_layout
+        PASS [   0.013s] (251/337) amazing-layout shaped_text_tests::rtl_manual_hyphen_is_fitted_and_painted_at_the_visual_start
+        PASS [   0.010s] (252/337) amazing-layout shaped_text_tests::selected_manual_hyphen_break_inserts_a_visible_hyphen
+        PASS [   0.021s] (253/337) amazing-layout shaped_text_tests::ruby_can_wrap_at_a_legal_han_base_boundary
+        PASS [   0.010s] (254/337) amazing-layout shaped_text_tests::shaped_entry_point_places_provider_glyphs_with_source_clusters
+        PASS [   0.021s] (255/337) amazing-layout shaped_text_tests::ruby_does_not_wrap_at_an_illegal_latin_base_boundary
+        PASS [   0.010s] (256/337) amazing-layout shaped_text_tests::shaped_layout_consumes_visual_line_runs
+        PASS [   0.013s] (257/337) amazing-layout shaped_text_tests::shaped_inline_background_includes_horizontal_padding
+        PASS [   0.013s] (258/337) amazing-layout shaped_text_tests::short_text_combine_is_centered_in_its_em_cell
+        PASS [   0.010s] (259/337) amazing-layout shaped_text_tests::sideways_lr_uses_horizontal_shaping_on_a_vertical_inline_axis
+        PASS [   0.015s] (260/337) amazing-layout shaped_text_tests::standalone_pre_line_newline_node_creates_a_line_break
+        PASS [   0.014s] (261/337) amazing-layout shaped_text_tests::standalone_whitespace_node_separates_adjacent_inline_boxes
+        PASS [   0.013s] (262/337) amazing-layout shaped_text_tests::text_combine_upright_forms_one_horizontal_atomic_cell
+        PASS [   0.018s] (263/337) amazing-layout shaped_text_tests::spanning_ruby_annotation_centers_across_all_owned_bases
+        PASS [   0.010s] (264/337) amazing-layout shaped_text_tests::unfittable_manual_hyphen_is_not_selected_as_a_wrap_point
+        PASS [   0.010s] (265/337) amazing-layout shaped_text_tests::vertical_glyphs_keep_distinct_inline_axis_positions
+        PASS [   0.010s] (266/337) amazing-layout shaped_text_tests::vertical_mixed_orientation_is_resolved_per_cluster
+        PASS [   0.011s] (267/337) amazing-layout shaped_text_tests::vertical_lr_preformatted_lines_advance_to_the_right
+        PASS [   0.012s] (268/337) amazing-layout svg_tests::block_svg_exposes_root_and_content_viewport
+        PASS [   0.014s] (269/337) amazing-layout shaped_text_tests::vertical_rl_wraps_against_height_and_adds_columns_to_the_left
+        PASS [   0.017s] (270/337) amazing-layout shaped_text_tests::vertical_rl_ruby_places_annotation_on_the_line_over_side
+        PASS [   0.015s] (271/337) amazing-layout svg_tests::svg_subtrees_never_make_css_boxes
+        PASS [   0.025s] (272/337) amazing-layout svg_tests::svg_display_none_and_contents_suppress_the_entire_subtree
+        PASS [   0.037s] (273/337) amazing-layout svg_tests::css_dimensions_and_percentages_override_svg_attributes
+        PASS [   0.050s] (274/337) amazing-layout table_tests::auto_table_percentage_max_width_caps_share_not_intrinsic_text
+        PASS [   0.076s] (275/337) amazing-layout svg_tests::wpt_outer_svg_sizing_matrix
+        PASS [   0.077s] (276/337) amazing-layout table_tests::auto_table_prioritizes_percent_then_unconstrained_columns
+        PASS [   0.029s] (277/337) amazing-layout table_tests::auto_table_spanning_percentage_preserves_existing_column_shares
+        PASS [   0.093s] (278/337) amazing-layout table_tests::auto_table_cell_min_max_constraints_use_outer_box_sizes
+        PASS [   0.025s] (279/337) amazing-layout table_tests::collapsed_border_joins_cover_short_empty_rows
+        PASS [   0.054s] (280/337) amazing-layout table_tests::fixed_spans_subtract_existing_columns_across_length_and_percentage_terms
+        PASS [   0.057s] (281/337) amazing-layout table_tests::fixed_table_colgroup_fallback_and_spanning_cell_use_unassigned_columns
+        PASS [   0.106s] (282/337) amazing-layout table_tests::auto_table_scroll_cell_max_width_limits_track_without_shrinking_contents
+        PASS [   0.102s] (283/337) amazing-layout table_tests::fixed_table_column_percentages_exclude_table_borders_and_spacing
+        PASS [   0.050s] (284/337) amazing-layout table_tests::fixed_table_preserves_lengths_when_percentages_overcommit
+        PASS [   0.038s] (285/337) amazing-layout table_tests::table_baseline_aligns_first_lines_of_different_font_sizes
+        PASS [   0.023s] (286/337) amazing-layout table_tests::table_caption_is_outside_grid_decoration_and_moves_with_wrapper
+        PASS [   0.093s] (287/337) amazing-layout table_tests::table_auto_uses_content_and_distributes_extra_width
+        PASS [   0.169s] (288/337) amazing-layout table_tests::fixed_table_decoration_stays_in_tracks_narrower_than_cell_offsets
+        PASS [   0.021s] (289/337) amazing-layout table_tests::table_collapsed_hidden_wins_and_none_loses
+        PASS [   0.022s] (290/337) amazing-layout table_tests::table_collapsed_ties_prefer_style_then_cell_then_logical_start
+        PASS [   0.021s] (291/337) amazing-layout table_tests::table_collapsed_winner_controls_half_border_geometry
+        PASS [   0.024s] (292/337) amazing-layout table_tests::table_columns_discard_irrelevant_children
+        PASS [   0.217s] (293/337) amazing-layout table_tests::fixed_table_distributes_excess_by_column_kind_and_width
+        PASS [   0.030s] (294/337) amazing-layout table_tests::table_direct_row_span_stops_before_an_explicit_group
+        PASS [   0.023s] (295/337) amazing-layout table_tests::table_empty_cells_does_not_hide_preserved_spaces_or_in_flow_boxes
+        PASS [   0.011s] (296/337) amazing-layout table_tests::table_empty_collapsed_grid_keeps_declared_height_and_ignores_padding
+        PASS [   0.037s] (297/337) amazing-layout table_tests::table_empty_cells_hide_decoration_without_losing_layout
+        PASS [   0.033s] (298/337) amazing-layout table_tests::table_header_footer_and_caption_order
+        PASS [   0.024s] (299/337) amazing-layout table_tests::table_intrinsic_width_in_a_float_honors_width_and_collapsed_padding
+        PASS [   0.153s] (300/337) amazing-layout table_tests::table_cell_box_sizing_and_fixed_percentage_offsets
+        PASS [   0.014s] (301/337) amazing-layout table_tests::table_orphan_cells_share_a_row_and_table
+        PASS [   0.022s] (302/337) amazing-layout table_tests::table_missing_child_wrappers_group_consecutive_content
+        PASS [   0.037s] (303/337) amazing-layout table_tests::table_min_width_participates_in_column_distribution
+        PASS [   0.079s] (304/337) amazing-layout table_tests::table_fixed_columns_then_first_row_then_equal_remainder
+        PASS [   0.026s] (305/337) amazing-layout table_tests::table_relayout_does_not_accumulate_alignment_or_border_offsets
+        PASS [   0.025s] (306/337) amazing-layout table_tests::table_rowspan_explicit_height_is_a_minimum_across_owned_rows
+        PASS [   0.021s] (307/337) amazing-layout table_tests::table_rtl_columns_and_winning_physical_borders
+        PASS [   0.020s] (308/337) amazing-layout table_tests::table_separate_spacing_padding_and_centering
+        PASS [   0.031s] (309/337) amazing-layout table_tests::table_span_attribute_clamping_is_bounded_and_css_cells_ignore_html_spans
+        PASS [   0.026s] (310/337) amazing-layout table_tests::table_spanning_cells_have_no_internal_border_segments
+        PASS [   0.031s] (311/337) amazing-layout table_tests::table_spans_allocate_grid_and_clamp_at_row_group_boundary
+        PASS [   0.027s] (312/337) amazing-layout table_tree::tests::anonymous_cell_keeps_collapsing_child_margins_inside_its_bfc
+        PASS [   0.029s] (313/337) amazing-layout table_tests::table_zero_rowspan_grows_to_end_of_group_and_overlap_keeps_source_order
+        PASS [   0.056s] (314/337) amazing-layout table_tests::table_vertical_alignment_preserves_natural_content_height
+        PASS [   0.031s] (315/337) amazing-layout table_tree::tests::anonymous_cell_owns_atomic_inline_children_and_their_whitespace
+        PASS [   0.029s] (316/337) amazing-layout table_tree::tests::empty_inline_table_row_synthesizes_baseline_from_its_minimum_height
+        PASS [   0.047s] (317/337) amazing-layout table_tree::tests::explicit_inline_table_baseline_uses_first_row_below_caption
+        PASS [   0.076s] (318/337) amazing-layout table_tree::tests::css_table_box_sizing_distinguishes_content_and_border_edges
+        PASS [   0.033s] (319/337) amazing-layout table_tree::tests::inline_table_caption_shaping_matches_block_at_nonzero_origin
+        PASS [   0.074s] (320/337) amazing-layout table_tree::tests::inline_table_baseline_ignores_other_cells_vertical_alignment
+        PASS [   0.125s] (321/337) amazing-layout table_tree::tests::generated_text_remains_outside_anonymous_inline_table
+        PASS [   0.061s] (322/337) amazing-layout table_tree::tests::non_whitespace_inline_content_separates_anonymous_tables
+        PASS [   0.002s] (323/337) amazing-layout values::tests::border_radius_calc_uses_its_own_axis_and_keeps_function_whitespace
+        PASS [   0.002s] (324/337) amazing-layout values::tests::border_style_none_zeroes_width
+        PASS [   0.002s] (325/337) amazing-layout values::tests::calc_keeps_length_and_percentage_until_the_used_basis_is_known
+        PASS [   0.019s] (326/337) amazing-layout table_tree::tests::preserved_whitespace_between_table_parts_does_not_create_cells
+        PASS [   0.002s] (327/337) amazing-layout values::tests::font_relative_units_keep_element_and_root_metrics_separate
+        PASS [   0.002s] (328/337) amazing-layout values::tests::font_size_ladder_and_relative_units
+        PASS [   0.002s] (329/337) amazing-layout values::tests::lengths_cover_absolute_font_relative_and_percent
+        PASS [   0.002s] (330/337) amazing-layout values::tests::line_height_forms
+        PASS [   0.010s] (331/337) amazing-layout values::tests::computed_calc_and_logical_size_use_the_physical_axis
+        PASS [   0.002s] (332/337) amazing-layout values::tests::margin_shorthand_replicates_and_auto_survives
+        PASS [   0.002s] (333/337) amazing-layout values::tests::padding_defaults_to_zero_without_declarations
+        PASS [   0.002s] (334/337) amazing-layout values::tests::used_size_math_handles_resolved_attr_and_definite_calc_size
+        PASS [   0.002s] (335/337) amazing-layout values::tests::zoom_scales_absolute_used_lengths_once_but_not_percentage_terms
+        PASS [   0.108s] (336/337) amazing-layout table_tree::tests::nested_inline_table_contributes_to_the_outer_column_intrinsic_size
+        PASS [   0.121s] (337/337) amazing-layout table_tree::tests::orphan_cells_in_inline_parent_share_an_inline_table_and_surrounding_line
+────────────
+     Summary [   1.965s] 337 tests run: 336 passed, 1 failed, 1 skipped
+        FAIL [   0.013s] (232/337) amazing-layout ruby_tests::ruby_max_content_width_includes_annotation_and_contextual_overhang
+error: test run failed
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+   Doc-tests amazing_layout
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+{"output": "/home/user/amazing/out/layout/layout21/candidate1b/ruby", "source": "97d79da4-layout21-candidate1b", "counts": {"pass": 43, "mismatch": 75, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{
+  "before": "/home/user/amazing/out/layout/layout21/before/report.json",
+  "after": "/home/user/amazing/out/layout/layout21/candidate1b/ruby/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 118,
+  "before_counts": {
+    "pass": 33,
+    "mismatch": 85,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 43,
+    "mismatch": 75,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": 18,
+  "losses": 8,
+  "actual_hash_changes": 103,
+  "reference_hash_changes": 88,
+  "before_projection_sha256": "2f26e9d87f7733e981f63a8dcd3f6dd85d53958cb1cd73897fecbf6339fd71e5",
+  "after_projection_sha256": "c2fec69e3b2b8a69e17878009848dece84d5eff6d56bc28bb48038815ef3c9a0"
+}

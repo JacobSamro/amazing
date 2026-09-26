@@ -29,14 +29,59 @@ pub(crate) struct ChildNavigation {
 
 struct FrameDocument {
     src: Option<String>,
+    srcdoc: Option<String>,
     document: Option<NodeIdx>,
     url: String,
+    sandbox: SandboxFlags,
+}
+
+/// The `sandbox` attribute's recognized tokens, ASCII-case-insensitive and
+/// space-separated. Absent attribute means not sandboxed at all (full
+/// access, matching an ordinary same-origin child). Tokens this driver does
+/// not otherwise enforce (`allow-forms`, `allow-popups`,
+/// `allow-top-navigation`, ...) are accepted but currently no-ops, since the
+/// features they'd gate (form-target navigation restrictions, popups,
+/// top-level navigation from a child) either don't exist yet or aren't
+/// enforced here; see docs/lanes/html_TODO.md.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SandboxFlags {
+    pub(crate) sandboxed: bool,
+    pub(crate) allow_scripts: bool,
+    pub(crate) allow_same_origin: bool,
+}
+
+fn parse_sandbox(attr: Option<&str>) -> SandboxFlags {
+    let Some(attr) = attr else { return SandboxFlags::default() };
+    let mut flags = SandboxFlags { sandboxed: true, allow_scripts: false, allow_same_origin: false };
+    for token in attr.split_ascii_whitespace() {
+        match token.to_ascii_lowercase().as_str() {
+            "allow-scripts" => flags.allow_scripts = true,
+            "allow-same-origin" => flags.allow_same_origin = true,
+            _ => {}
+        }
+    }
+    flags
+}
+
+/// Bits 0-2 of `NavigableContext::sandbox_flags`; amazing-fetch only checks
+/// that the field fits in 16 bits (frame-embedding plumbing owned by the
+/// `net` lane), so this driver-local encoding is ours to define.
+impl SandboxFlags {
+    fn to_bits(self) -> u32 {
+        (self.sandboxed as u32) | (self.allow_scripts as u32) << 1 | (self.allow_same_origin as u32) << 2
+    }
 }
 
 #[derive(Default)]
 pub(super) struct FrameRuntime {
     documents: HashMap<NodeIdx, FrameDocument>,
-    pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>)>,
+    /// `(frame, document, fire_load_events)`. `fire_load_events` is false
+    /// only for an iframe with neither `src` nor `srcdoc`: its initial
+    /// `about:blank` is created for `contentDocument`/`contentWindow` to see,
+    /// but per spec no `load` event is queued for it (WPT's
+    /// `iframe-nosrc.html` treats any iframe-level `load` before the page's
+    /// own as a failure).
+    pending_loads: VecDeque<(NodeIdx, Option<NodeIdx>, bool)>,
     resolver: Option<FrameResourceResolver>,
     navigation_hook: Option<ChildNavigationHook>,
     form_navigation_hook: Option<FormNavigationHook>,
@@ -44,26 +89,57 @@ pub(super) struct FrameRuntime {
     /// connected iframe. The proxy identity survives re-navigation; only the
     /// realm it targets changes, via binding_retarget_window_proxy.
     windows: HashMap<NodeIdx, (RealmHandle, JsValue)>,
+    /// Counter minting a fresh opaque-origin string on each navigation of a
+    /// sandboxed iframe without `allow-same-origin`, so two such frames (or
+    /// the same frame across re-navigations) are never mistaken for the same
+    /// origin, matching the spec's "unique opaque origin per navigation".
+    opaque_origin_counter: u64,
 }
 
 /// Classic inline `<script>` bodies in tree order. External `src` and
 /// `type="module"` scripts are not fetched or evaluated for iframe
 /// documents yet; this mirrors the WPT harness's classic-only scheduling.
-fn collect_classic_inline_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<String>) {
+struct ChildScript { src: Option<String>, body: String }
+
+/// Classic `<script>` elements in tree order, inline or external.
+/// `type="module"` is still not fetched or evaluated for iframe documents:
+/// the same limitation the top-level WPT harness has for module/async/defer.
+fn collect_classic_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<ChildScript>) {
     if dom.namespace(node) == Some(Namespace::Html) && dom.local_name(node) == Some("script") {
-        let has_src = dom.get_attribute_ns(node, None, "src").is_some();
+        let src = dom.get_attribute_ns(node, None, "src").map(str::to_owned);
         let module = dom.get_attribute_ns(node, None, "type")
             .is_some_and(|value| value.eq_ignore_ascii_case("module"));
-        if !has_src && !module {
+        if !module {
             let mut source = String::new();
             for child in dom.children(node) {
                 if let NodeKind::Text { data } = &dom.get(child).kind { source.push_str(data); }
             }
-            if !source.trim().is_empty() { out.push(source); }
+            if src.is_some() || !source.trim().is_empty() {
+                out.push(ChildScript { src, body: source });
+            }
         }
         return;
     }
-    for child in dom.children(node) { collect_classic_inline_scripts(dom, child, out); }
+    for child in dom.children(node) { collect_classic_scripts(dom, child, out); }
+}
+
+/// Fetch an external classic script for a child document: resolved against
+/// the child's own URL (not the top document's), through the pinned fixture
+/// resolver when one is set, otherwise a real network fetch. `None` means
+/// the URL did not resolve or the fetch/decode failed; the script is then
+/// silently skipped, as if no error listener were installed to observe it.
+fn fetch_child_script(src: &str, base: &str,
+    resolver: Option<&FrameResourceResolver>) -> Option<String> {
+    let url = ParsedUrl::parse(base).ok()?.resolve(src).ok()?.serialize();
+    let bytes = if let Some(resolve) = resolver {
+        let path = resolve(&url)?;
+        std::fs::read(path).ok()?
+    } else {
+        amazing_net::fetch(&url, &amazing_net::FetchOptions {
+            max_response_bytes: 16 * 1024 * 1024, ..Default::default()
+        }).ok().filter(|response| response.is_success())?.body
+    };
+    Some(amazing_html::encoding::decode(&bytes, None).text)
 }
 
 fn same_origin(parent: &str, child: &str) -> bool {
@@ -108,13 +184,13 @@ fn parse_response(body: &[u8], mime: &str, charset: Option<&str>) -> Result<(Dom
 }
 
 fn fetch_child_document(logical_url: &str, parent_url: &str,
-    resolver: Option<&FrameResourceResolver>) -> Result<amazing_net::Response, String> {
+    resolver: Option<&FrameResourceResolver>, sandbox: SandboxFlags) -> Result<amazing_net::Response, String> {
     let parent = HttpUrl::parse(parent_url).map_err(|error| format!("iframe parent URL: {error:?}"))?;
     let target = HttpUrl::parse(logical_url).map_err(|error| format!("iframe URL: {error:?}"))?;
     let origin = parent.origin().clone();
     let context = NavigableContext {
         top_level_origin: origin.clone(), parent_origin: origin.clone(),
-        ancestor_origins: vec![origin], sandbox_flags: 0,
+        ancestor_origins: vec![origin], sandbox_flags: sandbox.to_bits(),
         frame_csp: Default::default(), referrer: parent.serialize(),
         referrer_policy: "strict-origin-when-cross-origin".into(),
         now_unix: SystemTime::now().duration_since(UNIX_EPOCH)
@@ -185,11 +261,97 @@ impl RuntimeBindings {
         self.state.borrow_mut().frames.navigation_hook = Some(hook);
     }
 
-    pub(crate) fn take_iframe_loads(&self) -> Vec<(NodeIdx, Option<NodeIdx>)> {
+    pub(crate) fn take_iframe_loads(&self) -> Vec<(NodeIdx, Option<NodeIdx>, bool)> {
         self.state.borrow_mut().frames.pending_loads.drain(..).collect()
     }
 
-    pub(crate) fn navigate_iframes(&self) {
+    /// Everything about a frame's just-committed navigation that must be
+    /// visible synchronously -- before any deferred task, including a
+    /// script that reads `contentDocument`/`contentWindow` before
+    /// `setup_iframe_window`'s later tick ever runs: the realm and
+    /// WindowProxy (JSRT-9), its origin, a full per-realm WebIDL interface
+    /// set (so `frame.contentWindow.Document !== window.Document`), and
+    /// `document` bound as that realm's global. Only running the document's
+    /// own classic scripts stays deferred, to `setup_iframe_window`.
+    ///
+    /// Called once from `navigate_iframes`, synchronously with the
+    /// navigation commit; `setup_iframe_window` only falls back to calling
+    /// it when somehow no realm exists yet (e.g. a test driving it directly
+    /// without a prior `navigate_iframes`).
+    fn ensure_realm(&self, js: &mut Interpreter, frame: NodeIdx, document: NodeIdx,
+        child_url: &str, sandbox: SandboxFlags) -> Result<RealmHandle, Throw> {
+        // `about:srcdoc` inherits the parent document's origin (it is not
+        // opaque on its own); a sandboxed frame without `allow-same-origin`
+        // gets a fresh, never-repeating opaque origin per navigation instead
+        // of whatever its URL would otherwise resolve to, so it can never
+        // observe or be observed as same-origin with anything, including its
+        // own earlier navigations.
+        let origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
+            let mut state = self.state.borrow_mut();
+            state.frames.opaque_origin_counter += 1;
+            format!("null (sandboxed #{})", state.frames.opaque_origin_counter)
+        } else if child_url == "about:srcdoc" {
+            self.state.borrow().document_url.as_deref()
+                .and_then(|parent| ParsedUrl::parse(parent).ok())
+                .map(|url| url.origin().serialize())
+                .unwrap_or_else(|| "null".into())
+        } else {
+            ParsedUrl::parse(child_url).map(|url| url.origin().serialize())
+                .unwrap_or_else(|_| "null".into())
+        };
+        let existing = self.state.borrow().frames.windows.get(&frame).cloned();
+        let realm = if let Some((_, proxy)) = existing {
+            let bare = js.binding_create_object(None)?;
+            let realm = js.binding_create_realm(bare)?;
+            js.binding_retarget_window_proxy(&proxy, realm)?;
+            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
+            realm
+        } else {
+            let bare = js.binding_create_object(None)?;
+            let realm = js.binding_create_realm(bare)?;
+            let proxy = js.binding_create_window_proxy(realm)?;
+            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
+            realm
+        };
+        js.binding_set_realm_origin(realm, &origin)?;
+        let state = self.state.clone();
+        js.binding_with_realm(realm, |i| {
+            // `host_native_dispatch` is per-realm state (see JSRT-9's
+            // `RealmState`), so a freshly created realm has none until we
+            // install one; without this every native binding call in the
+            // child (DOM methods, `contentWindow`/`contentDocument`
+            // getters, etc.) throws "host function dispatcher is not
+            // installed".
+            i.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
+            let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
+            // A real Document/Element/Array/... surface for this realm, not
+            // the top realm's: `frame.contentWindow.Array !== window.Array`
+            // and `frame.contentWindow.Document !== window.Document`. Storage,
+            // messaging, canvas and net stay top-only for this slice.
+            install_interfaces(&mut adapter)?;
+            adapter.install_dom_unscopables()?;
+            adapter.install_window_event_target()?;
+            adapter.install_selection_global()?;
+            adapter.install_iframe_members()?;
+            adapter.install_html_form_globals()?;
+            adapter.install_document_write_globals()?;
+            // Wrapped here, inside the child realm, so `document` gets the
+            // child's own freshly-installed Document.prototype (its host
+            // object cache is per-realm) rather than the caller's; the
+            // `contentDocument` getter enters this same realm to fetch the
+            // identical cached wrapper, so the two stay `===` no matter
+            // which is read first.
+            let wrapped = adapter.wrap_node(document)?;
+            let fresh = EnvHandle::new(EnvKind::Global, Some(adapter.js.global_env.clone()));
+            fresh.declare_lexical("document", wrapped.clone(), false)?;
+            adapter.js.global_env = fresh;
+            adapter.js.global_obj.borrow_mut().set_own("document", wrapped);
+            Ok(())
+        })?;
+        Ok(realm)
+    }
+
+    pub(crate) fn navigate_iframes(&self, js: &mut Interpreter) {
         let (host, base, resolver) = {
             let state = self.state.borrow();
             (state.host.clone(), state.document_url.clone(), state.frames.resolver.clone())
@@ -200,27 +362,37 @@ impl RuntimeBindings {
             host.dom.tree_order(NodeIdx(0)).into_iter().filter_map(|node| {
                 (host.dom.namespace(node) == Some(Namespace::Html)
                     && host.dom.local_name(node) == Some("iframe"))
-                    .then(|| (node, host.dom.get_attribute_ns(node, None, "src").map(str::to_owned)))
+                    .then(|| (node,
+                        host.dom.get_attribute_ns(node, None, "src").map(str::to_owned),
+                        host.dom.get_attribute_ns(node, None, "srcdoc").map(str::to_owned),
+                        parse_sandbox(host.dom.get_attribute_ns(node, None, "sandbox"))))
             }).collect::<Vec<_>>()
         };
-        let connected: HashSet<_> = candidates.iter().map(|(node, _)| *node).collect();
+        let connected: HashSet<_> = candidates.iter().map(|(node, ..)| *node).collect();
         {
             let mut state = self.state.borrow_mut();
             state.frames.documents.retain(|node, _| connected.contains(node));
             state.frames.windows.retain(|node, _| connected.contains(node));
         }
-        for (node, src) in candidates {
-            if self.state.borrow().frames.documents.get(&node).is_some_and(|old| old.src == src) {
+        for (node, src, srcdoc, sandbox) in candidates {
+            if self.state.borrow().frames.documents.get(&node)
+                .is_some_and(|old| old.src == src && old.srcdoc == srcdoc) {
                 continue;
             }
             let loaded = (|| -> Result<(Dom, String, String, &'static str), String> {
+                // `srcdoc` takes priority over `src` per spec: its content is
+                // used verbatim and the navigable's URL becomes "about:srcdoc"
+                // rather than being resolved/fetched.
+                if let Some(html) = srcdoc.as_deref() {
+                    return Ok((amazing_html::parse(html), "about:srcdoc".into(), "text/html".into(), "UTF-8"));
+                }
                 let Some(source) = src.as_deref().filter(|source| !source.is_empty()) else {
                     return Ok((amazing_html::parse("<!doctype html><html><head></head><body></body></html>"),
                         "about:blank".into(), "text/html".into(), "UTF-8"));
                 };
                 let logical_url = ParsedUrl::parse(&base).and_then(|base| base.resolve(source))
                     .map_err(|error| format!("iframe URL: {error:?}"))?.serialize();
-                let response = fetch_child_document(&logical_url, &base, resolver.as_ref())?;
+                let response = fetch_child_document(&logical_url, &base, resolver.as_ref(), sandbox)?;
                 if !response.is_success() { return Err(format!("iframe status {}", response.status)); }
                 let mime = content_type(&response, &logical_url,
                     resolver.is_some() || logical_url.starts_with("file:"))
@@ -249,71 +421,90 @@ impl RuntimeBindings {
                 }
                 Err(_) => (None, String::new()),
             };
+            // Per spec, a `load` event is only queued for this navigation
+            // when the element has a `src` or `srcdoc` attribute at all
+            // (present, even if empty) -- not for the implicit `about:blank`
+            // an iframe with neither gets purely from being inserted.
+            let fire_load_events = src.is_some() || srcdoc.is_some();
+            // Realm/WindowProxy creation happens here, synchronously with
+            // the navigation commit, not deferred to `setup_iframe_window`'s
+            // later tick: `contentDocument`/`contentWindow` must see the
+            // same wrapper identity whether they're read from an inline
+            // script that runs before that tick or from one that runs
+            // after (WPT's `iframe-nosrc.html` "contentDocument should not
+            // be changed" exercises exactly this ordering).
+            if let Some(document) = document {
+                let _ = self.ensure_realm(js, node, document, &url, sandbox);
+            }
             let mut state = self.state.borrow_mut();
             let navigation = ChildNavigation { frame: node, requested_src: src.clone(),
                 committed_url: url.clone(), document };
-            state.frames.documents.insert(node, FrameDocument { src, document, url });
-            state.frames.pending_loads.push_back((node, document));
+            state.frames.documents.insert(node, FrameDocument { src, srcdoc, document, url, sandbox });
+            state.frames.pending_loads.push_back((node, document, fire_load_events));
             let hook = state.frames.navigation_hook.clone();
             drop(state);
             if let Some(hook) = hook { hook(navigation); }
         }
     }
 
-    /// Give a connected iframe its child browsing context: a same-agent
-    /// realm and a stable WindowProxy (JSRT-9), branded with this document's
-    /// origin, with `document` bound in the realm's global environment and
-    /// the document's classic inline scripts run inside it. Called once per
-    /// committed navigation, after `navigate_iframes` has updated the DOM;
-    /// on re-navigation the existing WindowProxy is retargeted to a fresh
-    /// realm rather than replaced, so `contentWindow` identity is stable.
+    /// Run a connected iframe's classic scripts, deferred here (rather than
+    /// synchronous with the navigation commit) so they execute as their own
+    /// task, as spec requires. The realm/proxy, its origin, per-realm
+    /// interfaces and the bound `document` global all already exist by now
+    /// -- `navigate_iframes` created them synchronously via `ensure_realm`,
+    /// so `contentDocument`/`contentWindow` have a stable identity whether a
+    /// script reads them before or after this tick runs.
     pub(crate) fn setup_iframe_window(&self, js: &mut Interpreter, frame: NodeIdx,
         document: NodeIdx) -> Result<(), Throw> {
-        let child_url = self.state.borrow().frames.documents.get(&frame)
-            .map(|entry| entry.url.clone()).unwrap_or_default();
-        let origin = ParsedUrl::parse(&child_url).map(|url| url.origin().serialize())
-            .unwrap_or_else(|_| "null".into());
-        let existing = self.state.borrow().frames.windows.get(&frame).cloned();
-        let realm = if let Some((_, proxy)) = existing {
-            let bare = js.binding_create_object(None)?;
-            let realm = js.binding_create_realm(bare)?;
-            js.binding_retarget_window_proxy(&proxy, realm)?;
-            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
-            realm
-        } else {
-            let bare = js.binding_create_object(None)?;
-            let realm = js.binding_create_realm(bare)?;
-            let proxy = js.binding_create_window_proxy(realm)?;
-            self.state.borrow_mut().frames.windows.insert(frame, (realm, proxy));
-            realm
+        let (child_url, sandbox) = {
+            let state = self.state.borrow();
+            let entry = state.frames.documents.get(&frame);
+            (entry.map(|entry| entry.url.clone()).unwrap_or_default(),
+                entry.map(|entry| entry.sandbox).unwrap_or_default())
         };
-        js.binding_set_realm_origin(realm, &origin)?;
+        // Normally already created by `navigate_iframes`; this fallback
+        // only matters for a direct call with no prior navigation commit
+        // (e.g. a test driving `setup_iframe_window` on its own). The
+        // lookup is bound to an owned `Option` first, rather than matched on
+        // directly, so its `Ref` from `borrow()` drops before the `None`
+        // arm runs -- otherwise that immutable borrow stays alive for the
+        // whole match (matches extend a scrutinee temporary's lifetime
+        // across all arms) and `ensure_realm`'s own `borrow_mut()` panics
+        // with "already borrowed" the first time a frame's realm is created
+        // through this fallback instead of through `navigate_iframes`.
+        let existing_realm = self.state.borrow().frames.windows.get(&frame).map(|(realm, _)| *realm);
+        let realm = match existing_realm {
+            Some(realm) => realm,
+            None => self.ensure_realm(js, frame, document, &child_url, sandbox)?,
+        };
+        // `sandbox` without `allow-scripts` disables script execution in the
+        // child browsing context entirely (its own scripting flag is
+        // unset), so nothing runs at all -- not even collecting scripts.
+        if sandbox.sandboxed && !sandbox.allow_scripts { return Ok(()); }
         let state = self.state.clone();
         let scripts = {
             let state = state.borrow();
             let host = state.host.borrow();
             let mut scripts = Vec::new();
-            collect_classic_inline_scripts(&host.dom, document, &mut scripts);
+            collect_classic_scripts(&host.dom, document, &mut scripts);
             scripts
         };
-        // Wrap the document in the CALLER's realm (the top realm, here),
-        // not the child's: wrap_node's identity cache is per-realm, and
-        // `frame.contentDocument` is always read from the top realm, so
-        // binding the same wrapper as the child's `document` keeps
-        // `frame.contentWindow.document === frame.contentDocument`.
-        let wrapped = {
-            let mut adapter = RuntimeBindingHost { js, state: state.clone() };
-            adapter.wrap_node(document)?
-        };
+        let resolver = state.borrow().frames.resolver.clone();
         js.binding_with_realm(realm, |i| {
-            let fresh = EnvHandle::new(EnvKind::Global, Some(i.global_env.clone()));
-            fresh.declare_lexical("document", wrapped.clone(), false)?;
-            i.global_env = fresh;
-            // Also a data property of the global object itself, matching the
-            // top realm's install(), so `window.document`/`contentWindow.document`
-            // property access (not just the lexical `document` binding) works.
-            i.global_obj.borrow_mut().set_own("document", wrapped.clone());
-            for body in &scripts { i.run_script(body)?; }
+            let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
+            for script in &scripts {
+                match &script.src {
+                    None => { adapter.js.run_script(&script.body)?; }
+                    Some(src) => {
+                        if let Some(text) = fetch_child_script(src, &child_url, resolver.as_ref()) {
+                            adapter.js.run_script(&text)?;
+                        }
+                        // A fetch failure or unresolvable URL is silently
+                        // skipped, matching how a real load-error listener
+                        // would observe it without one installed here.
+                    }
+                }
+            }
             Ok(())
         })
     }
@@ -373,17 +564,156 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
+    /// `document.write`/`writeln`/`open`/`close`. Markup passed to
+    /// `write`/`writeln` runs its classic `<script>` elements synchronously
+    /// and immediately, like a parser-inserted `<script>` would -- unlike
+    /// `innerHTML`, whose inserted scripts never execute. `open()` and
+    /// `close()` are accepted as near-no-ops here: neither implements the
+    /// spec's "ignore-opens-during-unload" counter or the full-document
+    /// replacement `open()` performs when the document is not currently
+    /// being parsed (ready state not `"loading"`); see docs/lanes/html_TODO.md.
+    pub(super) fn install_document_write_globals(&mut self) -> Result<(), Throw> {
+        let prototype = self.prototype(Interface::Document)
+            .ok_or_else(|| Throw::type_error("Missing Document prototype"))?;
+        let write = self.native("write", 0, NativeEntry::DocumentWrite, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "write", write, true, false, true)?;
+        let writeln = self.native("writeln", 0, NativeEntry::DocumentWriteln, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "writeln", writeln, true, false, true)?;
+        let open = self.native("open", 0, NativeEntry::DocumentOpen, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "open", open, true, false, true)?;
+        let close = self.native("close", 0, NativeEntry::DocumentClose, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "close", close, true, false, true)
+    }
+
+    fn document_receiver_node(&self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
+        let key = self.platform_object(receiver, InterfaceBrand::NODE)
+            .ok_or_else(|| Throw::type_error("Invalid Document receiver"))?;
+        let node = self.node_from_platform_key(key)
+            .ok_or_else(|| Throw::type_error("Stale Document receiver"))?;
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        if !matches!(host.dom.get(node).kind, NodeKind::Document) {
+            return Err(Throw::type_error("Invalid Document receiver"));
+        }
+        Ok(node)
+    }
+
+    pub(super) fn document_open(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        self.document_receiver_node(&receiver)?;
+        Ok(receiver)
+    }
+
+    pub(super) fn document_close(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        self.document_receiver_node(&receiver)?;
+        Ok(JsValue::Undefined)
+    }
+
+    pub(super) fn document_write(&mut self, receiver: JsValue, args: &[JsValue],
+        newline: bool) -> Result<JsValue, Throw> {
+        let document = self.document_receiver_node(&receiver)?;
+        let mut text = String::new();
+        for arg in args {
+            let units = self.to_dom_string(arg)?;
+            text.push_str(&String::from_utf16_lossy(&units));
+        }
+        if newline { text.push('\n'); }
+        self.write_into_document(document, &text)?;
+        Ok(JsValue::Undefined)
+    }
+
+    /// Parses `text` as an HTML fragment and appends it to the document's
+    /// body (falling back to `head`, then the document element), then runs
+    /// any classic `<script>` elements the fragment introduced -- inline
+    /// immediately, external fetched relative to the document's own URL --
+    /// synchronously and in document order, before returning. This is
+    /// enough for scripts that only assert *execution order* around a
+    /// `document.write` call (the common WPT idiom); it does not track a
+    /// live parser insertion point, so writes always land at the end of the
+    /// target container rather than exactly where the writing script's own
+    /// `<script>` element was in the source. See docs/lanes/html_TODO.md.
+    fn write_into_document(&mut self, document: NodeIdx, text: &str) -> Result<(), Throw> {
+        let parsed = amazing_html::parse_fragment("body", text)
+            .map_err(|_| Throw::type_error("Unable to parse document.write markup"))?;
+        let children = self.with_dom(|dom| {
+            let insertion_parent = dom.document_body(document)?
+                .or(dom.document_head(document)?)
+                .or(dom.document_element(document)?)
+                .unwrap_or(document);
+            let fragment = dom.import_fragment(&parsed, document)?;
+            let children: Vec<NodeIdx> = dom.children(fragment).collect();
+            dom.pre_insert(fragment, insertion_parent, None)?;
+            Ok(children)
+        })?;
+        let mut scripts = Vec::new();
+        {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            for &child in &children {
+                collect_classic_scripts(&host.dom, child, &mut scripts);
+            }
+        }
+        if scripts.is_empty() { return Ok(()); }
+        let base = self.state.borrow().document_url.clone();
+        let resolver = self.state.borrow().frames.resolver.clone();
+        for script in scripts {
+            match script.src {
+                None => { self.js.run_script(&script.body)?; }
+                Some(src) => {
+                    if let Some(base) = base.as_deref() {
+                        if let Some(text) = fetch_child_script(&src, base, resolver.as_ref()) {
+                            self.js.run_script(&text)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl RuntimeBindingHost<'_> {
     pub(super) fn navigate_form(&mut self, request: FormNavigationRequest) -> Result<(), Throw> {
         let hook = self.state.borrow().frames.form_navigation_hook.clone();
         if let Some(hook) = hook {
             hook(request);
-        } else {
-            // Current top-level navigation entry; IPC-10 replaces this URL-only
-            // fallback with the structured request above for POST and targets.
-            self.js.binding_location_navigate(&request.url, false);
-            self.state.borrow_mut().document_url = Some(request.url);
+            return Ok(());
         }
+        // A `target` naming a connected iframe's `name` content attribute
+        // lands the navigation in that child browsing context instead of
+        // top-level, by setting its `src` the same way `iframe.src = ...`
+        // would; the special browsing-context keywords (`_self` and an
+        // empty target, `_blank`, `_parent`, `_top`) never match a frame
+        // name and always fall through to top-level navigation. POST bodies
+        // are not carried into a targeted iframe navigation yet (the
+        // existing child-navigation fetch is GET-only): documented in
+        // docs/lanes/html_TODO.md rather than silently dropped here.
+        if let Some(frame) = self.named_frame(&request.target) {
+            let host = self.state.borrow().host.clone();
+            host.borrow_mut().dom.set_attribute(frame, "src", &request.url)
+                .map_err(|error| Throw::type_error(format!("targeted iframe navigation: {error:?}")))?;
+            RuntimeBindings { state: self.state.clone() }.navigate_iframes(self.js);
+            return Ok(());
+        }
+        // Current top-level navigation entry; IPC-10 replaces this URL-only
+        // fallback with the structured request above for POST and targets.
+        self.js.binding_location_navigate(&request.url, false);
+        self.state.borrow_mut().document_url = Some(request.url);
         Ok(())
+    }
+
+    /// The connected iframe whose `name` content attribute exactly matches
+    /// `target`, or `None` for an empty target, the `_self`/`_blank`/
+    /// `_parent`/`_top` keywords (spec special browsing-context names, which
+    /// always start with `_` and never match a frame name), or no match.
+    fn named_frame(&self, target: &str) -> Option<NodeIdx> {
+        if target.is_empty() || target.starts_with('_') { return None; }
+        let host = self.state.borrow().host.clone();
+        let host = host.borrow();
+        host.dom.tree_order(NodeIdx(0)).into_iter().find(|&node| {
+            host.dom.namespace(node) == Some(Namespace::Html)
+                && host.dom.local_name(node) == Some("iframe")
+                && host.dom.get_attribute_ns(node, None, "name") == Some(target)
+        })
     }
 }
 
@@ -442,11 +772,31 @@ impl RuntimeBindingHost<'_> {
         if host.dom.root(node) != NodeIdx(0) { return Ok(JsValue::Null); }
         let Some(frame) = state.frames.documents.get(&node) else { return Ok(JsValue::Null) };
         let Some(document) = frame.document else { return Ok(JsValue::Null) };
-        let visible = frame.url == "about:blank" || state.document_url.as_deref()
-            .is_some_and(|parent| same_origin(parent, &frame.url));
+        // `about:srcdoc` is same-origin-inherited from the parent, like
+        // `about:blank`, so it needs no URL-based origin comparison; a
+        // sandboxed frame without `allow-same-origin` gets a fresh opaque
+        // origin every navigation (see `setup_iframe_window`) and so is
+        // never same-origin with the parent, regardless of its URL.
+        let opaque = frame.sandbox.sandboxed && !frame.sandbox.allow_same_origin;
+        let visible = !opaque && (frame.url == "about:blank" || frame.url == "about:srcdoc"
+            || state.document_url.as_deref().is_some_and(|parent| same_origin(parent, &frame.url)));
+        let realm = state.frames.windows.get(&node).map(|(realm, _)| *realm);
         drop(host);
         drop(state);
-        if visible { self.wrap_node(document) } else { Ok(JsValue::Null) }
+        if !visible { return Ok(JsValue::Null); }
+        // Wrap through the child's own realm when one exists, so the host
+        // object cache there (keyed per realm) returns the identical wrapper
+        // `setup_iframe_window` already cached as `contentWindow.document`,
+        // with that realm's own Document.prototype rather than the caller's.
+        match realm {
+            Some(realm) => {
+                let state = self.state.clone();
+                self.js.binding_with_realm(realm, |i| {
+                    RuntimeBindingHost { js: i, state: state.clone() }.wrap_node(document)
+                })
+            }
+            None => self.wrap_node(document),
+        }
     }
 
     /// Unlike `contentDocument`, `contentWindow` is not nulled cross-origin:
@@ -475,7 +825,7 @@ impl RuntimeBindingHost<'_> {
             | Operation::ElementSetAttributeNS | Operation::ElementRemoveAttribute
             | Operation::ElementRemoveAttributeNS | Operation::ElementSetAttributeNode
             | Operation::ElementSetAttributeNodeNS | Operation::ElementRemoveAttributeNode) {
-            RuntimeBindings { state: self.state.clone() }.navigate_iframes();
+            RuntimeBindings { state: self.state.clone() }.navigate_iframes(self.js);
         }
         result
     }
@@ -561,6 +911,38 @@ mod tests {
     }
 
     #[test]
+    fn removing_a_freshly_appended_iframe_before_its_load_dispatch_does_not_panic() {
+        // WPT regression (html/dom/elements/global-attributes/
+        // lang-attribute-document-element-replacement.html): appending a
+        // bare `<iframe>` creates its realm synchronously in
+        // `navigate_iframes` and queues a `pending_loads` entry;
+        // `iframe.remove()` immediately after (still in the same script,
+        // before the harness's next `dispatch_pending_iframe_loads` tick)
+        // runs `navigate_iframes` again and evicts the now-disconnected
+        // frame's entry from `frames.windows` via `retain`. The stale
+        // `pending_loads` entry then makes `dispatch_pending_iframe_loads`
+        // call `setup_iframe_window`, which finds no realm and falls back to
+        // `ensure_realm` -- previously a `RefCell` double-borrow panic
+        // ("already borrowed") because the fallback lookup's `match`
+        // scrutinee kept its `Ref` alive across the arm that calls
+        // `ensure_realm`'s own `borrow_mut()`.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "var iframe = document.createElement('iframe'); document.body.append(iframe); \
+             var doc = iframe.contentDocument; doc.documentElement.lang = 'de'; \
+             var div = document.createElement('div'); doc.body.append(div); \
+             iframe.remove(); \
+             div.getAttribute !== undefined"
+        ).unwrap(), JsValue::Bool(true));
+        // The stale queue entry drains without panicking.
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+    }
+
+    #[test]
     fn iframe_content_document_enforces_same_origin_after_src_change() {
         let path = std::env::temp_dir().join(format!("amazing-iframe-cross-{}.xml", std::process::id()));
         std::fs::write(&path, "<root/>").unwrap();
@@ -625,5 +1007,188 @@ mod tests {
 
         std::fs::remove_file(&path).unwrap();
         std::fs::remove_file(&path2).unwrap();
+    }
+
+    #[test]
+    fn iframe_srcdoc_runs_scripts_same_origin_with_no_network_fetch() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(
+                "<body><iframe srcdoc=\"<script>window.markedByChild = true;</script>\"></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        // No resolver and no network reachable: srcdoc must not attempt a fetch.
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); \
+             frame.contentDocument.URL === 'about:srcdoc' && \
+             frame.contentWindow.markedByChild === true"
+        ).unwrap(), JsValue::Bool(true), "srcdoc uses about:srcdoc and runs inline scripts");
+        // Same-origin as the parent (not opaque), so the parent can read into it.
+        assert_eq!(scheduler.run_script(
+            "frame.contentDocument.body.textContent !== undefined"
+        ).unwrap(), JsValue::Bool(true), "srcdoc document readable from the parent realm");
+    }
+
+    #[test]
+    fn iframe_sandbox_without_allow_same_origin_is_cross_origin_from_parent() {
+        let path = std::env::temp_dir().join(format!("amazing-iframe-sandboxed-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><script>window.markedByChild = true;</script></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe sandbox='allow-scripts' src='child.html'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        // Without `allow-same-origin` the child gets a fresh opaque origin
+        // every navigation, so it is cross-origin from the parent even
+        // though both come from the same URL origin: `contentDocument` is
+        // null, and an arbitrary property read through `contentWindow`
+        // (not on the small cross-origin allowlist) throws.
+        assert_eq!(scheduler.run_script(
+            "document.querySelector('iframe').contentDocument"
+        ).unwrap(), JsValue::Null, "opaque-origin child has no contentDocument for the parent");
+        assert!(scheduler.run_script(
+            "document.querySelector('iframe').contentWindow.markedByChild"
+        ).is_err(), "arbitrary property read across an opaque origin throws");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn iframe_sandbox_allow_same_origin_without_allow_scripts_blocks_scripts() {
+        let path = std::env::temp_dir().join(format!("amazing-iframe-sandboxed-so-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><script>window.markedByChild = true;</script></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe sandbox='allow-same-origin' src='child.html'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        // `allow-same-origin` alone keeps the child visible to the parent
+        // but does not itself permit scripting; only `allow-scripts` does.
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); \
+             frame.contentDocument !== null && frame.contentWindow.markedByChild"
+        ).unwrap(), JsValue::Undefined, "same-origin visible, but no script ran without allow-scripts");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn iframe_sandbox_allow_scripts_and_allow_same_origin_runs_scripts() {
+        let path = std::env::temp_dir().join(format!("amazing-iframe-sandboxed-scripts-{}.html", std::process::id()));
+        std::fs::write(&path,
+            "<body><script>window.markedByChild = true;</script></body>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(
+                "<body><iframe sandbox='allow-scripts allow-same-origin' src='child.html'></iframe></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); frame.contentWindow.markedByChild"
+        ).unwrap(), JsValue::Bool(true), "allow-scripts runs the child's scripts");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn form_target_navigates_named_iframe_instead_of_top_level() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(
+                "<body><iframe name='result'></iframe>\
+                 <form action='https://example.test/submitted' target='result'></form></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "document.forms[0].submit(); \
+             document.querySelector('iframe').getAttribute('src')"
+        ).unwrap(), JsValue::str("https://example.test/submitted?"),
+            "target matching a frame name navigates that frame, not top-level");
+        assert_eq!(scheduler.run_script("location.href")
+            .unwrap(), JsValue::str("https://example.test/main.html"), "top-level location is untouched");
+    }
+
+    #[test]
+    fn form_target_blank_still_navigates_top_level() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(
+                "<body><iframe name='_blank'></iframe>\
+                 <form action='https://example.test/submitted' target='_blank'></form></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("document.forms[0].submit();").unwrap();
+        // `_blank` is a special keyword, never a frame name match, even when
+        // (invalidly) reused as one.
+        assert_eq!(scheduler.run_script("document.querySelector('iframe').getAttribute('src')")
+            .unwrap(), JsValue::Null, "the '_blank' keyword never matches a frame name");
+        assert_eq!(scheduler.run_script("location.href")
+            .unwrap(), JsValue::str("https://example.test/submitted?"), "falls through to top-level navigation");
+    }
+
+    #[test]
+    fn document_write_runs_its_inserted_inline_script_synchronously_and_in_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        // Matches WPT's `execution-timing` idiom: a script that calls
+        // `document.write` with an embedded `<script>` observes that script
+        // run before `write()` returns, not merely at some later point.
+        assert_eq!(scheduler.run_script(
+            "var order = []; order.push('before'); \
+             document.write('<script>order.push(\"written\")<\\/script>'); \
+             order.push('after'); order.join(',')"
+        ).unwrap(), JsValue::str("before,written,after"));
+        // The written markup is really inserted into the document, not just
+        // executed and discarded.
+        assert_eq!(scheduler.run_script("document.body.children.length")
+            .unwrap(), JsValue::num(1.0));
+    }
+
+    #[test]
+    fn document_writeln_appends_a_newline_and_write_does_not() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "document.write('a'); document.writeln('b'); document.write('c'); \
+             document.body.textContent"
+        ).unwrap(), JsValue::str("ab\nc"));
+    }
+
+    #[test]
+    fn document_open_and_close_do_not_throw_and_open_returns_the_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script("document.open() === document")
+            .unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("document.close()")
+            .unwrap(), JsValue::Undefined);
     }
 }

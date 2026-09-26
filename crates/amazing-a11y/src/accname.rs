@@ -127,7 +127,7 @@ fn compute_name(
         }
     }
 
-    let element_role = role::role_for(ctx.dom, node);
+    let element_role = role::role_for(ctx.dom, ctx.ids, node);
 
     // Step 2D: aria-label.
     if let Some(label) = non_empty(ctx.dom.get_attribute_ns(node, None, "aria-label")) {
@@ -194,7 +194,7 @@ fn self_text_alternative(ctx: &NameContext<'_>, node: NodeIdx) -> String {
     if let Some(alt) = host_language_name(ctx, node) {
         return flatten(&alt);
     }
-    if role::role_for(ctx.dom, node).name_from_content() {
+    if role::role_for(ctx.dom, ctx.ids, node).name_from_content() {
         let mut visited = vec![node];
         let mut parts = Vec::new();
         let flags = ContentFlags { embed_control_values: false, exclude: None, force_include: false };
@@ -216,7 +216,7 @@ fn name_from_first_heading(
     visited: &mut Vec<NodeIdx>,
 ) -> Option<String> {
     for descendant in ctx.dom.tree_order(node) {
-        if descendant == node || role::role_for(ctx.dom, descendant) != Role::Heading {
+        if descendant == node || role::role_for(ctx.dom, ctx.ids, descendant) != Role::Heading {
             continue;
         }
         let mut branch = visited.clone();
@@ -235,9 +235,12 @@ fn host_language_name(ctx: &NameContext<'_>, node: NodeIdx) -> Option<String> {
     match tag {
         "img" | "area" => match dom.get_attribute_ns(node, None, "alt") {
             // An `alt` attribute present (even empty) is the name; otherwise
-            // fall back to `title`.
+            // fall back to `title`, then (A11Y-10) to an ancestor `<figure>`'s
+            // `<figcaption>` when this element is its sole non-whitespace
+            // content besides that caption.
             Some(alt) => Some(alt.to_owned()),
-            None => non_empty(dom.get_attribute_ns(node, None, "title")),
+            None => non_empty(dom.get_attribute_ns(node, None, "title"))
+                .or_else(|| figure_figcaption_fallback(dom, node)),
         },
         "input" => {
             let ty = dom
@@ -286,7 +289,11 @@ fn host_language_name(ctx: &NameContext<'_>, node: NodeIdx) -> Option<String> {
         }
         "table" => child_text_by_tag(dom, node, "caption"),
         "fieldset" => child_text_by_tag(dom, node, "legend"),
-        "figure" => child_text_by_tag(dom, node, "figcaption"),
+        // A11Y-10: unlike `table`/`caption` and `fieldset`/`legend`, a
+        // `<figure>`'s OWN name is not derived from its `<figcaption>` at
+        // all (only `aria-label`/`aria-labelledby`/`title`, i.e. no
+        // host-language mapping here — the figcaption text is instead an
+        // `<img>`-only fallback, see `figure_figcaption_fallback` below).
         "svg" => descendant_text_by_tag(dom, node, "title"),
         "abbr" => non_empty(dom.get_attribute_ns(node, None, "title")),
         "progress" | "meter" | "output" => associated_label_text(ctx, node),
@@ -417,7 +424,7 @@ fn collect_child(
             // focus.
             if flags.embed_control_values
                 && Some(child) != flags.exclude
-                && let Some(value) = control_value(ctx.dom, child)
+                && let Some(value) = control_value(ctx.dom, ctx.ids, child)
             {
                 parts.push(value);
             } else if let Some(own) = own_name(ctx, child, visited) {
@@ -554,8 +561,8 @@ fn is_form_control(dom: &Dom, node: NodeIdx) -> bool {
     matches!(dom.name(node), Some("input" | "select" | "textarea"))
 }
 
-fn control_value(dom: &Dom, node: NodeIdx) -> Option<String> {
-    let role = role::role_for(dom, node);
+fn control_value(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Option<String> {
+    let role = role::role_for(dom, ids, node);
     if matches!(role, Role::Checkbox | Role::Radio | Role::Switch) {
         return None;
     }
@@ -577,7 +584,7 @@ fn control_value(dom: &Dom, node: NodeIdx) -> Option<String> {
     // descendant's text (`aria-selected="true"`), not an attribute of the
     // listbox itself.
     if role == Role::Listbox {
-        return selected_listbox_option_text(dom, node);
+        return selected_listbox_option_text(dom, ids, node);
     }
     // An ARIA `combobox` with no `value`/`aria-valuetext` of its own (e.g. a
     // plain `<span role="combobox">3</span>`) exposes its rendered text as
@@ -605,10 +612,10 @@ fn selected_native_option_text(dom: &Dom, select: NodeIdx) -> Option<String> {
 }
 
 /// The text of an ARIA `listbox`'s selected `option` descendant.
-fn selected_listbox_option_text(dom: &Dom, listbox: NodeIdx) -> Option<String> {
+fn selected_listbox_option_text(dom: &Dom, ids: &HashMap<String, NodeIdx>, listbox: NodeIdx) -> Option<String> {
     for id in dom.tree_order(listbox) {
         if id != listbox
-            && role::role_for(dom, id) == Role::Option
+            && role::role_for(dom, ids, id) == Role::Option
             && dom
                 .get_attribute_ns(id, None, "aria-selected")
                 .is_some_and(|v| v.eq_ignore_ascii_case("true"))
@@ -678,6 +685,39 @@ fn descendant_text_by_tag(dom: &Dom, node: NodeIdx, tag: &str) -> Option<String>
         }
     }
     None
+}
+
+/// A11Y-10: an `<img>`/`<area>` with no `alt`/`title` of its own inherits its
+/// ancestor `<figure>`'s `<figcaption>` text, but only when it is that
+/// figure's sole non-whitespace content besides the figcaption itself — if
+/// any other flow content sits alongside it, the figcaption is understood to
+/// caption the whole figure rather than standing in for this element's name
+/// (html-aam's `figure-name-no-figcaption.tentative.html`, whose own comment
+/// states the rule verbatim).
+fn figure_figcaption_fallback(dom: &Dom, node: NodeIdx) -> Option<String> {
+    let figure = dom.get(node).parent.filter(|&parent| dom.name(parent) == Some("figure"))?;
+    let mut other_content = false;
+    let mut figcaption_text = None;
+    for child in dom.children(figure) {
+        if child == node {
+            continue;
+        }
+        match &dom.get(child).kind {
+            NodeKind::Element { name, .. } if name.as_str() == "figcaption" => {
+                figcaption_text = Some(host::child_text(dom, child));
+            }
+            NodeKind::Text { data } | NodeKind::CDATASection { data } => {
+                if !data.trim().is_empty() {
+                    other_content = true;
+                }
+            }
+            _ => other_content = true,
+        }
+    }
+    if other_content {
+        return None;
+    }
+    figcaption_text.filter(|text| !text.trim().is_empty())
 }
 
 /// A node is hidden when it has `hidden`/`aria-hidden="true"`, or its computed

@@ -152,8 +152,16 @@ pub(crate) fn cmd_render_page(args: &[String]) -> ExitCode {
         dom: document.dom,
         native_forwarded: false,
     }));
+    // IA-LIVE-3: matchMedia (runtime_host_integrator_assist.rs) evaluates
+    // size-based media features against the real per-page viewport rather
+    // than a hardcoded default.
+    let viewport_height = fixed_height
+        .map(|h| h as f32)
+        .unwrap_or_else(|| amazing_css::MediaEnvironment::default().viewport_height_px);
     let outcome = if scripting {
-        crate::cmd::js::execute_page_scripts_lenient(&host, &base_url, probe_source.as_deref())
+        crate::cmd::js::execute_page_scripts_lenient(
+            &host, &base_url, probe_source.as_deref(), (width, viewport_height),
+        )
     } else {
         crate::cmd::js::LenientScriptResult { errors: Vec::new(), probe: Vec::new() }
     };

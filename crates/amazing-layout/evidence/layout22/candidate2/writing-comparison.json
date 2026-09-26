@@ -1,0 +1,39 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/before-final/report.json",
+  "after": "/home/user/amazing/out/layout/layout22/candidate2/writing/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 1112,
+  "before_counts": {
+    "pass": 230,
+    "mismatch": 749,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 133,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 231,
+    "mismatch": 748,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 133,
+    "crash": 0
+  },
+  "gains": [
+    "css-writing-modes__direction-upright-001.html",
+    "css-writing-modes__text-combine-upright-compression-001.html",
+    "css-writing-modes__text-combine-upright-compression-005.html",
+    "css-writing-modes__text-combine-upright-sideways-001.html",
+    "css-writing-modes__text-combine-upright-sideways-002.html"
+  ],
+  "losses": [
+    "css-writing-modes__available-size-011.html",
+    "css-writing-modes__block-plaintext-003.html",
+    "css-writing-modes__border-slice-001.html",
+    "css-writing-modes__text-combine-upright-compression-007.html"
+  ],
+  "actual_hash_changes": 399,
+  "reference_hash_changes": 195,
+  "before_projection_sha256": "e5ed1a3073bd5a22aad9505ffa63ce867652b2b9223664aacfab50fe17c7a0c5",
+  "after_projection_sha256": "1f4fae9426e3fd5e80de3b62d41592f815d0ecc468f41aff2d48f79efe726012"
+}

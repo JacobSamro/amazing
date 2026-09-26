@@ -5,7 +5,7 @@
 //! set of ES built-ins using only `std`. Modules, generators and a
 //! real asynchronous job queue remain explicit later milestones.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -287,6 +287,12 @@ pub struct Interpreter {
     pending_history_update: Option<(String, bool, JsValue)>,
     history_state: JsValue,
     last_event_default_prevented: bool,
+    /// CDP-20's minimal debugger seam (`crate::debug_hook`): if set, called
+    /// before every statement. `None` by default, so hosts that never
+    /// install a hook pay nothing beyond the `Option` check.
+    debug_hook: Option<crate::debug_hook::SharedDebugHook>,
+    current_script_id: String,
+    current_script_url: String,
 }
 
 impl Interpreter {
@@ -455,6 +461,9 @@ impl Interpreter {
             pending_history_update: None,
             history_state: JsValue::Null,
             last_event_default_prevented: false,
+            debug_hook: None,
+            current_script_id: String::new(),
+            current_script_url: String::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -686,6 +695,26 @@ impl Interpreter {
 
     pub fn last_event_default_prevented(&self) -> bool {
         self.last_event_default_prevented
+    }
+
+    /// Installs (or, with `None`, removes) CDP-20's minimal debugger hook —
+    /// see `crate::debug_hook`. Cloning the `Rc` is cheap; call this once
+    /// per realm, not per script.
+    pub fn set_debug_hook(&mut self, hook: Option<crate::debug_hook::SharedDebugHook>) {
+        self.debug_hook = hook;
+    }
+
+    /// Tags every subsequent `on_statement` callback with `id`/`url` until
+    /// the next call. The interpreter does not itself track "which script is
+    /// this statement in" (a tree-walking interpreter has no script-level
+    /// frame of its own), so the host must call this immediately before
+    /// running a script it wants attributed correctly; an inline event
+    /// handler or a timer/microtask callback keeps whatever the last
+    /// top-level script set, which is an honest simplification, not real
+    /// per-callback script identity (see the driver's own doc comment).
+    pub fn set_current_script(&mut self, id: impl Into<String>, url: impl Into<String>) {
+        self.current_script_id = id.into();
+        self.current_script_url = url.into();
     }
 
     /// Opt into driver-owned time and checkpoints before running page code.
@@ -1134,6 +1163,15 @@ impl Interpreter {
         self.in_eval = false;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
+                // Bypasses `exec_stmt` for perf (no `Flow` unwrapping needed
+                // for a plain top-level expression statement), so CDP-20's
+                // debug hook is called explicitly here too — otherwise every
+                // top-level `expr;` statement (extremely common: every bare
+                // `Runtime.evaluate` call is exactly this) would be
+                // invisible to a line breakpoint.
+                if let Some(hook) = self.debug_hook.clone() {
+                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+                }
                 self.completion = self.eval_expr(e, &env)?;
                 continue;
             }
@@ -1265,6 +1303,9 @@ impl Interpreter {
     }
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        if let Some(hook) = self.debug_hook.clone() {
+            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+        }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
             StmtKind::Expression(e) => {
@@ -1983,6 +2024,11 @@ impl Interpreter {
                             if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
                             return Ok(JsValue::Bool(deleted));
                         }
+                        if let Some(result) = self.proxy_delete(&o, &k) {
+                            let deleted = result?;
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
+                            return Ok(JsValue::Bool(deleted));
+                        }
                         if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
                             if o.borrow().own_prop(&k).is_some() {
                                 return Err(Throw::type_error("module namespace export cannot be deleted"));
@@ -2171,6 +2217,7 @@ impl Interpreter {
                 match b {
                     JsValue::Object(o) => {
                         if let Some(result) = self.window_proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
+                        if let Some(result) = self.proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
                         Ok(JsValue::Bool(match k.as_string() {
                         _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
@@ -2289,7 +2336,20 @@ impl Interpreter {
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
         match self.scoped_reference(env, name)? {
-            None => Ok(None),
+            None => {
+                // Nothing lexical, no object-environment binding, and the raw
+                // check in `scoped_reference`'s own global fallback missed it
+                // either -- but that raw check doesn't dispatch Proxy `has`
+                // traps. Give the real global object one more look through
+                // the full `[[HasProperty]]` algorithm before giving up.
+                let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
+                if exists {
+                    let global = JsValue::Object(self.global_obj.clone());
+                    self.get_prop(&global, name).map(Some)
+                } else {
+                    Ok(None)
+                }
+            }
             Some(Reference::Property(base, key)) => self.get_prop(&base, &key).map(Some),
             Some(_) => {
                 if env.is_uninitialized(name) {
@@ -2309,7 +2369,43 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<(Reference, JsValue), Throw> {
         match &target.kind {
-            ExprKind::Ident(identifier) => self.name_reference_value(env, &identifier.name),
+            ExprKind::Ident(identifier) => {
+                let name = &identifier.name;
+                match self.scoped_reference(env, name)? {
+                    Some(Reference::Property(base, key)) => {
+                        let value = self.get_prop(&base, &key)?;
+                        Ok((Reference::Property(base, key), value))
+                    }
+                    Some(reference) => {
+                        if env.is_uninitialized(name) {
+                            return Err(Throw::reference_error(format!("{name} is uninitialized")));
+                        }
+                        if let Some(global) = env.global_binding_object(name) {
+                            let global = JsValue::Object(global);
+                            let value = self.get_prop(&global, name)?;
+                            return Ok((Reference::Property(global, name.clone().into()), value));
+                        }
+                        let value = env.resolve(name).unwrap_or(JsValue::Undefined);
+                        Ok((reference, value))
+                    }
+                    None => {
+                        // Same Proxy-aware global fallback as `identifier_value`:
+                        // a raw has-property miss everywhere else doesn't mean
+                        // the real global object's `[[HasProperty]]` (which may
+                        // dispatch through a Proxy) would also miss.
+                        let exists = self.default_has_property(
+                            &self.global_obj.clone(), &PropertyKey::from(name.as_str()),
+                        )?;
+                        if exists {
+                            let global = JsValue::Object(self.global_obj.clone());
+                            let value = self.get_prop(&global, name)?;
+                            Ok((Reference::Property(global, name.clone().into()), value))
+                        } else {
+                            Ok((Reference::Binding(name.clone()), JsValue::Undefined))
+                        }
+                    }
+                }
+            }
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
                 if let MemberProp::Private(identifier) = prop {
@@ -2603,6 +2699,12 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("value is not callable")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return match new_target {
+                Some(nt) => self.proxy_construct(&o, args, nt),
+                None => self.proxy_call(&o, this, args),
+            };
+        }
         let fun = o
             .borrow()
             .func
@@ -2815,6 +2917,9 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("constructor is not an object")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return self.proxy_construct(&o, args, new_target);
+        }
         let fun = o
             .borrow()
             .func
@@ -3963,8 +4068,8 @@ impl Interpreter {
         let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
         if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
         if !a.is_object() { return Ok(JsValue::Bool(false)); }
-        let p = match r.borrow().get_own("prototype") {
-            Some(JsValue::Object(p)) => p,
+        let p = match self.get_prop(b, "prototype")? {
+            JsValue::Object(p) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
         };
         if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
@@ -3995,6 +4100,7 @@ include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
+include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
@@ -4014,7 +4120,9 @@ include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
+include!("builtins_binary_base64.rs");
 include!("builtins_intl_data.rs");
+include!("builtins_intl_unit_data.rs");
 include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");
 include!("builtins_intl_number.rs");
@@ -4023,6 +4131,7 @@ include!("builtins_intl_plural.rs");
 include!("builtins_intl_datetime.rs");
 include!("builtins_intl_date_support.rs");
 include!("builtins_intl_relative_list.rs");
+include!("builtins_intl_duration.rs");
 include!("builtins_intl_collator.rs");
 include!("builtins_intl_segmenter.rs");
 include!("builtins_intl_names.rs");

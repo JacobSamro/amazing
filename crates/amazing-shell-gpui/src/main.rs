@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+mod a11y_bridge;
 mod audio_output;
 mod dom_runtime;
 mod engine_compositor;
@@ -1933,6 +1934,14 @@ impl BrowserShell {
                                                 .w(px(viewport.width as f32))
                                                 .h(px(viewport.height as f32))
                                                 .into_any_element(),
+                                        })
+                                        // A11Y-11: the live page's accessibility tree, as an
+                                        // invisible off-screen sibling (see `a11y_bridge`'s
+                                        // `build_element` — it never paints or occupies layout
+                                        // space) so GPUI's own AccessKit walk exposes it over
+                                        // AT-SPI2 on Linux, matching A11Y-9's proof.
+                                        .when_some(viewport.accessibility_tree(), |el, tree| {
+                                            el.child(a11y_bridge::ax_tree_element(tree))
                                         })
                                         .child(
                                             canvas(

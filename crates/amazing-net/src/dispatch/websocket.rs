@@ -24,6 +24,14 @@ pub enum WebSocketEvent {
         id: WebSocketId,
         error: ws::Error,
     },
+    /// Payload bytes from `send()` calls that have now actually been
+    /// written to the transport, for the caller to decrement its
+    /// `bufferedAmount` by (WHATWG: bytes "queued but not yet transmitted").
+    /// Control frames (close/ping/pong) never contribute to this.
+    Sent {
+        id: WebSocketId,
+        bytes: u64,
+    },
 }
 
 enum Phase {
@@ -43,7 +51,10 @@ pub(super) struct WebSocketConnection {
     transport: Option<Transport>,
     expected: String,
     incoming: Vec<u8>,
-    outgoing: VecDeque<Vec<u8>>,
+    /// Queued frames awaiting write, paired with the number of payload
+    /// bytes to credit to `Sent` once the frame fully drains (the data
+    /// frame's own payload length, or 0 for a control frame).
+    outgoing: VecDeque<(Vec<u8>, u64)>,
     written: usize,
     fragmented_opcode: Option<u8>,
     message: Vec<u8>,
@@ -51,6 +62,9 @@ pub(super) struct WebSocketConnection {
     frames: usize,
     sent_close: bool,
     received_close: bool,
+    /// Data-frame payload bytes flushed to the transport since the last
+    /// `Sent` event was emitted for this connection.
+    flushed_bytes: u64,
 }
 
 impl<R: Resolver, C: Connector> Dispatcher<R, C> {
@@ -83,11 +97,21 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         let url = ParsedUrl::parse(input).map_err(|_| ws::Error::InvalidInput)?;
         if !matches!(url.scheme(), "ws" | "wss")
             || url.fragment().is_some()
-            || url.includes_credentials()
             || url.hostname().is_empty()
         {
             return Err(ws::Error::InvalidInput);
         }
+        // URL Standard userinfo, same as `fetch()`/XHR: username/password in
+        // the URL become a `Basic` `Authorization` header on the handshake
+        // request rather than being rejected outright (WPT
+        // `websockets/basic-auth.any.js` expects `ws://foo:bar@host/...` to
+        // authenticate and open normally).
+        let authorization = url.includes_credentials().then(|| {
+            let mut credentials = crate::url::encoding::percent_decode(url.username());
+            credentials.push(b':');
+            credentials.extend(crate::url::encoding::percent_decode(url.password()));
+            format!("Basic {}", handshake::base64(&credentials))
+        });
         if self
             .websockets
             .values()
@@ -129,6 +153,9 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         if let Some(cookie) = cookie {
             request.push_str(&format!("Cookie: {cookie}\r\n"));
         }
+        if let Some(authorization) = &authorization {
+            request.push_str(&format!("Authorization: {authorization}\r\n"));
+        }
         request.push_str("\r\n");
         if request.len() > handshake::MAX_HANDSHAKE
             || self.buffered_bytes().saturating_add(request.len()) > self.limits.max_buffered_bytes
@@ -147,7 +174,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 transport: None,
                 expected: handshake::accept(&key),
                 incoming: Vec::new(),
-                outgoing: VecDeque::from([request.into_bytes()]),
+                outgoing: VecDeque::from([(request.into_bytes(), 0)]),
                 written: 0,
                 fragmented_opcode: None,
                 message: Vec::new(),
@@ -155,6 +182,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 frames: 0,
                 sent_close: false,
                 received_close: false,
+                flushed_bytes: 0,
             },
         );
         Ok(id)
@@ -180,7 +208,8 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         {
             return Err(ws::Error::Limit);
         }
-        connection.queue(opcode, &bytes, self.limits.max_buffered_bytes)
+        let credit = bytes.len() as u64;
+        connection.queue(opcode, &bytes, self.limits.max_buffered_bytes, credit)
     }
 
     pub fn close_websocket(
@@ -200,7 +229,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             payload.extend_from_slice(&close.code.to_be_bytes());
             payload.extend_from_slice(close.reason.as_bytes());
         }
-        connection.queue(8, &payload, self.limits.max_buffered_bytes)?;
+        connection.queue(8, &payload, self.limits.max_buffered_bytes, 0)?;
         connection.sent_close = true;
         Ok(())
     }
@@ -248,9 +277,11 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
 
 impl WebSocketConnection {
     pub(super) fn held(&self) -> usize {
-        self.incoming.len() + self.message.len() + self.outgoing.iter().map(Vec::len).sum::<usize>()
+        self.incoming.len()
+            + self.message.len()
+            + self.outgoing.iter().map(|(f, _)| f.len()).sum::<usize>()
     }
-    fn queue(&mut self, opcode: u8, bytes: &[u8], limit: usize) -> Result<(), ws::Error> {
+    fn queue(&mut self, opcode: u8, bytes: &[u8], limit: usize, credit: u64) -> Result<(), ws::Error> {
         let held = self.held();
         if held.saturating_add(bytes.len()).saturating_add(14) > limit {
             return Err(ws::Error::Limit);
@@ -270,12 +301,12 @@ impl WebSocketConnection {
         }
         frame.extend_from_slice(&mask);
         frame.extend(bytes.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
-        self.outgoing.push_back(frame);
+        self.outgoing.push_back((frame, credit));
         Ok(())
     }
 
     fn write(&mut self, remaining: &mut usize) -> Result<(), ws::Error> {
-        let Some(frame) = self.outgoing.front() else {
+        let Some((frame, _)) = self.outgoing.front() else {
             return Ok(());
         };
         if *remaining == 0 {
@@ -296,7 +327,8 @@ impl WebSocketConnection {
                 self.written += n;
                 *remaining -= n;
                 if self.written == frame.len() {
-                    self.outgoing.pop_front();
+                    let (_, credit) = self.outgoing.pop_front().unwrap();
+                    self.flushed_bytes += credit;
                     self.written = 0;
                 }
                 Ok(())
@@ -419,6 +451,12 @@ impl WebSocketConnection {
             }
             Phase::Open => {
                 self.write(remaining)?;
+                if self.flushed_bytes > 0 {
+                    events.push(WebSocketEvent::Sent {
+                        id,
+                        bytes: std::mem::take(&mut self.flushed_bytes),
+                    });
+                }
                 self.consume(id, limits.max_buffered_bytes, events)?;
                 if self.received_close && self.outgoing.is_empty() {
                     return Ok(true);
@@ -487,7 +525,7 @@ impl WebSocketConnection {
                 return Err(ws::Error::Limit);
             }
             match opcode {
-                9 => self.queue(10, &payload, limit)?,
+                9 => self.queue(10, &payload, limit, 0)?,
                 10 => {}
                 8 => {
                     if payload.len() == 1 {
@@ -507,7 +545,7 @@ impl WebSocketConnection {
                     };
                     self.received_close = true;
                     if !self.sent_close {
-                        self.queue(8, &payload, limit)?;
+                        self.queue(8, &payload, limit, 0)?;
                         self.sent_close = true;
                     }
                     events.push(WebSocketEvent::Close { id, close });

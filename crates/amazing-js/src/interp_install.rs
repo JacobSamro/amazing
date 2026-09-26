@@ -263,6 +263,7 @@ impl Interpreter {
         }
         self.define_global("Reflect", reflect);
         self.install_std_reflect();
+        self.install_proxy();
         self.define_global(
             "Array",
             Self::native("Array", native_array, &self.function_proto),

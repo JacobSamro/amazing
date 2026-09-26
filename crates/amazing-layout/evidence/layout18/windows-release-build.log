@@ -1,0 +1,285 @@
+win-run: win-002 unreachable, using win-001
+win-run[layout]: win-001 from /Users/jMac/Projects/OpenSource/amazing-wt/layout (2287c1bf, with uncommitted edits)
+with-build-slot[layout]: acquired win-001/slot-1 after 0s
+LAYOUT-18 SOURCE LOCK: 2287c1bf0f69cc7a50534259999956d74e93c1a6
+
+Algorithm       Hash                                                                   Path                            
+---------       ----                                                                   ----                            
+SHA256          CA8C6C2D49124AEEAA9F6FD1F93D46C5B246F2B43B852B2FCA4452B542D81AC4       C:\Users\server\src\wt\layout...
+SHA256          0A197C1DACAE08BC8622D03A4D99EA5E6E7792C1F117886F9CB8EE1520B9C2A8       C:\Users\server\src\wt\layout...
+SHA256          C5C7D8332ECC78FAE1E94CA5E0E87F5B782366F0B466B1E165ACFC20FC1B5135       C:\Users\server\src\wt\layout...
+SHA256          EC3DD02D22DB6AA9AEA6859317C76BAEF3F9554DF5F2B9BEDBA2891D940B2A90       C:\Users\server\src\wt\layout...
+   Compiling windows-sys v0.61.2
+   Compiling amazing-dom v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-dom)
+   Compiling amazing-common v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-common)
+   Compiling simd-adler32 v0.3.10
+   Compiling amazing-media v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-media)
+   Compiling amazing-encoding v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-encoding)
+   Compiling amazing-text v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-text)
+   Compiling amazing-css v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-css)
+   Compiling miniz_oxide v0.8.9
+   Compiling amazing-html v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-html)
+warning: function `cyclic` is never used
+  --> crates\amazing-css\src\counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i32, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling mio v1.2.3
+   Compiling socket2 v0.6.5
+   Compiling tokio v1.53.1
+   Compiling flate2 v1.1.9
+   Compiling amazing-layout v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-layout)
+   Compiling amazing-net-tls v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net-tls)
+   Compiling amazing-net-brotli v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net-brotli)
+   Compiling fdeflate v0.3.7
+   Compiling amazing-paint v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-paint)
+   Compiling webrtc-util v0.17.2
+   Compiling quick-error v2.0.1
+   Compiling color_quant v1.1.0
+   Compiling zune-core v0.5.3
+   Compiling byteorder-lite v0.1.0
+   Compiling weezl v0.1.12
+   Compiling gif v0.14.2
+   Compiling image-webp v0.2.4
+   Compiling zune-jpeg v0.5.15
+   Compiling png v0.18.1
+   Compiling amazing-net v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net)
+   Compiling moxcms v0.7.11
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-fetch v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-fetch)
+   Compiling webrtc-util v0.11.0
+   Compiling image v0.25.9
+   Compiling rtp v0.17.2
+   Compiling rtcp v0.17.2
+   Compiling amazing-svg v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-svg)
+   Compiling amazing-webrtc v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc)
+   Compiling amazing-text-provider v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-text-provider)
+   Compiling webrtc-dtls v0.12.0
+   Compiling amazing-image v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-image)
+   Compiling webrtc-srtp v0.17.2
+   Compiling amazing-compositor v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-compositor)
+   Compiling amazing-canvas v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-canvas)
+   Compiling amazing-ipc-platform v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-ipc-platform)
+   Compiling amazing-regex v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-regex)
+   Compiling amazing-ipc v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-ipc)
+   Compiling amazing-storage v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-storage)
+   Compiling amazing-js v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-js)
+   Compiling amazing-bindings v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-bindings)
+   Compiling amazing-process v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-process)
+   Compiling amazing-webrtc-codecs v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc-codecs)
+   Compiling amazing-webrtc-crypto v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc-crypto)
+warning: function `binary_define_index` is never used
+   --> crates\amazing-js\src\builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates\amazing-js\src\builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates\amazing-js\src\builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates\amazing-js\src\builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates\amazing-js\src\builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+   Compiling amazing v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing)
+warning: unused import: `BTreeMap`
+ --> crates\amazing\src\runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `self`
+ --> crates\amazing\src\runtime_host_storage.rs:5:254
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}};
+  |                                                                   ^^^^
+
+warning: unused import: `load_page_text`
+  --> crates\amazing\src\main.rs:23:40
+   |
+23 | use page::{PageMedia, load_page_media, load_page_text};
+   |                                        ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates\amazing\src\runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates\amazing\src\runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: function `load_page_text` is never used
+  --> crates\amazing\src\page.rs:43:15
+   |
+43 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `PixelMismatch` is never constructed
+  --> crates\amazing\src\render_oracle.rs:64:19
+   |
+64 | pub(crate) struct PixelMismatch {
+   |                   ^^^^^^^^^^^^^
+
+warning: function `first_pixel_mismatch` is never used
+  --> crates\amazing\src\render_oracle.rs:71:15
+   |
+71 | pub(crate) fn first_pixel_mismatch(candidate: &Surface, full: &Surface) -> Option<PixelMismatch> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates\amazing\src\runtime_binding_host.rs:60:17
+   |
+60 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+60 -     FontFaceSet(NodeIdx, Option<JsValue>),
+60 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `create_inert_document` and `dispatch_window_event` are never used
+   --> crates\amazing\src\runtime_binding_host.rs:104:19
+    |
+103 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+104 |     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+139 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates\amazing\src\runtime_host_storage.rs:32:5
+   |
+29 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+32 |     cache: PersistentCacheStorage,
+   |     ^^^^^
+
+warning: variant `Cache` is never constructed
+  --> crates\amazing\src\runtime_host_storage.rs:65:5
+   |
+54 | enum StorageObject {
+   |      ------------- variant in this enum
+...
+65 |     Cache { name: String },
+   |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates\amazing\src\runtime_host_storage.rs:254:8
+    |
+155 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+254 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `ScrollFrame` is never constructed
+  --> crates\amazing\src\runtime_host_compositor.rs:31:19
+   |
+31 | pub(crate) struct ScrollFrame {
+   |                   ^^^^^^^^^^^
+
+warning: struct `DomScrollEvent` is never constructed
+  --> crates\amazing\src\runtime_host_compositor.rs:36:19
+   |
+36 | pub(crate) struct DomScrollEvent {
+   |                   ^^^^^^^^^^^^^^
+
+warning: methods `on_scroll_input`, `on_scroll_vsync`, `take_scroll_events`, `cancel_animation`, and `compositor` are never used
+   --> crates\amazing\src\runtime_host_compositor.rs:89:19
+    |
+ 41 | impl RetainedPropertyScene {
+    | -------------------------- methods in this implementation
+...
+ 89 |     pub(crate) fn on_scroll_input(
+    |                   ^^^^^^^^^^^^^^^
+...
+129 |     pub(crate) fn on_scroll_vsync(
+    |                   ^^^^^^^^^^^^^^^
+...
+145 |     pub(crate) fn take_scroll_events(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+226 |     pub(crate) fn cancel_animation(
+    |                   ^^^^^^^^^^^^^^^^
+...
+247 |     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    |                   ^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates\amazing\src\runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `save_snapshot` and `renderer_crashed` are never used
+   --> crates\amazing\src\runtime_host_ipc.rs:642:12
+    |
+408 | impl Driver {
+    | ----------- methods in this implementation
+...
+642 |     pub fn save_snapshot(
+    |            ^^^^^^^^^^^^^
+...
+723 |     pub fn renderer_crashed(&mut self, tab_id: u64) -> Result<Vec<u64>, String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: `amazing` (bin "amazing") generated 17 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 3 suggestions)
+    Finished `release` profile [optimized] target(s) in 5m 33s
+SHA256          CCA3EB6FFC645B8D62AA456E5F7E10652EBC208742CA207E975992BD677A1B84       C:\Users\server\target\layout...
+Missing WPT revision marker. Transfer a verified checkout/marker from the editing host and pass -RevisionMarker.
+At line:120 char:5
++     throw "Missing WPT revision marker. Transfer a verified checkout/ ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Missing WPT rev...RevisionMarker.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Missing WPT revision marker. Transfer a verified checkout/marker from the editing host a 
+   nd pass -RevisionMarker.
+ 
+LAYOUT-18 GATE ERROR: Render runner failed: full
+
+

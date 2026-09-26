@@ -1,0 +1,39 @@
+{
+  "before": "crates/amazing-layout/evidence/layout18/linux-retained-before.json",
+  "after": "crates/amazing-layout/evidence/layout18/linux-retained-after.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 279,
+    "mismatch": 170,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-flexbox__flexbox-align-items-center-nested-001.html",
+    "css-flexbox__flexbox-writing-mode-003.html",
+    "css-flexbox__flexbox_rtl-flow.html",
+    "css-flexbox__flexbox_writing_mode_vertical_lays_out_contents_from_top_to_bottom.html",
+    "css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-out-of-flow-definite-size-001.html"
+  ],
+  "losses": [
+    "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-safe-001.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-001.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-001.html",
+    "css-sizing__intrinsic-height-abspos-stretch-percentage-child.html"
+  ],
+  "actual_hash_changes": 27,
+  "reference_hash_changes": 7,
+  "before_projection_sha256": "d3e674c321c247368f009bb8fa655140a4710c02a388f4d93a39ac84ed4048d9",
+  "after_projection_sha256": "b38e0eadfc9687defa61f8a47baaf0833190a8312e93294ff7e0245a3dbf1b9e"
+}

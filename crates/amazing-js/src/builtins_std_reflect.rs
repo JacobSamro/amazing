@@ -80,12 +80,7 @@ fn std_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValu
 fn std_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
-    if let Some(result) = i.window_proxy_delete(&target, &key) { return result.map(JsValue::Bool); }
-    if let Some(deleted) = binary_delete_index(&target, &key) { return Ok(JsValue::Bool(deleted)); }
-    let deleted = if let Some(name) = key.as_string() {
-        i.legacy_delete(&target, name)?.unwrap_or_else(|| target.borrow_mut().delete_own(&key))
-    } else { target.borrow_mut().delete_own(&key) };
-    Ok(JsValue::Bool(deleted))
+    Ok(JsValue::Bool(i.default_delete_property(&target, &key)?))
 }
 
 fn std_reflect_get(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -98,6 +93,10 @@ fn std_reflect_get(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Resul
 fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
+    if matches!(target.borrow().exotic, Exotic::Proxy(_)) {
+        return Ok(i.default_get_own_property(&target, &key)?
+            .map(|property| object_descriptor_value(i, property)).unwrap_or(JsValue::Undefined));
+    }
     if let Some(result) = i.window_proxy_descriptor(&target, &key) { return result; }
     if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
         return native_object_get_own_property_descriptor(i, JsValue::Undefined, args);
@@ -124,26 +123,18 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
 
 fn std_reflect_get_prototype_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
-    if let Some(result) = i.window_proxy_prototype(&target) { return result; }
-    let prototype = target.borrow().proto.clone();
-    Ok(prototype.map(JsValue::Object).unwrap_or(JsValue::Null))
+    i.default_get_prototype(&target)
 }
 
 fn std_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
-    if let Some(result) = i.window_proxy_has(&target, &key) { return result.map(JsValue::Bool); }
-    if let Some(property) = binary_index_descriptor(&target, &key) { return Ok(JsValue::Bool(property.is_some())); }
-    let has = if let Some(name) = key.as_string() {
-        i.legacy_has_property(&target, name)?
-    } else { target.borrow().has_property(&key) };
-    Ok(JsValue::Bool(has))
+    Ok(JsValue::Bool(i.default_has_property(&target, &key)?))
 }
 
 fn std_reflect_is_extensible(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
-    if i.is_window_proxy(&target) { return Ok(JsValue::Bool(true)); }
-    Ok(JsValue::Bool(i.legacy_for(&target).is_some() || target.borrow().extensible))
+    Ok(JsValue::Bool(i.default_is_extensible(&target)?))
 }
 
 fn std_reflect_own_keys(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -157,10 +148,7 @@ fn std_reflect_own_keys(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> 
 
 fn std_reflect_prevent_extensions(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
-    if i.is_window_proxy(&target) { return Ok(JsValue::Bool(false)); }
-    if i.legacy_for(&target).is_some() { return Ok(JsValue::Bool(false)); }
-    target.borrow_mut().extensible = false;
-    Ok(JsValue::Bool(true))
+    Ok(JsValue::Bool(i.default_prevent_extensions(&target)?))
 }
 
 fn std_reflect_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -178,16 +166,5 @@ fn std_reflect_set_prototype_of(i: &mut Interpreter, _: JsValue, args: Vec<JsVal
         Some(JsValue::Null) => None,
         _ => return Err(Throw::type_error("prototype must be an object or null")),
     };
-    if let Some(result) = i.window_proxy_set_prototype(&target, &prototype) { return result.map(JsValue::Bool); }
-    let current = target.borrow().proto.clone();
-    if current.as_ref().zip(prototype.as_ref()).is_some_and(|(a, b)| Rc::ptr_eq(&a.0, &b.0))
-        || (current.is_none() && prototype.is_none()) { return Ok(JsValue::Bool(true)); }
-    if !target.borrow().extensible { return Ok(JsValue::Bool(false)); }
-    let mut cursor = prototype.clone();
-    while let Some(object) = cursor {
-        if Rc::ptr_eq(&object.0, &target.0) { return Ok(JsValue::Bool(false)); }
-        cursor = object.borrow().proto.clone();
-    }
-    target.borrow_mut().proto = prototype;
-    Ok(JsValue::Bool(true))
+    Ok(JsValue::Bool(i.default_set_prototype(&target, &prototype)?))
 }

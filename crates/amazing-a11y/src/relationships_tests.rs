@@ -67,9 +67,18 @@ fn aria_owns_cycles_are_ignored() {
 
 #[test]
 fn aria_activedescendant_resolves_to_a_tree_node() {
+    // A11Y-10: a bare `<li>` with no `role` no longer inherits `listitem`
+    // from a `<ul>` whose OWN role has been overridden away from `list`
+    // (here to `listbox`) — matching HTML-AAM's list-ancestor algorithm,
+    // which is defined over the ancestor's *computed* role, not its tag. A
+    // real listbox authors its options with `role="option"` (as here),
+    // which both keeps them non-generic (so they aren't flattened away as
+    // meaningless wrapper generics) and is what this test actually means to
+    // exercise: activedescendant resolution, independent of `<li>`'s own
+    // role fallback.
     let doc = document(
         "<ul id=\"list\" role=\"listbox\" aria-activedescendant=\"opt2\">\
-           <li id=\"opt1\">A</li><li id=\"opt2\">B</li>\
+           <li id=\"opt1\" role=\"option\">A</li><li id=\"opt2\" role=\"option\">B</li>\
          </ul>",
     );
     let list = ax_of_id(&doc, "list").unwrap();

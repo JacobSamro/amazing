@@ -625,3 +625,300 @@ console calls (needs an engine-side change to `native_log` to stop joining
 arguments before the driver sees them — a js-runtime-owned seam);
 `ownProperties=false` vs `true`; stylesheet/image `Network.*` events;
 `Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-19 — DOM.getBoxModel/getContentQuads and Overlay highlight — done
+
+Coordinator's ticket named `DOM.getDocument`, `querySelector`,
+`getOuterHTML`, `DOM.setAttributeValue` and `CSS.getComputedStyleForNode` —
+all five were already implemented in CDP-16/17. This ticket's actual delta,
+confirmed by grepping the driver for zero hits on "highlight"/"Overlay"
+before starting, was `DOM.getBoxModel`/`getContentQuads` and every
+`Overlay.*` highlight method — both already fully dispatch-wired in
+`amazing-devtools` from an earlier generic-protocol ticket (`domains/dom.rs`,
+`domains/overlay.rs`), defaulting to `Unsupported`/`Ok(())` since the driver
+never implemented them. Pure driver-side work; no `amazing-devtools` change
+needed.
+
+- **`DOM.getBoxModel`**: a new `find_box_for_node` walks the same fallback
+  layout tree `hit_test_node`/`full_ax_tree` already use (style compute +
+  `amazing_layout::layout_styled_document` with `FallbackTextSystem`/
+  `NoReplacedElements`), matching by node identity (`LayoutBox::node ==
+  Some(target)`) instead of by point — mirrors `hit_test`'s traversal order
+  (checks `positioned` descendants first) but doesn't need paint-order
+  tie-breaking since only one node can match. A new `box_model_from`
+  converts the found box into a CDP `BoxModel`: `border_box`/`content_box`
+  are already resolved by layout; the padding box is the border box inset
+  by the box's own resolved `border` (thickness) `Sides`; the margin box is
+  the border box outset by `margin` (`SidesM::unwrap_or(0.0)` — an
+  unresolved auto margin reports as `0`, the same simplification this file
+  already uses elsewhere).
+- **`DOM.getContentQuads`** wraps `get_box_model` in a one-element `Vec` —
+  the dispatch layer already extracts just `model.content` per node
+  (confirmed by reading `domains/dom.rs`'s existing `"DOM.getContentQuads"`
+  arm before writing this — it was already spec-correct: "content quads",
+  not border quads, matching real Chrome), so no per-line-box splitting was
+  needed to make the numbers agree; both share the same documented
+  `Flow::Inlines` gap `hit_test`/`find_box_for_node` already have.
+- **`Overlay.highlightNode`** validates the node resolves to real box
+  geometry by calling `get_box_model` and discarding the result, so an
+  unknown or box-less node (a `display: none` element, which produces no
+  `LayoutBox` at all) reports `HostError::NotFound` exactly as a real
+  highlight request against a non-existent target would fail.
+  `highlightRect`/`highlightQuad` now answer `Ok(())` directly from
+  `DriverPageSession` (no page-thread round trip — there's no engine state
+  to check arbitrary coordinates against, and real Chrome accepts any rect/
+  quad too, so this is not a shortcut around real validation, there simply
+  isn't any to do). `overlay_enabled`/`setInspectMode`/`hideHighlight` were
+  *already* answering `Ok(())` from the trait's own defaults, unnoticed
+  until this ticket read the actual default bodies closely — no override
+  needed. **No compositor overlay layer exists in this engine**, so none of
+  the four highlight methods paint anything; there is no pixel difference a
+  screenshot could prove, which is why `DOM.getBoxModel`'s real geometry is
+  the proof instead.
+- Proof — one end-to-end WebSocket CDP client test chaining the "already
+  done" DOM/CSS methods onto the new box-model/Overlay ones against a
+  single live node (`end_to_end_box_model_and_overlay_highlight_on_the_live_
+  page`): `getDocument` → `querySelector` → `getOuterHTML` (contains the
+  text) → `setAttributeValue` → `getOuterHTML` again (contains the new
+  attribute) → `getComputedStyleForNode` → `getBoxModel` (asserts the real
+  box-model arithmetic: a 100×50 content box with 2px padding + 5px border
+  on every side reports a 114×64 border box, and a further 3px margin
+  reports a 120-wide margin box — pure box-model math, independent of where
+  the absolutely-positioned element actually landed on the page) →
+  `getContentQuads` (one 100-wide content quad) → `highlightNode` (succeeds)
+  → `hideHighlight` → `highlightNode` on a `display: none` sibling (a real
+  CDP error, checked with a new `Client::raw` helper that returns the whole
+  reply instead of assuming success, since `result()`/`result_and_events()`
+  both panic on an `"error"` reply by design).
+- A real bug the test caught mid-write: the first draft of the test asserted
+  `getContentQuads` returned the *border*-box quad (114 wide); it actually
+  returns the *content*-box quad (100 wide) — not a driver bug, a
+  misreading of `domains/dom.rs`'s already-existing, already-correct
+  dispatch code (which literally is named "content quads"). Fixed the test,
+  not the driver.
+
+Known limitations, newly documented: no compositor overlay layer exists, so
+`Overlay.*` highlighting is validate-only with no visual effect;
+`getBoxModel`/`getContentQuads`/`highlightNode` share `hit_test`'s
+`Flow::Inlines` gap (a node that only contributes to an inline line box is
+not found); an unresolved auto margin reports as `0` in the margin box.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` + `amazing-
+devtools` crate nextest combined 387/387 (0 failed) + both crates' doctests
+green; workspace nextest 3113 passed, 0 failed, 13 skipped; all workspace
+doctests passed. Committed as `4f01de21`. No cross-lane seam needed.
+
+Boundary candidates for a future ticket: a real compositor overlay layer to
+actually paint highlights (would need the `compositor` lane); per-line-box
+`getContentQuads` for inline content; per-argument `RemoteObject`s for
+console calls; `ownProperties=false` vs `true`; stylesheet/image
+`Network.*` events; `Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-20 — Debugger domain (enable/scriptParsed/getScriptSource/
+setBreakpointByUrl/pause/resume) + Page.captureScreenshot — done
+
+Coordinator's ticket: `Debugger.enable`, `scriptParsed` for classic and
+module scripts, `getScriptSource`, `setBreakpointByUrl` at line granularity,
+`pause`/`resume`, a minimal engine hook in `amazing-js` (with any further
+interpreter-side need filed to js-runtime), and `Page.captureScreenshot`.
+
+- `Page.captureScreenshot` was already fully real since CDP-17 (`PageOwner::
+  capture_screenshot` through `amazing_canvas::encode_png`); re-verified
+  (still passing, plus a fresh assertion in this ticket's own end-to-end
+  test) rather than reimplemented.
+- The `amazing-devtools` protocol layer for the whole `Debugger` domain
+  (dispatch, JSON serialization, `ScriptInfo`/`ScriptLocation`/`CallFrame`/
+  `PausedEvent`) already existed from an earlier generic-protocol ticket —
+  this ticket's actual delta is entirely the driver
+  (`runtime_host_devtools.rs`) plus one small addition to `amazing-js`.
+- **New `amazing-js` seam** (`crates/amazing-js/src/debug_hook.rs`): a
+  `DebugHook` trait (`on_statement(&mut self, script_id, url, line)`) and
+  `SharedDebugHook = Rc<RefCell<dyn DebugHook>>`, plus
+  `Interpreter::set_debug_hook`/`set_current_script`. Wired into TWO call
+  sites: `exec_stmt`'s own top (the choke-point for everything except a
+  bare top-level expression statement), and the top-level program loop's own
+  fast path for `StmtKind::Expression` — that fast path bypasses
+  `exec_stmt` entirely for performance, and without its own hook call every
+  bare `expr;` statement (which is what most `Runtime.evaluate` calls are)
+  would be invisible to a line breakpoint. Confirmed this the hard way: the
+  first version only hooked `exec_stmt` and the breakpoint-hit test found
+  zero hits until the fast path got its own call too.
+- **Driver-side state** (`PageOwner`): `scripts: Vec<ScriptRecord>` (id,
+  url, source, extent, hash) for `getScriptSource`; `scripts_parsed:
+  VecDeque<ScriptInfo>` only enqueued once `Debugger.enable` has actually
+  been called — an unconditional enqueue at parse time would double-report
+  every script the page loaded before the client ever connected, since
+  `debugger_enabled(true)` backfills every already-known script; breakpoints/
+  pause-flag/paused-queue are `Rc<RefCell<_>>` cells shared directly with a
+  `DriverDebugHook` living inside the interpreter, not called back into
+  `PageOwner` — the hook fires from deep inside a `PageOwner` method that
+  already holds `&mut self`, so a callback that tried to re-enter `PageOwner`
+  would need a second, disallowed `&mut` borrow. Only plain data (URL/line
+  comparisons, a one-shot bool, an event queue) crosses that boundary.
+- `setBreakpointByUrl` matches by URL string (no regex) against every
+  script's own recorded extent, converts CDP's 0-based `lineNumber` to
+  `amazing_js`'s 1-based `Span::start.line` once at set time, and returns
+  real, currently-resolvable `locations` (empty, not an error, if the line
+  is past every known script). `condition` is accepted but never evaluated.
+- Module scripts (`<script type="module">`) are collected (a new
+  `collect_module_scripts`, mirroring `cmd::js::collect_script_text`'s walk)
+  and reported via `scriptParsed`/`getScriptSource` with real source, but
+  never executed — this engine still does not support ES modules
+  (`cmd::js::is_classic_javascript_type`'s own doc comment); CDP-20's delta
+  is reporting them honestly instead of `collect_script_text` silently
+  dropping them.
+- **The real architectural limit, confirmed and filed, not worked around**:
+  this driver cannot suspend JS execution mid-statement (single-threaded
+  tree-walking interpreter, no coroutine mechanism; the driver's one page
+  thread can't service a `Debugger.resume` while blocked inside a script it
+  is currently running). `Debugger.pause` arms a one-shot flag the *next*
+  statement that actually runs reports as `Debugger.paused` (`reason:
+  "other"`) — real, but after the fact. A genuine breakpoint hit is likewise
+  real but post-hoc: the hook detects the match and queues `Debugger.paused`
+  (`reason: "Breakpoint"`, `hitBreakpoints` set) before the statement
+  finishes, not before it starts. `stepInto`/`stepOver`/`stepOut`/
+  `evaluateOnCallFrame` stay `Unsupported` — there is no suspended call
+  stack for any of them to act on. Filed a heads-up (not a blocking request)
+  to `.agents/js-runtime/questions.md`: real synchronous pause/resume/step
+  needs the interpreter to expose a resumable/steppable execution API
+  (continuation state in the bytecode VM, or a fiber the hook can block on
+  while a separate loop services protocol commands) — a genuine
+  interpreter-level change, correctly out of this ticket's/lane's scope.
+- Proof — one end-to-end WebSocket test
+  (`end_to_end_debugger_domain_scripts_breakpoints_and_pause`): `enable`
+  backfills `scriptParsed` for both a classic and a module script parsed
+  during the page's synchronous initial load (before this client ever
+  connected); `getScriptSource` returns each one's real text;
+  `setBreakpointByUrl` resolves a real location for the script whose extent
+  covers the line and an empty array for one that doesn't; a genuine
+  breakpoint hit (set up by exploiting the driver's own documented
+  script-attribution simplification — a later `Runtime.evaluate` still runs
+  "as" the last top-level script the driver tagged) produces a real
+  `Debugger.paused` with the right `hitBreakpoints`/`reason`;
+  `removeBreakpoint` silences it; `Debugger.pause` fires a forced
+  `reason: "other"` pause on the next statement, and `Debugger.resume`
+  clears it before it fires; `stepInto`/`evaluateOnCallFrame` return real
+  CDP errors; `Page.captureScreenshot` still decodes to a real PNG. Also
+  caught, mid-write: every event here is queued synchronously during its
+  triggering command but only flushed by the server's own poll loop *after*
+  that command's reply is sent (`Connection::run`: `dispatch_message` then
+  `pump()`), so it shows up in the *next* command's push events, not the
+  triggering command's own — the same "nudge" pattern CDP-18's network/
+  console tests already used, generalized here into a small
+  `evaluate_and_collect` test helper.
+
+Known limitations, newly documented: no true synchronous pause/resume/step
+(see above); script identity is coarse (every statement is attributed to
+whichever top-level script was tagged most recently — an inline handler,
+timer callback, or `Runtime.evaluate` call all inherit that, not their own
+identity); script line/column extents are relative to the script's own text,
+not its position in the containing HTML (`startLine`/`startColumn` always
+`0`); `hash` is a `DefaultHasher` (SipHash) digest, not V8's algorithm;
+`setBreakpointByUrl`'s `url` is literal-only, `condition` is unevaluated.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3133
+passed, 0 failed, 14 skipped; all workspace doctests passed (amazing-js 1,
+amazing-devtools 1, everything else 0). Committed as `27128c44`. Cross-lane
+seam filed to `.agents/js-runtime/questions.md` (heads-up, not blocking).
+
+Boundary candidates for a future ticket: real synchronous pause/resume/step
+(js-runtime/js-vm, needs a resumable execution API); per-execution-context
+script identity instead of "last top-level script tagged"; conditional
+breakpoints; `urlRegex` support; HTML-relative script source locations.
+
+## CDP-21 — Network.setCacheDisabled/setExtraHTTPHeaders, Emulation.
+setDeviceMetricsOverride, Input.insertText — done
+
+Coordinator's ticket: the four methods above, each with its own end-to-end
+test.
+
+- Unlike CDP-19/20, the `amazing-devtools` protocol layer was NOT already
+  complete for two of these: `Network.setCacheDisabled` existed only as a
+  dispatch arm that never called any host method, and
+  `Network.setExtraHTTPHeaders` did not exist anywhere in the protocol layer.
+  Added both as new `DevToolsSession` trait methods in `host.rs`
+  (`set_cache_disabled(&mut self, disabled: bool)`,
+  `set_extra_http_headers(&mut self, headers: &[(String, String)])`,
+  both `Ok(())`-by-default) and a new/rewired dispatch arm in
+  `domains/network.rs`. `Emulation.setDeviceMetricsOverride`/
+  `clearDeviceMetricsOverride` and `Input.insertText` already had full
+  protocol-layer wiring from an earlier generic-protocol ticket; this ticket's
+  delta there is entirely the driver.
+- **No real HTTP cache to disable** (confirmed via grep: `amazing-net` has no
+  cache subsystem at all), so `Network.setCacheDisabled`'s real, testable
+  effect is adding `Cache-Control: no-cache`/`Pragma: no-cache` request
+  headers to every future fetch — an honest, wire-observable substitute
+  matching what a real browser also does over the wire.
+  `Network.setExtraHTTPHeaders` is a full replace each call, matching CDP.
+- **Both survive a `Page.navigate` reload**, which is a genuine
+  chicken-and-egg problem: a reload replaces the whole `PageOwner`
+  (`navigate()`'s `*self = reloaded`), and the very first document fetch
+  *of that replacement* needs to already carry the headers. Solved by
+  threading `extra_headers`/`cache_disabled` as explicit parameters into
+  `PageOwner::fetch_and_load` itself, with `navigate()` passing its own
+  current state forward, rather than trying to inject them onto the
+  `PageOwner` after construction.
+- **`Emulation.setDeviceMetricsOverride`'s width/height are read through two
+  new helpers, `PageOwner::effective_width()`/`effective_fixed_height()`**
+  (override when set, else the page's own base width / auto height), and
+  every layout/render call site was switched to go through them:
+  `layout_metrics`, `hit_test_node`, `get_box_model`,
+  `media_environment` (feeds `getComputedStyleForNode`'s media query
+  environment), `capture_screenshot`, `full_ax_tree`. Proven with a real
+  `Page.captureScreenshot` PNG decoded to check its `IHDR` width/height
+  matches the override, and `Page.getLayoutMetrics`' `contentSize.width`
+  before/during/after the override and its clear.
+- `height: 0` (a real, documented CDP value) keeps auto-height rather than
+  fixing it at `0` — matches real Chrome's own "don't override height"
+  convention, and maps directly onto this engine's pre-existing
+  `paint_host_surface(..., fixed_height: Option<u32>, ...)` convention where
+  `None` already meant the same thing.
+- The override does NOT ride along with a reload the same way headers do —
+  there's no "base height" field to bake it into (unlike width). `navigate()`
+  instead captures `override_width`/`override_fixed_height`/
+  `device_scale_factor` before fetching and restores them onto the
+  replacement `PageOwner` afterward.
+- `deviceScaleFactor` is stored; `mobile`/`screenWidth`/`screenHeight`/
+  `positionX`/`positionY`/`dontSetVisibleSize`/orientation are accepted but
+  not applied — this driver's raster path has no separate screen size,
+  window position, or orientation concept to honor them against.
+- **`Input.insertText` reuses real JS bindings instead of reimplementing DOM
+  manipulation in the driver**: synthesizes and runs a small JS snippet
+  (`document.activeElement`, its `value` setter, `new Event('input', {bubbles:
+  true})`, `dispatchEvent`) through the existing `scheduler.run_script`. No
+  caret/selection model, so it always appends at the end; returns
+  `HostError::Unsupported` when nothing focused has a `value` property (e.g.
+  a `contenteditable` element — real rich-text insertion is out of scope).
+- Proof — two new end-to-end WebSocket tests:
+  `end_to_end_network_set_cache_disabled_and_extra_headers_reach_the_wire`
+  (real fixture HTTP server records the raw request head of both the initial
+  navigate and a reload; both `Cache-Control`/`Pragma: no-cache` and the
+  extra header are found on both) and
+  `end_to_end_device_metrics_override_and_insert_text` (layout metrics width
+  before/during/after the override and its clear; screenshot PNG dimensions
+  match the override; insertText appends into a real `<input>` and a real
+  `addEventListener('input', ...)` observes it).
+- **Code-health split**: the CDP-21 additions alone would have pushed
+  `runtime_host_devtools.rs` to 4121 lines, over the project's 4000-line
+  policy. Split its `#[cfg(test)] mod tests { ... }` block out into
+  `runtime_host_devtools_tests.rs` (declared with `#[path = "..."] mod
+  tests;`), matching the `amazing-dom` `*_tests.rs` convention already used
+  elsewhere in the workspace (e.g. `tree.rs`/`tree_tests.rs`). Both files are
+  now under the limit (2694 and 1428 lines) and the module path
+  (`runtime_host_devtools::tests::...`) is unchanged.
+
+Known limitations, newly documented: `setCacheDisabled` has no cache to
+actually disable (headers-only substitute); device metrics override's
+`mobile`/screen/position/orientation fields are accepted but unapplied;
+`insertText` is `<input>`/`<textarea>`-only, no caret/selection model, no
+`contenteditable` support.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3135
+passed, 0 failed, 14 skipped (up from CDP-20's 3133/0/14 — two new tests,
+zero losses); all workspace doctests passed. Committed as `6611b6da`.
+
+Boundary candidates for a future ticket: a real per-request/per-origin cache
+subsystem in `amazing-net` (would let `setCacheDisabled` mean something
+closer to real Chrome); applying `mobile`/screen/position/orientation from
+`setDeviceMetricsOverride`; caret/selection-aware `insertText` and
+`contenteditable` support.

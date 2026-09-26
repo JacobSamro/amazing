@@ -1,0 +1,19 @@
+linux-run[layout]: boat from /Users/jMac/Projects/OpenSource/amazing-wt/layout (9d89433c)
+linux-run[layout]: boat sandbox bx_cp5jbn5z
+Initialized empty Git repository in /home/user/corpora/wpt-layout/.git/
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint: 
+hint: 	git config --global init.defaultBranch <name>
+hint: 
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint: 
+hint: 	git branch -m <name>
+From https://github.com/web-platform-tests/wpt
+ * branch            c2a2fce69e5c2509d9dc28440ec8b42532e5c293 -> FETCH_HEAD
+HEAD is now at c2a2fce6 Revert "[bfcache] Prevent JS callbacks from running when context is frozen"
+Linux render runner: pixel counts, channel maximum, diff bytes, first reftest link, fuzzy limits verified
+{"output": "/home/user/amazing/out/layout18-linux-after-loss", "source": "9d89433c", "counts": {"pass": 5, "mismatch": 1, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-after-flex-grid", "source": "9d89433c", "counts": {"pass": 586, "mismatch": 702, "error": 0, "timeout": 0, "unsupported": 158, "crash": 0}}

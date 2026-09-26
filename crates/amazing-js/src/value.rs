@@ -227,6 +227,7 @@ impl fmt::Debug for Obj {
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
+            (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -762,6 +763,7 @@ pub enum Exotic {
     SymbolObject(JsSymbol),
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
+    Proxy(Rc<crate::interp::ProxyState>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -939,6 +941,10 @@ pub struct JsObject {
     pub(crate) async_body_code: Option<Result<crate::interp::vm::FunctionCode, crate::interp::vm::CompileError>>,
     /// Promise capability captured by a native resolve or reject function.
     pub(crate) promise_target: Option<Obj>,
+    /// State a `Proxy.revocable` revoke function closes over. Orthogonal to
+    /// `exotic`: the revoke function is an ordinary callable, not itself a
+    /// Proxy exotic object, so it must not be caught by the Proxy trap hooks.
+    pub(crate) proxy_revoke: Option<Rc<crate::interp::ProxyState>>,
 }
 
 impl Default for JsObject {
@@ -969,6 +975,7 @@ impl JsObject {
             strict_function: false,
             async_body_code: None,
             promise_target: None,
+            proxy_revoke: None,
         }
     }
 
