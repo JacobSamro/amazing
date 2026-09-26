@@ -1370,6 +1370,46 @@ Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped
 
 `media_queries::MediaEnvironment` supplies viewport size, DPR, media type, and user preferences. `MediaQueryList::parse` with `evaluate` matches screen/print, width/height/resolution, orientation, and common `prefers-*` features. `parse_sizes_attribute` selects the first matching source size, resolves viewport/absolute/font-relative lengths and common CSS math, and accepts an optional auto width; invalid entries fall through to 100vw.
 
+## CSS-15b — predefined counter styles and focus pseudo-classes (2026-09-26)
+
+The CSS crate now implements the full normative predefined counter-style set from
+CSS Counter Styles 3 (§6 simple and §7 complex). Per-style suffixes are honored
+(`、` for `cjk-decimal`, the fixed CJK styles, hiragana/katakana/iroha and the
+Japanese/Chinese longhands; `", "` for the Korean longhands; `". "` otherwise).
+`cjk-earthly-branch` and `cjk-heavenly-stem` are fixed, not cyclic, with a
+`cjk-decimal` fallback. Added the simple additive styles (`armenian`,
+`upper-armenian`, `lower-armenian`, `georgian`, `hebrew`), the limited-range CJK
+longhand additive styles (`japanese-informal`, `japanese-formal`,
+`korean-hangul-formal`, `korean-hanja-informal`, `korean-hanja-formal`), and the
+Chinese limited-range specialized algorithm (`simp-chinese-informal/-formal`,
+`trad-chinese-informal/-formal`, `cjk-ideographic`). Custom `@counter-style`
+rules now support `system: additive`. Out-of-range values fall back per style
+(`cjk-decimal` or `decimal`).
+
+Selectors 4 `:focus`, `:focus-visible`, and `:focus-within` now match from the
+DOM's programmatic focus record (`Dom::is_focused`, `is_focus_visible`,
+`is_focus_within`). `:focus-visible` follows the keyboard-visibility flag with
+the text-control exception (text-ish `input`, `textarea`, `contenteditable`).
+Added `Pseudo::FocusVisible` parse/match/specificity and the `focus-visible`
+invalidation token. This depends on the dom-bindings focus API (`9a79112`,
+merged to dev as `8cb9e5cb`/`9d2e5c27`); the selector code had previously been
+cherry-picked into this branch by mistake and is now committed lane-clean.
+
+Linux (venus-001) `cargo nextest run -p amazing-css --locked`: **310/310**,
+CSS doctests 0. Commits `1d4b4d11` (counter styles) and `13e1d722` (focus).
+
+**Render-corpus handoff (not measured this session).** The css15b manifest
+(`crates/amazing-css/evidence/css15b-manifest.json`, 219 cases) pins WPT
+`53bc812da2ed81179ebd1ba76b2d197cc4747d12`, but the win-001 WPT checkout at
+`C:\Users\server\target\css\wpt` is at `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`
+and currently has `css-pseudo` but **not** `css-counter-styles` or
+`css-conditional`. The committed baseline `css15b-before.json` is 48 pass / 171
+mismatch / 0 error (pseudo 31/49, counter styles 4/76, conditional 13/46).
+A fresh after-run needs those two directories restored at the manifest revision
+(and the manifest/checkout pin reconciled) before its numbers are comparable to
+the baseline. The `4/76` counter-style sub-count is the population this ticket
+targets; no after count is claimed until that sweep runs.
+
 ## Next CSS-15 bulk css/ WPT sweep
 
 Pinned WPT revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12` has the largest document counts in `css-grid` (3410), `css-flexbox` (1974), `css-backgrounds` (1355), `css-transforms` (1245), `css-images` (751), `selectors` (684), `css-values` (603), `css-color` (517), `css-variables` (268), and `css-cascade` (158). Grid/flexbox are layout-owned and backgrounds/images paint-owned. The selected CSS-owned directories are `selectors`, `css-values`, and `css-color`: 80 path-stratified static reftests from each, in `crates/amazing-css/evidence/css15-manifest.json`.
