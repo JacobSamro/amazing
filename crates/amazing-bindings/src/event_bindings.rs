@@ -125,13 +125,10 @@ pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_d
     kind: &str, related: Option<amazing_dom::NodeIdx>) -> Result<(), H::Error> {
     let init = EventInit { bubbles: matches!(kind, "focusin" | "focusout"),
         cancelable: false, composed: true };
-    let related_value = match related { Some(node) => Some(host.wrap_node(node)?), None => None };
-    let related_root = related_value.map(|value| host.retain_value(value));
     let event = host.with_dom(|dom| {
         let mut event = Event::new(kind, init, Duration::ZERO);
         event.set_class(EventClass::Focus);
         event.set_related_target(related.map(EventTarget::Node));
-        event.set_extra("relatedTarget", EventExtra::Root(related_root));
         Ok(dom.events_mut().create_event(event))
     })?;
     let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(EventTarget::Node(node), event, DispatchOrigin::UserAgent))?;
@@ -224,7 +221,7 @@ fn ui_detail<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<f64, H::E
     Ok(number.trunc().rem_euclid(4294967296.) as u32 as i32 as f64)
 }
 
-enum ConvertedExtra<V> { Native(EventExtra), Root(Option<V>) }
+enum ConvertedExtra<V> { Native(EventExtra), Root(Option<V>), Target(Option<EventTarget>) }
 fn convert_extras<H: BindingHost>(host: &mut H, dictionary: &H::Value, class: EventClass)
     -> Result<Vec<(&'static str, ConvertedExtra<H::Value>)>, H::Error> {
     let mut extras = Vec::new();
@@ -237,12 +234,13 @@ fn convert_extras<H: BindingHost>(host: &mut H, dictionary: &H::Value, class: Ev
                 if name == "detail" { ui_detail(host, &value)? } else { host.to_number(&value)? })),
             EventExtra::String(_) => ConvertedExtra::Native(EventExtra::String(host.to_dom_string(&value)?)),
             EventExtra::Root(_) => {
-                if host.is_nullish(&value) { ConvertedExtra::Root(None) }
+                if name == "relatedTarget" {
+                    ConvertedExtra::Target(if host.is_nullish(&value) { None } else { Some(target(host, &value)?) })
+                } else if host.is_nullish(&value) { ConvertedExtra::Root(None) }
                 else {
                     if name == "view" && host.window_event_target_slot(&value).is_none() {
                         return Err(host.type_error("UIEvent.view must be a Window"));
                     }
-                    if name == "relatedTarget" { target(host, &value)?; }
                     ConvertedExtra::Root(Some(value))
                 }
             },
@@ -320,6 +318,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 for (name, extra) in convert_extras(host, dictionary, class)? {
                     let extra = match extra {
                         ConvertedExtra::Native(value) => value,
+                        ConvertedExtra::Target(value) => { event.set_related_target(value); continue; },
                         ConvertedExtra::Root(value) => EventExtra::Root(value.map(|value| host.retain_value(value))),
                     };
                     event.set_extra(name, extra);
@@ -405,6 +404,10 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     let id = event_id(host, &receiver)?;
     if let O::EventExtra(name) = op {
+        if name == "relatedTarget" {
+            let related = host.with_dom(|dom| Ok(dom.events().event(id).related_target()))?;
+            return wrap_target(host, related);
+        }
         let extra = host.with_dom(|dom| Ok(dom.events().event(id).extra(name).cloned()))?
             .unwrap_or_else(|| extra_spec(name));
         return Ok(match extra {

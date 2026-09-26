@@ -150,6 +150,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn focus_and_mouse_related_targets_follow_native_shadow_dispatch_state() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('shadow event target'); }
+            const host = document.createElement('div');
+            const root = host.attachShadow({mode: 'closed'});
+            const inner = root.appendChild(document.createElement('span'));
+            const external = new EventTarget();
+            for (const Constructor of [FocusEvent, MouseEvent]) {
+                const event = new Constructor('probe', {relatedTarget: inner});
+                check(event.relatedTarget === inner);
+                let observed = false;
+                external.addEventListener('probe', value => {
+                    observed = value.relatedTarget === host && value.target === external;
+                }, {once: true});
+                external.dispatchEvent(event);
+                check(observed && event.relatedTarget === host && event.target === external);
+                root.dispatchEvent(event);
+                check(event.relatedTarget === null && event.target === null);
+                check(event.currentTarget === null && event.composedPath().length === 0);
+            }
+            const event = new FocusEvent('move', {relatedTarget: external});
+            inner.addEventListener('move', () => host.appendChild(inner), {once: true});
+            inner.dispatchEvent(event);
+            check(inner.parentNode === host && event.target === null && event.relatedTarget === null);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn document_default_view_preserves_window_identity_and_inert_document_nulls() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
