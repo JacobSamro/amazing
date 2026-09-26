@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import os
 import subprocess
 import time
@@ -56,6 +57,16 @@ def boat(*args: str, timeout: int = 60) -> dict | None:
         return None
     lines = [l for l in out.splitlines() if l.startswith("{")]
     return json.loads(lines[-1]) if lines else None
+
+
+LANE_MAP = Path(__file__).resolve().parent.parent / ".agents" / ".boat-lanes.json"
+
+
+def managed_ids() -> set[str]:
+    try:
+        return set(json.loads(LANE_MAP.read_text()).values())
+    except (OSError, ValueError):
+        return set()
 
 
 def running_sandboxes() -> list[dict]:
@@ -109,7 +120,8 @@ def main() -> int:
         live = running_sandboxes()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
-            if "keep" in name.lower() or sid in KEEP:
+            # Only sandboxes boat-lane.py manages; anything else is the user's.
+            if "keep" in name.lower() or sid in KEEP or sid not in managed_ids():
                 continue
             busy = is_busy(sid)
             if busy is not False:
