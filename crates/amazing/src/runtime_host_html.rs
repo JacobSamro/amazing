@@ -1450,13 +1450,20 @@ mod tests {
         // them, not after both. Exercised through `prepare_page_scripts`
         // (cmd/js.rs), the same top-level script-phase wiring a real page
         // load uses (`begin_document_parsing`/`narrow_write_insertion_point`).
+        // HTML-32: `prepare_page_scripts` now parses `html` itself through
+        // the interleaved parser, so `host` starts with an empty `Dom` and
+        // the source that used to be pre-parsed via `amazing_html::parse`
+        // is passed straight through as its new `html` argument instead.
         let host = Rc::new(RefCell::new(BrowserDomHost {
-            dom: amazing_html::parse(
-                "<body><div id=a></div><script>document.write('<div id=written></div>')</script><div id=b></div></body>"),
+            dom: amazing_dom::Dom::new(),
             native_forwarded: false,
         }));
-        let mut scheduler = crate::cmd::js::prepare_page_scripts(&host, "https://example.test/main.html", false)
-            .unwrap().unwrap();
+        let mut scheduler = crate::cmd::js::prepare_page_scripts(
+            &host,
+            "https://example.test/main.html",
+            "<body><div id=a></div><script>document.write('<div id=written></div>')</script><div id=b></div></body>",
+            false,
+        ).unwrap().unwrap();
         // The writing `<script>` element itself stays in the tree (as an
         // empty-id element between "a" and "written") -- only the *written*
         // content lands at its insertion point, right after it and before
@@ -1474,12 +1481,18 @@ mod tests {
         // callback firing after load would call it) implicitly performs
         // `document.open()`'s full-document replace instead of appending
         // next to whatever content the page already had.
+        // HTML-32: same reshaping as the test above -- `host` starts empty
+        // and the source is passed as `prepare_page_scripts`'s `html` arg.
         let host = Rc::new(RefCell::new(BrowserDomHost {
-            dom: amazing_html::parse("<body><div id=original></div></body>"),
+            dom: amazing_dom::Dom::new(),
             native_forwarded: false,
         }));
-        let mut scheduler = crate::cmd::js::prepare_page_scripts(&host, "https://example.test/main.html", true)
-            .unwrap().unwrap();
+        let mut scheduler = crate::cmd::js::prepare_page_scripts(
+            &host,
+            "https://example.test/main.html",
+            "<body><div id=original></div></body>",
+            true,
+        ).unwrap().unwrap();
         scheduler.run_script("document.write('hello')").unwrap();
         assert_eq!(scheduler.run_script("document.body.textContent").unwrap(), JsValue::str("hello"));
         assert_eq!(scheduler.run_script("document.getElementById('original')").unwrap(), JsValue::Null);

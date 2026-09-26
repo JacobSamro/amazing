@@ -28,20 +28,12 @@ pub(crate) fn is_classic_javascript_type(raw: Option<&str>) -> bool {
     // non-ASCII whitespace -- `raw.split(';').next()` and `str::trim()`
     // (Unicode-whitespace-aware) both wrongly accepted types this crate's
     // own `is_classic_javascript_type` must reject, e.g.
-    // "text/javascript;charset=utf-8" or "text/javascript\u{00A0}".
+    // "text/javascript;charset=utf-8" or "text/javascript\u{00A0}". HTML-32:
+    // shares `amazing_html::is_javascript_mime_type`'s full mimesniff list
+    // (this used to hand-roll its own 8-of-16-entry subset, in sync with
+    // `tree.rs`'s copy of the same gap).
     let value = amazing_html::strip_ascii_whitespace(raw).to_ascii_lowercase();
-    value.is_empty()
-        || matches!(
-            value.as_str(),
-            "text/javascript"
-                | "application/javascript"
-                | "application/ecmascript"
-                | "text/ecmascript"
-                | "application/x-javascript"
-                | "text/x-javascript"
-                | "text/jscript"
-                | "text/livescript"
-        )
+    value.is_empty() || amazing_html::is_javascript_mime_type(&value)
 }
 
 /// Builds a `PageScript` for one already-known `<script>` node (classic type
@@ -71,10 +63,29 @@ pub(crate) fn script_source_from_node(
             source.push_str(data);
         }
     }
+    // HTML-32: an SVG `<script>` (unlike its HTML sibling) names its
+    // external resource with `href`/`xlink:href`, not `src` -- SVG has no
+    // `src` attribute at all. WPT's `unclosed-svg-script.html` ("SVG
+    // scripts with self-closing start tag should run") uses a self-closing
+    // `<script href=.../>`, which the HTML-31/32 tree-builder fixes now
+    // correctly pause/classify (see `tree.rs::in_foreign_content`), but
+    // this lookup still missed its source entirely: `src` is absent and a
+    // self-closing tag has no inline text either, so `script_source_from_
+    // node` returned `None` (silently "not a script") for every such
+    // element until now.
     let src = attrs
         .iter()
         .find(|(name, _)| name == "src")
-        .map(|(_, value)| value.clone());
+        .map(|(_, value)| value.clone())
+        .or_else(|| {
+            if dom.namespace(node) != Some(amazing_dom::Namespace::Svg) {
+                return None;
+            }
+            attrs
+                .iter()
+                .find(|(name, _)| name == "href" || name.eq_ignore_ascii_case("xlink:href"))
+                .map(|(_, value)| value.clone())
+        });
     if src.is_some() || !source.trim().is_empty() {
         Some(PageScript { node, src, body: source })
     } else {
@@ -187,8 +198,8 @@ pub(crate) fn collect_inline_handlers(
     }
 }
 
-pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Result<(), String> {
-    if let Some(mut scheduler) = prepare_page_scripts(host, page, false)? {
+pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str, html: &str) -> Result<(), String> {
+    if let Some(mut scheduler) = prepare_page_scripts(host, page, html, false)? {
         scheduler.pump_at(std::time::Duration::from_millis(16), true)
             .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
     }
@@ -213,22 +224,12 @@ pub(crate) struct LenientScriptResult {
 pub(crate) fn execute_page_scripts_lenient(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
+    html: &str,
     probe: Option<&str>,
     viewport: (f32, f32),
 ) -> LenientScriptResult {
     let mut errors = Vec::new();
     let mut probe_lines = Vec::new();
-    let (scripts, handlers) = {
-        let host_ref = host.borrow();
-        let mut scripts = Vec::new();
-        collect_script_text(&host_ref.dom, amazing_dom::NodeIdx(0), &mut scripts);
-        let mut handlers = Vec::new();
-        collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
-        (scripts, handlers)
-    };
-    if scripts.is_empty() && handlers.is_empty() && probe.is_none() {
-        return LenientScriptResult { errors, probe: probe_lines };
-    }
     let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
         host.clone(), crate::js_scheduler::JS_CAPACITY) {
         Ok(scheduler) => scheduler,
@@ -264,55 +265,99 @@ pub(crate) fn execute_page_scripts_lenient(
         .unwrap_or(45u64);
     let deadline = Instant::now() + Duration::from_secs(budget);
     let mut budget_exceeded = false;
-    macro_rules! check_budget {
-        ($skipped:expr) => {
-            if !budget_exceeded && Instant::now() >= deadline {
-                budget_exceeded = true;
-                errors.push(format!(
-                    "script phase exceeded its {budget}s budget; {} skipped",
-                    $skipped
-                ));
-            }
-            if budget_exceeded {
-                continue;
-            }
-        };
-    }
-    for (node, event, body) in handlers {
-        check_budget!("remaining inline handlers");
-        if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
-            errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
+    // HTML-32: `host`'s DOM starts empty; the interleaved parse below builds
+    // it directly from `html`, running each classic parser-blocking script
+    // against the DOM as constructed so far (same mechanism as
+    // `wpt_harness.rs::execute_page`/`prepare_page_scripts`). Unlike those,
+    // this pass is lenient: a script's own failure is collected into
+    // `errors`, never propagated as an `Err` from the closure below, since
+    // that would abort the *whole* interleaved parse early
+    // (`run_interleaved_parse`'s own contract) -- the opposite of what a
+    // real-page best-effort pass wants. Budget-checking moves inside the
+    // closure for the same reason: once exceeded, every remaining script
+    // (blocking or deferred) is skipped by returning `Ok(())` without
+    // running it, rather than a `continue` in a `for` loop.
+    let script_result = run_interleaved_parse(host, &mut scheduler, html, |scheduler, script| {
+        if !budget_exceeded && Instant::now() >= deadline {
+            budget_exceeded = true;
+            errors.push(format!(
+                "script phase exceeded its {budget}s budget; remaining page scripts skipped"
+            ));
         }
-    }
-    // HTML-29: brackets the page's own top-level script phase so a
-    // `document.write` call inserts at the parser's insertion point
-    // (narrowed to right after each script) rather than always implicitly
-    // reopening the document; ended once the load event has fired below.
-    scheduler.begin_document_parsing(0);
-    for script in scripts {
-        check_budget!("remaining page scripts");
-        scheduler.narrow_write_insertion_point(0, script.node.0);
-        let source = match script.src {
+        if budget_exceeded {
+            return Ok(());
+        }
+        let source = match &script.src {
             Some(src) => {
-                let script_url = resolve_script_url(page, &src);
+                let script_url = resolve_script_url(page, src);
                 let fetched = amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
                     .map_err(|error| format!("{error}"))
                     .and_then(|response| response.text()
                         .ok_or_else(|| format!("external script {src} was not text")));
                 match fetched {
                     Ok(source) => source,
-                    Err(error) => { errors.push(format!("external script {src}: {error}")); continue; }
+                    Err(error) => { errors.push(format!("external script {src}: {error}")); return Ok(()); }
                 }
             }
-            None => script.body,
+            None => script.body.clone(),
         };
         if let Err(error) = scheduler.run_script(&source) {
             errors.push(format!("page script: {}", error.describe()));
         }
+        Ok(())
+    });
+    // The closure above always returns `Ok(())`, so `run_interleaved_parse`
+    // itself cannot fail here; treat the theoretically-impossible `Err` the
+    // same as "no deferred/async scripts" rather than unwrapping, since this
+    // whole function's contract is to never panic on a real page.
+    let deferred = script_result.unwrap_or_default();
+    if !budget_exceeded {
+        for script in &deferred {
+            let source = match &script.src {
+                Some(src) => {
+                    let script_url = resolve_script_url(page, src);
+                    let fetched = amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("{error}"))
+                        .and_then(|response| response.text()
+                            .ok_or_else(|| format!("external script {src} was not text")));
+                    match fetched {
+                        Ok(source) => source,
+                        Err(error) => { errors.push(format!("external script {src}: {error}")); continue; }
+                    }
+                }
+                None => script.body.clone(),
+            };
+            if let Err(error) = scheduler.run_script(&source) {
+                errors.push(format!("page script: {}", error.describe()));
+            }
+        }
+    }
+    // HTML-31/32: inline `on*` handlers only exist once their element has
+    // been parsed; collected after the interleaved parse reaches `Eof`
+    // (matching `wpt_harness.rs::execute_page`/`prepare_page_scripts`),
+    // unlike before HTML-32, when the whole DOM already existed upfront.
+    let handlers = {
+        let host_ref = host.borrow();
+        let mut handlers = Vec::new();
+        collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
+        handlers
+    };
+    for (node, event, body) in handlers {
+        if !budget_exceeded && Instant::now() >= deadline {
+            budget_exceeded = true;
+            errors.push(format!(
+                "script phase exceeded its {budget}s budget; remaining inline handlers skipped"
+            ));
+        }
+        if budget_exceeded {
+            continue;
+        }
+        if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
+            errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
+        }
     }
     if budget_exceeded {
         errors.push("skipped DOMContentLoaded/load dispatch and the event loop: script phase budget already exceeded".to_owned());
-        scheduler.end_document_parsing(0);
         return LenientScriptResult { errors, probe: probe_lines };
     }
     if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
@@ -327,7 +372,6 @@ pub(crate) fn execute_page_scripts_lenient(
     {
         errors.push(format!("body load listener: {}", error.describe()));
     }
-    scheduler.end_document_parsing(0);
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
         if Instant::now() >= deadline {
@@ -354,23 +398,60 @@ pub(crate) fn execute_page_scripts_lenient(
 /// Starts the page's script and event-loop lifetime. WPT keeps this scheduler
 /// through first paint and its reftest checkpoint; ordinary render performs
 /// its existing 16 ms checkpoint in `execute_inline_scripts`.
+/// HTML-32: `host`'s DOM starts empty; this builds it directly from `html`
+/// via `run_interleaved_parse`, the same way `wpt_harness.rs::execute_page`
+/// does, rather than assuming a caller already parsed it. `force_scheduler`
+/// is kept only for API stability at its two call sites -- a scheduler (and
+/// the interleaved parse that needs one to run any script against) is now
+/// always created, since there is no longer a pre-built DOM to inspect for
+/// "are there actually any scripts" before deciding.
 pub(crate) fn prepare_page_scripts(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
-    force_scheduler: bool,
+    html: &str,
+    _force_scheduler: bool,
 ) -> Result<Option<crate::js_scheduler::DriverScheduler>, String> {
-    let scripts = {
-        let host_ref = host.borrow();
-        let mut scripts = Vec::new();
-        collect_script_text(&host_ref.dom, amazing_dom::NodeIdx(0), &mut scripts);
-        scripts
-    };
-    if scripts.is_empty() && !force_scheduler {
-        return Ok(None);
-    }
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
     scheduler.set_location_url(page);
+    let deferred = run_interleaved_parse(host, &mut scheduler, html, |scheduler, script| {
+        let source = match &script.src {
+            Some(src) => {
+                let script_url = resolve_script_url(page, src);
+                let response =
+                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("external script {src}: {error}"))?;
+                response
+                    .text()
+                    .ok_or_else(|| format!("external script {src} was not text"))?
+            }
+            None => script.body.clone(),
+        };
+        scheduler.run_script(&source)
+            .map(|_| ())
+            .map_err(|error| format!("page script failed: {}", error.describe()))
+    })?;
+    for script in &deferred {
+        let source = match &script.src {
+            Some(src) => {
+                let script_url = resolve_script_url(page, src);
+                let response =
+                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("external script {src}: {error}"))?;
+                response
+                    .text()
+                    .ok_or_else(|| format!("external script {src} was not text"))?
+            }
+            None => script.body.clone(),
+        };
+        scheduler.run_script(&source)
+            .map_err(|error| format!("page script failed: {}", error.describe()))?;
+    }
+    // HTML-31/32: inline `on*` handler attributes only exist once their
+    // element has been parsed, so collecting them waits until the
+    // interleaved parse above reaches `Eof` (matching `wpt_harness.rs::
+    // execute_page`; unlike before HTML-32, when the whole DOM already
+    // existed prior to running any script at all).
     let handlers = {
         let host_ref = host.borrow();
         let mut handlers = Vec::new();
@@ -381,25 +462,6 @@ pub(crate) fn prepare_page_scripts(
         scheduler.install_inline_handler(node, &event, &body)
             .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
     }
-    // HTML-29: see the matching comment in `execute_page_scripts_lenient`.
-    scheduler.begin_document_parsing(0);
-    for script in scripts {
-        scheduler.narrow_write_insertion_point(0, script.node.0);
-        let source = match script.src {
-            Some(src) => {
-                let script_url = resolve_script_url(page, &src);
-                let response =
-                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
-                        .map_err(|error| format!("external script {src}: {error}"))?;
-                response
-                    .text()
-                    .ok_or_else(|| format!("external script {src} was not text"))?
-            }
-            None => script.body,
-        };
-        scheduler.run_script(&source)
-            .map_err(|error| format!("page script failed: {}", error.describe()))?;
-    }
     scheduler.dispatch_dom_event(0, "DOMContentLoaded")
         .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
     scheduler.dispatch_dom_event(0, "load")
@@ -409,7 +471,6 @@ pub(crate) fn prepare_page_scripts(
         scheduler.dispatch_dom_event(body, "load")
             .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
     }
-    scheduler.end_document_parsing(0);
     Ok(Some(scheduler))
 }
 
@@ -628,6 +689,19 @@ mod tests {
         assert!(is_classic_javascript_type(Some("text/javascript")));
         assert!(is_classic_javascript_type(Some("TEXT/JavaScript")));
         assert!(is_classic_javascript_type(Some("application/javascript")));
+        // HTML-32: these 8 were missing from the matched set entirely
+        // (only 8 of mimesniff's 16-entry JavaScript MIME type list were
+        // recognized), caught while triaging WPT's
+        // `script-type-and-language-js.html`.
+        for data in [
+            "application/x-ecmascript",
+            "APPLICATION/X-ECMASCRIPT",
+            "text/x-ecmascript",
+            "text/javascript1.0",
+            "text/javascript1.5",
+        ] {
+            assert!(is_classic_javascript_type(Some(data)), "{data} must run as classic JS");
+        }
         for data in [
             "module",
             "application/ld+json",
@@ -645,6 +719,11 @@ mod tests {
             // of which is exercised here).
             "TEXT/JavaScript; charset=utf-8",
             "text/javascript\u{00A0}",
+            // Only 1.0 through 1.5 are recognized legacy versions (WPT's
+            // `script-type-and-language-js.html` expects 1.6-1.9 to be
+            // rejected even with the otherwise-valid "text/" prefix).
+            "text/javascript1.6",
+            "javascript1.0",
         ] {
             assert!(
                 !is_classic_javascript_type(Some(data)),

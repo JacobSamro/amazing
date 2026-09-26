@@ -41,7 +41,7 @@ pub mod tokenizer;
 pub mod tree;
 pub mod xml;
 pub use tree::IncrementalParser;
-pub use tree::{strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
+pub use tree::{is_javascript_mime_type, strip_ascii_whitespace, ParserConstruction, ParserCustomElementHost, ScriptMode};
 pub use resumable::{ParseSignal, ResumableParser};
 pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};

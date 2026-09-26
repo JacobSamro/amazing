@@ -193,6 +193,28 @@ mod tests {
         assert_eq!(parser.run(), ParseSignal::Eof);
     }
 
+    /// HTML-32: a self-closing SVG `<script/>` (only meaningful with `src`,
+    /// since self-closing leaves no room for inline text) used to be popped
+    /// by `in_foreign_content`'s `StartTag` branch with no classify/pause
+    /// check at all -- the same gap HTML-31 fixed for its non-self-closing
+    /// sibling, just reached through the self-closing path instead of the
+    /// `EndTag` match arm.
+    #[test]
+    fn self_closing_svg_script_pauses_the_same_as_a_normal_one() {
+        let mut parser = ResumableParser::new(Dom::new());
+        // An unquoted attribute value's terminator set has no `/` in it (only
+        // whitespace/`>`), so `src=a.js/` would swallow the slash into the
+        // value instead of ending the tag self-closing -- the self-closing
+        // flag needs a quoted value (or a space before the slash) to leave
+        // "after attribute value (quoted)"/"before attribute name" state.
+        parser.push_source("<body><svg><script src=\"a.js\"/></svg><div id=after></div></body>");
+        let ParseSignal::Script(script) = parser.run() else { panic!("expected a script pause") };
+        assert_eq!(parser.dom().name(script), Some("script"));
+        let dump = parser.dom().dump(NodeIdx(0));
+        assert!(!dump.contains("id=\"after\""), "later sibling built before its script paused:\n{dump}");
+        assert_eq!(parser.run(), ParseSignal::Eof);
+    }
+
     #[test]
     fn fragment_parsing_never_pauses_for_scripts() {
         let dom = crate::parse_fragment("div", "<script>x</script>").expect("fragment");
