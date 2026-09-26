@@ -631,14 +631,14 @@ fn std_temporal_parse_time(text: &str, fields: &mut [i64; 10]) -> Result<(), Thr
     Ok(())
 }
 
-fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool), Throw> {
+fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool, Option<&str>), Throw> {
     let invalid = || Throw::range_error("invalid Temporal annotation");
-    let Some(first) = text.find('[') else { return Ok((text, false)); };
+    let Some(first) = text.find('[') else { return Ok((text, false, None)); };
     let body = &text[..first];
     let mut tail = &text[first..];
     let mut calendar = false;
     let mut critical_calendar = false;
-    let mut time_zone = false;
+    let mut time_zone = None;
     while !tail.is_empty() {
         let rest = tail.strip_prefix('[').ok_or_else(invalid)?;
         let end = rest.find(']').ok_or_else(invalid)?;
@@ -656,11 +656,11 @@ fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool), Throw> {
             if value.starts_with('!') || key.bytes().any(|c| c.is_ascii_uppercase()) {
                 return Err(invalid());
             }
-        } else if time_zone || annotation.is_empty() {
+        } else if time_zone.is_some() || annotation.is_empty() {
             return Err(invalid());
-        } else { time_zone = true; }
+        } else { time_zone = Some(annotation); }
     }
-    Ok((body, calendar))
+    Ok((body, calendar, time_zone))
 }
 
 fn std_temporal_time_prefix(text: &str) -> &str {
@@ -730,7 +730,7 @@ fn std_temporal_parse_duration(text: &str) -> Result<[i64; 10], Throw> {
 fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Throw> {
     if kind == StdTemporalKind::Duration { return std_temporal_parse_duration(text); }
     let invalid = || Throw::range_error("invalid Temporal string");
-    let (text, _calendar) = std_temporal_parse_annotations(text)?;
+    let (text, _calendar, _zone) = std_temporal_parse_annotations(text)?;
     if text.ends_with('Z') || text.ends_with('z') { return Err(invalid()); }
     let mut values = [0; 10];
     match kind {
@@ -816,6 +816,11 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
 
 fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalKind) -> Result<JsValue, Throw> {
     let fields = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0))?;
+    // Every plain type except Duration takes an options bag; validating it here
+    // surfaces both a wrong options type and an invalid overflow value.
+    if kind != StdTemporalKind::Duration {
+        std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+    }
     std_temporal_make(i, kind, fields)
 }
 
@@ -1042,6 +1047,9 @@ fn std_temporal_string_precision(i: &mut Interpreter, option: &JsValue) -> Resul
         };
     let mode = std_temporal_option_string(i, option, "roundingMode")?
         .unwrap_or_else(|| "trunc".to_string());
+    if !std_temporal_round_mode_valid(&mode) {
+        return Err(Throw::range_error("invalid roundingMode"));
+    }
     let unit = std_temporal_option_string(i, option, "smallestUnit")?;
     let minute_only = unit.as_deref().is_some_and(|name| name.strip_suffix('s').unwrap_or(name) == "minute");
     let step = if let Some(unit) = unit {

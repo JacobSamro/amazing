@@ -978,6 +978,27 @@ pub struct NetworkFinishedEvent {
     pub timestamp: f64,
 }
 
+/// `Network.loadingFailed` data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NetworkFailedEvent {
+    pub request_id: String,
+    /// `"Document"`, `"Script"`, ... matching the request's own type.
+    pub resource_type: String,
+    pub error_text: String,
+    pub canceled: bool,
+    /// Monotonic seconds.
+    pub timestamp: f64,
+}
+
+/// `Runtime.exceptionThrown` data: an [`ExceptionDetails`] plus the wall time
+/// it was observed at (the event needs its own timestamp; `evaluate`'s
+/// synchronous result does not).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExceptionEvent {
+    pub details: ExceptionDetails,
+    pub timestamp: f64,
+}
+
 /// `Log.entryAdded` data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LogEntry {
@@ -1672,6 +1693,16 @@ pub trait DevToolsSession: Send {
     }
     /// `Network.loadingFinished`.
     fn drain_network_finished(&mut self) -> Vec<NetworkFinishedEvent> {
+        Vec::new()
+    }
+    /// `Network.loadingFailed`.
+    fn drain_network_failed(&mut self) -> Vec<NetworkFailedEvent> {
+        Vec::new()
+    }
+    /// `Runtime.exceptionThrown` — uncaught errors from event handlers,
+    /// timers and other callbacks the page didn't itself catch (distinct from
+    /// `Runtime.evaluate`'s own synchronous `exceptionDetails`).
+    fn drain_exceptions(&mut self) -> Vec<ExceptionEvent> {
         Vec::new()
     }
     /// `Log.entryAdded`.

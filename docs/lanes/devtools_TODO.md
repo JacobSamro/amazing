@@ -529,3 +529,187 @@ Boundary candidates for a future ticket: `DOM.getNodeForLocation` (trivial
 reuse of the new `hit_test`, still `Unsupported`), inline-run hit-testing, a
 real text/replaced-content provider for layout (shared by hit-testing and
 the ax tree), and Network/Fetch domain wiring on the live page.
+
+## CDP-18 — Network/Runtime console/exceptions, Log, object inspection — done
+
+Wired the remaining "live page" gaps CDP-16/17 left `Unsupported`:
+
+- **Network**: `requestWillBeSent`/`responseReceived`/`loadingFinished`/
+  `loadingFailed` plus `getResponseBody`, for the top-level document fetch
+  (`Page.navigate` and the initial load) and every `<script src>` fetch.
+  Bypassed `cmd::real_pages::fetch_document` (which discards status/headers
+  and fails hard on non-2xx) in favor of calling `amazing_net::fetch`
+  directly from the driver, so real status codes, headers and bodies are
+  available (`amazing-devtools/src/host.rs` adds `NetworkFailedEvent` +
+  `drain_network_failed`). Response bodies are cached per request id in
+  `PageOwner::bodies` for `getResponseBody`. Scope is document + script only
+  — stylesheet/image loads belong to css/layout/replaced-content, not this
+  driver, and are not instrumented.
+- **Runtime console/exceptions**: `consoleAPICalled` reads
+  `amazing_js::interp::Interpreter.output` directly (the field the driver
+  already read for its own diagnostics) rather than needing any new
+  engine-side hook. `native_log` is the only console method the interpreter
+  implements and already joins every argument into one string, so every
+  event has `kind: "log"` and one string `RemoteObject` argument.
+  `exceptionThrown` covers two sources: page-load failures (a thrown script,
+  inline handler, or bounded event-loop step) and a mouse/key event
+  listener's own throw — the latter used to propagate as `HostError::
+  Internal`, failing the whole `Input.dispatch*Event` command; it now goes
+  through `PageOwner::record_exception` and the command still returns `Ok`,
+  matching a real browser (a page's own bug doesn't fail the DevTools
+  command, only gets reported through the console/exception channel).
+  `Log.entryAdded` mirrors both exception sources plus network failures,
+  not ordinary `console.log` calls — matching Chrome's own split between
+  the Log domain (browser-internal) and the console API.
+- **Page load: strict → lenient**: `PageOwner::from_parsed`/`fetch_and_load`
+  no longer call `cmd::js::prepare_page_scripts` (which fails the whole
+  load — and drops the realm — on the first script/handler error). A new
+  `PageOwner::load_scripts_leniently` mirrors `cmd::js::
+  execute_page_scripts_lenient`'s collect-don't-abort logic but keeps this
+  page's own persistent `scheduler` (that sibling function builds and drops
+  its own scheduler, which doesn't fit CDP-16's persistent-realm design);
+  every failure becomes an exception+log entry instead of an `Err`.
+- **Runtime.getProperties/callFunctionOn**: a per-realm `objectId` registry
+  (`PageOwner::objects: HashMap<String, JsValue>`) minted by
+  `PageOwner::remote_object`, which every `evaluate`/`getProperties`/
+  `callFunctionOn` result now goes through instead of the old free function
+  `js_value_to_remote_object` (removed). Built entirely on `amazing-js`'s
+  already-public embedding API — no engine or shared-file change needed:
+  `binding_own_property_keys`/`binding_get_own_property` (own properties,
+  reading through a getter via `binding_call` when present) for
+  `getProperties`, and `binding_call` (with `this` resolved from `objectId`
+  or `binding_global_object`, arguments from `objectId` handles or
+  `json_to_js_value` for JSON literals) for `callFunctionOn`. `objectId`s
+  never expire individually except via `Runtime.releaseObject`; navigating
+  the page replaces the whole `PageOwner`, dropping all of them at once —
+  matching a real navigation invalidating the previous document's ids.
+- **Debugger.\* stays `Unsupported`** — the ticket explicitly keeps
+  stepping/breakpoints for js-runtime, since that needs VM-level hooks this
+  driver does not implement. No `questions.md` entry was needed: nothing
+  else in this ticket required another lane's internals.
+- Proof — two new end-to-end tests, both a real WebSocket CDP client
+  against the real page thread:
+  `end_to_end_network_console_and_object_inspection_from_a_real_fetched_page`
+  drives a real fixture HTTP server (`serve_multi`, new — serves N routes by
+  path, generalizing the existing single-route `serve_once`) with a document
+  that `<script src>`s an external script which `console.log`s and sets a
+  global object, through `PageInit::Fetch` (the real `amazing_net::fetch`
+  path, not the in-memory `spawn_test_host` shortcut), and checks
+  `Network.requestWillBeSent`/`responseReceived`/`loadingFinished` for both
+  the document and the script, `Runtime.consoleAPICalled` for the script's
+  log line, `Runtime.getProperties` and `callFunctionOn` against the
+  script's global object, and `Network.getResponseBody` for the script.
+  `end_to_end_uncaught_script_error_is_reported_not_fatal` proves a page
+  with a top-level throw still loads (`document.title` still evaluates) and
+  produces both `Runtime.exceptionThrown` and a `source: "javascript"`
+  `Log.entryAdded`.
+
+Known limitations, newly documented: console events are always `kind:
+"log"` with one string argument (no `warn`/`error`/`info`/`debug`, no
+per-argument `RemoteObject`s — `native_log` already collapsed everything
+before this driver ever sees it); `getProperties`' `ownProperties=false`
+(include inherited) is not distinguished from `true` — every call is own
+properties only, every descriptor reports `isOwn: true`; `callFunctionOn`
+arguments only round-trip JSON primitives, an array/object literal argument
+becomes `undefined`; network instrumentation covers only document + script
+fetches.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` + `amazing-
+devtools` crate nextest combined 383/383 (0 failed) + both crates' doctests
+green; workspace nextest 3051 passed, 0 failed, 13 skipped; all workspace
+doctests passed (amazing-js, amazing-html, amazing-a11y, amazing-devtools).
+Committed as `528d2e03`. No cross-lane seam needed.
+
+Boundary candidates for a future ticket: per-argument `RemoteObject`s for
+console calls (needs an engine-side change to `native_log` to stop joining
+arguments before the driver sees them — a js-runtime-owned seam);
+`ownProperties=false` vs `true`; stylesheet/image `Network.*` events;
+`Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-19 — DOM.getBoxModel/getContentQuads and Overlay highlight — done
+
+Coordinator's ticket named `DOM.getDocument`, `querySelector`,
+`getOuterHTML`, `DOM.setAttributeValue` and `CSS.getComputedStyleForNode` —
+all five were already implemented in CDP-16/17. This ticket's actual delta,
+confirmed by grepping the driver for zero hits on "highlight"/"Overlay"
+before starting, was `DOM.getBoxModel`/`getContentQuads` and every
+`Overlay.*` highlight method — both already fully dispatch-wired in
+`amazing-devtools` from an earlier generic-protocol ticket (`domains/dom.rs`,
+`domains/overlay.rs`), defaulting to `Unsupported`/`Ok(())` since the driver
+never implemented them. Pure driver-side work; no `amazing-devtools` change
+needed.
+
+- **`DOM.getBoxModel`**: a new `find_box_for_node` walks the same fallback
+  layout tree `hit_test_node`/`full_ax_tree` already use (style compute +
+  `amazing_layout::layout_styled_document` with `FallbackTextSystem`/
+  `NoReplacedElements`), matching by node identity (`LayoutBox::node ==
+  Some(target)`) instead of by point — mirrors `hit_test`'s traversal order
+  (checks `positioned` descendants first) but doesn't need paint-order
+  tie-breaking since only one node can match. A new `box_model_from`
+  converts the found box into a CDP `BoxModel`: `border_box`/`content_box`
+  are already resolved by layout; the padding box is the border box inset
+  by the box's own resolved `border` (thickness) `Sides`; the margin box is
+  the border box outset by `margin` (`SidesM::unwrap_or(0.0)` — an
+  unresolved auto margin reports as `0`, the same simplification this file
+  already uses elsewhere).
+- **`DOM.getContentQuads`** wraps `get_box_model` in a one-element `Vec` —
+  the dispatch layer already extracts just `model.content` per node
+  (confirmed by reading `domains/dom.rs`'s existing `"DOM.getContentQuads"`
+  arm before writing this — it was already spec-correct: "content quads",
+  not border quads, matching real Chrome), so no per-line-box splitting was
+  needed to make the numbers agree; both share the same documented
+  `Flow::Inlines` gap `hit_test`/`find_box_for_node` already have.
+- **`Overlay.highlightNode`** validates the node resolves to real box
+  geometry by calling `get_box_model` and discarding the result, so an
+  unknown or box-less node (a `display: none` element, which produces no
+  `LayoutBox` at all) reports `HostError::NotFound` exactly as a real
+  highlight request against a non-existent target would fail.
+  `highlightRect`/`highlightQuad` now answer `Ok(())` directly from
+  `DriverPageSession` (no page-thread round trip — there's no engine state
+  to check arbitrary coordinates against, and real Chrome accepts any rect/
+  quad too, so this is not a shortcut around real validation, there simply
+  isn't any to do). `overlay_enabled`/`setInspectMode`/`hideHighlight` were
+  *already* answering `Ok(())` from the trait's own defaults, unnoticed
+  until this ticket read the actual default bodies closely — no override
+  needed. **No compositor overlay layer exists in this engine**, so none of
+  the four highlight methods paint anything; there is no pixel difference a
+  screenshot could prove, which is why `DOM.getBoxModel`'s real geometry is
+  the proof instead.
+- Proof — one end-to-end WebSocket CDP client test chaining the "already
+  done" DOM/CSS methods onto the new box-model/Overlay ones against a
+  single live node (`end_to_end_box_model_and_overlay_highlight_on_the_live_
+  page`): `getDocument` → `querySelector` → `getOuterHTML` (contains the
+  text) → `setAttributeValue` → `getOuterHTML` again (contains the new
+  attribute) → `getComputedStyleForNode` → `getBoxModel` (asserts the real
+  box-model arithmetic: a 100×50 content box with 2px padding + 5px border
+  on every side reports a 114×64 border box, and a further 3px margin
+  reports a 120-wide margin box — pure box-model math, independent of where
+  the absolutely-positioned element actually landed on the page) →
+  `getContentQuads` (one 100-wide content quad) → `highlightNode` (succeeds)
+  → `hideHighlight` → `highlightNode` on a `display: none` sibling (a real
+  CDP error, checked with a new `Client::raw` helper that returns the whole
+  reply instead of assuming success, since `result()`/`result_and_events()`
+  both panic on an `"error"` reply by design).
+- A real bug the test caught mid-write: the first draft of the test asserted
+  `getContentQuads` returned the *border*-box quad (114 wide); it actually
+  returns the *content*-box quad (100 wide) — not a driver bug, a
+  misreading of `domains/dom.rs`'s already-existing, already-correct
+  dispatch code (which literally is named "content quads"). Fixed the test,
+  not the driver.
+
+Known limitations, newly documented: no compositor overlay layer exists, so
+`Overlay.*` highlighting is validate-only with no visual effect;
+`getBoxModel`/`getContentQuads`/`highlightNode` share `hit_test`'s
+`Flow::Inlines` gap (a node that only contributes to an inline line box is
+not found); an unresolved auto margin reports as `0` in the margin box.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): `amazing` + `amazing-
+devtools` crate nextest combined 387/387 (0 failed) + both crates' doctests
+green; workspace nextest 3113 passed, 0 failed, 13 skipped; all workspace
+doctests passed. Committed as `4f01de21`. No cross-lane seam needed.
+
+Boundary candidates for a future ticket: a real compositor overlay layer to
+actually paint highlights (would need the `compositor` lane); per-line-box
+`getContentQuads` for inline content; per-argument `RemoteObject`s for
+console calls; `ownProperties=false` vs `true`; stylesheet/image
+`Network.*` events; `Debugger.*` stepping/breakpoints (js-runtime).

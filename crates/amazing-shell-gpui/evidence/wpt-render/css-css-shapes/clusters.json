@@ -1,0 +1,191 @@
+{
+  "schema": 1,
+  "subdir": "css/css-shapes",
+  "mismatch_count": 94,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 15,
+      "examples": [
+        "css__css-shapes__shape-outside__assorted__float-retry-push-inset.html",
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-017.html",
+        "css__css-shapes__shape-outside__assorted__float-retry-push-polygon.html",
+        "css__css-shapes__shape-outside__assorted__float-retry-push-rect.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-padding-box-border-radius-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 14,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-041.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-038.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-037.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-004.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-042.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 10,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-007.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-048.html",
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-024.html",
+        "css__css-shapes__shape-outside__supported-shapes__polygon__shape-outside-polygon-024.html",
+        "css__css-shapes__shape-outside__supported-shapes__polygon__shape-outside-polygon-022.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 8,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-009.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-005.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-046.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-049.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 7,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-042.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-003.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-044.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-043.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-008.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less blue than reference",
+      "count": 7,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-022.html",
+        "css__css-shapes__shape-outside__supported-shapes__polygon__shape-outside-polygon-023.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-012.html",
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-027.html",
+        "css__css-shapes__shape-outside__supported-shapes__polygon__shape-outside-polygon-025.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 5,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-051.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-053.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-049.html",
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-023.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-051.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 4,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-033.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-035.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-033.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-035.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-032.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-034.html",
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-034.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-032.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-055.html",
+        "css__css-shapes__shape-outside__shape-image__gradients__shape-outside-linear-gradient-004.html",
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-054.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-padding-box-001.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-padding-box-002.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-content-box-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-006.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-005.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-007.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-001.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-margin-box-border-radius-002.html",
+        "css__css-shapes__shape-outside__shape-box__shape-outside-border-box-border-radius-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 2,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-021.html",
+        "css__css-shapes__shape-outside__supported-shapes__inset__shape-outside-inset-020.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shapes__shape-outside__shape-box__shape-outside-content-box-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shapes__shape-outside__assorted__float-retry-push-image.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__ellipse__shape-outside-ellipse-047.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shapes__shape-outside__supported-shapes__circle__shape-outside-circle-048.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shapes__shape-outside__values__shape-outside-inset-0010.html"
+      ]
+    }
+  ]
+}

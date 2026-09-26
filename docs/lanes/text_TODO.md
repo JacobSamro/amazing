@@ -625,3 +625,172 @@ these are the first *meaningful* Linux numbers for it. Evidence:
 Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
 skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
 workspace doctests green (`--locked --doc`).
+
+## TEXT-19: web font decode short-read root cause, TTC support, fontconfig-driven Linux font scan
+
+Coordinator ask (after TEXT-17/18 merged as `2cce98d0`): reproduce and fix the
+WOFF2/sfnt decode short-read integrator-assist filed in
+`.agents/text/questions.md` (`font-face "<family>": Io(Error { kind:
+UnexpectedEof, message: "failed to fill whole buffer" })`, 73 occurrences,
+`crates/amazing/src/page.rs:129`), widen the Linux font scan to cover
+fontconfig's configured directories plus `~/.local/share/fonts` and
+`/usr/local/share/fonts`, and handle `.ttc` collections.
+
+**Root cause finding: this was never a decoder bug.** Traced every enum in
+the fetch-to-registration chain: `TextError` (5 unit variants),
+`amazing_fetch::api::ApiError`/`FetchError` (no `Io` variant) cannot produce
+an `Io(...)` Debug string; `amazing_net::NetError::Io(std::io::Error)` is the
+only match, and `amazing-net/src/http.rs` already has a passing test
+(`short_content_length_body_is_an_error_not_a_truncation`) proving this is
+intentional: a server that closes its connection before delivering all
+`Content-Length`-promised bytes correctly raises `Io(UnexpectedEof)`.
+Confirmed empirically that `decode_web_font_to_sfnt` already fails closed
+(never panics, never accepts a short buffer) against 3 real downloaded fonts
+truncated at every cut point. Routed the finding to net in
+`.agents/net/questions.md` rather than filing a text-owned fix for a
+net-layer behavior; added regression tests anyway to pin the decoder's
+existing fail-closed behavior against real fixtures going forward
+(`truncated_woff2_fails_closed_at_every_cut_point_never_panics` and the
+pinned `pinned_wpt_woff2_fails_closed_at_every_truncation_cut`, which sweeps
+every truncation cut of `fonts/noto/NotoNaskhArabic-regular.woff2`).
+
+**TTC (`.ttc`) collection support.** `read-fonts`/`harfrust`'s
+`FontRef::from_index(bytes, index)` and swash's `FontRef::from_index` already
+natively support both plain sfnt data and TTC collections (swash call sites
+were already using `from_index(_, 0)` everywhere); the engine-side gap was
+`amazing-text-provider`'s own format sniffing and structural validation.
+Added `FontFormat::Collection` (sniffed from the `ttcf` magic), a
+`ttc_font_directory_offset` helper that walks the TTC header's offset table
+(bounded by `MAX_TTC_FONTS = 64` against a hostile `numFonts`) to locate font
+0's own sfnt table directory, generalized `validate_font_structure` to
+validate at that offset instead of assuming offset 0, and switched the two
+`HarfFontRef::new` shaping/registration call sites to `HarfFontRef::from_index(_,
+0)`. No changes to the public `WebFont`/`FontRecord` structs or their ~46
+call sites — index 0 is the only sub-font the system-font scanner or any
+current caller needs. New tests: `ttc_collection_registers_shapes_and_rasterizes_its_first_font`,
+`truncated_ttc_fails_closed_never_panics`.
+
+**Fontconfig-driven Linux font directory scan.** `linux_font_roots()` in
+`crates/amazing/src/font_loader.rs` now reads real `<dir>` elements out of
+`/etc/fonts/fonts.conf` and `/etc/fonts/conf.d/*.conf` (a small hand-rolled
+tag scanner in the same style as this file's existing `import_urls` CSS
+`@import` scanner, not a new XML dependency), resolving `prefix="xdg"` against
+`$XDG_DATA_HOME` (falling back to `~/.local/share`, XDG's own default) and a
+leading `~` against `$HOME`, with XML comments stripped first so a
+commented-out `<dir>` (fontconfig ships one for the deprecated `~/.fonts`)
+is never picked up. This runs *before* the existing hardcoded
+`/usr/share/fonts`, `/usr/local/share/fonts`, `~/.fonts`, and
+`~/.local/share/fonts` defaults, which stay as a supplement/fallback
+deduplicated against whatever fontconfig already found, so the scan degrades
+gracefully with no fontconfig config present at all. New tests:
+`fontconfig_dir_elements_cover_plain_xdg_and_tilde_forms`,
+`fontconfig_xdg_dir_prefers_xdg_data_home_over_the_default`,
+`fontconfig_tilde_dir_expands_against_home`, `fontconfig_plain_dir_is_used_verbatim`,
+`fontconfig_dir_scan_never_panics_on_truncated_markup`,
+`fontconfig_comments_are_stripped_including_unterminated`.
+
+Gate: `amazing`/`amazing-text-provider` crate nextest 348/348 (8 skipped,
+Boat sandbox `bx_cp5jbn5z`). Final gate: workspace nextest **3035/3035
+passed, 13 skipped** (`--locked --no-fail-fast`), workspace doctests green
+(4 doctests: `amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js`, each 1 passed). Commit: see `.agents/text/status.json`.
+
+## TEXT-20: fix css-fonts/writing-modes mismatches by cluster, widen the Linux selection
+
+Coordinator ask: fix the 7 css-fonts/writing-modes mismatches TEXT-18 found on Linux, by
+cluster, and widen the pinned css-fonts selection now that WPT runs on Linux.
+
+**Cluster 1 (largest, fixed): `slnt` axis sign inversion.** All 4 `css-fonts/matching/*`
+tests use `@font-face { font-style: oblique <min>deg <max>deg }` ranges on a variable
+test font (`variabletest_matching.ttf`) whose `slnt` axis renders a distinct "bar chart"
+glyph per exact coordinate. `font_variations::for_face`
+(`crates/amazing-text-provider/src/font_variations.rs`) was feeding the CSS-space
+clamped oblique angle straight into the `slnt` variation coordinate. Per CSS Fonts 4
+section 6.3 (and the `font-variation-settings` note in 7.2), confirmed against the
+spec source (`csswg-drafts/css-fonts-4/Overview.bs`): "the OpenType slnt axis is
+defined with a positive angle meaning a counter-clockwise slant, the opposite
+direction to CSS" -- the coordinate fed to the font must be negated; the CSS-space
+value is only used (unnegated) for the section-5.2 face-selection distance math
+against the descriptor's own CSS-degree range. Fixed by negating just the final
+axis value: `value: -requested_oblique_angle(style).clamp(min_degrees, max_degrees)`.
+Verified against the WPT test suite's own README
+(`css/css-fonts/matching/README.md`), which documents the exact bar-length/axis-value
+table used to derive each reference glyph -- traced one case (`fixed-stretch-style-over-weight`
+span 5: oblique 0deg request, face B range 45..67.5deg) through the table by hand and
+confirmed the fix produces the documented reference glyph ("y", "x", "4").
+
+Result: `css-fonts__matching__range-descriptor-reversed.html` now passes exactly
+(byte-identical PPM). The other three matching tests
+(`fixed-stretch-style-over-weight`, `stretch-distance-over-weight-distance`,
+`style-ranges-over-weight-direction`) improved substantially (differing pixels
+dropped from 13481/12324/17281 to 5285/4260/5605 respectively) but still mismatch.
+Pixel-diff analysis (`crates/amazing-text-provider/evidence/text20-text2-font-face-manifest-linux.json`)
+shows the remaining difference is confined to spans where the *second* `@font-face`
+candidate wins (face selection and the resolved `wght`/`wdth`/`slnt` coordinates were
+independently verified correct against the WPT README's table by hand for one such
+span), with the composite "MNOP" bar-chart glyph rendering at a different vertical
+scale/position than the reference's literal static glyphs for those spans only --
+consistent with a subtler swash/harfrust variable-font interpolation discrepancy
+for a specific coordinate combination, not a face-selection or axis-value bug. Not
+resolved this ticket; needs a focused swash/harfrust-level repro. `text2-font-face`:
+4 pass / 4 mismatch -> **5 pass / 3 mismatch**.
+
+**Cluster 2 (routed, unchanged): `text5-vertical`'s 2 mismatches.**
+`css-writing-modes__writing-mode-vertical-lr-002.xht` tests block-flow character
+positioning inside a `vertical-lr` box (line wrapping/positions), which is a layout
+box-geometry concern outside text-provider's shaping/glyph-orientation code --
+confirmed still layout-owned per the existing TEXT-7..13 routing.
+`css-writing-modes__direction-upright-001.html` tests that `text-orientation: upright`
+forces strong-LTR bidi specifically on `<span>`-scoped sub-runs nested inside a
+`dir=rtl` vertical block, while the surrounding (non-upright) text stays normally
+bidi-reordered; `amazing-text-provider` already forces LTR for an upright *paragraph*
+(`upright_vertical_text_forces_left_to_right_bidi_direction`), but the WPT case's
+span-scoped nesting still mismatches. Diagnosed but not fixed this ticket (budget);
+carried forward as the next `text5-vertical` item.
+`text5-vertical`: 5 pass / 2 mismatch, unchanged from TEXT-18.
+
+**Widening deferred.** Given the above two clusters consumed the ticket's budget,
+did not widen the pinned selection this round; carrying that forward as the next
+`text` lane item alongside `direction-upright-001`.
+
+Gate: crate nextest `amazing-text-provider` 80/80 (2 skipped). Final gate: workspace
+nextest and doctests (see status.json for the exact numbers/SHA).
+
+## TEXT-21: standard/system-UI generic font families (largest css-fonts cluster)
+
+Coordinator ask: fix the largest remaining css-fonts mismatch cluster in bulk using
+`scripts/linux-render-wpt.sh text css/css-fonts` against the baseline in
+`crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json` (18 pass / 14 mismatch,
+32 selected self-contained reftests), plus the span-scoped upright-bidi item.
+
+**Cluster fixed: CSS Fonts 4 standard/system-UI generic families
+(`ui-serif`/`ui-sans-serif`/`ui-monospace`/`ui-rounded`) were never registered.**
+7 of the 8 `standard-font-family-*` mismatches (largest cluster) were `rel=mismatch`
+reftests asserting these keyword families render *differently* from the
+unstyled default -- they were rendering byte-identical because
+`register_linux_system_faces`/`local_font_path` (`crates/amazing/src/font_loader.rs`)
+only registered `serif`/`sans-serif`/`system-ui`/`monospace`, so a page requesting
+`font: 72px 'ui-serif'` (a generic keyword even though quoted, per spec) fell
+through to the engine's undifferentiated last-resort default -- identical to
+having no `font-family` at all. Registered all four `ui-*` names to the same
+sans/serif/mono buckets as their non-`ui-` counterparts (`ui-rounded` rides
+with sans -- Linux has no distinct rounded system design, matching other
+engines' non-Apple fallback), in both `register_linux_system_faces` and
+`local_font_path`, plus the analogous Windows aliases in
+`crates/amazing/src/page.rs`'s `register_system_text_faces` (untested this
+ticket -- win-001 gates are deferred).
+
+`standard-font-family-11` ("ui-serif works", no bold/no font-synthesis
+override) still mismatches: this sandbox has only one registered serif font
+file, so `ui-serif` and the plain default both resolve to the exact same face
+-- an environment font-availability limit, not a code bug, the same class of
+gap as the already-routed `font-unicode-PUA-primary-font` case.
+
+**Not chased this ticket** (budget): `font-size-adjust-zero-1/2`,
+`font-size-adjust-order-001` (a `font-size-adjust: 0` interaction, possibly
+line-height/metrics related), `rlh-in-monospace` (root em / `rlh` unit
+sizing), `font-variant-emoji-1`. Flagged for the next `css-fonts` pass.
+
+Updated baseline: `crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json`,
+**18 pass / 14 mismatch -> 25 pass / 7 mismatch** (32 selected). Crate gate:
+`amazing`/`amazing-text-provider` nextest 357/357 (8 skipped).

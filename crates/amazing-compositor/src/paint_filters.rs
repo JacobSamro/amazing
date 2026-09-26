@@ -24,6 +24,10 @@ pub struct PaintFilterInput {
     /// RC-27's resolved `clip-path` basic-shape mask (`inset`/`circle`/
     /// `ellipse`), converted to the retained `EffectClip` representation.
     pub clip_path: Option<EffectClip>,
+    /// COMP-16: the group's own resolved CSS `transform`, when it can be
+    /// composited by a single inverse-mapped sample of its local surface
+    /// (see `EffectOperations::local_transform`).
+    pub local_transform: Option<Matrix4>,
 }
 
 /// Implemented by the producer adapter once computed lengths, resources,
@@ -60,6 +64,7 @@ pub fn paint_view_metadata_with_filters(
         operations.backdrop_filters = input.backdrop_filters.clone();
         operations.backdrop_bounds = input.backdrop_bounds;
         operations.clip_path = input.clip_path.clone();
+        operations.local_transform = input.local_transform;
         let node = &view.effects()[input.effect.0];
         if node.filter.ops().map(import_filter).collect::<Vec<_>>() == input.filters
             && node.backdrop_filter.ops().map(import_filter).collect::<Vec<_>>() == input.backdrop_filters
@@ -79,23 +84,90 @@ impl PaintFilterSource for PainterFilterSource {
     fn filter_inputs(&self) -> &[PaintFilterInput] { &self.0 }
 }
 impl PainterFilterSource {
+    /// A qualifying group is one whose own filter, backdrop-filter or
+    /// clip-path needs the local-space treatment `composite_group` gives it.
+    fn qualifies(node: &amazing_paint::display_list_view::EffectNode) -> bool {
+        !node.filter.is_empty() || !node.backdrop_filter.is_empty() || node.clip.is_some()
+    }
+    /// The closest ancestor (inclusive) of `id` that qualifies, or 0 (the
+    /// root, which never qualifies) when none does.
+    fn closest_qualifying(
+        effects: &[amazing_paint::display_list_view::EffectNode],
+        id: usize,
+        cache: &mut std::collections::HashMap<usize, usize>,
+    ) -> usize {
+        if id == 0 {
+            return 0;
+        }
+        if let Some(&hit) = cache.get(&id) {
+            return hit;
+        }
+        let result = if Self::qualifies(&effects[id]) {
+            id
+        } else {
+            Self::closest_qualifying(effects, effects[id].parent as usize, cache)
+        };
+        cache.insert(id, result);
+        result
+    }
     pub fn from_view(view: &DisplayListView<'_>) -> Result<Self, SceneError> {
-        let has_filters = view.effects().iter().any(|n|
-            !n.filter.is_empty() || !n.backdrop_filter.is_empty());
-        let has_clip = view.effects().iter().any(|n| n.clip.is_some());
-        // Painter filters and clip masks both execute on the group's local,
-        // pre-transform surface (see `composite_group`'s inverse-mapped mask
-        // test); retained filters/clip currently apply in the same identity-
-        // space `DrawQuad::Pass` stage. Preserve correctness via full paint
-        // whenever any transform in the view is not identity, rather than
-        // reasoning per-ancestor about which effect it actually affects.
-        if (has_filters || has_clip) && view.transforms().iter().any(|n|
-            n.matrix != [1., 0., 0., 1., 0., 0.])
-        {
-            return Err(SceneError::InvalidState);
+        let effects = view.effects();
+        let transforms = view.transforms();
+        // Filters and clip masks both execute on a group's local,
+        // pre-transform surface, then get transform-sampled once into their
+        // parent (see `composite_group`). Reject nesting between any two
+        // qualifying (filter/backdrop/clip) groups up front: composing two
+        // local surfaces this way needs conjugating one matrix through the
+        // other, not the single inverse-mapped sample below.
+        for (_index, node) in effects.iter().enumerate().skip(1) {
+            if !Self::qualifies(node) {
+                continue;
+            }
+            let mut ancestor = node.parent as usize;
+            while ancestor != 0 {
+                if Self::qualifies(&effects[ancestor]) {
+                    return Err(SceneError::InvalidState);
+                }
+                ancestor = effects[ancestor].parent as usize;
+            }
+        }
+        // A qualifying group's own transform is the one id common to every
+        // item whose closest qualifying ancestor is that group (the nesting
+        // check above makes "closest" also "only qualifying ancestor").
+        // More than one distinct id inside one group's own subtree -- a
+        // further, different transform nested inside it -- cannot be
+        // composited by a single sample either.
+        let mut closest_cache = std::collections::HashMap::new();
+        let mut group_transform: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+        for item in view.items() {
+            let e = Self::closest_qualifying(effects, item.properties.effect as usize, &mut closest_cache);
+            if e == 0 {
+                continue;
+            }
+            match group_transform.entry(e) {
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(item.properties.transform);
+                }
+                std::collections::hash_map::Entry::Occupied(slot) => {
+                    if *slot.get() != item.properties.transform {
+                        return Err(SceneError::InvalidState);
+                    }
+                }
+            }
+        }
+        // The group's transform (if any) sits directly under the identity
+        // root: one under an ancestor transform would need conjugating the
+        // group's matrix through that ancestor rather than a single
+        // inverse-mapped sample (a plain ancestor transform with no filter
+        // of its own reaches this check too; the nesting rejection above
+        // only covers a *qualifying* ancestor).
+        for &t in group_transform.values() {
+            if t != 0 && transforms[t as usize].parent != 0 {
+                return Err(SceneError::InvalidState);
+            }
         }
         let mut inputs = Vec::new();
-        for (index, node) in view.effects().iter().enumerate().skip(1) {
+        for (index, node) in effects.iter().enumerate().skip(1) {
             if node.filter.is_empty() && node.backdrop_filter.is_empty() && node.clip.is_none() {
                 continue;
             }
@@ -104,19 +176,48 @@ impl PainterFilterSource {
                 Some(mask) => Some(import_clip(mask).ok_or(SceneError::InvalidState)?),
                 None => None,
             };
+            let local_transform = match group_transform.get(&index).copied() {
+                Some(t) if t != 0 => {
+                    let [a, b, c, d, e, f] = transforms[t as usize].matrix;
+                    let m = Matrix4::affine(a, b, c, d, e, f);
+                    if m.unmap(0.5, 0.5).is_none() {
+                        return Err(SceneError::InvalidState);
+                    }
+                    Some(m)
+                }
+                _ => None,
+            };
+            let filters: Vec<_> = node.filter.ops().map(import_filter).collect();
+            let backdrop_filters: Vec<_> = node.backdrop_filter.ops().map(import_filter).collect();
+            // A blurring filter or backdrop-filter reads neighboring source
+            // pixels outward by its outset; under a `local_transform` that
+            // read must itself be transform-sampled (as `composite_group`
+            // does), which this compositor does not do yet. Zero-outset
+            // filters (invert, brightness, ...) and `clip_path` are exact
+            // per-pixel tests with no such neighbor read, so they are fine.
+            if local_transform.is_some() {
+                let has_outset = |ops: &[FilterOperation]| {
+                    EffectOperations { filters: ops.to_vec(), ..Default::default() }.outset() > 0.
+                };
+                if has_outset(&filters) || has_outset(&backdrop_filters) {
+                    return Err(SceneError::InvalidState);
+                }
+            }
             let input = PaintFilterInput {
                 effect: EffectId(index), space: PaintFilterSpace::Raster,
-                filters: node.filter.ops().map(import_filter).collect(),
-                backdrop_filters: node.backdrop_filter.ops().map(import_filter).collect(),
+                filters,
+                backdrop_filters,
                 backdrop_bounds: (!node.backdrop_filter.is_empty()).then_some(
                     Rect::new(bounds.x, bounds.y, bounds.width, bounds.height)),
                 clip_path,
+                local_transform,
             };
             EffectOperations {
                 filters: input.filters.clone(),
                 backdrop_filters: input.backdrop_filters.clone(),
                 backdrop_bounds: input.backdrop_bounds,
                 clip_path: input.clip_path.clone(),
+                local_transform: input.local_transform,
                 ..Default::default()
             }.validate().map_err(|_| SceneError::InvalidState)?;
             inputs.push(input);
@@ -137,32 +238,23 @@ impl PainterFilterSource {
 /// `(rx, ry)` pair is always equal; a mismatch there is defensive and falls
 /// back rather than guessing.
 pub(crate) fn import_clip(mask: amazing_paint::clip::ClipMask) -> Option<EffectClip> {
-    match mask {
-        amazing_paint::clip::ClipMask::Rect { x, y, width, height, radii } => {
-            let (rx, ry) = radii[0];
-            if radii.iter().all(|r| *r == (rx, ry)) && rx > 0. && ry > 0.
-                && width == rx * 2. && height == ry * 2.
-            {
-                return Some(EffectClip::Ellipse { center: (x + rx, y + ry), radii: (rx, ry) });
-            }
-            if radii.iter().any(|(rx, ry)| rx != ry) {
-                return None;
-            }
-            Some(EffectClip::Inset {
-                rect: Rect::new(x, y, width, height),
-                radii: [radii[0].0, radii[1].0, radii[2].0, radii[3].0],
-            })
-        }
-        // `polygon()`/a straight-edged `path()`: the painter's mask is
-        // already a closed vertex loop plus winding rule, which maps
-        // directly onto this retained type's own `Polygon` variant.
-        amazing_paint::clip::ClipMask::Polygon { points, len, even_odd } => {
-            Some(EffectClip::Polygon {
-                points: points[..len as usize].to_vec(),
-                rule: if even_odd { FillRule::EvenOdd } else { FillRule::NonZero },
-            })
-        }
+    // A polygon mask has no effect-clip counterpart yet; the caller repaints it.
+    let amazing_paint::clip::ClipMask::Rect { x, y, width, height, radii } = mask else {
+        return None;
+    };
+    let (rx, ry) = radii[0];
+    if radii.iter().all(|r| *r == (rx, ry)) && rx > 0. && ry > 0.
+        && width == rx * 2. && height == ry * 2.
+    {
+        return Some(EffectClip::Ellipse { center: (x + rx, y + ry), radii: (rx, ry) });
     }
+    if radii.iter().any(|(rx, ry)| rx != ry) {
+        return None;
+    }
+    Some(EffectClip::Inset {
+        rect: Rect::new(x, y, width, height),
+        radii: [radii[0].0, radii[1].0, radii[2].0, radii[3].0],
+    })
 }
 pub(crate) fn import_filter(op: amazing_paint::filter::FilterOp) -> FilterOperation {
     use amazing_paint::filter::FilterOp as P;

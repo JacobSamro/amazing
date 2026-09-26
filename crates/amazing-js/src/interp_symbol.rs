@@ -129,6 +129,11 @@ fn native_array_iterator_entries(i: &mut Interpreter, this: JsValue, _: Vec<JsVa
     Ok(i.sequence_iterator(this, SequenceIteratorKind::ArrayEntries))
 }
 fn native_string_iterator(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    // Spec requires RequireObjectCoercible(this) before ToString; a bare
+    // ToString would coerce null/undefined to "null"/"undefined" instead.
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("String iterator receiver is null or undefined"));
+    }
     let value = i.to_js_string(&this)?;
     Ok(i.sequence_iterator(JsValue::Str(value), SequenceIteratorKind::String))
 }

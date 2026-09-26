@@ -490,6 +490,16 @@ fn parse_item_align(v: Option<&str>) -> ItemAlign {
         Some(v) if v.eq_ignore_ascii_case("end") || v.eq_ignore_ascii_case("flex-end") => {
             ItemAlign::End
         }
+        // `self-start`/`self-end` properly resolve against the *item's own*
+        // writing mode/direction, which this container-level keyword parser
+        // (shared by justify-items/align-items and by `-self` overrides, none
+        // of which carry a per-item direction here) doesn't have; falling
+        // back to plain start/end covers the common case where the item's
+        // direction matches its container's, and is still strictly more
+        // correct than the previous default of `Stretch` (which silently
+        // discarded the keyword and re-filled the grid area).
+        Some(v) if v.eq_ignore_ascii_case("self-start") => ItemAlign::Start,
+        Some(v) if v.eq_ignore_ascii_case("self-end") => ItemAlign::End,
         Some(v) if v.eq_ignore_ascii_case("center") => ItemAlign::Center,
         _ => ItemAlign::Stretch,
     }

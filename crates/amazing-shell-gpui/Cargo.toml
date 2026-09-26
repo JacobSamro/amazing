@@ -7,6 +7,7 @@ license = "MIT"
 rust-version = "1.89"
 
 [dependencies]
+amazing-a11y = { path = "../amazing-a11y" }
 amazing-css = { path = "../amazing-css" }
 amazing-compositor = { path = "../amazing-compositor" }
 amazing-dom = { path = "../amazing-dom" }
@@ -49,6 +50,11 @@ path = "src/compositor_presenter.rs"
 [[bin]]
 name = "amazing-compositor-proof"
 path = "src/bin/compositor_proof.rs"
+test = false
+
+[[bin]]
+name = "amazing-a11y-proof"
+path = "src/bin/a11y_proof.rs"
 test = false
 
 [profile.release]

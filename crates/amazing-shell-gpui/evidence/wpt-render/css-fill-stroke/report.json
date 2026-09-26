@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/fill-stroke",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:31:09Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-fill-stroke/run-20260926T163107Z-117855",
+  "inventory": {
+    "document_files": 6,
+    "testharness_files": 4,
+    "reftests": 1,
+    "eligible_static_self_contained": 1,
+    "selected": 1,
+    "excluded": {
+      "not-reftest": 5
+    }
+  },
+  "counts": {
+    "pass": 0,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css__fill-stroke__paint-order-001.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/paint-order-001-ref.html",
+      "differing_pixels": 81944,
+      "max_difference": 255,
+      "allowed_max_difference": 1,
+      "allowed_differing_pixels": 5,
+      "actual_sha256": "ec91dbfec7760a2f98ea18d29482f66b7ad6462a7b446bab5d84305e09e8b3b1",
+      "reference_sha256": "5444e70c845b527ed61d137da414925dccf4b29c4613a069f2bdd977aed80c23",
+      "diff_sha256": "d7029261a9a4dbb8a4782fc3f4f5aa19bf5d9cdc37eacf960b58897472bb0fa6",
+      "detail": "maxDifference=255/1; totalPixels=81944/5"
+    }
+  ]
+}

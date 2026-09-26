@@ -15,8 +15,10 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 
 RAW = "https://raw.githubusercontent.com/web-platform-tests/wpt/{revision}/{path}"
@@ -163,6 +165,11 @@ def main():
     parser.add_argument("--width", type=int, default=800)
     parser.add_argument("--height", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=20)
+    parser.add_argument("--keep-passing-images", action="store_true",
+                         help="keep actual/reference PPMs for passing cases too "
+                              "(default: only mismatch renders are kept under --output; "
+                              "everything else lives in a scratch tempdir that is removed "
+                              "at exit, per the 2026-09-26 sandbox disk-hygiene incident)")
     args = parser.parse_args()
 
     with open(args.manifest, encoding="utf-8-sig") as handle:
@@ -170,6 +177,7 @@ def main():
     revision = manifest["revision"]
     os.makedirs(args.output, exist_ok=True)
     os.makedirs(args.wpt_root, exist_ok=True)
+    scratch_root = tempfile.mkdtemp(prefix="lfg-render-")
 
     results = []
     counts = {"pass": 0, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}
@@ -177,7 +185,11 @@ def main():
     for case in manifest["tests"]:
         case_id = case["id"]
         test_rel = case["test"]
-        case_dir = os.path.join(args.output, re.sub(r"[^A-Za-z0-9_.-]", "_", case_id))
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", case_id)
+        # Render into scratch; only mismatches get copied into the persistent
+        # --output tree below, so a big sweep never leaves gigabytes of
+        # passing-case PPMs behind on a shared, disk-constrained sandbox.
+        case_dir = os.path.join(scratch_root, safe_id)
         os.makedirs(case_dir, exist_ok=True)
         try:
             test_path = fetch(test_rel, revision, args.wpt_root)
@@ -227,6 +239,19 @@ def main():
             "detail": compare_detail,
         })
         print(f"{classification.upper():9s} {case_id} ({compare_detail})", flush=True)
+        if classification == "mismatch" or args.keep_passing_images:
+            kept_dir = os.path.join(args.output, safe_id)
+            if os.path.isdir(kept_dir):
+                shutil.rmtree(kept_dir)
+            shutil.copytree(case_dir, kept_dir)
+            # `reference.ppm` may live under an earlier case's scratch dir
+            # (shared references render once, via `ref_cache`); make sure a
+            # kept mismatch still carries its own copy for inspection.
+            kept_ref = os.path.join(kept_dir, "reference.ppm")
+            if os.path.abspath(ref_output) != os.path.abspath(kept_ref):
+                shutil.copyfile(ref_output, kept_ref)
+
+    shutil.rmtree(scratch_root, ignore_errors=True)
 
     report = {
         "schema": 1, "wpt_revision": revision, "manifest": args.manifest,

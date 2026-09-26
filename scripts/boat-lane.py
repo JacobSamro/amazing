@@ -56,11 +56,14 @@ POOLS = {
     "pool-js-b": ["js-lang"],
     "pool-js-date": ["js-date"],  # split 2026-09-26: 57% busy, 24% overlap with js-lang
     "pool-js-lib": ["js-binary", "js-stdlib", "js-intl"],
-    "pool-dom": ["dom-bindings", "html", "integrator-assist"],
+    "pool-dom": ["dom-bindings", "html"],
     "pool-layout": ["layout", "layout-flexgrid", "css", "text"],
     "pool-paint": ["replaced-content", "compositor"],
     "pool-sys": ["net", "ipc", "storage"],
     "pool-new": ["wasm", "a11y", "devtools"],
+    # integrator-assist left pool-dom (disk full) then pool-new (75% busy, 28% overlap)
+    # on 2026-09-26; it builds the whole `amazing` crate, so it gets its own sandbox.
+    "pool-ia": ["integrator-assist"],
     "pool-desktop": ["shell"],
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
@@ -76,8 +79,27 @@ POOL_TYPE = {
 }
 
 
+# Large is only worth its 2x rate on bare metal. A large resume that lands on
+# Hetzner (8 slower cores) is dropped back to default for a while, which has
+# landed on bare metal every time (2026-09-26). The reaper reads the same rule.
+DOWNSIZED = MAIN / ".agents" / ".boat-downsized.json"
+DOWNSIZE_HOURS = 6
+
+
+def downsized() -> dict:
+    try:
+        d = json.loads(DOWNSIZED.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in d.items() if v > time.time()}
+
+
+def pool_type(pool: str) -> str:
+    return "default" if pool in downsized() else POOL_TYPE.get(pool, "default")
+
+
 def type_of(lane: str) -> str:
-    return POOL_TYPE.get(pool_of(lane), "default")
+    return pool_type(pool_of(lane))
 
 
 def pool_of(lane: str) -> str:
@@ -97,7 +119,31 @@ def target_of(lane: str) -> str:
 STOPPED = {"archived", "stopped"}
 
 
+# Only sandboxes named "amazing*" (the template's own name) belong to this fleet.
+# Everything else on the account is the user's and is never stopped, resized or
+# deleted from here (2026-09-26).
+MUTATING = {"stop", "resume", "delete", "exec"}
+
+
 def boat(*args: str, timeout: int = 180) -> dict:
+    if args and args[0] in MUTATING and len(args) > 1 and args[1].startswith("bx_"):
+        name = _name_of(args[1])
+        if not name.startswith("amazing"):
+            raise SystemExit(f"boat-lane: refusing `boat {args[0]}` on {args[1]} ({name!r}): not an amazing sandbox")
+    return _boat(*args, timeout=timeout)
+
+
+_NAMES: dict[str, str] = {}
+
+
+def _name_of(sid: str) -> str:
+    if sid not in _NAMES:
+        d = _boat("info", sid)
+        _NAMES[sid] = d.get("sandbox", d).get("name", "") or ""
+    return _NAMES[sid]
+
+
+def _boat(*args: str, timeout: int = 180) -> dict:
     out = subprocess.run(
         [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
     ).stdout
@@ -191,7 +237,34 @@ def ensure(lane: str, size: str) -> dict:
     with open(MAP.with_suffix(".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         sid = _ensure_locked(pool_of(lane), size)
-    return wait_ready(sid)
+    d = wait_ready(sid)
+    if d.get("type") == "large" and d.get("machineProvider") == "hetzner" and not busy(d):
+        pool = pool_of(lane)
+        print(f"boat-lane: {sid} came up large on Hetzner; using default for "
+              f"{DOWNSIZE_HOURS} h", file=sys.stderr)
+        marks = downsized()
+        marks[pool] = time.time() + DOWNSIZE_HOURS * 3600
+        DOWNSIZED.write_text(json.dumps(marks))
+        boat("stop", sid, timeout=240)
+        with open(MAP.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            _ensure_locked(pool, "default")
+        d = wait_ready(sid)
+    return d
+
+
+def busy(d: dict) -> bool:
+    """True if another run holds a lease on this sandbox (don't restart it)."""
+    host, port = d["sshEndpoint"].rsplit(":", 1)
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15", "-i", str(KEY), "-p", port,
+             f"user@{host}", "find ~/.amazing-busy -type f -mmin -60 | wc -l"],
+            capture_output=True, text=True, timeout=60)
+        return int(r.stdout.strip() or 0) > 0
+    except (subprocess.TimeoutExpired, ValueError):
+        return True
 
 
 def _ensure_locked(lane: str, size: str) -> str:

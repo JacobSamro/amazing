@@ -1219,6 +1219,18 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
     for segment in &mut b.table_decoration.borders {segment.rect=shift(segment.rect,dx,dy);}
     for hole in &mut b.table_decoration.background_holes {*hole=shift(*hole,dx,dy);}
     b.content_box = shift(b.content_box, dx, dy);
+    // `GridTracks` (kept for abspos children's static position / containing
+    // block, see `position.rs::grid_area_containing_block`) stores absolute
+    // physical track positions computed during this grid container's own
+    // layout. Any later shift of the box — float placement resolving its
+    // final x, a `position: relative` offset, a table/flex re-flow — moves
+    // `content_box` but previously left these positions behind, desyncing
+    // an abspos child's grid area from where its container actually ended
+    // up (e.g. every floated `.container` after the first one on a line).
+    if let Some(tracks) = &mut b.grid_tracks {
+        for x in &mut tracks.col_positions { *x += dx; }
+        for y in &mut tracks.row_positions { *y += dy; }
+    }
     for line in &mut b.lines {
         line.y_top += dy;
         line.baseline += dy;

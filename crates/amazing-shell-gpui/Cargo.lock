@@ -191,6 +191,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "amazing-a11y"
+version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-html",
+ "amazing-layout",
+ "amazing-text",
+]
+
+[[package]]
 name = "amazing-common"
 version = "0.0.1"
 
@@ -341,6 +352,7 @@ version = "0.0.1"
 name = "amazing-shell-gpui"
 version = "0.0.1"
 dependencies = [
+ "amazing-a11y",
  "amazing-compositor",
  "amazing-css",
  "amazing-dom",

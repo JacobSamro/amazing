@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "subdir": "css/compositing",
+  "mismatch_count": 16,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__compositing__mix-blend-mode__mix-blend-mode-blended-with-3D-transform.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-both-parent-and-blended-with-3D-transform.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-blended-element-with-transparent-pixels.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-overflowing-child-of-blended-element.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-parent-with-border-radius.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__compositing__mix-blend-mode__mix-blend-mode-overflowing-child.html",
+        "css__compositing__root-element-background-margin-opacity.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-root-element-group.html",
+        "css__compositing__mix-blend-mode__mix-blend-mode-plus-lighter-basic.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__compositing__mix-blend-mode__mix-blend-mode-sibling-with-3D-transform.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__compositing__mix-blend-mode__mix-blend-mode-filter.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__compositing__root-element-blend-mode.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__compositing__root-element-filter.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__compositing__mix-blend-mode__mix-blend-mode-stacking-context-001.html"
+      ]
+    }
+  ]
+}

@@ -141,6 +141,9 @@ impl SessionState {
             for item in self.dev.drain_console() {
                 events.push(domains::runtime::console_event(&item));
             }
+            for item in self.dev.drain_exceptions() {
+                events.push(domains::runtime::exception_thrown_event(&item));
+            }
         }
         if enabled.network {
             for item in self.dev.drain_network_requests() {
@@ -151,6 +154,9 @@ impl SessionState {
             }
             for item in self.dev.drain_network_finished() {
                 events.push(domains::network::finished_event(&item));
+            }
+            for item in self.dev.drain_network_failed() {
+                events.push(domains::network::failed_event(&item));
             }
         }
         if enabled.log {

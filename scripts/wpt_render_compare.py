@@ -15,15 +15,30 @@ Stdlib only, matching the engine's own zero-dependency policy. Python and
 Rust are both acceptable per the ticket; Python was chosen so lanes can run
 this without an extra crate/build step.
 
+Was serial (one render-wpt subprocess pair at a time); --jobs N runs N
+candidates' render+compare pipelines concurrently on separate threads (each
+subprocess call releases the GIL while waiting), useful for a full-fleet
+sweep across many WPT categories.
+
+SHELL-L5 turned this into a zero-loss gate: --baseline <path> diffs this
+run's per-test classifications against a previous report.json or --compact
+compact.json (either shape is accepted) and exits 2 if any previously-passing
+test regressed ("lost"). --compact additionally writes compact.json, an
+id -> classification map with none of report.json's per-test detail
+(relation/pixel counts/sha256/stdout) -- the file meant to be committed as a
+future --baseline, so evidence size does not grow with every run the way a
+full report.json would.
+
 Usage:
   wpt_render_compare.py --wpt-root DIR --subdir css/css-backgrounds \\
       --exe PATH/TO/amazing --out OUT_DIR
-      [--width 800] [--height 600] [--timeout 20] [--limit N]
-      [--font-set STRING]
+      [--width 800] [--height 600] [--timeout 20] [--limit N] [--jobs N]
+      [--baseline PATH] [--compact] [--font-set STRING]
 """
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -31,6 +46,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -40,6 +56,13 @@ XML_EXTENSIONS = {".xht", ".xhtml"}
 
 LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.I | re.S)
 SCRIPT_RE = re.compile(r"<script\b", re.I | re.S)
+# Inline event-handler attributes (onload="test()", etc.) run script without
+# a <script> tag; the SHELL-L4 fleet sweep found 3/7168 "eligible" reftests
+# that were actually testharness-style pages invoking `test()`/
+# `getComputedStyle()` this way, misclassified as engine "crash" instead of
+# excluded as "scripted" (renderer exit 1 from a body-load-listener
+# ReferenceError, not a real render failure).
+INLINE_EVENT_HANDLER_RE = re.compile(r"\bon\w+\s*=", re.I)
 TESTHARNESS_RE = re.compile(r"testharness\.js", re.I | re.S)
 FLAGS_META_RE = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']flags[\"']", re.I | re.S)
 EMBEDDED_RESOURCE_RE = re.compile(r"<(?:img|object|iframe|video|audio|canvas|svg)\b", re.I | re.S)
@@ -129,7 +152,7 @@ def classify_candidate(test_path: Path, wpt_root: Path):
         return {"eligible": False, "reason": "xml-reference-mode", "testharness": testharness}
     reference_source = reference_path.read_text(errors="replace")
     combined = source + "\n" + reference_source
-    if SCRIPT_RE.search(combined):
+    if SCRIPT_RE.search(combined) or INLINE_EVENT_HANDLER_RE.search(combined):
         reason = "scripted"
     elif FLAGS_META_RE.search(combined):
         reason = "flagged-environment"
@@ -317,6 +340,98 @@ def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: i
     return {"classification": "rendered", "detail": stdout.strip()}
 
 
+def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, width: int, height: int, timeout: int):
+    """Renders one reftest pair and classifies it. Pure function of its
+    arguments (own subprocess calls, own test_directory) so callers can run
+    many of these concurrently across threads -- each candidate writes only
+    to its own directory_id subdirectory."""
+    test_id = re.sub(r"[^A-Za-z0-9_.\-]", "__", candidate["path"])
+    directory_id = sha256_hex(test_id)[:16]
+    test_directory = run_directory / directory_id
+    test_directory.mkdir(parents=True, exist_ok=True)
+    test_path = candidate["abs_path"]
+    reference_path = candidate["reference_path"]
+    actual_path = test_directory / "actual.ppm"
+    reference_output_path = test_directory / "reference.ppm"
+    diff_path = test_directory / "diff.ppm"
+
+    actual_run = invoke_fixed_render(
+        exe, test_path, actual_path, width, height, timeout, wpt_root, test_directory / "actual"
+    )
+    if actual_run["classification"] != "rendered":
+        return {
+            "id": test_id,
+            "classification": actual_run["classification"],
+            "detail": actual_run["detail"],
+        }
+    reference_run = invoke_fixed_render(
+        exe, reference_path, reference_output_path, width, height, timeout, wpt_root,
+        test_directory / "reference",
+    )
+    if reference_run["classification"] != "rendered":
+        return {
+            "id": test_id,
+            "classification": reference_run["classification"],
+            "actual_sha256": sha256_file(actual_path),
+            "detail": f"reference: {reference_run['detail']}",
+        }
+    test_source = test_path.read_text(errors="replace")
+    max_difference, total_pixels = fuzzy_limits(test_source)
+    comparison = compare_ppm(actual_path, reference_output_path, diff_path, max_difference, total_pixels)
+    passed = (not comparison["matched"]) if candidate["relation"] == "mismatch" else comparison["matched"]
+    return {
+        "id": test_id,
+        "classification": "pass" if passed else "mismatch",
+        "relation": candidate["relation"],
+        "reference_href": candidate["href"],
+        "differing_pixels": comparison["differing_pixels"],
+        "max_difference": comparison["max_difference"],
+        "allowed_max_difference": max_difference,
+        "allowed_differing_pixels": total_pixels,
+        "actual_sha256": sha256_file(actual_path),
+        "reference_sha256": sha256_file(reference_output_path),
+        "diff_sha256": sha256_file(diff_path),
+        "detail": comparison["detail"],
+    }
+
+
+def extract_classifications(data: dict) -> dict:
+    """Reads a test-id -> classification map out of either JSON shape this
+    tool produces: a full report.json (`tests` is a list of per-test dicts
+    with `id`/`classification`) or a --compact one (`tests` is already an
+    id -> classification map). --baseline accepts either."""
+    tests = data.get("tests", {})
+    if isinstance(tests, dict):
+        return dict(tests)
+    return {test["id"]: test["classification"] for test in tests}
+
+
+def compare_to_baseline(current: dict, baseline: dict) -> dict:
+    """Zero-loss-gate comparison: `lost` (was pass, now is not) is the only
+    bucket that should ever fail a gate. `gained` is the mirror image;
+    `changed` covers a reclassification that does not cross the pass
+    boundary (e.g. mismatch -> error); `new`/`removed` cover test ids only
+    one side has (a WPT update, a --limit change, or a discovery-filter fix
+    like the inline-event-handler one SHELL-L4 landed)."""
+    gained, lost, changed, unchanged = [], [], [], []
+    for test_id in sorted(set(current) & set(baseline)):
+        before, after = baseline[test_id], current[test_id]
+        if before == after:
+            unchanged.append(test_id)
+        elif before != "pass" and after == "pass":
+            gained.append(test_id)
+        elif before == "pass" and after != "pass":
+            lost.append(test_id)
+        else:
+            changed.append(test_id)
+    new = sorted(set(current) - set(baseline))
+    removed = sorted(set(baseline) - set(current))
+    return {
+        "gained": gained, "lost": lost, "changed": changed, "unchanged": unchanged,
+        "new": new, "removed": removed,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wpt-root", required=True)
@@ -327,6 +442,24 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--limit", type=int, default=0, help="0 = every eligible reftest in the subdir")
+    parser.add_argument(
+        "--jobs", type=int, default=1,
+        help="concurrent test pipelines (each spawns its own render-wpt subprocesses); "
+             "1 = serial (default, matches the original behaviour)",
+    )
+    parser.add_argument(
+        "--baseline", default=None,
+        help="a previous report.json or --compact-written compact.json (either shape is accepted) "
+             "to diff this run against; prints gained/lost/changed/unchanged/new/removed test-id "
+             "counts and exits 2 if any previously-passing test is lost (a zero-loss gate).",
+    )
+    parser.add_argument(
+        "--compact", action="store_true",
+        help="also write compact.json next to report.json: {schema, subdir, wpt_revision, counts, "
+             "tests: {id: classification}} with none of report.json's per-test detail "
+             "(relation/pixel counts/sha256/stdout). Meant for committing as a future --baseline "
+             "instead of the full report, so evidence stays small as categories accumulate runs.",
+    )
     parser.add_argument(
         "--font-set",
         default="Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
@@ -354,66 +487,33 @@ def main() -> int:
     run_directory = out_dir / run_name
     run_directory.mkdir(parents=True, exist_ok=True)
 
-    results = []
-    for candidate in selected:
-        test_id = re.sub(r"[^A-Za-z0-9_.\-]", "__", candidate["path"])
-        directory_id = sha256_hex(test_id)[:16]
-        test_directory = run_directory / directory_id
-        test_directory.mkdir(parents=True, exist_ok=True)
-        test_path = candidate["abs_path"]
-        reference_path = candidate["reference_path"]
-        actual_path = test_directory / "actual.ppm"
-        reference_output_path = test_directory / "reference.ppm"
-        diff_path = test_directory / "diff.ppm"
+    jobs = max(1, args.jobs)
+    results_by_index = {}
+    print_lock = threading.Lock()
 
-        actual_run = invoke_fixed_render(
-            exe, test_path, actual_path, args.width, args.height, args.timeout, wpt_root, test_directory / "actual"
-        )
-        if actual_run["classification"] != "rendered":
-            result = {
-                "id": test_id,
-                "classification": actual_run["classification"],
-                "detail": actual_run["detail"],
-            }
-        else:
-            reference_run = invoke_fixed_render(
-                exe, reference_path, reference_output_path, args.width, args.height, args.timeout, wpt_root,
-                test_directory / "reference",
-            )
-            if reference_run["classification"] != "rendered":
-                result = {
-                    "id": test_id,
-                    "classification": reference_run["classification"],
-                    "actual_sha256": sha256_file(actual_path),
-                    "detail": f"reference: {reference_run['detail']}",
-                }
-            else:
-                test_source = test_path.read_text(errors="replace")
-                max_difference, total_pixels = fuzzy_limits(test_source)
-                comparison = compare_ppm(actual_path, reference_output_path, diff_path, max_difference, total_pixels)
-                passed = (not comparison["matched"]) if candidate["relation"] == "mismatch" else comparison["matched"]
-                result = {
-                    "id": test_id,
-                    "classification": "pass" if passed else "mismatch",
-                    "relation": candidate["relation"],
-                    "reference_href": candidate["href"],
-                    "differing_pixels": comparison["differing_pixels"],
-                    "max_difference": comparison["max_difference"],
-                    "allowed_max_difference": max_difference,
-                    "allowed_differing_pixels": total_pixels,
-                    "actual_sha256": sha256_file(actual_path),
-                    "reference_sha256": sha256_file(reference_output_path),
-                    "diff_sha256": sha256_file(diff_path),
-                    "detail": comparison["detail"],
-                }
-        results.append(result)
-        print(f"{result['classification'].upper():<10} {result['id']}")
+    def run_and_report(index, candidate):
+        result = run_one_test(candidate, exe, wpt_root, run_directory, args.width, args.height, args.timeout)
+        with print_lock:
+            print(f"{result['classification'].upper():<10} {result['id']}")
+        return index, result
+
+    if jobs == 1:
+        for index, candidate in enumerate(selected):
+            _, result = run_and_report(index, candidate)
+            results_by_index[index] = result
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            futures = [pool.submit(run_and_report, index, candidate) for index, candidate in enumerate(selected)]
+            for future in concurrent.futures.as_completed(futures):
+                index, result = future.result()
+                results_by_index[index] = result
+    results = [results_by_index[index] for index in range(len(selected))]
 
     counts = {"pass": 0, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}
     for result in results:
         counts[result["classification"]] += 1
 
-    report = {
+    metadata = {
         "schema": 1,
         "wpt_revision": wpt_revision,
         "subdir": args.subdir,
@@ -421,11 +521,26 @@ def main() -> int:
         "font_set": args.font_set,
         "host": socket.gethostname(),
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "run_directory": str(run_directory),
-        "inventory": inventory,
-        "counts": counts,
-        "tests": results,
     }
+    report = {**metadata, "run_directory": str(run_directory), "inventory": inventory, "counts": counts, "tests": results}
+
+    baseline_compare = None
+    exit_code = 0
+    if args.baseline:
+        baseline_data = json.loads(Path(args.baseline).read_text())
+        baseline_map = extract_classifications(baseline_data)
+        current_map = {result["id"]: result["classification"] for result in results}
+        baseline_compare = compare_to_baseline(current_map, baseline_map)
+        report["baseline_compare"] = {"baseline": str(Path(args.baseline).resolve()), **baseline_compare}
+        counted = {key: len(value) for key, value in baseline_compare.items()}
+        print(
+            "Baseline compare ({}): gained={gained} lost={lost} changed={changed} "
+            "unchanged={unchanged} new={new} removed={removed}".format(args.subdir, **counted)
+        )
+        if baseline_compare["lost"]:
+            print(f"LOST (previously passing, now not): {', '.join(baseline_compare['lost'])}")
+            exit_code = 2
+
     report_path = run_directory / "report.json"
     report_path.write_text(json.dumps(report, indent=2))
     latest_path = out_dir / "report.json"
@@ -435,7 +550,21 @@ def main() -> int:
         "Counts: pass={pass} mismatch={mismatch} error={error} timeout={timeout} "
         "unsupported={unsupported} crash={crash}".format(**counts)
     )
-    return 0
+
+    if args.compact:
+        compact = {
+            **metadata,
+            "counts": counts,
+            "tests": {result["id"]: result["classification"] for result in results},
+        }
+        if baseline_compare is not None:
+            compact["baseline_compare"] = report["baseline_compare"]
+        compact_path = run_directory / "compact.json"
+        compact_path.write_text(json.dumps(compact, indent=2))
+        (out_dir / "compact.json").write_text(json.dumps(compact, indent=2))
+        print(f"Compact: {compact_path}")
+
+    return exit_code
 
 
 if __name__ == "__main__":

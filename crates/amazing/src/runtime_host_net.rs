@@ -461,8 +461,19 @@ impl RuntimeBindingHost<'_> {
         let url_str = self.dom_string(&url_value)?;
         let base_str = self.state.borrow().document_url.clone().unwrap_or_default();
         let base = amazing_net::ParsedUrl::parse(&base_str).ok();
-        let resolved = amazing_net::ParsedUrl::parse_with_base(&url_str, base.as_ref())
+        let mut resolved = amazing_net::ParsedUrl::parse_with_base(&url_str, base.as_ref())
             .map_err(|_| self.ws_syntax_error("Invalid WebSocket URL"))?;
+        // WebSockets living standard, constructor steps: after parsing
+        // (relative to the entry settings object's API base URL), an
+        // `http`/`https` scheme is rewritten to `ws`/`wss` before the
+        // scheme is validated -- this is what lets a relative `url` (e.g.
+        // `""`, `"test"`) resolve against the document's own http(s)
+        // location and still construct successfully.
+        match resolved.scheme() {
+            "http" => resolved.set_protocol("ws"),
+            "https" => resolved.set_protocol("wss"),
+            _ => {}
+        }
         if !matches!(resolved.scheme(), "ws" | "wss") {
             return Err(self.ws_syntax_error("WebSocket URL must use the ws: or wss: scheme"));
         }
@@ -471,9 +482,12 @@ impl RuntimeBindingHost<'_> {
         }
         let protocols_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
         let protocols = self.websocket_read_protocols(&protocols_value)?;
+        // WebSockets living standard constructor steps: duplicate detection
+        // among the requested subprotocols is ASCII-case-insensitive (two
+        // values differing only by case are still "the same" protocol).
         let mut seen = HashSet::new();
         for protocol in &protocols {
-            if !is_ws_token(protocol) || !seen.insert(protocol.clone()) {
+            if !is_ws_token(protocol) || !seen.insert(protocol.to_ascii_lowercase()) {
                 return Err(self.ws_syntax_error("Invalid or duplicate WebSocket subprotocol"));
             }
         }
@@ -531,20 +545,22 @@ impl RuntimeBindingHost<'_> {
             return Err(self.ws_invalid_state_error("WebSocket is still CONNECTING"));
         }
         let data = args.first().cloned().unwrap_or(JsValue::Undefined);
-        let (message, len) = if matches!(data, JsValue::Str(_)) {
-            let text = self.dom_string(&data)?;
-            let len = text.len() as u64;
-            (WsEvent::Text(text), len)
-        } else if let Some(bytes) = self.fetch_buffer_source_bytes(&data)? {
+        // WebIDL `(USVString or Blob or ArrayBuffer or ArrayBufferView) data`:
+        // the interface-typed branches are checked structurally; anything
+        // else (including a plain string, `null`, `undefined`, a number, or
+        // an object with its own `toString`) falls through to the USVString
+        // conversion via `ToString`, per the union-type conversion algorithm
+        // -- `send(null)` is required to transmit the text "null", not throw.
+        let (message, len) = if let Some(bytes) = self.fetch_buffer_source_bytes(&data)? {
             let len = bytes.len() as u64;
             (WsEvent::Binary(bytes), len)
         } else if let Ok(blob) = self.blob_record(&data) {
             let len = blob.bytes.len() as u64;
             (WsEvent::Binary(blob.bytes), len)
         } else {
-            return Err(self.fetch_type_error(
-                "WebSocket.send: data must be a string, Blob, ArrayBuffer, or ArrayBufferView",
-            ));
+            let text = self.dom_string(&data)?;
+            let len = text.len() as u64;
+            (WsEvent::Text(text), len)
         };
         if ready_state >= 2 {
             // CLOSING or CLOSED: WHATWG "send a WebSocket message" increases
@@ -681,13 +697,18 @@ impl RuntimeBindingHost<'_> {
             .unwrap_or(JsValue::Null)
     }
     fn websocket_handler_set(&mut self, slot: usize, key: &'static str, value: JsValue) {
-        let nullish = self.js.binding_is_nullish(&value);
+        // WebHTML "event handler IDL attributes" setter, `EventHandler`
+        // being [TreatNonCallableAsNull]: a value that is not callable
+        // (including null/undefined, but also e.g. a plain number or a
+        // non-callable object) converts to null, not a stored non-function
+        // value -- the getter must read back null, never the raw input.
+        let callable = self.js.binding_is_callable(&value);
         let mut state = self.state.borrow_mut();
         let handlers = &mut state.net.websockets[slot].handlers;
-        if nullish {
-            handlers.remove(key);
-        } else {
+        if callable {
             handlers.insert(key, value);
+        } else {
+            handlers.remove(key);
         }
     }
 
@@ -1737,9 +1758,9 @@ mod tests {
         scheduler.set_location_url("https://example.test/");
 
         let cases = [
-            "http://example.test/",       // wrong scheme
+            "ftp://example.test/",        // scheme not http(s)/ws(s), and not rewritten
             "ws://example.test/#frag",    // fragment not allowed
-            "not a url at all",           // unparsable
+            "ws://",                      // special scheme requires a non-empty host
         ];
         for case in cases {
             let script = format!(
@@ -1755,6 +1776,16 @@ mod tests {
             .run_script("var w = new WebSocket('ws://example.test/socket'); w.readyState === 0 && w.url === 'ws://example.test/socket'")
             .unwrap();
         assert_eq!(ok, JsValue::Bool(true));
+
+        // WebSockets living standard constructor steps 4-5: an `http`/`https`
+        // scheme (typically from a relative URL resolved against the
+        // document's own location) is rewritten to `ws`/`wss` before the
+        // scheme is validated, so an absolute `http://` URL constructs
+        // successfully rather than throwing.
+        let rewritten = scheduler
+            .run_script("var w2 = new WebSocket('http://example.test/socket'); w2.url === 'ws://example.test/socket'")
+            .unwrap();
+        assert_eq!(rewritten, JsValue::Bool(true), "http scheme should rewrite to ws");
     }
 
     #[test]
