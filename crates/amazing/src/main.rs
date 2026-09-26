@@ -135,12 +135,11 @@ fn main() -> ExitCode {
         Some("wpt-harness" | "wpt-harness-worker") => cmd::wpt_harness::run(&args[1..]),
         Some("a11y-tree") => runtime_host_a11y::cmd_a11y_tree(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
-        Some("axtree") => cmd::axtree::cmd_axtree(&args[2..]),
         Some("devtools") => cmd_devtools(&args[2..]),
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]|axtree <page.html|url> [viewport_width]|devtools <url> [listen-addr]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]|devtools <url> [listen-addr]]"
             );
             ExitCode::FAILURE
         }

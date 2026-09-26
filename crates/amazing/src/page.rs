@@ -98,6 +98,12 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
     };
     register_system_text_faces(&mut text.provider);
     let expanded = font_loader::expand_font_sheets(sheets, &mut text.warnings);
+    // Shared across every @font-face rule on the page: real pages routinely
+    // declare several icon-font aliases (Font Awesome 5/6 Free/Brands, plain
+    // "FontAwesome") whose `src:` lists repeat the exact same URL, and
+    // without this each repeat paid its own network round trip -- see the
+    // cache field's doc comment in `font_loader.rs` (IA-LIVE-2).
+    let mut font_fetch_cache = std::collections::HashMap::new();
     for (source, stylesheet_url) in &expanded {
         for face in amazing_css::parse_font_faces(source) {
             let family = face.family.clone();
@@ -112,6 +118,7 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
                 stylesheet_url,
                 document_url: page,
                 warnings: Vec::new(),
+                cache: &mut font_fetch_cache,
             };
             let source_labels = descriptor.sources.iter().map(|source| match source {
                 amazing_text_provider::FontFaceSource::Local(name) => format!("local({name})"),

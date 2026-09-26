@@ -22,7 +22,7 @@ use amazing_css::StyledDom;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_layout::LayoutBox;
 
-use crate::document::{PageError, parse_document_bytes};
+use crate::document::{DocumentKind, PageError, parse_document_bytes};
 use crate::page::{collect_author_css, load_page_media_in_viewport, load_page_text_from_sheets};
 
 /// Builds the accessibility tree for a document whose DOM, computed style
@@ -34,21 +34,36 @@ pub(crate) fn build_ax_tree(dom: &Dom, styled: &StyledDom, layout: &LayoutBox) -
 }
 
 /// Parses, styles (author `<style>`/`<link rel=stylesheet>`, this page's
-/// viewport), loads replaced content and fonts, and lays out `html_path`
+/// viewport), loads replaced content and fonts, and lays out `page`
 /// exactly as `amazing render`/`amazing layout` do, then builds its
 /// accessibility tree. `fixed_height` behaves as it does for those commands:
-/// `None` sizes to content.
+/// `None` sizes to content. `page` may be a local file path or an
+/// `http(s)://` URL, fetched the same way `amazing render-page` does
+/// (folded in from the now-removed `amazing axtree` command, per the
+/// integrator's request to keep one `a11y-tree` subcommand).
 pub(crate) fn ax_tree_for_page(
-    html_path: &str,
+    page: &str,
     width: f32,
     fixed_height: Option<u32>,
 ) -> Result<AxTree, PageError> {
-    let html = std::fs::read(html_path)
-        .map_err(|error| format!("cannot read {html_path}: {error}"))?;
-    let dom = parse_document_bytes(&html, html_path, None)?.dom;
+    let remote = page.starts_with("http://") || page.starts_with("https://");
+    let (base_url, html, content_type) = if remote {
+        let (base_url, html, content_type) = crate::cmd::real_pages::fetch_document(page)
+            .map_err(|error| PageError::Render(format!("fetch: {error}")))?;
+        (base_url, html, content_type)
+    } else {
+        let html = std::fs::read(page)
+            .map_err(|error| format!("cannot read {page}: {error}"))?;
+        (page.to_owned(), html, None)
+    };
+    let document = parse_document_bytes(&html, &base_url, content_type.as_deref())?;
+    if document.kind != DocumentKind::Html {
+        return Err(PageError::Unsupported("XML documents are not supported yet"));
+    }
+    let dom = document.dom;
 
     let mut sources = Vec::new();
-    collect_author_css(&dom, NodeIdx(0), html_path, &mut sources)?;
+    collect_author_css(&dom, NodeIdx(0), &base_url, &mut sources)?;
     let font_sheets: Vec<(String, String)> = sources
         .iter()
         .map(|(source, url, _)| (source.clone(), url.clone()))
@@ -62,8 +77,8 @@ pub(crate) fn ax_tree_for_page(
         ..amazing_css::MediaEnvironment::default()
     };
     let styled = amazing_css::compute_with_environment(&dom, &sheets, &environment);
-    let media = load_page_media_in_viewport(&dom, html_path, &styled, width, 1.0);
-    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
+    let media = load_page_media_in_viewport(&dom, &base_url, &styled, width, 1.0);
+    let page_text = load_page_text_from_sheets(&font_sheets, &base_url);
     let layout = amazing_layout::layout_styled_document(
         &dom,
         &styled,
@@ -75,16 +90,17 @@ pub(crate) fn ax_tree_for_page(
     Ok(build_ax_tree(&dom, &styled, &layout))
 }
 
-/// `amazing a11y-tree <page.html> [viewport_width]`: headless dump of the
+/// `amazing a11y-tree <page.html|url> [viewport_width]`: headless dump of the
 /// accessibility tree — one indented `role "name" (description) states…`
-/// line per node (see `SchemaSnapshot::dump`).
+/// line per node (see `SchemaSnapshot::dump`). Accepts a local file path or
+/// an `http(s)://` URL, fetched like `amazing render-page`.
 pub(crate) fn cmd_a11y_tree(args: &[String]) -> ExitCode {
-    let Some(html_path) = args.first() else {
-        eprintln!("usage: amazing a11y-tree <page.html> [viewport_width]");
+    let Some(page) = args.first() else {
+        eprintln!("usage: amazing a11y-tree <page.html|url> [viewport_width]");
         return ExitCode::FAILURE;
     };
     let width: f32 = args.get(1).and_then(|w| w.parse().ok()).unwrap_or(800.0);
-    match ax_tree_for_page(html_path, width, None) {
+    match ax_tree_for_page(page, width, None) {
         Ok(tree) => {
             print!("{}", tree.snapshot().dump());
             ExitCode::SUCCESS
