@@ -625,3 +625,72 @@ these are the first *meaningful* Linux numbers for it. Evidence:
 Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
 skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
 workspace doctests green (`--locked --doc`).
+
+## TEXT-19: web font decode short-read root cause, TTC support, fontconfig-driven Linux font scan
+
+Coordinator ask (after TEXT-17/18 merged as `2cce98d0`): reproduce and fix the
+WOFF2/sfnt decode short-read integrator-assist filed in
+`.agents/text/questions.md` (`font-face "<family>": Io(Error { kind:
+UnexpectedEof, message: "failed to fill whole buffer" })`, 73 occurrences,
+`crates/amazing/src/page.rs:129`), widen the Linux font scan to cover
+fontconfig's configured directories plus `~/.local/share/fonts` and
+`/usr/local/share/fonts`, and handle `.ttc` collections.
+
+**Root cause finding: this was never a decoder bug.** Traced every enum in
+the fetch-to-registration chain: `TextError` (5 unit variants),
+`amazing_fetch::api::ApiError`/`FetchError` (no `Io` variant) cannot produce
+an `Io(...)` Debug string; `amazing_net::NetError::Io(std::io::Error)` is the
+only match, and `amazing-net/src/http.rs` already has a passing test
+(`short_content_length_body_is_an_error_not_a_truncation`) proving this is
+intentional: a server that closes its connection before delivering all
+`Content-Length`-promised bytes correctly raises `Io(UnexpectedEof)`.
+Confirmed empirically that `decode_web_font_to_sfnt` already fails closed
+(never panics, never accepts a short buffer) against 3 real downloaded fonts
+truncated at every cut point. Routed the finding to net in
+`.agents/net/questions.md` rather than filing a text-owned fix for a
+net-layer behavior; added regression tests anyway to pin the decoder's
+existing fail-closed behavior against real fixtures going forward
+(`truncated_woff2_fails_closed_at_every_cut_point_never_panics` and the
+pinned `pinned_wpt_woff2_fails_closed_at_every_truncation_cut`, which sweeps
+every truncation cut of `fonts/noto/NotoNaskhArabic-regular.woff2`).
+
+**TTC (`.ttc`) collection support.** `read-fonts`/`harfrust`'s
+`FontRef::from_index(bytes, index)` and swash's `FontRef::from_index` already
+natively support both plain sfnt data and TTC collections (swash call sites
+were already using `from_index(_, 0)` everywhere); the engine-side gap was
+`amazing-text-provider`'s own format sniffing and structural validation.
+Added `FontFormat::Collection` (sniffed from the `ttcf` magic), a
+`ttc_font_directory_offset` helper that walks the TTC header's offset table
+(bounded by `MAX_TTC_FONTS = 64` against a hostile `numFonts`) to locate font
+0's own sfnt table directory, generalized `validate_font_structure` to
+validate at that offset instead of assuming offset 0, and switched the two
+`HarfFontRef::new` shaping/registration call sites to `HarfFontRef::from_index(_,
+0)`. No changes to the public `WebFont`/`FontRecord` structs or their ~46
+call sites — index 0 is the only sub-font the system-font scanner or any
+current caller needs. New tests: `ttc_collection_registers_shapes_and_rasterizes_its_first_font`,
+`truncated_ttc_fails_closed_never_panics`.
+
+**Fontconfig-driven Linux font directory scan.** `linux_font_roots()` in
+`crates/amazing/src/font_loader.rs` now reads real `<dir>` elements out of
+`/etc/fonts/fonts.conf` and `/etc/fonts/conf.d/*.conf` (a small hand-rolled
+tag scanner in the same style as this file's existing `import_urls` CSS
+`@import` scanner, not a new XML dependency), resolving `prefix="xdg"` against
+`$XDG_DATA_HOME` (falling back to `~/.local/share`, XDG's own default) and a
+leading `~` against `$HOME`, with XML comments stripped first so a
+commented-out `<dir>` (fontconfig ships one for the deprecated `~/.fonts`)
+is never picked up. This runs *before* the existing hardcoded
+`/usr/share/fonts`, `/usr/local/share/fonts`, `~/.fonts`, and
+`~/.local/share/fonts` defaults, which stay as a supplement/fallback
+deduplicated against whatever fontconfig already found, so the scan degrades
+gracefully with no fontconfig config present at all. New tests:
+`fontconfig_dir_elements_cover_plain_xdg_and_tilde_forms`,
+`fontconfig_xdg_dir_prefers_xdg_data_home_over_the_default`,
+`fontconfig_tilde_dir_expands_against_home`, `fontconfig_plain_dir_is_used_verbatim`,
+`fontconfig_dir_scan_never_panics_on_truncated_markup`,
+`fontconfig_comments_are_stripped_including_unterminated`.
+
+Gate: `amazing`/`amazing-text-provider` crate nextest 348/348 (8 skipped,
+Boat sandbox `bx_cp5jbn5z`). Final gate: workspace nextest **3035/3035
+passed, 13 skipped** (`--locked --no-fail-fast`), workspace doctests green
+(4 doctests: `amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js`, each 1 passed). Commit: see `.agents/text/status.json`.
