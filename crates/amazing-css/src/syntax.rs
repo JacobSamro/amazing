@@ -31,6 +31,12 @@ pub enum Token {
     Percentage(f64),
     /// Numeric with unit ident, e.g. `14px` or `1e3em`.
     Dimension(f64, String),
+    /// CSS Syntax 3 §4.3.9 `<urange>`: `U+41`, `U+41-5A`, `U+4??`. Stores the
+    /// verbatim matched text (case, digit count and wildcards as written) —
+    /// captured directly off the source so no sign/leading-zero information
+    /// is lost the way it would be by re-tokenizing through `Number`/
+    /// `Dimension` (see CSS-26).
+    UnicodeRange(String),
     Whitespace,
     Colon,
     Semicolon,
@@ -259,6 +265,41 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// CSS Syntax 3 §4.3.9 "Consume a unicode-range token". Cursor sits on
+    /// the leading `u`/`U`; caller has already verified the next two code
+    /// points are `+` followed by a hex digit or `?`. Captures the matched
+    /// text verbatim rather than reformatting it, so `U+0131` stays
+    /// `U+0131` (not `U+131`) and `U+4??`/`u+41-5a` keep their original
+    /// wildcard/case spelling.
+    fn unicode_range(&mut self) -> Token {
+        let start = self.pos;
+        self.pos += 2; // past 'u'/'U' and '+'
+        let mut hex_digits = 0;
+        while hex_digits < 6 && self.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+            self.pos += 1;
+            hex_digits += 1;
+        }
+        let mut wildcards = 0;
+        while hex_digits + wildcards < 6 && self.peek() == Some('?') {
+            self.pos += 1;
+            wildcards += 1;
+        }
+        // An explicit end (`-005A`) is only valid when no wildcards were
+        // consumed for the start.
+        if wildcards == 0
+            && self.peek() == Some('-')
+            && self.peek_at(1).is_some_and(|c| c.is_ascii_hexdigit())
+        {
+            self.pos += 1; // past '-'
+            let mut end_digits = 0;
+            while end_digits < 6 && self.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+                self.pos += 1;
+                end_digits += 1;
+            }
+        }
+        Token::UnicodeRange(self.chars[start..self.pos].iter().collect())
+    }
+
     fn bad_url_remnants(&mut self) {
         loop {
             match self.peek() {
@@ -390,6 +431,19 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                 lx.pos += 1;
                 Token::CloseSquare
             },
+            // CSS Syntax 3 §4.3.9: `u`/`U` immediately followed by `+` and a
+            // hex digit or `?` starts a unicode-range token instead of an
+            // ident. This is unconditional at the tokenizer level (matching
+            // real UAs) — outside an `@font-face`'s `unicode-range`
+            // descriptor "u+41" is not otherwise meaningful CSS, so there is
+            // no ambiguity in practice.
+            Some(c @ ('u' | 'U'))
+                if lx.peek_at(1) == Some('+')
+                    && lx.peek_at(2).is_some_and(|d| d.is_ascii_hexdigit() || d == '?') =>
+            {
+                let _ = c;
+                lx.unicode_range()
+            },
             Some(c) if is_ident_start(c) ||
                 (c == '\\' && lx.peek_at(1).is_some_and(|next| next != '\n')) => {
                 let name = lx.ident();
@@ -495,6 +549,7 @@ pub fn serialize(tokens: &[Token]) -> String {
                 out.push_str(&fmt_num(*n));
                 out.push_str(unit);
             },
+            Token::UnicodeRange(s) => out.push_str(s),
             Token::Whitespace => {
                 if ws_renders(tokens, i) && !out.is_empty() && !out.ends_with(' ') {
                     out.push(' ');
@@ -665,5 +720,59 @@ mod tests {
             let tokens = tokenize(css);
             assert_eq!(tokenize(&serialize(&tokens)), tokens, "{css}");
         }
+    }
+
+    // CSS-26: `<urange>` tokenization (CSS Syntax 3 §4.3.9 / CSS Fonts 4).
+    // Regression coverage for the bug where `U+0131` reached the
+    // `unicode-range` descriptor as `u131` — the `+` sign and leading zero
+    // were lost because a generic `Ident("u")` + `Number(131.0)` pair
+    // doesn't retain either. A dedicated `UnicodeRange` token, captured
+    // verbatim off the source, fixes that at the root.
+    #[test]
+    fn unicode_range_single_value_preserves_sign_and_leading_zeros() {
+        // The exact bug report case: a 4-digit codepoint with a leading zero.
+        assert_eq!(tokenize("U+0131"), vec![Token::UnicodeRange("U+0131".into())]);
+        assert_eq!(serialize(&tokenize("U+0131")), "U+0131");
+        // Lowercase 'u' and lowercase hex digits are also valid and are kept
+        // verbatim rather than being case-normalized.
+        assert_eq!(tokenize("u+0041"), vec![Token::UnicodeRange("u+0041".into())]);
+        assert_eq!(tokenize("U+f"), vec![Token::UnicodeRange("U+f".into())]);
+    }
+
+    #[test]
+    fn unicode_range_hyphenated_range_and_wildcard_forms() {
+        assert_eq!(tokenize("U+41-5A"), vec![Token::UnicodeRange("U+41-5A".into())]);
+        assert_eq!(serialize(&tokenize("U+41-5A")), "U+41-5A");
+        // Wildcards stand in for the trailing hex digits; up to 6 hex/`?`
+        // code points total are consumed.
+        assert_eq!(tokenize("U+4??"), vec![Token::UnicodeRange("U+4??".into())]);
+        assert_eq!(tokenize("U+??????"), vec![Token::UnicodeRange("U+??????".into())]);
+        // A comma-separated list, as it appears in a real descriptor value.
+        assert_eq!(
+            tokenize("U+41-5A, U+4??"),
+            vec![
+                Token::UnicodeRange("U+41-5A".into()),
+                Token::Comma,
+                Token::Whitespace,
+                Token::UnicodeRange("U+4??".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unicode_range_does_not_hijack_unrelated_u_identifiers() {
+        // 'u' not immediately followed by '+' stays an ordinary ident/unit.
+        assert_eq!(tokenize("um"), vec![Token::Ident("um".into())]);
+        assert_eq!(tokenize("14u"), vec![Token::Dimension(14.0, "u".into())]);
+        // `url(...)` is unaffected (its '(' rules it out before '+' is seen).
+        assert_eq!(
+            tokenize("url(a.woff2)"),
+            vec![Token::Url { value: "a.woff2".into(), raw: "a.woff2".into() }]
+        );
+        // A lone 'u+' with nothing hex/`?` after it is not a urange.
+        assert_eq!(
+            tokenize("u+x"),
+            vec![Token::Ident("u".into()), Token::Delim('+'), Token::Ident("x".into())]
+        );
     }
 }
