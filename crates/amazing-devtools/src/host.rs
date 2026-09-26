@@ -1283,6 +1283,19 @@ pub trait DevToolsSession: Send {
     fn get_request_post_data(&mut self, _request_id: &str) -> Result<Option<String>, HostError> {
         Err(HostError::Unsupported)
     }
+    /// Disables/re-enables the HTTP cache for future requests
+    /// (`Network.setCacheDisabled`). Advisory, like the `Emulation` hints
+    /// below: a driver with no cache of its own still succeeds, since the
+    /// *absence* of caching already satisfies "disabled".
+    fn set_cache_disabled(&mut self, _disabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Replaces the extra headers sent on every future request
+    /// (`Network.setExtraHTTPHeaders`) — a full replace each call, not a
+    /// merge, matching CDP.
+    fn set_extra_http_headers(&mut self, _headers: &[(String, String)]) -> Result<(), HostError> {
+        Ok(())
+    }
 
     // --- Fetch ------------------------------------------------------------
     /// Enables/disables request interception for the given patterns.
