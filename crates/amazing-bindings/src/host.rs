@@ -906,6 +906,10 @@ pub trait BindingHost: Sized {
     fn is_constructor(&mut self, _value: &Self::Value) -> Result<bool, Self::Error> {
         self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
     }
+    /// Classify the WebIDL object branch without invoking user code.
+    fn is_object_value(&mut self, _value: &Self::Value) -> Result<bool, Self::Error> {
+        self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
+    }
     fn require_object(&mut self, _value: &Self::Value) -> Result<(), Self::Error> {
         self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
     }

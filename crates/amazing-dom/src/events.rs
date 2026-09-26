@@ -401,6 +401,13 @@ impl EventTargets {
             && !listener.passive && types.contains(&listener.event_type.as_str()))
     }
 
+    pub fn listener_id(&self, target: EventTarget, event_type: &str, callback: CallbackId,
+        capture: bool) -> Option<ListenerId> {
+        self.listeners.iter().find(|listener| listener.target == target
+            && listener.event_type == event_type && listener.callback == callback
+            && listener.capture == capture).map(|listener| listener.id)
+    }
+
     pub fn listener_callbacks(&self, target: EventTarget, event_type: &str, capture: bool) -> Vec<CallbackId> {
         self.listeners.iter().filter(|listener| listener.target == target
             && listener.event_type == event_type && listener.capture == capture)
@@ -474,12 +481,14 @@ impl EventTargets {
         }
         removed
     }
-    pub fn remove_listener_id(&mut self, id: ListenerId) {
+    pub fn remove_listener_id(&mut self, id: ListenerId) -> Option<CallbackId> {
+        let callback = self.listeners.iter().find(|listener| listener.id == id).map(|listener| listener.callback);
         let before = self.listeners.len();
         self.listeners.retain(|l| l.id != id);
         if self.listeners.len() != before {
             self.listener_generation = self.listener_generation.wrapping_add(1);
         }
+        callback
     }
     pub fn remove_all_listeners(&mut self, target: EventTarget) {
         let before = self.listeners.len();
@@ -562,7 +571,7 @@ impl EventTargets {
                     let once = listener.once;
                     let passive = listener.passive;
                     if once {
-                        self.remove_listener_id(id);
+                        let _ = self.remove_listener_id(id);
                     }
                     let event = self.event_mut(dispatch.event);
                     event.passive = passive;

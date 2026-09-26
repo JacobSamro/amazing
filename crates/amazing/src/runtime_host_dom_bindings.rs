@@ -144,6 +144,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn abortable_listeners_handle_recursive_dispatch_dependents_and_conversion_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('listener registration'); }
+            const target = new EventTarget();
+            const controller = new AbortController();
+            const signal = AbortSignal.any([controller.signal]);
+            let calls = 0;
+            target.addEventListener('x', () => {
+                calls++;
+                if (calls === 6) controller.abort();
+                target.dispatchEvent(new Event('x'));
+            }, {signal});
+            target.dispatchEvent(new Event('x'));
+            check(calls === 6);
+            let reads = '';
+            const options = {
+                get capture() { reads += 'c'; return false; },
+                get once() { reads += 'o'; return false; },
+                get passive() { reads += 'p'; return false; },
+                get signal() { reads += 's'; return signal; }
+            };
+            target.addEventListener('x', null, options);
+            check(reads === 'cops');
+            let rejected = false;
+            try { target.addEventListener('x', null, {signal: null}); }
+            catch (error) { rejected = error instanceof TypeError; }
+            check(rejected);
+            const later = new AbortController();
+            let once = 0;
+            target.addEventListener('once', () => once++, {once: true, signal: later.signal});
+            target.dispatchEvent(new Event('once'));
+            later.abort();
+            target.dispatchEvent(new Event('once'));
+            check(once === 1);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn legacy_document_and_body_colors_share_attributes_and_noops_ignore_arguments() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

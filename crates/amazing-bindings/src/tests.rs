@@ -256,6 +256,9 @@ impl BindingHost for Host {
         Ok(matches!(value, V::Dictionary(entries) if entries.iter().any(|(name, value)|
             *name == "__constructor" && *value == V::Bool(true))))
     }
+    fn is_object_value(&mut self, value: &V) -> Result<bool, String> {
+        Ok(!matches!(value, V::Undefined | V::Null | V::Bool(_) | V::Number(_) | V::String(_)))
+    }
     fn require_object(&mut self, value: &V) -> Result<(), String> {
         if matches!(value, V::Dictionary(_) | V::Array(_)) { Ok(()) }
         else { Err("TypeError: Expected an object".into()) }
@@ -2530,3 +2533,6 @@ mod tests_dataset;
 
 #[path = "tests_legacy_document.rs"]
 mod tests_legacy_document;
+
+#[path = "tests_listener_registration.rs"]
+mod tests_listener_registration;

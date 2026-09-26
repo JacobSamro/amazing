@@ -357,12 +357,34 @@ pub(crate) fn invoke<H: BindingHost>(
             let result = host.with_dom(|dom| dom.events().dispatch_result(event))?;
             return Ok(host.boolean(result));
         }
-        let event_type_arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let event_type = utf16_string(host, event_type_arg)?;
-        let callback = args.get(1).ok_or_else(|| host.type_error("Not enough arguments"))?;
-        if host.is_nullish(callback) { return Ok(host.undefined()); }
-        let options = args.get(2);
-        let capture = option(host, options, "capture")?;
+        if args.len() < 2 { return Err(host.type_error("Not enough arguments")); }
+        let event_type = utf16_string(host, &args[0])?;
+        let callback = &args[1];
+        let null_callback = host.is_nullish(callback);
+        if !null_callback && !host.is_object_value(callback)? {
+            return Err(host.type_error("EventListener must be an object"));
+        }
+        // WebIDL converts the complete dictionary before the DOM algorithm can
+        // return for null callbacks, duplicates, or already-aborted signals.
+        let mut listener_options = ListenerOptions::default();
+        let mut signal = None;
+        if let Some(options) = args.get(2) {
+            if host.is_object_value(options)? {
+                listener_options.capture = option(host, Some(options), "capture")?;
+                if op == O::AddEventListener {
+                    listener_options.once = option(host, Some(options), "once")?;
+                    listener_options.passive = passive_option(host, Some(options))?;
+                    let value = host.get_property(options, "signal")?;
+                    if !host.is_undefined(&value) {
+                        signal = Some(crate::abort_bindings::signal(host, &value, InterfaceBrand::ABORT_SIGNAL)?);
+                    }
+                }
+            } else {
+                listener_options.capture = host.to_boolean(options);
+            }
+        }
+        if null_callback { return Ok(host.undefined()); }
+        let capture = listener_options.capture;
         let existing = host.with_dom(|dom| Ok(dom.events().listener_callbacks(target, &event_type, capture)))?;
         let matched = existing.into_iter().find(|id| host.root_value(*id)
             .is_some_and(|value| host.same_value(&value, callback)));
@@ -374,12 +396,11 @@ pub(crate) fn invoke<H: BindingHost>(
             return Ok(host.undefined());
         }
         if matched.is_some() { return Ok(host.undefined()); }
-        let listener_options = ListenerOptions {
-            capture, once: option(host, options, "once")?,
-            passive: passive_option(host, options)?,
-        };
         let id = host.retain_value(callback.clone());
-        host.with_dom(|dom| Ok(dom.add_event_listener(target, &event_type, Some(id), listener_options)))?;
+        let result = host.with_dom(|dom| dom.add_abortable_event_listener(
+            target, &event_type, Some(id), listener_options, signal));
+        if !matches!(result, Ok(Some(_))) { host.release_value(id); }
+        result?;
         return Ok(host.undefined());
     }
     let id = event_id(host, &receiver)?;

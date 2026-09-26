@@ -1162,6 +1162,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 && !matches!(function.body, FunctionBody::HostNative(_, JsCallPolicy::CallOnly, _))
         }))
     }
+    fn is_object_value(&mut self, value: &JsValue) -> Result<bool, Throw> {
+        Ok(value.is_object())
+    }
     fn require_object(&mut self, value: &JsValue) -> Result<(), Throw> {
         if value.is_object() { Ok(()) } else { Err(Throw::type_error("Expected an object")) }
     }
