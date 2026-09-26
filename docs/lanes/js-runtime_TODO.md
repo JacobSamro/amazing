@@ -507,3 +507,38 @@ Give each realm its own intrinsics, global object, and global environment in the
 Accepted seam: `binding_create_realm(global) -> RealmHandle` plus realm-scoped eval and call. Include a host-created WindowProxy exotic whose target global swaps on navigation while identity remains stable; one agent-wide microtask/job queue; current, entry, and incumbent realm accessors; realm-specific Error prototypes; and Test262 `$262.createRealm` through this same API. Ask html for any remaining hooks before locking.
 
 HTML-25 additionally needs scoped realm entry/restoration for realm-specific `binding_global_object`, constructor/prototype installation, and `binding_wrap_host`; WindowProxy get/set hooks with entry/incumbent realm and target origin for cross-origin checks after navigation; and host-native dispatch/`HostHandle` identity across parent-to-child calls, with child-realm error intrinsics.
+
+## JSRT-8 Object property collection and iterable consumption (2026-09-26)
+
+Collection code `e0d61eb8` snapshots keys while rechecking each property's
+current enumerability after earlier getters, snapshots converted descriptors
+before any defineProperties writes, and creates own descriptor-result keys
+without invoking inherited setters. It also requires Object.create's prototype
+argument, reflects UTF-16 primitive string descriptors, and exposes host
+collection descriptors through the existing legacy hooks.
+
+On fixed base `4b8555a2`, pinned full Test262 moved from 30,404 to 30,415
+passing files and 58,777 to 58,799 passing variants, with no lost file or variant
+passes. Windows integration `6936733c` passed 2,469 workspace tests, skipped
+seven, and passed both doctests. The earlier compositor failures were resolved
+by the merged COMP-13b changes. Evidence: `js-runtime_object_collection_evidence.json`.
+
+Iterator follow-up `33d7cf43` makes Object.fromEntries and Object.groupBy
+consume one item at a time, closes iterators on consumer failures while
+preserving the original exception, and propagates iterator-step failures
+without closing. Live array growth during groupBy callbacks is observable.
+Its complete fixed-base corpus moved from 30,415 to 30,418 passing files and
+58,799 to 58,805 variants, again with no lost passes. Linux crate tests passed
+327 with one skipped, plus the doctest. Windows passed 2,473 tests with seven skipped plus both doctests. Fresh
+integration d33ee2f9 (including upstream standard-library changes) passed
+31,537 Test262 files / 61,040 variants; Windows passed 2,482 tests with eight
+skipped plus both doctests. No prior passing file or variant was lost.
+Evidence: `js-runtime_object_iterator_evidence.json`.
+
+Next Object audit findings: boxed String entries still lack indexed exotic
+properties (`Object.fromEntries([Object('ab')])`). Five fromEntries assertions
+were blocked by the missing ordinary constructor prototype backlink; local dev
+now supplies the tree-walker backlink, so the new integration corpus will
+measure that combination. VM prototype construction and descriptor attributes
+need the corresponding audit. Internal-slot cleanup remains queued above,
+with call-site migration requests recorded for js-stdlib, js-binary and js-vm.

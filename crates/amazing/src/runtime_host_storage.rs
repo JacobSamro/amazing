@@ -1,9 +1,64 @@
 //! Web Storage, IndexedDB, and Cache API driver bindings.
 use super::*;
-use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak};
+use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
 use amazing_bindings::storage_interfaces;
-use amazing_storage::{core::{BucketKey, DiskStore, StorageKey}, web::{PersistentWebStorage, StorageChange}, idb::{self, IndexedDb, StructuredValue, Key, KeyRange, Direction, Mode, Durability, Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}};
+use amazing_storage::{core::{BucketKey, DiskStore, StorageKey, QuotaLedger}, web::{PersistentWebStorage, StorageChange}, idb::{self, IndexedDb, StructuredValue, Key, KeyRange, Direction, Mode, Durability, Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{BucketRegistry, Policy, valid_bucket_name}, locks::{LockCoordinator, Mode as LockMode, Options as LockOptions}};
 use std::sync::atomic::{AtomicU64, Ordering};
+use amazing_js::{SerializedHostValue, StructuredCloneHost};
+
+struct StorageCloneHost { state: Rc<RefCell<BindingState>> }
+impl StorageCloneHost {
+    fn field(out: &mut Vec<u8>, value: &[u8]) { out.extend_from_slice(&(value.len() as u32).to_le_bytes()); out.extend_from_slice(value); }
+    fn read_field<'a>(bytes: &mut &'a [u8]) -> Result<&'a [u8], Throw> {
+        if bytes.len() < 4 { return Err(Throw::error("DataCloneError", "invalid stored host value")); }
+        let len = u32::from_le_bytes(bytes[..4].try_into().unwrap()) as usize;
+        *bytes = &bytes[4..];
+        if bytes.len() < len { return Err(Throw::error("DataCloneError", "invalid stored host value")); }
+        let (value, tail) = bytes.split_at(len);
+        *bytes = tail;
+        Ok(value)
+    }
+}
+impl StructuredCloneHost for StorageCloneHost {
+    fn serialize_host(&mut self, value: &JsValue) -> Result<Option<SerializedHostValue>, Throw> {
+        let JsValue::Object(object) = value else { return Ok(None); };
+        let pointer = Rc::as_ptr(&object.0) as usize;
+        let state = self.state.borrow();
+        let Some(slot) = state.web_object_handles.get(&pointer) else { return Ok(None); };
+        let (type_name, blob, file) = match &state.web_objects[*slot] {
+            WebObject::Blob(blob) => ("Blob", blob, None),
+            WebObject::File(file) => ("File", &file.blob, Some(file)),
+            _ => return Ok(None),
+        };
+        let mut bytes = Vec::new();
+        Self::field(&mut bytes, &blob.bytes);
+        Self::field(&mut bytes, blob.content_type.as_bytes());
+        if let Some(file) = file {
+            Self::field(&mut bytes, file.name.as_bytes());
+            bytes.extend_from_slice(&file.last_modified.to_le_bytes());
+        }
+        Ok(Some(SerializedHostValue { type_name: type_name.into(), bytes }))
+    }
+    fn deserialize_host(&mut self, value: &SerializedHostValue, target: &mut Interpreter) -> Result<JsValue, Throw> {
+        let mut bytes = value.bytes.as_slice();
+        let data = Self::read_field(&mut bytes)?.to_vec();
+        let content_type = String::from_utf8(Self::read_field(&mut bytes)?.to_vec())
+            .map_err(|_| Throw::error("DataCloneError", "invalid Blob type"))?;
+        let blob = Blob::from_bytes(data, &content_type);
+        let mut adapter = RuntimeBindingHost { js: target, state: self.state.clone() };
+        match value.type_name.as_str() {
+            "Blob" if bytes.is_empty() => adapter.blob_new(blob),
+            "File" => {
+                let name = String::from_utf8(Self::read_field(&mut bytes)?.to_vec())
+                    .map_err(|_| Throw::error("DataCloneError", "invalid File name"))?;
+                if bytes.len() != 8 { return Err(Throw::error("DataCloneError", "invalid File timestamp")); }
+                let last_modified = i64::from_le_bytes((*bytes).try_into().unwrap());
+                adapter.file_new(File { blob, name, last_modified })
+            }
+            _ => Err(Throw::error("DataCloneError", "unknown stored host value")),
+        }
+    }
+}
 
 struct TestStorageRoot { path: PathBuf }
 
@@ -29,12 +84,17 @@ thread_local! {
 pub(super) struct StorageRuntime {
     web: Rc<RefCell<PersistentWebStorage>>,
     idb: Rc<RefCell<IndexedDb>>,
-    cache: PersistentCacheStorage,
+    cache: Rc<RefCell<PersistentCacheStorage>>,
+    manager: Rc<RefCell<StorageManager>>,
+    buckets: Rc<RefCell<BucketRegistry>>,
+    locks: Rc<RefCell<LockCoordinator>>,
+    lock_client_id: u64,
+    lock_callbacks: HashMap<u64,LockCallback>,
     objects: Vec<StorageObject>,
     wrappers: HashMap<usize, JsValue>,
     pending: VecDeque<StorageJob>,
-    blocked_opens: VecDeque<(StorageKey,String,usize)>,
-    blocked_deletes: VecDeque<(StorageKey,String,usize)>,
+    blocked_opens: VecDeque<(BucketKey,String,usize)>,
+    blocked_deletes: VecDeque<(BucketKey,String,usize)>,
     tick_scheduled: bool,
     _test_root: Option<Rc<TestStorageRoot>>,
 }
@@ -42,6 +102,11 @@ pub(super) struct StorageRuntime {
 thread_local! {
     static SHARED_WEB_STORAGE: RefCell<HashMap<PathBuf,Weak<RefCell<PersistentWebStorage>>>>=RefCell::new(HashMap::new());
     static SHARED_INDEXED_DB: RefCell<HashMap<PathBuf,Weak<RefCell<IndexedDb>>>>=RefCell::new(HashMap::new());
+    static SHARED_CACHE: RefCell<HashMap<PathBuf,Weak<RefCell<PersistentCacheStorage>>>>=RefCell::new(HashMap::new());
+    static SHARED_MANAGER: RefCell<HashMap<PathBuf,Weak<RefCell<StorageManager>>>>=RefCell::new(HashMap::new());
+    static SHARED_BUCKETS: RefCell<HashMap<PathBuf,Weak<RefCell<BucketRegistry>>>>=RefCell::new(HashMap::new());
+    static SHARED_QUOTA: RefCell<HashMap<PathBuf,SyncWeak<Mutex<QuotaLedger>>>>=RefCell::new(HashMap::new());
+    static SHARED_LOCKS: RefCell<HashMap<PathBuf,Weak<RefCell<LockCoordinator>>>>=RefCell::new(HashMap::new());
     static STORAGE_DOCUMENTS: RefCell<HashMap<PathBuf,Vec<Weak<RefCell<BindingState>>>>>=RefCell::new(HashMap::new());
 }
 
@@ -53,19 +118,25 @@ pub(super) struct StorageEventDelivery {
 
 enum StorageObject {
     Area { session: bool },
-    Factory,
+    Factory { bucket: String },
     Request { result: JsValue, error: JsValue, ready: bool, source: JsValue, transaction: JsValue, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Database { connection: u64, name: String, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Transaction { connection: u64, id: u64, value: Option<IdbTransaction>, mode: Mode, scope: Vec<String>, queued: bool, active_for_requests: bool, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
-    Store { transaction: usize, name: String },
-    Index { transaction: usize, store: String, name: String },
+    Store { transaction: usize, name: String, key_path_value: Option<JsValue> },
+    Index { transaction: usize, store: String, name: String, key_path_value: Option<JsValue>, object_store_value: Option<JsValue> },
     Cursor { cursor: IdbCursor, transaction: usize, source: usize, request: usize, with_value: bool },
     Range(KeyRange),
-    CacheStorage,
+    CacheStorage { bucket: String },
     Cache { name: String },
+    Manager,
+    LockManager,
+    Lock { name: String, mode: amazing_storage::locks::Mode },
+    BucketManager,
+    Bucket { name: String, epoch: u64 },
 }
 
 enum StorageJob {
+    LockGranted { id: u64 },
     RequestSuccess { request: usize, result: JsValue },
     RequestError { request: usize, error: JsValue },
     DeleteSuccess { request: usize, old: u64 },
@@ -75,6 +146,20 @@ enum StorageJob {
     DispatchListener { slot: usize, event: JsValue, callbacks: VecDeque<JsValue> },
     TransactionComplete { transaction: usize },
     StorageEvent(StorageEventDelivery),
+}
+
+struct LockCallback {
+    callback: JsValue,
+    promise: JsValue,
+    key: StorageKey,
+    name: String,
+    mode: LockMode,
+    started: bool,
+    acquired: bool,
+}
+
+impl Drop for StorageRuntime {
+    fn drop(&mut self) {self.locks.borrow_mut().release_client(self.lock_client_id);}
 }
 
 enum StoreResult {
@@ -97,6 +182,18 @@ impl RuntimeBindings {
                 adapter.state.borrow_mut().storage_inbox.push_front(delivery);
                 return Err(error);
             }
+        }
+        let grants={let state=adapter.state.borrow();let Some(storage)=state.storage.as_ref() else{return Ok(())};
+            let locks=storage.locks.borrow();
+            storage.lock_callbacks.iter().filter_map(|(id,callback)|{
+                if callback.started{return None}
+                locks.query(&callback.key).held.iter().any(|lock|lock.id==*id).then_some(*id)
+            }).collect::<Vec<_>>()};
+        for id in grants {
+            if let Some(callback)=adapter.state.borrow_mut().storage.as_mut().unwrap().lock_callbacks.get_mut(&id){
+                callback.started=true;callback.acquired=true;
+            }
+            adapter.storage_schedule(StorageJob::LockGranted{id})?;
         }
         Ok(())
     }
@@ -159,6 +256,10 @@ impl RuntimeBindingHost<'_> {
                 .and_then(|kind| self.state.borrow().storage_classes.get(&kind).map(|pair|pair.0.clone()))
                 .unwrap_or_else(||self.js.binding_object_prototype());
             let prototype=self.js.binding_create_object(Some(&parent))?;
+            self.js.binding_define_symbol_data_property(&prototype,
+                amazing_js::value::WellKnownSymbol::ToStringTag.symbol(),
+                JsValue::str(definition.name),
+                BindingPropertyFlags{writable:false,enumerable:false,configurable:true})?;
             let entry=if definition.kind==SI::IDBVersionChangeEvent{
                 NativeEntry::Storage(SI::IDBVersionChangeEvent,"constructor",SM::StaticMethod)
             }else{NativeEntry::IllegalConstructor};
@@ -187,12 +288,24 @@ impl RuntimeBindingHost<'_> {
             self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
         for (name,interface,object) in [
-            ("indexedDB",SI::IDBFactory,StorageObject::Factory),
-            ("caches",SI::CacheStorage,StorageObject::CacheStorage),
+            ("indexedDB",SI::IDBFactory,StorageObject::Factory{bucket:"default".into()}),
+            ("caches",SI::CacheStorage,StorageObject::CacheStorage{bucket:"default".into()}),
         ] {
             let wrapper=self.storage_allocate(interface,object)?;
             self.define_data_property(&global,name,wrapper,true,true,true)?;
         }
+        let navigator=self.js.binding_get_property(&global,"navigator")?;
+        let navigator=if matches!(navigator,JsValue::Object(_)){navigator}else{
+            let value=self.js.binding_create_object(None)?;
+            self.define_data_property(&global,"navigator",value.clone(),true,false,true)?;
+            value
+        };
+        let manager=self.storage_allocate(SI::StorageManager,StorageObject::Manager)?;
+        self.define_data_property(&navigator,"storage",manager,true,true,true)?;
+        let locks=self.storage_allocate(SI::LockManager,StorageObject::LockManager)?;
+        self.define_data_property(&navigator,"locks",locks,true,true,true)?;
+        let buckets=self.storage_allocate(SI::StorageBucketManager,StorageObject::BucketManager)?;
+        self.define_data_property(&navigator,"storageBuckets",buckets,true,true,true)?;
         self.install_storage_legacy();
         Ok(())
     }
@@ -214,24 +327,61 @@ impl RuntimeBindingHost<'_> {
             {Some(TestStorageRoot::new())}
         }else{None};
         let path=test_root.as_ref().map(|root|root.path.clone()).unwrap_or_else(Self::storage_profile_path);
+        let quota=SHARED_QUOTA.with(|shared|{
+            if let Some(value)=shared.borrow().get(&path).and_then(SyncWeak::upgrade){return value}
+            let value=Arc::new(Mutex::new(QuotaLedger::new(STORAGE_QUOTA)));
+            shared.borrow_mut().insert(path.clone(),Arc::downgrade(&value));value
+        });
         let web=SHARED_WEB_STORAGE.with(|shared|->Result<_,Throw>{
             if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
-            let value=Rc::new(RefCell::new(PersistentWebStorage::open(DiskStore::open(path.join("web"),STORAGE_QUOTA)
-                .map_err(|e|Throw::type_error(format!("storage open: {e:?}")))?,10*1024*1024)
+            let mut disk=DiskStore::open(path.join("web"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("storage open: {e:?}")))?;
+            disk.attach_quota(quota.clone());
+            let value=Rc::new(RefCell::new(PersistentWebStorage::open(disk,10*1024*1024)
                 .map_err(|e|Throw::type_error(format!("Web Storage open: {e:?}")))?));
             shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
         })?;
         let idb=SHARED_INDEXED_DB.with(|shared|->Result<_,Throw>{
             if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
-            let value=Rc::new(RefCell::new(IndexedDb::with_disk(DiskStore::open(path.join("idb"),STORAGE_QUOTA)
-                .map_err(|e|Throw::type_error(format!("IndexedDB open: {e:?}")))?)
+            let mut disk=DiskStore::open(path.join("idb"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("IndexedDB open: {e:?}")))?;
+            disk.attach_quota(quota.clone());
+            let value=Rc::new(RefCell::new(IndexedDb::with_disk(disk)
                 .map_err(|e|Throw::type_error(format!("IndexedDB decode: {e:?}")))?));
             shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
         })?;
-        let cache=PersistentCacheStorage::open(DiskStore::open(path.join("cache"),STORAGE_QUOTA)
-            .map_err(|e|Throw::type_error(format!("Cache open: {e:?}")))?)
-            .map_err(|e|Throw::type_error(format!("Cache decode: {e:?}")))?;
-        self.state.borrow_mut().storage=Some(StorageRuntime {web,idb,cache,objects:Vec::new(),wrappers:HashMap::new(),pending:VecDeque::new(),blocked_opens:VecDeque::new(),blocked_deletes:VecDeque::new(),tick_scheduled:false,_test_root:test_root});
+        let cache=SHARED_CACHE.with(|shared|->Result<_,Throw>{
+            if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
+            let mut disk=DiskStore::open(path.join("cache"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("Cache open: {e:?}")))?;
+            disk.attach_quota(quota.clone());
+            let value=Rc::new(RefCell::new(PersistentCacheStorage::open(disk)
+                .map_err(|e|Throw::type_error(format!("Cache decode: {e:?}")))?));
+            shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
+        })?;
+        let manager=SHARED_MANAGER.with(|shared|->Result<_,Throw>{
+            if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
+            let disk=DiskStore::open(path.join("manager"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("StorageManager open: {e:?}")))?;
+            let value=Rc::new(RefCell::new(StorageManager::open(disk,quota)
+                .map_err(|e|Throw::type_error(format!("StorageManager decode: {e:?}")))?));
+            shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
+        })?;
+        let locks=SHARED_LOCKS.with(|shared|{
+            if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return value}
+            let value=Rc::new(RefCell::new(LockCoordinator::default()));
+            shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));value
+        });
+        let buckets=SHARED_BUCKETS.with(|shared|->Result<_,Throw>{
+            if let Some(value)=shared.borrow().get(&path).and_then(Weak::upgrade){return Ok(value)}
+            let disk=DiskStore::open(path.join("buckets"),STORAGE_QUOTA)
+                .map_err(|e|Throw::type_error(format!("Storage Buckets open: {e:?}")))?;
+            let value=Rc::new(RefCell::new(BucketRegistry::load(disk)
+                .map_err(|e|Throw::type_error(format!("Storage Buckets decode: {e:?}")))?));
+            shared.borrow_mut().insert(path.clone(),Rc::downgrade(&value));Ok(value)
+        })?;
+        let lock_client_id=self.state.borrow().arena;
+        self.state.borrow_mut().storage=Some(StorageRuntime {web,idb,cache,manager,buckets,locks,lock_client_id,lock_callbacks:HashMap::new(),objects:Vec::new(),wrappers:HashMap::new(),pending:VecDeque::new(),blocked_opens:VecDeque::new(),blocked_deletes:VecDeque::new(),tick_scheduled:false,_test_root:test_root});
         STORAGE_DOCUMENTS.with(|documents| {
             let mut documents = documents.borrow_mut();
             let peers = documents.entry(path).or_default();
@@ -448,6 +598,11 @@ impl RuntimeBindingHost<'_> {
                 self.storage_version_event(&name,old,new)
             },
             SI::CacheStorage|SI::Cache=>self.storage_cache_invoke(interface,member,this,args),
+            SI::StorageManager=>self.storage_manager_invoke(member,this),
+            SI::StorageBucketManager=>self.storage_bucket_manager_invoke(member,this,args),
+            SI::StorageBucket=>self.storage_bucket_invoke(member,kind,this,args),
+            SI::LockManager=>self.storage_lock_manager_invoke(member,this,args),
+            SI::Lock=>self.storage_lock_invoke(member,this),
             _=>self.storage_idb_invoke(interface,member,kind,this,args),
         }
     }
@@ -482,6 +637,241 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn storage_lock_invoke(&mut self,member:&str,this:JsValue)->Result<JsValue,Throw>{
+        let slot=self.storage_slot(&this,SI::Lock)?;
+        let (name,mode)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Lock{name,mode}=>(name.clone(),*mode),_=>unreachable!()}};
+        match member {"name"=>Ok(JsValue::str(name)),"mode"=>Ok(JsValue::str(match mode{LockMode::Shared=>"shared",LockMode::Exclusive=>"exclusive"})),
+            _=>Err(Throw::type_error("Unknown Lock member"))}
+    }
+    fn storage_lock_manager_invoke(&mut self,member:&str,this:JsValue,args:&[JsValue])->Result<JsValue,Throw>{
+        self.storage_slot(&this,SI::LockManager)?;
+        let key=self.storage_key()?;
+        if member=="query" {
+            let locks=self.state.borrow().storage.as_ref().unwrap().locks.clone();
+            let snapshot=locks.borrow().query(&key);
+            let result=self.js.binding_create_object(None)?;
+            for (name,items) in [("held",snapshot.held),("pending",snapshot.pending)] {
+                let mut values=Vec::new();
+                for item in items {
+                    let value=self.js.binding_create_object(None)?;
+                    self.define_data_property(&value,"name",JsValue::str(item.name),true,true,true)?;
+                    self.define_data_property(&value,"mode",JsValue::str(match item.mode{LockMode::Shared=>"shared",LockMode::Exclusive=>"exclusive"}),true,true,true)?;
+                    self.define_data_property(&value,"clientId",JsValue::str(item.client_id.to_string()),true,true,true)?;
+                    values.push(value);
+                }
+                let values=self.js.binding_create_array(values)?;
+                self.define_data_property(&result,name,values,true,true,true)?;
+            }
+            let promise=self.new_promise()?;self.resolve_promise(&promise,result)?;return Ok(promise)
+        }
+        if member!="request"{return Err(Throw::type_error("Unknown LockManager member"))}
+        let name=self.storage_string(self.storage_arg(args,0)?)?;
+        let (options,callback)=if args.get(1).is_some_and(|value|self.js.binding_is_callable(value)) {
+            (None,args.get(1).cloned())
+        }else{(args.get(1),args.get(2).cloned())};
+        let callback=callback.filter(|value|self.js.binding_is_callable(value))
+            .ok_or_else(||Throw::type_error("Lock callback must be callable"))?;
+        let mut mode=LockMode::Exclusive;let mut flags=LockOptions::default();
+        if let Some(JsValue::Object(_))=options {
+            let value=self.js.binding_get_property(options.unwrap(),"mode")?;
+            if !matches!(value,JsValue::Undefined){mode=match self.storage_string(&value)?.as_str(){
+                "shared"=>LockMode::Shared,"exclusive"=>LockMode::Exclusive,_=>return Err(Throw::type_error("Invalid lock mode"))}}
+            let value=self.js.binding_get_property(options.unwrap(),"ifAvailable")?;flags.if_available=self.js.binding_to_boolean(&value);
+            let value=self.js.binding_get_property(options.unwrap(),"steal")?;flags.steal=self.js.binding_to_boolean(&value);
+        }
+        let promise=self.new_promise()?;
+        let (locks,client_id)={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();(storage.locks.clone(),storage.lock_client_id)};
+        let outcome=locks.borrow_mut().request(key.clone(),client_id,name.clone(),mode,flags);
+        let outcome=match outcome {Ok(value)=>value,Err(error)=>{
+            let name=match error{amazing_storage::locks::Error::InvalidName=>"NotSupportedError",amazing_storage::locks::Error::IncompatibleOptions=>"NotSupportedError"};
+            let error=self.storage_dom_error(name,"Invalid lock request");self.reject_promise(&promise,error.0)?;return Ok(promise)
+        }};
+        static NEXT_UNAVAILABLE:AtomicU64=AtomicU64::new(1u64<<63);
+        let id=outcome.id.unwrap_or_else(||NEXT_UNAVAILABLE.fetch_add(1,Ordering::Relaxed));
+        let acquired=outcome.granted.contains(&id);
+        let started=acquired||outcome.id.is_none();
+        self.state.borrow_mut().storage.as_mut().unwrap().lock_callbacks.insert(id,
+            LockCallback{callback,promise:promise.clone(),key,name,mode,started,acquired});
+        if started {self.storage_schedule(StorageJob::LockGranted{id})?;}
+        Ok(promise)
+    }
+    fn storage_lock_granted(&mut self,id:u64)->Result<(),Throw>{
+        let pending={let state=self.state.borrow();state.storage.as_ref().unwrap().lock_callbacks.get(&id)
+            .map(|pending|(pending.callback.clone(),pending.name.clone(),pending.mode,pending.acquired))};
+        let Some((callback,name,mode,acquired))=pending else{return Ok(())};
+        let lock=if acquired {self.storage_allocate(SI::Lock,StorageObject::Lock{name,mode})?}else{JsValue::Null};
+        let result=(||->Result<(),Throw>{
+            let returned=binding_call(self.js,&callback,&JsValue::Undefined,&[lock])?;
+            let global=self.js.binding_global_object();
+            let constructor=self.js.binding_get_property(&global,"Promise")?;
+            let resolve=self.js.binding_get_property(&constructor,"resolve")?;
+            let pending=binding_call(self.js,&resolve,&constructor,&[returned])?;
+            let success=self.native("lock callback fulfilled",1,NativeEntry::StorageLockSettled(id,true),HostCallPolicy::CallOnly);
+            let failure=self.native("lock callback rejected",1,NativeEntry::StorageLockSettled(id,false),HostCallPolicy::CallOnly);
+            let then=self.js.binding_get_property(&pending,"then")?;
+            binding_call(self.js,&then,&pending,&[success,failure])?;
+            Ok(())
+        })();
+        if let Err(error)=result {self.storage_lock_finish(id,Err(error.0))?;}
+        Ok(())
+    }
+    pub(super) fn storage_lock_settled(&mut self,id:u64,success:bool,args:&[JsValue])->Result<JsValue,Throw>{
+        let value=args.first().cloned().unwrap_or(JsValue::Undefined);
+        self.storage_lock_finish(id,if success{Ok(value)}else{Err(value)})?;
+        Ok(JsValue::Undefined)
+    }
+    fn storage_lock_finish(&mut self,id:u64,result:Result<JsValue,JsValue>)->Result<(),Throw>{
+        let pending=self.state.borrow_mut().storage.as_mut().unwrap().lock_callbacks.remove(&id);
+        let Some(pending)=pending else{return Ok(())};
+        if pending.acquired {self.state.borrow().storage.as_ref().unwrap().locks.borrow_mut().release(id);}
+        match result {Ok(value)=>self.resolve_promise(&pending.promise,value)?,Err(error)=>self.reject_promise(&pending.promise,error)?}
+        Ok(())
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    fn storage_manager_invoke(&mut self,member:&str,this:JsValue)->Result<JsValue,Throw>{
+        self.storage_slot(&this,SI::StorageManager)?;
+        let promise=self.new_promise()?;
+        let result=(||->Result<JsValue,Throw>{
+            let key=self.storage_key()?;
+            let manager=self.state.borrow().storage.as_ref().unwrap().manager.clone();
+            match member {
+                "estimate"=>{
+                    let estimate=manager.borrow().estimate(&key);
+                    let value=self.js.binding_create_object(None)?;
+                    self.define_data_property(&value,"usage",JsValue::num(estimate.usage as f64),true,true,true)?;
+                    self.define_data_property(&value,"quota",JsValue::num(estimate.quota as f64),true,true,true)?;
+                    Ok(value)
+                },
+                "persisted"=>Ok(JsValue::Bool(manager.borrow().persisted(&key))),
+                "persist"=>{let granted=manager.borrow_mut().persist(key)
+                    .map_err(|error|Throw::type_error(format!("StorageManager persist: {error:?}")))?;
+                    Ok(JsValue::Bool(granted))},
+                _=>Err(Throw::type_error("Unknown StorageManager member")),
+            }
+        })();
+        match result {Ok(value)=>self.resolve_promise(&promise,value)?,Err(error)=>self.reject_promise(&promise,error.0)?}
+        Ok(promise)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    fn storage_bucket_manager_invoke(&mut self, member:&str, this:JsValue, args:&[JsValue])->Result<JsValue,Throw>{
+        self.storage_slot(&this,SI::StorageBucketManager)?;
+        let promise=self.new_promise()?;
+        let result=(||->Result<JsValue,Throw>{
+            let key=self.storage_key()?;
+            match member {
+                "keys"=>{
+                    let names=self.state.borrow().storage.as_ref().unwrap().buckets.borrow().keys(&key);
+                    let values=names.into_iter().map(JsValue::str).collect();
+                    Ok(self.js.binding_create_array(values)?)
+                },
+                "open"=>{
+                    let name=self.storage_string(self.storage_arg(args,0)?)?;
+                    if !valid_bucket_name(&name){return Err(Throw::type_error("Invalid bucket name"))}
+                    let mut policy=Policy::default();
+                    if let Some(options@JsValue::Object(_))=args.get(1){
+                        let quota=self.js.binding_get_property(options,"quota")?;
+                        if !matches!(quota,JsValue::Undefined){
+                            let number=self.js.binding_to_number(&quota)?;
+                            if !number.is_finite()||number<1.0||number>9_007_199_254_740_991.0{
+                                return Err(Throw::type_error("Invalid bucket quota"))}
+                            policy.quota=Some(number as u64);
+                        }
+                        let durability=self.js.binding_get_property(options,"durability")?;
+                        if !matches!(durability,JsValue::Undefined){
+                            policy.durability=match self.storage_string(&durability)?.as_str(){
+                                "strict"=>Durability::Strict,"relaxed"=>Durability::Relaxed,
+                                _=>return Err(Throw::type_error("Invalid bucket durability"))};
+                        }
+                        let expires=self.js.binding_get_property(options,"expires")?;
+                        if !matches!(expires,JsValue::Undefined|JsValue::Null){
+                            let number=self.js.binding_to_number(&expires)?;
+                            if !number.is_finite(){return Err(Throw::type_error("Invalid bucket expires"))}
+                            policy.expires=Some(number as i64);
+                        }
+                    }
+                    let epoch=self.state.borrow().storage.as_ref().unwrap().buckets.borrow_mut()
+                        .open(key,name.clone(),policy)
+                        .map_err(|error|Throw::type_error(format!("Bucket open: {error:?}")))?;
+                    self.storage_allocate(SI::StorageBucket,StorageObject::Bucket{name,epoch})
+                },
+                "delete"=>{
+                    let name=self.storage_string(self.storage_arg(args,0)?)?;
+                    if !valid_bucket_name(&name){return Err(Throw::type_error("Invalid bucket name"))}
+                    self.state.borrow().storage.as_ref().unwrap().buckets.borrow_mut()
+                        .delete(&key,&name)
+                        .map_err(|error|Throw::type_error(format!("Bucket delete: {error:?}")))?;
+                    Ok(JsValue::Undefined)
+                },
+                _=>Err(Throw::type_error("Unknown StorageBucketManager member")),
+            }
+        })();
+        match result {Ok(value)=>self.resolve_promise(&promise,value)?,Err(error)=>self.reject_promise(&promise,error.0)?}
+        Ok(promise)
+    }
+    fn storage_bucket_invoke(&mut self, member:&str, kind:SM, this:JsValue, args:&[JsValue])->Result<JsValue,Throw>{
+        let slot=self.storage_slot(&this,SI::StorageBucket)?;
+        let (name,epoch)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Bucket{name,epoch}=>(name.clone(),*epoch),_=>unreachable!()}};
+        if kind!=SM::Getter {
+            let key=self.storage_key()?;
+            let promise=self.new_promise()?;
+            let result=(||->Result<JsValue,Throw>{
+                if !self.state.borrow().storage.as_ref().unwrap().buckets.borrow().handle_valid(&key,&name,epoch){
+                    return Err(self.storage_dom_error("UnknownError","Bucket has been deleted"))}
+                let buckets=self.state.borrow().storage.as_ref().unwrap().buckets.clone();
+                match member {
+                    "persisted"=>Ok(JsValue::Bool(buckets.borrow().policy(&key,&name).is_some_and(|policy|policy.persisted))),
+                    "persist"=>{
+                        let mut policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        policy.persisted=true;
+                        buckets.borrow_mut().update(&key,&name,policy)
+                            .map_err(|error|Throw::type_error(format!("Bucket persist: {error:?}")))?;
+                        Ok(JsValue::Bool(true))
+                    },
+                    "durability"=>Ok(JsValue::str(match buckets.borrow().policy(&key,&name).map(|policy|policy.durability){
+                        Some(Durability::Strict)=>"strict",_=>"relaxed"})),
+                    "expires"=>Ok(buckets.borrow().policy(&key,&name).and_then(|policy|policy.expires)
+                        .map_or(JsValue::Null,|expires|JsValue::num(expires as f64))),
+                    "setExpires"=>{
+                        let number=self.js.binding_to_number(self.storage_arg(args,0)?)?;
+                        if !number.is_finite(){return Err(Throw::type_error("Invalid expires"))}
+                        let mut policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        policy.expires=Some(number as i64);
+                        buckets.borrow_mut().update(&key,&name,policy)
+                            .map_err(|error|Throw::type_error(format!("Bucket setExpires: {error:?}")))?;
+                        Ok(JsValue::Undefined)
+                    },
+                    "estimate"=>{
+                        let policy=buckets.borrow().policy(&key,&name).cloned().unwrap_or_default();
+                        let quota=policy.quota.unwrap_or_else(||{
+                            let manager=self.state.borrow().storage.as_ref().unwrap().manager.clone();
+                            manager.borrow().estimate(&key).quota});
+                        let value=self.js.binding_create_object(None)?;
+                        self.define_data_property(&value,"usage",JsValue::num(0.0),true,true,true)?;
+                        self.define_data_property(&value,"quota",JsValue::num(quota as f64),true,true,true)?;
+                        Ok(value)
+                    },
+                    _=>Err(Throw::type_error("Unknown StorageBucket member")),
+                }
+            })();
+            match result {Ok(value)=>self.resolve_promise(&promise,value)?,Err(error)=>self.reject_promise(&promise,error.0)?}
+            return Ok(promise)
+        }
+        match member {
+            "name"=>Ok(JsValue::str(name)),
+            "indexedDB"=>self.storage_allocate(SI::IDBFactory,StorageObject::Factory{bucket:name}),
+            "caches"=>self.storage_allocate(SI::CacheStorage,StorageObject::CacheStorage{bucket:name}),
+            _=>Err(Throw::type_error("Unknown StorageBucket member")),
+        }
+    }
+}
+
+impl RuntimeBindingHost<'_> {
     fn storage_idb_error(&mut self, error: idb::Error) -> Throw {
         let name = match error {
             idb::Error::Data => "DataError", idb::Error::Constraint => "ConstraintError",
@@ -500,8 +890,10 @@ impl RuntimeBindingHost<'_> {
         Ok((slot,value))
     }
     fn storage_factory_invoke(&mut self, member: &str, this: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let _=self.storage_slot(&this,SI::IDBFactory)?;
-        let key=self.storage_key()?;
+        let slot=self.storage_slot(&this,SI::IDBFactory)?;
+        let bucket={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Factory{bucket}=>bucket.clone(),_=>unreachable!()}};
+        let key=BucketKey::new(self.storage_key()?,bucket);
         match member {
             "cmp"=>{
                 if args.len()<2 {
@@ -675,7 +1067,9 @@ impl RuntimeBindingHost<'_> {
                     let state=self.state.borrow();if let StorageObject::Database{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
                 }
                 let (connection,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Database{connection,name,..}=>(*connection,name.clone()),_=>unreachable!()}};
-                let key=self.storage_key()?;
+                let key=self.state.borrow().storage.as_ref().unwrap().idb.borrow()
+                    .connection(connection).map(|connection|connection.key.clone())
+                    .ok_or_else(||Throw::type_error("IDBDatabase is closed"))?;
                 match member {
                     "name"=>Ok(JsValue::str(name)),
                     "version"=>{let state=self.state.borrow();let version=state.storage.as_ref().unwrap().idb.borrow().connection(connection).map_or(0,|connection|connection.version);
@@ -704,13 +1098,15 @@ impl RuntimeBindingHost<'_> {
                             self.storage_parse_key_path(&path)?}else{None};
                         let auto=if matches!(options,JsValue::Object(_)){let value=self.js.binding_get_property(&options,"autoIncrement")?;self.js.binding_to_boolean(&value)}else{false};
                         let transaction=self.storage_upgrade_transaction(connection)?;
-                        {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{unreachable!()};
-                            tx.database_mut().and_then(|db|db.create_store(name.clone(),key_path,auto)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
-                        self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction,name})
+                        let result={let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{unreachable!()};
+                            tx.database_mut().and_then(|db|db.create_store(name.clone(),key_path,auto))};
+                        result.map_err(|error|self.storage_idb_error(error))?;
+                        self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction,name,key_path_value:None})
                     },
                     "deleteObjectStore"=>{let name=self.storage_string(self.storage_arg(args,0)?)?;let transaction=self.storage_upgrade_transaction(connection)?;
-                        {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{unreachable!()};
-                            tx.database_mut().and_then(|db|db.delete_store(&name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}Ok(JsValue::Undefined)},
+                        let result={let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{unreachable!()};
+                            tx.database_mut().and_then(|db|db.delete_store(&name))};
+                        result.map_err(|error|self.storage_idb_error(error))?;Ok(JsValue::Undefined)},
                     _=>Ok(JsValue::Null),
                 }
             },
@@ -758,7 +1154,7 @@ impl RuntimeBindingHost<'_> {
             let state=self.state.borrow();if let StorageObject::Transaction{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
         }
         let (connection,mode,names,active)={let state=self.state.borrow();let StorageObject::Transaction{connection,mode,scope,value,queued,..}=&state.storage.as_ref().unwrap().objects[slot] else{unreachable!()};
-            (*connection,*mode,scope.clone(),value.is_some()||*queued)};
+            (*connection,*mode,scope.clone(),value.as_ref().is_some_and(IdbTransaction::is_active)||*queued)};
         match member {
             "mode"=>Ok(JsValue::str(match mode{Mode::ReadOnly=>"readonly",Mode::ReadWrite=>"readwrite",Mode::VersionChange=>"versionchange"})),
             "durability"=>Ok(JsValue::str("default")),"error"=>Ok(JsValue::Null),
@@ -779,22 +1175,23 @@ impl RuntimeBindingHost<'_> {
                     }
                 };
                 if !found {return Err(self.storage_dom_error("NotFoundError","Object store not found"))}
-                self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction:slot,name})},
-            "abort"=>{let mut state=self.state.borrow_mut();if let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[slot]{tx.abort();}Ok(JsValue::Undefined)},
+                self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction:slot,name,key_path_value:None})},
+            "abort"=>{if !active{return Err(self.storage_dom_error("InvalidStateError","Transaction has finished"))}
+                let mut state=self.state.borrow_mut();if let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[slot]{tx.abort();}Ok(JsValue::Undefined)},
             "commit"=>Ok(JsValue::Undefined),
             _=>Err(Throw::type_error("Unknown IDBTransaction member")),
         }
     }
     fn storage_store_invoke(&mut self,member:&str,this:JsValue,args:&[JsValue])->Result<JsValue,Throw>{
         let slot=self.storage_slot(&this,SI::IDBObjectStore)?;
-        let (transaction,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Store{transaction,name}=>(*transaction,name.clone()),_=>unreachable!()}};
+        let (transaction,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Store{transaction,name,..}=>(*transaction,name.clone()),_=>unreachable!()}};
         match member {
             "name"=>return Ok(JsValue::str(name)),"transaction"=>return self.storage_wrapper(transaction),
             "keyPath"|"autoIncrement"|"indexNames"=>{
                 let (key_path,auto,names)={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
                     let store=tx.store(&name).map_err(|error|Throw::type_error(format!("{error:?}")))?;
                     (store.key_path.clone(),store.auto_increment,store.index_names().into_iter().map(str::to_owned).collect::<Vec<_>>())};
-                return match member {"keyPath"=>key_path.as_ref().map_or(Ok(JsValue::Null),|path|self.storage_key_path_value(path)),
+                return match member {"keyPath"=>key_path.as_ref().map_or(Ok(JsValue::Null),|path|self.storage_cached_key_path_value(slot,path)),
                     "autoIncrement"=>Ok(JsValue::Bool(auto)),_=>self.js.binding_create_array(names.into_iter().map(JsValue::str).collect())};
             },
             _=>{},
@@ -805,7 +1202,7 @@ impl RuntimeBindingHost<'_> {
             if member=="index" {
                 {let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
                     tx.store(&name).and_then(|store|store.index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
-                return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name});
+                return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name,key_path_value:None,object_store_value:None});
             }
             if member=="createIndex" {
                 let path=self.storage_parse_key_path(self.storage_arg(args,1)?)?
@@ -815,7 +1212,7 @@ impl RuntimeBindingHost<'_> {
                 let multi=if matches!(options,JsValue::Object(_)){let value=self.js.binding_get_property(&options,"multiEntry")?;self.js.binding_to_boolean(&value)}else{false};
                 {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
                     tx.store_mut(&name).and_then(|store|store.create_index(index_name.clone(),path,unique,multi)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
-                return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name});
+                return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name,key_path_value:None,object_store_value:None});
             }
             {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
                 tx.store_mut(&name).and_then(|store|store.delete_index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
@@ -837,7 +1234,7 @@ impl RuntimeBindingHost<'_> {
                 let state=self.state.borrow();let range=match &state.storage.as_ref().unwrap().objects[handle.slot as usize]{StorageObject::Range(range)=>range.clone(),_=>unreachable!()};(None,Some(range))
             }else{let key=self.storage_to_key(value)?;(Some(key.clone()),Some(KeyRange::only(key)))}
         }else{(None,None)};
-        let value=if matches!(member,"add"|"put"){Some(self.storage_clone_value(self.storage_arg(args,0)?,&mut Vec::new())?)}else{None};
+        let value=if matches!(member,"add"|"put"){Some(self.storage_clone_for_idb(self.storage_arg(args,0)?)?)}else{None};
         let limit=if matches!(member,"getAll"|"getAllKeys") {args.get(1).filter(|v|!matches!(v,JsValue::Undefined)).map(|v|self.js.binding_to_number(v).map(|n|n.max(0.0) as usize)).transpose()?}else{None};
         let outcome={let mut state=self.state.borrow_mut();let storage=state.storage.as_mut().unwrap();
             let StorageObject::Transaction{value:Some(tx),..}=&mut storage.objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
@@ -856,6 +1253,11 @@ impl RuntimeBindingHost<'_> {
                 _=>Err(idb::Error::InvalidState),
             }
         };
+        if let Err(error)=&outcome {
+            if matches!(error,idb::Error::Data|idb::Error::ReadOnly|idb::Error::TransactionInactive|idb::Error::InvalidState|idb::Error::NotFound) {
+                return Err(self.storage_idb_error(error.clone()))
+            }
+        }
         let (request,wrapper)=self.storage_request(false,this,self.storage_wrapper(transaction)?)?;
         let result=match outcome {
             Ok(StoreResult::None)=>JsValue::Undefined,Ok(StoreResult::Count(count))=>JsValue::num(count as f64),
@@ -909,6 +1311,18 @@ impl RuntimeBindingHost<'_> {
         match path {idb::KeyPath::Single(path)=>Ok(JsValue::str(path)),
             idb::KeyPath::Compound(paths)=>self.js.binding_create_array(paths.iter().map(JsValue::str).collect())}
     }
+    fn storage_cached_key_path_value(&mut self,slot:usize,path:&idb::KeyPath)->Result<JsValue,Throw>{
+        let cached={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+            StorageObject::Store{key_path_value,..}|StorageObject::Index{key_path_value,..}=>key_path_value.clone(),
+            _=>None}};
+        if let Some(value)=cached{return Ok(value)}
+        let value=self.storage_key_path_value(path)?;
+        let mut state=self.state.borrow_mut();match &mut state.storage.as_mut().unwrap().objects[slot]{
+            StorageObject::Store{key_path_value,..}|StorageObject::Index{key_path_value,..}=>*key_path_value=Some(value.clone()),
+            _=>{},
+        }
+        Ok(value)
+    }
     fn storage_direction(&mut self,value:Option<&JsValue>)->Result<Direction,Throw>{
         let Some(value)=value else{return Ok(Direction::Next)};
         match self.storage_string(value)?.as_str(){"next"=>Ok(Direction::Next),"nextunique"=>Ok(Direction::NextUnique),
@@ -925,14 +1339,19 @@ impl RuntimeBindingHost<'_> {
     fn storage_index_invoke(&mut self,member:&str,this:JsValue,args:&[JsValue])->Result<JsValue,Throw>{
         let slot=self.storage_slot(&this,SI::IDBIndex)?;
         let (transaction,store_name,index_name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
-            StorageObject::Index{transaction,store,name}=>(*transaction,store.clone(),name.clone()),_=>unreachable!()}};
+            StorageObject::Index{transaction,store,name,..}=>(*transaction,store.clone(),name.clone()),_=>unreachable!()}};
         if member=="name" {return Ok(JsValue::str(index_name))}
-        if member=="objectStore" {return self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction,name:store_name})}
+        if member=="objectStore" {
+            if let StorageObject::Index{object_store_value:Some(value),..}=&self.state.borrow().storage.as_ref().unwrap().objects[slot]{return Ok(value.clone())}
+            let value=self.storage_allocate(SI::IDBObjectStore,StorageObject::Store{transaction,name:store_name.clone(),key_path_value:None})?;
+            if let StorageObject::Index{object_store_value,..}=&mut self.state.borrow_mut().storage.as_mut().unwrap().objects[slot]{*object_store_value=Some(value.clone());}
+            return Ok(value)
+        }
         if matches!(member,"keyPath"|"unique"|"multiEntry") {
             let (path,unique,multi)={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
                 let index=tx.store(&store_name).and_then(|store|store.index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;
                 (index.key_path.clone(),index.unique,index.multi_entry)};
-            return match member {"keyPath"=>self.storage_key_path_value(&path),
+            return match member {"keyPath"=>self.storage_cached_key_path_value(slot,&path),
                 "unique"=>Ok(JsValue::Bool(unique)),_=>Ok(JsValue::Bool(multi))}
         }
         let range=self.storage_query_range(args.first())?;
@@ -990,7 +1409,7 @@ impl RuntimeBindingHost<'_> {
             "update"|"delete"=>{
                 self.storage_transaction_accepts_request(transaction)?;
                 let record=record.ok_or_else(||self.storage_dom_error("InvalidStateError","Cursor exhausted"))?;
-                let value=if member=="update"{Some(self.storage_clone_value(self.storage_arg(args,0)?,&mut Vec::new())?)}else{None};
+                let value=if member=="update"{Some(self.storage_clone_for_idb(self.storage_arg(args,0)?)?)}else{None};
                 let (store_name,_)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[source]{
                     StorageObject::Store{name,..}=>(name.clone(),false),StorageObject::Index{store,..}=>(store.clone(),true),_=>return Err(Throw::type_error("Invalid cursor source"))}};
                 let outcome={let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),..}=&mut state.storage.as_mut().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
@@ -1008,6 +1427,7 @@ impl RuntimeBindingHost<'_> {
         let job={let mut state=self.state.borrow_mut();let storage=state.storage.as_mut().unwrap();storage.tick_scheduled=false;storage.pending.pop_front()};
         if let Some(job)=job {
             match job {
+                StorageJob::LockGranted{id}=>self.storage_lock_granted(id)?,
                 StorageJob::RequestSuccess{request,result}=>{
                     if let Some(StorageObject::Request{result:stored,ready,error,..})=self.state.borrow_mut().storage.as_mut().unwrap().objects.get_mut(request){
                         *stored=result;*ready=true;*error=JsValue::Null;
@@ -1021,6 +1441,8 @@ impl RuntimeBindingHost<'_> {
                     }
                     self.storage_activate_request_transaction(request);
                     self.storage_dispatch(request,"error",None,None)?;
+                    if let Some(StorageObject::Request{source:JsValue::Null,transaction,..})=
+                        self.state.borrow_mut().storage.as_mut().unwrap().objects.get_mut(request){*transaction=JsValue::Null;}
                 },
                 StorageJob::DeleteSuccess{request,old}=>{
                     if let Some(StorageObject::Request{result,error,ready,..})=self.state.borrow_mut().storage.as_mut().unwrap().objects.get_mut(request){
@@ -1082,7 +1504,22 @@ impl RuntimeBindingHost<'_> {
                         match state.storage.as_mut().unwrap().objects.get_mut(transaction){Some(StorageObject::Transaction{connection,id,value,..})=>(*connection,*id,value.take()),_=>return Ok(JsValue::Undefined)}};
                     if let Some(value)=value {
                         let result=self.state.borrow().storage.as_ref().unwrap().idb.borrow_mut().finish(connection,id,value,true);
-                        match result {Ok(())=>self.storage_dispatch(transaction,"complete",None,None)?,Err(_)=>self.storage_dispatch(transaction,"abort",None,None)?}
+                        match result {Ok(())=>self.storage_dispatch(transaction,"complete",None,None)?,Err(error)=>{
+                            self.storage_dispatch(transaction,"abort",None,None)?;
+                            let open_request={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
+                                let wrapper=storage.wrappers.get(&transaction);
+                                storage.objects.iter().enumerate().find_map(|(index,object)|match object{
+                                    StorageObject::Request{source:JsValue::Null,transaction:value,..}
+                                        if wrapper.is_some_and(|wrapper|self.js.binding_same_value(wrapper,value))=>Some(index),
+                                    _=>None,
+                                })};
+                            if let Some(request)=open_request {
+                                self.state.borrow_mut().storage.as_mut().unwrap().pending.retain(|job|
+                                    !matches!(job,StorageJob::RequestSuccess{request:slot,..} if *slot==request));
+                                let error=self.storage_idb_error(error).0;
+                                self.storage_schedule(StorageJob::RequestError{request,error})?;
+                            }
+                        }}
                     }
                 },
                 StorageJob::StorageEvent(delivery)=>self.dispatch_storage_event(delivery)?,
@@ -1176,42 +1613,23 @@ impl RuntimeBindingHost<'_> {
             Key::String(value)=>Ok(JsValue::str(value)),Key::Binary(value)=>self.js.binding_create_array_buffer(value.clone()),
             Key::Array(items)=>{let mut values=Vec::new();for item in items {values.push(self.storage_from_key(item)?)}self.js.binding_create_array(values)}}
     }
-    fn storage_clone_value(&mut self,value:&JsValue,seen:&mut Vec<usize>)->Result<StructuredValue,Throw>{
-        match value {
-            JsValue::Undefined=>Ok(StructuredValue::Undefined),
-            JsValue::Null=>Ok(StructuredValue::Null),
-            JsValue::Bool(value)=>Ok(StructuredValue::Bool(*value)),JsValue::Num(value)=>Ok(StructuredValue::Number(*value)),
-            JsValue::Str(value)=>Ok(StructuredValue::String(value.to_utf8_lossy())),
-            JsValue::Object(object) if matches!(object.borrow().get_own("[[DateValue]]"),Some(JsValue::Num(_)))=>{
-                let Some(JsValue::Num(value))=object.borrow().get_own("[[DateValue]]") else{unreachable!()};Ok(StructuredValue::Date(value))
-            },
-            JsValue::Object(_) if self.storage_binary_bytes(value)?.is_some()=>Ok(StructuredValue::Binary(self.storage_binary_bytes(value)?.unwrap())),
-            JsValue::Object(object)=>{
-                let pointer=Rc::as_ptr(&object.0) as usize;
-                if object.borrow().func.is_some()||!matches!(object.borrow().exotic,Exotic::Ordinary|Exotic::Array)||seen.contains(&pointer){
-                    return Err(self.storage_dom_error("DataCloneError","Value cannot be cloned"));
-                }
-                seen.push(pointer);
-                let result=if matches!(object.borrow().exotic,Exotic::Array) {
-                    let length=self.js.binding_get_property(value,"length")?;let count=self.js.binding_to_number(&length)? as usize;
-                    if count>100_000{return Err(self.storage_dom_error("DataCloneError","Array is too long"))}
-                    let mut items=Vec::new();for index in 0..count {let item=self.js.binding_get_property(value,&index.to_string())?;items.push(self.storage_clone_value(&item,seen)?)}
-                    StructuredValue::Array(items)
-                }else{
-                    let names=self.js.binding_own_property_keys(value)?;let mut map=BTreeMap::new();
-                    for name in names {let item=self.js.binding_get_property(value,&name)?;map.insert(name,self.storage_clone_value(&item,seen)?);}
-                    StructuredValue::Object(map)
-                };seen.pop();Ok(result)
-            },
-            _=>Err(self.storage_dom_error("DataCloneError","Value cannot be cloned")),
-        }
+    fn storage_clone_for_idb(&mut self,value:&JsValue)->Result<StructuredValue,Throw>{
+        let mut host=StorageCloneHost{state:self.state.clone()};
+        let wire=self.js.structured_serialize_with_host(value,&[],true,&mut host)?;
+        Ok(StructuredValue::Graph{view:Box::new(idb::graph_view(&wire)),wire})
     }
     fn storage_from_value(&mut self,value:&StructuredValue)->Result<JsValue,Throw>{
-        match value {StructuredValue::Undefined=>Ok(JsValue::Undefined),StructuredValue::Null=>Ok(JsValue::Null),StructuredValue::Bool(value)=>Ok(JsValue::Bool(*value)),
+        match value {StructuredValue::Graph{wire,..}=>{
+            let mut host=StorageCloneHost{state:self.state.clone()};self.js.structured_deserialize_with_host(wire,&mut host)
+        },
+            StructuredValue::Hole|StructuredValue::Undefined=>Ok(JsValue::Undefined),StructuredValue::Null=>Ok(JsValue::Null),StructuredValue::Bool(value)=>Ok(JsValue::Bool(*value)),
             StructuredValue::Number(value)=>Ok(JsValue::num(*value)),
             StructuredValue::Date(value)=>{let global=self.js.binding_global_object();let constructor=self.js.binding_get_property(&global,"Date")?;self.js.binding_construct(&constructor,vec![JsValue::num(*value)])},
             StructuredValue::String(value)=>Ok(JsValue::str(value)),StructuredValue::Binary(value)=>self.js.binding_create_array_buffer(value.clone()),
-            StructuredValue::Array(items)=>{let mut values=Vec::new();for item in items{values.push(self.storage_from_value(item)?)}self.js.binding_create_array(values)},
+            StructuredValue::Array(items)=>{let mut values=Vec::new();for item in items{values.push(self.storage_from_value(item)?)}
+                let array=self.js.binding_create_array(values)?;
+                for (index,item) in items.iter().enumerate(){if matches!(item,StructuredValue::Hole){self.js.binding_delete_property(&array,&index.to_string())?;}}
+                Ok(array)},
             StructuredValue::Object(items)=>{let object=self.js.binding_create_object(None)?;
                 for (name,value) in items {let item=self.storage_from_value(value)?;self.js.binding_set_property(&object,name,item)?;}Ok(object)},
         }
@@ -1263,6 +1681,42 @@ mod storage_binding_tests {
         first.set_location_url(&origin);second.set_location_url(&origin);
         first.run_script("localStorage.setItem('shared','value')").unwrap();
         assert_eq!(second.run_script("localStorage.getItem('shared')").unwrap(),JsValue::str("value"));
+    }
+
+    #[test]
+    fn navigator_storage_estimates_and_remembers_persistence() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var storageResult='pending'; navigator.storage.estimate().then(function(e){storageResult=String(e.usage)+':'+String(e.quota)});").unwrap();
+        for step in 1..5 {scheduler.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        let estimate=scheduler.run_script("storageResult").unwrap();
+        assert!(matches!(estimate,JsValue::Str(ref value) if value.to_utf8_lossy().contains(':')));
+        scheduler.run_script("navigator.storage.persist().then(function(granted){storageResult=String(granted)});").unwrap();
+        for step in 5..9 {scheduler.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(scheduler.run_script("storageResult").unwrap(),JsValue::str("true"));
+        scheduler.run_script("navigator.storage.persisted().then(function(value){storageResult=String(value)});").unwrap();
+        for step in 9..13 {scheduler.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(scheduler.run_script("storageResult").unwrap(),JsValue::str("true"));
+    }
+
+    #[test]
+    fn web_locks_coordinate_two_documents_and_release_after_callback_promise() {
+        let _shared=SharedTestStorage::new();
+        let mut first=scheduler();let mut second=scheduler();
+        let origin=format!("https://locks-{}.example.test/",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        first.set_location_url(&origin);second.set_location_url(&origin);
+        first.run_script("var releaseLock; var firstState='pending'; navigator.locks.request('resource',function(lock){firstState=lock.name+':'+lock.mode; return new Promise(function(resolve){releaseLock=resolve;});});").unwrap();
+        for step in 1..5 {first.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(first.run_script("firstState").unwrap(),JsValue::str("resource:exclusive"));
+        second.run_script("var secondState='pending'; navigator.locks.request('resource',function(lock){secondState=lock.name+':'+lock.mode;});").unwrap();
+        for step in 1..5 {second.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(second.run_script("secondState").unwrap(),JsValue::str("pending"));
+        second.run_script("var lockSnapshot='pending'; var unavailable=false; navigator.locks.query().then(function(s){lockSnapshot=s.held.length+':'+s.pending.length}); navigator.locks.request('resource',{ifAvailable:true},function(lock){unavailable=lock===null;});").unwrap();
+        for step in 5..9 {second.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(second.run_script("lockSnapshot").unwrap(),JsValue::str("1:1"));
+        assert_eq!(second.run_script("unavailable").unwrap(),JsValue::Bool(true));
+        first.run_script("releaseLock('done')").unwrap();
+        for step in 9..15 {first.pump_at(Duration::from_millis(step*10),false).unwrap();second.pump_at(Duration::from_millis(step*10),false).unwrap();}
+        assert_eq!(second.run_script("secondState").unwrap(),JsValue::str("resource:exclusive"));
     }
 
     #[test]
@@ -1319,6 +1773,14 @@ mod storage_binding_tests {
     }
 
     #[test]
+    fn indexeddb_structured_clone_preserves_cycles_and_shared_identity() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var cloneResult='pending'; var open=indexedDB.open('graph',1); open.onupgradeneeded=function(){open.result.createObjectStore('items')}; open.onsuccess=function(){var shared={value:7}; var original={left:shared,right:shared}; original.self=original; var tx=open.result.transaction('items','readwrite'); tx.objectStore('items').put(original,1); tx.oncomplete=function(){var read=open.result.transaction('items').objectStore('items').get(1); read.onsuccess=function(){var value=read.result; cloneResult=String(value!==original && value.self===value && value.left===value.right && value.left.value===7)};};};").unwrap();
+        for step in 1..30 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); if scheduler.run_script("cloneResult").unwrap()!=JsValue::str("pending") {break} }
+        assert_eq!(scheduler.run_script("cloneResult").unwrap(),JsValue::str("true"));
+    }
+
+    #[test]
     fn indexeddb_compares_binary_date_and_array_keys() {
         let mut scheduler=scheduler();
         for (script, expected) in [
@@ -1363,5 +1825,37 @@ mod storage_binding_tests {
             if scheduler.run_script("result").unwrap()==JsValue::str("version:1:2:ready:2") {break}
         }
         assert_eq!(scheduler.run_script("result").unwrap(),JsValue::str("version:1:2:ready:2"));
+    }
+
+    #[test]
+    fn storage_buckets_open_keys_describe_and_invalidate() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; var bucket=null; \
+            navigator.storageBuckets.open('alpha',{durability:'strict',quota:4096,expires:777}) \
+            .then(function(b){bucket=b;log.push(b.name);return navigator.storageBuckets.open('beta')}) \
+            .then(function(){return navigator.storageBuckets.keys()}) \
+            .then(function(names){log.push(names.join(','));return bucket.durability()}) \
+            .then(function(d){log.push(d);return bucket.expires()}) \
+            .then(function(e){log.push(String(e));return bucket.estimate()}) \
+            .then(function(est){log.push(est.quota+':'+est.usage);log.push(typeof bucket.indexedDB.open);return navigator.storageBuckets.delete('alpha')}) \
+            .then(function(){return bucket.persisted()}) \
+            .catch(function(error){log.push('error:'+error.name)});").unwrap();
+        for step in 1..25 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap(),
+            JsValue::str("alpha|alpha,beta|strict|777|4096:0|function|error:UnknownError"));
+    }
+
+    #[test]
+    fn storage_buckets_reject_invalid_names_and_quotas() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var rejected=[]; function capture(p){return p.then(function(){rejected.push('resolved')},function(e){rejected.push(e.name)})} \
+            capture(navigator.storageBuckets.open('Bad Name')); \
+            capture(navigator.storageBuckets.open('_bad')); \
+            capture(navigator.storageBuckets.open('ok',{quota:0})); \
+            capture(navigator.storageBuckets.open('ok',{quota:9007199254740992})); \
+            capture(navigator.storageBuckets.delete('bad name'));").unwrap();
+        for step in 1..15 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("rejected.join(',')").unwrap(),
+            JsValue::str("TypeError,TypeError,TypeError,TypeError,TypeError"));
     }
 }

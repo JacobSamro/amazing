@@ -309,3 +309,49 @@ The five remaining expanded mismatches are routed to CSS and layout for
 ligature precedence. The remaining crash is the DOM/driver
 `getElementById("content")` script-order issue. No remaining failure in this
 selection has a text-owned cause established by the audit.
+
+## TEXT-13: font-size-adjust metric resolution and current-dev re-audit
+
+`FontSizeAdjustMetric` (`ExHeight`, `CapHeight`, `ChWidth`, `IcWidth`,
+`IcHeight`) and `TextSystem::adjusted_font_size(&TextStyle, metric, aspect)` are
+the text-owned half of CSS Fonts 4 §2.6 `font-size-adjust`. The default trait
+method returns `style.size` unchanged, so no caller had to change. The provider
+resolves the requested metric against the first available font through the same
+`font_relative_metrics` path as `ch`/`ic`, then returns
+`style.size * aspect / font_metric_ratio`; a zero aspect yields a zero used size
+and a missing or non-positive font metric falls back to `style.size`. Layout
+adopts it by computing each element's used size and passing it as
+`TextStyle.size`; that handoff is routed, not yet wired. Commit `929c301a`.
+
+The same ticket re-measured the pinned selections on current dev `0d6b60b0`,
+after LAYOUT-14 exact stretch/oblique values, CSS font-kerning and layout letter
+spacing/feature mapping landed. The retained 15-case font selection moved
+**13 pass / 2 mismatch → 14 pass / 1 mismatch**
+(`first-available-font-002` gained once layout adopted `font_relative_metrics`);
+the only remaining failure is the environment-owned
+`font-unicode-PUA-primary-font` (0 differing pixels, installed Arial/Times
+fixture). The expanded 40-case selection moved 34 pass /
+5 mismatch / 1 crash to **38 pass / 2 mismatch / 0 crash**. Gains:
+`font-feature-resolution-001`, `font-feature-resolution-002`,
+`font-kerning-01`, `font-kerning-04`, and the `font-variant-ligatures` crash
+(resolved by DOM/driver). One loss: `font-kerning-02` (345 px), caused by
+layout's `font_features::from_style` enabling both `kern` and `vkrn` for
+`font-kerning:normal` in horizontal text. Retention held for font-face 4/8,
+flow 14/16, shaping 12/12. Evidence:
+`crates/amazing-text-provider/evidence/text13-gate-summary.json`.
+
+Remaining expanded mismatches are layout-owned and routed:
+`font-kerning-02/03` (orientation-aware kern/vkrn), the four
+`css-fonts/matching/*` variable-axis cases (layout hard-codes
+`TextStyle.synthesis` to the default, so `font-synthesis:none` is ignored), and
+`font-size-adjust-zero-2` (layout must use `adjusted_font_size`).
+
+The two unassigned `css-text` word-break-shaping cases
+(`overflow-wrap-shaping-001`, `line-break-shaping-001`) are also layout-owned:
+with the pinned `NotoNaskhArabic-regular.woff2`, `shape_line` returns glyph ids
+identical to the whole-word `shape` for every split, so Arabic joining context
+survives the line edge, and `line_breaks` emits the correct Emergency/Anywhere
+opportunities. The residual failure is layout break selection / float
+shrink-to-fit.
+
+
