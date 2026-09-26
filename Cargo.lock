@@ -88,11 +88,13 @@ dependencies = [
  "amazing-dom",
  "amazing-fetch",
  "amazing-html",
+ "amazing-ipc",
  "amazing-js",
  "amazing-layout",
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-process",
  "amazing-regex",
  "amazing-storage",
  "amazing-svg",
@@ -281,6 +283,9 @@ version = "0.0.1"
 [[package]]
 name = "amazing-storage"
 version = "0.0.1"
+dependencies = [
+ "amazing-js",
+]
 
 [[package]]
 name = "amazing-svg"
