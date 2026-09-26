@@ -1731,9 +1731,168 @@ committed work, per the same disk-hygiene principle AGENTS.md states for
 win-001. WPT CSS reftest sweeps and all render gates remain deferred under
 Linux-first (2026-09-26).
 
+## CSS-25 — Linux WPT parsing/computed-value runner (base `5b923bf7`)
+
+Commit `e58765a8`. WPT on Linux without render sweeps: a runner for the
+pinned WPT parse/computed-value testharness selections, driving
+`amazing-css` directly (no browser, no JS engine), plus the biggest
+failure clusters it surfaced.
+
+- **The runner**: `crates/amazing-css/examples/wpt_conformance.rs`. WPT's
+  `css/support/parsing-testcommon.js` and `computed-testcommon.js` give
+  every `*-valid.html`/`*-invalid.html`/`*-computed.html` file a small,
+  regular shape — top-level calls to `test_valid_value(property, value[,
+  serialized])`, `test_invalid_value(property, value)`, and
+  `test_computed_value(property, specified, computed)`, almost always with
+  plain quoted-string arguments. The runner statically extracts those call
+  sites (a small parenthesis/quote-aware scanner, not a JS parser — see its
+  own doc comment for the exact grammar it walks) and checks them against:
+  - valid/invalid: the new `pub fn values::parses(property, value) ->
+    bool` (a thin wrapper over the crate-internal `parse`, exposed
+    read-only for this runner; cascade code keeps using `parse` directly).
+  - computed: a lone `div { property: specified }` through `compute()`,
+    comparing `ComputedStyle::get(property)` textually against the
+    expected serialization.
+  Usage: `WPT_ROOT=~/corpora/wpt cargo run -p amazing-css --example
+  wpt_conformance [selection...]`; defaults to css-color, css-values,
+  css-cascade, css-conditional.
+- **Selections and file-shape reality**: the ticket named css-color,
+  css-values, css-cascade, mediaqueries and css-conditional. Only the first,
+  second, third and fifth have files in the `test_valid_value`/
+  `test_invalid_value`/`test_computed_value` shape (57 files, 360 extracted
+  assertions total at the pinned `c2a2fce` WPT revision). `css/mediaqueries`
+  has none — its parsing tests use a per-file `test_parsing(query, expected)`
+  pattern against `matchMedia(query).media`'s CSSOM canonical serialization
+  (e.g. `"(color"` normalizes to `"(color)"`, an unparseable query to
+  `"not all"`), which `MediaQueryList` does not implement (it stores each
+  comma-separated query as trimmed source text, not a canonical
+  re-serialization) — a distinct, real gap, but a different shape of work
+  than this runner covers; not attempted here.
+- **Known measurement limits** (see the runner's own doc comment): a
+  property this crate has no grammar for falls through to
+  `ComputedValue::Unparsed`, which accepts anything, so `values::parses`
+  reports it valid regardless of content — an honest "cannot yet reject
+  this" signal, not a scoring bug. Computed-value comparison is exact
+  string equality; this crate mostly retains the cascade winner's literal
+  (lightly canonicalized) text rather than always re-serializing to the CSS
+  Color 4/Values 5 computed forms WPT expects, so a computed failure can be
+  either a real bug or this known model gap (the fixes below narrow that
+  gap; the remainder in "Deferred" is the gap). Assertions made through a
+  per-file local JS wrapper function (not a direct call to the three
+  helpers) are not extracted, so counts are a lower bound per file.
+- **Measured**: **160/360 before any fix → 203/360 after**, zero
+  regressions on the amazing-css test suite (335 → 347 → still 347 across
+  this ticket's fixes).
+
+Three real bugs found and fixed, biggest cluster first:
+
+- **`syntax::serialize()` never inserted a space after a comma** inside a
+  function's argument list: `min(calc-size(auto,size + 20px),300px)`
+  instead of the CSS-canonical `min(calc-size(auto, size + 20px), 300px)`.
+  This is why nearly every multi-argument computed value across css-values
+  and css-color was failing on purely cosmetic grounds — `clamp()`,
+  `color-mix()`, `container`, `random-item()`, `rgba()`, `translate()`, all
+  of them. Fixed engine-wide: `Token::Comma` now always serializes as `", "`
+  (comma, one space, regardless of the source's own spacing), matching
+  every browser's canonical serialization. Updated the handful of existing
+  tests that had hardcoded the old (wrong) spacing in `cascade.rs`,
+  `computed.rs`, `parser.rs`, `syntax.rs`'s own tests, and two integration
+  tests. This also fixed one test in `crates/amazing/` (outside this lane's
+  paths) that depended on the old spacing; filed for integrator-assist in
+  `.agents/css/questions.md` with the exact one-line fix.
+- **`opacity`/`fill-opacity` only accepted a bare `<number>`**, silently
+  dropping every percentage, `calc()`, `min()`, `max()`, `clamp()` value to
+  the initial value `1` (invalid declarations don't override the cascade
+  winner, and there was none, so it fell back to initial) — CSS Color 4
+  §4.5's `<alpha-value>` is `<number> | <percentage>`, with the usual
+  `calc()` math (CSS Values 4 §10). Added `values::alpha_value`, a small
+  immediate recursive-descent evaluator (`+ - * /`, nested `calc()`/`min()`/
+  `max()`/`clamp()`): the percentage basis for an alpha value is always
+  exactly 1 (100% = 1), a *fixed* basis unlike a length's containing-block-
+  dependent one, so unlike `crate::math` (grammar validation only, deferred
+  resolution) this can and does evaluate to a concrete `f64` immediately.
+  `clamp(MIN, VAL, MAX)` follows the CSS Values 4 §10.6 formula exactly
+  (`max(MIN, min(VAL, MAX))`, not a naive `VAL.clamp(MIN, MAX)` — when
+  `MIN > MAX` the result is `MIN`, and Rust's own `f64::clamp` panics on
+  that input). One tokenizer quirk worth remembering elsewhere: a
+  standalone `-` or `+` lexes as a one-character `Token::Ident`, not
+  `Token::Delim`, per CSS Syntax 3's "would start an identifier" rule
+  (`calc(1 - 1)`'s middle token is `Ident("-")`) — `is_op()` matches both
+  forms. Fixed 20+ opacity valid/computed cases.
+- **`all` (CSS Cascade 3 §7.4) had no grammar at all** — any value "parsed"
+  via the generic accept-anything `Unparsed` fallback every property this
+  crate doesn't otherwise model falls into, so every css-cascade
+  invalid-value test failed (`all: auto`/`none`/`filter`/two keywords all
+  wrongly "parsed"). Given its own arm: only the CSS-wide keywords
+  (`initial | inherit | unset | revert | revert-layer`). Fixed css-cascade
+  from 3/10 to 10/10.
+- **`container`/`container-name`/`container-type`** (CSS Containment 3):
+  not evaluated (no size-container-query matching exists in this engine),
+  but now validated (`container-name`: `none | <custom-ident>+`;
+  `container-type`: `normal | [ [ size | inline-size ] || scroll-state ]`;
+  `container` shorthand: `<container-name> [ / <container-type> ]?`) and
+  `container-name`/`container-type` given `PROPERTIES` metadata (initial
+  `none`/`normal`, not inherited) so `initial`/`inherit`/`unset` resolve
+  instead of dropping the declaration entirely (previously `style.get()`
+  returned `None` for those three cases). Classified `Rebuild` in
+  `change_classification.rs` (a real change establishes/removes a query
+  container and containment, conservatively the broadest kind). The
+  `container` shorthand itself is stored as its own pass-through
+  declaration (this crate's shorthands other than the CSS-13-era ones
+  aren't independently re-derived from their longhands on read; that's a
+  broader existing architecture point, not new to this ticket) so its own
+  `initial`/`inherit`/`unset` cases are unchanged. Fixed 4 of
+  css-conditional's 12 container-related computed failures.
+
+Boundary (deliberately not fixed here, with the reason):
+
+- **`alpha()`** (CSS Color 5's relative-alpha function, e.g. `alpha(from red
+  / 0.5)`): entirely unimplemented (falls through to the generic
+  cascade-preserved-text path, so it "parses" as inert text but never
+  computes a color). All 3 `alpha-color-*.html` files (roughly 70
+  assertions) fail on this. Bleeding-edge, effectively unused on real pages
+  today; deferred rather than building a whole new relative-color function
+  for a corpus-measurement ticket.
+- **`random-item()`** (CSS Values 5, similarly brand-new/experimental):
+  unimplemented; `random-item-invalid.html`/`random-item-computed.html`
+  account for roughly 27 of the remaining css-values failures. Same
+  rationale as `alpha()`.
+- **`calc()` `infinity`/`NaN` arithmetic** for `width` et al.
+  (`calc-infinity-nan-computed.html`, ~15 failures): this crate's general
+  `crate::math` calc validator doesn't carry IEEE-754 infinity/NaN through
+  arithmetic to a used-value clamp; a real but narrower gap than the three
+  fixed above.
+- **Relative-color channel keywords (`r`/`g`/`b`/...) used inside a
+  `calc()`/`clamp()`/`min()`/`max()` that is itself an argument to
+  `rgb(from ... clamp(r, 30, 300) g b)`**: the relative-color grammar
+  doesn't thread channel-keyword substitution through nested math the way
+  `alpha()`'s calc-with-`alpha`-keyword case already does (`clamp-color-
+  computed.html`, ~15 failures, mostly overlapping with the comma-spacing
+  fix for the ones that don't need channel substitution).
+- **`container` shorthand serialization nuances**: slash-spacing
+  normalization (`foo /inline-size` → `foo / inline-size`) and
+  `container-type`'s canonical keyword order (`scroll-state size` → `size
+  scroll-state`) both need dedicated shorthand-serialization logic (this
+  crate generally serializes the cascade winner's tokenized text, not a
+  per-shorthand canonical re-derivation), disconnected from any actual
+  container-query *evaluation* capability. ~6 failures.
+
+Linux gate (Boat sandbox `bx_cp5jbn5z`, lane head `e58765a8`): CSS crate
+**347/347** (no regressions from any of the above), workspace nextest
+**2905/2906** (10 skipped) — the one failure,
+`runtime_binding_host::compositor::property_scene_tests::css13_attribute_delta_updates_bound_nodes_without_recompute`
+in `crates/amazing/src/runtime_host_compositor.rs` (outside this lane's
+paths), is a hardcoded string literal that depended on the old (wrong)
+comma-serialization convention; filed for integrator-assist with the exact
+one-line fix. Doctests **ok** across all 31 doc-tested crates. WPT
+mediaqueries `matchMedia` canonical serialization, and every item under
+"Boundary" above, are candidates for the next CSS-25-style pass.
+
 ## Next
 
-CSS-25: build a Linux runner for the pinned WPT parse/computed-value
-testharness tests (`css/*/parsing/*-valid.html`, `*-invalid.html`,
-`*-computed.html`) driving `amazing-css` directly, covering css-color,
-css-values, css-cascade, mediaqueries and css-conditional. In progress.
+The five deferred items above, roughly in real-page-impact order:
+`calc()` infinity/NaN, relative-color channel keywords inside nested
+`calc()`/`clamp()`, `container` shorthand serialization, then `alpha()` and
+`random-item()` (both genuinely rare on real pages today). Also: `mediaqueries`'
+`matchMedia().media` canonical serialization, a distinct shape of work this
+ticket's runner doesn't cover.
