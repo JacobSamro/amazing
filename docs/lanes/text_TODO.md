@@ -578,3 +578,50 @@ Gate: crate tests `amazing-text`/`amazing-text-provider`/`amazing` 340/340
 (6 skipped), including the new regression test, and the real-pages corpus
 harness (`amazing::real_pages`) green. Workspace nextest 2993/2993 (11
 skipped), workspace doctests green. Commit: see `.agents/text/status.json`.
+
+## TEXT-18: pinned css-fonts pixel selections, first Linux measurement
+
+WPT was unavailable on the Boat sandbox through TEXT-14/15/16 (filed gap in
+`.agents/text/questions.md`), so those tickets gated on unit tests or a
+hand-rolled focused subset. `scripts/ensure-wpt.sh` now provisions the pinned
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` checkout on the sandbox, so this
+ticket runs the lane's four pinned manifests there for the first time:
+`text1-fonts-manifest.json` (15), `text2-font-face-manifest.json` (8),
+`text5-vertical-manifest.json` (7), `text12-expanded-manifest.json` (40).
+
+New comparator `crates/amazing-text-provider/evidence/text18-render-wpt.py`,
+a Python port of `scripts/run-render-wpt.ps1`'s comparison (exact PPM diff,
+`<meta name=fuzzy>` tolerance, `mismatch`-relation inversion) that runs
+`amazing render-wpt <page> <out.ppm> 800 600` with `AMAZING_WPT_ROOT` set to
+the checkout — the same driver command and viewport the Windows harness
+uses, so the numbers are directly comparable, just measured on Linux instead
+of win-001. Each selection was run twice back to back with identical counts
+and per-test actual/reference/diff SHA-256 (stable).
+
+Results at `bbd741b6` (TEXT-17, on this branch):
+- fonts (15): **14 pass / 1 mismatch** — matches TEXT-13's win-001 number
+  exactly; the one mismatch is `font-unicode-PUA-primary-font`, the
+  environment-owned PUA-coverage case.
+- font-face (8): **4 pass / 4 mismatch** — matches the TEXT-12/13 win-001
+  number (retained both tickets); the four `matching__*` mismatches are the
+  pre-existing `@font-face` descriptor-matching gap, the four `variations__*`
+  cases pass.
+- vertical (7): **5 pass / 2 mismatch** — matches TEXT-12's win-001 number;
+  both mismatches are layout-owned per the existing TEXT-7..13 routing.
+- expanded (40): **40 pass / 0 mismatch** — up from TEXT-13's win-001 38/40;
+  the two prior mismatches (`font-kerning-02` and the `font-size-adjust`
+  area) are gone, consistent with TEXT-14's kerning-axis fix landing after
+  TEXT-13 was measured. First Linux run of this selection.
+
+Total: 63 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash
+across 70 cases. Every number either matches or improves on the last
+Windows measurement — zero regressions crossing platforms. Before TEXT-17's
+fix this corpus would have rendered as full-coverage boxes throughout
+(register_system_text_faces registered no face for any family on Linux), so
+these are the first *meaningful* Linux numbers for it. Evidence:
+`crates/amazing-text-provider/evidence/text18-gate-summary.json` and the four
+`text18-*-linux.json` result files.
+
+Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
+skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
+workspace doctests green (`--locked --doc`).
