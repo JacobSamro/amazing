@@ -1,3 +1,4 @@
+use crate::host::LegacyReflectionKind as LR;
 use amazing_dom::legacy_document::LegacyColor as LC;
 use crate::host::{
     BindingHost, FormAttribute as F, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
@@ -814,6 +815,210 @@ const OLIST: &[Member] = &[
     getter("reversed", O::OListReversed), setter("reversed", O::OListSetReversed),
 ];
 const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
+const EMPTY_LEGACY_BASE: &[Member] = &[];
+const fn with_legacy_members<const N: usize>(base: &[Member], extra: &[Member]) -> [Member; N] {
+    assert!(N == base.len() + extra.len());
+    let mut members = [getter("", O::NodeType); N];
+    let mut index = 0;
+    while index < base.len() { members[index] = base[index]; index += 1; }
+    let mut extra_index = 0;
+    while extra_index < extra.len() { members[index] = extra[extra_index]; index += 1; extra_index += 1; }
+    members
+}
+const LEGACY_ANCHOR_EXTRA: &[Member] = &[
+    getter("coords", O::LegacyReflectGet(I::HTMLAnchorElement, "coords", LR::String)), setter("coords", O::LegacyReflectSet(I::HTMLAnchorElement, "coords", LR::String)),
+    getter("charset", O::LegacyReflectGet(I::HTMLAnchorElement, "charset", LR::String)), setter("charset", O::LegacyReflectSet(I::HTMLAnchorElement, "charset", LR::String)),
+    getter("name", O::LegacyReflectGet(I::HTMLAnchorElement, "name", LR::String)), setter("name", O::LegacyReflectSet(I::HTMLAnchorElement, "name", LR::String)),
+    getter("rev", O::LegacyReflectGet(I::HTMLAnchorElement, "rev", LR::String)), setter("rev", O::LegacyReflectSet(I::HTMLAnchorElement, "rev", LR::String)),
+    getter("shape", O::LegacyReflectGet(I::HTMLAnchorElement, "shape", LR::String)), setter("shape", O::LegacyReflectSet(I::HTMLAnchorElement, "shape", LR::String)),
+];
+const LEGACY_ANCHOR: [Member; (HYPERLINK).len() + LEGACY_ANCHOR_EXTRA.len()] = with_legacy_members(HYPERLINK, LEGACY_ANCHOR_EXTRA);
+const LEGACY_AREA_EXTRA: &[Member] = &[
+    getter("noHref", O::LegacyReflectGet(I::HTMLAreaElement, "nohref", LR::Boolean)), setter("noHref", O::LegacyReflectSet(I::HTMLAreaElement, "nohref", LR::Boolean)),
+];
+const LEGACY_AREA: [Member; (HYPERLINK).len() + LEGACY_AREA_EXTRA.len()] = with_legacy_members(HYPERLINK, LEGACY_AREA_EXTRA);
+const LEGACY_BODY_EXTRA: &[Member] = &[
+    getter("background", O::LegacyReflectGet(I::HTMLBodyElement, "background", LR::String)), setter("background", O::LegacyReflectSet(I::HTMLBodyElement, "background", LR::String)),
+];
+const LEGACY_BODY: [Member; (HTML_BODY).len() + LEGACY_BODY_EXTRA.len()] = with_legacy_members(HTML_BODY, LEGACY_BODY_EXTRA);
+const LEGACY_BR_EXTRA: &[Member] = &[
+    getter("clear", O::LegacyReflectGet(I::HTMLBRElement, "clear", LR::String)), setter("clear", O::LegacyReflectSet(I::HTMLBRElement, "clear", LR::String)),
+];
+const LEGACY_BR: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_BR_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_BR_EXTRA);
+const LEGACY_TABLECAPTION_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableCaptionElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableCaptionElement, "align", LR::String)),
+];
+const LEGACY_TABLECAPTION: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLECAPTION_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLECAPTION_EXTRA);
+const LEGACY_TABLECOL_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableColElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableColElement, "align", LR::String)),
+    getter("ch", O::LegacyReflectGet(I::HTMLTableColElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableColElement, "char", LR::String)),
+    getter("chOff", O::LegacyReflectGet(I::HTMLTableColElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableColElement, "charoff", LR::String)),
+    getter("vAlign", O::LegacyReflectGet(I::HTMLTableColElement, "valign", LR::String)), setter("vAlign", O::LegacyReflectSet(I::HTMLTableColElement, "valign", LR::String)),
+    getter("width", O::LegacyReflectGet(I::HTMLTableColElement, "width", LR::String)), setter("width", O::LegacyReflectSet(I::HTMLTableColElement, "width", LR::String)),
+];
+const LEGACY_TABLECOL: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLECOL_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLECOL_EXTRA);
+const LEGACY_DIV_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLDivElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLDivElement, "align", LR::String)),
+];
+const LEGACY_DIV: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_DIV_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_DIV_EXTRA);
+const LEGACY_DLIST_EXTRA: &[Member] = &[
+    getter("compact", O::LegacyReflectGet(I::HTMLDListElement, "compact", LR::Boolean)), setter("compact", O::LegacyReflectSet(I::HTMLDListElement, "compact", LR::Boolean)),
+];
+const LEGACY_DLIST: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_DLIST_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_DLIST_EXTRA);
+const LEGACY_EMBED_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLEmbedElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLEmbedElement, "align", LR::String)),
+    getter("name", O::LegacyReflectGet(I::HTMLEmbedElement, "name", LR::String)), setter("name", O::LegacyReflectSet(I::HTMLEmbedElement, "name", LR::String)),
+];
+const LEGACY_EMBED: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_EMBED_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_EMBED_EXTRA);
+const LEGACY_HEADING_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLHeadingElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLHeadingElement, "align", LR::String)),
+];
+const LEGACY_HEADING: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_HEADING_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_HEADING_EXTRA);
+const LEGACY_HR_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLHRElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLHRElement, "align", LR::String)),
+    getter("color", O::LegacyReflectGet(I::HTMLHRElement, "color", LR::String)), setter("color", O::LegacyReflectSet(I::HTMLHRElement, "color", LR::String)),
+    getter("noShade", O::LegacyReflectGet(I::HTMLHRElement, "noshade", LR::Boolean)), setter("noShade", O::LegacyReflectSet(I::HTMLHRElement, "noshade", LR::Boolean)),
+    getter("size", O::LegacyReflectGet(I::HTMLHRElement, "size", LR::String)), setter("size", O::LegacyReflectSet(I::HTMLHRElement, "size", LR::String)),
+    getter("width", O::LegacyReflectGet(I::HTMLHRElement, "width", LR::String)), setter("width", O::LegacyReflectSet(I::HTMLHRElement, "width", LR::String)),
+];
+const LEGACY_HR: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_HR_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_HR_EXTRA);
+const LEGACY_HTML_EXTRA: &[Member] = &[
+    getter("version", O::LegacyReflectGet(I::HTMLHtmlElement, "version", LR::String)), setter("version", O::LegacyReflectSet(I::HTMLHtmlElement, "version", LR::String)),
+];
+const LEGACY_HTML: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_HTML_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_HTML_EXTRA);
+const LEGACY_IFRAME_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLIFrameElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLIFrameElement, "align", LR::String)),
+    getter("scrolling", O::LegacyReflectGet(I::HTMLIFrameElement, "scrolling", LR::String)), setter("scrolling", O::LegacyReflectSet(I::HTMLIFrameElement, "scrolling", LR::String)),
+    getter("frameBorder", O::LegacyReflectGet(I::HTMLIFrameElement, "frameborder", LR::String)), setter("frameBorder", O::LegacyReflectSet(I::HTMLIFrameElement, "frameborder", LR::String)),
+    getter("longDesc", O::LegacyReflectGet(I::HTMLIFrameElement, "longdesc", LR::UsvUrl)), setter("longDesc", O::LegacyReflectSet(I::HTMLIFrameElement, "longdesc", LR::UsvUrl)),
+    getter("marginHeight", O::LegacyReflectGet(I::HTMLIFrameElement, "marginheight", LR::LegacyString)), setter("marginHeight", O::LegacyReflectSet(I::HTMLIFrameElement, "marginheight", LR::LegacyString)),
+    getter("marginWidth", O::LegacyReflectGet(I::HTMLIFrameElement, "marginwidth", LR::LegacyString)), setter("marginWidth", O::LegacyReflectSet(I::HTMLIFrameElement, "marginwidth", LR::LegacyString)),
+];
+const LEGACY_IFRAME: [Member; (IFRAME).len() + LEGACY_IFRAME_EXTRA.len()] = with_legacy_members(IFRAME, LEGACY_IFRAME_EXTRA);
+const LEGACY_IMAGE_EXTRA: &[Member] = &[
+    getter("name", O::LegacyReflectGet(I::HTMLImageElement, "name", LR::String)), setter("name", O::LegacyReflectSet(I::HTMLImageElement, "name", LR::String)),
+    getter("lowsrc", O::LegacyReflectGet(I::HTMLImageElement, "lowsrc", LR::UsvUrl)), setter("lowsrc", O::LegacyReflectSet(I::HTMLImageElement, "lowsrc", LR::UsvUrl)),
+    getter("align", O::LegacyReflectGet(I::HTMLImageElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLImageElement, "align", LR::String)),
+    getter("hspace", O::LegacyReflectGet(I::HTMLImageElement, "hspace", LR::Unsigned)), setter("hspace", O::LegacyReflectSet(I::HTMLImageElement, "hspace", LR::Unsigned)),
+    getter("vspace", O::LegacyReflectGet(I::HTMLImageElement, "vspace", LR::Unsigned)), setter("vspace", O::LegacyReflectSet(I::HTMLImageElement, "vspace", LR::Unsigned)),
+    getter("longDesc", O::LegacyReflectGet(I::HTMLImageElement, "longdesc", LR::UsvUrl)), setter("longDesc", O::LegacyReflectSet(I::HTMLImageElement, "longdesc", LR::UsvUrl)),
+    getter("border", O::LegacyReflectGet(I::HTMLImageElement, "border", LR::LegacyString)), setter("border", O::LegacyReflectSet(I::HTMLImageElement, "border", LR::LegacyString)),
+];
+const LEGACY_IMAGE: [Member; (IMAGE).len() + LEGACY_IMAGE_EXTRA.len()] = with_legacy_members(IMAGE, LEGACY_IMAGE_EXTRA);
+const LEGACY_INPUT_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLInputElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLInputElement, "align", LR::String)),
+    getter("useMap", O::LegacyReflectGet(I::HTMLInputElement, "usemap", LR::String)), setter("useMap", O::LegacyReflectSet(I::HTMLInputElement, "usemap", LR::String)),
+];
+const LEGACY_INPUT: [Member; (INPUT).len() + LEGACY_INPUT_EXTRA.len()] = with_legacy_members(INPUT, LEGACY_INPUT_EXTRA);
+const LEGACY_LEGEND_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLLegendElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLLegendElement, "align", LR::String)),
+];
+const LEGACY_LEGEND: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_LEGEND_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_LEGEND_EXTRA);
+const LEGACY_LI_EXTRA: &[Member] = &[
+    getter("type", O::LegacyReflectGet(I::HTMLLIElement, "type", LR::String)), setter("type", O::LegacyReflectSet(I::HTMLLIElement, "type", LR::String)),
+];
+const LEGACY_LI: [Member; (LI).len() + LEGACY_LI_EXTRA.len()] = with_legacy_members(LI, LEGACY_LI_EXTRA);
+const LEGACY_LINK_EXTRA: &[Member] = &[
+    getter("charset", O::LegacyReflectGet(I::HTMLLinkElement, "charset", LR::String)), setter("charset", O::LegacyReflectSet(I::HTMLLinkElement, "charset", LR::String)),
+    getter("rev", O::LegacyReflectGet(I::HTMLLinkElement, "rev", LR::String)), setter("rev", O::LegacyReflectSet(I::HTMLLinkElement, "rev", LR::String)),
+    getter("target", O::LegacyReflectGet(I::HTMLLinkElement, "target", LR::String)), setter("target", O::LegacyReflectSet(I::HTMLLinkElement, "target", LR::String)),
+];
+const LEGACY_LINK: [Member; (LINK).len() + LEGACY_LINK_EXTRA.len()] = with_legacy_members(LINK, LEGACY_LINK_EXTRA);
+const LEGACY_MENU_EXTRA: &[Member] = &[
+    getter("compact", O::LegacyReflectGet(I::HTMLMenuElement, "compact", LR::Boolean)), setter("compact", O::LegacyReflectSet(I::HTMLMenuElement, "compact", LR::Boolean)),
+];
+const LEGACY_MENU: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_MENU_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_MENU_EXTRA);
+const LEGACY_META_EXTRA: &[Member] = &[
+    getter("scheme", O::LegacyReflectGet(I::HTMLMetaElement, "scheme", LR::String)), setter("scheme", O::LegacyReflectSet(I::HTMLMetaElement, "scheme", LR::String)),
+];
+const LEGACY_META: [Member; (META).len() + LEGACY_META_EXTRA.len()] = with_legacy_members(META, LEGACY_META_EXTRA);
+const LEGACY_OBJECT_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLObjectElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLObjectElement, "align", LR::String)),
+    getter("archive", O::LegacyReflectGet(I::HTMLObjectElement, "archive", LR::String)), setter("archive", O::LegacyReflectSet(I::HTMLObjectElement, "archive", LR::String)),
+    getter("code", O::LegacyReflectGet(I::HTMLObjectElement, "code", LR::String)), setter("code", O::LegacyReflectSet(I::HTMLObjectElement, "code", LR::String)),
+    getter("declare", O::LegacyReflectGet(I::HTMLObjectElement, "declare", LR::Boolean)), setter("declare", O::LegacyReflectSet(I::HTMLObjectElement, "declare", LR::Boolean)),
+    getter("hspace", O::LegacyReflectGet(I::HTMLObjectElement, "hspace", LR::Unsigned)), setter("hspace", O::LegacyReflectSet(I::HTMLObjectElement, "hspace", LR::Unsigned)),
+    getter("standby", O::LegacyReflectGet(I::HTMLObjectElement, "standby", LR::String)), setter("standby", O::LegacyReflectSet(I::HTMLObjectElement, "standby", LR::String)),
+    getter("vspace", O::LegacyReflectGet(I::HTMLObjectElement, "vspace", LR::Unsigned)), setter("vspace", O::LegacyReflectSet(I::HTMLObjectElement, "vspace", LR::Unsigned)),
+    getter("codeBase", O::LegacyReflectGet(I::HTMLObjectElement, "codebase", LR::Url)), setter("codeBase", O::LegacyReflectSet(I::HTMLObjectElement, "codebase", LR::Url)),
+    getter("codeType", O::LegacyReflectGet(I::HTMLObjectElement, "codetype", LR::String)), setter("codeType", O::LegacyReflectSet(I::HTMLObjectElement, "codetype", LR::String)),
+    getter("useMap", O::LegacyReflectGet(I::HTMLObjectElement, "usemap", LR::String)), setter("useMap", O::LegacyReflectSet(I::HTMLObjectElement, "usemap", LR::String)),
+    getter("border", O::LegacyReflectGet(I::HTMLObjectElement, "border", LR::LegacyString)), setter("border", O::LegacyReflectSet(I::HTMLObjectElement, "border", LR::LegacyString)),
+];
+const LEGACY_OBJECT: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_OBJECT_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_OBJECT_EXTRA);
+const LEGACY_OLIST_EXTRA: &[Member] = &[
+    getter("compact", O::LegacyReflectGet(I::HTMLOListElement, "compact", LR::Boolean)), setter("compact", O::LegacyReflectSet(I::HTMLOListElement, "compact", LR::Boolean)),
+];
+const LEGACY_OLIST: [Member; (OLIST).len() + LEGACY_OLIST_EXTRA.len()] = with_legacy_members(OLIST, LEGACY_OLIST_EXTRA);
+const LEGACY_PARAGRAPH_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLParagraphElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLParagraphElement, "align", LR::String)),
+];
+const LEGACY_PARAGRAPH: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_PARAGRAPH_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_PARAGRAPH_EXTRA);
+const LEGACY_PARAM_EXTRA: &[Member] = &[
+    getter("name", O::LegacyReflectGet(I::HTMLParamElement, "name", LR::String)), setter("name", O::LegacyReflectSet(I::HTMLParamElement, "name", LR::String)),
+    getter("value", O::LegacyReflectGet(I::HTMLParamElement, "value", LR::String)), setter("value", O::LegacyReflectSet(I::HTMLParamElement, "value", LR::String)),
+    getter("type", O::LegacyReflectGet(I::HTMLParamElement, "type", LR::String)), setter("type", O::LegacyReflectSet(I::HTMLParamElement, "type", LR::String)),
+    getter("valueType", O::LegacyReflectGet(I::HTMLParamElement, "valuetype", LR::String)), setter("valueType", O::LegacyReflectSet(I::HTMLParamElement, "valuetype", LR::String)),
+];
+const LEGACY_PARAM: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_PARAM_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_PARAM_EXTRA);
+const LEGACY_PRE_EXTRA: &[Member] = &[
+    getter("width", O::LegacyReflectGet(I::HTMLPreElement, "width", LR::Signed)), setter("width", O::LegacyReflectSet(I::HTMLPreElement, "width", LR::Signed)),
+];
+const LEGACY_PRE: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_PRE_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_PRE_EXTRA);
+const LEGACY_STYLE_EXTRA: &[Member] = &[
+    getter("type", O::LegacyReflectGet(I::HTMLStyleElement, "type", LR::String)), setter("type", O::LegacyReflectSet(I::HTMLStyleElement, "type", LR::String)),
+];
+const LEGACY_STYLE: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_STYLE_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_STYLE_EXTRA);
+const LEGACY_SCRIPT_EXTRA: &[Member] = &[
+    getter("charset", O::LegacyReflectGet(I::HTMLScriptElement, "charset", LR::String)), setter("charset", O::LegacyReflectSet(I::HTMLScriptElement, "charset", LR::String)),
+    getter("event", O::LegacyReflectGet(I::HTMLScriptElement, "event", LR::String)), setter("event", O::LegacyReflectSet(I::HTMLScriptElement, "event", LR::String)),
+    getter("htmlFor", O::LegacyReflectGet(I::HTMLScriptElement, "for", LR::String)), setter("htmlFor", O::LegacyReflectSet(I::HTMLScriptElement, "for", LR::String)),
+];
+const LEGACY_SCRIPT: [Member; (SCRIPT).len() + LEGACY_SCRIPT_EXTRA.len()] = with_legacy_members(SCRIPT, LEGACY_SCRIPT_EXTRA);
+const LEGACY_TABLE_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableElement, "align", LR::String)),
+    getter("border", O::LegacyReflectGet(I::HTMLTableElement, "border", LR::String)), setter("border", O::LegacyReflectSet(I::HTMLTableElement, "border", LR::String)),
+    getter("frame", O::LegacyReflectGet(I::HTMLTableElement, "frame", LR::String)), setter("frame", O::LegacyReflectSet(I::HTMLTableElement, "frame", LR::String)),
+    getter("rules", O::LegacyReflectGet(I::HTMLTableElement, "rules", LR::String)), setter("rules", O::LegacyReflectSet(I::HTMLTableElement, "rules", LR::String)),
+    getter("summary", O::LegacyReflectGet(I::HTMLTableElement, "summary", LR::String)), setter("summary", O::LegacyReflectSet(I::HTMLTableElement, "summary", LR::String)),
+    getter("width", O::LegacyReflectGet(I::HTMLTableElement, "width", LR::String)), setter("width", O::LegacyReflectSet(I::HTMLTableElement, "width", LR::String)),
+    getter("bgColor", O::LegacyReflectGet(I::HTMLTableElement, "bgcolor", LR::LegacyString)), setter("bgColor", O::LegacyReflectSet(I::HTMLTableElement, "bgcolor", LR::LegacyString)),
+    getter("cellPadding", O::LegacyReflectGet(I::HTMLTableElement, "cellpadding", LR::LegacyString)), setter("cellPadding", O::LegacyReflectSet(I::HTMLTableElement, "cellpadding", LR::LegacyString)),
+    getter("cellSpacing", O::LegacyReflectGet(I::HTMLTableElement, "cellspacing", LR::LegacyString)), setter("cellSpacing", O::LegacyReflectSet(I::HTMLTableElement, "cellspacing", LR::LegacyString)),
+];
+const LEGACY_TABLE: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLE_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLE_EXTRA);
+const LEGACY_TABLESECTION_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableSectionElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableSectionElement, "align", LR::String)),
+    getter("ch", O::LegacyReflectGet(I::HTMLTableSectionElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableSectionElement, "char", LR::String)),
+    getter("chOff", O::LegacyReflectGet(I::HTMLTableSectionElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableSectionElement, "charoff", LR::String)),
+    getter("vAlign", O::LegacyReflectGet(I::HTMLTableSectionElement, "valign", LR::String)), setter("vAlign", O::LegacyReflectSet(I::HTMLTableSectionElement, "valign", LR::String)),
+];
+const LEGACY_TABLESECTION: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLESECTION_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLESECTION_EXTRA);
+const LEGACY_TABLECELL_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableCellElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableCellElement, "align", LR::String)),
+    getter("axis", O::LegacyReflectGet(I::HTMLTableCellElement, "axis", LR::String)), setter("axis", O::LegacyReflectSet(I::HTMLTableCellElement, "axis", LR::String)),
+    getter("height", O::LegacyReflectGet(I::HTMLTableCellElement, "height", LR::String)), setter("height", O::LegacyReflectSet(I::HTMLTableCellElement, "height", LR::String)),
+    getter("width", O::LegacyReflectGet(I::HTMLTableCellElement, "width", LR::String)), setter("width", O::LegacyReflectSet(I::HTMLTableCellElement, "width", LR::String)),
+    getter("ch", O::LegacyReflectGet(I::HTMLTableCellElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableCellElement, "char", LR::String)),
+    getter("chOff", O::LegacyReflectGet(I::HTMLTableCellElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableCellElement, "charoff", LR::String)),
+    getter("noWrap", O::LegacyReflectGet(I::HTMLTableCellElement, "nowrap", LR::Boolean)), setter("noWrap", O::LegacyReflectSet(I::HTMLTableCellElement, "nowrap", LR::Boolean)),
+    getter("vAlign", O::LegacyReflectGet(I::HTMLTableCellElement, "valign", LR::String)), setter("vAlign", O::LegacyReflectSet(I::HTMLTableCellElement, "valign", LR::String)),
+    getter("bgColor", O::LegacyReflectGet(I::HTMLTableCellElement, "bgcolor", LR::LegacyString)), setter("bgColor", O::LegacyReflectSet(I::HTMLTableCellElement, "bgcolor", LR::LegacyString)),
+];
+const LEGACY_TABLECELL: [Member; (CELL).len() + LEGACY_TABLECELL_EXTRA.len()] = with_legacy_members(CELL, LEGACY_TABLECELL_EXTRA);
+const LEGACY_TABLEROW_EXTRA: &[Member] = &[
+    getter("align", O::LegacyReflectGet(I::HTMLTableRowElement, "align", LR::String)), setter("align", O::LegacyReflectSet(I::HTMLTableRowElement, "align", LR::String)),
+    getter("ch", O::LegacyReflectGet(I::HTMLTableRowElement, "char", LR::String)), setter("ch", O::LegacyReflectSet(I::HTMLTableRowElement, "char", LR::String)),
+    getter("chOff", O::LegacyReflectGet(I::HTMLTableRowElement, "charoff", LR::String)), setter("chOff", O::LegacyReflectSet(I::HTMLTableRowElement, "charoff", LR::String)),
+    getter("vAlign", O::LegacyReflectGet(I::HTMLTableRowElement, "valign", LR::String)), setter("vAlign", O::LegacyReflectSet(I::HTMLTableRowElement, "valign", LR::String)),
+    getter("bgColor", O::LegacyReflectGet(I::HTMLTableRowElement, "bgcolor", LR::LegacyString)), setter("bgColor", O::LegacyReflectSet(I::HTMLTableRowElement, "bgcolor", LR::LegacyString)),
+];
+const LEGACY_TABLEROW: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_TABLEROW_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_TABLEROW_EXTRA);
+const LEGACY_ULIST_EXTRA: &[Member] = &[
+    getter("compact", O::LegacyReflectGet(I::HTMLUListElement, "compact", LR::Boolean)), setter("compact", O::LegacyReflectSet(I::HTMLUListElement, "compact", LR::Boolean)),
+    getter("type", O::LegacyReflectGet(I::HTMLUListElement, "type", LR::String)), setter("type", O::LegacyReflectSet(I::HTMLUListElement, "type", LR::String)),
+];
+const LEGACY_ULIST: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_ULIST_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_ULIST_EXTRA);
 pub static INTERFACES: &[D] = &[
     D { interface: I::Location, name: "Location", parent: None,
         constructor: None, members: LOCATION },
@@ -907,39 +1112,39 @@ pub static INTERFACES: &[D] = &[
         getter("rows", O::FrameSetRows), setter("rows", O::FrameSetRowsSet)
     ] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_HTML },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTitleElement, name: "HTMLTitleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLBaseElement, name: "HTMLBaseElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: LINK },
-    D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: META },
-    D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: HTML_BODY },
-    D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLPreElement, name: "HTMLPreElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_LINK },
+    D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_META },
+    D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_STYLE },
+    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_BODY },
+    D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_HEADING },
+    D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_PARAGRAPH },
+    D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_HR },
+    D { interface: I::HTMLPreElement, name: "HTMLPreElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_PRE },
     D { interface: I::HTMLQuoteElement, name: "HTMLQuoteElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOListElement, name: "HTMLOListElement", parent: Some(I::HTMLElement), constructor: None, members: OLIST },
-    D { interface: I::HTMLUListElement, name: "HTMLUListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: LI },
-    D { interface: I::HTMLDListElement, name: "HTMLDListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLDivElement, name: "HTMLDivElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOListElement, name: "HTMLOListElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_OLIST },
+    D { interface: I::HTMLUListElement, name: "HTMLUListElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_ULIST },
+    D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_LI },
+    D { interface: I::HTMLDListElement, name: "HTMLDListElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_DLIST },
+    D { interface: I::HTMLDivElement, name: "HTMLDivElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_DIV },
     D { interface: I::HTMLSpanElement, name: "HTMLSpanElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: HYPERLINK },
-    D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: IMAGE },
-    D { interface: I::HTMLBRElement, name: "HTMLBRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_ANCHOR },
+    D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_IMAGE },
+    D { interface: I::HTMLBRElement, name: "HTMLBRElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_BR },
     D { interface: I::HTMLModElement, name: "HTMLModElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTimeElement, name: "HTMLTimeElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataElement, name: "HTMLDataElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableElement, name: "HTMLTableElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableCaptionElement, name: "HTMLTableCaptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableSectionElement, name: "HTMLTableSectionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableRowElement, name: "HTMLTableRowElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: CELL },
-    D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableElement, name: "HTMLTableElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLE },
+    D { interface: I::HTMLTableCaptionElement, name: "HTMLTableCaptionElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLECAPTION },
+    D { interface: I::HTMLTableSectionElement, name: "HTMLTableSectionElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLESECTION },
+    D { interface: I::HTMLTableRowElement, name: "HTMLTableRowElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLEROW },
+    D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLECELL },
+    D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_TABLECOL },
     D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: FORM },
-    D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: INPUT },
+    D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_INPUT },
     D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: BUTTON },
     D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: SELECT },
     D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: OPTION },
@@ -947,7 +1152,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: TEXTAREA },
     D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: LABEL },
     D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
-    D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_LEGEND },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
     D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -958,19 +1163,19 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLSourceElement, name: "HTMLSourceElement", parent: Some(I::HTMLElement), constructor: None, members: SOURCE },
     D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
+    D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[getter("content", O::TemplateContent)] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
-    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: IFRAME },
-    D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_IFRAME },
+    D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_EMBED },
+    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_OBJECT },
+    D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_PARAM },
     D { interface: I::HTMLDetailsElement, name: "HTMLDetailsElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDialogElement, name: "HTMLDialogElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMapElement, name: "HTMLMapElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLAreaElement, name: "HTMLAreaElement", parent: Some(I::HTMLElement), constructor: None, members: HYPERLINK },
+    D { interface: I::HTMLAreaElement, name: "HTMLAreaElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_AREA },
     D { interface: I::HTMLPictureElement, name: "HTMLPictureElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLMenuElement, name: "HTMLMenuElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMenuElement, name: "HTMLMenuElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_MENU },
     D {
         interface: I::CharacterData,
         name: "CharacterData",

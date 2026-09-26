@@ -221,7 +221,12 @@ pub enum FormAttribute {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    LegacyReflectGet(Interface, &'static str, LegacyReflectionKind),
+    LegacyReflectSet(Interface, &'static str, LegacyReflectionKind),
     FormAttributeGet(FormAttribute), FormAttributeSet(FormAttribute),
     URLConstructor, URLCanParse, URLParse, URLHref, URLSetHref,
     URLOrigin, URLProtocol, URLSetProtocol, URLUsername, URLSetUsername,

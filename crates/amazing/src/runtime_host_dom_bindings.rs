@@ -3,6 +3,20 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_resolve_reflected_url(&mut self, input: &[u16]) -> Vec<u16> {
+        // URL parsing consumes scalar values even when the content attribute
+        // itself is DOMString. Invalid URLs reflect the original string.
+        let scalar = String::from_utf16_lossy(input);
+        let base = self.state.borrow().document_url.as_deref()
+            .and_then(|base| amazing_net::url::ParsedUrl::parse(base).ok());
+        let resolved = match base {
+            Some(base) => base.resolve(&scalar),
+            None => amazing_net::url::ParsedUrl::parse(&scalar),
+        };
+        resolved.map(|url| url.serialize().encode_utf16().collect())
+            .unwrap_or_else(|_| input.to_vec())
+    }
+
     pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
         // The current embedding associates its one WindowProxy with the active
         // document. DOMImplementation, DOMParser and clones create inert docs.
@@ -153,6 +167,67 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn obsolete_reflection_converts_types_preserves_aliases_and_checks_receiver_interfaces() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url("https://example.test/base/");
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'obsolete reflection check ' + step; }
+            const script = document.createElement('script');
+            script.htmlFor = 'window'; script.event = 'onload'; script.charset = 'utf-8';
+            check(script.getAttribute('for') === 'window' && script.getAttribute('event') === 'onload');
+            script.setAttribute('for', 'target'); check(script.htmlFor === 'target');
+            const col = document.createElement('col'); col.ch = '.'; col.chOff = '12';
+            check(col.getAttribute('char') === '.' && col.getAttribute('charoff') === '12');
+            const table = document.createElement('table');
+            table.bgColor = null; table.cellPadding = null; table.cellSpacing = undefined;
+            check(table.getAttribute('bgcolor') === '' && table.cellPadding === '' && table.cellSpacing === 'undefined');
+            const hr = document.createElement('hr'); hr.color = null;
+            check(hr.color === 'null'); hr.noShade = 'false'; check(hr.noShade && hr.getAttribute('noshade') === '');
+            hr.noShade = 0; check(!hr.hasAttribute('noshade'));
+            const td = document.createElement('td'); td.noWrap = true; check(td.hasAttribute('nowrap'));
+            td.noWrap = false; check(!td.hasAttribute('nowrap'));
+            const image = document.createElement('img'); image.hspace = -1; image.vspace = 4294967297;
+            check(image.getAttribute('hspace') === '0' && image.vspace === 1);
+            image.setAttribute('hspace', '  +12px'); check(image.hspace === 12);
+            image.setAttribute('hspace', '2147483648'); check(image.hspace === 0);
+            image.hspace = 2147483647; check(image.hspace === 2147483647);
+            const pre = document.createElement('pre'); pre.width = 4294967295; check(pre.width === -1);
+            pre.setAttribute('width', ' -7px'); check(pre.width === -7);
+            const iframe = document.createElement('iframe'); iframe.longDesc = 'help';
+            check(iframe.getAttribute('longdesc') === 'help' && iframe.longDesc === 'https://example.test/base/help');
+            iframe.marginWidth = null; check(iframe.marginWidth === '');
+            image.lowsrc = '\uD800'; check(image.getAttribute('lowsrc') === '\uFFFD');
+            const object = document.createElement('object'); object.codeBase = 'code/';
+            check(object.codeBase === 'https://example.test/base/code/');
+            object.codeBase = 'http://['; check(object.codeBase === 'http://[');
+            object.codeBase = '\uD800'; check(object.getAttribute('codebase') === '\uD800');
+            check(object.codeBase.indexOf('%EF%BF%BD') !== -1);
+            object.useMap = '#map'; check(object.useMap === '#map');
+            const body = document.createElement('body'); body.background = 'relative'; check(body.background === 'relative');
+            body.background = '\uD800'; check(body.background === '\uD800');
+            const param = document.createElement('param'); param.name = 'key'; param.value = 'value'; param.valueType = 'ref';
+            check(param.getAttribute('name') === 'key' && param.getAttribute('value') === 'value' && param.getAttribute('valuetype') === 'ref');
+            const area = document.createElement('area'); area.noHref = true; check(area.noHref);
+            const anchor = document.createElement('a'); anchor.name = 'named'; check(anchor.getAttribute('name') === 'named');
+            check(Object.getOwnPropertyDescriptor(HTMLAreaElement.prototype, 'name') === undefined);
+            let converted = false, rejected = false;
+            try { Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'name').set.call(area,
+                {toString() { converted = true; return 'wrong'; }}); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && !converted);
+            const link = document.createElement('link'); link.target = '_blank'; check(link.getAttribute('target') === '_blank');
+            const clone = script.cloneNode(); check(clone.htmlFor === 'target' && clone.event === 'onload');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
 
     #[test]
     fn event_names_preserve_utf16_through_construction_init_and_listener_lifetime() {

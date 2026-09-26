@@ -1719,16 +1719,7 @@ impl DocumentHost for RuntimeBindingHost<'_> {
 
 impl UrlReflection for RuntimeBindingHost<'_> {
     fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, Throw> {
-        let input = String::from_utf16(input)
-            .map_err(|_| Throw::type_error("lone surrogate not yet representable"))?;
-        let base_url = self.state.borrow().document_url.clone();
-        let base = base_url
-            .ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
-        let base = amazing_net::url::ParsedUrl::parse(&base)
-            .map_err(|_| throw_dom_error(self, DomError::NotSupportedError))?;
-        let resolved = base.resolve(&input)
-            .map_err(|_| Throw::type_error("Invalid URL"))?;
-        Ok(resolved.serialize().encode_utf16().collect())
+        Ok(self.dom_resolve_reflected_url(input))
     }
 }
 
