@@ -78,7 +78,7 @@ printf '{\"exe\":\"%s\",\"sha256\":\"%s\",\"commit_tree\":\"%s\",\"args\":\"%s\"
 ls -la \$OUT/captures/$NAME.png
 " || exit $?
 
-read -r H P _ < <("$REPO/scripts/boat-lane.py" ensure "$LANE")
+read -r H P _ < <("$MAIN/scripts/boat-lane.py" ensure "$LANE")
 DEST="$MAIN/.agents/$LANE/captures"; mkdir -p "$DEST"
 for f in png json log; do
   scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \

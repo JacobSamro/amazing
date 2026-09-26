@@ -38,11 +38,11 @@ for K in $(seq 0 $((N - 1))); do
       python3 /tmp/t262runner.py \"\$TEST262_ROOT\" --binary \"\$CARGO_TARGET_DIR/release/examples/test262_host\" \
         --jobs \$JOBS --timeout 60 --shard $K/$N --output \$OUT/shard.json >/dev/null 2>&1
       echo shard-$K-exit=\$?" > "$OUTDIR/.shard-$SHA-$TAG-$K.log" 2>&1
-    read -r H P ID _ < <("$REPO/scripts/boat-lane.py" ensure "t262-shard-$K")
+    read -r H P ID _ < <("$MAIN/scripts/boat-lane.py" ensure "t262-shard-$K")
     scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
       -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/t262-shard-$K/shard.json" "$OUTDIR/.shard-$SHA-$TAG-$K.json"
     # Shards are single-use: stop now instead of billing 5 idle minutes.
-    "$REPO/scripts/boat-lane.py" stop "t262-shard-$K" >/dev/null 2>&1
+    "$MAIN/scripts/boat-lane.py" stop "t262-shard-$K" >/dev/null 2>&1
   ) &
   pids+=($!)
 done
