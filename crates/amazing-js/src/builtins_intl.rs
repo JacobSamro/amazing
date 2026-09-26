@@ -354,6 +354,21 @@ fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Ve
 /// intl402/fallback-locales-are-supported.js and
 /// intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
 fn intl_lookup_one(tag: &str) -> Option<&'static str> {
+    // A CLDR likely-subtags script hint (e.g. "zh-TW" -> "zh-Hant-TW") was
+    // tried here to disambiguate Chinese script by region, since this engine
+    // now carries both "zh" (Hans) and "zh-Hant" as literal rows and plain
+    // truncation alone resolves "zh-TW"/"zh-HK"/"zh-US" down to bare "zh".
+    // Reverted: this engine does not distinguish the "lookup" and "best fit"
+    // matchers (both go through this same function), and the BCP-47 Lookup
+    // algorithm is pure subtag truncation with no script inference --
+    // redirecting "zh-TW" to "zh-Hant" (never a truncation of "zh-TW") broke
+    // the invariant intl402/supportedLocalesOf-consistent-with-resolvedOptions.js
+    // checks: under "lookup", resolvedOptions().locale must always be a
+    // string prefix of the request. Fixing this for real needs the matcher
+    // option to actually take effect (currently accepted but unused across
+    // every Intl constructor), so "best fit" alone could add the script
+    // hint -- filed in questions.md rather than done here, given the risk of
+    // widening an already-ignored option's behavior across every constructor.
     let mut candidate = tag;
     loop {
         if let Some(data) = INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(candidate)) {

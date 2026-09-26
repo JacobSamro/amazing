@@ -17,7 +17,7 @@ URL = f"https://github.com/unicode-org/cldr-json/archive/refs/tags/{VERSION}.tar
 PREFIX = f"cldr-json-{VERSION}/cldr-json/"
 OUTPUT = Path("crates/amazing-js/src/builtins_intl_locale_data.rs")
 LIKELY_CHUNK = 3000
-LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh-Hans", "ar", "hi", "ru")
+LOCALES = ("en", "en-GB", "de", "fr", "es", "ja", "zh", "zh-Hans", "zh-Hant", "ko", "sr", "ar", "hi", "ru")
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 HOURS = {"H": "h23", "h": "h12", "K": "h11", "k": "h24"}
 
