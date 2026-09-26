@@ -837,3 +837,69 @@ fn page_endpoint_applies_emulation_hints() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_highlights_via_overlay() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let document = client.result("DOM.getDocument", empty());
+    let root_id = document
+        .get("root")
+        .unwrap()
+        .get("nodeId")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    let found = client.result(
+        "DOM.querySelector",
+        obj! { "nodeId" => n(root_id as f64), "selector" => s("#main") },
+    );
+    let node_id = found.get("nodeId").unwrap().as_u64().unwrap();
+
+    client.result("Overlay.enable", empty());
+    client.result(
+        "Overlay.highlightNode",
+        obj! {
+            "nodeId" => n(node_id as f64),
+            "highlightConfig" => obj! {
+                "contentColor" => obj! { "r" => n(1.0), "g" => n(2.0), "b" => n(3.0), "a" => n(0.5) },
+                "showInfo" => Json::Bool(true),
+            },
+        },
+    );
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        assert_eq!(
+            script.highlighted_node,
+            Some(amazing_devtools::host::EngineNodeId(4))
+        );
+        let config = script.highlight_config.as_ref().unwrap();
+        assert!(config.show_info);
+        assert_eq!(config.content_color.unwrap().r, 1);
+    }
+    client.result(
+        "Overlay.highlightRect",
+        obj! { "x" => n(1.0), "y" => n(2.0), "width" => n(30.0), "height" => n(40.0) },
+    );
+    client.result(
+        "Overlay.highlightQuad",
+        obj! { "quad" => Json::Array(vec![n(0.0), n(0.0), n(10.0), n(0.0), n(10.0), n(10.0), n(0.0), n(10.0)]) },
+    );
+    client.result("Overlay.setInspectMode", obj! { "mode" => s("searchForNode") });
+    client.result("Overlay.setShowPaintRects", obj! { "result" => Json::Bool(true) });
+    client.result("Overlay.hideHighlight", empty());
+
+    let script = host.script();
+    let script = script.lock().unwrap();
+    assert_eq!(script.overlay_enabled, Some(true));
+    assert_eq!(script.highlighted_rect.unwrap().width, 30.0);
+    assert_eq!(script.highlighted_quad.unwrap().points[2], (10.0, 10.0));
+    assert_eq!(script.inspect_mode.as_deref(), Some("searchForNode"));
+    assert_eq!(script.highlight_hidden, Some(true));
+    drop(script);
+
+    shutdown.store(true, Ordering::Relaxed);
+}

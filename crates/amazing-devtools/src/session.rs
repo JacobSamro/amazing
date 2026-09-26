@@ -176,6 +176,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "CSS" => domains::css::dispatch(session, request),
         "Input" => domains::input::dispatch(session, request),
         "Emulation" => domains::emulation::dispatch(session, request),
+        "Overlay" => domains::overlay::dispatch(session, request),
         "Network" => domains::network::dispatch(session, request),
         "Log" => domains::log::dispatch(session, request),
         "Fetch" => domains::fetch::dispatch(session, request),

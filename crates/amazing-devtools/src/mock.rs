@@ -12,10 +12,10 @@ use std::sync::{Arc, Mutex};
 use crate::host::{
     BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
     EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
-    FrameResourceTree, FrameTree, HostError, HostInfo, InterceptedRequest, KeyEvent, LayoutMetrics,
-    LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent,
-    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
-    PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
+    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, InterceptedRequest,
+    KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery,
+    MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
+    PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
     ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use crate::json::Json;
@@ -92,6 +92,20 @@ pub struct MockScript {
     pub cpu_throttling_rate: Option<f64>,
     /// Last `Emulation.setScriptExecutionDisabled` value.
     pub script_execution_disabled: Option<bool>,
+    /// Last `Overlay.enable`/`disable` state.
+    pub overlay_enabled: Option<bool>,
+    /// Last `Overlay.setInspectMode` value.
+    pub inspect_mode: Option<String>,
+    /// Last `Overlay.highlightNode` node.
+    pub highlighted_node: Option<EngineNodeId>,
+    /// Last `Overlay.highlightRect` rectangle.
+    pub highlighted_rect: Option<Rect>,
+    /// Last `Overlay.highlightQuad` quad.
+    pub highlighted_quad: Option<Quad>,
+    /// Last `Overlay.highlight*` configuration.
+    pub highlight_config: Option<HighlightConfig>,
+    /// Set by `Overlay.hideHighlight`.
+    pub highlight_hidden: Option<bool>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -164,6 +178,13 @@ impl Default for MockScript {
             touch_emulation: None,
             cpu_throttling_rate: None,
             script_execution_disabled: None,
+            overlay_enabled: None,
+            inspect_mode: None,
+            highlighted_node: None,
+            highlighted_rect: None,
+            highlighted_quad: None,
+            highlight_config: None,
+            highlight_hidden: None,
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -825,6 +846,50 @@ impl DevToolsSession for MockSession {
 
     fn set_script_execution_disabled(&mut self, value: bool) -> Result<(), HostError> {
         self.script.lock().unwrap().script_execution_disabled = Some(value);
+        Ok(())
+    }
+
+    fn overlay_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().overlay_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_inspect_mode(
+        &mut self,
+        mode: &str,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().inspect_mode = Some(mode.to_string());
+        Ok(())
+    }
+
+    fn highlight_node(
+        &mut self,
+        node: EngineNodeId,
+        config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_node = Some(node);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn highlight_rect(&mut self, rect: Rect, config: &HighlightConfig) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_rect = Some(rect);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn highlight_quad(&mut self, quad: Quad, config: &HighlightConfig) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.highlighted_quad = Some(quad);
+        script.highlight_config = Some(config.clone());
+        Ok(())
+    }
+
+    fn hide_highlight(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().highlight_hidden = Some(true);
         Ok(())
     }
 

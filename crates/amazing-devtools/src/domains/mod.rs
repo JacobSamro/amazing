@@ -11,6 +11,7 @@ pub mod fetch;
 pub mod input;
 pub mod log;
 pub mod network;
+pub mod overlay;
 pub mod page;
 pub mod runtime;
 pub mod target;
