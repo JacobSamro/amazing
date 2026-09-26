@@ -218,10 +218,12 @@ fn binary_round_shift(value: u64, shift: u32) -> u64 {
 }
 
 fn binary_read(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool) -> Result<JsValue, Throw> {
-    let buffer = view.buffer.borrow();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    // An out-of-bounds (or detached) DataView throws TypeError before any
+    // element access; a request past the declared view length throws RangeError.
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(kind.size()).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
+    let buffer = view.buffer.borrow();
     let start = view.offset + offset;
     if kind.big() {
         let mut raw = [0u8; 8];
@@ -235,11 +237,12 @@ fn binary_read(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool)
     Ok(JsValue::num(binary_number(&buffer.bytes[start..start + kind.size()], kind, little)))
 }
 fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: f64) -> Result<(), Throw> {
+    if view.buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(kind.size()).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
     let mut buffer = view.buffer.borrow_mut();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
-    if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
     let start = view.offset + offset;
     buffer.bytes[start..start + kind.size()].copy_from_slice(&binary_encode_number(value, kind, little));
     Ok(())
@@ -247,11 +250,12 @@ fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool
 fn binary_write_value(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: &JsValue) -> Result<(), Throw> {
     if !kind.big() { return binary_write(view, kind, offset, little, i.to_number(value)?); }
     let bigint = i.to_bigint(value)?;
+    if view.buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(8).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
     let mut buffer = view.buffer.borrow_mut();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
-    if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
     let mut bytes = bigint.low_u64().to_le_bytes();
     if !little { bytes.reverse(); }
     let start = view.offset + offset;
@@ -333,7 +337,7 @@ impl Interpreter {
         }))));
         JsValue::Object(object)
     }
-    fn binary_new_view(&mut self, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
+    fn binary_view_on(&mut self, object: Obj, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
         let buffer = binary_buffer(&JsValue::Object(buffer_object.clone()))?;
         let size = kind.map_or(1, BinaryKind::size);
         let bytes_len = buffer.borrow().bytes.len();
@@ -345,16 +349,19 @@ impl Interpreter {
         if kind.is_some() && length.is_none() && (bytes_len - offset) % size != 0 && !buffer.borrow().resizable {
             return Err(Throw::range_error("unaligned TypedArray length"));
         }
+        if kind.is_some() { object.borrow_mut().exotic = Exotic::TypedArray; }
+        binary_register(&object, BinaryState::View(BinaryView { buffer, buffer_object, offset, length, kind }));
+        Ok(JsValue::Object(object))
+    }
+    fn binary_new_view(&mut self, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
         let name = kind.map_or("DataView", BinaryKind::name);
         let proto = self.global_env.resolve(name)
             .and_then(|ctor| self.get_prop(&ctor, "prototype").ok())
             .and_then(|value| if let JsValue::Object(o) = value { Some(o) } else { None })
             .unwrap_or_else(|| self.object_proto.clone());
         let mut raw = JsObject::ordinary(); raw.proto = Some(proto);
-        if kind.is_some() { raw.exotic = Exotic::TypedArray; }
         let object = Obj(Rc::new(RefCell::new(raw)));
-        binary_register(&object, BinaryState::View(BinaryView { buffer, buffer_object, offset, length, kind }));
-        Ok(JsValue::Object(object))
+        self.binary_view_on(object, buffer_object, offset, length, kind)
     }
     pub fn binding_create_array_buffer(&mut self, bytes: Vec<u8>) -> Result<JsValue, Throw> {
         let len = bytes.len(); Ok(self.binary_new_buffer(bytes, len, false, false))
@@ -483,8 +490,8 @@ impl Interpreter {
             let _ = proto.borrow_mut().define("constructor", binary_writable_property(ctor.clone()));
             binary_configure_constructor(function, name, 3, &proto);
             binary_species(self, function);
-            let _ = function.borrow_mut().define("BYTES_PER_ELEMENT", binary_property(JsValue::num(kind.size() as f64)));
-            let _ = proto.borrow_mut().define("BYTES_PER_ELEMENT", binary_property(JsValue::num(kind.size() as f64)));
+            let _ = function.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
+            let _ = proto.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
             self.define_global(name, ctor);
         }
         let atomics = self.object_value();
@@ -748,7 +755,8 @@ fn binary_is_view(_: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         .is_some_and(|state| matches!(state, BinaryState::View(_)))))
 }
 fn binary_data_view_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    binary_require_new(&this)?;
+    if i.current_new_target().is_none() { return Err(Throw::type_error("DataView requires new")); }
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("DataView requires new")); };
     let buffer_object = binary_obj(args.first().unwrap_or(&JsValue::Undefined))?;
     let buffer = binary_buffer(&JsValue::Object(buffer_object.clone()))?;
     let offset = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
@@ -756,7 +764,7 @@ fn binary_data_view_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>)
         Some(binary_index(i, arg)?)
     } else if buffer.borrow().resizable { None }
     else { Some(buffer.borrow().bytes.len().saturating_sub(offset)) };
-    i.binary_new_view(buffer_object, offset, length, None)
+    i.binary_view_on(object.clone(), buffer_object, offset, length, None)
 }
 fn binary_view_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
@@ -801,6 +809,10 @@ fn binary_data_view_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     };
     let view = binary_view(&this)?;
     if view.kind.is_some() { return Err(Throw::type_error("not a DataView")); }
+    // SetViewValue checks IsImmutableBuffer before converting any argument.
+    if set && view.buffer.borrow().immutable {
+        return Err(Throw::type_error("immutable DataView buffer"));
+    }
     let offset = binary_index(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let little = args.get(if set { 2 } else { 1 }).is_some_and(JsValue::to_boolean);
     if set {
