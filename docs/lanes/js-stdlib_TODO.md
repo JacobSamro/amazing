@@ -681,4 +681,97 @@ scope -- `Duration/compare` and `Duration/prototype/total`'s
 `relativeto-string-wrong-offset.js`-style tests are still failing, unchanged
 from before this ticket).
 
+## JSS-total: `.from()`/`.with()` overflow regulation, ZonedDateTime.round, toLocaleString
+
+Fixed base: local `dev` `df152f3c` (JSS-round `72dbd5c6` already merged).
+
+Applied the JSS-round `relativeTo` timeZone/offset-consistency machinery to
+`Duration.prototype.total` and `Duration.compare` (both now resolve
+`relativeTo` unconditionally, matching `round()`'s existing pattern).
+
+Rewrote `ZonedDateTime.prototype.round`: Instant's day-adjacent increments
+(hour:24, minute:1440, second:86400) use the simple "evenly divides a fixed
+86400s solar day" rule, but `ZonedDateTime`'s "day" unit needs GetStartOfDay-
+style variable-length-day bracketing (`std_epoch_start_of_day_ns`, new) to
+handle DST, and its sub-day units round the local wall-clock time-of-day
+(always non-negative) rather than raw, possibly hugely negative, epoch
+nanoseconds. Rewrote `ZonedDateTime.prototype.with` similarly: calendar/
+timeZone rejection, alphabetical `PrepareTemporalFields`-order field reads
+with a two-tier validation model (unconditional lower bound vs. overflow-
+dependent upper bound), deferred monthCode resolution, and full offset-option
+(`prefer`/`use`/`ignore`/`reject`) resolution against the real timezone
+database (`builtins_intl_timezone.rs`).
+
+Root cause for most of the remaining `PlainYearMonth`/`PlainMonthDay` (and,
+it turned out, `PlainDate`/`PlainDateTime`/`PlainTime`) `.from()` "overflow"/
+"limits" failures: `std_temporal_from` computed the overflow option's
+boolean purely to validate its type, then discarded it -- the object-bag
+path always ran the unconditional (reject-only) ISO validity check, so
+`overflow: "constrain"` never actually constrained an out-of-range month or
+day. Split `std_temporal_bag` into raw field extraction plus a new
+`std_temporal_regulate(kind, fields, reject)` (RegulateISODate/
+RegulateISOYearMonth/RegulateISOMonthDay/RegulateTime), applied once
+overflow is known. Threaded a `reject` parameter through
+`std_temporal_from_fields` to all 13 call sites (constrain by default,
+matching `ToTemporalDate`'s un-forwarded-options behavior -- only `.from()`
+itself reads the real option). `.from()`'s three input shapes have three
+different, spec-fixed, Proxy-observable read orders, confirmed against
+`options-wrong-type.js`/`observable-get-overflow-argument-string-invalid.js`:
+an object bag reads its own fields before options is touched; a string is
+parsed before options is touched; anything already a Temporal record or
+ZonedDateTime validates options before converting. Also added the
+unconditional (overflow-independent) rejection of month/day < 1 -- confirmed
+against `out-of-range.js`/`negative-month-or-day.js`, this is
+`ToPositiveIntegerWithTruncation`, not `RegulateISODate`'s clamp.
+
+The same overflow-discard gap, plus a missing
+`RejectObjectWithCalendarOrTimeZone` check and wrong (non-alphabetical)
+field read order, affected the shared `std_temporal_with` used by
+`PlainDate`/`PlainDateTime`/`PlainTime`/`PlainYearMonth`/
+`PlainMonthDay.prototype.with()`. Rewrote it to reject a bag that is itself
+any recognized Temporal object (without touching its properties -- they may
+be throwing getters on a real instance), or that carries a `calendar`/
+`timeZone` property, before reading anything else; read fields in
+`PrepareCalendarFields`' per-kind alphabetical order (`PlainYearMonth`/
+`PlainMonthDay` now correctly skip fields outside their own `fieldNames`,
+e.g. `PlainYearMonth.prototype.with` no longer reads "day" at all); defer
+monthCode's calendar-format validation until after options is read; and
+give `PlainMonthDay`'s `with` its own regulation path so a supplied `year`
+can decide Feb-29 constrain/reject without itself being range-checked (it's
+never stored -- the result's reference year is always 1972, per
+`iso-year-used-only-for-overflow.js`).
+
+Also fixed along the way: `ZonedDateTime.from`'s own bag path gained the
+same overflow-option support it was previously missing entirely; and
+`toLocaleString` on `Instant`/`ZonedDateTime` no longer misinterprets its
+`(locale, options)` arguments as `toString`'s own (`calendarName`/`offset`/
+`timeZoneName`) options bag (it now has its own trivial pass-through
+matching the Plain* types' existing `std_temporal_to_locale_string`
+pattern).
+
+`built-ins/Temporal`: **7,862 -> 8,086 pass variants (+224), zero lost**,
+diffed by (path, variant) against `js-stdlib-total-baseline.jsonl` (the
+JSS-round-merged baseline on this host). Workspace: `cargo nextest run
+--workspace --locked --no-fail-fast` 3,298/3,298 passed (16 skipped, 0
+failed); `cargo test --workspace --locked --doc` all green, including
+`amazing_js`, `amazing_html`, `amazing_common` (1/1 each). Committed
+`4c759ccf`.
+
+Remaining Temporal clusters, none started this round (largest first):
+`Duration.prototype.total`/`toString`/`round`/`compare`/`add`/`subtract`
+(~136 files combined -- distinct bugs from the relativeTo gap fixed this
+round and JSS-round, likely rounding-mode/formatting-precision issues, not
+yet triaged); `PlainDate`/`PlainDateTime.prototype.{since,until}` (~76 files
+combined); `ZonedDateTime.prototype.{from,since,until,equals,add,subtract}`
+(~83 files combined); `PlainDate.prototype.toZonedDateTime` (~17 files);
+`Instant.prototype.toString` (~11 files); `PlainDateTime/PlainMonthDay/
+PlainYearMonth.prototype.from` (~27 files, likely the remaining
+`observable-get-overflow-argument-primitive.js`/`order-of-operations.js`-
+style Proxy property-order tests, a deliberate diminishing-returns tradeoff
+this round, same as ZonedDateTime.with's 2 residual order tests);
+`PlainDateTime.prototype.with/throws-if-combined-date-time-outside-valid-
+iso-range.js` (1 known-remaining edge case -- a combined date+time ISO
+range check at nanosecond precision that `std_temporal_validate` doesn't
+do today, low value for its investigation cost).
+
 
