@@ -449,6 +449,18 @@ mod tests {
     }
 
     #[test]
+    fn input_type_change_preserves_undirtied_default_value() {
+        let (mut driver, _) = adapter(16, false);
+        driver.run_script("var i = document.createElement('input'); i.type = 'color'; globalThis.v1 = i.value; i.type = 'text'; globalThis.v2 = i.value; i.type = 'color'; globalThis.v3 = i.value; i.value = '#ffffff'; globalThis.v4 = i.value; i.type = 'text'; globalThis.v5 = i.value;").unwrap();
+        for (name, expected) in [
+            ("v1", "#000000"), ("v2", ""), ("v3", "#000000"),
+            ("v4", "#ffffff"), ("v5", "#ffffff"),
+        ] {
+            assert_eq!(driver.run_script(name).unwrap(), JsValue::str(expected), "color {name}");
+        }
+    }
+
+    #[test]
     fn rendering_dispatches_resize_before_frames_and_paints_after() {
         let (mut driver, _) = adapter(64, false);
         let painted = Rc::new(RefCell::new(false));

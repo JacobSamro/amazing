@@ -740,21 +740,40 @@ impl Dom {
                 let previous_state = self.form_state(node).cloned().unwrap_or_default();
                 let old_mode = value_mode_for_type(previous);
                 let new_mode = value_mode_for_type(new_type);
-                let old_value = match old_mode {
-                    ValueMode::Value => previous_state.value.unwrap_or_else(||
-                        self.attribute_utf16(node, "value").unwrap_or_default()),
+                // The transfer source is the live value only when dirty,
+                // otherwise the content attribute. The old IDL value is that
+                // source sanitized for the *previous* type (the type attribute
+                // has already changed by the time this handler runs).
+                let source = match old_mode {
+                    ValueMode::Value if previous_state.dirty_value => previous_state
+                        .value
+                        .clone()
+                        .unwrap_or_default(),
+                    ValueMode::Value => self.attribute_utf16(node, "value").unwrap_or_default(),
                     ValueMode::DefaultOn => self.attribute_utf16(node, "value")
                         .unwrap_or_else(|| units("on")),
                     ValueMode::Default => self.attribute_utf16(node, "value").unwrap_or_default(),
                     ValueMode::Filename => Vec::new(),
                 };
+                let old_value = if old_mode == ValueMode::Value {
+                    sanitize_input(previous, &source, self.attr(node, "min"),
+                        self.attr(node, "max"), self.attr(node, "step"))
+                } else {
+                    source.clone()
+                };
                 if old_mode == ValueMode::Value
-                    && matches!(new_mode, ValueMode::Default | ValueMode::DefaultOn) {
+                    && matches!(new_mode, ValueMode::Default | ValueMode::DefaultOn)
+                    && self.attribute_utf16(node, "value").is_none()
+                    && !old_value.is_empty()
+                {
+                    // Only materialize the default-mode value when there is a
+                    // non-empty value to carry over; otherwise a checkbox/radio
+                    // keeps its absent value attribute and reports "on".
                     let value = String::from_utf16_lossy(&old_value);
                     let _ = self.set_attribute(node, "value", &value);
                 }
                 let new_value = if new_mode == ValueMode::Value {
-                    Some(sanitize_input(new_type, &old_value, self.attr(node, "min"),
+                    Some(sanitize_input(new_type, &source, self.attr(node, "min"),
                         self.attr(node, "max"), self.attr(node, "step")))
                 } else { None };
                 let state = self.form_state_mut(node);
@@ -1519,8 +1538,10 @@ mod tests {
         dom.set_input_value(input, units("script")).unwrap();
         dom.set_attribute(input, "value", "default").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("script"));
+        // Switching to the default-on mode resets the dirty flag, so a present
+        // value content attribute governs the checkbox value.
         dom.set_attribute(input, "type", "checkbox").unwrap();
-        assert_eq!(dom.input_value(input).unwrap(), units("script"));
+        assert_eq!(dom.input_value(input).unwrap(), units("default"));
         dom.remove_attribute(input, "value").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("on"));
         dom.set_attribute(input, "type", "file").unwrap();
@@ -1738,6 +1759,28 @@ mod tests {
         assert!(dom.option_selected(b).unwrap());
         dom.reset_form(form).unwrap();
         assert_eq!(dom.selected_index(select).unwrap(), 0);
+    }
+    #[test]
+    fn label_control_and_empty_form_attribute() {
+        let mut dom = Dom::new();
+        let form = dom.create_element(NodeIdx(0), "form");
+        let input = dom.create_element(form, "input");
+        dom.set_attribute(input, "id", "field").unwrap();
+        let label = dom.create_element(form, "label");
+        dom.set_attribute(label, "for", "field").unwrap();
+        assert_eq!(dom.label_control(label).unwrap(), Some(input));
+        assert_eq!(dom.label_form(label).unwrap(), Some(form));
+        // A label with no `for` targets its first labelable descendant.
+        let nested = dom.create_element(form, "label");
+        let inner = dom.create_element(nested, "textarea");
+        assert_eq!(dom.label_control(nested).unwrap(), Some(inner));
+        assert_eq!(dom.label_form(nested).unwrap(), Some(form));
+        // An empty form attribute never matches a form with an empty id.
+        let loose = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(loose, "form", "").unwrap();
+        dom.set_attribute(form, "id", "").unwrap();
+        assert!(dom.is_connected(loose));
+        assert_eq!(dom.form_owner(loose), None);
     }
     #[test]
     fn validation_flags_and_custom_error() {

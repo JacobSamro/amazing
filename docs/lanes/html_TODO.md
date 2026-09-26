@@ -663,3 +663,24 @@ After merging local dev `e84d6a40` at `be054956` (including NET-30 `04f01ee`), t
 At pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, Linux baseline `Document-createElement.html` was **49/147** and `Document-createElementNS.html` **85/596** subtests passed. After this slice they are **49/147** and **255/596**. The complete 314-file `dom/nodes/` selection rose from **2,171 pass / 984 fail** to **2,344 pass / 823 fail**; exact named comparison found **171 fail-to-pass and zero pass losses**. The after JSONL SHA-256 is `e06f66d491608c54405dfcfe96b2bc9cfe5c1fbc43fa784504a541a01caca0d3` on Linux. The Windows after sweep recorded the same 3,167 named subtest statuses, SHA-256 `450a5fa09e89e477fa8a1f410e5d0e0861a365c41c3fcb81b078f1f96637c02a`. Under the WPT runner's 10-second worker deadline, Windows classified `Document-createElementNS.html` as a file timeout after recording all 596 subtests; a diagnostic 20-second deadline completed it at about 10.6 seconds with the same **255/341** subtest split. The default deadline remains the reported Windows file status.
 
 Final win-002 workspace nextest and separate doctests passed on the merged source. The two requested WPT files and the 314-file selection were measured with the pinned unmodified test sources on win-001; the only Windows/Linux classification difference was the file timeout above. The HTML-17 processing-instruction behavior and pinned fixture remain unchanged.
+
+## HTML-26 — form submission, constraint validation and form element interfaces
+
+At pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the HTML lane
+swept the whole `html/semantics/forms/` selection (468 files, 54 runner-
+unsupported) as a code-area ticket. The supporting slices landed with the
+forms code: all `constraints/form-validation-*` files now pass
+(`validity-valid` 35, `patternMismatch` 85, `rangeOverflow` 49,
+`rangeUnderflow` 47, `valueMissing` 78, `stepMismatch` 28, `tooLong`/`tooShort`
+63 each, `typeMismatch` 11, `customError` 8, `checkValidity`/`reportValidity`
+130 each); `the-meter-element/meter` 50, `meter-leading-plus-sign` 12, and
+`form-control-infrastructure/form_attribute` 100 all pass. Constraint flags
+are computed regardless of disabled/readonly status (only `valueMissing` is
+mutability-gated for value-mode controls), a radio without a name is never
+missing, `time` reversed ranges wrap midnight, and number-like step multiples
+are checked exactly on the decimal representation.
+
+This is a ported pinned-source sweep, not unmodified WPT harness credit. Two
+engine gaps outside this lane bound the remaining async files:
+`await` on a pending promise does not suspend in the tree-walking interpreter
+(js-runtime), and `Date` has no prototype methods, blocking `valueAsDate`.
