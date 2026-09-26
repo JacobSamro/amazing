@@ -55,6 +55,8 @@ mod relationships_tests;
 #[cfg(test)]
 mod role_tests;
 #[cfg(test)]
+mod text_tests;
+#[cfg(test)]
 mod tree_tests;
 #[cfg(test)]
 pub(crate) mod test_support;

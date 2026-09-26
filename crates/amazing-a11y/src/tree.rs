@@ -106,6 +106,84 @@ impl AxTree {
         chain
     }
 
+    /// Accessible text of a subtree in reading order. Inline runs are joined
+    /// with spaces; line breaks and block-level boundaries become newlines.
+    pub fn text_content(&self, id: AxNodeId) -> String {
+        let mut out = String::new();
+        self.collect_text(id, &mut out);
+        out.trim_end().to_owned()
+    }
+
+    /// The full document text, in reading order.
+    pub fn text(&self) -> String {
+        match self.root {
+            Some(root) => self.text_content(root),
+            None => String::new(),
+        }
+    }
+
+    /// Character range of a node's text inside [`AxTree::text`]. Leading
+    /// separators are excluded, so the range always slices the node's own text.
+    pub fn text_range(&self, id: AxNodeId) -> Option<(usize, usize)> {
+        let root = self.root?;
+        let mut out = String::new();
+        let mut start = None;
+        let mut end = None;
+        self.record_range(root, id, &mut out, &mut start, &mut end);
+        let (mut start, end) = (start?, end?);
+        let chars: Vec<char> = out.chars().collect();
+        while start < end && chars.get(start).is_some_and(|c| c.is_whitespace()) {
+            start += 1;
+        }
+        Some((start, end))
+    }
+
+    fn collect_text(&self, id: AxNodeId, out: &mut String) {
+        self.append_text(id, out);
+        for child in self.children(id) {
+            self.collect_text(*child, out);
+        }
+    }
+
+    fn append_text(&self, id: AxNodeId, out: &mut String) {
+        let Some(node) = self.node(id) else { return };
+        match node.role {
+            Role::StaticText | Role::InlineTextBox => {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push(' ');
+                }
+                out.push_str(&node.name);
+            }
+            Role::LineBreak => out.push('\n'),
+            role if breaks_line(role) => {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn record_range(
+        &self,
+        current: AxNodeId,
+        target: AxNodeId,
+        out: &mut String,
+        start: &mut Option<usize>,
+        end: &mut Option<usize>,
+    ) {
+        if current == target {
+            *start = Some(out.chars().count());
+        }
+        self.append_text(current, out);
+        for child in self.children(current) {
+            self.record_range(*child, target, out, start, end);
+        }
+        if current == target {
+            *end = Some(out.chars().count());
+        }
+    }
+
     /// Depth-first preorder walk starting at `root` (defaults to the tree root).
     pub fn walk(&self, start: Option<AxNodeId>) -> Vec<AxNodeId> {
         let mut out = Vec::new();
@@ -723,4 +801,43 @@ fn style_visibility_hidden(styled: &StyledDom, node: NodeIdx) -> bool {
 fn aria_hidden(dom: &Dom, node: NodeIdx) -> bool {
     dom.get_attribute_ns(node, None, "aria-hidden")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// Roles that end the current line of accessible text.
+fn breaks_line(role: Role) -> bool {
+    use Role::*;
+    matches!(
+        role,
+        Document
+            | Paragraph
+            | Heading
+            | Blockquote
+            | Caption
+            | Definition
+            | Term
+            | Listitem
+            | Cell
+            | Columnheader
+            | Rowheader
+            | Gridcell
+            | Row
+            | Table
+            | Article
+            | Banner
+            | Complementary
+            | Contentinfo
+            | Form
+            | Main
+            | Navigation
+            | Region
+            | Search
+            | Figure
+            | Feed
+            | Log
+            | Alert
+            | Status
+            | Dialog
+            | Alertdialog
+            | Group
+    )
 }
