@@ -63,6 +63,7 @@ struct Host {
     image_state: Option<ImageLoaderState>,
     image_decode_requested: Vec<NodeIdx>,
     external_targets: Vec<(u64, V)>,
+    window: Option<(u64, V)>,
     cancel_events: bool,
     callback_targets: Vec<Option<amazing_dom::events::EventTarget>>,
 }
@@ -203,6 +204,12 @@ impl BindingHost for Host {
     }
     fn release_value(&mut self, callback: CallbackId) {
         if let Some(slot) = self.callbacks.get_mut(callback.0 as usize) { *slot = None; }
+    }
+    fn window_event_target_slot(&self, value: &V) -> Option<u64> {
+        self.window.as_ref().filter(|(_, window)| window == value).map(|(slot, _)| *slot)
+    }
+    fn window_event_target_value(&self, slot: u64) -> Option<V> {
+        self.window.as_ref().filter(|(target, _)| *target == slot).map(|(_, window)| window.clone())
     }
     fn external_event_target_slot(&self, value: &V) -> Option<u64> {
         self.external_targets.iter().find(|(_, wrapper)| wrapper == value).map(|(slot, _)| *slot)
@@ -2507,3 +2514,6 @@ fn static_range_requires_all_members_and_converts_in_dictionary_order() {
 
 #[path = "tests_message_events.rs"]
 mod message_events;
+
+#[path = "tests_event_dictionaries.rs"]
+mod event_dictionaries;

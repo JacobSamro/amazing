@@ -198,22 +198,58 @@ fn event_class(op: O) -> Option<EventClass> {
     })
 }
 
+// Inherited dictionaries precede derived dictionaries; each dictionary's
+// supported members are visited in lexicographic order (WebIDL conversion).
 fn event_fields(class: EventClass) -> &'static [&'static str] {
-    const UI: &[&str] = &["view", "detail"];
-    const FOCUS: &[&str] = &["view", "detail", "relatedTarget"];
-    const MOUSE: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget"];
-    const WHEEL: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget",
-        "deltaX", "deltaY", "deltaZ", "deltaMode"];
-    const KEYBOARD: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "key", "code", "location", "repeat", "isComposing", "charCode", "keyCode", "which"];
-    const COMPOSITION: &[&str] = &["view", "detail", "data"];
+    const UI: &[&str] = &["detail", "view"];
+    const FOCUS: &[&str] = &["detail", "view", "relatedTarget"];
+    const MOUSE: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY"];
+    const WHEEL: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY",
+        "deltaMode", "deltaX", "deltaY", "deltaZ"];
+    const KEYBOARD: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "charCode", "code", "isComposing", "key", "keyCode", "location", "repeat", "which"];
+    const COMPOSITION: &[&str] = &["detail", "view", "data"];
     match class {
         EventClass::Ui => UI, EventClass::Focus => FOCUS, EventClass::Mouse => MOUSE,
         EventClass::Wheel => WHEEL, EventClass::Keyboard => KEYBOARD,
         EventClass::Composition => COMPOSITION, _ => &[],
     }
+}
+
+fn ui_detail<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<f64, H::Error> {
+    let number = host.to_number(value)?;
+    if !number.is_finite() || number == 0. { return Ok(0.); }
+    Ok(number.trunc().rem_euclid(4294967296.) as u32 as i32 as f64)
+}
+
+enum ConvertedExtra<V> { Native(EventExtra), Root(Option<V>) }
+fn convert_extras<H: BindingHost>(host: &mut H, dictionary: &H::Value, class: EventClass)
+    -> Result<Vec<(&'static str, ConvertedExtra<H::Value>)>, H::Error> {
+    let mut extras = Vec::new();
+    for &name in event_fields(class) {
+        let value = host.get_property(dictionary, name)?;
+        if host.is_undefined(&value) { continue; }
+        let extra = match extra_spec(name) {
+            EventExtra::Boolean(_) => ConvertedExtra::Native(EventExtra::Boolean(host.to_boolean(&value))),
+            EventExtra::Number(_) => ConvertedExtra::Native(EventExtra::Number(
+                if name == "detail" { ui_detail(host, &value)? } else { host.to_number(&value)? })),
+            EventExtra::String(_) => ConvertedExtra::Native(EventExtra::String(host.to_dom_string(&value)?)),
+            EventExtra::Root(_) => {
+                if host.is_nullish(&value) { ConvertedExtra::Root(None) }
+                else {
+                    if name == "view" && host.window_event_target_slot(&value).is_none() {
+                        return Err(host.type_error("UIEvent.view must be a Window"));
+                    }
+                    if name == "relatedTarget" { target(host, &value)?; }
+                    ConvertedExtra::Root(Some(value))
+                }
+            },
+        };
+        extras.push((name, extra));
+    }
+    Ok(extras)
 }
 
 pub(crate) fn invoke<H: BindingHost>(
@@ -240,6 +276,9 @@ pub(crate) fn invoke<H: BindingHost>(
         }
         let init = if op != O::CreateEvent {
             let dictionary = args.get(1);
+            if let Some(value) = dictionary.filter(|value| !host.is_nullish(value)) {
+                host.require_object(value)?;
+            }
             EventInit {
                 bubbles: option(host, dictionary, "bubbles")?,
                 cancelable: option(host, dictionary, "cancelable")?,
@@ -272,15 +311,12 @@ pub(crate) fn invoke<H: BindingHost>(
         if let Some(class) = event_class(op) {
             event.set_class(class);
             if let Some(dictionary) = args.get(1).filter(|value| !host.is_nullish(value)) {
-                for &name in event_fields(class) {
-                    let value = host.get_property(dictionary, name)?;
-                    if host.is_undefined(&value) { continue; }
-                    let extra = match extra_spec(name) {
-                        EventExtra::Boolean(_) => EventExtra::Boolean(host.to_boolean(&value)),
-                        EventExtra::Number(_) => EventExtra::Number(host.to_number(&value)?),
-                        EventExtra::String(_) => EventExtra::String(host.to_dom_string(&value)?),
-                        EventExtra::Root(_) => EventExtra::Root(if host.is_nullish(&value) { None }
-                            else { Some(host.retain_value(value)) }),
+                // Conversion can run user code and fail. Retain roots only once all
+                // fields have converted so later exceptions cannot leak earlier roots.
+                for (name, extra) in convert_extras(host, dictionary, class)? {
+                    let extra = match extra {
+                        ConvertedExtra::Native(value) => value,
+                        ConvertedExtra::Root(value) => EventExtra::Root(value.map(|value| host.retain_value(value))),
                     };
                     event.set_extra(name, extra);
                 }
