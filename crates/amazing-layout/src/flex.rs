@@ -1280,9 +1280,9 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     let pad = values::resolve_padding(&b.style, em, 0.0);
     let bor = values::resolve_borders(&b.style, em);
     let chrome = pad.left + pad.right + bor.left + bor.right;
-    let inner = match values::resolve_extent(&b.style, "width", b.font_size, 0.0) {
-        MaybeLen::Px(width) => width.max(0.0),
-        MaybeLen::Auto => max_content_inner_width(b, fonts),
+    let inner = match intrinsic_preferred_width(b) {
+        Some(width) => width,
+        None => max_content_inner_width(b, fonts),
     };
     let inner = intrinsic_calc_size(b, "width", inner, fonts).unwrap_or(inner);
     chrome + intrinsic_width_constraints(b, inner, fonts)
@@ -1297,12 +1297,24 @@ pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     let pad = values::resolve_padding(&b.style, em, 0.0);
     let bor = values::resolve_borders(&b.style, em);
     let chrome = pad.left + pad.right + bor.left + bor.right;
-    let inner = match values::resolve_extent(&b.style, "width", b.font_size, 0.0) {
-        MaybeLen::Px(width) => width.max(0.0),
-        MaybeLen::Auto => min_content_inner_width(b, fonts),
+    let inner = match intrinsic_preferred_width(b) {
+        Some(width) => width,
+        None => min_content_inner_width(b, fonts),
     };
     let inner = intrinsic_calc_size(b, "width", inner, fonts).unwrap_or(inner);
     chrome + intrinsic_width_constraints(b, inner, fonts)
+}
+
+/// Cyclic preferred percentages behave as auto for intrinsic contributions
+/// (CSS Sizing 3 §5.2.1); zero is not a definite percentage basis here.
+fn intrinsic_preferred_width(b: &LayoutBox) -> Option<f32> {
+    if b.style.get("width").is_some_and(|value| value.contains('%')) {
+        return None;
+    }
+    let MaybeLen::Px(width) = values::resolve_extent(&b.style, "width", b.font_size, 0.0) else {
+        return None;
+    };
+    Some(width.max(0.0))
 }
 
 fn intrinsic_calc_size(b: &LayoutBox, property: &str, automatic: f32, fonts: &FontSource) -> Option<f32> {

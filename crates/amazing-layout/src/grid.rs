@@ -170,6 +170,9 @@ impl TrackSize {
                 }
             )
     }
+    fn has_auto_max(self) -> bool {
+        matches!(self, Self::Auto | Self::MinMax { max: TrackBreadth::Auto, .. })
+    }
     fn is_fr(self) -> bool {
         self.fr_factor() > 0.0
     }
@@ -210,6 +213,7 @@ impl TrackSize {
                 min: TrackBreadth::Px(min),
                 max: TrackBreadth::Px(max),
             } => Some(max.max(min)),
+            TrackSize::MinMax { max: TrackBreadth::Px(max), .. } => Some(max),
             TrackSize::MinMax {
                 min: TrackBreadth::Px(min),
                 ..
@@ -1164,7 +1168,7 @@ fn size_axis(
 
 fn stretch_auto_tracks(sizes: &mut [f32], kinds: &[TrackSize], available: f32, gap: f32) {
     let autos = kinds.iter().enumerate().filter_map(|(index, kind)|
-        (*kind == TrackSize::Auto).then_some(index)).collect::<Vec<_>>();
+        kind.has_auto_max().then_some(index)).collect::<Vec<_>>();
     if autos.is_empty() { return; }
     let spare = available - sizes.iter().sum::<f32>()
         - gap * sizes.len().saturating_sub(1) as f32;
@@ -1306,6 +1310,15 @@ fn subgrid_axis_for_item(
     })
 }
 
+/// Track contributions use an indefinite area width. Preferred percentages
+/// behave as auto; percentage margins and padding contribute zero. The flex
+/// intrinsic-width seam already includes padding/border exactly once.
+fn intrinsic_outer_width(item: &LayoutBox, fonts: &FontSource) -> f32 {
+    let margin = values::resolve_margins(&item.style, item.font_size, 0.0);
+    crate::flex::max_content_width(item, fonts)
+        + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0)
+}
+
 /// A subgrid is empty for sizing its parent in this axis; its children
 /// contribute in the parent's tracks, with the subgrid edge chrome added to
 /// their outer contributions (Grid 2 §9). The child placement remains local.
@@ -1337,16 +1350,7 @@ fn subgrid_column_contribs(
     for (child, (_, _, col, col_span)) in children.iter().zip(placed) {
         let col_start = col.clamp(1, span as u32) as usize;
         let col_span = (col_span as usize).min(span + 1 - col_start);
-        let specified = values::resolve_extent(&child.style, "width", child.font_size, content_w);
-        let inner = match specified {
-            MaybeLen::Px(width) => width.max(0.0),
-            MaybeLen::Auto => crate::flex::max_content_width(child, fonts),
-        };
-        let margin = values::resolve_margins(&child.style, child.font_size, content_w);
-        let padding = values::resolve_padding(&child.style, child.font_size, content_w);
-        let border = values::resolve_borders(&child.style, child.font_size);
-        let mut outer = inner + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0)
-            + padding.left + padding.right + border.left + border.right;
+        let mut outer = intrinsic_outer_width(child, fonts);
         if col_start == 1 { outer += start_chrome; }
         if col_start + col_span - 1 == span { outer += end_chrome; }
         contributions.push(Contrib {
@@ -1554,24 +1558,10 @@ pub(crate) fn layout_grid_with_context(
             if let Some(children) = subgrid_column_contribs(it, p, &spec, content_w, fonts) {
                 return children;
             }
-            let specified = values::resolve_extent(&it.style, "width", it.font_size, content_w);
-            let inner = match specified {
-                MaybeLen::Px(w) => w.max(0.0),
-                MaybeLen::Auto => crate::flex::max_content_width(it, fonts),
-            };
-            let m = values::resolve_margins(&it.style, it.font_size, content_w);
-            let pad = values::resolve_padding(&it.style, it.font_size, content_w);
-            let bor = values::resolve_borders(&it.style, it.font_size);
             vec![Contrib {
                 start: (p.col.unwrap_or(1) - 1) as usize,
                 span: p.col_span.max(1) as usize,
-                outer: inner
-                    + m.left.unwrap_or(0.0)
-                    + m.right.unwrap_or(0.0)
-                    + pad.left
-                    + pad.right
-                    + bor.left
-                    + bor.right,
+                outer: intrinsic_outer_width(it, fonts),
             }]
         })
         .collect();
@@ -1904,18 +1894,10 @@ pub(crate) fn layout_grid_lanes(
             contributions.extend(children);
             continue;
         }
-        let width = match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
-            MaybeLen::Px(width) => width.max(0.0),
-            MaybeLen::Auto => crate::flex::max_content_width(it, fonts),
-        };
-        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
-        let padding = values::resolve_padding(&it.style, it.font_size, content_w);
-        let border = values::resolve_borders(&it.style, it.font_size);
         contributions.push(Contrib {
             start: p.col.unwrap_or(1).saturating_sub(1) as usize,
             span: p.col_span as usize,
-            outer: width + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0)
-                + padding.left + padding.right + border.left + border.right,
+            outer: intrinsic_outer_width(it, fonts),
         });
     }
     let mut sizes = size_axis(&kinds, spec.col_gap, Some(content_w), &contributions);
@@ -2571,6 +2553,35 @@ mod tests {
         assert_eq!(names["fit"], vec![3, 4, 5]);
         assert_eq!(names["end"], vec![6]);
         assert_eq!(parse_track_list("repeat(auto-fill, 0px)", &ctx, true).len(), 29);
+    }
+
+    #[test]
+    fn percentage_items_do_not_expand_intrinsic_track_maxima_to_container_width() {
+        let mut items = grid_fixture(3, "", "width:100%;height:20px");
+        lay(&mut items, &cs(&[("grid-template-columns", "repeat(auto-fill, minmax(100px, auto))")]), 300.0, None);
+        for (i, item) in items.iter().enumerate() {
+            assert!(rect_eq(item.border_box, i as f32 * 100.0, 0.0, 100.0, 20.0));
+        }
+    }
+
+    #[test]
+    fn intrinsic_track_contributions_include_chrome_only_once() {
+        for (width, sizing, expected) in [("auto", "content-box", 20.0), ("50px", "content-box", 70.0)] {
+            let mut items = grid_fixture(2, "", &format!("width:{width};box-sizing:{sizing};padding:10px;height:20px"));
+            lay(&mut items, &cs(&[("grid-template-columns", "max-content max-content")]), 300.0, None);
+            assert!(close(items[0].border_box.w, expected));
+            assert!(close(items[1].border_box.x, expected));
+        }
+    }
+
+    #[test]
+    fn minmax_auto_maxima_stretch_in_both_axes() {
+        let mut items = grid_fixture(2, "", "");
+        lay(&mut items, &cs(&[("grid-template-columns", "repeat(2, minmax(50px, auto))"),
+            ("grid-template-rows", "minmax(20px, auto)"),
+            ("justify-content", "normal"), ("align-content", "normal")]), 300.0, Some(100.0));
+        assert!(rect_eq(items[0].border_box, 0.0, 0.0, 150.0, 100.0));
+        assert!(rect_eq(items[1].border_box, 150.0, 0.0, 150.0, 100.0));
     }
 
     // --- parser units -----------------------------------------------------
