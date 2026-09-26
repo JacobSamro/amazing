@@ -126,6 +126,14 @@ struct BindingState {
     messaging: Option<runtime_host_messaging::MessagingRealm>,
     net: NetRuntime,
     integrator_assist: IaRuntime,
+    /// HTML-29: per-document `document.write`/`writeln` insertion point.
+    /// A key present means that document's parser is "active" (its own
+    /// top-level scripts are running, or it is inside a `document.open()`/
+    /// `write()` synthetic session): `write()` inserts at `(parent,
+    /// before)`, matching `Dom::pre_insert`'s own signature. No key means
+    /// `write()` implicitly performs `document.open()`'s full-document
+    /// replace first. See `runtime_host_html.rs`.
+    write_insertion_points: HashMap<NodeIdx, (NodeIdx, Option<NodeIdx>)>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -664,6 +672,7 @@ pub(crate) fn install(
         messaging: None,
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
+        write_insertion_points: HashMap::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
