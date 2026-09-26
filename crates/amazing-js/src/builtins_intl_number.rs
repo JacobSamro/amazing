@@ -88,6 +88,13 @@ fn intl_number_supported_locales(i: &mut Interpreter, _: JsValue, args: Vec<JsVa
         if matches!(options, JsValue::Null) { return Err(Throw::type_error("null supportedLocalesOf options")); }
         let _matcher = intl_string_option(i, options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     }
+    // Deliberately the strict truncation match only (no language-only relaxed
+    // tier): that tier can resolve a request to a *longer* data locale (e.g.
+    // "zh" -> "zh-Hans"), which non-echoing constructors' resolvedOptions()
+    // can never classify as supported or byFallback (the result isn't a
+    // prefix of the request); keeping this method's own notion of "matches"
+    // stricter keeps it consistent with theirs. See
+    // intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
     let supported = locales.into_iter().filter(|tag| {
         let base = tag.split("-u-").next().unwrap_or(tag);
         let mut candidate = base;
