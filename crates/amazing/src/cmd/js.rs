@@ -1,5 +1,5 @@
 //! JavaScript commands and page script execution.
-use std::{cell::RefCell, rc::Rc, process::ExitCode};
+use std::{cell::RefCell, rc::Rc, process::ExitCode, time::{Duration, Instant}};
 use amazing_js::DomHost;
 use crate::dom_host::BrowserDomHost;
 use super::parse::read_source;
@@ -132,12 +132,51 @@ pub(crate) fn execute_page_scripts_lenient(
         }
     };
     scheduler.set_location_url(page);
+    // IA-LIVE-2: a real page's script phase can burn far more wall time than
+    // any single sub-operation's own timeout suggests. Each blocking
+    // synchronous network primitive underneath (external <script src> fetch,
+    // sync/async XHR bridging in `runtime_host_net.rs`) is individually
+    // bounded (10-15s), but nothing previously capped how many of those a
+    // page's own script could chain sequentially -- `docs.rs/serde` and
+    // `vuejs.org` each burned minutes of real wall time this way with zero
+    // errors surfaced (a script-level fetch/XHR failure is an unhandled
+    // promise rejection, invisible to this harness, not a `Throw` from
+    // `run_script`). Cap the WHOLE script phase (handlers, scripts, the
+    // load/DOMContentLoaded dispatch and the event-loop pump) at one overall
+    // deadline so one page can no longer blow a corpus run's per-page
+    // budget; remaining scripts/handlers/pumps are skipped and reported
+    // instead of silently eating the rest of the process's time. 45s is
+    // comfortably under the 150s the corpus harnesses kill a child at, while
+    // leaving room for the paint phase's own (separately bounded) font/image
+    // fetches.
+    let budget = std::env::var("AMAZING_SCRIPT_PHASE_BUDGET_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(45u64);
+    let deadline = Instant::now() + Duration::from_secs(budget);
+    let mut budget_exceeded = false;
+    macro_rules! check_budget {
+        ($skipped:expr) => {
+            if !budget_exceeded && Instant::now() >= deadline {
+                budget_exceeded = true;
+                errors.push(format!(
+                    "script phase exceeded its {budget}s budget; {} skipped",
+                    $skipped
+                ));
+            }
+            if budget_exceeded {
+                continue;
+            }
+        };
+    }
     for (node, event, body) in handlers {
+        check_budget!("remaining inline handlers");
         if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
             errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
         }
     }
     for script in scripts {
+        check_budget!("remaining page scripts");
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
@@ -156,6 +195,10 @@ pub(crate) fn execute_page_scripts_lenient(
             errors.push(format!("page script: {}", error.describe()));
         }
     }
+    if budget_exceeded {
+        errors.push("skipped DOMContentLoaded/load dispatch and the event loop: script phase budget already exceeded".to_owned());
+        return LenientScriptResult { errors, probe: probe_lines };
+    }
     if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
         errors.push(format!("DOMContentLoaded listener: {}", error.describe()));
     }
@@ -170,6 +213,10 @@ pub(crate) fn execute_page_scripts_lenient(
     }
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
+        if Instant::now() >= deadline {
+            errors.push(format!("script phase exceeded its {budget}s budget during the event loop"));
+            break;
+        }
         match scheduler.pump_at(std::time::Duration::from_millis(16), true) {
             Ok(true) => {},
             Ok(false) => break,

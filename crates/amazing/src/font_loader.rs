@@ -320,6 +320,18 @@ pub(super) struct PageFontLoader<'a> {
     pub stylesheet_url: &'a str,
     pub document_url: &'a str,
     pub warnings: Vec<String>,
+    /// Per-page cache of resolved-URL -> fetch result, shared across every
+    /// `@font-face` rule on the page. A real page routinely declares several
+    /// icon-font families (e.g. "Font Awesome 5/6 Free/Brands" plus a plain
+    /// "FontAwesome" alias) whose `src:` lists repeat the exact same URL; each
+    /// distinct call used to pay its own network round trip (up to the 20s
+    /// `fetch_cors` deadline below) even when an earlier rule already fetched
+    /// -- or already failed to fetch -- that same URL. See IA-LIVE-2: this was
+    /// most of the 279s render time on docs.rs/serde (12 duplicate fetches of
+    /// 4 distinct FontAwesome URLs, each timing out against an unreachable
+    /// host, plus 5 unique webfont URLs -- 17 sequential fetch attempts for 9
+    /// distinct URLs).
+    pub cache: &'a mut std::collections::HashMap<String, Result<Vec<u8>, String>>,
 }
 
 pub(super) fn font_source_label(source: &str) -> String {
@@ -335,10 +347,16 @@ pub(super) fn font_source_label(source: &str) -> String {
 impl PageFontLoader<'_> {
     fn read_url(&mut self, source: &str, max_bytes: usize) -> Option<Vec<u8>> {
         let resolved = super::resolve_font_url(self.stylesheet_url, source);
-        let result = if resolved.starts_with("http://") || resolved.starts_with("https://") {
-            self.fetch_cors(source, max_bytes)
+        let result = if let Some(cached) = self.cache.get(&resolved) {
+            cached.clone()
         } else {
-            super::load_resource(&resolved, max_bytes)
+            let fetched = if resolved.starts_with("http://") || resolved.starts_with("https://") {
+                self.fetch_cors(source, max_bytes)
+            } else {
+                super::load_resource(&resolved, max_bytes)
+            };
+            self.cache.insert(resolved.clone(), fetched.clone());
+            fetched
         };
         match result {
             Ok(bytes) => Some(bytes),
@@ -533,10 +551,12 @@ mod tests {
         });
         let base = format!("http://{address}/css/site.css");
         let document = format!("http://{address}/index.html");
+        let mut cache = std::collections::HashMap::new();
         let mut loader = PageFontLoader {
             stylesheet_url: &base,
             document_url: &document,
             warnings: Vec::new(),
+            cache: &mut cache,
         };
         let bytes = loader
             .load_url(FontFetchRequest {
@@ -551,6 +571,69 @@ mod tests {
             Some(b"font".as_slice()),
             "{:?}",
             loader.warnings
+        );
+    }
+
+    /// IA-LIVE-2: real pages (docs.rs, plenty of icon-font stylesheets)
+    /// declare several `@font-face` rules — e.g. "Font Awesome 5 Free",
+    /// "Font Awesome 6 Free" and a plain "FontAwesome" alias — whose `src:`
+    /// lists repeat the exact same URL. A second `load_url` for a URL
+    /// already resolved this page must reuse the cached result instead of
+    /// opening another connection; each duplicate used to pay its own up-to-
+    /// 20s `fetch_cors` deadline.
+    #[test]
+    fn http_font_source_is_only_fetched_once_per_page_even_when_reused_by_multiple_font_face_rules() {
+        use std::io::{Read, Write};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_hits = hits.clone();
+        let server = std::thread::spawn(move || {
+            // A correctly deduped loader connects at most once; give any
+            // second connection a short window to show up before we stop
+            // listening and let the test assert on the count.
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut socket, _)) => {
+                        server_hits.fetch_add(1, Ordering::SeqCst);
+                        let mut request = [0u8; 4096];
+                        let mut count = 0;
+                        while !request[..count].windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                            match socket.read(&mut request[count..]) {
+                                Ok(read) if read > 0 => count += read,
+                                _ => break,
+                            }
+                        }
+                        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 4\r\nConnection: close\r\n\r\nfont");
+                    }
+                    Err(_) => std::thread::sleep(Duration::from_millis(5)),
+                }
+            }
+        });
+        let base = format!("http://{address}/css/site.css");
+        let document = format!("http://{address}/index.html");
+        let mut cache = std::collections::HashMap::new();
+        let mut loader = PageFontLoader {
+            stylesheet_url: &base,
+            document_url: &document,
+            warnings: Vec::new(),
+            cache: &mut cache,
+        };
+        let request = || FontFetchRequest { url: "font.ttf", cors_mode: true, max_bytes: 4 };
+        let first = loader.load_url(request()).unwrap();
+        let second = loader.load_url(request()).unwrap();
+        server.join().unwrap();
+        assert_eq!(first.as_deref(), Some(b"font".as_slice()), "{:?}", loader.warnings);
+        assert_eq!(second, first, "second call should return the cached bytes");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "second load_url for the same URL must not open a new connection"
         );
     }
 }
