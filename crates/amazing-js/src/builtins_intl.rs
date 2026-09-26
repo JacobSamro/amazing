@@ -38,6 +38,14 @@ fn intl_state(object: &Obj) -> Option<IntlState> {
     })
 }
 
+// Calendars for which Intl.DateTimeFormat provides (Gregorian-backed)
+// functionality. ECMA-402 AvailableCalendars; the list is sorted and unique.
+const INTL_KNOWN_CALENDARS: &[&str] = &[
+    "buddhist", "chinese", "coptic", "dangi", "ethioaa", "ethiopic", "gregory",
+    "hebrew", "indian", "islamic-civil", "islamic-tbla", "islamic-umalqura",
+    "iso8601", "japanese", "persian", "roc",
+];
+
 fn intl_data(locale: &str) -> &'static IntlNumberData {
     INTL_NUMBER_DATA.iter().find(|data| data.locale == locale).unwrap_or(&INTL_NUMBER_DATA[0])
 }
@@ -325,7 +333,7 @@ fn intl_get_canonical_locales(i: &mut Interpreter, _: JsValue, args: Vec<JsValue
 fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let values: Vec<&str> = match key.as_str() {
-        "calendar" => vec!["gregory"],
+        "calendar" => INTL_KNOWN_CALENDARS.to_vec(),
         "collation" => vec![],
         "currency" => INTL_SUPPORTED_CURRENCIES.to_vec(),
         "numberingSystem" => vec!["arab", "deva", "latn"],

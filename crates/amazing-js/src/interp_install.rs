@@ -23,8 +23,8 @@ impl Interpreter {
             value: JsValue::Object(prototype), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
-        let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+        let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
@@ -254,6 +254,7 @@ impl Interpreter {
                 .borrow_mut()
                 .set_own("prototype", JsValue::Object(self.date_proto.clone()));
         }
+        self.install_date_engine(&date_ctor);
         self.define_global("Date", date_ctor);
         let json = self.object_value();
         let _ = self.set_prop(

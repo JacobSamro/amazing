@@ -1226,15 +1226,7 @@ fn native_is_extensible(
 }
 
 fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if let JsValue::Object(object) = &this {
-        let value = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
-        object
-            .borrow_mut()
-            .define("[[DateValue]]", symbol_data(JsValue::Num(value), true, true)).unwrap();
-        Ok(this)
-    } else {
-        Ok(JsValue::str(""))
-    }
+    intl_date_construct(i, this, args)
 }
 
 fn native_date_to_string(
@@ -1242,14 +1234,15 @@ fn native_date_to_string(
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    if let JsValue::Object(object) = this {
-        if object.borrow().get_own("[[DateValue]]").is_some() {
-            return Ok(JsValue::str(
-                "Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)",
-            ));
-        }
-    }
-    Ok(JsValue::str("Invalid Date"))
+    let milliseconds = match &this {
+        JsValue::Object(object) => match object.borrow().get_own("[[DateValue]]") {
+            Some(JsValue::Num(value)) => value,
+            Some(_) => f64::NAN,
+            None => return Ok(JsValue::str("Invalid Date")),
+        },
+        _ => return Ok(JsValue::str("Invalid Date")),
+    };
+    Ok(JsValue::str(intl_date_to_string_value(milliseconds)))
 }
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

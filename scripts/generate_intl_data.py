@@ -87,6 +87,45 @@ def main() -> None:
     lines.append("];")
 
     lines += [
+        "struct IntlCompactData { locale: &'static str, style: &'static str,",
+        "    magnitude: u32, divisor: u32, suffix: &'static str }",
+        "const INTL_COMPACT_DATA: &[IntlCompactData] = &[",
+    ]
+    for locale in LOCALES:
+        number_data = cldr(f"cldr-numbers-full/main/{locale}/numbers.json")["main"][locale]["numbers"]
+        for style in ("short", "long"):
+            formats = number_data[f"decimalFormats-numberSystem-{number_data['defaultNumberingSystem']}"][style]["decimalFormat"]
+            for key, pattern in sorted(formats.items()):
+                if "-count-one" in key:
+                    continue
+                magnitude = int(key.split("-")[0])
+                if magnitude < 1000:
+                    continue
+                zeros = pattern.count("0")
+                if zeros == 0:
+                    continue
+                # CLDR escapes apostrophes; the placeholder digits are '0'.
+                unquoted = []
+                index = 0
+                while index < len(pattern):
+                    if pattern[index] == "'":
+                        if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                            unquoted.append("'")
+                            index += 2
+                            continue
+                        index += 1
+                        continue
+                    unquoted.append(pattern[index])
+                    index += 1
+                suffix = "".join(unquoted).replace("0", "")
+                divisor = len(str(magnitude)) - 1 - (zeros - 1)
+                lines.append(
+                    f"    IntlCompactData {{ locale: {rust_string(locale)}, style: {rust_string(style)}, "
+                    f"magnitude: {len(str(magnitude)) - 1}, divisor: {divisor}, suffix: {rust_string(suffix)} }},"
+                )
+    lines.append("];")
+
+    lines += [
         "struct IntlDateData { locale: &'static str, date: [&'static str; 4], time: [&'static str; 4],",
         "    date_time: [&'static str; 4], months_wide: [&'static str; 12], months_abbr: [&'static str; 12],",
         "    weekdays_wide: [&'static str; 7], weekdays_abbr: [&'static str; 7],",

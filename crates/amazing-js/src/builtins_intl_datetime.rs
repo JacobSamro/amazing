@@ -38,6 +38,11 @@ fn intl_date_state(this: &JsValue) -> Result<IntlDateState, Throw> {
     }
 }
 
+fn intl_now_milliseconds() -> f64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as f64).unwrap_or(0.0)
+}
+
 fn intl_timezone(text: &str) -> Result<String, Throw> {
     tz_canonicalize(text).ok_or_else(|| Throw::range_error("invalid time zone"))
 }
@@ -76,7 +81,8 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     }
     // A well-formed but unavailable calendar falls back to the locale default.
     let calendar = if calendar_option == "gregorian" { "gregory".into() }
-        else if calendar_option == "iso8601" { calendar_option } else { "gregory".into() };
+        else if INTL_KNOWN_CALENDARS.contains(&calendar_option.as_str()) { calendar_option }
+        else { "gregory".into() };
     let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
     if !(3..=8).contains(&numbering_system.len())
         || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
@@ -118,22 +124,27 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     }
     let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
     let hour12 = i.get_prop(&options, "hour12")?;
+    let extension_cycle = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
+        .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
     let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
     let hour_cycle = if !hour12.is_undefined() {
         if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string()
-    } else { hour_cycle_option.unwrap_or_else(|| default_cycle.into()) };
+    } else { hour_cycle_option.or(extension_cycle).unwrap_or_else(|| default_cycle.into()) };
     let state = IntlDateState {
         locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle,
     };
-    let object = if let JsValue::Object(object) = this { object } else {
-        let intl = i.global_env.resolve("Intl").unwrap();
-        let constructor = i.get_prop(&intl, "DateTimeFormat")?;
-        let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
-        let mut raw = JsObject::ordinary();
-        raw.proto = Some(proto);
-        Obj(Rc::new(RefCell::new(raw)))
+    let object = match this {
+        JsValue::Object(object) if i.current_new_target().is_some() => object,
+        _ => {
+            let intl = i.global_env.resolve("Intl").unwrap();
+            let constructor = i.get_prop(&intl, "DateTimeFormat")?;
+            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+            let mut raw = JsObject::ordinary();
+            raw.proto = Some(proto);
+            Obj(Rc::new(RefCell::new(raw)))
+        }
     };
     intl_register(&object, IntlState::DateTime(state));
     Ok(JsValue::Object(object))
@@ -229,11 +240,15 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
     if let Some(minute) = &state.minute {
         if !time.is_empty() { time.push(':'); }
-        time.push_str(if minute == "2-digit" { "mm" } else { "m" });
+        // ECMA-402 keeps minute and second two-digit whenever they are part of
+        // a time pattern, regardless of the requested "numeric" width.
+        time.push_str("mm");
+        let _ = minute;
     }
     if let Some(second) = &state.second {
         if !time.is_empty() { time.push(':'); }
-        time.push_str(if second == "2-digit" { "ss" } else { "s" });
+        time.push_str("ss");
+        let _ = second;
     }
     if let Some(digits) = state.fractional_second_digits {
         time.push('.');
@@ -319,19 +334,23 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
 }
 
 fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, Throw> {
-    match value {
+    let milliseconds = match value {
         Some(JsValue::Object(object)) if object.borrow().get_own("[[DateValue]]").is_some() => {
             let stored = object.borrow().get_own("[[DateValue]]").unwrap();
-            i.to_number(&stored)
+            i.to_number(&stored)?
         }
-        Some(value) => i.to_number(value),
-        None => Ok(0.0),
-    }
+        Some(JsValue::Undefined) | None => intl_now_milliseconds(),
+        Some(value) => i.to_number(value)?,
+    };
+    // PartitionDateTimePattern applies TimeClip: non-finite values are a
+    // RangeError, finite values are truncated toward zero.
+    if !milliseconds.is_finite() { return Err(Throw::range_error("invalid time value")); }
+    Ok(milliseconds.trunc())
 }
 
 fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_date_state(&this)?;
-    let function = Interpreter::native_arity("format", intl_date_bound_format, &i.function_proto, 1);
+    let function = Interpreter::native_arity("", intl_date_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
@@ -416,9 +435,13 @@ fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue
     for (key, value) in [
         ("locale", &state.locale), ("calendar", &state.calendar),
         ("numberingSystem", &state.numbering_system), ("timeZone", &state.time_zone),
-        ("hourCycle", &state.hour_cycle),
     ] { i.set_prop(&object, key, JsValue::str(value))?; }
-    i.set_prop(&object, "hour12", JsValue::Bool(["h11", "h12"].contains(&state.hour_cycle.as_str())))?;
+    // hourCycle and hour12 are only part of the resolved options when the
+    // requested pattern actually contains a time component.
+    if state.hour.is_some() || state.time_style.is_some() {
+        i.set_prop(&object, "hourCycle", JsValue::str(state.hour_cycle.as_str()))?;
+        i.set_prop(&object, "hour12", JsValue::Bool(["h11", "h12"].contains(&state.hour_cycle.as_str())))?;
+    }
     for (key, value) in [
         ("dateStyle", &state.date_style), ("timeStyle", &state.time_style),
         ("weekday", &state.weekday), ("era", &state.era), ("year", &state.year),

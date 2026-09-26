@@ -202,15 +202,16 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         min_fraction, max_fraction, min_significant, max_significant, rounding_priority, rounding_mode,
         rounding_increment, trailing_zero_display,
     };
-    let object = if let JsValue::Object(object) = this {
-        object
-    } else {
-        let intl = i.global_env.resolve("Intl").unwrap();
-        let constructor = i.get_prop(&intl, "NumberFormat")?;
-        let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
-        let mut raw = JsObject::ordinary();
-        raw.proto = Some(proto);
-        Obj(Rc::new(RefCell::new(raw)))
+    let object = match this {
+        JsValue::Object(object) if i.current_new_target().is_some() => object,
+        _ => {
+            let intl = i.global_env.resolve("Intl").unwrap();
+            let constructor = i.get_prop(&intl, "NumberFormat")?;
+            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+            let mut raw = JsObject::ordinary();
+            raw.proto = Some(proto);
+            Obj(Rc::new(RefCell::new(raw)))
+        }
     };
     intl_register(&object, IntlState::Number(state));
     Ok(JsValue::Object(object))
@@ -230,7 +231,7 @@ fn intl_valid_unit(unit: &str) -> bool {
 
 fn intl_number_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_number_state(&this)?;
-    let function = Interpreter::native_arity("format", intl_number_bound_format, &i.function_proto, 1);
+    let function = Interpreter::native_arity("", intl_number_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
@@ -254,28 +255,34 @@ fn intl_number_bound_format(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
 fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_number_state(&this)?;
     let object = i.object_value();
+    // Property insertion order per ECMA-402 16.5.5 Intl.NumberFormat.prototype.resolvedOptions.
     for (name, value) in [
         ("locale", state.locale.as_str()), ("numberingSystem", state.numbering_system.as_str()),
-        ("style", state.style.as_str()), ("notation", state.notation.as_str()),
-        ("signDisplay", state.sign_display.as_str()), ("useGrouping", state.use_grouping.as_str()),
-        ("roundingMode", state.rounding_mode.as_str()), ("roundingPriority", state.rounding_priority.as_str()),
-        ("trailingZeroDisplay", state.trailing_zero_display.as_str()),
+        ("style", state.style.as_str()),
     ] { i.set_prop(&object, name, JsValue::str(value))?; }
-    for (name, value) in [("currency", state.currency.as_ref()), ("unit", state.unit.as_ref())] {
-        if let Some(value) = value { i.set_prop(&object, name, JsValue::str(value))?; }
-    }
     if state.style == "currency" {
+        if let Some(currency) = state.currency.as_ref() { i.set_prop(&object, "currency", JsValue::str(currency))?; }
         i.set_prop(&object, "currencyDisplay", JsValue::str(state.currency_display))?;
         i.set_prop(&object, "currencySign", JsValue::str(state.currency_sign))?;
     }
-    if state.style == "unit" { i.set_prop(&object, "unitDisplay", JsValue::str(state.unit_display))?; }
-    if state.notation == "compact" { i.set_prop(&object, "compactDisplay", JsValue::str(state.compact_display))?; }
+    if state.style == "unit" {
+        if let Some(unit) = state.unit.as_ref() { i.set_prop(&object, "unit", JsValue::str(unit))?; }
+        i.set_prop(&object, "unitDisplay", JsValue::str(state.unit_display))?;
+    }
     for (name, value) in [
         ("minimumIntegerDigits", state.min_integer), ("minimumFractionDigits", state.min_fraction),
-        ("maximumFractionDigits", state.max_fraction), ("roundingIncrement", state.rounding_increment),
+        ("maximumFractionDigits", state.max_fraction),
     ] { i.set_prop(&object, name, JsValue::num(value as f64))?; }
     if let Some(value) = state.min_significant { i.set_prop(&object, "minimumSignificantDigits", JsValue::num(value as f64))?; }
     if let Some(value) = state.max_significant { i.set_prop(&object, "maximumSignificantDigits", JsValue::num(value as f64))?; }
+    i.set_prop(&object, "useGrouping", JsValue::str(state.use_grouping.as_str()))?;
+    i.set_prop(&object, "notation", JsValue::str(state.notation.as_str()))?;
+    if state.notation == "compact" { i.set_prop(&object, "compactDisplay", JsValue::str(state.compact_display))?; }
+    i.set_prop(&object, "signDisplay", JsValue::str(state.sign_display.as_str()))?;
+    i.set_prop(&object, "roundingIncrement", JsValue::num(state.rounding_increment as f64))?;
+    i.set_prop(&object, "roundingMode", JsValue::str(state.rounding_mode.as_str()))?;
+    i.set_prop(&object, "roundingPriority", JsValue::str(state.rounding_priority.as_str()))?;
+    i.set_prop(&object, "trailingZeroDisplay", JsValue::str(state.trailing_zero_display.as_str()))?;
     Ok(object)
 }
 
@@ -386,17 +393,23 @@ fn intl_round_scaled(value: f64, mode: &str) -> f64 {
 
 // ECMA-402 rounds the decimal representation of a Number. Multiplying the
 // binary float by a power of ten first changes ties such as 1.015 into 1.01499.
-fn intl_round_decimal(value: f64, negative: bool, fraction_digits: usize,
+fn intl_round_decimal(value: f64, negative: bool, fraction_digits: i32,
     increment: usize, mode: &str) -> Option<String> {
-    if fraction_digits > 35 { return None; }
     let decimal = value.to_string();
     let (whole, fraction) = decimal.split_once('.').unwrap_or((&decimal, ""));
     if !whole.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) { return None; }
     let coefficient = whole.bytes().chain(fraction.bytes()).try_fold(0u128, |number, byte| {
         number.checked_mul(10)?.checked_add((byte - b'0') as u128)
     })?;
-    let numerator = coefficient.checked_mul(10u128.checked_pow(fraction_digits as u32)?)?;
-    let denominator = (increment as u128).checked_mul(10u128.checked_pow(fraction.len() as u32)?)?;
+    // `d` is the number of decimal places between the exact value and the
+    // requested rounding position. It is negative when rounding to a place
+    // left of the decimal point (significant digits above the leading digit).
+    let d: i64 = fraction.len() as i64 - fraction_digits as i64;
+    let (numerator, denominator) = if d >= 0 {
+        (coefficient, (increment as u128).checked_mul(10u128.checked_pow(d as u32)?)?)
+    } else {
+        (coefficient.checked_mul(10u128.checked_pow((-d) as u32)?)?, increment as u128)
+    };
     let quotient = numerator / denominator;
     let remainder = numerator % denominator;
     let above_half = remainder > denominator - remainder;
@@ -413,9 +426,15 @@ fn intl_round_decimal(value: f64, negative: bool, fraction_digits: usize,
         _ => above_half || tie,
     };
     let units = quotient.checked_add(u128::from(increase))?.checked_mul(increment as u128)?;
-    if fraction_digits == 0 { return Some(units.to_string()); }
-    let scale = 10u128.pow(fraction_digits as u32);
-    Some(format!("{}.{:0width$}", units / scale, units % scale, width = fraction_digits))
+    if fraction_digits > 0 {
+        let scale = 10u128.checked_pow(fraction_digits as u32)?;
+        Some(format!("{}.{:0width$}", units / scale, units % scale, width = fraction_digits as usize))
+    } else if fraction_digits == 0 {
+        Some(units.to_string())
+    } else {
+        let scale = 10u128.checked_pow((-fraction_digits) as u32)?;
+        Some(units.checked_mul(scale)?.to_string())
+    }
 }
 
 fn intl_localize_digits(source: &str, numbering: &str) -> String {
@@ -423,6 +442,25 @@ fn intl_localize_digits(source: &str, numbering: &str) -> String {
     source.chars().map(|ch| if let Some(digit) = ch.to_digit(10) {
         char::from_u32(zero as u32 + digit).unwrap()
     } else { ch }).collect()
+}
+
+/// Compact notation scale and suffix for the largest generated magnitude that
+/// does not exceed the value's decimal exponent. A magnitude whose CLDR
+/// pattern has no suffix (for example German short thousands) yields `None`,
+/// which falls back to ordinary decimal formatting.
+fn intl_compact_for(locale: &str, style: &str, exponent: i32) -> Option<(f64, &'static str)> {
+    let mut best: Option<&IntlCompactData> = None;
+    for entry in INTL_COMPACT_DATA.iter()
+        .filter(|entry| entry.locale == locale && entry.style == style)
+    {
+        if (entry.magnitude as i32) <= exponent
+            && best.map_or(true, |current| entry.magnitude > current.magnitude)
+        {
+            best = Some(entry);
+        }
+    }
+    best.filter(|entry| !entry.suffix.is_empty())
+        .map(|entry| (10f64.powi(entry.divisor as i32), entry.suffix))
 }
 
 fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'static str, String)>) {
@@ -441,21 +479,11 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         } else { value / 10f64.powi(exponent) };
     }
     let mut compact_suffix = "";
-    if state.notation == "compact" && value.is_finite() {
-        let east_asian = ["ja", "zh-Hans"].contains(&state.locale.as_str());
-        let (scale, suffix) = if east_asian {
-            if value >= 1e12 { (1e12, "兆") } else if value >= 1e8 { (1e8, "億") }
-            else if value >= 1e4 { (1e4, "万") } else { (1.0, "") }
-        } else if state.locale == "de" && state.compact_display == "short" {
-            if value >= 1e12 { (1e12, " Bio.") } else if value >= 1e9 { (1e9, " Mrd.") }
-            else if value >= 1e6 { (1e6, " Mio.") } else if value >= 1e3 { (1e3, " Tsd.") } else { (1.0, "") }
-        } else if state.compact_display == "long" {
-            if value >= 1e12 { (1e12, " trillion") } else if value >= 1e9 { (1e9, " billion") }
-            else if value >= 1e6 { (1e6, " million") } else if value >= 1e3 { (1e3, " thousand") } else { (1.0, "") }
-        } else if value >= 1e12 { (1e12, "T") } else if value >= 1e9 { (1e9, "B") }
-            else if value >= 1e6 { (1e6, "M") } else if value >= 1e3 { (1e3, "K") } else { (1.0, "") };
-        value /= scale;
-        compact_suffix = suffix;
+    if state.notation == "compact" && value.is_finite() && value != 0.0 {
+        if let Some((scale, suffix)) = intl_compact_for(&state.locale, &state.compact_display, value.log10().floor() as i32) {
+            value /= scale;
+            compact_suffix = suffix;
+        }
     }
     let mut number_parts = Vec::new();
     if value.is_nan() {
@@ -464,9 +492,8 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         number_parts.push(("infinity", data.infinity.to_string()));
     } else {
         let digits_before = if value == 0.0 { 1 } else { value.log10().floor() as i32 + 1 };
-        let sig_min = (state.min_significant.unwrap_or(1) as i32 - digits_before).max(0) as usize;
-        let sig_max = (state.max_significant.unwrap_or(21) as i32 - digits_before)
-            .clamp(sig_min as i32, 100) as usize;
+        let sig_min = (state.min_significant.unwrap_or(1) as i32 - digits_before).max(0);
+        let sig_max = state.max_significant.unwrap_or(21) as i32 - digits_before;
         let use_significant = match state.rounding_priority.as_str() {
             "morePrecision" | "lessPrecision" => {
                 let fixed_more_precise = -(state.max_fraction as i32)
@@ -477,18 +504,18 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
             _ => state.max_significant.is_some(),
         };
         let (min_fraction, max_fraction) = if use_significant { (sig_min, sig_max) }
-            else { (state.min_fraction, state.max_fraction) };
-        let scale = 10f64.powi(max_fraction.min(100) as i32);
+            else { (state.min_fraction as i32, state.max_fraction as i32) };
+        let scale = 10f64.powi(max_fraction.clamp(0, 100));
         let increment = state.rounding_increment as f64;
         let signed = if negative { -value } else { value };
         let rounded = intl_round_scaled(signed * scale / increment, &state.rounding_mode).abs() * increment / scale;
-        rounded_zero = rounded == 0.0;
         let mut digits = intl_round_decimal(value, negative, max_fraction, state.rounding_increment,
-            &state.rounding_mode).unwrap_or_else(|| format!("{:.*}", max_fraction.min(100), rounded));
+            &state.rounding_mode).unwrap_or_else(|| format!("{:.*}", max_fraction.clamp(0, 100) as usize, rounded));
         if let Some(dot) = digits.find('.') {
-            while digits.len() > dot + 1 + min_fraction && digits.ends_with('0') { digits.pop(); }
+            while digits.len() > dot + 1 + min_fraction as usize && digits.ends_with('0') { digits.pop(); }
             if digits.ends_with('.') { digits.pop(); }
         }
+        rounded_zero = digits.bytes().all(|byte| byte == b'0' || byte == b'.');
         if state.trailing_zero_display == "stripIfInteger" && rounded.fract() == 0.0 {
             digits.truncate(digits.find('.').unwrap_or(digits.len()));
         }
@@ -530,7 +557,8 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     let sign = match state.sign_display.as_str() {
         "never" => None,
         "always" => Some(if negative { ("minusSign", data.minus) } else { ("plusSign", data.plus) }),
-        "exceptZero" if rounded_zero => None,
+        "exceptZero" if rounded_zero || value.is_nan() => None,
+        "exceptZero" => Some(if negative { ("minusSign", data.minus) } else { ("plusSign", data.plus) }),
         "negative" if rounded_zero => None,
         _ if negative => Some(("minusSign", data.minus)),
         _ => None,
@@ -577,11 +605,47 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     (text, parts)
 }
 
+fn intl_round_bigint_digits(digits: &str, max_significant: usize, mode: &str) -> String {
+    let trimmed = digits.trim_start_matches('0');
+    if trimmed.len() <= max_significant || max_significant == 0 {
+        return if trimmed.is_empty() { "0".into() } else { trimmed.to_string() };
+    }
+    let mut kept: Vec<u8> = trimmed.as_bytes()[..max_significant].iter().map(|byte| byte - b'0').collect();
+    let next = trimmed.as_bytes()[max_significant] - b'0';
+    let rest_nonzero = trimmed.as_bytes()[max_significant + 1..].iter().any(|byte| *byte != b'0');
+    let last_odd = kept.last().is_some_and(|digit| digit % 2 == 1);
+    let round_up = match mode {
+        "trunc" | "floor" => false,
+        "expand" => next != 0 || rest_nonzero,
+        "halfTrunc" => next > 5,
+        "halfEven" => next > 5 || (next == 5 && (rest_nonzero || last_odd)),
+        _ => next >= 5,
+    };
+    let mut carry = round_up;
+    for index in (0..kept.len()).rev() {
+        if !carry { break; }
+        if kept[index] == 9 { kept[index] = 0; } else { kept[index] += 1; carry = false; }
+    }
+    let trailing = trimmed.len() - max_significant;
+    if carry {
+        let mut result = String::from("1");
+        result.push_str(&"0".repeat(trailing + 1));
+        result
+    } else {
+        let mut result: String = kept.iter().map(|digit| (b'0' + *digit) as char).collect();
+        result.push_str(&"0".repeat(trailing));
+        result
+    }
+}
+
 fn intl_format_bigint(state: &IntlNumberState, input: &str) -> String {
     let data = intl_data(&state.locale);
     let negative = input.starts_with('-');
     let mut digits = input.trim_start_matches('-').to_string();
     if state.style == "percent" { digits.push_str("00"); }
+    if let Some(max_significant) = state.max_significant {
+        digits = intl_round_bigint_digits(&digits, max_significant, &state.rounding_mode);
+    }
     let padded = format!("{:0>width$}", digits, width = state.min_integer);
     let mut groups = Vec::new();
     if state.use_grouping != "false" && padded.len() >= 4 {
