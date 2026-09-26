@@ -36,7 +36,7 @@ pub mod role;
 pub mod tree;
 
 pub use accname::NameContext;
-pub use aria::{AxProperties, AxStates, InvalidState, Orientation, Sort, Tristate};
+pub use aria::{AxProperties, AxStates, InvalidState, Orientation, Relevant, Sort, Tristate};
 pub use bounds::{AxRect, BoundsMap};
 pub use role::Role;
 pub use tree::{
@@ -50,6 +50,8 @@ mod accname_tests;
 mod aria_tests;
 #[cfg(test)]
 mod bounds_tests;
+#[cfg(test)]
+mod relationships_tests;
 #[cfg(test)]
 mod role_tests;
 #[cfg(test)]

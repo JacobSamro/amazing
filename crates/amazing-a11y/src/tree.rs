@@ -36,6 +36,8 @@ pub struct AxNode {
     pub bounds: Option<AxRect>,
     pub children: Vec<AxNodeId>,
     pub parent: Option<AxNodeId>,
+    /// Resolved `aria-activedescendant` target, when present in this tree.
+    pub active_descendant: Option<AxNodeId>,
 }
 
 impl AxNode {
@@ -84,6 +86,26 @@ impl AxTree {
             .map(|entry| entry.id)
     }
 
+    /// The node carrying focus, if any.
+    pub fn focused(&self) -> Option<AxNodeId> {
+        self.nodes.iter().find(|node| node.states.focused).map(|node| node.id)
+    }
+
+    /// Root-to-focused node path (empty when nothing is focused).
+    pub fn focus_chain(&self) -> Vec<AxNodeId> {
+        let Some(mut current) = self.focused() else { return Vec::new() };
+        let mut chain = Vec::new();
+        loop {
+            chain.push(current);
+            match self.nodes.get(current.0 as usize).and_then(|node| node.parent) {
+                Some(parent) => current = parent,
+                None => break,
+            }
+        }
+        chain.reverse();
+        chain
+    }
+
     /// Depth-first preorder walk starting at `root` (defaults to the tree root).
     pub fn walk(&self, start: Option<AxNodeId>) -> Vec<AxNodeId> {
         let mut out = Vec::new();
@@ -119,6 +141,7 @@ pub struct SchemaNode {
     pub bounds: Option<AxRect>,
     pub children: Vec<AxNodeId>,
     pub parent: Option<AxNodeId>,
+    pub active_descendant: Option<AxNodeId>,
 }
 
 impl From<&AxNode> for SchemaNode {
@@ -134,6 +157,7 @@ impl From<&AxNode> for SchemaNode {
             bounds: node.bounds,
             children: node.children.clone(),
             parent: node.parent,
+            active_descendant: node.active_descendant,
         }
     }
 }
@@ -227,6 +251,8 @@ pub fn build(dom: &Dom, styled: &StyledDom, layout: &LayoutBox) -> AxTree {
     let bounds = bounds::collect_bounds(dom, layout);
     let mut builder = Builder { dom, styled, ids, labels_by_target, bounds, nodes: Vec::new() };
     let root = builder.build_root();
+    builder.apply_owns();
+    builder.apply_active_descendants();
     builder.finish(root)
 }
 
@@ -340,6 +366,89 @@ impl<'a> Builder<'a> {
             self.visit(child, Some(id));
         }
         Some(id)
+    }
+
+    /// Reparents nodes named by `aria-owns` under their owner, in the order
+    /// listed. The first owner wins; moves that would create a cycle are
+    /// ignored. Owned children are appended after the owner's DOM children.
+    fn apply_owns(&mut self) {
+        let by_dom: HashMap<NodeIdx, AxNodeId> = self
+            .nodes
+            .iter()
+            .filter_map(|node| node.dom_node.map(|dom_node| (dom_node, node.id)))
+            .collect();
+        let owners: Vec<(AxNodeId, NodeIdx)> = self
+            .nodes
+            .iter()
+            .filter_map(|node| node.dom_node.map(|dom_node| (node.id, dom_node)))
+            .collect();
+        let mut owned: HashSet<AxNodeId> = HashSet::new();
+        for (owner, owner_dom) in owners {
+            let Some(references) = self.dom.get_attribute_ns(owner_dom, None, "aria-owns") else {
+                continue;
+            };
+            let targets: Vec<AxNodeId> = references
+                .split_ascii_whitespace()
+                .filter_map(|id| self.ids.get(id))
+                .filter_map(|dom_node| by_dom.get(dom_node).copied())
+                .collect();
+            for target in targets {
+                // The first owner wins; a node can be owned at most once.
+                if target == owner
+                    || owned.contains(&target)
+                    || self.nodes[owner.0 as usize].children.contains(&target)
+                {
+                    continue;
+                }
+                // The owner must not already be inside the target.
+                if self.is_under(owner, target) {
+                    continue;
+                }
+                if let Some(parent) = self.nodes[target.0 as usize].parent {
+                    self.nodes[parent.0 as usize].children.retain(|child| *child != target);
+                }
+                self.nodes[target.0 as usize].parent = Some(owner);
+                self.nodes[owner.0 as usize].children.push(target);
+                owned.insert(target);
+            }
+        }
+    }
+
+    /// True when `node` is `ancestor` or inside it.
+    fn is_under(&self, node: AxNodeId, ancestor: AxNodeId) -> bool {
+        let mut current = Some(node);
+        while let Some(id) = current {
+            if id == ancestor {
+                return true;
+            }
+            current = self.nodes.get(id.0 as usize).and_then(|entry| entry.parent);
+        }
+        false
+    }
+
+    /// Resolves each `aria-activedescendant` id reference to a tree node.
+    fn apply_active_descendants(&mut self) {
+        let by_dom: HashMap<NodeIdx, AxNodeId> = self
+            .nodes
+            .iter()
+            .filter_map(|node| node.dom_node.map(|dom_node| (dom_node, node.id)))
+            .collect();
+        for index in 0..self.nodes.len() {
+            let Some(dom_node) = self.nodes[index].dom_node else { continue };
+            let Some(reference) =
+                self.dom.get_attribute_ns(dom_node, None, "aria-activedescendant")
+            else {
+                continue;
+            };
+            let reference = reference.trim();
+            if reference.is_empty() {
+                continue;
+            }
+            self.nodes[index].active_descendant = self
+                .ids
+                .get(reference)
+                .and_then(|dom_node| by_dom.get(dom_node).copied());
+        }
     }
 
     fn visit(&mut self, node: NodeIdx, parent: Option<AxNodeId>) {
@@ -476,6 +585,7 @@ impl<'a> Builder<'a> {
             bounds,
             children: Vec::new(),
             parent,
+            active_descendant: None,
         });
         if let Some(parent) = parent
             && let Some(entry) = self.nodes.get_mut(parent.0 as usize)
@@ -498,6 +608,7 @@ impl<'a> Builder<'a> {
             bounds: None,
             children: Vec::new(),
             parent,
+            active_descendant: None,
         });
         if let Some(parent) = parent
             && let Some(entry) = self.nodes.get_mut(parent.0 as usize)

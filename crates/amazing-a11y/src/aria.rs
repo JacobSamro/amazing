@@ -10,7 +10,7 @@ use amazing_dom::{Dom, NodeIdx};
 use std::collections::BTreeMap;
 
 use crate::host;
-use crate::role::Role;
+use crate::role::{self, Role};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Tristate {
@@ -101,6 +101,32 @@ pub struct AxStates {
     pub haspopup: bool,
 }
 
+/// `aria-relevant` as a set of change kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Relevant {
+    pub additions: bool,
+    pub removals: bool,
+    pub text: bool,
+    pub all: bool,
+}
+
+impl Relevant {
+    /// Parses a whitespace-separated `aria-relevant` token list.
+    pub fn parse(value: &str) -> Self {
+        let mut relevant = Relevant::default();
+        for token in value.split_ascii_whitespace() {
+            match token.to_ascii_lowercase().as_str() {
+                "additions" => relevant.additions = true,
+                "removals" => relevant.removals = true,
+                "text" => relevant.text = true,
+                "all" => relevant.all = true,
+                _ => {}
+            }
+        }
+        relevant
+    }
+}
+
 /// Typed accessibility properties. `raw` keeps every remaining `aria-*`
 /// attribute verbatim (lowercased name, original value).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -119,6 +145,7 @@ pub struct AxProperties {
     pub current: Option<String>,
     pub live: Option<String>,
     pub relevant: Option<String>,
+    pub relevant_flags: Relevant,
     pub atomic: bool,
     pub controls: Vec<String>,
     pub describedby: Vec<String>,
@@ -126,6 +153,20 @@ pub struct AxProperties {
     pub errormessage: Option<String>,
     pub owns: Vec<String>,
     pub flowto: Vec<String>,
+    /// Position of the item in a set (1-based), and the size of that set.
+    pub pos_in_set: Option<u32>,
+    pub set_size: Option<u32>,
+    /// Table/grid addressing; indices and counts are 1-based per ARIA.
+    pub row_index: Option<u32>,
+    pub row_index_text: Option<String>,
+    pub row_count: Option<u32>,
+    pub col_index: Option<u32>,
+    pub col_index_text: Option<String>,
+    pub col_count: Option<u32>,
+    pub col_span: Option<u32>,
+    pub row_span: Option<u32>,
+    /// `aria-activedescendant` id reference (resolved to a tree id on the node).
+    pub active_descendant: Option<String>,
     pub raw: BTreeMap<String, String>,
 }
 
@@ -158,6 +199,15 @@ fn aria_number(dom: &Dom, node: NodeIdx, name: &str) -> Option<f64> {
         .parse::<f64>()
         .ok()
         .filter(|v| v.is_finite())
+}
+
+/// A non-negative integer ARIA attribute.
+fn aria_u32(dom: &Dom, node: NodeIdx, name: &str) -> Option<u32> {
+    let value = aria_number(dom, node, name)?;
+    if value < 0.0 {
+        return None;
+    }
+    u32::try_from(value as i64).ok()
 }
 
 fn id_list(dom: &Dom, node: NodeIdx, name: &str) -> Vec<String> {
@@ -239,8 +289,7 @@ pub fn compute_states(dom: &Dom, node: NodeIdx, role: Role) -> AxStates {
 /// Computes the typed properties for `node`.
 pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties {
     let mut props = AxProperties {
-        level: aria_number(dom, node, "aria-level")
-            .and_then(|n| u32::try_from(n as i64).ok()),
+        level: aria_u32(dom, node, "aria-level"),
         value_now: aria_number(dom, node, "aria-valuenow"),
         value_min: aria_number(dom, node, "aria-valuemin"),
         value_max: aria_number(dom, node, "aria-valuemax"),
@@ -274,6 +323,7 @@ pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties 
         current: non_empty(dom.get_attribute_ns(node, None, "aria-current")),
         live: non_empty(dom.get_attribute_ns(node, None, "aria-live")),
         relevant: non_empty(dom.get_attribute_ns(node, None, "aria-relevant")),
+        relevant_flags: Relevant::default(),
         atomic: aria_bool(dom, node, "aria-atomic").unwrap_or(false),
         controls: id_list(dom, node, "aria-controls"),
         describedby: id_list(dom, node, "aria-describedby"),
@@ -281,8 +331,35 @@ pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties 
         errormessage: non_empty(dom.get_attribute_ns(node, None, "aria-errormessage")),
         owns: id_list(dom, node, "aria-owns"),
         flowto: id_list(dom, node, "aria-flowto"),
+        pos_in_set: aria_u32(dom, node, "aria-posinset"),
+        set_size: aria_u32(dom, node, "aria-setsize"),
+        row_index: aria_u32(dom, node, "aria-rowindex"),
+        row_index_text: non_empty(dom.get_attribute_ns(node, None, "aria-rowindextext")),
+        row_count: aria_u32(dom, node, "aria-rowcount"),
+        col_index: aria_u32(dom, node, "aria-colindex"),
+        col_index_text: non_empty(dom.get_attribute_ns(node, None, "aria-colindextext")),
+        col_count: aria_u32(dom, node, "aria-colcount"),
+        col_span: aria_u32(dom, node, "aria-colspan"),
+        row_span: aria_u32(dom, node, "aria-rowspan"),
+        active_descendant: non_empty(
+            dom.get_attribute_ns(node, None, "aria-activedescendant"),
+        ),
         raw: BTreeMap::new(),
     };
+    props.relevant_flags = props
+        .relevant
+        .as_deref()
+        .map(Relevant::parse)
+        .unwrap_or_default();
+
+    // Native set position for collection items when ARIA does not provide it.
+    let (native_pos, native_size) = native_set_position(dom, node, role);
+    if props.pos_in_set.is_none() {
+        props.pos_in_set = native_pos;
+    }
+    if props.set_size.is_none() {
+        props.set_size = native_size;
+    }
 
     // Heading level defaults follow HTML-AAM: h1..h6.
     if props.level.is_none()
@@ -306,4 +383,39 @@ pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties 
 
 fn non_empty(value: Option<&str>) -> Option<String> {
     value.map(str::to_owned).filter(|v| !v.trim().is_empty())
+}
+
+/// Native `posinset`/`setsize` for collection items: the item's 1-based index
+/// among its siblings that resolve to the same role. Only reported when the set
+/// has more than one member and ARIA did not supply the values.
+fn native_set_position(dom: &Dom, node: NodeIdx, role: Role) -> (Option<u32>, Option<u32>) {
+    if !matches!(
+        role,
+        Role::Listitem
+            | Role::Option
+            | Role::Treeitem
+            | Role::Tab
+            | Role::Menuitem
+            | Role::Menuitemcheckbox
+            | Role::Menuitemradio
+            | Role::Radio
+    ) {
+        return (None, None);
+    }
+    let Some(parent) = dom.get(node).parent else { return (None, None) };
+    let mut position = None;
+    let mut size = 0u32;
+    for child in dom.children(parent) {
+        if role::role_for(dom, child) == role {
+            size += 1;
+            if child == node {
+                position = Some(size);
+            }
+        }
+    }
+    if position.is_some() && size > 1 {
+        (position, Some(size))
+    } else {
+        (None, None)
+    }
 }
