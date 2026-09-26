@@ -733,6 +733,21 @@ const OPTGROUP: &[Member] = &[
 ];
 const LABEL: &[Member] = &[
     form_get("htmlFor", F::HtmlFor), form_set("htmlFor", F::HtmlFor),
+    getter("form", O::LabelForm), getter("control", O::LabelControl),
+];
+const OBJ: &[Member] = &[getter("form", O::FormControlForm)];
+const PROGRESS: &[Member] = &[
+    getter("value", O::ProgressValue), setter("value", O::ProgressSetValue),
+    getter("max", O::ProgressMax), setter("max", O::ProgressSetMax),
+    getter("position", O::ProgressPosition),
+];
+const METER: &[Member] = &[
+    getter("value", O::MeterValue), setter("value", O::MeterSetValue),
+    getter("min", O::MeterMin), setter("min", O::MeterSetMin),
+    getter("max", O::MeterMax), setter("max", O::MeterSetMax),
+    getter("low", O::MeterLow), setter("low", O::MeterSetLow),
+    getter("high", O::MeterHigh), setter("high", O::MeterSetHigh),
+    getter("optimum", O::MeterOptimum), setter("optimum", O::MeterSetOptimum),
 ];
 const VALIDITY: &[Member] = &[
     getter("valueMissing", O::ValidityValueMissing), getter("typeMismatch", O::ValidityTypeMismatch),
@@ -899,8 +914,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
-    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: PROGRESS },
+    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: METER },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLVideoElement, name: "HTMLVideoElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
     D { interface: I::HTMLAudioElement, name: "HTMLAudioElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
@@ -912,7 +927,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: IFRAME },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: OBJ },
     D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDetailsElement, name: "HTMLDetailsElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDialogElement, name: "HTMLDialogElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },

@@ -22,6 +22,25 @@ pub(crate) fn handles(op: O) -> bool {
             | O::FormControlForm
             | O::FormControlName
             | O::FormControlSetName
+            | O::LabelControl
+            | O::LabelForm
+            | O::ProgressValue
+            | O::ProgressSetValue
+            | O::ProgressMax
+            | O::ProgressSetMax
+            | O::ProgressPosition
+            | O::MeterValue
+            | O::MeterSetValue
+            | O::MeterMin
+            | O::MeterSetMin
+            | O::MeterMax
+            | O::MeterSetMax
+            | O::MeterLow
+            | O::MeterSetLow
+            | O::MeterHigh
+            | O::MeterSetHigh
+            | O::MeterOptimum
+            | O::MeterSetOptimum
             | O::InputValue
             | O::InputSetValue
             | O::InputDefaultValue
@@ -150,6 +169,15 @@ fn number<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<
     let value = arg(host, args, at)?;
     host.to_number(value)
 }
+/// WebIDL `double` (not `unrestricted double`) rejects non-finite values.
+fn finite_number<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<f64, H::Error> {
+    let value = number(host, args, at)?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(host.type_error("The provided double value is non-finite"))
+    }
+}
 fn boolean<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<bool, H::Error> {
     let value = arg(host, args, at)?;
     Ok(host.to_boolean(value))
@@ -164,6 +192,76 @@ fn set_attr<H: BindingHost>(
     value: &[u16],
 ) -> Result<(), H::Error> {
     host.with_dom(|dom| crate::html_reflection::set(dom, node, name, value.to_vec()))
+}
+fn parsed_attr_number<H: BindingHost>(
+    host: &mut H,
+    node: NodeIdx,
+    name: &str,
+) -> Result<Option<f64>, H::Error> {
+    let raw = attr(host, node, name)?;
+    Ok(String::from_utf16_lossy(&raw)
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite()))
+}
+fn set_attr_number<H: BindingHost>(
+    host: &mut H,
+    node: NodeIdx,
+    name: &str,
+    value: f64,
+) -> Result<(), H::Error> {
+    let text = if value == value.trunc() && value.abs() < 1e15 {
+        format!("{}", value as i64)
+    } else {
+        format!("{value}")
+    };
+    set_attr(host, node, name, &text.encode_utf16().collect::<Vec<_>>())
+}
+fn progress_max<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    Ok(match parsed_attr_number(host, node, "max")? {
+        Some(value) if value > 0. => value,
+        _ => 1.,
+    })
+}
+fn progress_value<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let max = progress_max(host, node)?;
+    let value = parsed_attr_number(host, node, "value")?
+        .filter(|value| *value >= 0.)
+        .unwrap_or(0.);
+    Ok(value.min(max))
+}
+fn meter_min<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    Ok(parsed_attr_number(host, node, "min")?.unwrap_or(0.))
+}
+fn meter_max<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = parsed_attr_number(host, node, "max")?.unwrap_or(1.);
+    Ok(if max < min { min } else { max })
+}
+fn meter_value<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let value = parsed_attr_number(host, node, "value")?.unwrap_or(0.);
+    Ok(value.max(min).min(max))
+}
+fn meter_low<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let low = parsed_attr_number(host, node, "low")?.unwrap_or(min);
+    Ok(low.max(min).min(max))
+}
+fn meter_high<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let low = meter_low(host, node)?;
+    let high = parsed_attr_number(host, node, "high")?.unwrap_or(max);
+    Ok(high.max(min).min(max).max(low))
+}
+fn meter_optimum<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let optimum = parsed_attr_number(host, node, "optimum")?.unwrap_or((min + max) / 2.);
+    Ok(optimum.max(min).min(max))
 }
 fn bool_attr<H: BindingHost>(
     host: &mut H,
@@ -868,17 +966,83 @@ pub(crate) fn invoke<H: BindingHost>(
             }
         };
     }
+    if matches!(op, O::LabelControl | O::LabelForm) {
+        let label = node(host, &receiver, &["label"])?;
+        let control = if op == O::LabelControl {
+            host.with_dom(|dom| dom.label_control(label))?
+        } else {
+            host.with_dom(|dom| dom.label_form(label))?
+        };
+        return wrap(host, control);
+    }
     let target = node(
         host,
         &receiver,
         &[
             "input", "textarea", "select", "option", "button", "fieldset", "output",
+            "object", "progress", "meter",
         ],
     )?;
     match op {
         O::FormControlForm => {
             let form = host.with_dom(|dom| Ok(dom.form_owner(target)))?;
             wrap(host, form)
+        }
+        O::ProgressValue => { let value = progress_value(host, target)?; Ok(host.number(value)) }
+        O::ProgressSetValue => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "value", value)?;
+            Ok(host.undefined())
+        }
+        O::ProgressMax => { let value = progress_max(host, target)?; Ok(host.number(value)) }
+        O::ProgressSetMax => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "max", value)?;
+            Ok(host.undefined())
+        }
+        O::ProgressPosition => {
+            if parsed_attr_number(host, target, "value")?.is_none() {
+                return Ok(host.number(-1.));
+            }
+            let value = progress_value(host, target)?;
+            let max = progress_max(host, target)?;
+            Ok(host.number(value / max))
+        }
+        O::MeterValue => { let value = meter_value(host, target)?; Ok(host.number(value)) }
+        O::MeterSetValue => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "value", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterMin => { let value = meter_min(host, target)?; Ok(host.number(value)) }
+        O::MeterSetMin => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "min", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterMax => { let value = meter_max(host, target)?; Ok(host.number(value)) }
+        O::MeterSetMax => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "max", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterLow => { let value = meter_low(host, target)?; Ok(host.number(value)) }
+        O::MeterSetLow => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "low", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterHigh => { let value = meter_high(host, target)?; Ok(host.number(value)) }
+        O::MeterSetHigh => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "high", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterOptimum => { let value = meter_optimum(host, target)?; Ok(host.number(value)) }
+        O::MeterSetOptimum => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "optimum", value)?;
+            Ok(host.undefined())
         }
         O::FormControlName => {
             let value = attr(host, target, "name")?;

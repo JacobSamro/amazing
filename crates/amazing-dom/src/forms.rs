@@ -830,7 +830,9 @@ impl Dom {
             return None;
         }
         if let Some(id) = self.attr(node, "form") {
-            if self.is_connected(node) {
+            // An empty form attribute value can never match a form ID, so the
+            // control has no form owner (no ancestor fallback while connected).
+            if !id.is_empty() && self.is_connected(node) {
                 let document = self.owner_document(node)?;
                 let first = self
                     .tree_order(document)
@@ -853,6 +855,39 @@ impl Dom {
             parent = self.get(current).parent;
         }
         None
+    }
+    /// Whether a node may be the labeled control of a label.
+    fn labelable(&self, node: NodeIdx) -> bool {
+        if self.html_tag(node, "input") {
+            return self.input_type(node).ok() != Some("hidden");
+        }
+        ["button", "meter", "output", "progress", "select", "textarea"]
+            .iter()
+            .any(|tag| self.html_tag(node, tag))
+    }
+    /// The labeled control of a `label`: the element with the `for` ID, or the
+    /// first labelable descendant when there is no usable `for` attribute.
+    pub fn label_control(&self, label: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
+        self.require_tag(label, &["label"])?;
+        if let Some(for_id) = self.attr(label, "for") {
+            if !for_id.is_empty() {
+                let root = self.root(label);
+                return Ok(self.tree_order(root).into_iter().find(|candidate| {
+                    *candidate != label
+                        && self.attr(*candidate, "id") == Some(for_id)
+                        && self.labelable(*candidate)
+                }));
+            }
+        }
+        Ok(self
+            .tree_order(label)
+            .into_iter()
+            .skip(1)
+            .find(|candidate| self.labelable(*candidate)))
+    }
+    /// The form owner of a label's labeled control, if any.
+    pub fn label_form(&self, label: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
+        Ok(self.label_control(label)?.and_then(|control| self.form_owner(control)))
     }
     pub fn form_controls(&self, form: NodeIdx) -> Result<Vec<NodeIdx>, DomError> {
         self.require_tag(form, &["form"])?;
