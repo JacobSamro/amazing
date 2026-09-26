@@ -1692,3 +1692,85 @@ passed** (up from 177, all 6 new); workspace/doctests carried in the same
 combined gate as RC-32 above (no regressions from re-running after this
 change -- `ImageProvider`'s new method is default-`None`, so every
 existing caller is source- and behavior-compatible unchanged).
+
+**RC-33 final gate** (`765c4d91`, merged into `lane/replaced-content-rc21`
+at `07a6635f` then `d983c455` after two rounds of `dev` drift, including a
+"Fix dev build" commit for HTML-29's `PageScript.node` field that had
+landed in `dev` after my first merge and briefly broke the workspace build
+until re-merged). Linux, venus pool (this run landed on `worker-2`):
+workspace `cargo nextest run --workspace --locked`: **3,316 passed, 0
+failed, 17 skipped** (up from 3,092 pre-RC-32/33, reflecting the two large
+`dev` merges, not a regression); `cargo test --workspace --locked --doc`:
+**4 passed, 0 failed** (`amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js`, one each). No known-EPERM sealed-memory failures observed on
+this run despite landing on `worker-2` (IPC-12's host-specific issue did
+not manifest this time).
+
+`css/css-masking --baseline auto`: pass=72/mismatch=69 (gained=19,
+**lost=2**, unchanged=82, new=38 -- the corpus itself grew substantially
+since the checked-in baseline was recorded). Investigated both losses
+(`clip-path-path-interpolation-with-zoom.html`,
+`clip-path-shape-interpolation-with-zoom.html`) by reading the WPT source:
+both test CSS Animations' interpolation of an animated `clip-path: path()`
+value under `zoom`, a computation owned by the animation/cascade engine
+(css/js-runtime), not by paint -- `amazing-paint` has no `zoom`-specific
+code at all (layout resolves zoom into the box geometry paint receives).
+Not touched by RC-32/RC-33 or either merge; filed as informational only,
+not a paint regression.
+
+`css/css-borders --baseline auto` (third mandate item, see below): 2 of
+its losses are the same class of finding, detailed there.
+
+## css-backgrounds / css-borders mismatch clusters (3rd item of the RC-32/33
+## mandate)
+
+Fresh Linux `--baseline auto` numbers on `d983c455` (checked-in evidence
+was stale -- from before RC-30/31/32/33 and two large `dev` merges):
+
+- `css/css-backgrounds`: pass=74/mismatch=60, **gained=1, lost=0**,
+  unchanged=132, new=1. Clean -- no regressions, small net gain. Did not
+  investigate the +1 gain (single test, not worth the sandbox time); no
+  further action needed here this ticket.
+- `css/css-borders`: pass=15/mismatch=54, gained=0, **lost=2**, unchanged=52,
+  new=15. Top clusters (`clusters.json`): 27 medium-region/darker (e.g.
+  `border-shape-outline-with-border.html`, `corner-shape-backdrop-
+  filter.html`), 6 medium-region/lighter (e.g. `border-shape-outline.html`,
+  `corner-shape-square.html`), 6 medium-region/less-green (superellipse
+  variants).
+
+Root-caused the whole `corner-shape`/`border-shape` cluster (accounts for
+essentially all 54 mismatches plus the 2 losses) by reading representative
+WPT source pairs (`corner-shape-fill.html`/`-ref.html`,
+`corner-shape-bevel-overflow.html`/`-ref.html`): every one sets
+`corner-shape: bevel|scoop|squircle|...` and/or `border-shape: <shape()>`,
+CSS Borders and Box Decorations 4 properties that do not exist anywhere in
+`amazing-css` (confirmed via grep, same as RC-31's earlier finding) --
+unsupported declarations are dropped by the cascade before paint ever sees
+them, so every one of these test pages paints as a plain `border-radius`
+box. Their *references*, however, render the intended shape via ordinary
+`clip-path: polygon(...)`/`ellipse(...)`, which RC-31 fixed to resolve
+against the correct geometry box this same session. The **2 losses**
+(`corner-shape-bevel-overflow.html`, `corner-shape-fill.html`) are exactly
+this: before RC-31's fix, their `clip-path` reference likely rendered
+against the wrong box and coincidentally matched the test's unclipped
+rounded rect; now that the reference clips correctly, the test's
+unsupported `corner-shape` genuinely mismatches it. This is expected
+fallout of RC-31's own correctness fix, not a new bug, and not fixable from
+`amazing-paint`'s side: `corner-shape`/`border-shape` need real CSS Borders
+4 grammar, cascade registration, and a superellipse/bevel/scoop rasterizer
+(a non-trivial paint-side addition once css defines the computed-value
+shape) -- **out of this lane's `amazing-css` scope to self-serve** (unlike
+RC-32's outline, this is a whole new shape grammar, not a small mechanical
+mirror of an existing property). The `outline`/`backdrop-filter` sub-names
+in the top cluster (`border-shape-outline-with-border.html`,
+`corner-shape-backdrop-filter.html`) are the same root cause plus a second
+missing property each -- not something RC-32's now-shipped outline support
+alone unlocks, since `corner-shape`/`border-shape` still gate the whole
+page.
+
+Filed to `questions.md` for css: register `corner-shape` (`superellipse()`
+including `bevel`/`scoop`/`squircle`/`round`/`square`/`notch` keyword
+shorthands, per-corner longhands) and `border-shape` grammar; this is the
+single largest remaining css-borders cluster (54 of 69 mismatches) and
+blocks essentially the entire subdirectory. No further paint-side action
+taken this ticket -- nothing to fix until the property exists to consume.
