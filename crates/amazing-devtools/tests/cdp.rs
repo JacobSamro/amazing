@@ -964,3 +964,112 @@ fn page_endpoint_reports_performance_and_security() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_runs_compiled_scripts_and_reports_heap() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let compiled = client.result(
+        "Runtime.compileScript",
+        obj! { "expression" => s("1+1"), "sourceURL" => s("test.js"), "persistScript" => Json::Bool(true) },
+    );
+    assert_eq!(compiled.get("scriptId").unwrap().as_str(), Some("script-1"));
+
+    let run = client.result("Runtime.runScript", obj! { "scriptId" => s("script-1") });
+    assert_eq!(
+        run.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(1.0)
+    );
+
+    let isolate = client.result("Runtime.getIsolateId", empty());
+    assert_eq!(isolate.get("id").unwrap().as_str(), Some("isolate-1"));
+
+    let heap = client.result("Runtime.getHeapUsage", empty());
+    assert_eq!(heap.get("usedSize").unwrap().as_f64(), Some(1000.0));
+    assert_eq!(heap.get("totalSize").unwrap().as_f64(), Some(2000.0));
+
+    let names = client.result("Runtime.globalLexicalScopeNames", empty());
+    assert_eq!(names.get("names").unwrap().as_array().unwrap().len(), 2);
+
+    let objects = client.result("Runtime.queryObjects", obj! { "prototypeObjectId" => s("p1") });
+    assert_eq!(
+        objects.get("objects").unwrap().get("objectId").unwrap().as_str(),
+        Some("objects-1")
+    );
+
+    client.result("Runtime.setAsyncCallStackDepth", obj! { "maxDepth" => n(4.0) });
+    client.result("Runtime.discardConsoleEntries", empty());
+
+    let script = host.script();
+    let script = script.lock().unwrap();
+    assert_eq!(script.compiled_sources, ["1+1"]);
+    assert_eq!(script.async_call_stack_depth, Some(4));
+    assert_eq!(script.discard_console_count, 1);
+    drop(script);
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_reports_the_accessibility_tree() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Accessibility.enable", empty());
+    assert_eq!(host.script().lock().unwrap().accessibility_enabled, Some(true));
+
+    let full = client.result("Accessibility.getFullAXTree", empty());
+    let nodes = full.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(nodes.len(), 3);
+    assert_eq!(nodes[0].get("nodeId").unwrap().as_str(), Some("ax-1"));
+    assert_eq!(
+        nodes[0].get("role").unwrap().get("value").unwrap().as_str(),
+        Some("WebArea")
+    );
+    assert_eq!(
+        nodes[0].get("backendDOMNodeId").unwrap().as_f64(),
+        Some(1.0)
+    );
+    assert_eq!(
+        nodes[0].get("childIds").unwrap().as_array().unwrap()[0].as_str(),
+        Some("ax-2")
+    );
+
+    let partial = client.result(
+        "Accessibility.getPartialAXTree",
+        obj! { "backendNodeId" => n(6.0), "fetchRelatives" => Json::Bool(false) },
+    );
+    let partial_nodes = partial.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(partial_nodes.len(), 1);
+    assert_eq!(
+        partial_nodes[0].get("nodeId").unwrap().as_str(),
+        Some("ax-3")
+    );
+    assert_eq!(
+        partial_nodes[0].get("name").unwrap().get("value").unwrap().as_str(),
+        Some("Hello")
+    );
+
+    let children = client.result("Accessibility.getChildAXNodes", obj! { "id" => s("ax-1") });
+    let child_nodes = children.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(child_nodes.len(), 1);
+    assert_eq!(child_nodes[0].get("nodeId").unwrap().as_str(), Some("ax-2"));
+
+    let query = client.result(
+        "Accessibility.queryAXTree",
+        obj! { "accessibleName" => s("Hello") },
+    );
+    let query_nodes = query.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(query_nodes.len(), 1);
+    assert_eq!(query_nodes[0].get("nodeId").unwrap().as_str(), Some("ax-3"));
+
+    client.error("Accessibility.getPartialAXTree", empty());
+
+    client.result("Accessibility.disable", empty());
+    assert_eq!(host.script().lock().unwrap().accessibility_enabled, Some(false));
+
+    shutdown.store(true, Ordering::Relaxed);
+}

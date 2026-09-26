@@ -52,6 +52,7 @@ pub struct EnabledDomains {
     pub log: bool,
     pub fetch: bool,
     pub security: bool,
+    pub accessibility: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -188,6 +189,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Network" => domains::network::dispatch(session, request),
         "Log" => domains::log::dispatch(session, request),
         "Fetch" => domains::fetch::dispatch(session, request),
+        "Accessibility" => domains::accessibility::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }
