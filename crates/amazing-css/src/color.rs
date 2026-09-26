@@ -165,16 +165,16 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
         let t: Vec<&str> = joined.split_ascii_whitespace().collect();
         match t.as_slice() {
             [r, g, b] => Some([
-                clamp_byte(parse_channel(r)?),
-                clamp_byte(parse_channel(g)?),
-                clamp_byte(parse_channel(b)?),
+                clamp_byte(channel_or_none(r)?),
+                clamp_byte(channel_or_none(g)?),
+                clamp_byte(channel_or_none(b)?),
                 255,
             ]),
             [r, g, b, slash, a] if *slash == "/" => Some([
-                clamp_byte(parse_channel(r)?),
-                clamp_byte(parse_channel(g)?),
-                clamp_byte(parse_channel(b)?),
-                parse_alpha(a)?,
+                clamp_byte(channel_or_none(r)?),
+                clamp_byte(channel_or_none(g)?),
+                clamp_byte(channel_or_none(b)?),
+                alpha_or_none(a)?,
             ]),
             _ => None,
         }
@@ -184,6 +184,16 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
 /// One RGB channel as a raw 0..=255-scale f32 (percentages rescaled).
 /// Alphabetic tokens (`nan`, `inf`) are rejected; decimal values that
 /// overflow f32 to ±infinity survive and clamp in [`clamp_byte`].
+/// CSS Color 4 `none` in the modern `rgb()`/`rgba()` space syntax (not the
+/// legacy comma syntax, which predates `none` and does not accept it).
+fn channel_or_none(tok: &str) -> Option<f32> {
+    if tok.eq_ignore_ascii_case("none") { Some(0.0) } else { parse_channel(tok) }
+}
+
+fn alpha_or_none(tok: &str) -> Option<u8> {
+    if tok.eq_ignore_ascii_case("none") { Some(0) } else { parse_alpha(tok) }
+}
+
 fn parse_channel(tok: &str) -> Option<f32> {
     let val = if let Some(p) = tok.strip_suffix('%') {
         p.trim().parse::<f32>().ok()? * 255.0 / 100.0

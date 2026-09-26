@@ -836,6 +836,32 @@ mod tests {
         assert!(parse("margin-top", "calc-size(auto, size + 20px)").is_none());
     }
     #[test]
+    fn calc_size_nests_inside_min_max_and_clamp() {
+        // CSS Values 5 SS11: `calc-size()` is itself a `<calc-sum>`, so it may
+        // appear as an argument to `min()`/`max()`/`clamp()`, not just at the
+        // top level or as its own basis.
+        for css in [
+            "min(calc-size(auto, size + 20px), 300px)",
+            "max(calc-size(min-content, size), 10px)",
+            "clamp(10px, calc-size(auto, size), 500px)",
+            "clamp(calc-size(auto, size - 5px), 200px, calc-size(max-content, size + 5px))",
+            "min(10px, max(calc-size(fit-content, size), 20px))",
+        ] {
+            assert!(
+                matches!(parse("width", css), Some(ComputedValue::LengthPercentageExpression(_))),
+                "{css}"
+            );
+        }
+        // The nested basis keyword still has to be a valid one, and `any`
+        // still forbids `size` inside the nested calc-size.
+        for invalid in [
+            "min(calc-size(bogus, size), 10px)",
+            "max(calc-size(any, size), 10px)",
+        ] {
+            assert!(parse("width", invalid).is_none(), "{invalid}");
+        }
+    }
+    #[test]
     fn relative_currentcolor_rebinds_on_inheritance() {
         let parent = style(
             None,

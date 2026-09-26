@@ -12,7 +12,19 @@ fn percentage(value: &str) -> Option<f64> {
     finite(value.strip_suffix('%')?)
 }
 
+/// CSS Color 4 §4.4: a `none` component. Direct (non-interpolated) use
+/// renders it as 0 in whatever numeric context needs a concrete value;
+/// `color-mix()` gives it special treatment instead (see `color_mix`).
+fn none_component(value: &str) -> Option<f64> {
+    value.eq_ignore_ascii_case("none").then_some(0.0)
+}
+
+fn is_none(value: &str) -> bool {
+    value.eq_ignore_ascii_case("none")
+}
+
 fn hue(value: &str) -> Option<f64> {
+    if is_none(value) { return Some(0.0); }
     let degrees = if let Some(value) = value.strip_suffix("deg") {
         finite(value)?
     } else if let Some(value) = value.strip_suffix("grad") {
@@ -28,6 +40,7 @@ fn hue(value: &str) -> Option<f64> {
 }
 
 fn alpha(value: &str) -> Option<u8> {
+    if is_none(value) { return Some(0); }
     let value = percentage(value).map(|number| number / 100.0).or_else(|| finite(value))?;
     Some((value.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
@@ -73,14 +86,16 @@ fn hsl_rgb(hue: f64, saturation: f64, lightness: f64) -> [f64; 3] {
 
 pub(super) fn hsl(inner: &str) -> Option<[u8; 4]> {
     let (values, a) = components(inner, true)?;
-    Some(rgba(hsl_rgb(hue(&values[0])?, percentage(&values[1])?, percentage(&values[2])?), a))
+    let saturation = none_component(&values[1]).or_else(|| percentage(&values[1]))?;
+    let lightness = none_component(&values[2]).or_else(|| percentage(&values[2]))?;
+    Some(rgba(hsl_rgb(hue(&values[0])?, saturation, lightness), a))
 }
 
 pub(super) fn hwb(inner: &str) -> Option<[u8; 4]> {
     let (values, a) = components(inner, false)?;
     let h = hue(&values[0])?;
-    let white = percentage(&values[1])? / 100.0;
-    let black = percentage(&values[2])? / 100.0;
+    let white = none_component(&values[1]).or_else(|| percentage(&values[1]))? / 100.0;
+    let black = none_component(&values[2]).or_else(|| percentage(&values[2]))? / 100.0;
     Some(rgba(hwb_rgb(h, white, black), a))
 }
 
@@ -111,7 +126,9 @@ pub(super) fn predefined_rgb(inner: &str) -> Option<[u8; 4]> {
     let rest = words.collect::<Vec<_>>().join(" ");
     let (values, a) = components(&rest, false)?;
     let channels = [0, 1, 2].map(|i| {
-        percentage(&values[i]).map(|n| n / 100.0).or_else(|| finite(&values[i]))
+        none_component(&values[i])
+            .or_else(|| percentage(&values[i]).map(|n| n / 100.0))
+            .or_else(|| finite(&values[i]))
     });
     color_space_rgba(&space, [channels[0]?, channels[1]?, channels[2]?], a)
 }
@@ -255,9 +272,14 @@ fn d50_to_d65(xyz: [f64; 3]) -> [f64; 3] {
 
 pub(super) fn lab(inner: &str) -> Option<[u8; 4]> {
     let (values, alpha) = components(inner, false)?;
-    let lightness = percentage(&values[0]).or_else(|| finite(&values[0]))?.clamp(0.0, 100.0);
-    let lab_a = percentage(&values[1]).map(|value| value * 1.25).or_else(|| finite(&values[1]))?;
-    let lab_b = percentage(&values[2]).map(|value| value * 1.25).or_else(|| finite(&values[2]))?;
+    let lightness = none_component(&values[0]).or_else(|| percentage(&values[0]))
+        .or_else(|| finite(&values[0]))?.clamp(0.0, 100.0);
+    let lab_a = none_component(&values[1])
+        .or_else(|| percentage(&values[1]).map(|value| value * 1.25))
+        .or_else(|| finite(&values[1]))?;
+    let lab_b = none_component(&values[2])
+        .or_else(|| percentage(&values[2]).map(|value| value * 1.25))
+        .or_else(|| finite(&values[2]))?;
     if lightness == 0.0 { return Some([0, 0, 0, alpha]); }
     if lightness == 100.0 { return Some([255, 255, 255, alpha]); }
     Some(lab_color(lightness, lab_a, lab_b, alpha))
@@ -265,8 +287,10 @@ pub(super) fn lab(inner: &str) -> Option<[u8; 4]> {
 
 pub(super) fn lch(inner: &str) -> Option<[u8; 4]> {
     let (values, alpha) = components(inner, false)?;
-    let lightness = percentage(&values[0]).or_else(|| finite(&values[0]))?.clamp(0.0, 100.0);
-    let chroma = percentage(&values[1]).map(|value| value * 1.5)
+    let lightness = none_component(&values[0]).or_else(|| percentage(&values[0]))
+        .or_else(|| finite(&values[0]))?.clamp(0.0, 100.0);
+    let chroma = none_component(&values[1])
+        .or_else(|| percentage(&values[1]).map(|value| value * 1.5))
         .or_else(|| finite(&values[1]))?.max(0.0);
     let angle = hue(&values[2])? * PI / 180.0;
     if lightness == 0.0 { return Some([0, 0, 0, alpha]); }
@@ -309,7 +333,9 @@ fn oklab_xyz(lab: [f64; 3]) -> [f64; 3] {
 }
 
 fn ok_component(value: &str, percentage_scale: f64) -> Option<f64> {
-    percentage(value).map(|n| n * percentage_scale / 100.0).or_else(|| finite(value))
+    none_component(value)
+        .or_else(|| percentage(value).map(|n| n * percentage_scale / 100.0))
+        .or_else(|| finite(value))
 }
 
 pub(super) fn oklab(inner: &str) -> Option<[u8; 4]> {
@@ -335,15 +361,47 @@ pub(super) fn oklch(inner: &str) -> Option<[u8; 4]> {
     Some(rgba(xyz_to_srgb(oklab_xyz(lab)), a))
 }
 
+/// CSS Color 4 §12.2 hue-interpolation methods for the polar spaces
+/// (`hsl`, `hwb`, `lch`, `oklch`): `shorter hue` is the default.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HueMethod { Shorter, Longer, Increasing, Decreasing }
+
+fn mix_hue(h1: f64, h2: f64, w2: f64, method: HueMethod) -> f64 {
+    let shorter = (h2 - h1 + 540.0).rem_euclid(360.0) - 180.0;
+    let delta = match method {
+        HueMethod::Shorter => shorter,
+        HueMethod::Longer => {
+            if shorter == 0.0 { 0.0 } else if shorter > 0.0 { shorter - 360.0 } else { shorter + 360.0 }
+        }
+        HueMethod::Increasing => (h2 - h1).rem_euclid(360.0),
+        HueMethod::Decreasing => (h2 - h1).rem_euclid(360.0) - 360.0,
+    };
+    (h1 + delta * w2).rem_euclid(360.0)
+}
+
+/// CSS Color 4 §13: a channel missing (`none`) in exactly one operand takes
+/// the other operand's value unattenuated by its mix weight; missing in
+/// both stays 0 (there is no further consumer to propagate it to here).
+fn mix_channel(v1: f64, missing1: bool, v2: f64, missing2: bool, w1: f64, w2: f64) -> f64 {
+    match (missing1, missing2) {
+        (true, true) => 0.0,
+        (true, false) => v2,
+        (false, true) => v1,
+        (false, false) => v1 * w1 + v2 * w2,
+    }
+}
+
 /// CSS Color 5's two-color mix. Keep interpolation in its declared space;
-/// converting the endpoints to sRGB before mixing gives visibly wrong LCH hues.
+/// converting the endpoints to sRGB before mixing gives visibly wrong hues.
+/// Spaces: the rectangular `srgb`/`srgb-linear`/`lab`/`oklab`/`xyz`/
+/// `xyz-d65`/`xyz-d50`, and the polar `hsl`/`hwb`/`lch`/`oklch` (each with an
+/// optional `<hue-method> hue` after the space name).
 pub(super) fn color_mix(inner: &str, depth: usize) -> Option<[u8; 4]> {
     let parts = split_top_level_commas(inner)?;
     let [method, first, second] = parts.as_slice() else { return None };
-    let space = method.trim().strip_prefix("in ")?.trim().to_ascii_lowercase();
-    if !matches!(space.as_str(), "srgb" | "srgb-linear" | "lch") { return None; }
-    let (first, p1) = mix_item(first, depth)?;
-    let (second, p2) = mix_item(second, depth)?;
+    let (space, hue_method) = parse_mix_method(method)?;
+    let (first, p1, missing1) = mix_item(first, depth, &space)?;
+    let (second, p2, missing2) = mix_item(second, depth, &space)?;
     let (p1, p2) = match (p1, p2) {
         (None, None) => (0.5, 0.5),
         (Some(a), None) => (a, 1.0 - a),
@@ -357,33 +415,164 @@ pub(super) fn color_mix(inner: &str, depth: usize) -> Option<[u8; 4]> {
     let p2 = p2 / sum;
     let a1 = first[3] as f64 / 255.0;
     let a2 = second[3] as f64 / 255.0;
-    let alpha = a1 * p1 + a2 * p2;
-    let (w1, w2) = if alpha > 0.0 { (a1 * p1 / alpha, a2 * p2 / alpha) }
+    let alpha = mix_channel(a1, missing1[3], a2, missing2[3], p1, p2);
+    // The premultiplication weights need each operand's *effective* alpha
+    // (SS13: a missing component acts as if it were set equal to the other
+    // operand's value), not the literal 0 the parser stores for a `none`
+    // alpha -- using the raw 0 would zero out that operand's contribution to
+    // every other channel instead of leaving it unaffected.
+    let eff_a1 = if missing1[3] { a2 } else { a1 };
+    let eff_a2 = if missing2[3] { a1 } else { a2 };
+    let (w1, w2) = if alpha > 0.0 { (eff_a1 * p1 / alpha, eff_a2 * p2 / alpha) }
         else { (p1, p2) };
     let output_alpha = byte(alpha * multiplier);
-    if space == "lch" {
-        let one = srgb_to_lch(first);
-        let two = srgb_to_lch(second);
-        let h1 = if one[1] < 0.0001 { two[2] } else { one[2] };
-        let h2 = if two[1] < 0.0001 { h1 } else { two[2] };
-        let delta = (h2 - h1 + 540.0).rem_euclid(360.0) - 180.0;
-        let angle = (h1 + delta * w2).to_radians();
-        let lightness = one[0] * w1 + two[0] * w2;
-        let chroma = one[1] * w1 + two[1] * w2;
-        return Some(lab_color(lightness, chroma * angle.cos(), chroma * angle.sin(), output_alpha));
-    }
-    let mut rgb = [0.0; 3];
-    for i in 0..3 {
-        let one = first[i] as f64 / 255.0;
-        let two = second[i] as f64 / 255.0;
-        rgb[i] = if space == "srgb-linear" {
-            srgb_encode(srgb_decode(one) * w1 + srgb_decode(two) * w2)
-        } else { one * w1 + two * w2 };
-    }
-    Some(rgba(rgb, output_alpha))
+    let polar_hue_index = match space.as_str() {
+        "hsl" | "hwb" => Some(0),
+        "lch" | "oklch" => Some(2),
+        _ => None,
+    };
+    let (one, two): ([f64; 3], [f64; 3]) = match space.as_str() {
+        "srgb" => ([0, 1, 2].map(|i| first[i] as f64 / 255.0), [0, 1, 2].map(|i| second[i] as f64 / 255.0)),
+        "srgb-linear" => (
+            [0, 1, 2].map(|i| srgb_decode(first[i] as f64 / 255.0)),
+            [0, 1, 2].map(|i| srgb_decode(second[i] as f64 / 255.0)),
+        ),
+        "lab" => (srgb_to_lab(first), srgb_to_lab(second)),
+        "oklab" => (srgb_to_oklab(first), srgb_to_oklab(second)),
+        "xyz" | "xyz-d65" => (srgb_to_xyz_d65(first), srgb_to_xyz_d65(second)),
+        "xyz-d50" => (srgb_to_xyz_d50(first), srgb_to_xyz_d50(second)),
+        "hsl" => (srgb_to_hsl(first), srgb_to_hsl(second)),
+        "hwb" => (srgb_to_hwb(first), srgb_to_hwb(second)),
+        "lch" => (srgb_to_lch(first), srgb_to_lch(second)),
+        "oklch" => (srgb_to_oklch(first), srgb_to_oklch(second)),
+        _ => return None,
+    };
+    let mixed = if let Some(hue_index) = polar_hue_index {
+        // An achromatic side or a literally missing hue contributes nothing
+        // directional; the other side's hue carries through unmixed. `hwb`'s
+        // achromatic test is `white + black >= 100`, not a near-zero channel.
+        let (one_moot, two_moot) = if space == "hwb" {
+            (one[1] + one[2] >= 100.0 - 1e-4 || missing1[0], two[1] + two[2] >= 100.0 - 1e-4 || missing2[0])
+        } else {
+            (one[1].abs() < 1e-4 || missing1[hue_index], two[1].abs() < 1e-4 || missing2[hue_index])
+        };
+        let other = [0, 1, 2].into_iter().filter(|&i| i != hue_index);
+        let mut mixed = [0.0; 3];
+        let h1 = if one_moot { two[hue_index] } else { one[hue_index] };
+        let h2 = if two_moot { h1 } else { two[hue_index] };
+        mixed[hue_index] = if missing1[hue_index] && missing2[hue_index] { 0.0 }
+            else { mix_hue(h1, h2, w2, hue_method) };
+        for i in other {
+            mixed[i] = mix_channel(one[i], missing1[i], two[i], missing2[i], w1, w2);
+        }
+        mixed
+    } else {
+        [0, 1, 2].map(|i| mix_channel(one[i], missing1[i], two[i], missing2[i], w1, w2))
+    };
+    Some(match space.as_str() {
+        "srgb" => rgba(mixed, output_alpha),
+        "srgb-linear" => rgba(mixed.map(srgb_encode), output_alpha),
+        "lab" => lab_color(mixed[0], mixed[1], mixed[2], output_alpha),
+        "oklab" => rgba(xyz_to_srgb(oklab_xyz(mixed)), output_alpha),
+        "xyz" | "xyz-d65" => rgba(xyz_to_srgb(mixed), output_alpha),
+        "xyz-d50" => rgba(xyz_to_srgb(d50_to_d65(mixed)), output_alpha),
+        "hsl" => rgba(hsl_rgb(mixed[0], mixed[1], mixed[2]), output_alpha),
+        "hwb" => rgba(hwb_rgb(mixed[0], mixed[1] / 100.0, mixed[2] / 100.0), output_alpha),
+        "lch" | "oklch" => {
+            let angle = mixed[2].to_radians();
+            let (a, b) = (mixed[1] * angle.cos(), mixed[1] * angle.sin());
+            if space == "lch" { lab_color(mixed[0], a, b, output_alpha) }
+            else { rgba(xyz_to_srgb(oklab_xyz([mixed[0], a, b])), output_alpha) }
+        }
+        _ => return None,
+    })
 }
 
-fn mix_item(item: &str, depth: usize) -> Option<([u8; 4], Option<f64>)> {
+/// `in <space> [<shorter | longer | increasing | decreasing> hue]?`.
+fn parse_mix_method(method: &str) -> Option<(String, HueMethod)> {
+    let method = method.trim().strip_prefix("in ")?.trim();
+    let mut words = method.split_ascii_whitespace();
+    let space = words.next()?.to_ascii_lowercase();
+    if !matches!(space.as_str(), "srgb" | "srgb-linear" | "lab" | "oklab" | "xyz" | "xyz-d65"
+        | "xyz-d50" | "hsl" | "hwb" | "lch" | "oklch") {
+        return None;
+    }
+    let hue_method = match words.next() {
+        None => HueMethod::Shorter,
+        Some(word) => {
+            let method = match word.to_ascii_lowercase().as_str() {
+                "shorter" => HueMethod::Shorter,
+                "longer" => HueMethod::Longer,
+                "increasing" => HueMethod::Increasing,
+                "decreasing" => HueMethod::Decreasing,
+                _ => return None,
+            };
+            if !words.next().is_some_and(|word| word.eq_ignore_ascii_case("hue")) {
+                return None;
+            }
+            method
+        }
+    };
+    if words.next().is_some() { return None; }
+    Some((space, hue_method))
+}
+
+/// `xyz` is an alias for `xyz-d65` (CSS Color 4 SS10.5): treat them as the
+/// same space when matching an operand's literal function against the
+/// `color-mix()` space it is being mixed in.
+fn normalize_space_alias(space: &str) -> &str {
+    if space == "xyz" { "xyz-d65" } else { space }
+}
+
+/// Whether `color_text` is written directly in `space`'s own function
+/// (`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()` absolute form,
+/// `rgb()`/`rgba()` for `srgb`, or `color(<space> ...)` for `srgb`,
+/// `srgb-linear` and the `xyz`/`xyz-d65`/`xyz-d50` family) so a `none`
+/// channel there means the *same* channel is missing in the mix. An operand
+/// written in a different function or a different `color()` space keeps the
+/// established none-is-0 behavior; propagating missing-ness across a space
+/// conversion is not attempted.
+fn none_mask(color_text: &str, space: &str) -> [bool; 4] {
+    let trimmed = color_text.trim();
+    let Some(open) = trimmed.find('(') else { return [false; 4] };
+    if !trimmed.ends_with(')') { return [false; 4]; }
+    let name = trimmed[..open].trim().to_ascii_lowercase();
+    let inner = &trimmed[open + 1..trimmed.len() - 1];
+    let (canonical, inner): (&str, &str) = match name.as_str() {
+        "hsl" | "hsla" => ("hsl", inner),
+        "hwb" => ("hwb", inner),
+        "lab" => ("lab", inner),
+        "lch" => ("lch", inner),
+        "oklab" => ("oklab", inner),
+        "oklch" => ("oklch", inner),
+        "rgb" | "rgba" => ("srgb", inner),
+        "color" => {
+            let trimmed_inner = inner.trim_start();
+            let (space_name, rest) = trimmed_inner
+                .split_once(char::is_whitespace)
+                .unwrap_or((trimmed_inner, ""));
+            let canonical = match space_name.to_ascii_lowercase().as_str() {
+                "srgb" => "srgb",
+                "srgb-linear" => "srgb-linear",
+                "xyz" | "xyz-d65" => "xyz-d65",
+                "xyz-d50" => "xyz-d50",
+                _ => return [false; 4],
+            };
+            (canonical, rest)
+        }
+        _ => return [false; 4],
+    };
+    if canonical != normalize_space_alias(space) { return [false; 4]; }
+    if inner.trim_start().to_ascii_lowercase().starts_with("from") { return [false; 4]; }
+    let normalized = inner.replace([',', '/'], " ");
+    let mut mask = [false; 4];
+    for (i, token) in normalized.split_ascii_whitespace().take(4).enumerate() {
+        mask[i] = token.eq_ignore_ascii_case("none");
+    }
+    mask
+}
+
+fn mix_item(item: &str, depth: usize, space: &str) -> Option<([u8; 4], Option<f64>, [bool; 4])> {
     let item = item.trim();
     let mut mix_percent = None;
     let mut color = item;
@@ -402,7 +591,8 @@ fn mix_item(item: &str, depth: usize) -> Option<([u8; 4], Option<f64>)> {
         }
     }
     if mix_percent.is_some_and(|p| !(0.0..=1.0).contains(&p)) { return None; }
-    Some((super::parse_css_color_depth(color, depth + 1)?, mix_percent))
+    let rgba = super::parse_css_color_depth(color, depth + 1)?;
+    Some((rgba, mix_percent, none_mask(color, space)))
 }
 
 fn split_top_level_commas(value: &str) -> Option<Vec<&str>> {
