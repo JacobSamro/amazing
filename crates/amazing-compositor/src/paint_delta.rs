@@ -70,7 +70,7 @@ impl Compositor {
             .as_ref()
             .ok_or(PaintDeltaError::MissingKeys)?;
         let mut seen = HashSet::new();
-        let mut affected = HashSet::<TileKey>::new();
+        let mut affected = HashMap::<TileKey, Rect>::new();
         for change in &delta.changes {
             if !seen.insert(change.key) {
                 return Err(PaintDeltaError::DuplicateKey);
@@ -95,13 +95,26 @@ impl Compositor {
             let damage = change.old_bounds.union(change.new_bounds);
             for (layer_index, layer) in self.layers.iter().enumerate() {
                 if layer.chunks.contains(&chunk_index) {
-                    affected.extend(tile_keys(layer_index, damage));
+                    for key in tile_keys(layer_index, damage) {
+                        affected
+                            .entry(key)
+                            .and_modify(|rect| *rect = rect.union(damage))
+                            .or_insert(damage);
+                    }
                 }
             }
         }
         let mut dirtied = 0;
-        for key in affected {
+        if !affected.is_empty() {
+            self.raster_epoch = self.raster_epoch.wrapping_add(1);
+        }
+        for (key, damage) in affected {
             if let Some(tile) = self.tiles.get_mut(&key) {
+                if !tile.dirty {
+                    tile.damage = Some(damage);
+                } else if let Some(previous) = tile.damage {
+                    tile.damage = Some(previous.union(damage));
+                }
                 tile.dirty = true;
                 dirtied += 1;
             }
@@ -183,6 +196,17 @@ mod tests {
         };
         assert_eq!(compositor.apply_paint_delta(&delta), Ok(1));
         assert_eq!(compositor.dirty_tiles(), 1);
+        assert_eq!(
+            compositor
+                .tiles
+                .get(&TileKey {
+                    layer: 0,
+                    x: 1,
+                    y: 0
+                })
+                .and_then(|tile| tile.damage),
+            Some(rects[1])
+        );
         let frame = compositor.build_frame(&source, 512, 64).unwrap();
         assert_eq!(frame.resources.uploads.len(), 1);
         assert_eq!(source.paint_calls.get() - paint_before, 1);

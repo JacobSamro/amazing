@@ -66,14 +66,25 @@ pub(crate) fn invoke<H: BindingHost>(
 ) -> Result<H::Value, H::Error> {
     if op == O::StaticRangeConstructor {
         let dictionary = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let start_node_value = host.get_property(dictionary, "startContainer")?;
-        let start_node = required_node(host, Some(&start_node_value))?;
-        let start_offset_value = host.get_property(dictionary, "startOffset")?;
-        let start_offset = unsigned_long(host, &start_offset_value)? as usize;
+        if host.is_nullish(dictionary) {
+            return Err(host.type_error("Missing required StaticRangeInit members"));
+        }
+        // Web IDL converts dictionary members in lexicographic order, and
+        // required numeric members must not turn missing/undefined into zero.
         let end_node_value = host.get_property(dictionary, "endContainer")?;
         let end_node = required_node(host, Some(&end_node_value))?;
         let end_offset_value = host.get_property(dictionary, "endOffset")?;
+        if host.is_undefined(&end_offset_value) {
+            return Err(host.type_error("Missing required endOffset"));
+        }
         let end_offset = unsigned_long(host, &end_offset_value)? as usize;
+        let start_node_value = host.get_property(dictionary, "startContainer")?;
+        let start_node = required_node(host, Some(&start_node_value))?;
+        let start_offset_value = host.get_property(dictionary, "startOffset")?;
+        if host.is_undefined(&start_offset_value) {
+            return Err(host.type_error("Missing required startOffset"));
+        }
+        let start_offset = unsigned_long(host, &start_offset_value)? as usize;
         let range = host.with_dom(|dom| dom.register_static_range(
             BoundaryPoint::new(start_node, start_offset),
             BoundaryPoint::new(end_node, end_offset),

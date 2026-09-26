@@ -49,6 +49,18 @@ fn array_receiver(i: &Interpreter, this: JsValue) -> Result<JsValue, Throw> {
 }
 
 fn array_like_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Throw> {
+    let length = array_search_length(i, object)?;
+    if length > 1_000_000 {
+        return Err(Throw::range_error(
+            "array operation exceeds supported length",
+        ));
+    }
+    Ok(length)
+}
+
+// Searches can start close to the end of a very large sparse array-like object.
+// Their scan bound is applied after fromIndex has selected the range to visit.
+fn array_search_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Throw> {
     if let JsValue::Object(handle) = object {
         if let Some(JsValue::Str(text)) = handle.borrow().get_own("[[StringData]]") {
             return Ok(text.len());
@@ -61,11 +73,6 @@ fn array_like_length(i: &mut Interpreter, object: &JsValue) -> Result<usize, Thr
     } else {
         number.trunc().min(9_007_199_254_740_991.0)
     };
-    if length > 1_000_000.0 {
-        return Err(Throw::range_error(
-            "array operation exceeds supported length",
-        ));
-    }
     Ok(length as usize)
 }
 
@@ -531,7 +538,7 @@ fn native_array_last_index_of(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let object = array_receiver(i, this)?;
-    let length = array_like_length(i, &object)?;
+    let length = array_search_length(i, &object)?;
     if length == 0 {
         return Ok(JsValue::num(-1.0));
     }
@@ -548,9 +555,12 @@ fn native_array_last_index_of(
     } else {
         (length - 1) as isize
     };
-    for index in (0..=start).rev() {
+    for (visited, index) in (0..=start).rev().enumerate() {
+        if visited == 1_000_000 {
+            return Err(Throw::range_error("array search exceeds iteration limit"));
+        }
         let index = index as usize;
-        if array_has(i, &object, index)? && i.get_prop(&object, index.to_string())? == search {
+        if array_has(i, &object, index)? && array_get_index(i, &object, index)? == search {
             return Ok(JsValue::num(index as f64));
         }
     }
