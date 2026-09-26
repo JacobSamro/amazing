@@ -1370,6 +1370,51 @@ Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped
 
 `media_queries::MediaEnvironment` supplies viewport size, DPR, media type, and user preferences. `MediaQueryList::parse` with `evaluate` matches screen/print, width/height/resolution, orientation, and common `prefers-*` features. `parse_sizes_attribute` selects the first matching source size, resolves viewport/absolute/font-relative lengths and common CSS math, and accepts an optional auto width; invalid entries fall through to 100vw.
 
+## CSS-15b — predefined counter styles and focus pseudo-classes (2026-09-26)
+
+The CSS crate now implements the full normative predefined counter-style set from
+CSS Counter Styles 3 (§6 simple and §7 complex). Per-style suffixes are honored
+(`、` for `cjk-decimal`, the fixed CJK styles, hiragana/katakana/iroha and the
+Japanese/Chinese longhands; `", "` for the Korean longhands; `". "` otherwise).
+`cjk-earthly-branch` and `cjk-heavenly-stem` are fixed, not cyclic, with a
+`cjk-decimal` fallback. Added the simple additive styles (`armenian`,
+`upper-armenian`, `lower-armenian`, `georgian`, `hebrew`), the limited-range CJK
+longhand additive styles (`japanese-informal`, `japanese-formal`,
+`korean-hangul-formal`, `korean-hanja-informal`, `korean-hanja-formal`), and the
+Chinese limited-range specialized algorithm (`simp-chinese-informal/-formal`,
+`trad-chinese-informal/-formal`, `cjk-ideographic`). Custom `@counter-style`
+rules now support `system: additive`. Out-of-range values fall back per style
+(`cjk-decimal` or `decimal`).
+
+Selectors 4 `:focus`, `:focus-visible`, and `:focus-within` now match from the
+DOM's programmatic focus record (`Dom::is_focused`, `is_focus_visible`,
+`is_focus_within`). `:focus-visible` follows the keyboard-visibility flag with
+the text-control exception (text-ish `input`, `textarea`, `contenteditable`).
+Added `Pseudo::FocusVisible` parse/match/specificity and the `focus-visible`
+invalidation token. This depends on the dom-bindings focus API (`9a79112`,
+merged to dev as `8cb9e5cb`/`9d2e5c27`); the selector code had previously been
+cherry-picked into this branch by mistake and is now committed lane-clean.
+
+Linux (venus-001) `cargo nextest run -p amazing-css --locked`: **310/310**,
+CSS doctests 0. Commits `1d4b4d11` (counter styles) and `13e1d722` (focus).
+
+**Render result (counter-styles selection).** `css/css-counter-styles` was
+restored at the pinned revision via a blob-filtered sparse checkout on the Mac
+and transferred to win-001. Running `run-render-wpt.ps1` with the 80-case
+`crates/amazing-css/evidence/css15b-counter-manifest.json` (a counter-styles-only
+subset of the css15b manifest) against the candidate executable gives
+**73 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash**, up from
+the committed baseline's **4 pass / 76 mismatch**: 69 gains, zero regressions.
+Evidence: `crates/amazing-css/evidence/css15b-counter-after.json`. The 7
+remaining are 3 Hebrew cases (RTL/bidi and `counter-hebrew-nested`), 1
+`korean-hanja-informal` case, and 3 Chinese `counter-*` `counter()` cases
+(not `::marker`), which are followed up separately.
+
+The full 219-case css15b corpus (css-pseudo/counter-styles/conditional) still
+needs `css/css-conditional` restored at the manifest revision for a comparable
+all-category after-run; the counter-styles directory and selection above are the
+part this ticket owns and has now measured.
+
 ## Next CSS-15 bulk css/ WPT sweep
 
 Pinned WPT revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12` has the largest document counts in `css-grid` (3410), `css-flexbox` (1974), `css-backgrounds` (1355), `css-transforms` (1245), `css-images` (751), `selectors` (684), `css-values` (603), `css-color` (517), `css-variables` (268), and `css-cascade` (158). Grid/flexbox are layout-owned and backgrounds/images paint-owned. The selected CSS-owned directories are `selectors`, `css-values`, and `css-color`: 80 path-stratified static reftests from each, in `crates/amazing-css/evidence/css15-manifest.json`.
@@ -1379,3 +1424,111 @@ The fixed-base baseline is **190 pass / 50 mismatch / 0 error / 0 unsupported**.
 ## Viewport computed values and resize invalidation
 
 `compute_with_environment(dom, sheets, &MediaEnvironment)` is the driver entry point. `compute()` supplies a default 800×600 CSS-pixel environment for existing callers. `vw`/`vh`/`vmin`/`vmax` and their `sv`/`lv`/`dv` variants become computed px before inheritance; the small, large, and dynamic sizes default to the layout viewport when absent. This resolves root `font-size: 100vw` before child `rem` values. `StyleInvalidator::new_with_environment` captures the prior environment; `collect_viewport_resize` selects nodes with matching viewport-dependent rules or viewport units in inline styles, and `recompute_roots` uses the new environment for those subtrees. The driver creates a fresh invalidator with the new environment after applying the delta. Container units remain future work.
+
+## COMP-15 — filter, blend, mask, and clip-path (2026-09-26)
+
+CSS now registers `filter`, `backdrop-filter`, `mix-blend-mode`, `isolation`,
+`mask-image`, `mask-mode`, `mask-repeat`, `mask-position`, `mask-clip`,
+`mask-origin`, `mask-size`, `mask-composite`, and `mask-type`, and parses
+`clip-path` shapes. `crates/amazing-css/src/effects.rs` holds the typed values:
+
+- `FilterList` resolves a `<filter-value-list>` to functions
+  (blur/brightness/contrast/drop-shadow/grayscale/hue-rotate/invert/opacity/
+  saturate/sepia/url). Number/percentage arguments are clamped to the property
+  range; `calc()` arguments are retained as `FilterFunction::Expression` text for
+  the compositor to fold. `drop-shadow` offsets/blur are lengths, not
+  percentages.
+- `BlendMode` covers the full Compositing and Blending 2 keyword set including
+  `plus-lighter`; `isolation` is a bool (`isolate` true).
+- `clip-path` parses `none`, `url()`, `<geometry-box>`,
+  `inset()`/`circle()`/`ellipse()`/`polygon()` (with optional `round <length>`
+  and fill-rule) and `path()` (with optional fill-rule), in either
+  `<shape> <box>` order.
+- `mask-image` is a comma list of `none`/`url()`/`<image>`; `mask-mode`,
+  `mask-type`, `mask-composite`, `mask-clip`/`mask-origin` are typed keyword
+  enums; `mask-repeat`/`mask-position`/`mask-size` are grammar-validated.
+- `clip-path` now routes through the effects parser instead of the SVG
+  presentation path (which only accepted `none`/`url()`); SVG consumers only
+  require a non-`Unparsed` typed value.
+
+Effect-only longhands classify as `StyleChangeKind::CompositorOnly` and
+`CompositorStyleDelta` carries them as `effects: Vec<(property, css)>`
+value-only updates through the CSS-13 delta path (`update_attribute`,
+`apply_to_styles`), so the compositor can apply filter/blend/mask/clip changes
+without a CSS recompute.
+
+Boundaries (not claimed): `xywh()` and `rect()` shapes (CSS Shapes 2) and
+`ray()` are unimplemented; `polygon(round ...)` is validated but not retained
+typed; GPU rasterization of filters/backdrop-filters/blend/masks and the
+compositor adoption of the `effects` field are the compositor lane's work. The
+engine's computed serialization places no space after commas in shape functions,
+which differs from the WPT canonical form but is the existing serializer policy.
+
+Evidence: Linux (Boat) CSS nextest **322/322**; workspace nextest **2489/2489**
+(10 skipped). WPT parsing selections pinned at revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` in
+`crates/amazing-css/evidence/css19-effects-manifest.json`; the valid/invalid
+declaration sets are encoded in `effects.rs` unit tests and
+`tests/css19_effects.rs`, because the DOM CSSOM/`getComputedStyle` path those
+harness files need is not implemented. Linux final gate (Boat, lane head
+`4c331292`): CSS crate **322/322**, workspace nextest **2539/2539** (10
+skipped), workspace doctests **2/2**. WPT render sweeps are deferred under the
+Linux-first rule (2026-09-26).
+
+## CSS-15c — i64 counter values and the extended CJK longhand algorithm
+
+Commit `6c90b5e5` (on the lane head `c8bb65e7` after the dev merge). Counter
+values (`counter-reset`, `counter-increment`, `counter-set`, a `reversed()`
+initial value, and the `counters()` history) are now `i64`, so author-specified
+values beyond 32 bits survive to the marker instead of clamping. The Chinese
+longhand styles (`simp-chinese-informal`/`-formal`, `trad-chinese-informal`/
+`-formal`, and the deprecated `cjk-ideographic`) use the CSS Counter Styles 3
+[§7.1.2 extended algorithm](https://drafts.csswg.org/css-counter-styles-3/#extended-range-optional):
+four-digit groups with `万`/`亿`/`万亿` (simplified) or `萬`/`億`/`兆`
+(traditional) markers, a single `零` collapsing runs of zero groups, and the
+informal tens-digit drop, defined over |value| < 10^16. The `japanese-*` and
+`korean-*` longhands stay the §7.1.1 limited-range (-9999..=9999) forms and keep
+their spec `fallback: cjk-decimal`. Values at or beyond 10^16 fall back per the
+counter style (`cjk-decimal` for the CJK longhands, `decimal` otherwise). The
+`counter-trad-chinese-informal-ref.html` reference values through 10^15 and the
+out-of-range fallback are unit-tested in `counter_styles.rs`.
+
+This is the CSS-owned part of the seven remaining counter-styles render
+mismatches: the three Chinese `counter()` cases used values past the old
+limited range. Linux final gate (Boat, lane head `4c331292`): CSS crate
+**322/322**, workspace nextest **2539/2539** (10 skipped), workspace doctests
+**2/2**. The counter-styles WPT render after-run uses the Windows-only
+PowerShell runner, so it is deferred under the Linux-first rule; the formatting
+itself is proven by the spec-reference unit tests above.
+
+## CSS-20 — CSS Values 5 calc-size() preservation (LAYOUT-18)
+
+Commit `9bb410cd`. CSS accepts `calc-size( <calc-size-basis>, <calc-sum> )`
+([CSS Values 5 §11](https://drafts.csswg.org/css-values-5/#calc-size)) on the
+size longhands: `width`, `height`, `min-width`/`min-height`,
+`max-width`/`max-height`, `flex-basis`, and the logical `inline-size`/
+`block-size` family (mapped to the physical longhands before validation). The
+basis is a sizing keyword (`auto | min-content | max-content | fit-content |
+stretch | contain`), the `fit-content()` function variation, a `<calc-sum>`, a
+nested `calc-size()`, or `any`. The calculation is a `<calc-sum>` in which the
+`size` keyword names the basis; `size` is rejected when the basis is `any`.
+
+`crates/amazing-css/src/math.rs::calc_size` validates the grammar and the
+expression is retained unmodified as
+`ComputedValue::LengthPercentageExpression`, so `ComputedStyle::get` returns the
+canonical `calc-size(...)` text and `typed()` exposes the expression without
+resolving the intrinsic keyword at computed-value time. Layout owns the
+used-value evaluation (its own `calc-size()` parser and intrinsic basis
+handling). Malformed arithmetic, trailing tokens, a non-sizing property
+context, an unknown basis, and `size` under an `any` basis are rejected before
+cascade, so the declaration behaves as invalid rather than manufacturing a
+value.
+
+Boundary (not claimed): `calc-size()` nested inside another math function
+(`min(calc-size(...), 50px)`) is not accepted; only the top-level function is.
+Layout's other LAYOUT-18 seam, typed `attr()` inside math (`width:
+max(attr(data-test type(<length>)))`), was already implemented by CSS-15.
+
+Linux final gate (Boat sandbox, lane head `9bb410cd`): CSS crate **323/323**
+(adds `values::tests::calc_size_is_preserved_for_layout`), workspace nextest
+**2540/2540** (10 skipped), workspace doctests **2/2**, zero failures.

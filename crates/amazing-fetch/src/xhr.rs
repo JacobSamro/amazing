@@ -3,7 +3,7 @@
 //! No JS objects, DOM events, or scheduler are created in this crate.
 use crate::api::{
     byte_string, fetch_api, parse_json, usv_string, ApiError, ApiHeaders, ApiRequest,
-    ApiRequestInit, ApiRequestInput, ApiResponse, BodyInput, HeaderGuard, JsonValue,
+    ApiRequestInit, ApiRequestInput, ApiResponse, Blob, BodyInput, HeaderGuard, JsonValue,
     PendingFetchApi,
 };
 use crate::{FetchError, HttpUrl, NetworkOrCache, Origin, Site};
@@ -31,7 +31,16 @@ pub enum XhrResponseValue {
     Text(String),
     Json(Option<JsonValue>),
     ArrayBuffer(Vec<u8>),
+    Blob(Blob),
     Null,
+}
+/// The document response bytes and metadata retained until the DOM embedder parses them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XhrDocumentSource {
+    pub bytes: Vec<u8>,
+    pub content_type: String,
+    pub url: String,
+    pub charset: Option<String>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XhrEventKind {
@@ -84,6 +93,7 @@ pub enum XhrError {
     InvalidStateCredentials,
     InvalidStateResponseType,
     InvalidStateResponseText,
+    InvalidStateResponseXml,
     InvalidStateOverrideMimeType,
     SyntaxMethod,
     SyntaxUrl,
@@ -113,6 +123,7 @@ impl XhrError {
             | Self::InvalidStateCredentials
             | Self::InvalidStateResponseType
             | Self::InvalidStateResponseText
+            | Self::InvalidStateResponseXml
             | Self::InvalidStateOverrideMimeType => "InvalidStateError",
             Self::SyntaxMethod
             | Self::SyntaxUrl
@@ -219,6 +230,9 @@ impl Xhr {
     pub fn send_invoked(&self) -> bool {
         self.send_flag
     }
+    pub fn is_asynchronous(&self) -> bool {
+        self.asynchronous
+    }
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -239,6 +253,9 @@ impl Xhr {
     }
     pub fn request_headers(&self) -> &ApiHeaders {
         &self.request_headers
+    }
+    pub fn is_data_request(&self) -> bool {
+        self.url.as_ref().is_some_and(|url| url.as_parsed().scheme() == "data")
     }
     pub fn set_upload_listeners(&mut self, present: bool) {
         self.upload_has_listeners = present;
@@ -408,7 +425,7 @@ impl Xhr {
         let upload_total = body.as_ref().and_then(body_length);
         let utf8_body = matches!(
             body.as_ref(),
-            Some(BodyInput::String(_) | BodyInput::UrlSearchParams(_))
+            Some(BodyInput::String(_) | BodyInput::UrlSearchParams(_) | BodyInput::Document { .. })
         );
         let mut init = ApiRequestInit::default();
         init.method = Some(self.method.encode_utf16().collect());
@@ -648,9 +665,19 @@ impl Xhr {
     }
     pub fn abort(&mut self) -> Vec<XhrEvent> {
         match self.state {
-            XhrState::Opened if self.send_flag => self.fail(XhrError::Abort).unwrap_or_default(),
+            XhrState::Opened if self.send_flag => {
+                let events = self.fail(XhrError::Abort).unwrap_or_default();
+                self.state = XhrState::Unsent;
+                events
+            }
             XhrState::HeadersReceived | XhrState::Loading => {
-                self.fail(XhrError::Abort).unwrap_or_default()
+                let events = self.fail(XhrError::Abort).unwrap_or_default();
+                self.state = XhrState::Unsent;
+                events
+            }
+            XhrState::Opened => {
+                self.state = XhrState::Unsent;
+                Vec::new()
             }
             XhrState::Done => {
                 self.state = XhrState::Unsent;
@@ -711,6 +738,27 @@ impl Xhr {
         let charset = self.final_charset();
         Ok(decoder.decode(&self.received, charset.as_deref()))
     }
+    /// Returns the source for responseXML/responseType=document. XML parse errors
+    /// are handled by the DOM embedder and become a null response.
+    pub fn document_source(&self) -> Option<XhrDocumentSource> {
+        if self.state != XhrState::Done { return None; }
+        let response = self.response.as_ref()?;
+        if !response.body.shared_present() { return None; }
+        let header = response.headers.get_string("content-type").ok().flatten();
+        let mime = self.override_mime.as_deref().or(header.as_deref())
+            .and_then(crate::mime::MimeType::parse)
+            .unwrap_or_else(|| crate::mime::MimeType::parse("text/xml").expect("static MIME"));
+        let html = mime.type_ == "text" && mime.subtype == "html";
+        let xml = matches!(mime.type_.as_str(), "text" | "application") && mime.subtype == "xml"
+            || mime.subtype.ends_with("+xml");
+        if !xml && (!html || self.response_type != XhrResponseType::Document) { return None; }
+        Some(XhrDocumentSource {
+            bytes: self.received.clone(),
+            content_type: mime.essence(),
+            url: response.url.clone(),
+            charset: self.final_charset(),
+        })
+    }
     pub fn response(&self, decoder: &impl XhrTextDecoder) -> Result<XhrResponseValue, XhrError> {
         match self.response_type {
             XhrResponseType::Default | XhrResponseType::Text => {
@@ -719,7 +767,15 @@ impl Xhr {
             XhrResponseType::Document if self.state == XhrState::Done => {
                 Err(XhrError::UnsupportedDocument)
             }
-            XhrResponseType::Blob if self.state == XhrState::Done => Err(XhrError::UnsupportedBlob),
+            XhrResponseType::Blob if self.state == XhrState::Done => {
+                if self.response.is_none() { return Ok(XhrResponseValue::Null); }
+                let header = self.response.as_ref().and_then(|response|
+                    response.headers.get_string("content-type").ok().flatten());
+                let content_type = self.override_mime.as_deref().or(header.as_deref());
+                let content_type = content_type.and_then(crate::mime::MimeType::parse)
+                    .map_or_else(|| "application/octet-stream".to_owned(), |mime| mime.serialize());
+                Ok(XhrResponseValue::Blob(Blob::from_bytes(self.received.clone(), &content_type)))
+            }
             XhrResponseType::Document | XhrResponseType::Blob => Ok(XhrResponseValue::Null),
             XhrResponseType::Json if self.state != XhrState::Done => Ok(XhrResponseValue::Null),
             XhrResponseType::ArrayBuffer if self.state != XhrState::Done => {
@@ -869,6 +925,7 @@ fn map_header_error(error: ApiError) -> XhrError {
 fn body_length(body: &BodyInput) -> Option<u64> {
     match body {
         BodyInput::Bytes(v) => Some(v.len() as u64),
+        BodyInput::Document { bytes, .. } => Some(bytes.len() as u64),
         BodyInput::String(v) => Some(usv_string(v).len() as u64),
         BodyInput::UrlSearchParams(_)
         | BodyInput::Stream(_)
