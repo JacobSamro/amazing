@@ -53,6 +53,7 @@ enum NativeEntry {
     IFrameContentDocument,
     IFrameSrcGet,
     IFrameSrcSet,
+    OptionConstructor,
 }
 
 enum WebObject {
@@ -500,6 +501,7 @@ pub(crate) fn install(
             NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
             NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
             NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
+            NativeEntry::OptionConstructor => adapter.option_constructor(&args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -514,6 +516,7 @@ pub(crate) fn install(
     adapter.install_storage_interfaces()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
+    adapter.install_html_form_globals()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;

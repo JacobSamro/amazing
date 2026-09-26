@@ -309,32 +309,58 @@ pub(crate) fn supported_names<H: BindingHost>(
     })
 }
 fn validity<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<ValidityState, H::Error> {
-    let (pattern, value) = host.with_dom(|dom| {
-        let pattern = if dom.html_tag(node, "input")
-            && matches!(
-                dom.input_type(node)?,
-                "text" | "search" | "tel" | "url" | "email" | "password"
-            ) {
+    let (pattern, value, multiple_email) = host.with_dom(|dom| {
+        let is_input = dom.html_tag(node, "input");
+        let input_type = if is_input { Some(dom.input_type(node)?) } else { None };
+        let pattern = if input_type.as_deref().is_some_and(|kind| {
+            matches!(kind, "text" | "search" | "tel" | "url" | "email" | "password")
+        }) {
             dom.attribute_utf16(node, "pattern")
         } else {
             None
         };
-        let value = if dom.html_tag(node, "input") {
+        let value = if is_input {
             dom.input_value(node)?
         } else if dom.html_tag(node, "textarea") {
             dom.textarea_value(node)?
         } else {
             Vec::new()
         };
-        Ok((pattern, value))
+        let multiple_email = input_type.as_deref() == Some("email")
+            && dom.attribute_utf16(node, "multiple").is_some();
+        Ok((pattern, value, multiple_email))
     })?;
+    // A pattern on a multiple email control is matched against each
+    // comma-separated address after stripping surrounding whitespace; any
+    // mismatching address makes the whole control mismatch.
     let match_result = match pattern.filter(|_| !value.is_empty()) {
-        Some(pattern) => host.form_pattern_matches(&pattern, &value)?,
+        Some(pattern) => {
+            let mut mismatched = false;
+            if multiple_email {
+                let text = String::from_utf16_lossy(&value);
+                for address in text.split(',').map(|part| part.trim_matches(|c: char| c.is_ascii_whitespace())) {
+                    let units: Vec<u16> = address.encode_utf16().collect();
+                    if host.form_pattern_matches(&pattern, &units)? == Some(false) {
+                        mismatched = true;
+                        break;
+                    }
+                }
+            } else {
+                mismatched = host.form_pattern_matches(&pattern, &value)? == Some(false);
+            }
+            Some(!mismatched)
+        }
         None => None,
     };
     host.with_dom(|dom| dom.validity(node, |_, _| match_result))
 }
 fn validate<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<bool, H::Error> {
+    // A control that is not a candidate for constraint validation satisfies its
+    // constraints for the purposes of checkValidity/reportValidity and does not
+    // fire an invalid event, even though validity flags may still be set.
+    if !host.with_dom(|dom| dom.will_validate(node))? {
+        return Ok(true);
+    }
     let valid = validity(host, node)?.valid();
     if !valid {
         crate::event_bindings::dispatch_invalid_event(host, node)?;

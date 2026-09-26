@@ -229,6 +229,48 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    /// `[LegacyFactoryFunction=Option]` from the HTML standard: builds a
+    /// detached `<option>` with text, value, default-selected and selectedness.
+    pub(super) fn install_html_form_globals(&mut self) -> Result<(), Throw> {
+        let option = self.native("Option", 4, NativeEntry::OptionConstructor,
+            HostCallPolicy::CallAndConstruct);
+        let global = self.js.binding_global_object();
+        self.define_data_property(&global, "Option", option, true, false, true)
+    }
+
+    pub(super) fn option_constructor(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let text = args.first().map(|v| self.to_dom_string(v)).transpose()?;
+        let value = args.get(1).map(|v| self.to_dom_string(v)).transpose()?;
+        let has_default = args.get(2).is_some();
+        let default_selected = args.get(2).is_some_and(|v| self.to_boolean(v));
+        let has_selected = args.get(3).is_some();
+        let selected = args.get(3).is_some_and(|v| self.to_boolean(v));
+        let document = self.current_document();
+        let node = self.with_dom(|dom| {
+            let node = dom.create_element_local_in(
+                document, Some("http://www.w3.org/1999/xhtml"), "option")?;
+            if let Some(text) = &text {
+                if !text.is_empty() {
+                    dom.create_text(node, &String::from_utf16_lossy(text));
+                }
+            }
+            if let Some(value) = &value {
+                dom.set_attribute(node, "value", &String::from_utf16_lossy(value))?;
+            }
+            if default_selected {
+                dom.set_attribute(node, "selected", "")?;
+            }
+            // `selected` falls back to `defaultSelected` when not supplied.
+            if has_selected || has_default {
+                dom.set_option_selected(node, selected || (!has_selected && default_selected))?;
+            }
+            Ok(node)
+        })?;
+        self.wrap_node(node)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
     pub(super) fn navigate_form(&mut self, request: FormNavigationRequest) -> Result<(), Throw> {
         let hook = self.state.borrow().frames.form_navigation_hook.clone();
         if let Some(hook) = hook {

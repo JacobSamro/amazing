@@ -393,6 +393,62 @@ mod tests {
     }
 
     #[test]
+    fn promise_then_async_await_settles_across_nested_frames() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.done = false; Promise.resolve().then(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))); done = true; });").unwrap();
+        for frame in 0..10 {
+            driver.pump_at(Duration::from_millis(frame * 16), true).unwrap();
+        }
+        assert!(matches!(driver.run_script("done").unwrap(), JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn detached_input_select_queues_select_event() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.hit = 0; var i = document.createElement('input'); i.type = 'text'; i.value = 'foobar'; i.addEventListener('select', () => { hit++; }); i.select();").unwrap();
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("hit").unwrap(), JsValue::Num(n) if n == 1.0));
+    }
+
+    #[test]
+    fn detached_clone_select_queues_select_event() {
+        let (mut driver, _) = adapter(64, false);
+        // The source control's live selection must not be cloned: the clone
+        // starts at the default end selection, so select() changes it and fires.
+        driver.run_script("globalThis.hit = 0; var i = document.createElement('input'); i.type = 'text'; i.value = 'foobar'; i.select(); var c = i.cloneNode(true); c.addEventListener('select', () => { hit++; }); c.select();").unwrap();
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("hit").unwrap(), JsValue::Num(n) if n == 1.0));
+    }
+
+    #[test]
+    #[ignore = "blocked on js-lane: tree-walking `await` on a pending promise returns immediately instead of suspending (interp.rs:1980)"]
+    fn await_suspends_until_timer_fires() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.order = ''; (async () => { order += 'A'; await new Promise(resolve => setTimeout(resolve, 1000)); order += 'B'; })(); order += 'C';").unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("AC"));
+        driver.pump_at(Duration::from_millis(1200), false).unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("ACB"));
+    }
+
+    #[test]
+    fn validity_flags_are_computed_for_disabled_and_readonly_controls() {
+        let (mut driver, _) = adapter(64, false);
+        // valueMissing is mutability-gated: a disabled/readonly required empty
+        // control is not missing. Size/pattern/range/steps are independent.
+        driver.run_script("var i = document.createElement('input'); i.required = true; globalThis.cv = i.validity.valueMissing; globalThis.cc = i.validity.valid; var c = i.cloneNode(true); globalThis.kv = c.validity.valueMissing; globalThis.kc = c.validity.valid;").unwrap();
+        assert!(matches!(driver.run_script("cv").unwrap(), JsValue::Bool(true)), "connected valueMissing");
+        assert!(matches!(driver.run_script("cc").unwrap(), JsValue::Bool(false)), "connected valid");
+        assert!(matches!(driver.run_script("kv").unwrap(), JsValue::Bool(true)), "cloned valueMissing");
+        assert!(matches!(driver.run_script("kc").unwrap(), JsValue::Bool(false)), "cloned valid");
+        // A disabled or readonly control with a pattern mismatch is still invalid.
+        driver.run_script("var p = document.createElement('input'); p.pattern = '[A-Z]'; p.value = 'abc'; globalThis.pm = p.validity.patternMismatch; globalThis.pv = p.validity.valid; var d = p.cloneNode(true); d.disabled = true; globalThis.dm = d.validity.patternMismatch; globalThis.dv = d.validity.valid; var r = p.cloneNode(true); r.readOnly = true; globalThis.rv = r.validity.valid; var n = document.createElement('input'); n.type = 'number'; n.max = '5'; n.value = '6'; globalThis.rm = n.validity.rangeOverflow; globalThis.rvm = n.validity.valid; var dn = n.cloneNode(true); dn.disabled = true; globalThis.drm = dn.validity.rangeOverflow; globalThis.drv = dn.validity.valid;").unwrap();
+        for (name, expected) in [("pm", true), ("pv", false), ("dm", true), ("dv", false), ("rv", false), ("rm", true), ("rvm", false), ("drm", true), ("drv", false)] {
+            let value = driver.run_script(name).unwrap();
+            assert!(matches!(value, JsValue::Bool(v) if v == expected), "validity {name}");
+        }
+    }
+
+    #[test]
     fn rendering_dispatches_resize_before_frames_and_paints_after() {
         let (mut driver, _) = adapter(64, false);
         let painted = Rc::new(RefCell::new(false));

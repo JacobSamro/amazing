@@ -96,6 +96,88 @@ fn valid_number(value: &str) -> Option<f64> {
     let n: f64 = value.parse().ok()?;
     n.is_finite().then_some(n)
 }
+/// Parse a finite decimal into `(mantissa, decimal_exponent)` so that the value
+/// equals `mantissa * 10^exp`. Accepts an optional sign, fraction and exponent.
+fn parse_decimal(value: &str) -> Option<(i128, i32)> {
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    let mut negative = false;
+    match bytes.first() {
+        Some(b'+') => i += 1,
+        Some(b'-') => { negative = true; i += 1; }
+        _ => {}
+    }
+    let mut mantissa: i128 = 0;
+    let mut fraction: i32 = 0;
+    let mut saw_digit = false;
+    while let Some(&c) = bytes.get(i) {
+        if c.is_ascii_digit() {
+            mantissa = mantissa.checked_mul(10)?.checked_add((c - b'0') as i128)?;
+            saw_digit = true;
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    if bytes.get(i) == Some(&b'.') {
+        i += 1;
+        while let Some(&c) = bytes.get(i) {
+            if c.is_ascii_digit() {
+                mantissa = mantissa.checked_mul(10)?.checked_add((c - b'0') as i128)?;
+                fraction += 1;
+                saw_digit = true;
+                i += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    if !saw_digit { return None; }
+    let mut exp: i32 = -fraction;
+    if matches!(bytes.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        let mut sign = 1i32;
+        match bytes.get(i) {
+            Some(b'+') => i += 1,
+            Some(b'-') => { sign = -1; i += 1; }
+            _ => {}
+        }
+        let mut digits = 0i32;
+        while let Some(&c) = bytes.get(i) {
+            if c.is_ascii_digit() {
+                digits = digits.checked_mul(10)?.checked_add((c - b'0') as i32)?;
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        exp = exp.checked_add(sign.checked_mul(digits)?)?;
+    }
+    if i != bytes.len() { return None; }
+    Some((if negative { -mantissa } else { mantissa }, exp))
+}
+/// Whether `(value - base)` is an exact integral multiple of `step`, computed on
+/// the decimal representations so tiny steps do not lose the fractional part to
+/// binary floating point. Returns `None` when the inputs are not finite decimals
+/// or would overflow the scaled integer arithmetic.
+fn exact_integral_multiple(value: &str, base: &str, step: &str) -> Option<bool> {
+    let (vm, ve) = parse_decimal(value)?;
+    let (bm, be) = parse_decimal(base)?;
+    let (sm, se) = parse_decimal(step)?;
+    if sm == 0 { return None; }
+    let e = ve.min(be);
+    let scale_v = 10i128.checked_pow(u32::try_from(ve - e).ok()?)?;
+    let scale_b = 10i128.checked_pow(u32::try_from(be - e).ok()?)?;
+    let mut numerator = vm.checked_mul(scale_v)?.checked_sub(bm.checked_mul(scale_b)?)?;
+    let mut denominator = sm;
+    let shift = e.checked_sub(se)?;
+    if shift >= 0 {
+        numerator = numerator.checked_mul(10i128.checked_pow(u32::try_from(shift).ok()?)?)?;
+    } else {
+        denominator = denominator.checked_mul(10i128.checked_pow(u32::try_from(-shift).ok()?)?)?;
+    }
+    Some(numerator % denominator == 0)
+}
 fn days_from_civil(mut year: i64, month: i64, day: i64) -> i64 {
     year -= i64::from(month <= 2);
     let era = year.div_euclid(400);
@@ -374,6 +456,17 @@ impl Dom {
     }
     pub(crate) fn clone_form_state(&mut self, from: NodeIdx, to: NodeIdx) {
         if let Some(state) = self.form_state(from).cloned() {
+            // HTML cloning steps propagate the live value, checkedness and
+            // selectedness (and their dirty flags). Per-element runtime state
+            // that is not cloned: the text selection, custom validity message,
+            // user-edited flag, cached type transition and event guards.
+            let mut state = state;
+            state.selection = None;
+            state.custom_error = Vec::new();
+            state.user_edited = false;
+            state.last_type = None;
+            state.constructing_entry_list = false;
+            state.firing_submission_events = false;
             *self.form_state_mut(to) = state;
         }
     }
@@ -1155,11 +1248,13 @@ impl Dom {
     pub fn validity(
         &self,
         node: NodeIdx,
-        pattern_matches: impl FnOnce(&str, &str) -> Option<bool>,
+        pattern_matches: impl Fn(&str, &str) -> Option<bool>,
     ) -> Result<ValidityState, DomError> {
-        if !self.will_validate(node)? {
-            return Ok(ValidityState::default());
-        }
+        // Most validity states are computed regardless of whether the control is
+        // a candidate for constraint validation; disabled/readonly only gate the
+        // mutability-dependent states (value missing). The candidate check still
+        // governs `willValidate` and `checkValidity`/`reportValidity`.
+        let mutable = self.will_validate(node)?;
         let mut v = ValidityState::default();
         let kind = if self.html_tag(node, "input") {
             self.input_type(node)?
@@ -1179,10 +1274,22 @@ impl Dom {
         v.custom_error = self
             .form_state(node)
             .is_some_and(|state| !state.custom_error.is_empty());
-        v.value_missing = if kind == "checkbox" {
+        // Only controls with a value mode gate valueMissing on mutability; for
+        // checkbox/radio/file/select the missing condition is checked even when
+        // the control is disabled or readonly.
+        let mutability_gated = !matches!(kind, "checkbox" | "radio" | "file")
+            && !self.html_tag(node, "select");
+        v.value_missing = if mutability_gated && !mutable {
+            false
+        } else if kind == "checkbox" {
             self.has(node, "required") && !self.input_checked(node)?
         } else if kind == "radio" {
             let name = self.attr(node, "name").unwrap_or("");
+            // A radio button with no name is not part of any radio button
+            // group, so the required constraint cannot be violated.
+            if name.is_empty() {
+                false
+            } else {
             let owner = self.form_owner(node);
             let root = self.root(node);
             let group: Vec<_> = (0..self.node_count())
@@ -1199,6 +1306,7 @@ impl Dom {
                 && !group
                     .iter()
                     .any(|peer| self.input_checked(*peer).unwrap_or(false))
+            }
         } else if self.html_tag(node, "select") && self.has(node, "required") {
             let options = self.select_options(node)?;
             let index = self.selected_index(node)?;
@@ -1283,6 +1391,19 @@ impl Dom {
                         .and_then(|v| temporal_number(kind, v));
                     v.range_underflow = min.is_some_and(|min| n < min);
                     v.range_overflow = max.is_some_and(|max| n > max);
+                    // `time` is cyclic: a range whose minimum is after its
+                    // maximum wraps around midnight, so a value is outside the
+                    // range (suffering both underflow and overflow) only when it
+                    // is less than the minimum and greater than the maximum.
+                    if kind == "time" {
+                        if let (Some(min), Some(max)) = (min, max) {
+                            if min > max {
+                                let outside = n < min && n > max;
+                                v.range_underflow = outside;
+                                v.range_overflow = outside;
+                            }
+                        }
+                    }
                     if self.attr(node, "step") != Some("any") {
                         let scale = match kind {
                             "date" => 86_400_000.,
@@ -1310,6 +1431,19 @@ impl Dom {
                         v.step_mismatch =
                             ((n - base) / step - ((n - base) / step).round()).abs() > 1e-8;
                     }
+                }
+            }
+            // Number-like controls use an exact decimal multiple test so very
+            // small steps keep the fractional part that binary division loses.
+            if matches!(kind, "number" | "range") && self.attr(node, "step") != Some("any") {
+                let step = self.attr(node, "step")
+                    .filter(|v| valid_number(v).is_some_and(|n| n > 0.))
+                    .unwrap_or("1");
+                let base = self.attr(node, "min")
+                    .or_else(|| self.attr(node, "value"))
+                    .unwrap_or("0");
+                if let Some(integral) = exact_integral_multiple(&s, base, step) {
+                    v.step_mismatch = !integral;
                 }
             }
         }
@@ -1588,7 +1722,31 @@ mod tests {
         assert!(dom.validity(input, |_, _| None).unwrap().custom_error);
         dom.set_attribute(input, "disabled", "").unwrap();
         assert!(!dom.will_validate(input).unwrap());
-        assert!(dom.validity(input, |_, _| None).unwrap().valid());
+        // Disabling bars the element from constraint validation (willValidate
+        // false) but does not clear already-set flags: step mismatch and custom
+        // error remain observable through validity.
+        let validity = dom.validity(input, |_, _| None).unwrap();
+        assert!(validity.step_mismatch);
+        assert!(validity.custom_error);
+        assert!(!validity.valid());
+    }
+    #[test]
+    fn exact_decimal_step_mismatch_for_number_inputs() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "number").unwrap();
+        // 17 is not an integral multiple of 3e-15; binary division would lose it.
+        dom.set_attribute(input, "step", "3e-15").unwrap();
+        dom.set_input_value(input, units("17")).unwrap();
+        assert!(dom.validity(input, |_, _| None).unwrap().step_mismatch);
+        // -12345678.9 is an integral multiple of 1e-12.
+        dom.set_attribute(input, "step", "1e-12").unwrap();
+        dom.set_input_value(input, units("-12345678.9")).unwrap();
+        assert!(!dom.validity(input, |_, _| None).unwrap().step_mismatch);
+        // 3.6 is an integral multiple of 0.003.
+        dom.set_attribute(input, "step", "0.003").unwrap();
+        dom.set_input_value(input, units("3.6")).unwrap();
+        assert!(!dom.validity(input, |_, _| None).unwrap().step_mismatch);
     }
     // WPT html/semantics/forms/constraints/form-validation-validity-valueMissing.html
     // and form-validation-willValidate.html at pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12.
