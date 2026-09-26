@@ -454,12 +454,12 @@ def owned_paths(lane: str) -> list[str]:
 # different model or effort -- two lanes had already drifted this way.
 # 2026-09-24: the fleet moved from Codex (gpt-6-sol medium) to OpenCode running
 # DeepSeek V4.1 Flash. `--auto` is OpenCode's equivalent of `codex --yolo`.
-AGENT_MODEL = "opencode-go/deepseek-v4.1-flash"
-AGENT_EFFORT = "default"  # model offers low/high/max only; default sits between
-# What the OpenCode mode line prints for AGENT_MODEL; used to spot model drift.
+# 2026-09-26: back on Codex gpt-6-sol medium, the fleet's best measured
+# throughput (OpenCode/DeepSeek V4.1 Flash parsing is kept for panes that run it).
+AGENT_MODEL = "gpt-6-sol"
+AGENT_EFFORT = "medium"
 AGENT_MODEL_LABEL = "DeepSeek V4.1 Flash"
-AGENT_LAUNCH = f"opencode --auto -m {AGENT_MODEL}"
-# Process names a live agent pane runs under (Codex kept for panes not yet moved).
+AGENT_LAUNCH = f'codex --yolo -m {AGENT_MODEL} -c model_reasoning_effort="{AGENT_EFFORT}"'
 AGENT_COMMANDS = ("opencode", "node", "codex")
 
 # Context below this fraction means the agent must checkpoint and be restarted
