@@ -373,6 +373,19 @@ fn collect_content(
 ///   skipped, contributing nothing.
 /// - Otherwise, an element with its own overriding name (`own_name`) uses
 ///   that name atomically; anything else recurses.
+/// True when `child` is one of `parent`'s own `aria-actions` IDREF targets
+/// (A11Y-12). `parent` here is always `child`'s immediate DOM parent at
+/// whichever recursion level `collect_child` is currently at — `aria-actions`
+/// only excludes a host's *direct* AX children, not arbitrarily nested
+/// descendants, so re-checking `parent`'s own attribute at each level (rather
+/// than carrying a fixed target set from the root) is exactly the right
+/// scope, and cheap: the common case has no `aria-actions` attribute at all.
+fn is_aria_action_target(ctx: &NameContext<'_>, parent: NodeIdx, child: NodeIdx) -> bool {
+    ctx.dom.get_attribute_ns(parent, None, "aria-actions").is_some_and(|ids| {
+        ids.split_ascii_whitespace().any(|id| ctx.ids.get(id) == Some(&child))
+    })
+}
+
 fn collect_child(
     ctx: &NameContext<'_>,
     parent: NodeIdx,
@@ -389,6 +402,16 @@ fn collect_child(
             }
         }
         NodeKind::Element { .. } => {
+            // A11Y-12 (aria-actions, w3c/aria#2208 / #1805): a direct AX
+            // child that `parent` itself lists in `aria-actions` names its
+            // own action, not the host — excluded before any other check
+            // (own_name/aria-label included, not just plain recursion; see
+            // `aria-actions-target-accname-from-aria-label.tentative.html`,
+            // whose target carries an `aria-label` that must still not
+            // bleed into the host's name).
+            if is_aria_action_target(ctx, parent, child) {
+                return;
+            }
             let already_visited = visited.contains(&child);
             if !flags.force_include && !already_visited && is_hard_hidden(ctx, child) {
                 return;
