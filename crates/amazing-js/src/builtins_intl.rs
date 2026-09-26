@@ -315,7 +315,7 @@ fn intl_resolve_keyword(extension: Option<String>, option: Option<String>,
 /// Append the retained Unicode extension keywords to a resolved base locale.
 fn intl_locale_with_extensions(base: &str, retained: &[(&str, String)]) -> String {
     let mut pairs: Vec<(&str, String)> = retained.iter()
-        .filter(|(_, value): &(&str, String)| !value.is_empty())
+        .filter(|entry| !entry.1.is_empty())
         .map(|(key, value)| (*key, value.clone())).collect();
     if pairs.is_empty() { return base.to_string(); }
     pairs.sort_by(|a, b| a.0.cmp(b.0));
