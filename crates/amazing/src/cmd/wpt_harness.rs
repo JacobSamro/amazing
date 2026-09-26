@@ -633,6 +633,19 @@ fn execute(options: &Options) -> Result<(), String> {
         }
         (fixture, page.url, page.history_state)
     };
+    // NET-40: `.https.` tests (e.g. `websockets/mixed-content.https.any.js`)
+    // assert on `location.protocol` and mixed-content restrictions
+    // (`client_restricts_mixed_content` in `runtime_host_net.rs`, NET-39)
+    // that only make sense for a secure top-level document. This fixture has
+    // no TLS listener, so only the DOCUMENT URL handed to the scheduler is
+    // rewritten to `https:`; the fetch that already happened above (and any
+    // nested navigation, which strips against `fixture.origin`, left
+    // unchanged) stays on the real loopback/shim `http://` socket.
+    let url = if options.test.contains(".https.") {
+        url.replacen("http://", "https://", 1)
+    } else {
+        url
+    };
     execute_page(
         options,
         &root,
