@@ -215,3 +215,17 @@ compositor **83 passed**. Existing IA pages remain exact and four CSS value
 fixtures unchanged. Evidence: `crates/amazing-compositor/evidence/comp15/paint-blends.md`.
 This importer item is complete. Filters/backdrop-filter/clip-path/mask await the
 later paint metadata slice; no other newly unblocked item is listed.
+
+### COMP-15 filter/backdrop producer boundary (prepared)
+
+Added PaintFilterSource/PaintFilterInput and atomic paint-view import of resolved
+filter/backdrop lists/bounds, preserving other group properties. Native pixel,
+cached-frame and rejection checks: compositor **86/86**; isolated Linux workspace
+**2775/2775**, **10 skipped**, **4 doctests**. All existing corpora unchanged.
+Evidence: `crates/amazing-compositor/evidence/comp15/filter-import.md`.
+
+Live filter/backdrop import is **not complete**: dev431a0a04 has no producer
+filter fields, filter-only groups or independent reference rendering. Replaced-
+content has the exact metadata contract request. Local-space inputs fail
+explicitly until reference-space handling exists. Clip/mask share that later
+producer dependency; no implementation claim is made for those inputs.
