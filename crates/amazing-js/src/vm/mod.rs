@@ -109,8 +109,10 @@ enum Instruction {
     RegExp(Register, Rc<amazing_regex::Regex>),
     ToKey(Register),
     LoadName(Register, String, bool),
+    LoadCallName(Register, Register, String),
     LoadThis(Register),
     ResolveName(usize, Register, String),
+    ResolveWriteName(usize, String),
     RequireResolved(usize),
     GetMember(Register, Register, KeyOperand),
     ResolveMember(usize, Register, Register, KeyOperand),
@@ -406,19 +408,19 @@ impl Program {
                             }
                         };
                     }
+                    Instruction::LoadCallName(dst, receiver, name) => {
+                        let (value, this) = i.scoped_call(&env, name)?;
+                        registers[*dst] = value;
+                        registers[*receiver] = this;
+                    }
                     Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this(),
                     Instruction::ResolveName(slot, dst, name) => {
-                        let (reference, value) = if let Some(value) = env.resolve(name) {
-                            (Reference::Binding(name.clone()), value)
-                        } else if i.global_obj.borrow().has_property(name) {
-                            let global = JsValue::Object(i.global_obj.clone());
-                            let value = i.get_prop(&global, name)?;
-                            (Reference::Property(global, name.clone().into()), value)
-                        } else {
-                            (Reference::Binding(name.clone()), JsValue::Undefined)
-                        };
+                        let (reference, value) = i.name_reference_value(&env, name)?;
                         references[*slot] = Some(reference);
                         registers[*dst] = value;
+                    }
+                    Instruction::ResolveWriteName(slot, name) => {
+                        references[*slot] = Some(i.name_reference(&env, name)?);
                     }
                     Instruction::RequireResolved(slot) => match &references[*slot] {
                         Some(Reference::Binding(name)) if !env.has(name) => {

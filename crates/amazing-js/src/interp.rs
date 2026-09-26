@@ -31,6 +31,9 @@ pub enum ExecutionBackend {
     Bytecode,
 }
 
+#[path = "interp_event_handler.rs"]
+mod event_handler;
+
 #[path = "interp_bindings.rs"]
 mod bindings;
 pub use bindings::BindingPropertyFlags;
@@ -1725,8 +1728,7 @@ impl Interpreter {
                                 }
                             }
                             let v = match &p.value {
-                                ast::PropValue::Shorthand(i) => env
-                                    .resolve(&i.name)
+                                ast::PropValue::Shorthand(i) => self.identifier_value(env, &i.name)?
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
                                 ast::PropValue::Init(x) => self.eval_expr(x, env)?,
                                 ast::PropValue::CoverInitializedName { .. } => {
@@ -1913,6 +1915,8 @@ impl Interpreter {
                 self.unary_value(op, value)
             }
             ast::UnOp::Delete => match &x.kind {
+                ExprKind::Paren(inner) => self.unary(op, inner, env),
+                ExprKind::Ident(name) => self.delete_scoped_name(env, &name.name),
                 ExprKind::Member { obj, prop, .. } => {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
@@ -2134,7 +2138,11 @@ impl Interpreter {
             self.assign_pattern_expr(t, &value, e)?;
             return Ok(value);
         }
-        let (reference, old) = self.resolve_reference(t, e)?;
+        let (reference, old) = if op == ast::AssignOp::Assign {
+            if let Some(name) = event_handler::identifier_name(t) {
+                (self.name_reference(e, name)?, JsValue::Undefined)
+            } else { self.resolve_reference(t, e)? }
+        } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
             let mut v = self.eval_expr(r, e)?;
             if let Some(name) = reference_name(&reference) {
@@ -2206,18 +2214,15 @@ impl Interpreter {
     // testharness.js exports its API by assigning properties of global_scope.
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
-        if env.is_uninitialized(name) {
-            return Err(Throw::reference_error(format!("{name} is uninitialized")));
-        }
-        if let Some(value) = env.resolve(name) {
-            return Ok(Some(value));
-        }
-        let exists = self.global_obj.borrow().has_property(name);
-        if exists {
-            let global = JsValue::Object(self.global_obj.clone());
-            self.get_prop(&global, name).map(Some)
-        } else {
-            Ok(None)
+        match self.scoped_reference(env, name)? {
+            None => Ok(None),
+            Some(Reference::Property(base, key)) => self.get_prop(&base, &key).map(Some),
+            Some(_) => {
+                if env.is_uninitialized(name) {
+                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
+                }
+                Ok(env.resolve(name))
+            }
         }
     }
 
@@ -2227,20 +2232,7 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<(Reference, JsValue), Throw> {
         match &target.kind {
-            ExprKind::Ident(identifier) => {
-                if let Some(value) = env.resolve(&identifier.name) {
-                    Ok((Reference::Binding(identifier.name.clone()), value))
-                } else if self.global_obj.borrow().has_property(&identifier.name) {
-                    let global = JsValue::Object(self.global_obj.clone());
-                    let value = self.get_prop(&global, &identifier.name)?;
-                    Ok((Reference::Property(global, identifier.name.clone().into()), value))
-                } else {
-                    Ok((
-                        Reference::Binding(identifier.name.clone()),
-                        JsValue::Undefined,
-                    ))
-                }
-            }
+            ExprKind::Ident(identifier) => self.name_reference_value(env, &identifier.name),
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
                 if let MemberProp::Private(name) = prop {
@@ -2291,7 +2283,8 @@ impl Interpreter {
                     return self.set_prop(&window, "location", value);
                 }
                 if !env.assign(&name, value.clone())? {
-                    self.global_env.declare_var(&name, value)?;
+                    let global = JsValue::Object(self.global_obj.clone());
+                    self.put_reference(Reference::Property(global, name.into()), value, env)?;
                 }
                 Ok(())
             }
@@ -2312,7 +2305,9 @@ impl Interpreter {
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
-        let (reference, _) = self.resolve_reference(t, e)?;
+        let reference = if let Some(name) = event_handler::identifier_name(t) {
+            self.name_reference(e, name)?
+        } else { self.resolve_reference(t, e)?.0 };
         self.put_reference(reference, v, e)
     }
 
@@ -2448,6 +2443,8 @@ impl Interpreter {
                 self.get_prop(&o, &k)?
             };
             (function, receiver)
+        } else if let Some(name) = event_handler::identifier_name(c) {
+            self.scoped_call(e, name)?
         } else {
             (self.eval_expr(c, e)?, JsValue::Undefined)
         };

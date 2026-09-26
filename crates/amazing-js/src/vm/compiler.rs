@@ -768,6 +768,13 @@ impl Compiler {
                         self.emit(Instruction::GetMember(function, object, key));
                         (function, object)
                     }
+                    _ if super::super::event_handler::identifier_name(callee).is_some() => {
+                        let name = super::super::event_handler::identifier_name(callee).unwrap();
+                        let function = self.register(callee.span)?;
+                        let receiver = self.register(callee.span)?;
+                        self.emit(Instruction::LoadCallName(function, receiver, name.to_owned()));
+                        (function, receiver)
+                    }
                     _ => (self.expression(callee)?, 0),
                 };
                 let mut arguments = Vec::new();
@@ -837,7 +844,12 @@ impl Compiler {
                 target,
                 value,
             } => {
-                let (slot, _) = self.reference(target)?;
+                let slot = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolveWriteName(slot, name.to_owned()));
+                    slot
+                } else { self.reference(target)?.0 };
                 let value = self.expression(value)?;
                 self.emit(Instruction::StoreReference(slot, value));
                 return Ok(value);

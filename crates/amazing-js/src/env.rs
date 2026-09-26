@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::value::{JsValue, Throw};
+use crate::value::{JsValue, Obj, Throw};
 
 /// Shared handle to one environment frame. The only way code outside this
 /// module touches an environment.
@@ -116,6 +116,8 @@ pub struct Env {
     /// borrowing the whole frame, so a held `borrow()` on the frame never
     /// conflicts with an inner write.
     vars: HashMap<String, BindingCell>,
+    /// Live binding object for an HTML handler (a with-environment record).
+    pub(crate) binding_object: Option<Obj>,
     /// Receiver recorded by a call (`None` = transparent frame).
     pub this_binding: Option<JsValue>,
     /// Derived constructors have a local `this` binding that throws until super().
@@ -234,9 +236,16 @@ impl EnvHandle {
             kind,
             parent,
             vars: HashMap::new(),
+            binding_object: None,
             this_binding: None,
             this_uninitialized: false,
         })))
+    }
+
+    pub(crate) fn new_object(object: Obj, parent: EnvHandle) -> EnvHandle {
+        let frame = Self::new(EnvKind::Block, Some(parent));
+        frame.0.borrow_mut().binding_object = Some(object);
+        frame
     }
 
     /// `var` declaration: mutable, non-lexical, redeclaration-friendly.
@@ -320,6 +329,17 @@ impl EnvHandle {
             }))),
         );
         Ok(())
+    }
+
+    /// Remove the mirrored environment entry after deleting a configurable
+    /// property of the global object. Lexical declarations are never removed.
+    pub(crate) fn remove_object_binding(&self, name: &str) -> bool {
+        let mut env = self.0.borrow_mut();
+        if env.vars.get(name).is_some_and(|cell| cell.0.borrow().lexical) {
+            return false;
+        }
+        env.vars.remove(name);
+        true
     }
 
     /// The cell in this frame, without consulting parent environments.
