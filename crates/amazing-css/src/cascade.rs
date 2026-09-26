@@ -328,8 +328,8 @@ fn compute_with_optional_animations(
     environment: &MediaEnvironment,
 ) -> StyledDom {
     // Compile UA + author rules up front; invalid selectors drop their rule.
-    let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
-    let author_rules = compile_sheets(author_sheets, false);
+    let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true, environment);
+    let author_rules = compile_sheets(author_sheets, false, environment);
 
     let body_link = hints::body_link(dom);
     let pseudo_targets = PseudoElement::STYLED.map(|pseudo| {
@@ -352,7 +352,7 @@ fn compute_with_optional_animations(
         environment,
         &mut out,
     );
-    crate::generated::resolve_document(dom, &mut out);
+    crate::generated::resolve_document(dom, &mut out, author_sheets, environment);
     out
 }
 
@@ -1497,6 +1497,25 @@ mod tests {
         assert_eq!(delta.styles.styles, compute_with_environment(&dom, &[sheet], &new).styles);
     }
 
+    #[test]
+    fn media_groups_use_the_computation_environment_and_resize_invalidates() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let target = dom.create_element(body, "div");
+        let sheet = parse_stylesheet("div { color: red } @media screen and (min-width: 900px) { @supports (display: grid) { div { color: green } } } @media print { div { color: blue } }");
+        let small = MediaEnvironment { viewport_width_px: 800.0, ..Default::default() };
+        let large = MediaEnvironment { viewport_width_px: 1000.0, ..small };
+        assert_eq!(compute_with_environment(&dom, &[sheet.clone()], &small).get(target).and_then(|s| s.get("color")), Some("red"));
+        assert_eq!(compute_with_environment(&dom, &[sheet.clone()], &large).get(target).and_then(|s| s.get("color")), Some("green"));
+        let previous = compute_with_environment(&dom, &[sheet.clone()], &small);
+        let roots = StyleInvalidator::new_with_environment(&[sheet.clone()], 10, small)
+            .collect_viewport_resize(&dom, large, 10);
+        assert!(roots.full);
+        assert_eq!(recompute_roots(&dom, &previous, roots).styles.styles,
+            compute_with_environment(&dom, &[sheet], &large).styles);
+    }
+
     /// html > (head > title, body > h1.title, p#intro, a[href]).
     /// Returns the arena plus [html, head, title, body, h1, p, a].
     fn fixture() -> (Dom, Vec<NodeIdx>) {
@@ -1524,6 +1543,7 @@ mod tests {
         let author = compile_sheets(
             &[parse_stylesheet("p{color:red!important;display:flex}")],
             false,
+            &MediaEnvironment::default(),
         );
         for (ua_css, expected) in [
             ("p{color:green!important}", "green"),
@@ -1534,7 +1554,7 @@ mod tests {
                 "black",
             ),
         ] {
-            let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
+            let ua = compile_sheets(&[parse_stylesheet(ua_css)], true, &MediaEnvironment::default());
             let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None, None, None, &MediaEnvironment::default());
             assert_eq!(style.get("color"), Some(expected));
         }
@@ -1611,6 +1631,22 @@ mod tests {
         let styled = compute(&dom, &[css]);
         assert_eq!(styled.generated_content(bullet, PseudoElement::Marker).unwrap().text(), "• ");
         assert!(styled.get_pseudo(suppressed, PseudoElement::Marker).is_none());
+    }
+
+    #[test]
+    fn counter_style_descriptors_apply_to_markers_and_content() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let ol = dom.create_element(body, "ol");
+        let item = dom.create_element(ol, "li");
+        let css = parse_stylesheet(
+            "@counter-style custom { system: numeric; symbols: 'A' 'B'; prefix: '['; suffix: ']'; } \
+             li { list-style-type: custom } li::before { content: counter(list-item, custom) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(styles.generated_content(item, PseudoElement::Marker).unwrap().text(), "[B]");
+        assert_eq!(styles.generated_content(item, PseudoElement::Before).unwrap().text(), "B");
     }
 
     #[test]

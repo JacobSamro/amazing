@@ -3,15 +3,16 @@
 //! The driver retains CSS, layout and compositor state across rendering updates.
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
-use amazing_compositor::{Compositor, CssCompositorTimeline, PaintDelta, PaintItemKey, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, classify_pixel_parity};
-use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_compositor::{Compositor, CssCompositorTimeline, PaintDelta, PaintItemKey, PaintViewRasterMode, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, TileRasterMode, TileRasterPool, TileRasterRequest, classify_pixel_parity};
+use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MediaEnvironment, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
 use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
 use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
-use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintFallbackReason, PaintItem, PaintViewUpdate, RetainedPaintView, TransformNode, ClipNode, EffectNode, ScrollNode}};
+use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, PaintViewUpdate, RetainedPaintView, TransformNode, ClipNode, EffectNode, ScrollNode}};
 use amazing_text::TextSystem;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::page::PagePaint;
@@ -94,6 +95,8 @@ pub(crate) fn enabled() -> bool {
 
 #[derive(Default)]
 pub(crate) struct RenderCoordinator {
+    production: bool,
+    parallel_tiles: bool,
     previous: Option<StyledDom>,
     sheets: Vec<Stylesheet>,
     generations: Vec<u64>,
@@ -103,8 +106,7 @@ pub(crate) struct RenderCoordinator {
     layout: Option<LayoutTree>,
     paint_generations: BTreeMap<NodeIdx, u64>,
     session: Option<RetainedCompositorSession>,
-    retained_paint: Option<RetainedPaintView>,
-    retained_paint_ambiguous: bool,
+    retained_paint: Option<Arc<RetainedPaintView>>,
     last_work: FrameWork,
 }
 
@@ -113,6 +115,11 @@ pub(crate) struct RenderCoordinator {
 struct RetainedCompositorSession {
     scene: RetainedScene,
     presenter: ReferenceCpuPresenter,
+    tile_pool: Option<TileRasterPool>,
+    last_complete: Option<Surface>,
+    paint_mode: PaintViewRasterMode,
+    width: u32,
+    height: u32,
 }
 
 enum RetainedScene {
@@ -141,6 +148,7 @@ pub(crate) struct FrameWork {
     pub(crate) paint_full: bool,
     pub(crate) tile_uploads: usize,
     pub(crate) tiles_dirtied: usize,
+    pub(crate) tile_jobs_scheduled: usize,
 }
 
 pub(crate) struct StyleCandidate {
@@ -159,6 +167,44 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    pub(crate) fn production() -> Self { Self { production: true, ..Self::default() } }
+
+    pub(crate) fn production_parallel() -> Self {
+        Self { production: true, parallel_tiles: true, ..Self::default() }
+    }
+
+    pub(crate) fn is_production(&self) -> bool { self.production }
+
+    pub(crate) fn update_layout_production(
+        &mut self, dom: &Dom, styled: &StyledDom, candidate: StyleCandidate,
+        text: &dyn TextSystem, paint: &PagePaint<'_>,
+        viewport_width: f32, viewport_height: Option<f32>,
+    ) {
+        self.last_work = FrameWork { style_rebuild_calls: 1, layout_update_calls: 1,
+            style_recalculated: candidate.recalculated, ..FrameWork::default() };
+        let delta = StyleDelta {
+            styles: styled.clone(), changed: candidate.changed,
+            change_kinds: candidate.change_kinds, recalculated: Vec::new(),
+            full_rebuild: candidate.full_fallback,
+        };
+        let geometry = if let Some(layout) = self.layout.as_mut() {
+            layout.update(dom, delta, &candidate.inputs, text, paint.media,
+                viewport_width, viewport_height)
+        } else {
+            self.layout = Some(LayoutTree::new(dom, styled.clone(), text, paint.media,
+                viewport_width, viewport_height));
+            GeometryDelta { outcome: UpdateOutcome::RequiresFullRebuild("initial layout"),
+                dirty: Vec::new(), changed: Vec::new() }
+        };
+        self.last_work.layout_dirty = geometry.dirty.len();
+        self.last_work.layout_full = !matches!(geometry.outcome, UpdateOutcome::Retained);
+        self.last_work.paint_full = true;
+        self.paint_generations = (0..dom.node_count()).filter_map(|index| {
+            let node = NodeIdx(index as u32);
+            dom.node_generation(node).map(|generation| (node, generation))
+        }).collect();
+    }
+
     pub(crate) fn on_vsync(
         &mut self,
         dom: &Dom,
@@ -166,7 +212,10 @@ impl RenderCoordinator {
         animated: &mut AnimatedValues,
         now_ms: f64,
     ) -> Option<(Surface, Vec<AnimationMainThreadEvent>)> {
-        if timeline.active_count() == 0 { return None; }
+        let ready_tiles = self.collect_parallel_tiles();
+        if timeline.active_count() == 0 {
+            return ready_tiles.map(|pixels| (pixels, Vec::new()));
+        }
         let session = self.session.as_mut()?;
         let RetainedScene::Property(scene) = &mut session.scene else { return None; };
         let mut events = Vec::new();
@@ -181,6 +230,36 @@ impl RenderCoordinator {
             }
             Err(_) => { self.reset_scene(); None }
         }
+    }
+
+    /// Install ready worker tiles at the frame boundary. Incomplete frames
+    /// remain hidden until every visible tile can be assembled atomically.
+    fn collect_parallel_tiles(&mut self) -> Option<Surface> {
+        let session = self.session.as_mut()?;
+        let pool = session.tile_pool.as_mut()?;
+        if session.scene.compositor_mut().collect_ready_tiles(pool) == 0 { return None; }
+        let mut frame = session.scene.compositor_mut()
+            .build_cached_frame(session.width, session.height).ok()?;
+        if session.paint_mode == PaintViewRasterMode::RawLocal {
+            let viewport = amazing_compositor::Rect::new(
+                0., 0., session.width as f32, session.height as f32);
+            frame.passes[0].quads.insert(0, amazing_compositor::DrawQuad::SolidColor(
+                amazing_compositor::SolidColorQuad {
+                    rect: viewport, color: [255; 4], clip_rect: viewport,
+                    opacity: 1., blend: amazing_compositor::BlendMode::Normal,
+                }));
+        }
+        let pixels = session.presenter.present(&frame).ok()?;
+        session.last_complete = Some(pixels.clone());
+        Some(pixels)
+    }
+
+    pub(crate) fn parallel_frame_if_idle(&mut self, journal: &[RenderMutation]) -> Option<Surface> {
+        if !self.parallel_tiles || !journal.is_empty() { return None; }
+        let pixels = self.collect_parallel_tiles().or_else(||
+            self.session.as_ref().and_then(|session| session.last_complete.clone()));
+        if pixels.is_some() { self.last_work = FrameWork::default(); }
+        pixels
     }
 
     pub(crate) fn pixel_parity(&self, candidate: &Surface, full: &Surface) -> PixelParity {
@@ -317,7 +396,6 @@ impl RenderCoordinator {
     pub(crate) fn reset_scene(&mut self) {
         self.session = None;
         self.retained_paint = None;
-        self.retained_paint_ambiguous = false;
     }
 
     pub(crate) fn layout_root(&self) -> &LayoutBox {
@@ -327,11 +405,17 @@ impl RenderCoordinator {
     /// Drain only the journal prefix visible at this boundary. Node generation
     /// is checked against the prior cache before allowing a CSS root update.
     pub(crate) fn candidate(&mut self, dom: &Dom, sheets: &[Stylesheet], viewport: (u32, u32), journal: Vec<RenderMutation>) -> StyleCandidate {
+        let environment = MediaEnvironment {
+            viewport_width_px: viewport.0 as f32,
+            viewport_height_px: viewport.1.max(1) as f32,
+            ..MediaEnvironment::default()
+        };
         let sheets_changed = self.invalidator.is_none() || self.sheets != sheets;
         let viewport_changed = self.viewport != viewport;
-        if sheets_changed {
+        if sheets_changed || viewport_changed {
             self.stylesheet_epoch = self.stylesheet_epoch.wrapping_add(1);
-            self.invalidator = Some(StyleInvalidator::new(sheets, self.stylesheet_epoch));
+            self.invalidator = Some(StyleInvalidator::new_with_environment(
+                sheets, self.stylesheet_epoch, environment));
         }
         let full = self.previous.is_none() || sheets_changed || viewport_changed;
         let mutations = journal.len();
@@ -345,7 +429,7 @@ impl RenderCoordinator {
         };
         if full {
             return StyleCandidate {
-                styles: amazing_css::compute(dom, sheets), mutations,
+                styles: amazing_css::compute_with_environment(dom, sheets, &environment), mutations,
                 recalculated: dom.node_count(), full_fallback: true,
                 changed: BTreeMap::new(), change_kinds: BTreeMap::new(), inputs,
             };
@@ -595,26 +679,35 @@ pub(crate) fn compositor_candidate(
     let snapshot = PaintSnapshot::from_view(&view);
     let source = PaintViewSource::new(&view);
     let mut dirtied_tiles = 0;
-    let paint_damage_valid = if let (Some(scene), Some(layout)) =
+    let retained_paint_delta = if let (Some(scene), Some(layout)) =
         (self.retained_paint.as_mut(), self.layout.as_ref())
     {
         match paint_damage_from_layout(layout, scene, &view) {
-                Some(damage) => match runtime_host_replaced_content::apply_layout_paint_damage(
-                    scene, &damage, dom, text, paint,
-                ) {
-                    Ok(_) => true,
-                    Err(error) => {
+                Some(damage) => match Arc::get_mut(scene).map(|scene|
+                    runtime_host_replaced_content::apply_layout_paint_damage(
+                        scene, &damage, dom, text, paint,
+                    )) {
+                    Some(Ok(delta)) => Some(delta),
+                    Some(Err(error)) => {
                         eprintln!("amazing oracle: retained paint fallback: {error:?}");
-                        false
+                        None
                     }
+                    None => None,
                 },
-                None => false,
+                None => None,
         }
-    } else { !self.retained_paint_ambiguous };
-    let retained = match (self.session.as_mut(), paint_update) {
-        (Some(session), Some(PaintViewUpdate::Delta(delta)))
-            if paint_damage_valid && delta.retired_resources.is_empty() => {
-            let delta = PaintDelta { changes: delta.changes.iter().map(|change|
+    } else { None };
+    let selected_paint_changes = match paint_update {
+        Some(PaintViewUpdate::Delta(delta)) if delta.retired_resources.is_empty()
+            && retained_paint_delta.is_some() => Some(&delta.changes),
+        None if self.production => retained_paint_delta.as_ref()
+            .filter(|delta| delta.retired_resources.is_empty())
+            .map(|delta| &delta.changes),
+        _ => None,
+    };
+    let retained = match (self.session.as_mut(), selected_paint_changes) {
+        (Some(session), Some(changes)) => {
+            let delta = PaintDelta { changes: changes.iter().map(|change|
                 amazing_compositor::PaintItemChange {
                     key: PaintItemKey(change.compositor_id), item_index: change.item_index,
                     old_bounds: amazing_compositor::Rect::new(change.old_bounds.x, change.old_bounds.y,
@@ -636,8 +729,11 @@ pub(crate) fn compositor_candidate(
         }
         _ => false,
     };
+    self.last_work.paint_full = !retained;
     if !retained {
-        self.last_work.paint_full = true;
+        let previous_complete = self.parallel_tiles.then(|| self.session.as_ref()
+            .and_then(|session| (session.width == width && session.height == height)
+                .then(|| session.last_complete.clone()).flatten())).flatten();
         let mut fresh = source.compositor(width, height).map_err(|error| error.to_string())?;
         if let Some(keys) = view.items().iter().map(|item| item.key.map(|key| PaintItemKey(key.compositor_id())))
             .collect::<Option<Vec<_>>>() {
@@ -657,25 +753,56 @@ pub(crate) fn compositor_candidate(
             RetainedScene::Plain(fresh)
         };
         self.session = Some(RetainedCompositorSession { scene,
-            presenter: ReferenceCpuPresenter::default() });
+            presenter: ReferenceCpuPresenter::default(),
+            tile_pool: self.parallel_tiles.then(|| TileRasterPool::new(0)),
+            last_complete: previous_complete,
+            paint_mode: source.mode(),
+            width, height,
+        });
         self.retained_paint = match runtime_host_replaced_content::seed_retained_paint(
             root, width, height, text, paint, &NoControls, dom,
         ) {
-            Ok(scene) => { self.retained_paint_ambiguous = false; Some(scene) },
+            Ok(scene) => Some(Arc::new(scene)),
             Err(error) => {
-                self.retained_paint_ambiguous = error == PaintFallbackReason::AmbiguousGeneration;
+                eprintln!("amazing oracle: retained paint seed fallback: {error:?}");
                 None
             }
         };
     }
     let session = self.session.as_mut().expect("oracle compositor initialized");
-    let frame = source.build_frame(session.scene.compositor_mut(), width, height)
-        .map_err(|error| error.to_string())?;
-    let uploads = frame.resources.uploads.len();
+    let frame = if self.parallel_tiles && session.last_complete.is_some() {
+        if let (Some(pool), Some(owned)) = (session.tile_pool.as_mut(), self.retained_paint.as_ref()) {
+            let request = TileRasterRequest { width, height, scroll_direction: (0., 0.),
+                mode: TileRasterMode::Parallel { workers: 0 } };
+            let paint_source: Arc<dyn amazing_compositor::PaintSource + Send + Sync> = owned.clone();
+            self.last_work.tile_jobs_scheduled = session.scene.compositor_mut()
+                .schedule_tiles(pool, paint_source, request)
+                .map_err(|error| error.to_string())?;
+            session.scene.compositor_mut().collect_ready_tiles(pool);
+            match source.build_cached_frame(session.scene.compositor_mut(), width, height) {
+                Ok(frame) => Some(frame),
+                Err(amazing_compositor::SceneError::MissingCachedTile) => None,
+                Err(error) => return Err(error.to_string()),
+            }
+        } else {
+            Some(source.build_frame(session.scene.compositor_mut(), width, height)
+                .map_err(|error| error.to_string())?)
+        }
+    } else {
+        Some(source.build_frame(session.scene.compositor_mut(), width, height)
+            .map_err(|error| error.to_string())?)
+    };
+    let uploads = frame.as_ref().map_or(0, |frame| frame.resources.uploads.len());
     self.last_work.tile_uploads = uploads;
     self.last_work.tiles_dirtied = dirtied_tiles;
-    let pixels = session.presenter.present(&frame)
-        .map_err(|error| format!("{error:?}"))?;
+    let pixels = if let Some(frame) = frame {
+        let pixels = session.presenter.present(&frame)
+            .map_err(|error| format!("{error:?}"))?;
+        session.last_complete = Some(pixels.clone());
+        pixels
+    } else {
+        session.last_complete.clone().expect("parallel scene has a complete frame")
+    };
     Ok(CandidateFrame { pixels, paint: snapshot, uploads, dirtied_tiles })
 }
 }

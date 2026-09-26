@@ -770,7 +770,9 @@ The Win-001 release mutation trace passed its direct-render byte comparisons, wi
 
 The rendering-update coordinator creates a generation-aware retained property scene from `PaintViewSource::property_bindings()`. CSS attribute classification runs before style, layout, and paint; a validated compositor-only class or inline-style delta updates the scene and cached CSS values with zero stage rebuilds. COMP-12's `scene.on_vsync` is called at the WPT frame checkpoint for active CSS handoffs. RC-20's retained paint view is seeded with DOM generations and accepts LAYOUT-17 keyed damage when its mapping is unambiguous; `AmbiguousGeneration` requests full paint. Unsupported RC-20 seeds keep the RC-19 paint-delta path. Any validation or parity loss uses the full painter.
 
-The Win-001 release trace on `58df3b15` passed. The document `<style>` opacity class fixture took **0/0/0** style/layout/paint-view calls and zero uploads over 20 frames. Effects had **40 layer-rounding pixels** (two per frame), zero parity losses, and zero fallbacks. Article/effects p95 were **149.999/120.875 ms**, still above ADR 0010's **20/31 ms** targets. Win-002 locked gates on the same production code passed: `amazing` 184 tests, workspace 2,377 tests, and two doctests. Evidence and direct-full baselines are in `crates/amazing/tests/invalidation_oracle/evidence/comp_adopt_win001_2026-09-24.md`.
+The Win-001 release oracle trace on `58df3b15` passed. The document `<style>` opacity class fixture took **0/0/0** style/layout/paint-view calls and zero uploads over 20 frames. Effects had **40 layer-rounding pixels** (two per frame), zero parity losses, and zero fallbacks. The article/effects diagnostic p95 of **149.999/120.875 ms** includes the independent full recomputation and must not be compared with ADR 0010's frame-time targets. Win-002 locked gates on the same production code passed: `amazing` 184 tests, workspace 2,377 tests, and two doctests. Evidence and direct-full baselines are in `crates/amazing/tests/invalidation_oracle/evidence/comp_adopt_win001_2026-09-24.md`.
+
+An opt-in `AMAZING_INCREMENTAL_PRODUCTION=1` candidate path skips the full oracle; the timing trace also keeps pixel classification outside both timers. On Win-001, candidate p50/p95 was **71.364/77.389 ms article**, **88.560/97.082 ms effects**, and **37.759/40.775 ms opacity**. Direct full p50/p95 on the same mutations was **31.417/32.705**, **28.006/31.101**, and **16.301/19.246 ms**. Article/effects remain above the ADR's 20/31 ms candidate targets because their production path still rebuilds paint; opacity keeps 0/0/0 and zero uploads. Full data and Windows gate counts are in `crates/amazing/tests/invalidation_oracle/evidence/production_timing_win001_2026-09-24.md`.
 
 ## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
 
@@ -837,3 +839,49 @@ The pinned Win-001 three-case animation render selection at WPT revision
 before and after. Every actual image hash and differing-pixel count matched;
 the remaining `animation-important-002` mismatch is unchanged. Reports and
 comparison are under `crates/amazing/tests/animations/evidence/layout-*.json`.
+
+## 2026-09-24 pause handoff: production timing, viewport CSS, parallel tiles
+
+Production timing is committed in the rebased series `625b4839` + `52b0f5fb` (original fixed-base Win-001 evidence at `71527381`). Oracle-free candidate p50/p95 ms versus direct full: article 71.364/77.389 vs 31.417/32.705; effects 88.560/97.082 vs 28.006/31.101; opacity 37.759/40.775 vs 16.301/19.246. Opacity had 0/0/0 style/layout/paint-view calls and zero parity losses; article/effects still miss ADR 0010 targets. See `crates/amazing/tests/invalidation_oracle/evidence/production_timing_win001_2026-09-24.md`.
+
+Viewport CSS driver adoption is `7c83a744` on CSS-15. Render, layout dump, GUI repaint, and animation sampling pass the actual viewport to `compute_with_environment`. Its exact-code predecessor `6ce2a16e` passed Linux `amazing` 183/183 (3 skipped), including the two-width root `vw` pixel test, and the Win-002 `amazing` crate gate. The Win-002 workspace gate stopped on compositor-owned `paint_view_owner_mapping_binds_dom_properties_to_tree_nodes` (root scroll node increased owner bindings from 3 to 4); doctests did not run. Request is in `.agents/integrator-assist/questions.md`.
+
+COMP-14 driver adoption is `5cf0e3f4` on owner API `e28f903a`. The retained scene owns one `TileRasterPool`, schedules from `Arc<RetainedPaintView>`, keeps the prior complete surface while workers run, and atomically presents ready tiles at vsync. If a paint delta requires a new scene, its owned snapshot can still be scheduled. Linux `amazing` compiled: 183 other tests passed and the focused parallel-vsync test passed after the fallback fix (3 ignored). A full combined Win-002 gate, Win-001 render trace, and production timings after this change remain for RESUME. The branch contains the compositor owner commit provisionally; rebase onto its eventual `dev` merge before final gate.
+
+On RESUME, also adopt HTML's frame phases in GUI: its scheduler now orders resize/scroll, rAF, then a render hook. Move GUI frame cadence into that hook, call compositor `on_vsync` there, and retain the WPT harness's deterministic 16,667us steps.
+
+### IA-COMP-14 completed — combined gate and post-adoption trace (2026-09-26)
+
+Resumed on `lane/ia-comp-adopt` after the Mac restart. Merged local `dev`
+`59492359`/`34ec9a9c` (the Boat→venus and win-002→win-001 fallbacks) into the
+branch; HEAD `8dde93ee`. Linux venus-001 `amazing` + `amazing-compositor`
+nextest: **246 passed / 3 skipped**. The former workspace blocker
+`paint_view_owner_mapping_binds_dom_properties_to_tree_nodes` is cleared by
+COMP-13b `6ca61021`: the document viewport scroll owner is a distinct node from
+the nested element's transform/opacity/scroll bindings.
+
+Win-002 was offline, so the combined gate ran on win-001 with the same
+toolchain through `scripts/win-run.sh`: workspace nextest **2453 passed /
+8 skipped** (124 binaries) and workspace doctests **2 passed / 0 failed**. The
+win-001 release `incremental_production_mutation_trace` passed 1/1; its absolute
+p50/p95 numbers are inflated because the host carried two other lane build
+slots (full p95 reached 1.03 s), so the clean 2026-09-24 reference stands for
+timing. Invariants held: opacity 0/0/0 with zero uploads; effects 40
+layer-rounding pixels, zero losses. Full data and the exact commands are in
+`crates/amazing/tests/invalidation_oracle/evidence/comp14_win001_2026-09-26.md`.
+The article `RequiresFullRebuild` paint fallback and effects
+`AmbiguousPropertyOwner` seed fallback remain routed to their owners.
+
+Boat named snapshots are unavailable while the account has zero-data-retention
+enabled, so `boat-lane.py ensure` cannot provision lane sandboxes; `linux-run.sh`
+falls back to venus automatically. Routed in `.agents/integrator-assist/questions.md`.
+
+### IA-FRAME-PHASES — next
+
+The driver EventLoop emits `Action::Render` at `RenderPhase::BeforeAnimationFrames`
+after resize/scroll and at `AfterAnimationFrames` after rAF. The driver scheduler
+ignores those actions, so `pump_at`/`pump_now` callers self-drive rendering
+outside the loop. This ticket exposes a render hook on `DriverScheduler`, calls
+the retained compositor's `on_vsync` from it in the WPT render path, and moves
+the driver GUI's animation-frame cadence into the hook. The GPUI shell's
+`engine_compositor` on_vsync adoption needs shell grants and is routed.
