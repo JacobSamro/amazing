@@ -119,9 +119,16 @@ backdrop_bounds, clip}` directly, retains the painter's own `FilterPlan` so
 the retained pass runs its exact pixel kernel (`painter_filters`), and
 converts a resolved `clip-path` shape with `import_clip`. Filters and clip
 masks both execute on the group's local, pre-transform surface in the
-painter; `from_view` returns `BakedFallback` whenever the view has any filter
-or clip alongside a nonidentity transform, since the retained `DrawQuad::Pass`
-stage that applies them has no matrix-aware compositing.
+painter (`composite_group`); COMP-16 gave `EffectOperations::local_transform`
+to a group whose own resolved CSS `transform` sits directly under the
+identity root, with no other filter/backdrop/clip group nested above or
+below it, and whose own subtree uses no further, different transform: its
+children render at identity into that local surface (`build_frame`), and
+`DrawQuad::Pass` samples it back with one inverse-mapped nearest read per
+destination pixel, matching `composite_group`'s own transform sampling
+exactly (see "Matrix-aware transformed groups" below). Anything else with a
+filter, backdrop-filter or clip alongside a nonidentity transform still
+returns `BakedFallback`.
 
 Duplicate/unknown/root IDs, invalid kernels, missing backdrop bounds,
 nonfinite/empty bounds, an unresolvable clip shape, and baked sources fail
@@ -148,3 +155,47 @@ a filter or backdrop-filter, and invalid batches, against the real painter
 with `classify_pixel_parity`; they are not independent full-painter filter
 comparisons against unmodified WPT. `mask-image` is not imported: the painter
 has no reference renderer for it yet.
+
+## Matrix-aware transformed groups (COMP-16)
+
+A group's own `local_transform` (translate/scale/rotate/skew, alone or
+composed) lets its zero-outset filter (everything but blur and drop-shadow),
+backdrop-filter, and `clip_path` composite through one inverse-mapped nearest
+sample instead of forcing `BakedFallback`:
+
+- `PainterFilterSource::from_view` resolves `local_transform` by finding the
+  one `transform` id common to every item under a qualifying group (filter,
+  backdrop-filter or `clip_path`); a second, different id inside that
+  group's own subtree, a qualifying ancestor or descendant group, or the
+  transform's own parent not being the identity root, all reject the group
+  and fall back to `BakedFallback` for the whole page instead of composing
+  two matrices or two local surfaces.
+- `Compositor::build_frame` renders such a group's own tiles at identity
+  (into its local, pre-transform surface) while tile *selection* and damage
+  tracking keep using the group's real on-screen matrix.
+- `DrawQuad::Pass` filters and clips that local surface exactly as the
+  identity case already did, then samples it into its parent with one
+  `Matrix4::unmap` per destination pixel (nearest, no interpolation) --
+  the same pattern `DrawQuad::Tile` already used for a transformed tile.
+  `clip_path` is tested at that exact fractional sample point rather than
+  the local surface's integer pixel centers (`effect_clip::clip_path_
+  contains`), matching `composite_group`'s own mask test there; an image
+  `mask` still applies on the local integer grid.
+- A backdrop-filter's snapshot is forward-sampled from the parent surface
+  through the same matrix into the group's local grid before the backdrop
+  filter runs, so it lines up with that grid's own coordinates.
+
+Blur and drop-shadow still force `BakedFallback` under a `local_transform`:
+both read neighboring source pixels outward by their outset, and that read
+would itself need transform-sampling (as `composite_group` does) rather than
+running on the untransformed local surface, which this compositor does not
+do yet.
+
+`tests/paint_filter_parity.rs`'s `transformed_filter_clip_and_backdrop_
+groups_match_full_paint` proves zero-loss pixel parity for translate, scale,
+rotate and a composed transform, crossed with filter/backdrop-filter/clip
+cases, against the real painter; `transformed_clipped_and_oversize_filters_
+use_exact_full_paint_fallback` proves the still-rejected cases (blur under a
+transform, nested qualifying groups, a transform under another transform,
+and oversized filters) match full paint exactly via `BakedFallback`. See
+`evidence/comp16/transformed-groups.md` for the measured numbers.
