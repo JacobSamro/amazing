@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "subdir": "css/css-borders",
+  "mismatch_count": 38,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 14,
+      "examples": [
+        "css__css-borders__corner-shape__corner-shape-superellipse-convex.html",
+        "css__css-borders__corner-shape__corner-shape-superellipse-bevel.html",
+        "css__css-borders__corner-shape__corner-shape-superellipse-squircle.html",
+        "css__css-borders__corner-shape__corner-shape-superellipse-negative-inf.html",
+        "css__css-borders__corner-shape__corner-shape-superellipse-scoop.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 10,
+      "examples": [
+        "css__css-borders__border-shape__border-shape-outline-with-border.html",
+        "css__css-borders__corner-shape__corner-shape-backdrop-filter.html",
+        "css__css-borders__border-shape__border-shape-overflow-solid-background.html",
+        "css__css-borders__border-shape__border-shape-outline-double-shape.html",
+        "css__css-borders__border-shape__border-shape-shadow-transparent.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-borders__corner-shape__corner-shape-square.html",
+        "css__css-borders__corner-shape__corner-shape-overflow-clip-margin.html",
+        "css__css-borders__corner-shape__corner-shape-bevel-overflow-composite.html",
+        "css__css-borders__subpixel-borders-with-child-border-box-sizing.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-borders__tentative__border-radius-side-shorthands__border-radius-side-shorthands-001.html",
+        "css__css-borders__tentative__border-radius-side-shorthands__border-radius-side-shorthands-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__border-shape__border-shape-outline-with-border-ellipse.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__corner-shape__corner-shorthand-rendering.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-borders__subpixel-borders-with-child.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__border-radius-greater-than-width.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__border-shape__border-shape-collapsed-shape-clips-background.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__border-shape__border-shape-background-origin-border-box.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-borders__subpixel-border-width.tentative.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-borders__border-shape__border-shape-outline-with-border-double-ellipse.html"
+      ]
+    }
+  ]
+}

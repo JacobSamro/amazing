@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "subdir": "css/css-inline",
+  "mismatch_count": 6,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 6,
+      "examples": [
+        "css__css-inline__model__phantom-line-boxes-002.html",
+        "css__css-inline__model__phantom-line-boxes-003.html",
+        "css__css-inline__model__phantom-line-boxes-006.html",
+        "css__css-inline__model__phantom-line-boxes-004.html",
+        "css__css-inline__model__phantom-line-boxes-001.html"
+      ]
+    }
+  ]
+}

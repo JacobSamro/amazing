@@ -1,0 +1,334 @@
+linux-run[layout]: boat at 6db18c89 (6db18c89d3f342bc2f4cadfa1f9790ce16fb60bc)
+linux-run[layout]: boat sandbox bx_cp5jbn5z
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        69G   42G   24G  64% /home
+   Compiling amazing-dom v0.0.1 (/home/user/amazing/crates/amazing-dom)
+   Compiling amazing-text v0.0.1 (/home/user/amazing/crates/amazing-text)
+   Compiling simd-adler32 v0.3.10
+   Compiling amazing-js v0.0.1 (/home/user/amazing/crates/amazing-js)
+   Compiling miniz_oxide v0.8.9
+   Compiling flate2 v1.1.9
+   Compiling amazing-storage v0.0.1 (/home/user/amazing/crates/amazing-storage)
+   Compiling amazing-text-provider v0.0.1 (/home/user/amazing/crates/amazing-text-provider)
+warning: function `map_set_raw` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2019:4
+     |
+2019 | fn map_set_raw(map: &Obj, key: MapKey, value: JsValue) {
+     |    ^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `native_map` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2030:4
+     |
+2030 | fn native_map(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_map_get` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2049:4
+     |
+2049 | fn native_map_get(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_set` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2065:4
+     |
+2065 | fn native_map_set(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_has` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2077:4
+     |
+2077 | fn native_map_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_delete` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2089:4
+     |
+2089 | fn native_map_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_clear` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2110:4
+     |
+2110 | fn native_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_map_keys` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2118:4
+     |
+2118 | fn native_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `native_map_values` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2132:4
+     |
+2132 | fn native_map_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_entries` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2150:4
+     |
+2150 | fn native_map_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `native_set` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2183:4
+     |
+2183 | fn native_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_set_add` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2205:4
+     |
+2205 | fn native_set_add(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_has` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2220:4
+     |
+2220 | fn native_set_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_delete` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2231:4
+     |
+2231 | fn native_set_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_clear` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2256:4
+     |
+2256 | fn native_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_set_values` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2264:4
+     |
+2264 | fn native_set_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_entries` is never used
+    --> crates/amazing-js/src/interp_builtins.rs:2278:4
+     |
+2278 | fn native_set_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:557:4
+    |
+557 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+   Compiling amazing-css v0.0.1 (/home/user/amazing/crates/amazing-css)
+   Compiling amazing-html v0.0.1 (/home/user/amazing/crates/amazing-html)
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/crates/amazing-layout)
+   Compiling amazing-svg v0.0.1 (/home/user/amazing/crates/amazing-svg)
+   Compiling amazing-paint v0.0.1 (/home/user/amazing/crates/amazing-paint)
+   Compiling amazing-canvas v0.0.1 (/home/user/amazing/crates/amazing-canvas)
+   Compiling amazing-bindings v0.0.1 (/home/user/amazing/crates/amazing-bindings)
+   Compiling amazing-compositor v0.0.1 (/home/user/amazing/crates/amazing-compositor)
+warning: `amazing-js` (lib) generated 22 warnings
+   Compiling amazing v0.0.1 (/home/user/amazing/crates/amazing)
+warning: unused imports: `Command`, `ExitCode`, and `ExitStatus`
+ --> crates/amazing/src/cmd/launch.rs:2:20
+  |
+2 | use std::process::{Command, ExitCode, ExitStatus};
+  |                    ^^^^^^^  ^^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::gui`
+ --> crates/amazing/src/cmd/launch.rs:3:5
+  |
+3 | use crate::gui;
+  |     ^^^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+
+warning: unused import: `self`
+ --> crates/amazing/src/runtime_host_storage.rs:5:254
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}};
+  |                                                                   ^^^^
+
+warning: unused imports: `PageMedia`, `load_page_media`, and `load_page_text`
+  --> crates/amazing/src/main.rs:21:12
+   |
+21 | use page::{PageMedia, load_page_media, load_page_text};
+   |            ^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates/amazing/src/runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates/amazing/src/runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `set_document_content_type` is never used
+  --> crates/amazing/src/js_scheduler.rs:67:19
+   |
+42 | impl DriverScheduler {
+   | -------------------- method in this implementation
+...
+67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `load_page_text` is never used
+  --> crates/amazing/src/page.rs:43:15
+   |
+43 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+
+warning: struct `PixelMismatch` is never constructed
+  --> crates/amazing/src/render_oracle.rs:63:19
+   |
+63 | pub(crate) struct PixelMismatch {
+   |                   ^^^^^^^^^^^^^
+
+warning: function `first_pixel_mismatch` is never used
+  --> crates/amazing/src/render_oracle.rs:70:15
+   |
+70 | pub(crate) fn first_pixel_mismatch(candidate: &Surface, full: &Surface) -> Option<PixelMismatch> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates/amazing/src/runtime_binding_host.rs:60:17
+   |
+60 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+60 -     FontFaceSet(NodeIdx, Option<JsValue>),
+60 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `create_inert_document` and `set_document_content_type` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:104:19
+    |
+103 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+104 |     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+121 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates/amazing/src/runtime_host_storage.rs:32:5
+   |
+29 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+32 |     cache: PersistentCacheStorage,
+   |     ^^^^^
+
+warning: variant `Cache` is never constructed
+  --> crates/amazing/src/runtime_host_storage.rs:65:5
+   |
+54 | enum StorageObject {
+   |      ------------- variant in this enum
+...
+65 |     Cache { name: String },
+   |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates/amazing/src/runtime_host_storage.rs:254:8
+    |
+155 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+254 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `ScrollFrame` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:31:19
+   |
+31 | pub(crate) struct ScrollFrame {
+   |                   ^^^^^^^^^^^
+
+warning: struct `DomScrollEvent` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:36:19
+   |
+36 | pub(crate) struct DomScrollEvent {
+   |                   ^^^^^^^^^^^^^^
+
+warning: methods `on_scroll_input`, `on_scroll_vsync`, `take_scroll_events`, `cancel_animation`, and `compositor` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:89:19
+    |
+ 41 | impl RetainedPropertyScene {
+    | -------------------------- methods in this implementation
+...
+ 89 |     pub(crate) fn on_scroll_input(
+    |                   ^^^^^^^^^^^^^^^
+...
+129 |     pub(crate) fn on_scroll_vsync(
+    |                   ^^^^^^^^^^^^^^^
+...
+145 |     pub(crate) fn take_scroll_events(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+226 |     pub(crate) fn cancel_animation(
+    |                   ^^^^^^^^^^^^^^^^
+...
+247 |     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    |                   ^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: `amazing` (bin "amazing") generated 19 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 5 suggestions)
+    Finished `release` profile [optimized] target(s) in 44.07s
+{"output": "/home/user/amazing/out/layout18-linux-before-complete-flex-grid", "source": "6db18c89", "counts": {"pass": 631, "mismatch": 815, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-after-complete-flex-grid", "source": "9d89433c", "counts": {"pass": 688, "mismatch": 758, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-before-complete-layout16-full", "source": "6db18c89", "counts": {"pass": 278, "mismatch": 170, "error": 0, "timeout": 0, "unsupported": 1, "crash": 0}}

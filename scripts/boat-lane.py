@@ -5,7 +5,7 @@ Each lane gets one persistent sandbox deployed from the `amazing-builder`
 template (Rust 1.97.1, libvpx 1.16, nextest, PyYAML, the pinned Test262
 checkout, and a warm target directory). The lane -> sandbox id map lives in
 .agents/.boat-lanes.json. A stopped sandbox is resumed; a missing one is
-created. scripts/boat-idle-reaper.py stops sandboxes idle for 15 minutes, so
+created. scripts/boat-idle-reaper.py stops sandboxes idle for 30 minutes, so
 lanes never pay for time they do not use.
 
 Lanes share pooled sandboxes (2026-09-26). One sandbox per lane kept 24
@@ -56,11 +56,14 @@ POOLS = {
     "pool-js-b": ["js-lang"],
     "pool-js-date": ["js-date"],  # split 2026-09-26: 57% busy, 24% overlap with js-lang
     "pool-js-lib": ["js-binary", "js-stdlib", "js-intl"],
-    "pool-dom": ["dom-bindings", "html", "integrator-assist"],
+    "pool-dom": ["dom-bindings", "html"],
     "pool-layout": ["layout", "layout-flexgrid", "css", "text"],
     "pool-paint": ["replaced-content", "compositor"],
     "pool-sys": ["net", "ipc", "storage"],
     "pool-new": ["wasm", "a11y", "devtools"],
+    # integrator-assist left pool-dom (disk full) then pool-new (75% busy, 28% overlap)
+    # on 2026-09-26; it builds the whole `amazing` crate, so it gets its own sandbox.
+    "pool-ia": ["integrator-assist"],
     "pool-desktop": ["shell"],
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
@@ -72,11 +75,31 @@ POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 POOL_TYPE = {
     "pool-js-a": "large", "pool-js-vm": "large", "pool-js-b": "large",
     "pool-js-date": "large", "pool-js-lib": "large", "pool-layout": "large",
+    "pool-dom": "large",  # 76% busy, 41% overlap across three lanes (2026-09-26)
 }
 
 
+# Large is only worth its 2x rate on bare metal. A large resume that lands on
+# Hetzner (8 slower cores) is dropped back to default for a while, which has
+# landed on bare metal every time (2026-09-26). The reaper reads the same rule.
+DOWNSIZED = MAIN / ".agents" / ".boat-downsized.json"
+DOWNSIZE_HOURS = 6
+
+
+def downsized() -> dict:
+    try:
+        d = json.loads(DOWNSIZED.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in d.items() if v > time.time()}
+
+
+def pool_type(pool: str) -> str:
+    return "default" if pool in downsized() else POOL_TYPE.get(pool, "default")
+
+
 def type_of(lane: str) -> str:
-    return POOL_TYPE.get(pool_of(lane), "default")
+    return pool_type(pool_of(lane))
 
 
 def pool_of(lane: str) -> str:
@@ -96,7 +119,31 @@ def target_of(lane: str) -> str:
 STOPPED = {"archived", "stopped"}
 
 
+# Only sandboxes named "amazing*" (the template's own name) belong to this fleet.
+# Everything else on the account is the user's and is never stopped, resized or
+# deleted from here (2026-09-26).
+MUTATING = {"stop", "resume", "delete", "exec"}
+
+
 def boat(*args: str, timeout: int = 180) -> dict:
+    if args and args[0] in MUTATING and len(args) > 1 and args[1].startswith("bx_"):
+        name = _name_of(args[1])
+        if not name.startswith("amazing"):
+            raise SystemExit(f"boat-lane: refusing `boat {args[0]}` on {args[1]} ({name!r}): not an amazing sandbox")
+    return _boat(*args, timeout=timeout)
+
+
+_NAMES: dict[str, str] = {}
+
+
+def _name_of(sid: str) -> str:
+    if sid not in _NAMES:
+        d = _boat("info", sid)
+        _NAMES[sid] = d.get("sandbox", d).get("name", "") or ""
+    return _NAMES[sid]
+
+
+def _boat(*args: str, timeout: int = 180) -> dict:
     out = subprocess.run(
         [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
     ).stdout
@@ -124,11 +171,23 @@ def save_map(m: dict) -> None:
     MAP.write_text(json.dumps(m, indent=2) + "\n")
 
 
+def endpoint(d: dict) -> str | None:
+    """host:port for ssh. Bare-metal sandboxes publish sshEndpoint; Hetzner ones
+    publish none but answer on their IPv4 address, port 22 (2026-09-26)."""
+    if d.get("sshEndpoint"):
+        return d["sshEndpoint"]
+    ip = d.get("ip") or ""
+    if ip and ":" not in ip:
+        return f"{ip}:22"
+    return None
+
+
 def wait_ready(sid: str, limit: int = 300) -> dict:
     deadline = time.time() + limit
     while time.time() < deadline:
         d = info(sid)
-        if d.get("state") in READY and d.get("sshEndpoint"):
+        if d.get("state") in READY and endpoint(d):
+            d["sshEndpoint"] = endpoint(d)
             if d.get("machineProvider") != "baremetal":
                 print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
                       "(2-4x slower than bare metal)", file=sys.stderr)
@@ -159,6 +218,9 @@ def healthy(d: dict) -> bool:
 
 def heal(lane: str) -> dict:
     """Restart the lane's sandbox when its lazy filesystem has died."""
+    # The reaper may have stopped it between ensure and the run's lease;
+    # resume it first rather than waiting for a ready state that never comes.
+    ensure(lane, type_of(lane))
     sid = load_map().get(pool_of(lane))
     d = wait_ready(sid)
     if healthy(d):
@@ -175,7 +237,34 @@ def ensure(lane: str, size: str) -> dict:
     with open(MAP.with_suffix(".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         sid = _ensure_locked(pool_of(lane), size)
-    return wait_ready(sid)
+    d = wait_ready(sid)
+    if d.get("type") == "large" and d.get("machineProvider") == "hetzner" and not busy(d):
+        pool = pool_of(lane)
+        print(f"boat-lane: {sid} came up large on Hetzner; using default for "
+              f"{DOWNSIZE_HOURS} h", file=sys.stderr)
+        marks = downsized()
+        marks[pool] = time.time() + DOWNSIZE_HOURS * 3600
+        DOWNSIZED.write_text(json.dumps(marks))
+        boat("stop", sid, timeout=240)
+        with open(MAP.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            _ensure_locked(pool, "default")
+        d = wait_ready(sid)
+    return d
+
+
+def busy(d: dict) -> bool:
+    """True if another run holds a lease on this sandbox (don't restart it)."""
+    host, port = d["sshEndpoint"].rsplit(":", 1)
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15", "-i", str(KEY), "-p", port,
+             f"user@{host}", "find ~/.amazing-busy -type f -mmin -60 | wc -l"],
+            capture_output=True, text=True, timeout=60)
+        return int(r.stdout.strip() or 0) > 0
+    except (subprocess.TimeoutExpired, ValueError):
+        return True
 
 
 def _ensure_locked(lane: str, size: str) -> str:
@@ -194,7 +283,14 @@ def _ensure_locked(lane: str, size: str) -> str:
         m[lane] = sid
         save_map(m)
         print(f"boat-lane: created {sid} for {lane} from {TEMPLATE}", file=sys.stderr)
-    elif d.get("state") in STOPPED:
+    elif d.get("state") in ("stopping", "snapshotting"):
+        # Stopped under us (the reaper); let the stop finish, then resume.
+        for _ in range(60):
+            time.sleep(5)
+            d = info(sid)
+            if d.get("state") not in ("stopping", "snapshotting"):
+                break
+    if d is not None and d.get("state") in STOPPED:
         extra = ("--type", size) if d.get("type") and d.get("type") != size else ()
         boat("resume", sid, "--no-auto-stop", *extra, timeout=300)
         print(f"boat-lane: resumed {sid} for {lane}"

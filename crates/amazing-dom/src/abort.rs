@@ -109,14 +109,19 @@ impl Dom {
     pub fn add_abortable_event_listener(&mut self, target: EventTarget, event_type: &str,
         callback: Option<CallbackId>, options: ListenerOptions, signal: Option<AbortSignalId>)
         -> Result<Option<ListenerId>, DomError> {
+        self.add_abortable_event_listener_utf16(target, &event_type.encode_utf16().collect::<Vec<_>>(), callback, options, signal)
+    }
+    pub fn add_abortable_event_listener_utf16(&mut self, target: EventTarget, event_type: &[u16],
+        callback: Option<CallbackId>, options: ListenerOptions, signal: Option<AbortSignalId>)
+        -> Result<Option<ListenerId>, DomError> {
         if let Some(signal) = signal {
             if self.abort_signal_reason(signal)?.is_some() { return Ok(None); }
         }
         let Some(callback) = callback else { return Ok(None) };
-        if let Some(existing) = self.events().listener_id(target, event_type, callback, options.capture) {
+        if let Some(existing) = self.events().listener_id_utf16(target, event_type, callback, options.capture) {
             return Ok(Some(existing));
         }
-        let listener = self.add_event_listener(target, event_type, Some(callback), options);
+        let listener = self.add_event_listener_utf16(target, event_type, Some(callback), options);
         if let (Some(signal), Some(listener)) = (signal, listener) {
             self.abort_signals.signals[signal.0].algorithms.push(AbortAlgorithm::RemoveEventListener(listener));
         }

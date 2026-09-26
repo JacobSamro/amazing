@@ -4,6 +4,9 @@ include!("builtins_date.rs");
 
 impl Interpreter {
     fn native(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
+        Self::native_arity(name, f, proto, 0)
+    }
+    pub(crate) fn native_arity(name: &str, f: crate::value::NativeFn, proto: &Obj, arity: usize) -> JsValue {
         let mut o = JsObject::function(JsFunction {
             name: name.into(),
             params: Vec::new(),
@@ -18,13 +21,17 @@ impl Interpreter {
         o.proto = Some(proto.clone());
         o.realm = proto.borrow().realm;
         let handle = Obj(Rc::new(RefCell::new(o)));
+        // JsObject::function seeds "name" then "length"; built-in functions
+        // must expose "length" before "name" in property order.
+        let _ = handle.borrow_mut().delete_own("name");
+        let _ = handle.borrow_mut().delete_own("length");
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         handle.borrow_mut().define("prototype", Property {
             value: JsValue::Object(prototype), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
+        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(0.0), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
@@ -78,13 +85,17 @@ impl Interpreter {
             Self::native("queueMicrotask", native_queue_microtask, &self.function_proto),
         );
         let error_constructor = Self::native("Error", native_error, &self.function_proto);
-        let error_prototype = match &error_constructor {
-            JsValue::Object(function) => match function.borrow().get_own("prototype") {
-                Some(JsValue::Object(prototype)) => prototype,
-                _ => unreachable!("native function has a prototype"),
-            },
-            _ => unreachable!("native function is an object"),
-        };
+        // Reused as the stored %Error.prototype% (self.error_proto) rather than
+        // the fresh ordinary object `Self::native` allocates, so the `stack`
+        // setter's SameValue-with-home-object check has a stable identity to
+        // compare against at call time.
+        let error_prototype = self.error_proto.clone();
+        if let JsValue::Object(function) = &error_constructor {
+            function.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(error_prototype.clone()), writable: true,
+                enumerable: false, configurable: true, getter: None, setter: None,
+            }).unwrap();
+        }
         {
             let mut prototype = error_prototype.borrow_mut();
             prototype.proto = Some(self.object_proto.clone());
@@ -92,6 +103,21 @@ impl Interpreter {
             prototype.set_own("message", JsValue::str(""));
             prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
             prototype.set_own("constructor", error_constructor.clone());
+        }
+        {
+            // `Error.prototype.stack` accessor (proposal error-stack-accessor,
+            // pinned in this Test262 revision); see native_error_stack_getter
+            // and native_error_stack_setter for the exact algorithm. Built via
+            // symbol_method so the accessor functions are non-constructible
+            // with no own "prototype", matching every other built-in accessor
+            // pair (verifyPrimordialAccessorProperty in prop-desc.js).
+            let getter = symbol_method(self, "get stack", native_error_stack_getter);
+            let setter = symbol_method(self, "set stack", native_error_stack_setter);
+            symbol_method_length(&setter, 1);
+            error_prototype.borrow_mut().define("stack", Property {
+                value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                getter: Some(getter), setter: Some(setter),
+            }).unwrap();
         }
         if let JsValue::Object(error) = &error_constructor {
             error.borrow_mut().define("isError", symbol_data(
@@ -144,6 +170,16 @@ impl Interpreter {
         let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
         symbol_method_length(&property_is_enumerable, 1);
         self.object_proto.borrow_mut().define("propertyIsEnumerable", symbol_data(property_is_enumerable, true, true)).unwrap();
+        for (name, length, native) in [
+            ("__defineGetter__", 2, native_object_define_getter as crate::value::NativeFn),
+            ("__defineSetter__", 2, native_object_define_setter as crate::value::NativeFn),
+            ("__lookupGetter__", 1, native_object_lookup_getter as crate::value::NativeFn),
+            ("__lookupSetter__", 1, native_object_lookup_setter as crate::value::NativeFn),
+        ] {
+            let method = symbol_method(self, name, native);
+            symbol_method_length(&method, length);
+            self.object_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
+        }
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));
@@ -227,6 +263,7 @@ impl Interpreter {
         }
         self.define_global("Reflect", reflect);
         self.install_std_reflect();
+        self.install_proxy();
         self.define_global(
             "Array",
             Self::native("Array", native_array, &self.function_proto),
@@ -261,6 +298,7 @@ impl Interpreter {
                 .borrow_mut()
                 .set_own("prototype", JsValue::Object(self.date_proto.clone()));
         }
+        self.install_date_engine(&date_ctor);
         self.define_global("Date", date_ctor);
         let json = self.object_value();
         let _ = self.set_prop(
@@ -353,6 +391,9 @@ impl Interpreter {
             ("map", native_array_map as crate::value::NativeFn),
             ("filter", native_array_filter as crate::value::NativeFn),
             ("some", native_array_some as crate::value::NativeFn),
+            ("find", native_array_find as crate::value::NativeFn),
+            ("every", native_array_every as crate::value::NativeFn),
+            ("sort", native_array_sort as crate::value::NativeFn),
             ("forEach", native_array_for_each as crate::value::NativeFn),
             ("reduce", native_array_reduce as crate::value::NativeFn),
             ("slice", native_array_slice as crate::value::NativeFn),

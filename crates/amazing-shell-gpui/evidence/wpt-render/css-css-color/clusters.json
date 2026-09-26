@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "subdir": "css/css-color",
+  "mismatch_count": 10,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-color__oklab-l-almost-1.html",
+        "css__css-color__oklch-l-almost-1.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-color__currentcolor-004.html",
+        "css__css-color__color-mix-currentcolor-nested-for-color-property.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-color__relative-currentcolor-prophoto-01.html",
+        "css__css-color__animation__contrast-color-interpolation.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color__light-dark-image-none.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color__clip-opacity-out-of-flow.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color__color-mix-currentcolor-visited.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color__color-mix-percents-02.html"
+      ]
+    }
+  ]
+}

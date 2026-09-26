@@ -380,6 +380,21 @@ impl Compositor {
             } else {
                 0
             };
+            // COMP-16: a group with its own resolved `transform` renders its
+            // tiles at identity, into the local pre-transform surface that
+            // `DrawQuad::Pass` then samples through that transform (see the
+            // comment there). Tile selection and damage above stay on the
+            // full `matrix`, which is what is actually visible on screen.
+            let draw_matrix = if passes
+                .get(pass_id)
+                .and_then(|p| p.effect_node)
+                .and_then(|id| self.trees.effect_operations(id))
+                .is_some_and(|op| op.local_transform.is_some())
+            {
+                Matrix4::IDENTITY
+            } else {
+                matrix
+            };
             for key in keys {
                 let local = tile_rect(key);
                 if !matrix.map_bounds(local).is_some_and(|r| {
@@ -456,7 +471,7 @@ impl Compositor {
                     resource_id: id,
                     rect: local,
                     content_rect: layer.bounds,
-                    transform: matrix,
+                    transform: draw_matrix,
                     clip_rect: if enhanced { raster_viewport } else { scissor },
                     opacity: if needs_pass { 1. } else { opacity },
                     blend: if needs_pass { BlendMode::Normal } else { blend },
@@ -674,6 +689,16 @@ fn sample(
 fn blend(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: BlendMode) -> [u8; 4] {
     super::effect_pixels::blend(dst, src, opacity, mode.into())
 }
+/// Nearest-neighbor sample matching `composite_group`'s own transform
+/// sampling: no interpolation, transparent outside the surface.
+fn sample_surface(surface: &Surface, x: f32, y: f32) -> [u8; 4] {
+    let sx = x.floor();
+    let sy = y.floor();
+    if sx < 0. || sy < 0. || sx >= surface.width as f32 || sy >= surface.height as f32 {
+        return [0; 4];
+    }
+    surface.get_pixel(sx as u32, sy as u32).unwrap_or([0; 4])
+}
 
 fn integer_translation(m: Matrix4) -> bool {
     let a = m.0;
@@ -815,19 +840,49 @@ impl ReferenceCpuPresenter {
                         .get(q.pass_id)
                         .and_then(|p| p.effect_node)
                         .and_then(|id| frame.trees.effect_operations(id));
+                    // COMP-16: a group with its own resolved `transform`
+                    // renders its children (in `build_frame`) at identity,
+                    // so `sub` below is the group's local, pre-transform
+                    // surface, matching `composite_group`'s `source`. Sample
+                    // it back into `out` with one inverse-mapped nearest
+                    // read per destination pixel, exactly like `DrawQuad::
+                    // Tile`'s own transform sampling.
+                    let local_transform = operations.and_then(|op| op.local_transform);
                     // Seed the group's backdrop before its children draw. A
                     // nested backdrop filter then sees the already-filtered
                     // parent background, without escaping its backdrop root.
+                    // Under a `local_transform`, `bounds` is in that same
+                    // local grid, so the backdrop snapshot is built by
+                    // forward-sampling `out` (true destination pixels)
+                    // through the group's own transform into that grid,
+                    // rather than reading `out` at identical indices.
                     let initial =
                         operations
                             .filter(|op| !op.backdrop_filters.is_empty())
                             .map(|op| {
                                 let bounds = op.backdrop_bounds.expect("validated backdrop bounds");
-                                let mut backdrop = super::effect_pixels::backdrop_filters(
-                                    &out,
-                                    &op.backdrop_filters,
-                                    bounds,
-                                );
+                                let source = if let Some(m) = local_transform {
+                                    let mut local = Surface::new(out.width, out.height);
+                                    for y in 0..out.height {
+                                        for x in 0..out.width {
+                                            let (lx, ly) = (x as f32 + 0.5, y as f32 + 0.5);
+                                            if !bounds.contains(lx, ly) {
+                                                continue;
+                                            }
+                                            if let Some((wx, wy)) = m.map(lx, ly) {
+                                                local.set_pixel(x, y, sample_surface(&out, wx, wy));
+                                            }
+                                        }
+                                    }
+                                    local
+                                } else {
+                                    out.clone()
+                                };
+                                let mut backdrop = if let Some((_, plan)) = op.painter_filters {
+                                    plan.apply_to_surface(&source)
+                                } else {
+                                    super::effect_pixels::backdrop_filters(&source, &op.backdrop_filters, bounds)
+                                };
                                 for y in 0..out.height {
                                     for x in 0..out.width {
                                         if !bounds.contains(x as f32 + 0.5, y as f32 + 0.5) {
@@ -841,8 +896,21 @@ impl ReferenceCpuPresenter {
                         self.draw_pass(frame, q.pass_id, depth + 1, initial)?;
                     let mut mode = EffectBlend::from(q.blend);
                     if let Some(operations) = operations {
-                        sub = super::effect_pixels::filters(&sub, &operations.filters);
-                        super::effect_clip::apply_masks(&mut sub, operations);
+                        sub = if let Some((plan, _)) = operations.painter_filters {
+                            plan.apply_to_surface(&sub)
+                        } else {
+                            super::effect_pixels::filters(&sub, &operations.filters)
+                        };
+                        // Under a `local_transform`, `clip_path` is tested at
+                        // the exact fractional point the sampling loop below
+                        // inverse-maps to, not this local grid's integer
+                        // pixel centers (see `clip_path_contains`'s comment);
+                        // only the image `mask` applies here still.
+                        if local_transform.is_some() {
+                            super::effect_clip::apply_mask_image_only(&mut sub, operations);
+                        } else {
+                            super::effect_clip::apply_masks(&mut sub, operations);
+                        }
                         if !operations.filters.is_empty() || !operations.backdrop_filters.is_empty()
                         {
                             sub_boundaries.fill(false);
@@ -864,7 +932,15 @@ impl ReferenceCpuPresenter {
                             if !frame.trees.visible(q.state, dx, dy) {
                                 continue;
                             }
-                            let src = sub.get_pixel(x, y).unwrap_or([0; 4]);
+                            let src = if let Some(m) = local_transform {
+                                let Some((sx, sy)) = m.unmap(dx, dy) else { continue };
+                                if operations.is_some_and(|op| !super::effect_clip::clip_path_contains(op, sx, sy)) {
+                                    continue;
+                                }
+                                sample_surface(&sub, sx, sy)
+                            } else {
+                                sub.get_pixel(x, y).unwrap_or([0; 4])
+                            };
                             if src[3] == 0 {
                                 continue;
                             }

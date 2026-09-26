@@ -1,0 +1,36 @@
+{
+  "fixed_base": "47bcf7f04265faf53702c4dcba37fa4535ad3c84",
+  "measured_at": "2026-09-26T15:41:01Z",
+  "platform": "Linux Boat pool-dom isolated lane target",
+  "workspace_pass": 2883,
+  "workspace_skip": 10,
+  "workspace_fail": 0,
+  "doctests": "all crate doc-test suites ok (amazing-dom and amazing-bindings each 1 passed)",
+  "corpus": {
+    "directories": ["dom/events", "html/semantics/forms", "uievents"],
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "before_pass_subtests": 2472,
+    "before_fail_subtests": 2091,
+    "after_pass_subtests": 2597,
+    "after_fail_subtests": 1983,
+    "gained_subtests": 125,
+    "lost_subtests": 0,
+    "before_binary": "dom-b-audit-input-activation-before (built at fixed_base, --ref)",
+    "after_binary_sha256": "8af30b304020e825f1ff3fbc4752526d3309d9d6f7f5c28f36741e29c1e1a064",
+    "before_results": "before.json",
+    "after_results": "after.json",
+    "compare_script": "compare-corpus.py"
+  },
+  "tested_source_sha256": {
+    "crates/amazing-dom/src/input_activation.rs": "f43f3387110090c4ec0e6c04d2ff453f3dde44644ac2817e71866f8c714c75b2",
+    "crates/amazing-dom/src/forms.rs": "7878f98b8cc85f042e5846aad2d950832bb9867ae91e79f9224868ad96342d57",
+    "crates/amazing-dom/src/events.rs": "93f0bd66581b38d9a2471eb4c62e0c2ca439421a33d02c4c77267cb4d6d32eb5",
+    "crates/amazing-bindings/src/input_activation_bindings.rs": "a871818906e60922d289fbc3283e40742824eb1a290565304a2459fc4cc87900",
+    "crates/amazing-bindings/src/event_bindings.rs": "add75a7c1d79e2c56d34db777f1ec795fe63fb418135c029c246c3b39fd22643",
+    "crates/amazing-bindings/src/host.rs": "6b8ae30bfe22b5cc6bb4eb37f9e1c5ca8140cb994bf3bfb9ba6908d7e24f2304",
+    "crates/amazing-bindings/src/interfaces.rs": "cec49664a6b25e435de6f81f223366a5a51b4cf8eb13dfbeb2d8e48b34a82ab0",
+    "crates/amazing-bindings/src/invoke.rs": "52f836852857d62d3642c353abd7341369bf8d65c7e22a811c334af7da112479",
+    "crates/amazing-bindings/src/lib.rs": "d79e99b1b96a80b7bbf8b4cd67e18869f284323fdd0d1a846cd3f744fbfe9d19",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "08842bead90e4ed2d0e2d031f9b241edc03a212b8fab660c900558e8d35d5bd7"
+  }
+}

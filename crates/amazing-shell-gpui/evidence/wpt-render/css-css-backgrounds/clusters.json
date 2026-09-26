@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "subdir": "css/css-backgrounds",
+  "mismatch_count": 61,
+  "unreadable": 1,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 9,
+      "examples": [
+        "css__css-backgrounds__background-color-clip.html",
+        "css__css-backgrounds__background-clip__clip-border-area-border-shape.html",
+        "css__css-backgrounds__background-clip__clip-text-constrain-geometry.html",
+        "css__css-backgrounds__background-clip__clip-text-ellipsis.html",
+        "css__css-backgrounds__background-clip__clip-text-fragmentation.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-backgrounds__border-bottom-width-medium.html",
+        "css__css-backgrounds__border-bottom-width-thin.html",
+        "css__css-backgrounds__border-top-width-medium.html",
+        "css__css-backgrounds__border-bottom-width-thick.html",
+        "css__css-backgrounds__border-top-width-thin.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-backgrounds__border-right-width-thick.html",
+        "css__css-backgrounds__border-left-width-thick.html",
+        "css__css-backgrounds__border-left-width-medium.html",
+        "css__css-backgrounds__border-left-width-thin.html",
+        "css__css-backgrounds__border-right-width-medium.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-backgrounds__box-shadow__slice-block-fragmentation-001.html",
+        "css__css-backgrounds__box-shadow__slice-block-fragmentation-003.html",
+        "css__css-backgrounds__background-clip__clip-border-area-text.html",
+        "css__css-backgrounds__background-clip__clip-border-shape-table-part-background.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-backgrounds__border-image-width-should-extend-to-padding.html",
+        "css__css-backgrounds__background-rounded-image-clip-002.html",
+        "css__css-backgrounds__background-attachment-local-hidden.html",
+        "css__css-backgrounds__background-position__background-position-right-in-body.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-backgrounds__background-clip__clip-border-area-on-body-propagated-to-root.html",
+        "css__css-backgrounds__background-clip__clip-border-area-border-shape-background-position.html",
+        "css__css-backgrounds__background-clip__clip-border-area-on-body-not-propagated-to-root.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-backgrounds__background-clip__clip-text-text-emphasis.html",
+        "css__css-backgrounds__background-clip__clip-text-text-decorations.html",
+        "css__css-backgrounds__background-clip__clip-text-blend-mode.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-backgrounds__background-clip__clip-text-scaled.html",
+        "css__css-backgrounds__background-color-body-propagation-001.html",
+        "css__css-backgrounds__background-color-body-propagation-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-backgrounds__box-shadow-041.html",
+        "css__css-backgrounds__box-shadow-042.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-backgrounds__background-clip-content-box-002.html",
+        "css__css-backgrounds__linear-gradient-currentcolor-first-line.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-backgrounds__box-shadow-body.html",
+        "css__css-backgrounds__background-clip__clip-text-inline.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-backgrounds__background-none-none-and-color.html",
+        "css__css-backgrounds__background-clip-padding-box-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-backgrounds__background-size-042.html",
+        "css__css-backgrounds__background-size-041.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__border-image-outset-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__background-clip__clip-text-descendants.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__background-clip-padding-box-with-border-radius-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow__slice-block-fragmentation-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow-radius-000.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow-radius-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow-040.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__background-clip__clip-text-multiline-linebreak.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow-005.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__first-letter-space-not-selected.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__box-shadow-039.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-backgrounds__background-color-root-propagation-003.html"
+      ]
+    }
+  ]
+}

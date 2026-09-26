@@ -3,7 +3,6 @@
 use amazing_js::Interpreter;
 use amazing_js::value::{FunctionBody, JsFunction, JsObject, JsValue, NativeFn, Obj, Throw};
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -118,11 +117,13 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         .and_then(|line| line.strip_prefix("GET "))
         .and_then(|line| line.split_once(' '))
         .map(|(path, _)| path.to_owned());
+    let mut served_name = String::new();
     let body = path.as_deref().and_then(|path| {
         let name = path.split(['?', '#']).next()?.strip_prefix('/')?;
         if name.contains('%') || name.contains('\\') || name.split('/').any(|part| part == "..") {
             return None;
         }
+        served_name = name.to_owned();
         if let Some((generated_name, bytes)) = generated
             && name == generated_name.trim_start_matches('/')
         {
@@ -138,9 +139,39 @@ fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String,
         Some(bytes) if bytes.len() <= FIXTURE_LIMIT => ("200 OK", bytes),
         _ => ("404 Not Found", Vec::new()),
     };
+    // A real WPT server sends a `Content-Type` header derived from the
+    // resource's extension; this fixture previously sent none at all, so
+    // `content_type()` (`runtime_host_html.rs`) had nothing to sniff and its
+    // own extension fallback never runs for a fetch through this server
+    // (that fallback only triggers for a resolver-backed or `file:` fetch,
+    // neither of which this loopback HTTP fetch is). That silently failed
+    // every navigation to a non-HTML child document (XML/XHTML iframes:
+    // "iframe response has no supported media type"), which is what made
+    // `iframe.contentWindow.document`'s elements look broken (e.g.
+    // `localName` never actually ran on a real element) -- the child
+    // document simply never loaded. Mirrors the WPT server's own
+    // mime-type mapping closely enough for what this corpus actually needs.
+    let content_type = match Path::new(&served_name).extension().and_then(|ext| ext.to_str()) {
+        Some("html" | "htm") => "text/html",
+        Some("xhtml" | "xht") => "application/xhtml+xml",
+        Some("xml") => "application/xml",
+        Some("svg") => "image/svg+xml",
+        Some("js" | "mjs") => "text/javascript",
+        Some("json") => "application/json",
+        Some("css") => "text/css",
+        Some("txt") => "text/plain",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("wasm") => "application/wasm",
+        _ => "application/octet-stream",
+    };
     let _ = write!(
         stream,
-        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         bytes.len()
     );
     let _ = stream.write_all(&bytes);
@@ -430,8 +461,22 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
             ("{{ports[https][0]}}", "443"),
             ("{{ports[https][1]}}", "8443"),
             ("{{domains[www2]}}", "www2.web-platform.test"),
+            ("{{domains[www1]}}", "www1.web-platform.test"),
+            ("{{domains[www]}}", "www.web-platform.test"),
+            ("{{hosts[][www]}}", "www.web-platform.test"),
             ("{{hosts[alt][]}}", "not-web-platform.test"),
+            ("{{hosts[alt][www]}}", "www.not-web-platform.test"),
             ("{{hosts[alt][www2]}}", "www2.not-web-platform.test"),
+            // NET-38: websockets/constants.sub.js builds its ws:// / wss://
+            // base URL from these; any value routes through StdResolver's
+            // *.web-platform.test host match regardless of the port number.
+            ("{{ports[ws][0]}}", "80"),
+            ("{{ports[wss][0]}}", "443"),
+            ("{{ports[h2][0]}}", "443"),
+            ("{{ports[http-local][0]}}", "80"),
+            ("{{ports[http-public][0]}}", "80"),
+            ("{{ports[https-local][0]}}", "443"),
+            ("{{ports[https-public][0]}}", "443"),
         ] {
             text = text.replace(placeholder, value);
         }
@@ -551,65 +596,6 @@ fn fixture_file(root: &Path, fixture: &FixtureServer, url: &str) -> Result<PathB
         root,
         relative.split(['?', '#']).next().unwrap_or(relative),
     )
-}
-
-fn collect_iframes(
-    dom: &amazing_dom::Dom,
-    node: amazing_dom::NodeIdx,
-    frames: &mut Vec<(u32, String)>,
-) {
-    if dom.name(node) == Some("iframe")
-        && let Some(src) = dom
-            .attrs_of(node)
-            .unwrap_or(&[])
-            .iter()
-            .find(|(name, _)| name == "src")
-            .map(|(_, value)| value)
-    {
-        frames.push((node.0, src.clone()));
-    }
-    for child in dom.children(node) {
-        collect_iframes(dom, child, frames);
-    }
-}
-
-fn service_iframes(
-    host: &Rc<RefCell<crate::BrowserDomHost>>,
-    scheduler: &mut crate::js_scheduler::DriverScheduler,
-    navigator: &mut crate::navigator::Navigator,
-    page_url: &str,
-    loaded: &mut BTreeMap<u32, (u64, String)>,
-) -> Result<(), String> {
-    let mut iframes = Vec::new();
-    collect_iframes(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut iframes);
-    for (node, src) in iframes {
-        if src.is_empty()
-            || src == "about:blank"
-            || loaded.get(&node).is_some_and(|(_, old)| old == &src)
-        {
-            continue;
-        }
-        let child_url = resolve_page_url(page_url, &src)?;
-        let child = match loaded.get(&node) {
-            Some((id, _)) => *id,
-            None => navigator.create_child(1)?,
-        };
-        let use_process = crate::runtime_host_ipc::enabled();
-        navigator.navigate_child(child, &child_url, |url, process_body| {
-            if use_process {
-                Ok(process_body.to_vec())
-            } else {
-                amazing_net::fetch(url, &amazing_net::FetchOptions::default())
-                    .map(|response| response.body)
-                    .map_err(|error| format!("iframe navigation: {error}"))
-            }
-        })?;
-        loaded.insert(node, (child, src));
-        scheduler
-            .dispatch_dom_event(node, "load")
-            .map_err(|error| error.describe())?;
-    }
-    Ok(())
 }
 
 fn execute(options: &Options) -> Result<(), String> {
@@ -738,7 +724,14 @@ fn execute_page(
         .canonicalize()
         .map_err(|e| e.to_string())?;
     let mut installed = false;
+    // HTML-29: opens the top-level document's `document.write` parser-
+    // active window for the duration of its own top-level script phase,
+    // narrowed to right after each script as it runs, and closed once its
+    // load event has fired below -- matching the window during which a
+    // real parser has an insertion point at all.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let (text, label, harness) = match script.src {
             Some(src) => {
                 let path = local_file(&root, file.parent().unwrap(), &src)?;
@@ -774,8 +767,12 @@ fn execute_page(
         return Err("no harness script loaded".into());
     }
     refresh_images(&mut scheduler)?;
-    let mut loaded_iframes = BTreeMap::new();
-    service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
+    // Iframes present in the initial DOM were already queued by
+    // `set_location_url` above (`RuntimeBindings::navigate_iframes`, run from
+    // `set_document_url`); this drains that queue, giving each one its own
+    // realm/WindowProxy and firing `DOMContentLoaded`/`load` on the child
+    // document and `load` on the frame element (JSRT-9 + HTML-25..27).
+    scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
     for event in ["DOMContentLoaded", "load"] {
         scheduler
             .dispatch_dom_event(0, event)
@@ -788,11 +785,15 @@ fn execute_page(
             .dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
+    scheduler.end_document_parsing(0);
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut frame = 0_u64;
     while !COMPLETE.get() {
-        service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
+        // Drains iframes queued since the last turn: script-driven
+        // `src`/DOM mutations already pushed them via
+        // `invoke_operation_with_html_hooks`'s `navigate_iframes` call.
+        scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
         if let Some((next, replace, state)) = scheduler.js.take_history_update() {
             let next = resolve_page_url(navigator.current_url().unwrap_or(&url), &next)?;
             let serialized = scheduler

@@ -1,0 +1,31 @@
+{
+  "source": "ab38fc57a5a6592a4c5f873bf31d8b4c74b3b6d4",
+  "base": "ca5e01fe",
+  "platform": "Linux Boat pool-dom isolated lane target",
+  "workspace_pass": 2763,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "corpus_files": 314,
+  "before_pass": 8077,
+  "after_pass": 8082,
+  "before_fail": 741,
+  "after_fail": 736,
+  "gained_subtests": 5,
+  "lost_subtests": 0,
+  "measured_at": "2026-09-26T13:39:02Z",
+  "tested_source_sha256": {
+    "crates/amazing-bindings/src/host.rs": "697060b6e3c1fde6cfd89bab8e79e9200414347ab380cd0804e29d5a6c16e03e",
+    "crates/amazing-bindings/src/interfaces.rs": "a47788d01f0065e89fdd6a181d9a532978b764c72d550c071754575cf42ed2b4",
+    "crates/amazing-bindings/src/invoke.rs": "be07fd535cc0a063b35c7e8caaea8c29043ca55a12a060dcdfb5dbac374d9f7d",
+    "crates/amazing-bindings/src/lib.rs": "9161d712c9b1c87b086fd0f0e05069413db7ad228967cee74faf49249d7006ba",
+    "crates/amazing-dom/src/lib.rs": "7d3bb4e92fef5716bacc930d5d597b08ab9e0ef499edf9b74d560095c3df7eb2",
+    "crates/amazing-dom/src/mutation.rs": "259d24b7af7ba9f830b5ea08624e36533e6534817d07c032eade9e6b50ced256",
+    "crates/amazing-dom/src/namespace.rs": "82f014b7aae87a68ac7302731d0a47239f286585cca2c17b0ecea0d843dca110",
+    "crates/amazing-dom/src/namespace_tests.rs": "1b5a333eff37f22d38b519a68cb18715894ca4c07fb730eb80e064b31b7183a3",
+    "crates/amazing-dom/src/range_contents.rs": "3991c1997f02184ada3564bf193521a5dcf019bbc927267c47ad7d5ad43e6be0",
+    "crates/amazing/src/runtime_binding_host.rs": "0f8f7276ef1156b08109ebc04cbb55e6e069946e539e2fea1787b560c688930c",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "4f40763b39e2a8bf8ffa9fceeebcea7f0fdb2b3a36beb0d6d826c55afe664c3d",
+    "crates/amazing-dom/src/processing_instruction.rs": "1965fa244d5193cc310a8e0cbedc6e16f7cc3cc1fc5927864b36efd4be641e01",
+    "crates/amazing-bindings/src/processing_instruction_bindings.rs": "1c570fd5dc17b94e786174aed93806bd723849f10fcbeae18901bcb29a422bbe"
+  }
+}

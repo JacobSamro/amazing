@@ -443,3 +443,502 @@ layout-owned per the TEXT-7..13 routes, and the PUA/emoji cases are environment
 ones. The lane has asked the orchestrator for its next ticket, proposing
 `font-optical-sizing: auto` (`opsz`) and a `font-variant-caps/-numeric/-position`
 feature contract as provider-local candidates.
+
+## TEXT-16: small-caps and super/subscript synthesis fallback
+
+CSS Fonts 4 section 6: when the selected face has no `smcp`/`c2sc`/`sups`/
+`subs` GSUB feature and `font-synthesis` allows it, the UA may synthesize the
+effect. `amazing_text::FontSynthesis` gains `small_caps`/`position` bools
+(default `true`, matching `font-synthesis`'s initial value `weight style
+small-caps position`) alongside the existing `weight`/`style`. `resolve_synthesis`
+leaves both false — it only compares `FontAttributes` (weight/stretch/slant),
+which has no GSUB visibility — so the provider resolves them separately, per
+glyph cluster, in `shape_range`.
+
+New module `crates/amazing-text-provider/src/font_variant_synthesis.rs`:
+`FaceFeatureSupport::probe` parses the selected face's GSUB feature list once
+per `shape_range` call (via the `read-fonts` crate, pinned to the exact
+version `harfrust` already depends on transitively, giving `TableProvider::
+gsub()`/`cmap()` on the same `harfrust::FontRef`); `feature_on` checks the
+already-built `Feature` list for a requested tag; `for_cluster` is a pure
+decision function (needs_smcp/c2sc/sups/subs booleans, an injectable
+uppercase-glyph-lookup closure, and the cluster's representative character)
+that is unit-tested directly with fake closures, no real font bytes needed.
+
+`shape_range` wires it in: an originally-lowercase letter requesting `smcp`
+gets its shaped glyph id substituted to the face's cmap-mapped uppercase
+glyph (skipped, not guessed, if the face has no such glyph); an
+already-uppercase letter under `c2sc`, or any glyph under `sups`/`subs`,
+keeps its shaped id. Superscript/subscript get a shape-time baseline offset
+(+0.33em / -0.14em, added to `offset_y`) so rasterization only needs a
+uniform outline scale. `ShapedRun`s now split on synthesis equality as well
+as source span, so one run with mixed original case gets separate runs per
+distinct needed synthesis. `rasterize_font_glyph` composes the small-caps
+(0.72) and position (0.66) scales with the existing oblique skew via
+`zeno::Transform::then`/`then_scale`, identical output to before when only
+`style` applies (verified by the retained oblique/bold tests).
+
+The exact scale factors and em shifts are approximations the same way the
+existing bold stroke width and -14 degree oblique skew already are; CSS does
+not mandate synthesis metrics.
+
+Not implemented: `pcap`/`c2pc` (petite-caps) and `titl` (titling-caps) reach
+HarfRust generically through the same `TextStyle.features` vector already
+(no text-owned change needed, same as TEXT-14's kerning conclusion), but have
+no synthesis fallback — CSS Fonts 4 does not mandate one for them, unlike
+small-caps/position. `unicase` has no associated GSUB tag or synthesis path
+and was out of the coordinator's requested scope.
+
+Gate: 11 new unit tests in `font_variant_synthesis` (substitution, the
+no-uppercase-glyph fallback, `c2sc`/`smcp` case gating, digits/punctuation
+untouched, super/sub direction and scale, combinations) plus 6 in `lib.rs`
+(raster transform mirroring the existing bold/oblique tests; the full
+`shape()` path through a new two-glyph synthetic font with real cmap bytes,
+including the small-caps-policy-disabled case). Crate nextest 72/72 ->
+89/89 (1 skipped), zero losses, doctests green. Workspace nextest 2882
+passed/10 skipped/0 failed, workspace doctests 4/0, on merged dev + TEXT-15.
+No pinned WPT `font-variant-caps`/`-position` fixture exists in this lane's
+frozen selections, and the Boat sandbox still has no WPT checkout (TEXT-14's
+filed gap, unchanged), so this gates on unit tests per the fallback
+instruction. Commit `628ec199`.
+
+The CSS/layout keyword-to-feature mapping needed to actually exercise this
+from real pages — computed `font-variant-caps`/`font-variant-position` into
+`TextStyle.features`, and computed `font-synthesis`'s new `small-caps`/
+`position` keywords into `TextStyle.synthesis` — is routed in
+`.agents/css/questions.md` and `.agents/layout/questions.md`; the CSS side of
+the audit found no CSS-owned gap (both properties are already parsed and
+computed as plain keyword strings), and the layout side ties into the
+already-open `font-synthesis` wiring request from TEXT-13.
+
+## TEXT-17: Linux glyph rendering was a solid box for every character
+
+Root cause: `register_system_text_faces` in `crates/amazing/src/page.rs` (and
+`FontFaceLoader::load_local` in `crates/amazing/src/font_loader.rs`, for
+`src: local(...)`) hardcoded Windows-only `C:\Windows\Fonts\*.ttf` paths for
+the generic families (`serif`/`sans-serif`/`monospace`/`system-ui`) and named
+families (`Arial`, `Times`, `Consolas`, ...). `amazing_net::fetch` on those
+paths fails on Linux, so every one of those `continue`s silently: zero font
+faces were ever registered, for any family, on Linux. Pages that rely on the
+UA default (`body { font-family: serif }`, the common case — `docs-index.html`
+in the real-pages corpus declares no `font-family` at all) then resolved to
+no usable face, and the engine's no-face fallback path painted every glyph as
+a full-coverage box instead of an outline (visible in
+`amazing-shell-gpui/evidence/linux/shell-docs-index.png`: chrome text, drawn
+by GPUI, was fine; every engine-rendered glyph was a filled rectangle).
+
+Headless reproduction first, per instruction: `amazing render
+tests/real-pages/pages/docs-index.html out.bmp 960` on the Boat sandbox,
+converted to PNG and inspected — confirmed the same solid-box rendering
+headless, isolating the bug to the engine's paint/font pipeline rather than
+anything GPUI-specific.
+
+Fix, in `crates/amazing/src/font_loader.rs` (text's outright file — kept the
+`page.rs` diff to only the already-granted `register_system_text_faces`
+function body, which now dispatches on `cfg(target_os = "windows")` and
+otherwise calls into `font_loader`): a bounded scan of the standard Linux
+font directories (`/usr/share/fonts`, `/usr/local/share/fonts`,
+`$HOME/.fonts`, `$HOME/.local/share/fonts`; depth <= 8, <= 4096 files) with
+filename-only classification into sans/serif/mono buckets (`serif` in the
+name and not `sans` -> serif; `mono` in the name -> mono; else sans), scored
+to prefer well-known, broadly-hinted families (DejaVu > Liberation > Noto >
+Freefont/Free) and plain regular weights over bold/italic/condensed
+variants, deterministic tie-break. The winning file per bucket is registered
+under the generic family plus a handful of common named aliases pages
+request directly (sans -> `sans-serif`/`system-ui`/`Arial`/`Helvetica`, serif
+-> `serif`/`Times`/`Times New Roman`/`Georgia`, mono ->
+`monospace`/`Courier`/`Courier New`/`Consolas`). `load_local` gets the same
+treatment for `src: local(...)` lookups via a small alias table into the same
+three buckets. No new dependency: pure `std::fs` scan, no fontconfig binding.
+
+On the Boat sandbox (Ubuntu 24.04, `pool-layout`), this resolves to DejaVu
+Sans/Serif/Sans Mono (97 font files present: DejaVu, Liberation, Lato, Noto,
+URW base35, Droid, FontAwesome). Headless re-render of the same page: PNG
+grew from 2,791 bytes (solid boxes) to 62,527 bytes (real antialiased glyph
+outlines); visually confirmed by reading both PNGs.
+
+Regression test: `glyphs_render_as_outlines_not_solid_boxes` in
+`crates/amazing/src/driver_tests.rs` renders `<div style="font-size:120px">
+OOO</div>` with no explicit `font-family` (exercising the same UA-default
+path as docs-index.html) through `cmd::render::render_surface`, finds the
+tight bounding box of dark pixels, and asserts foreground coverage within
+that box is under 85% — a real "O" has a light interior counter, a
+full-coverage box does not. Verified both directions: fails at 100.0% dark
+coverage with `register_linux_system_faces` temporarily disabled, passes at
+the real (much lower) coverage with the fix in place.
+
+`scripts/linux-shell-capture.sh` failed on this pooled sandbox for an
+unrelated reason (`amazing-shell-gpui/Cargo.lock` "cannot update the lock
+file because --locked was passed" — a stale lockfile issue on the shared
+sandbox, not Xvfb-related); per the coordinator's stated fallback, the
+headless render PNG is the proof, saved at
+`.agents/text/captures/text17-glyphs-headless.png` (+ `.json` metadata).
+
+Gate: crate tests `amazing-text`/`amazing-text-provider`/`amazing` 340/340
+(6 skipped), including the new regression test, and the real-pages corpus
+harness (`amazing::real_pages`) green. Workspace nextest 2993/2993 (11
+skipped), workspace doctests green. Commit: see `.agents/text/status.json`.
+
+## TEXT-18: pinned css-fonts pixel selections, first Linux measurement
+
+WPT was unavailable on the Boat sandbox through TEXT-14/15/16 (filed gap in
+`.agents/text/questions.md`), so those tickets gated on unit tests or a
+hand-rolled focused subset. `scripts/ensure-wpt.sh` now provisions the pinned
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` checkout on the sandbox, so this
+ticket runs the lane's four pinned manifests there for the first time:
+`text1-fonts-manifest.json` (15), `text2-font-face-manifest.json` (8),
+`text5-vertical-manifest.json` (7), `text12-expanded-manifest.json` (40).
+
+New comparator `crates/amazing-text-provider/evidence/text18-render-wpt.py`,
+a Python port of `scripts/run-render-wpt.ps1`'s comparison (exact PPM diff,
+`<meta name=fuzzy>` tolerance, `mismatch`-relation inversion) that runs
+`amazing render-wpt <page> <out.ppm> 800 600` with `AMAZING_WPT_ROOT` set to
+the checkout — the same driver command and viewport the Windows harness
+uses, so the numbers are directly comparable, just measured on Linux instead
+of win-001. Each selection was run twice back to back with identical counts
+and per-test actual/reference/diff SHA-256 (stable).
+
+Results at `bbd741b6` (TEXT-17, on this branch):
+- fonts (15): **14 pass / 1 mismatch** — matches TEXT-13's win-001 number
+  exactly; the one mismatch is `font-unicode-PUA-primary-font`, the
+  environment-owned PUA-coverage case.
+- font-face (8): **4 pass / 4 mismatch** — matches the TEXT-12/13 win-001
+  number (retained both tickets); the four `matching__*` mismatches are the
+  pre-existing `@font-face` descriptor-matching gap, the four `variations__*`
+  cases pass.
+- vertical (7): **5 pass / 2 mismatch** — matches TEXT-12's win-001 number;
+  both mismatches are layout-owned per the existing TEXT-7..13 routing.
+- expanded (40): **40 pass / 0 mismatch** — up from TEXT-13's win-001 38/40;
+  the two prior mismatches (`font-kerning-02` and the `font-size-adjust`
+  area) are gone, consistent with TEXT-14's kerning-axis fix landing after
+  TEXT-13 was measured. First Linux run of this selection.
+
+Total: 63 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash
+across 70 cases. Every number either matches or improves on the last
+Windows measurement — zero regressions crossing platforms. Before TEXT-17's
+fix this corpus would have rendered as full-coverage boxes throughout
+(register_system_text_faces registered no face for any family on Linux), so
+these are the first *meaningful* Linux numbers for it. Evidence:
+`crates/amazing-text-provider/evidence/text18-gate-summary.json` and the four
+`text18-*-linux.json` result files.
+
+Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
+skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
+workspace doctests green (`--locked --doc`).
+
+## TEXT-19: web font decode short-read root cause, TTC support, fontconfig-driven Linux font scan
+
+Coordinator ask (after TEXT-17/18 merged as `2cce98d0`): reproduce and fix the
+WOFF2/sfnt decode short-read integrator-assist filed in
+`.agents/text/questions.md` (`font-face "<family>": Io(Error { kind:
+UnexpectedEof, message: "failed to fill whole buffer" })`, 73 occurrences,
+`crates/amazing/src/page.rs:129`), widen the Linux font scan to cover
+fontconfig's configured directories plus `~/.local/share/fonts` and
+`/usr/local/share/fonts`, and handle `.ttc` collections.
+
+**Root cause finding: this was never a decoder bug.** Traced every enum in
+the fetch-to-registration chain: `TextError` (5 unit variants),
+`amazing_fetch::api::ApiError`/`FetchError` (no `Io` variant) cannot produce
+an `Io(...)` Debug string; `amazing_net::NetError::Io(std::io::Error)` is the
+only match, and `amazing-net/src/http.rs` already has a passing test
+(`short_content_length_body_is_an_error_not_a_truncation`) proving this is
+intentional: a server that closes its connection before delivering all
+`Content-Length`-promised bytes correctly raises `Io(UnexpectedEof)`.
+Confirmed empirically that `decode_web_font_to_sfnt` already fails closed
+(never panics, never accepts a short buffer) against 3 real downloaded fonts
+truncated at every cut point. Routed the finding to net in
+`.agents/net/questions.md` rather than filing a text-owned fix for a
+net-layer behavior; added regression tests anyway to pin the decoder's
+existing fail-closed behavior against real fixtures going forward
+(`truncated_woff2_fails_closed_at_every_cut_point_never_panics` and the
+pinned `pinned_wpt_woff2_fails_closed_at_every_truncation_cut`, which sweeps
+every truncation cut of `fonts/noto/NotoNaskhArabic-regular.woff2`).
+
+**TTC (`.ttc`) collection support.** `read-fonts`/`harfrust`'s
+`FontRef::from_index(bytes, index)` and swash's `FontRef::from_index` already
+natively support both plain sfnt data and TTC collections (swash call sites
+were already using `from_index(_, 0)` everywhere); the engine-side gap was
+`amazing-text-provider`'s own format sniffing and structural validation.
+Added `FontFormat::Collection` (sniffed from the `ttcf` magic), a
+`ttc_font_directory_offset` helper that walks the TTC header's offset table
+(bounded by `MAX_TTC_FONTS = 64` against a hostile `numFonts`) to locate font
+0's own sfnt table directory, generalized `validate_font_structure` to
+validate at that offset instead of assuming offset 0, and switched the two
+`HarfFontRef::new` shaping/registration call sites to `HarfFontRef::from_index(_,
+0)`. No changes to the public `WebFont`/`FontRecord` structs or their ~46
+call sites — index 0 is the only sub-font the system-font scanner or any
+current caller needs. New tests: `ttc_collection_registers_shapes_and_rasterizes_its_first_font`,
+`truncated_ttc_fails_closed_never_panics`.
+
+**Fontconfig-driven Linux font directory scan.** `linux_font_roots()` in
+`crates/amazing/src/font_loader.rs` now reads real `<dir>` elements out of
+`/etc/fonts/fonts.conf` and `/etc/fonts/conf.d/*.conf` (a small hand-rolled
+tag scanner in the same style as this file's existing `import_urls` CSS
+`@import` scanner, not a new XML dependency), resolving `prefix="xdg"` against
+`$XDG_DATA_HOME` (falling back to `~/.local/share`, XDG's own default) and a
+leading `~` against `$HOME`, with XML comments stripped first so a
+commented-out `<dir>` (fontconfig ships one for the deprecated `~/.fonts`)
+is never picked up. This runs *before* the existing hardcoded
+`/usr/share/fonts`, `/usr/local/share/fonts`, `~/.fonts`, and
+`~/.local/share/fonts` defaults, which stay as a supplement/fallback
+deduplicated against whatever fontconfig already found, so the scan degrades
+gracefully with no fontconfig config present at all. New tests:
+`fontconfig_dir_elements_cover_plain_xdg_and_tilde_forms`,
+`fontconfig_xdg_dir_prefers_xdg_data_home_over_the_default`,
+`fontconfig_tilde_dir_expands_against_home`, `fontconfig_plain_dir_is_used_verbatim`,
+`fontconfig_dir_scan_never_panics_on_truncated_markup`,
+`fontconfig_comments_are_stripped_including_unterminated`.
+
+Gate: `amazing`/`amazing-text-provider` crate nextest 348/348 (8 skipped,
+Boat sandbox `bx_cp5jbn5z`). Final gate: workspace nextest **3035/3035
+passed, 13 skipped** (`--locked --no-fail-fast`), workspace doctests green
+(4 doctests: `amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js`, each 1 passed). Commit: see `.agents/text/status.json`.
+
+## TEXT-20: fix css-fonts/writing-modes mismatches by cluster, widen the Linux selection
+
+Coordinator ask: fix the 7 css-fonts/writing-modes mismatches TEXT-18 found on Linux, by
+cluster, and widen the pinned css-fonts selection now that WPT runs on Linux.
+
+**Cluster 1 (largest, fixed): `slnt` axis sign inversion.** All 4 `css-fonts/matching/*`
+tests use `@font-face { font-style: oblique <min>deg <max>deg }` ranges on a variable
+test font (`variabletest_matching.ttf`) whose `slnt` axis renders a distinct "bar chart"
+glyph per exact coordinate. `font_variations::for_face`
+(`crates/amazing-text-provider/src/font_variations.rs`) was feeding the CSS-space
+clamped oblique angle straight into the `slnt` variation coordinate. Per CSS Fonts 4
+section 6.3 (and the `font-variation-settings` note in 7.2), confirmed against the
+spec source (`csswg-drafts/css-fonts-4/Overview.bs`): "the OpenType slnt axis is
+defined with a positive angle meaning a counter-clockwise slant, the opposite
+direction to CSS" -- the coordinate fed to the font must be negated; the CSS-space
+value is only used (unnegated) for the section-5.2 face-selection distance math
+against the descriptor's own CSS-degree range. Fixed by negating just the final
+axis value: `value: -requested_oblique_angle(style).clamp(min_degrees, max_degrees)`.
+Verified against the WPT test suite's own README
+(`css/css-fonts/matching/README.md`), which documents the exact bar-length/axis-value
+table used to derive each reference glyph -- traced one case (`fixed-stretch-style-over-weight`
+span 5: oblique 0deg request, face B range 45..67.5deg) through the table by hand and
+confirmed the fix produces the documented reference glyph ("y", "x", "4").
+
+Result: `css-fonts__matching__range-descriptor-reversed.html` now passes exactly
+(byte-identical PPM). The other three matching tests
+(`fixed-stretch-style-over-weight`, `stretch-distance-over-weight-distance`,
+`style-ranges-over-weight-direction`) improved substantially (differing pixels
+dropped from 13481/12324/17281 to 5285/4260/5605 respectively) but still mismatch.
+Pixel-diff analysis (`crates/amazing-text-provider/evidence/text20-text2-font-face-manifest-linux.json`)
+shows the remaining difference is confined to spans where the *second* `@font-face`
+candidate wins (face selection and the resolved `wght`/`wdth`/`slnt` coordinates were
+independently verified correct against the WPT README's table by hand for one such
+span), with the composite "MNOP" bar-chart glyph rendering at a different vertical
+scale/position than the reference's literal static glyphs for those spans only --
+consistent with a subtler swash/harfrust variable-font interpolation discrepancy
+for a specific coordinate combination, not a face-selection or axis-value bug. Not
+resolved this ticket; needs a focused swash/harfrust-level repro. `text2-font-face`:
+4 pass / 4 mismatch -> **5 pass / 3 mismatch**.
+
+**Cluster 2 (routed, unchanged): `text5-vertical`'s 2 mismatches.**
+`css-writing-modes__writing-mode-vertical-lr-002.xht` tests block-flow character
+positioning inside a `vertical-lr` box (line wrapping/positions), which is a layout
+box-geometry concern outside text-provider's shaping/glyph-orientation code --
+confirmed still layout-owned per the existing TEXT-7..13 routing.
+`css-writing-modes__direction-upright-001.html` tests that `text-orientation: upright`
+forces strong-LTR bidi specifically on `<span>`-scoped sub-runs nested inside a
+`dir=rtl` vertical block, while the surrounding (non-upright) text stays normally
+bidi-reordered; `amazing-text-provider` already forces LTR for an upright *paragraph*
+(`upright_vertical_text_forces_left_to_right_bidi_direction`), but the WPT case's
+span-scoped nesting still mismatches. Diagnosed but not fixed this ticket (budget);
+carried forward as the next `text5-vertical` item.
+`text5-vertical`: 5 pass / 2 mismatch, unchanged from TEXT-18.
+
+**Widening deferred.** Given the above two clusters consumed the ticket's budget,
+did not widen the pinned selection this round; carrying that forward as the next
+`text` lane item alongside `direction-upright-001`.
+
+Gate: crate nextest `amazing-text-provider` 80/80 (2 skipped). Final gate: workspace
+nextest and doctests (see status.json for the exact numbers/SHA).
+
+## TEXT-21: standard/system-UI generic font families (largest css-fonts cluster)
+
+Coordinator ask: fix the largest remaining css-fonts mismatch cluster in bulk using
+`scripts/linux-render-wpt.sh text css/css-fonts` against the baseline in
+`crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json` (18 pass / 14 mismatch,
+32 selected self-contained reftests), plus the span-scoped upright-bidi item.
+
+**Cluster fixed: CSS Fonts 4 standard/system-UI generic families
+(`ui-serif`/`ui-sans-serif`/`ui-monospace`/`ui-rounded`) were never registered.**
+7 of the 8 `standard-font-family-*` mismatches (largest cluster) were `rel=mismatch`
+reftests asserting these keyword families render *differently* from the
+unstyled default -- they were rendering byte-identical because
+`register_linux_system_faces`/`local_font_path` (`crates/amazing/src/font_loader.rs`)
+only registered `serif`/`sans-serif`/`system-ui`/`monospace`, so a page requesting
+`font: 72px 'ui-serif'` (a generic keyword even though quoted, per spec) fell
+through to the engine's undifferentiated last-resort default -- identical to
+having no `font-family` at all. Registered all four `ui-*` names to the same
+sans/serif/mono buckets as their non-`ui-` counterparts (`ui-rounded` rides
+with sans -- Linux has no distinct rounded system design, matching other
+engines' non-Apple fallback), in both `register_linux_system_faces` and
+`local_font_path`, plus the analogous Windows aliases in
+`crates/amazing/src/page.rs`'s `register_system_text_faces` (untested this
+ticket -- win-001 gates are deferred).
+
+`standard-font-family-11` ("ui-serif works", no bold/no font-synthesis
+override) still mismatches: this sandbox has only one registered serif font
+file, so `ui-serif` and the plain default both resolve to the exact same face
+-- an environment font-availability limit, not a code bug, the same class of
+gap as the already-routed `font-unicode-PUA-primary-font` case.
+
+**Not chased this ticket** (budget): `font-size-adjust-zero-1/2`,
+`font-size-adjust-order-001` (a `font-size-adjust: 0` interaction, possibly
+line-height/metrics related), `rlh-in-monospace` (root em / `rlh` unit
+sizing), `font-variant-emoji-1`. Flagged for the next `css-fonts` pass.
+
+Updated baseline: `crates/amazing-shell-gpui/evidence/wpt-render/css-fonts.json`,
+**18 pass / 14 mismatch -> 25 pass / 7 mismatch** (32 selected). Crate gate:
+`amazing`/`amazing-text-provider` nextest 357/357 (8 skipped).
+
+## TEXT-22: css-text triage, text-transform algorithm
+
+Coordinator ask: fix the largest css-text mismatch clusters in bulk using
+`scripts/wpt_render_cluster.py`/`scripts/linux-render-wpt.sh text css/css-text`
+(baseline 218 pass / 227 mismatch / 1 crash of 446 selected), routing
+layout-owned causes to `.agents/layout/questions.md`.
+
+**Fixed: `text-transform` was entirely unimplemented** (15 mismatches). The
+property parses/cascades in `amazing-css` but nothing ever transformed text
+content. Added `amazing_text::{TextTransform, TextTransformCase}` (case
+keyword plus independent `full_width`/`full_size_kana` bools, matching the
+CSS grammar `none | [capitalize|uppercase|lowercase] || full-width ||
+full-size-kana`) and a pure `amazing_text_provider::apply_text_transform`
+(`crates/amazing-text-provider/src/text_transform.rs`): uppercase/lowercase
+via `char::to_uppercase`/`to_lowercase` with the CSS-mandated Greek final
+sigma special case (lowercase Σ -> ς only at the end of a word, σ
+otherwise, computed via `icu_segmenter`'s word boundaries), capitalize
+(titlecase the first alphabetic character of each `icu_segmenter`
+`WordType::Letter` word, matching CSS's apostrophe-stays-in-word behavior),
+and full-width (ASCII printable range + U+FEE0, space -> U+3000).
+`full-size-kana` is a documented no-op -- no verified Unicode mapping table
+built, and no pinned case needs it yet.
+
+Deliberately did **not** add a `text_transform` field to `TextStyle`:
+`amazing-layout`'s `box_tree.rs::text_style` builds it via an exhaustive
+struct literal in a file this lane does not own, so a new required field
+would have broken that build. Layout resolves the CSS value itself (the
+same way it already resolves `white-space`/`hyphens`) and calls the new
+function on each DOM text run's source text, per the routing note in
+`.agents/layout/questions.md`.
+
+**Routed, not fixed** (all trace into `amazing-layout`'s paragraph-text
+construction, or into CSS properties `amazing-css` hasn't registered yet):
+`white-space` (78, largest in the subdir -- trailing-space-at-line-end
+handling, `break-spaces` scope, `text-wrap: balance` looks unimplemented,
+tab-stop mechanics), `word-space-transform` (20), `hyphens` (24, mostly
+vertical-writing-mode placement, float interaction, the unparsed
+`hyphenate-character` property, and per-language auto-hyphenation
+dictionaries -- a large unimplemented feature), `letter-spacing` (15),
+`tab-size`/`text-justify`/`text-autospace`/`hanging-punctuation` (8/7/5/4,
+not even registered as CSS properties), `writing-system` (4). Full detail
+in `.agents/layout/questions.md` and `.agents/css/questions.md`.
+`line-breaking` (6), `overflow-wrap` (3), `bidi` (2) not chased (budget).
+
+Render baseline for css-text unchanged (218/446) by design -- additive-only,
+pending layout wiring. Gate: crate nextest `amazing-text`+`amazing-text-provider`
+102/102 (2 skipped). Workspace nextest 3142/3142 passed (14 skipped),
+doctests clean. Commit `33538dae`.
+
+## TEXT-23: css-text-decor triage, text-emphasis mark table
+
+Coordinator ask: same method on css-text-decor (baseline 65 pass / 127
+mismatch of 192 selected).
+
+**Landed: `text_emphasis_mark`.** `text-emphasis` (CJK emphasis marks) is
+97 of 127 mismatches and entirely unimplemented anywhere (not parsed, not
+placed, not painted). `amazing_text_provider::text_emphasis_mark`
+(`crates/amazing-text-provider/src/text_emphasis.rs`) resolves an
+already-normalized `text-emphasis-style` computed value (e.g. `"filled
+circle"`, `"open"`, `"dot"`, `"sesame"`, `"none"`) to CSS Text Decoration
+3's suggested mark character, per its fixed fill x shape table (10
+combinations, plus bare-keyword defaults: bare fill defaults to `circle`,
+bare shape defaults to `filled`). The `<string>` form has no table entry by
+design -- the caller uses the string's first grapheme cluster directly.
+
+**Routed, not fixed:** the rest of `text-emphasis` (parsing in css,
+per-character mark placement including the ruby/emphasis conflict rule in
+layout, painting the mark glyph in paint) is real cross-crate new-feature
+work, routed to `.agents/layout/questions.md` and `.agents/paint/questions.md`.
+`text-decoration-*` (~17: skip-ink, inset, underline-offset, subelements,
+propagation) and `text-shadow` (~20) are layout/paint's box-model and
+glyph-effect code, not text-provider's.
+
+Render baseline for css-text-decor unchanged (65/192) by design. Gate:
+crate nextest clean. Workspace nextest 3148/3148 passed (14 skipped),
+doctests clean. Commit `02f0c58e`.
+
+## TEXT-24: css-ruby, whole area
+
+Coordinator ask: base on local dev `512912d5`, take a Linux render baseline
+with `scripts/linux-render-wpt.sh text css/css-ruby --baseline auto
+--compact`, implement ruby layout/paint support within owned crates, and
+route anything needed in `amazing-layout` to `questions.md` as a trait
+request.
+
+**Baseline:** 49 pass / 18 mismatch of 67 selected (the "23/67" figure the
+brief quoted was stale against a prior evidence snapshot; `--baseline auto`
+against the checked-in evidence showed `gained=26 lost=0` against this
+worktree's actual current state, i.e. other lanes' merged work already
+improved ruby well past that older number).
+
+**Finding: no missing capability in `amazing-text`/`amazing-text-provider`.**
+`amazing-layout`'s ruby code (`inline_ruby.rs`, `box_tree_ruby.rs`,
+`inline.rs`'s `apply_ruby_overhang`/`ruby_edge_space`) already calls
+`TextSystem::shape`/`shape_line` with full per-leaf `TextStyle` (including
+`direction`) and only needs a single independent-direction leaf per ruby
+base/annotation (which is exactly what `unicode-bidi: isolate` -- the CSS
+Ruby spec's default UA styling for `rb`/`rt` -- calls for), so
+`bidi_scopes: &[]` on those calls is correct as written, not a gap.
+Traced each of the 18 mismatches by reading the pinned WPT test source
+(`~/corpora/wpt/css/css-ruby/`) against `amazing-layout`'s own ruby code:
+
+- `ruby-overhang-spaces-{007,009,011,013,015,016,019}`,
+  `-align-{003,004}`, `-vertical-{004,005}` (11, the largest cluster):
+  `ruby_edge_space` (`crates/amazing-layout/src/inline.rs`) computes how
+  much of an adjacent whitespace run a wide ruby annotation may overhang;
+  the failing subset specifically combines tabs, ideographic spaces
+  (U+3000) and preserved end-of-line characters adjacent to the ruby,
+  where the already-passing majority of `ruby-overhang-spaces-*` use plain
+  ASCII spaces. `char::is_whitespace()` (used for the "full credit"
+  branch) already covers all three character classes, so the bug is more
+  likely in how the credit is walked/accumulated across a *run* of mixed
+  whitespace kinds, or in how `ruby.space_before`/`left_space`/`right_space`
+  combine at `apply_ruby_overhang`'s call site -- not something
+  text-provider's API surface is missing.
+- `break-within-bases/{nowrap,no-break-opportunity-at-end}` (2): line-break
+  opportunities inside a ruby base must stay suppressed except at true
+  base/annotation-pair boundaries; layout's own box tree owns which
+  offsets it asks `amazing-text-provider`'s `line_breaks` about, so this is
+  a box-tree-side bug, not a `line_breaks` gap.
+- `ruby-bidi-004`: verified against the WPT source that `dir=rtl`/
+  `unicode-bidi: isolate` should behave identically whether placed on the
+  outer `<ruby>`, an inner `<span>`, or the anonymous `<rb>` box.
+  `shape_line`/`bidi_analysis` already handle arbitrary per-leaf direction
+  correctly (established in TEXT-21); the mismatch is in
+  `box_tree_ruby.rs` not resolving the same `direction`/`unicode-bidi` for
+  an anonymous `<rb>` box as for an explicit one.
+- `ruby-intrinsic-isize-{001,003}`: min-content/max-content sizing across
+  multiple adjacent `<rb>` elements without an explicit pairing -- box
+  sizing, not shaping.
+- `interlinear-block-margin-box`, `ruby-text-collapse`
+  (`visibility: collapse`/`hidden` on `<rt>`): box generation/visibility,
+  not shaping.
+
+No trait request filed: every primitive ruby layout needs from
+`amazing-text-provider` (per-leaf shaping with an explicit direction,
+line-break opportunities, bidi analysis) already exists and is already
+used correctly by the call sites read above. Filed the above as a bug
+report (not a capability gap) to `.agents/layout/questions.md`, since
+misattributing it as a missing trait would send layout looking for the
+wrong kind of fix.
+
+No code change in `amazing-text`/`amazing-text-provider` this ticket.
+Render baseline for css-ruby unchanged (49/67). Gate: workspace nextest
+unchanged from TEXT-23's numbers (re-run to confirm zero losses after the
+`dev` merge to `512912d5`; see status.json for the exact count). Commit
+`<TEXT-24 sha>` (docs/lanes only).

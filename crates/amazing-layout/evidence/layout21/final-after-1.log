@@ -1,0 +1,2000 @@
+linux-run[layout]: boat from /Users/jMac/Projects/OpenSource/amazing-wt/layout (97d79da4, with uncommitted edits)
+linux-run[layout]: boat sandbox bx_cp5jbn5z (pool-layout)
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+warning: unused import: `LockOptions as WireLockOptions`
+ --> crates/amazing-process/src/storage.rs:4:69
+  |
+4 |     LockClient, LockInfo as WireLockInfo, LockMode as WireLockMode, LockOptions as WireLockOptions,
+  |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-process` (lib) generated 1 warning (run `cargo fix --lib -p amazing-process` to apply 1 suggestion)
+warning: unused imports: `Command`, `ExitCode`, and `ExitStatus`
+ --> crates/amazing/src/cmd/launch.rs:2:20
+  |
+2 | use std::process::{Command, ExitCode, ExitStatus};
+  |                    ^^^^^^^  ^^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::gui`
+ --> crates/amazing/src/cmd/launch.rs:3:5
+  |
+3 | use crate::gui;
+  |     ^^^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_host_storage.rs:3:25
+  |
+3 | use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
+  |                         ^^^^^^^^
+
+warning: unused import: `self`
+ --> crates/amazing/src/runtime_host_storage.rs:5:267
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{B...
+  |                                                                   ^^^^
+
+warning: unused imports: `PageMedia`, `load_page_media`, and `load_page_text`
+  --> crates/amazing/src/main.rs:23:12
+   |
+23 | use page::{PageMedia, load_page_media, load_page_text};
+   |            ^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates/amazing/src/runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates/amazing/src/runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `frame` is never used
+  --> crates/amazing/src/animation_scene.rs:40:19
+   |
+24 | impl AnimationScene {
+   | ------------------- method in this implementation
+...
+40 |     pub(crate) fn frame(
+   |                   ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `set_document_content_type` and `pump_now_with_render` are never used
+   --> crates/amazing/src/js_scheduler.rs:67:19
+    |
+ 42 | impl DriverScheduler {
+    | -------------------- methods in this implementation
+...
+ 67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+300 |     pub(crate) fn pump_now_with_render(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `scroll_y`, `history_index`, `history_length`, and `history` are never read
+   --> crates/amazing/src/navigator.rs:333:9
+    |
+330 | pub struct NavigationResult<T> {
+    |            ---------------- fields in this struct
+...
+333 |     pub scroll_y: i32,
+    |         ^^^^^^^^
+334 |     pub history_index: usize,
+    |         ^^^^^^^^^^^^^
+335 |     pub history_length: usize,
+    |         ^^^^^^^^^^^^^^
+336 |     pub history: Vec<String>,
+    |         ^^^^^^^
+
+warning: method `history_index` is never used
+   --> crates/amazing/src/navigator.rs:372:12
+    |
+350 | impl Navigator {
+    | -------------- method in this implementation
+...
+372 |     pub fn history_index(&self) -> Option<usize> {
+    |            ^^^^^^^^^^^^^
+
+warning: field `decoding` is never read
+  --> crates/amazing/src/page.rs:30:5
+   |
+24 | struct PageImage {
+   |        --------- field in this struct
+...
+30 |     decoding: amazing_media::loading::Decoding,
+   |     ^^^^^^^^
+
+warning: method `has_pending_lazy` is never used
+  --> crates/amazing/src/page.rs:66:19
+   |
+57 | impl PageMedia {
+   | -------------- method in this implementation
+...
+66 |     pub(crate) fn has_pending_lazy(&self) -> bool {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: function `load_page_text` is never used
+  --> crates/amazing/src/page.rs:90:15
+   |
+90 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+
+warning: struct `PixelMismatch` is never constructed
+  --> crates/amazing/src/render_oracle.rs:64:19
+   |
+64 | pub(crate) struct PixelMismatch {
+   |                   ^^^^^^^^^^^^^
+
+warning: function `first_pixel_mismatch` is never used
+  --> crates/amazing/src/render_oracle.rs:71:15
+   |
+71 | pub(crate) fn first_pixel_mismatch(candidate: &Surface, full: &Surface) -> Option<PixelMismatch> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates/amazing/src/runtime_binding_host.rs:71:17
+   |
+71 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+71 -     FontFaceSet(NodeIdx, Option<JsValue>),
+71 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `create_inert_document`, `set_document_content_type`, and `dispatch_window_event` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:165:19
+    |
+119 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+...
+165 |     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+182 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+200 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates/amazing/src/runtime_host_storage.rs:87:5
+   |
+84 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+87 |     cache: Rc<RefCell<PersistentCacheStorage>>,
+   |     ^^^^^
+
+warning: field `bucket` is never read
+   --> crates/amazing/src/runtime_host_storage.rs:129:20
+    |
+129 |     CacheStorage { bucket: String },
+    |     ------------   ^^^^^^
+    |     |
+    |     field in this variant
+
+warning: variant `Cache` is never constructed
+   --> crates/amazing/src/runtime_host_storage.rs:130:5
+    |
+119 | enum StorageObject {
+    |      ------------- variant in this enum
+...
+130 |     Cache { name: String },
+    |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates/amazing/src/runtime_host_storage.rs:404:8
+    |
+252 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+404 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: methods `fetch_request_record`, `fetch_response_record`, and `fetch_response_new` are never used
+   --> crates/amazing/src/runtime_host_net.rs:91:19
+    |
+ 66 | impl RuntimeBindingHost<'_> {
+    | --------------------------- methods in this implementation
+...
+ 91 |     pub(crate) fn fetch_request_record(&self, value: &JsValue) -> Result<ApiRequest, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+...
+ 99 |     pub(crate) fn fetch_response_record(&self, value: &JsValue) -> Result<ApiResponse, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+107 |     pub(crate) fn fetch_response_new(&mut self, response: ApiResponse) -> Result<JsValue, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: method `messaging_peer_owner` is never used
+   --> crates/amazing/src/runtime_host_messaging.rs:345:8
+    |
+122 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+345 |     fn messaging_peer_owner(&self, port: PortId) -> Option<ClientId> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ScrollFrame` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:31:19
+   |
+31 | pub(crate) struct ScrollFrame {
+   |                   ^^^^^^^^^^^
+
+warning: struct `DomScrollEvent` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:36:19
+   |
+36 | pub(crate) struct DomScrollEvent {
+   |                   ^^^^^^^^^^^^^^
+
+warning: methods `on_scroll_input`, `on_scroll_vsync`, `take_scroll_events`, `cancel_animation`, and `compositor` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:89:19
+    |
+ 41 | impl RetainedPropertyScene {
+    | -------------------------- methods in this implementation
+...
+ 89 |     pub(crate) fn on_scroll_input(
+    |                   ^^^^^^^^^^^^^^^
+...
+129 |     pub(crate) fn on_scroll_vsync(
+    |                   ^^^^^^^^^^^^^^^
+...
+145 |     pub(crate) fn take_scroll_events(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+226 |     pub(crate) fn cancel_animation(
+    |                   ^^^^^^^^^^^^^^^^
+...
+247 |     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    |                   ^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `save_snapshot` and `renderer_crashed` are never used
+   --> crates/amazing/src/runtime_host_ipc.rs:642:12
+    |
+408 | impl Driver {
+    | ----------- methods in this implementation
+...
+642 |     pub fn save_snapshot(
+    |            ^^^^^^^^^^^^^
+...
+723 |     pub fn renderer_crashed(&mut self, tab_id: u64) -> Result<Vec<u64>, String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: `amazing` (bin "amazing") generated 29 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 6 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.07s
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-paint v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-paint)
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+   Compiling amazing-a11y v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-a11y)
+warning: `amazing-js` (lib test) generated 5 warnings (5 duplicates)
+warning: function `ids` is never used
+  --> crates/amazing-a11y/src/test_support.rs:92:8
+   |
+92 | pub fn ids(doc: &AxDocument) -> Vec<AxNodeId> {
+   |        ^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `names` is never used
+  --> crates/amazing-a11y/src/test_support.rs:97:8
+   |
+97 | pub fn names(doc: &AxDocument) -> Vec<String> {
+   |        ^^^^^
+
+   Compiling amazing-compositor v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-compositor)
+warning: `amazing-a11y` (lib test) generated 2 warnings
+   Compiling amazing-canvas v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-canvas)
+   Compiling amazing-bindings v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-bindings)
+   Compiling amazing-process v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-process)
+warning: unused import: `LockOptions as WireLockOptions`
+ --> crates/amazing-process/src/storage.rs:4:69
+  |
+4 |     LockClient, LockInfo as WireLockInfo, LockMode as WireLockMode, LockOptions as WireLockOptions,
+  |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling amazing-image v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-image)
+warning: `amazing-process` (lib test) generated 1 warning (1 duplicate)
+warning: `amazing-process` (lib) generated 1 warning (run `cargo fix --lib -p amazing-process` to apply 1 suggestion)
+   Compiling amazing v0.0.1 (/home/user/amazing/wt/layout/crates/amazing)
+warning: unused imports: `Command`, `ExitCode`, and `ExitStatus`
+ --> crates/amazing/src/cmd/launch.rs:2:20
+  |
+2 | use std::process::{Command, ExitCode, ExitStatus};
+  |                    ^^^^^^^  ^^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::gui`
+ --> crates/amazing/src/cmd/launch.rs:3:5
+  |
+3 | use crate::gui;
+  |     ^^^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_host_storage.rs:3:25
+  |
+3 | use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
+  |                         ^^^^^^^^
+
+warning: unused import: `self`
+ --> crates/amazing/src/runtime_host_storage.rs:5:267
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{B...
+  |                                                                   ^^^^
+
+warning: unused imports: `PageMedia`, `load_page_media`, and `load_page_text`
+  --> crates/amazing/src/main.rs:23:12
+   |
+23 | use page::{PageMedia, load_page_media, load_page_text};
+   |            ^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates/amazing/src/runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates/amazing/src/runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `frame` is never used
+  --> crates/amazing/src/animation_scene.rs:40:19
+   |
+24 | impl AnimationScene {
+   | ------------------- method in this implementation
+...
+40 |     pub(crate) fn frame(
+   |                   ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `set_document_content_type` and `pump_now_with_render` are never used
+   --> crates/amazing/src/js_scheduler.rs:67:19
+    |
+ 42 | impl DriverScheduler {
+    | -------------------- methods in this implementation
+...
+ 67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+300 |     pub(crate) fn pump_now_with_render(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `scroll_y`, `history_index`, `history_length`, and `history` are never read
+   --> crates/amazing/src/navigator.rs:333:9
+    |
+330 | pub struct NavigationResult<T> {
+    |            ---------------- fields in this struct
+...
+333 |     pub scroll_y: i32,
+    |         ^^^^^^^^
+334 |     pub history_index: usize,
+    |         ^^^^^^^^^^^^^
+335 |     pub history_length: usize,
+    |         ^^^^^^^^^^^^^^
+336 |     pub history: Vec<String>,
+    |         ^^^^^^^
+
+warning: method `history_index` is never used
+   --> crates/amazing/src/navigator.rs:372:12
+    |
+350 | impl Navigator {
+    | -------------- method in this implementation
+...
+372 |     pub fn history_index(&self) -> Option<usize> {
+    |            ^^^^^^^^^^^^^
+
+warning: field `decoding` is never read
+  --> crates/amazing/src/page.rs:30:5
+   |
+24 | struct PageImage {
+   |        --------- field in this struct
+...
+30 |     decoding: amazing_media::loading::Decoding,
+   |     ^^^^^^^^
+
+warning: method `has_pending_lazy` is never used
+  --> crates/amazing/src/page.rs:66:19
+   |
+57 | impl PageMedia {
+   | -------------- method in this implementation
+...
+66 |     pub(crate) fn has_pending_lazy(&self) -> bool {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: function `load_page_text` is never used
+  --> crates/amazing/src/page.rs:90:15
+   |
+90 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+
+warning: struct `PixelMismatch` is never constructed
+  --> crates/amazing/src/render_oracle.rs:64:19
+   |
+64 | pub(crate) struct PixelMismatch {
+   |                   ^^^^^^^^^^^^^
+
+warning: function `first_pixel_mismatch` is never used
+  --> crates/amazing/src/render_oracle.rs:71:15
+   |
+71 | pub(crate) fn first_pixel_mismatch(candidate: &Surface, full: &Surface) -> Option<PixelMismatch> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates/amazing/src/runtime_binding_host.rs:71:17
+   |
+71 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+71 -     FontFaceSet(NodeIdx, Option<JsValue>),
+71 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `create_inert_document`, `set_document_content_type`, and `dispatch_window_event` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:165:19
+    |
+119 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+...
+165 |     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+182 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+200 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates/amazing/src/runtime_host_storage.rs:87:5
+   |
+84 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+87 |     cache: Rc<RefCell<PersistentCacheStorage>>,
+   |     ^^^^^
+
+warning: field `bucket` is never read
+   --> crates/amazing/src/runtime_host_storage.rs:129:20
+    |
+129 |     CacheStorage { bucket: String },
+    |     ------------   ^^^^^^
+    |     |
+    |     field in this variant
+
+warning: variant `Cache` is never constructed
+   --> crates/amazing/src/runtime_host_storage.rs:130:5
+    |
+119 | enum StorageObject {
+    |      ------------- variant in this enum
+...
+130 |     Cache { name: String },
+    |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates/amazing/src/runtime_host_storage.rs:404:8
+    |
+252 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+404 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: methods `fetch_request_record`, `fetch_response_record`, and `fetch_response_new` are never used
+   --> crates/amazing/src/runtime_host_net.rs:91:19
+    |
+ 66 | impl RuntimeBindingHost<'_> {
+    | --------------------------- methods in this implementation
+...
+ 91 |     pub(crate) fn fetch_request_record(&self, value: &JsValue) -> Result<ApiRequest, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+...
+ 99 |     pub(crate) fn fetch_response_record(&self, value: &JsValue) -> Result<ApiResponse, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+107 |     pub(crate) fn fetch_response_new(&mut self, response: ApiResponse) -> Result<JsValue, Throw> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: method `messaging_peer_owner` is never used
+   --> crates/amazing/src/runtime_host_messaging.rs:345:8
+    |
+122 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+345 |     fn messaging_peer_owner(&self, port: PortId) -> Option<ClientId> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ScrollFrame` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:31:19
+   |
+31 | pub(crate) struct ScrollFrame {
+   |                   ^^^^^^^^^^^
+
+warning: struct `DomScrollEvent` is never constructed
+  --> crates/amazing/src/runtime_host_compositor.rs:36:19
+   |
+36 | pub(crate) struct DomScrollEvent {
+   |                   ^^^^^^^^^^^^^^
+
+warning: methods `on_scroll_input`, `on_scroll_vsync`, `take_scroll_events`, `cancel_animation`, and `compositor` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:89:19
+    |
+ 41 | impl RetainedPropertyScene {
+    | -------------------------- methods in this implementation
+...
+ 89 |     pub(crate) fn on_scroll_input(
+    |                   ^^^^^^^^^^^^^^^
+...
+129 |     pub(crate) fn on_scroll_vsync(
+    |                   ^^^^^^^^^^^^^^^
+...
+145 |     pub(crate) fn take_scroll_events(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+226 |     pub(crate) fn cancel_animation(
+    |                   ^^^^^^^^^^^^^^^^
+...
+247 |     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    |                   ^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `save_snapshot` and `renderer_crashed` are never used
+   --> crates/amazing/src/runtime_host_ipc.rs:642:12
+    |
+408 | impl Driver {
+    | ----------- methods in this implementation
+...
+642 |     pub fn save_snapshot(
+    |            ^^^^^^^^^^^^^
+...
+723 |     pub fn renderer_crashed(&mut self, tab_id: u64) -> Result<Vec<u64>, String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: unused import: `BoundPropertyValue`
+   --> crates/amazing/src/runtime_host_compositor.rs:254:45
+    |
+254 |     use amazing_compositor::{BoundProperty, BoundPropertyValue, CompositingReasons,
+    |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::process::Command`
+ --> crates/amazing/tests/phase9_gpu.rs:1:5
+  |
+1 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing` (test "phase9_gpu") generated 1 warning (run `cargo fix --test "phase9_gpu" -p amazing` to apply 1 suggestion)
+warning: function `run_image_utility_child` is never used
+  --> crates/amazing/tests/../src/runtime_host_replaced_content.rs:51:15
+   |
+51 | pub(crate) fn run_image_utility_child() -> ExitCode {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `UtilityImageDecoder` is never constructed
+  --> crates/amazing/tests/../src/runtime_host_replaced_content.rs:66:19
+   |
+66 | pub(crate) struct UtilityImageDecoder {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: method `decode` is never used
+  --> crates/amazing/tests/../src/runtime_host_replaced_content.rs:71:19
+   |
+70 | impl UtilityImageDecoder {
+   | ------------------------ method in this implementation
+71 |     pub(crate) fn decode(&mut self, bytes: &[u8]) -> Result<amazing_media::Image, String> {
+   |                   ^^^^^^
+
+warning: variant `Remove` is never constructed
+   --> crates/amazing/tests/../src/runtime_host_replaced_content.rs:126:5
+    |
+125 | pub(crate) enum LayoutPaintDamage<'a> {
+    |                 ----------------- variant in this enum
+126 |     Remove(StablePaintItemKey),
+    |     ^^^^^^
+
+warning: methods `set_document_content_type` and `pump_now_with_render` are never used
+   --> crates/amazing/src/js_scheduler.rs:67:19
+    |
+ 42 | impl DriverScheduler {
+    | -------------------- methods in this implementation
+...
+ 67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+300 |     pub(crate) fn pump_now_with_render(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `set_document_content_type` and `dispatch_window_event` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:182:19
+    |
+119 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+...
+182 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+200 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `host` is never read
+  --> crates/amazing/src/runtime_host_replaced_content.rs:67:5
+   |
+66 | pub(crate) struct UtilityImageDecoder {
+   |                   ------------------- field in this struct
+67 |     host: Option<amazing_process::ProcessHost>,
+   |     ^^^^
+
+warning: `amazing` (test "runtime_host_replaced_content") generated 4 warnings
+warning: `amazing-css` (lib test) generated 1 warning (1 duplicate)
+warning: `amazing` (bin "amazing") generated 29 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 6 suggestions)
+warning: `amazing` (bin "amazing" test) generated 23 warnings (19 duplicates) (run `cargo fix --bin "amazing" -p amazing --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.02s
+────────────
+ Nextest run ID ffc45d24-e429-4824-b7ae-9b7f029efd29 with nextest profile: default
+    Starting 2798 tests across 132 binaries (10 tests skipped)
+        PASS [   0.026s] (   1/2798) amazing::css3_stylesheets nested_implicit_scopes_do_not_escape_their_owners
+        PASS [   0.031s] (   2/2798) amazing::css3_stylesheets layout_command_preserves_implicit_scope
+        PASS [   0.022s] (   3/2798) amazing::css3_stylesheets unclosed_sheet_does_not_consume_the_next_sheet
+        PASS [   0.039s] (   4/2798) amazing::css3_stylesheets splitting_sheets_preserves_cascade_and_extra_file_order
+        PASS [   0.028s] (   5/2798) amazing::html2_driver http_charset_uses_raw_header_while_xml_media_type_still_selects_xml
+        PASS [   0.017s] (   6/2798) amazing::html2_driver local_html_bytes_obey_bom_meta_fallback_and_replacement
+        PASS [   0.013s] (   7/2798) amazing::html2_driver local_utf16_html_and_xml_mode_remain_distinct
+        PASS [   0.147s] (   8/2798) amazing::css3_stylesheets interleaved_external_and_inline_sheets_preserve_rendered_cascade
+        PASS [   0.009s] (   9/2798) amazing::js4_event_loop_adapter native_forwarding_waits_for_admission_and_rearms_after_delivery
+        PASS [   0.012s] (  10/2798) amazing::js4_event_loop_adapter real_loop_orders_script_p_q_chained_r_before_timer_b_and_cancels_frame
+        PASS [   0.012s] (  11/2798) amazing::js4_event_loop_adapter real_loop_preserves_native_interleaving_with_reserved_capacity
+        PASS [   0.006s] (  12/2798) amazing::js4_event_loop_adapter thrown_callback_still_completes_its_checkpoint_and_runs_later_timer
+        PASS [   0.008s] (  13/2798) amazing::js4_event_loop_adapter thrown_script_still_forwards_earlier_scheduling_requests
+        PASS [   0.208s] (  14/2798) amazing::css3_stylesheets implicit_scope_uses_each_style_or_link_owner_parent
+        PASS [   0.022s] (  15/2798) amazing::phase2_style html_plus_css_yields_computed_styles
+        PASS [   0.185s] (  16/2798) amazing::phase3_layout wpt_css2_subset_report
+        PASS [   0.027s] (  17/2798) amazing::phase5_fetch_parse fetched_http_body_is_parsed_into_dom
+        PASS [   0.007s] (  18/2798) amazing::phase5_fetch_parse http_error_is_rejected_from_headers_without_reading_body
+        PASS [   0.028s] (  19/2798) amazing::phase5_flex_grid flex_align_content_stretch_grows_lines_and_items
+        PASS [   0.023s] (  20/2798) amazing::phase5_flex_grid flex_auto_margin_absorption_advances_following_items
+        PASS [   0.035s] (  21/2798) amazing::phase5_flex_grid flex_auto_minimum_depends_on_scrollable_overflow
+        PASS [   0.018s] (  22/2798) amazing::phase5_flex_grid flex_auto_minimum_preserves_unbreakable_content
+        PASS [   0.018s] (  23/2798) amazing::phase5_flex_grid flex_basis_first_shorthand_assigns_grow_and_shrink
+        PASS [   0.369s] (  24/2798) amazing::phase35_flex_grid wpt_flexbox_grid_subset_report
+        PASS [   0.019s] (  25/2798) amazing::phase5_flex_grid flex_column_auto_margin_absorbs_free_space_before_justify
+        PASS [   0.017s] (  26/2798) amazing::phase5_flex_grid flex_column_redistributes_after_a_max_height_freeze
+        PASS [   0.021s] (  27/2798) amazing::phase5_flex_grid flex_flow_shorthand_enables_wrapping
+        PASS [   0.017s] (  28/2798) amazing::phase5_flex_grid flex_infinite_grow_factor_dominates_finite_factors
+        PASS [   0.016s] (  29/2798) amazing::phase5_flex_grid flex_line_cross_size_counts_item_border_once
+        PASS [   0.017s] (  30/2798) amazing::phase5_flex_grid flex_min_content_maximum_clamps_the_flex_basis
+        PASS [   0.016s] (  31/2798) amazing::phase5_flex_grid flex_min_content_minimum_uses_the_child_contribution
+        PASS [   0.017s] (  32/2798) amazing::phase5_flex_grid flex_partial_shrink_uses_unscaled_factor_sum
+        PASS [   0.015s] (  33/2798) amazing::phase5_flex_grid flex_redistributes_space_after_an_item_hits_its_maximum
+        PASS [   0.020s] (  34/2798) amazing::phase5_flex_grid grid_auto_fill_counts_the_gap_between_repetitions
+        PASS [   0.024s] (  35/2798) amazing::phase5_flex_grid flex_rtl_gap_matches_logical_inline_end_margin
+        PASS [   0.020s] (  36/2798) amazing::phase5_flex_grid grid_auto_margins_center_an_item_without_sizing_the_track
+        PASS [   0.031s] (  37/2798) amazing::phase5_flex_grid grid_auto_repeat_subtracts_fixed_tracks_on_both_sides
+        PASS [   0.015s] (  38/2798) amazing::phase5_flex_grid grid_flexible_tracks_restart_when_a_base_exceeds_its_fraction
+        PASS [   0.016s] (  39/2798) amazing::phase5_flex_grid grid_indefinite_row_auto_repeat_uses_one_repetition
+        PASS [   0.014s] (  40/2798) amazing::phase5_flex_grid grid_inline_start_is_on_the_right_in_rtl
+        PASS [   0.017s] (  41/2798) amazing::phase5_flex_grid grid_maximizes_tracks_up_to_finite_growth_limits
+        PASS [   0.020s] (  42/2798) amazing::phase5_flex_grid grid_legacy_gap_aliases_separate_tracks
+        PASS [   0.016s] (  43/2798) amazing::phase5_flex_grid grid_named_line_occurrences_expand_through_auto_repeat
+        PASS [   0.021s] (  44/2798) amazing::phase5_flex_grid grid_minmax_floors_a_smaller_maximum_by_its_minimum
+        PASS [   0.015s] (  45/2798) amazing::phase5_flex_grid grid_named_line_places_an_item_on_the_matching_track
+        PASS [   0.015s] (  46/2798) amazing::phase5_flex_grid grid_none_template_creates_no_phantom_explicit_track
+        PASS [   0.014s] (  47/2798) amazing::phase5_flex_grid grid_rejects_unbounded_line_occurrences_before_track_allocation
+        PASS [   0.021s] (  48/2798) amazing::phase5_flex_grid grid_row_auto_fill_uses_the_definite_block_size
+        PASS [   0.017s] (  49/2798) amazing::phase5_flex_grid grid_template_accepts_adjacent_line_name_blocks
+        PASS [   0.014s] (  50/2798) amazing::phase5_flex_grid grid_template_longhand_rejects_reserved_line_names
+        PASS [   0.021s] (  51/2798) amazing::phase5_flex_grid grid_template_shorthand_populates_both_track_axes
+        PASS [   0.019s] (  52/2798) amazing::phase5_flex_grid invalid_flex_flow_does_not_override_an_earlier_valid_declaration
+        PASS [   0.017s] (  53/2798) amazing::phase5_flex_grid invalid_gap_shorthand_does_not_override_earlier_valid_longhands
+        PASS [   0.024s] (  54/2798) amazing::phase5_flex_grid invalid_flex_shorthand_does_not_override_earlier_valid_longhands
+        PASS [   0.020s] (  55/2798) amazing::phase5_flex_grid invalid_grid_template_does_not_override_an_earlier_valid_declaration
+        PASS [   0.029s] (  56/2798) amazing::phase5_flex_grid invalid_grid_gap_aliases_do_not_override_earlier_valid_gap
+        PASS [   0.012s] (  57/2798) amazing::phase5_flex_grid logical_margin_mapping_uses_the_computed_inherited_direction
+        PASS [   0.014s] (  58/2798) amazing::phase5_flex_grid repeated_grid_line_names_preserve_identifier_case
+        PASS [   0.028s] (  59/2798) amazing::phase5_flex_grid logical_margins_compete_in_cascade_order_and_preserve_auto
+        PASS [   0.013s] (  60/2798) amazing::phase6_paint background_clip_content_box_excludes_padding
+        PASS [   0.028s] (  61/2798) amazing::phase5_flex_grid variable_dependent_flex_and_grid_shorthands_expand_after_substitution
+        PASS [   0.012s] (  62/2798) amazing::phase6_paint border_radius_shapes_the_background_corner
+        PASS [   0.060s] (  63/2798) amazing::phase6_paint deeply_nested_effect_groups_fail_closed
+        PASS [   0.065s] (  64/2798) amazing::phase6_paint deeply_nested_rounded_clips_fail_closed
+        PASS [   0.012s] (  65/2798) amazing::phase6_paint double_border_leaves_the_middle_third_for_the_background
+        PASS [   0.014s] (  66/2798) amazing::phase6_paint hidden_overflow_couples_visible_cross_axis_to_auto
+        PASS [   0.019s] (  67/2798) amazing::phase6_paint fixed_auto_stacking_context_is_atomic_against_a_positive_sibling
+        PASS [   0.011s] (  68/2798) amazing::phase6_paint inset_shadow_paints_inside_the_padding_edge
+        PASS [   0.011s] (  69/2798) amazing::phase6_paint invalid_later_transform_does_not_override_valid_transform
+        PASS [   0.014s] (  70/2798) amazing::phase6_paint invalid_later_z_index_does_not_override_valid_z_index
+        PASS [   0.017s] (  71/2798) amazing::phase6_paint nested_stacking_context_is_atomic_against_a_higher_sibling
+        PASS [   0.012s] (  72/2798) amazing::phase6_paint opacity_composites_the_whole_box_group_once
+        PASS [   0.014s] (  73/2798) amazing::phase6_paint overflow_x_longhand_clips_descendant_paint
+        PASS [   0.016s] (  74/2798) amazing::phase6_paint percentage_opacity_composites_as_a_number
+        PASS [   0.016s] (  75/2798) amazing::phase6_paint positioned_auto_paints_after_later_in_flow_content
+        PASS [   0.016s] (  76/2798) amazing::phase6_paint positioned_auto_replays_non_context_ancestor_clip
+        PASS [   0.015s] (  77/2798) amazing::phase6_paint positioned_siblings_paint_in_z_index_order
+        PASS [   0.014s] (  78/2798) amazing::phase6_paint rounded_overflow_clips_descendant_paint
+        PASS [   0.031s] (  79/2798) amazing::phase6_paint positive_descendant_escapes_a_non_context_ancestor
+        PASS [   0.011s] (  80/2798) amazing::phase6_paint translate_transform_moves_the_painted_subtree
+        PASS [   0.013s] (  81/2798) amazing::phase6_paint variable_radius_expands_before_paint
+        PASS [   0.012s] (  82/2798) amazing::phase6_paint zero_blur_box_shadow_paints_behind_the_box
+        PASS [   0.005s] (  83/2798) amazing::phase9_media audio_info_command_reports_decoded_pcm_stream
+        PASS [   0.006s] (  84/2798) amazing::phase9_webrtc chromium_offer_produces_direction_and_parameter_compatible_answer
+        PASS [   0.005s] (  85/2798) amazing::phase9_webrtc chromium_sdp_roundtrip_keeps_relay_candidates_and_dynamic_payloads
+        PASS [   0.010s] (  86/2798) amazing::phase9_webrtc h264_roundtrip_probe_encodes_and_decodes_changed_pixels
+        PASS [   0.023s] (  87/2798) amazing::phase9_webrtc h264_rtp_probe_fragments_and_reconstructs_real_access_unit
+        PASS [   0.007s] (  88/2798) amazing::phase9_webrtc opus_probe_encodes_decodes_and_conceals
+        PASS [   0.005s] (  89/2798) amazing::phase9_webrtc rtp_jitter_probe_reorders_and_decodes_two_codecs
+        PASS [   0.006s] (  90/2798) amazing::phase9_webrtc sdp_roundtrip_command_reports_ice_dtls_media_summary
+        PASS [   0.011s] (  91/2798) amazing::phase9_webrtc secure_media_loopback_uses_vetted_dtls_srtp
+        PASS [   1.126s] (  92/2798) amazing::invalidation_oracle diagnostic_frame_matches_full_render_after_testrendered_mutation
+        PASS [   0.096s] (  93/2798) amazing::phase9_media render_command_loads_and_paints_relative_image_media
+        PASS [   0.005s] (  94/2798) amazing::phase9_webrtc turn_probe_authenticates_allocates_relays_and_deletes
+        PASS [   0.004s] (  95/2798) amazing::phase9_webrtc video_frame_probe_reorders_and_drops_damage
+        PASS [   0.015s] (  96/2798) amazing::phase9_webrtc vp8_decode_probe_reconstructs_key_and_interframes
+        PASS [   0.004s] (  97/2798) amazing::phase9_webrtc webrtc_loopback_command_completes_stun_and_rtp_exchange
+        PASS [   2.365s] (  98/2798) amazing::invalidation_oracle diagnostic_frame_matches_full_render_for_effects_scroller
+        PASS [   0.005s] (  99/2798) amazing::render_wpt fixed_render_rejects_unbounded_dimensions
+        PASS [   0.054s] ( 100/2798) amazing::render_wpt fixed_render_writes_the_exact_requested_viewport
+        PASS [   0.749s] ( 101/2798) amazing::render_wpt wait_timeout_and_page_script_error_do_not_write_images
+        PASS [   0.017s] ( 102/2798) amazing::runtime_host_replaced_content inline_replaced_content_retains_and_keeps_the_root_scroll_owner
+        PASS [   0.002s] ( 103/2798) amazing::runtime_host_replaced_content lazy_request_starts_after_viewport_intersection_and_rejects_stale_decode
+        PASS [   0.002s] ( 104/2798) amazing::runtime_host_replaced_content picture_selects_only_preceding_compatible_source
+        PASS [   0.002s] ( 105/2798) amazing::runtime_host_replaced_content picture_source_mutation_invalidates_only_following_images
+        PASS [   0.002s] ( 106/2798) amazing::runtime_host_replaced_content synthetic_layout_damage_uses_dom_generation_and_only_changes_one_raster
+        PASS [   0.016s] ( 107/2798) amazing::xml_dispatch html_script_failures_remain_renderer_failures_not_xml_errors
+        PASS [   0.078s] ( 108/2798) amazing::xml_dispatch http_xml_mime_types_dispatch_without_using_url_extensions
+        PASS [   0.078s] ( 109/2798) amazing::xml_dispatch malformed_xml_is_fatal_in_every_file_document_command_without_html_recovery
+        PASS [   0.007s] ( 110/2798) amazing::xml_dispatch unloaded_external_dtd_entities_have_a_distinct_unsupported_exit
+        PASS [   0.085s] ( 111/2798) amazing::xml_dispatch valid_static_xhtml_renders_the_same_nonwhite_pixels_as_html
+        PASS [   0.013s] ( 112/2798) amazing::xml_dispatch xml_files_preserve_case_and_do_not_gain_an_html_document
+        PASS [   0.078s] ( 113/2798) amazing::xml_dispatch xml_scripts_handlers_and_domrun_are_not_executed_while_html_scripts_still_run
+        PASS [   0.047s] ( 114/2798) amazing::bin/amazing animation_scene::tests::computed_style_change_starts_transition_and_samples_intermediate_width
+        PASS [   0.041s] ( 115/2798) amazing::bin/amazing animation_scene::tests::css14_styles_drive_engine_samples_and_transition_lifecycle
+        PASS [   0.021s] ( 116/2798) amazing::bin/amazing animation_scene::tests::transition_sample_preserves_animation_origin_under_it
+        PASS [   0.004s] ( 117/2798) amazing::bin/amazing browser_peer::tests::bounded_http_parser_reads_exact_body_and_rejects_oversize
+        PASS [   0.004s] ( 118/2798) amazing::bin/amazing cmd::js::tests::root_relative_resources_use_the_wpt_root_not_the_test_directory
+        PASS [   0.003s] ( 119/2798) amazing::bin/amazing cmd::real_pages::tests::json_string_escapes_control_and_quote
+        PASS [   0.222s] ( 120/2798) amazing::bin/amazing cmd::render::oracle_trace_tests::class_opacity_uses_validated_property_scene
+        PASS [   0.196s] ( 121/2798) amazing::bin/amazing cmd::render::oracle_trace_tests::inline_opacity_uses_validated_property_scene
+        PASS [   0.786s] ( 122/2798) amazing::bin/amazing cmd::render::oracle_trace_tests::parallel_tiles_present_a_complete_frame_after_vsync
+        PASS [   0.094s] ( 123/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::animation_frame_removes_wait_class_after_first_paint
+        PASS [   0.109s] ( 124/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::color_and_opacity_samples_reach_final_paint
+        PASS [   0.111s] ( 125/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::css_animation_end_event_releases_wait_and_paints_final_sample
+        PASS [   0.108s] ( 126/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::important_width_overrides_animation_in_layout
+        PASS [   5.006s] ( 127/2798) amazing::phase9_webrtc secure_media_two_processes_exchange_protected_media
+        PASS [   1.479s] ( 128/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::missing_wait_removal_is_explicit_unsupported_without_image
+        PASS [   0.026s] ( 129/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::root_viewport_font_size_uses_the_render_width
+        PASS [   0.077s] ( 130/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::static_page_keeps_ordinary_render_pixels
+        PASS [   0.080s] ( 131/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::test_rendered_follows_first_paint_once_and_repaints_mutated_layout
+        PASS [   0.104s] ( 132/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::timer_removes_wait_class_at_bounded_checkpoint
+        PASS [   0.116s] ( 133/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::transition_end_event_follows_testrendered_style_change
+        PASS [   0.004s] ( 134/2798) amazing::bin/amazing cmd::webrtc::tests::chromium_offer_selects_dynamic_opus_and_h264_payloads
+        PASS [   0.003s] ( 135/2798) amazing::bin/amazing cmd::wpt_harness::any_window_tests::any_window_wrapper_obeys_upstream_global_selection
+        PASS [   0.003s] ( 136/2798) amazing::bin/amazing cmd::wpt_harness::any_window_tests::any_window_wrapper_orders_upstream_metadata_before_source
+        PASS [   0.047s] ( 137/2798) amazing::bin/amazing document::tests::stream_consumes_before_final_read_and_matches_buffered_decoding
+        PASS [   0.004s] ( 138/2798) amazing::bin/amazing document::tests::streamed_xml_keeps_buffered_mode_dump_and_fatal_errors
+        PASS [   0.003s] ( 139/2798) amazing::bin/amazing document::tests::transport_charset_reads_raw_content_type_parameters
+        PASS [   0.003s] ( 140/2798) amazing::bin/amazing document::tests::xml_mode_uses_file_extensions_and_recognized_mime_types
+        PASS [   0.016s] ( 141/2798) amazing::bin/amazing driver_tests::bare_window_event_target_calls_coerce_nullish_this
+        PASS [   0.016s] ( 142/2798) amazing::bin/amazing driver_tests::binding_install_mutates_the_parsed_dom_and_keeps_child_nodes_live
+        PASS [   0.016s] ( 143/2798) amazing::bin/amazing driver_tests::binding_string_boundary_round_trips_lone_surrogate_without_replacement
+        PASS [   0.015s] ( 144/2798) amazing::bin/amazing driver_tests::constructed_document_has_xml_metadata_without_a_browsing_context
+        PASS [   0.015s] ( 145/2798) amazing::bin/amazing driver_tests::custom_elements_registry_installs_and_when_defined_resolves
+        PASS [   0.016s] ( 146/2798) amazing::bin/amazing driver_tests::detached_created_element_has_live_style
+        PASS [   0.003s] ( 147/2798) amazing::bin/amazing driver_tests::document_title_ignores_svg_title_elements
+        PASS [   0.003s] ( 148/2798) amazing::bin/amazing driver_tests::dom_host_set_attribute_queues_same_value_and_only_named_attribute
+        PASS [   0.015s] ( 149/2798) amazing::bin/amazing driver_tests::dom_mixin_unscopables_are_on_the_declaring_prototype
+        PASS [   0.018s] ( 150/2798) amazing::bin/amazing driver_tests::dom_parser_documents_share_the_arena_without_running_scripts
+        PASS [   0.020s] ( 151/2798) amazing::bin/amazing driver_tests::focus_updates_active_element_and_dispatches_ordered_focus_events
+        PASS [   0.019s] ( 152/2798) amazing::bin/amazing driver_tests::form_collections_and_validity_use_native_brands_and_live_hooks
+        PASS [   0.017s] ( 153/2798) amazing::bin/amazing driver_tests::form_date_and_document_metadata_use_current_driver_state
+        PASS [   0.016s] ( 154/2798) amazing::bin/amazing driver_tests::form_pattern_uses_v_mode_and_full_string_matching
+        PASS [   0.016s] ( 155/2798) amazing::bin/amazing driver_tests::location_exposes_live_url_components_navigation_and_ancestor_origins
+        PASS [   0.004s] ( 156/2798) amazing::bin/amazing driver_tests::malformed_page_font_warns_without_advancing_font_generation
+        PASS [   0.018s] ( 157/2798) amazing::bin/amazing driver_tests::put_forwards_assignments_keep_live_token_lists_and_location
+        PASS [   0.017s] ( 158/2798) amazing::bin/amazing driver_tests::shadow_root_uses_its_interface_and_slotchange_reaches_the_event_loop
+        PASS [   0.015s] ( 159/2798) amazing::bin/amazing driver_tests::xhr_inert_document_hook_decodes_xml_and_reports_parse_failure
+        PASS [   0.015s] ( 160/2798) amazing::bin/amazing js_scheduler::tests::abort_signal_timeout_fires_from_driver_timer_queue
+        PASS [   1.457s] ( 161/2798) amazing::bin/amazing cmd::render::reftest_protocol_tests::page_and_event_exceptions_cannot_become_passing_images
+        PASS [   0.028s] ( 162/2798) amazing::bin/amazing js_scheduler::tests::driver_drains_after_thrown_script_and_callback
+        PASS [   0.016s] ( 163/2798) amazing::bin/amazing js_scheduler::tests::driver_mutation_flag_batches_until_checkpoint
+        PASS [   0.030s] ( 164/2798) amazing::bin/amazing js_scheduler::tests::driver_native_mutation_preserves_capacity_and_rearms
+        PASS [   0.028s] ( 165/2798) amazing::bin/amazing js_scheduler::tests::driver_orders_timer_promise_microtask_and_frame_cancellation
+        PASS [   0.017s] ( 166/2798) amazing::bin/amazing js_scheduler::tests::driver_render_hook_brackets_animation_frames
+        PASS [   0.015s] ( 167/2798) amazing::bin/amazing js_scheduler::tests::driver_retains_taken_request_after_downstream_failure
+        PASS [   0.003s] ( 168/2798) amazing::bin/amazing navigator::tests::history_state_wire_preserves_cycles_and_rejects_bad_references
+        PASS [   0.011s] ( 169/2798) amazing::bin/amazing navigator::tests::history_state_crosses_wire_into_new_realm
+        PASS [   0.003s] ( 170/2798) amazing::bin/amazing navigator::tests::one_tab_restores_same_and_cross_document_scroll
+        PASS [   0.004s] ( 171/2798) amazing::bin/amazing page::font_loader::tests::css_face_descriptors_convert_to_provider_contract
+        PASS [   0.003s] ( 172/2798) amazing::bin/amazing page::font_loader::tests::imports_ignore_comments_nested_rules_and_quoted_semicolons
+        PASS [   0.003s] ( 173/2798) amazing::bin/amazing page::font_loader::tests::reversed_face_ranges_are_normalized_before_registration
+        PASS [   0.016s] ( 174/2798) amazing::bin/amazing page::font_loader::tests::http_font_uses_stylesheet_base_and_cors_service
+        PASS [   0.013s] ( 175/2798) amazing::bin/amazing page::tests::data_urls_supply_image_and_stylesheet_bytes
+        PASS [   0.032s] ( 176/2798) amazing::bin/amazing page::tests::data_svg_marker_uses_generated_image_cache_and_paints
+        PASS [   0.023s] ( 177/2798) amazing::bin/amazing page::tests::generated_images_share_the_decoded_url_cache_with_img_nodes
+        PASS [   0.028s] ( 178/2798) amazing::bin/amazing page::tests::generated_url_pixels_reach_the_rendered_page
+        PASS [   0.017s] ( 179/2798) amazing::bin/amazing page::tests::image_resources_for_replaced_elements_share_paint_decoding
+        PASS [   0.003s] ( 180/2798) amazing::bin/amazing page::tests::inline_stylesheet_uses_document_url_as_base
+        PASS [   0.043s] ( 181/2798) amazing::bin/amazing page::tests::image_intrinsic_size_ignores_html_and_css_dimensions
+        PASS [   0.015s] ( 182/2798) amazing::bin/amazing page::tests::lazy_image_loads_only_after_its_box_enters_viewport
+        PASS [   0.003s] ( 183/2798) amazing::bin/amazing render_oracle::tests::first_pixel_reports_coordinates_and_both_colors
+        PASS [   0.017s] ( 184/2798) amazing::bin/amazing page::tests::picture_and_density_candidates_select_intrinsic_css_size
+        PASS [   0.020s] ( 185/2798) amazing::bin/amazing render_oracle::tests::style_oracle_names_the_first_changed_property
+        PASS [   0.005s] ( 186/2798) amazing::bin/amazing runtime_binding_host::compositor::property_scene_tests::animation_vsync_uses_retained_scene_and_returns_final_css_update
+        PASS [   0.010s] ( 187/2798) amazing::bin/amazing runtime_binding_host::compositor::property_scene_tests::css13_attribute_delta_updates_bound_nodes_without_recompute
+        PASS [   0.046s] ( 188/2798) amazing::bin/amazing render_oracle::tests::journal_attribute_recalculates_a_stable_node_without_full_style
+        PASS [   0.010s] ( 189/2798) amazing::bin/amazing runtime_binding_host::compositor::property_scene_tests::css13b_opacity_class_mutation_skips_upstream_and_matches_full_frame
+        PASS [   0.023s] ( 190/2798) amazing::bin/amazing runtime_binding_host::compositor::property_scene_tests::scroll_frame_oracle_has_zero_upstream_calls_and_async_event
+        PASS [   0.019s] ( 191/2798) amazing::bin/amazing runtime_binding_host::dom_bindings::tests::dom_exception_uses_inherited_accessors_and_native_error_identity
+        PASS [   0.016s] ( 192/2798) amazing::bin/amazing runtime_binding_host::dom_bindings::tests::native_message_event_preserves_identity_and_freezes_ports_without_user_code
+        PASS [   0.025s] ( 193/2798) amazing::bin/amazing runtime_binding_host::image_loader_tests::html_image_properties_and_decode_observe_loaded_pixels
+        PASS [   0.016s] ( 194/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::broadcast_channel_is_named_and_skips_its_own_sender
+        PASS [   0.016s] ( 195/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::entangled_ports_deliver_structured_clone_at_checkpoint
+        PASS [   0.015s] ( 196/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::message_port_is_an_instance_and_onmessage_starts_it
+        PASS [   0.015s] ( 197/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::post_message_validates_target_origin_transfer_and_arity
+        PASS [   0.015s] ( 198/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::two_channels_in_one_document_receive_each_other
+        PASS [   0.015s] ( 199/2798) amazing::bin/amazing runtime_binding_host::runtime_host_messaging::tests::window_post_message_reaches_the_onmessage_handler
+        PASS [   0.015s] ( 200/2798) amazing::bin/amazing runtime_binding_host::runtime_host_net::tests::fetch_wrappers_do_not_alias_storage_wrappers
+        PASS [   0.085s] ( 201/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_blocked_upgrade_resumes_after_close
+        PASS [   0.017s] ( 202/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_compares_binary_date_and_array_keys
+        PASS [   0.017s] ( 203/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_compound_key_path_round_trips
+        PASS [   0.017s] ( 204/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_preserves_undefined_through_commit
+        PASS [   0.018s] ( 205/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_structured_clone_preserves_cycles_and_shared_identity
+        PASS [   0.018s] ( 206/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::indexeddb_upgrade_request_commits_then_reads_record
+        PASS [   0.027s] ( 207/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::local_storage_changes_are_visible_in_another_document
+        PASS [   0.041s] ( 208/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::local_storage_events_run_on_other_same_origin_document_tasks
+        PASS [   0.017s] ( 209/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::navigator_storage_estimates_and_remembers_persistence
+        PASS [   0.018s] ( 210/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::storage_buckets_open_keys_describe_and_invalidate
+        PASS [   0.016s] ( 211/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::storage_buckets_reject_invalid_names_and_quotas
+        PASS [   0.026s] ( 212/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::web_locks_coordinate_two_documents_and_release_after_callback_promise
+        PASS [   0.017s] ( 213/2798) amazing::bin/amazing runtime_binding_host::runtime_host_storage::storage_binding_tests::web_storage_named_properties_and_methods_share_ordered_area
+        PASS [   0.003s] ( 214/2798) amazing::bin/amazing runtime_host_ipc::tests::navigation_request_mints_browser_owned_manual_redirect_fields
+        PASS [   0.019s] ( 215/2798) amazing-a11y accname_tests::aria_label_beats_content
+        PASS [   0.056s] ( 216/2798) amazing-a11y accname_tests::associated_label_element
+        PASS [   0.018s] ( 217/2798) amazing-a11y accname_tests::css_generated_content_contributes
+        PASS [   0.012s] ( 218/2798) amazing-a11y accname_tests::cycles_are_broken
+        PASS [   0.012s] ( 219/2798) amazing-a11y accname_tests::describedby_can_reference_hidden_content
+        PASS [   0.037s] ( 220/2798) amazing-a11y accname_tests::description_precedence
+        PASS [   0.010s] ( 221/2798) amazing-a11y accname_tests::explicit_empty_alt_removes_the_image
+        PASS [   0.012s] ( 222/2798) amazing-a11y accname_tests::form_control_text_is_not_container_content
+        PASS [   0.022s] ( 223/2798) amazing-a11y accname_tests::hidden_content_is_excluded_but_referenced_hidden_is_included
+        PASS [   0.081s] ( 224/2798) amazing-a11y accname_tests::host_language_alternatives
+        PASS [   0.035s] ( 225/2798) amazing-a11y accname_tests::labelledby_beats_label
+        PASS [   0.014s] ( 226/2798) amazing-a11y accname_tests::labelledby_chains_through_references
+        PASS [   0.053s] ( 227/2798) amazing-a11y accname_tests::name_from_content
+        PASS [   0.778s] ( 228/2798) amazing::bin/amazing runtime_binding_host::runtime_host_net::tests::synchronous_xhr_keeps_pending_async_xhr_reply
+        PASS [   0.057s] ( 229/2798) amazing-a11y accname_tests::structural_alternatives
+        PASS [   0.019s] ( 230/2798) amazing-a11y accname_tests::title_is_a_last_resort_for_non_content_roles
+        PASS [   0.018s] ( 231/2798) amazing-a11y accname_tests::whitespace_in_names_is_flattened
+        PASS [   0.011s] ( 232/2798) amazing-a11y aria_tests::aria_level_overrides_heading_tag
+        PASS [   0.018s] ( 233/2798) amazing-a11y aria_tests::boolean_and_tristate_states
+        PASS [   0.031s] ( 234/2798) amazing-a11y aria_tests::aria_overrides_native_disabled
+        PASS [   0.010s] ( 235/2798) amazing-a11y aria_tests::dialog_modal_state
+        PASS [   0.023s] ( 236/2798) amazing-a11y aria_tests::hidden_and_inert_states
+        PASS [   0.019s] ( 237/2798) amazing-a11y aria_tests::invalid_variants_and_current
+        PASS [   0.050s] ( 238/2798) amazing-a11y aria_tests::focusable_and_editable
+        PASS [   0.010s] ( 239/2798) amazing-a11y aria_tests::placeholder_is_a_property_and_a_name
+        PASS [   0.027s] ( 240/2798) amazing-a11y aria_tests::native_and_aria_checked
+        PASS [   0.010s] ( 241/2798) amazing-a11y aria_tests::properties_are_typed_and_raw_is_preserved
+        PASS [   0.018s] ( 242/2798) amazing-a11y aria_tests::required_readonly_and_invalid
+        PASS [   0.026s] ( 243/2798) amazing-a11y aria_tests::selected_and_expanded
+        PASS [   0.010s] ( 244/2798) amazing-a11y bounds_tests::button_bounds_are_positive
+        PASS [   0.011s] ( 245/2798) amazing-a11y bounds_tests::document_root_spans_the_viewport
+        PASS [   0.014s] ( 246/2798) amazing-a11y bounds_tests::inline_element_union_of_its_text
+        PASS [   0.014s] ( 247/2798) amazing-a11y bounds_tests::out_of_flow_box_is_positioned_absolutely
+        PASS [   0.013s] ( 248/2798) amazing-a11y bounds_tests::stacked_blocks_increase_y
+        PASS [   0.016s] ( 249/2798) amazing-a11y bounds_tests::text_node_has_bounds
+        PASS [   0.013s] ( 250/2798) amazing-a11y bounds_tests::zero_sized_boxes_are_still_reported
+        PASS [   0.041s] ( 251/2798) amazing-a11y role_tests::context_sensitive_landmarks
+        PASS [   0.057s] ( 252/2798) amazing-a11y role_tests::explicit_role_overrides_implicit
+        PASS [   0.028s] ( 253/2798) amazing-a11y role_tests::foreign_content_roles
+        PASS [   0.010s] ( 254/2798) amazing-a11y role_tests::heading_levels
+        PASS [   0.044s] ( 255/2798) amazing-a11y role_tests::form_and_section_are_landmarks_only_when_named
+        PASS [   7.952s] ( 256/2798) amazing::phase9_webrtc secure_video_stream_delivers_six_timestamped_rgba_frames
+        PASS [   0.115s] ( 257/2798) amazing-a11y role_tests::input_types
+        PASS [   0.002s] ( 258/2798) amazing-a11y role_tests::role_name_round_trip
+        PASS [   0.027s] ( 259/2798) amazing-a11y role_tests::presentational_conflict_resolution
+        PASS [   0.031s] ( 260/2798) amazing-a11y role_tests::select_variants
+        PASS [   0.017s] ( 261/2798) amazing-a11y role_tests::th_row_scope_is_rowheader
+        PASS [   0.015s] ( 262/2798) amazing-a11y tree_tests::aria_hidden_prunes_subtree
+        PASS [   0.040s] ( 263/2798) amazing-a11y role_tests::table_roles
+        PASS [   0.010s] ( 264/2798) amazing-a11y tree_tests::blank_text_nodes_are_dropped
+        PASS [   0.020s] ( 265/2798) amazing-a11y tree_tests::children_and_parents_are_consistent
+        PASS [   0.012s] ( 266/2798) amazing-a11y tree_tests::display_none_prunes_subtree
+        PASS [   0.010s] ( 267/2798) amazing-a11y tree_tests::find_dom_maps_back_to_the_arena
+        PASS [   0.013s] ( 268/2798) amazing-a11y tree_tests::document_root_and_preorder
+        PASS [   0.012s] ( 269/2798) amazing-a11y tree_tests::hidden_attribute_prunes_subtree
+        PASS [   0.018s] ( 270/2798) amazing-a11y tree_tests::focusable_or_aria_generics_are_kept
+        PASS [   0.017s] ( 271/2798) amazing-a11y tree_tests::non_rendered_elements_have_no_accessibility_node
+        PASS [   0.012s] ( 272/2798) amazing-a11y tree_tests::presentational_role_promotes_children
+        PASS [   0.010s] ( 273/2798) amazing-a11y tree_tests::shape_lists_role_and_name_pairs
+        PASS [   0.010s] ( 274/2798) amazing-a11y tree_tests::snapshot_detaches_and_dumps
+        PASS [   0.010s] ( 275/2798) amazing-a11y tree_tests::text_only_generic_containers_are_flattened
+        PASS [   0.013s] ( 276/2798) amazing-a11y tree_tests::text_nodes_become_static_text
+        PASS [   0.002s] ( 277/2798) amazing-bindings canvas_interfaces::tests::html_dimension_parser_accepts_prefix_digits
+        PASS [   0.002s] ( 278/2798) amazing-bindings canvas_interfaces::tests::resize_resets_pixels_and_origin_clean
+        PASS [   0.002s] ( 279/2798) amazing-bindings tests::abort_controller_delivers_algorithms_and_events_before_any_dependents
+        PASS [   0.002s] ( 280/2798) amazing-bindings tests::adjacent_element_and_text_insert_at_each_tree_position
+        PASS [   0.013s] ( 281/2798) amazing-a11y tree_tests::visibility_hidden_prunes_and_a_descendant_can_override
+        PASS [   0.004s] ( 282/2798) amazing-bindings tests::adjacent_html_positions_and_inner_text_approximation
+        PASS [   0.002s] ( 283/2798) amazing-bindings tests::argument_coercion_finishes_before_any_tree_mutation_and_propagates_throw
+        PASS [   0.002s] ( 284/2798) amazing-bindings tests::attr_and_named_node_map_keep_identity_and_utf16_value
+        PASS [   0.002s] ( 285/2798) amazing-bindings tests::attribute_names_and_named_node_map_share_cross_namespace_insertion_order
+        PASS [   0.002s] ( 286/2798) amazing-bindings tests::blob_file_form_data_and_font_set_bindings_use_native_models
+        PASS [   0.002s] ( 287/2798) amazing-bindings tests::character_data_data_setter_uses_legacy_null_to_empty_string
+        PASS [   0.002s] ( 288/2798) amazing-bindings tests::cdata_inherits_text_and_preserves_utf16_only_in_xml_document
+        PASS [   0.002s] ( 289/2798) amazing-bindings tests::child_nodes_is_canonical_and_live_through_nodelist_dispatch
+        PASS [   0.002s] ( 290/2798) amazing-bindings tests::class_list_is_live_canonical_and_validates_tokens
+        PASS [   0.002s] ( 291/2798) amazing-bindings tests::compare_document_position_exposes_dom_tree_order
+        PASS [   0.003s] ( 292/2798) amazing-bindings tests::constructor_defaults_differ_from_required_factory_arguments_and_preserve_units
+        PASS [   0.002s] ( 293/2798) amazing-bindings tests::create_document_null_name_omits_root_and_namespace_sets_mime_type
+        PASS [   0.002s] ( 294/2798) amazing-bindings tests::custom_element_callbacks_run_after_dom_borrow_at_mutation_boundary
+        PASS [   0.002s] ( 295/2798) amazing-bindings tests::custom_element_creation_handles_is_and_disable_shadow
+        PASS [   0.002s] ( 296/2798) amazing-bindings tests::custom_element_definition_running_and_callback_extraction_order
+        PASS [   0.002s] ( 297/2798) amazing-bindings tests::custom_element_registry_validates_defines_upgrades_and_resolves_when_defined
+        PASS [   0.002s] ( 298/2798) amazing-bindings tests::custom_element_upgrade_drains_each_element_reactions_in_order
+        PASS [   0.002s] ( 299/2798) amazing-bindings tests::custom_event_detail_is_rooted_and_replaced_without_dom_borrow
+        PASS [   0.002s] ( 300/2798) amazing-bindings tests::detached_child_still_coerces_arguments_but_does_not_allocate_text
+        PASS [   0.002s] ( 301/2798) amazing-bindings tests::document_adopt_and_import_preserve_identity_and_target_ownership
+        PASS [   0.002s] ( 302/2798) amazing-bindings tests::document_implementation_is_same_object_and_builds_document_fixture
+        PASS [   0.002s] ( 303/2798) amazing-bindings tests::document_surface_uses_tree_and_host_metadata
+        PASS [   0.003s] ( 304/2798) amazing-bindings tests::dom_exception::dom_exception_defaults_null_conversion_and_coercion_order
+        PASS [   0.002s] ( 305/2798) amazing-bindings tests::dom_exception::dom_exception_getters_reject_wrong_brands_realms_and_generations
+        PASS [   0.002s] ( 306/2798) amazing-bindings tests::dom_parser_creates_inert_documents_and_xml_error_document
+        PASS [   0.002s] ( 307/2798) amazing-bindings tests::dom_exception_preserves_code_units_and_maps_native_error_names
+        PASS [   0.003s] ( 308/2798) amazing-bindings tests::element_attribute_queries_toggle_and_name_validation_follow_dom_rules
+        PASS [   0.004s] ( 309/2798) amazing-bindings tests::element_specific_reflection_handles_urls_enums_numbers_and_rel_list
+        PASS [   0.002s] ( 310/2798) amazing-bindings tests::event_dictionaries::event_dictionary_conversion_is_ordered_and_ui_detail_is_a_signed_long
+        PASS [   0.002s] ( 311/2798) amazing-bindings tests::event_dictionaries::invalid_related_target_does_not_retain_earlier_window_root
+        PASS [   0.002s] ( 312/2798) amazing-bindings tests::event_dictionaries::ui_event_view_requires_window_for_every_derived_constructor
+        PASS [   0.002s] ( 313/2798) amazing-bindings tests::event_subclass_constructors_preserve_dictionary_fields_and_defaults
+        PASS [   0.002s] ( 314/2798) amazing-bindings tests::event_target_dispatches_outside_borrow_and_releases_once_listener
+        PASS [   0.003s] ( 315/2798) amazing-bindings tests::fallible_host_string_propagates_lone_surrogate_error
+        PASS [   0.002s] ( 316/2798) amazing-bindings tests::form_input_value_modes_radio_group_and_reset_bindings
+        PASS [   0.004s] ( 317/2798) amazing-bindings tests::forced_token_toggle_without_a_change_queues_no_attribute_mutation
+        PASS [   0.002s] ( 318/2798) amazing-bindings tests::get_html_options_include_serializable_and_explicit_shadow_roots
+        PASS [   0.002s] ( 319/2798) amazing-bindings tests::generic_platform_identity_is_private_and_callbacks_run_after_dom_borrow
+        PASS [   0.002s] ( 320/2798) amazing-bindings tests::html_element_interface_lookup_has_specialized_and_unknown_fallbacks
+        PASS [   0.002s] ( 321/2798) amazing-bindings tests::html_collection_binding_and_legacy_hooks_are_live
+        PASS [   0.002s] ( 322/2798) amazing-bindings tests::image_and_source_reflection_uses_loader_state_and_decode_promise
+        PASS [   0.002s] ( 323/2798) amazing-bindings tests::html_reflection_handles_strings_keywords_booleans_and_tabindex
+        PASS [   0.002s] ( 324/2798) amazing-bindings tests::installation_orders_parent_interfaces_and_preserves_constant_values
+        PASS [   0.002s] ( 325/2798) amazing-bindings tests::is_equal_node_compares_data_attributes_and_descendants
+        PASS [   0.002s] ( 326/2798) amazing-bindings tests::legacy_events::legacy_factory_preserves_supported_event_classes_for_ascii_aliases
+        PASS [   0.002s] ( 327/2798) amazing-bindings tests::legacy_events::unrecognized_legacy_interfaces_throw_not_supported_for_all_domstrings
+        PASS [   0.002s] ( 328/2798) amazing-bindings tests::markup_and_selector_seams_are_live_and_run_after_dom_borrow
+        PASS [   0.003s] ( 329/2798) amazing-bindings tests::message_events::defaults_brand_and_dictionary_read_order
+        PASS [   0.002s] ( 330/2798) amazing-bindings tests::message_events::external_dispatch_obeys_passive_and_capture_removal_and_rejects_dead_slots
+        PASS [   0.002s] ( 331/2798) amazing-bindings tests::message_events::external_targets_share_registry_and_preserve_identity_for_trusted_delivery
+        PASS [   0.002s] ( 332/2798) amazing-bindings tests::message_events::payload_identity_utf16_and_invalid_sources
+        PASS [   0.004s] ( 333/2798) amazing-bindings tests::message_events::legacy_init_releases_replaced_values_and_is_ignored_during_dispatch
+        PASS [   0.002s] ( 334/2798) amazing-bindings tests::mutation_observer_records_are_snapshots_and_callback_survives_disconnect
+        PASS [   0.002s] ( 335/2798) amazing-bindings tests::mutation_return_values_and_links_keep_node_identity
+        PASS [   0.003s] ( 336/2798) amazing-bindings tests::node_base_uri_uses_first_document_base_and_document_url_fallback
+        PASS [   0.002s] ( 337/2798) amazing-bindings tests::node_filter_and_dom_exception_constants_match_legacy_values
+        PASS [   0.002s] ( 338/2798) amazing-bindings tests::node_name_casing_depends_on_namespace_and_owner_document
+        PASS [   0.002s] ( 339/2798) amazing-bindings tests::optional_hook_installation_errors_remain_fatal
+        PASS [   0.002s] ( 340/2798) amazing-bindings tests::parent_and_sibling_element_navigation_bindings_are_live
+        PASS [   0.002s] ( 341/2798) amazing-bindings tests::parent_node_move_before_is_exposed_on_document_element_and_fragment
+        PASS [   0.002s] ( 342/2798) amazing-bindings tests::passive_listener_option_preserves_absent_versus_explicit_false
+        PASS [   0.002s] ( 343/2798) amazing-bindings tests::pattern_host_seam_and_date_wrapping_run_outside_dom_borrow
+        PASS [   0.002s] ( 344/2798) amazing-bindings tests::processing_instruction_and_range_point_queries_preserve_units
+        PASS [   0.002s] ( 345/2798) amazing-bindings tests::put_forwards_token_list_assignments_update_the_live_value
+        PASS [   0.003s] ( 346/2798) amazing-bindings tests::range_installs_inheritance_constants_and_dispatches_live_boundaries
+        PASS [   0.002s] ( 347/2798) amazing-bindings tests::reflected_form_attributes_feed_validation_and_preserve_webidl_rules
+        PASS [   0.002s] ( 348/2798) amazing-bindings tests::selection_uses_the_same_live_range_after_text_mutation
+        PASS [   0.002s] ( 349/2798) amazing-bindings tests::select_and_validity_bindings_follow_live_dom
+        PASS [   0.002s] ( 350/2798) amazing-bindings tests::shared_html_integer_reflection_parses_leading_digits_and_range
+        PASS [   0.002s] ( 351/2798) amazing-bindings tests::shadow_root_and_slot_bindings_keep_identity_and_hide_closed_mode
+        PASS [   0.002s] ( 352/2798) amazing-bindings tests::slotchange_uses_mutation_checkpoint_and_runs_listener_after_dom_borrow
+        PASS [   0.002s] ( 353/2798) amazing-bindings tests::static_range_is_immutable_and_uses_inherited_boundary_getters
+        PASS [   0.002s] ( 354/2798) amazing-bindings tests::static_range_requires_all_members_and_converts_in_dictionary_order
+        PASS [   0.002s] ( 355/2798) amazing-bindings tests::synchronous_custom_element_creation_propagates_constructor_failure
+        PASS [   0.002s] ( 356/2798) amazing-bindings tests::take_records_retains_each_attribute_child_list_and_character_data_mutation
+        PASS [   0.002s] ( 357/2798) amazing-bindings tests::template_content_binding_returns_the_persistent_inert_fragment
+        PASS [   0.002s] ( 358/2798) amazing-bindings tests::text_content_excludes_comments_and_setter_replaces_children
+        PASS [   0.002s] ( 359/2798) amazing-bindings tests::timeout_signal_uses_host_timer_and_fires_on_expiry
+        PASS [   0.002s] ( 360/2798) amazing-bindings tests::traversal_filter_calls_after_borrow_and_retains_callback_identity
+        PASS [   0.002s] ( 361/2798) amazing-bindings tests::traversal_undefined_what_to_show_uses_show_all_default
+        PASS [   0.003s] ( 362/2798) amazing-bindings tests::unsupported_optional_hooks_are_recorded_without_aborting_installation
+        PASS [   0.003s] ( 363/2798) amazing-bindings tests::url_bindings_keep_search_params_live_and_same_object
+        PASS [   0.002s] ( 364/2798) amazing-bindings tests::url_search_params_constructor_overloads_and_mutation_preserve_order
+        PASS [   0.002s] ( 365/2798) amazing-bindings tests::whole_text_joins_adjacent_text_and_cdata_until_a_non_text_sibling
+        PASS [   0.004s] ( 366/2798) amazing-bindings tests::webidl_stringifiers_are_installed_on_declaring_prototypes
+        PASS [   0.002s] ( 367/2798) amazing-bindings tests::wpt_character_data_methods_use_utf16_offsets_and_validate_bounds
+        PASS [   0.002s] ( 368/2798) amazing-bindings tests::wpt_closest_walks_inclusive_ancestors_through_selector_host
+        PASS [   0.003s] ( 369/2798) amazing-bindings tests::wpt_create_element_uses_local_name_validation
+        PASS [   0.002s] ( 370/2798) amazing-bindings tests::wpt_element_names_and_document_type_fields_are_installed
+        PASS [   0.002s] ( 371/2798) amazing-bindings tests::wpt_html_token_list_attributes_are_live_and_canonical
+        PASS [   0.002s] ( 372/2798) amazing-bindings tests::wpt_empty_attribute_namespace_matches_null_namespace
+        PASS [   0.002s] ( 373/2798) amazing-bindings tests::wrong_receiver_is_rejected_before_user_coercion
+        PASS [   0.002s] ( 374/2798) amazing-bindings tests::wpt_node_namespace_and_identity_methods_are_installed
+        PASS [   0.002s] ( 375/2798) amazing-canvas png::tests::png_has_valid_chunks_and_uncompressed_pixel
+        PASS [   0.002s] ( 376/2798) amazing-bindings tests::xhtml_document_create_element_uses_html_namespace_without_lowercasing
+        PASS [   0.002s] ( 377/2798) amazing-canvas::canvas_pixels bitmap_smoothing_and_text_system_are_used
+        PASS [   0.002s] ( 378/2798) amazing-canvas::canvas_pixels gradients_composite_and_image_data_pixels
+        PASS [   0.002s] ( 379/2798) amazing-canvas::canvas_pixels gradients_patterns_shadows_state_and_pixel_bypass
+        PASS [   0.005s] ( 380/2798) amazing-canvas::canvas_pixels paths_fill_rules_and_antialiasing_have_golden_pixels
+        PASS [   0.007s] ( 381/2798) amazing-canvas::canvas_pixels path_curves_arcs_round_rect_dashes_and_hit_testing
+        PASS [   0.002s] ( 382/2798) amazing-canvas::canvas_pixels svg_paths_stroke_caps_and_composite_modes
+        PASS [   0.002s] ( 383/2798) amazing-canvas::canvas_pixels porter_duff_opaque_goldens_and_negative_image_dimensions
+        PASS [   0.002s] ( 384/2798) amazing-canvas::canvas_pixels text_alignment_stroke_and_signed_image_data
+        PASS [   0.004s] ( 385/2798) amazing-common tests::backtrack_with_seek
+        PASS [   0.004s] ( 386/2798) amazing-common tests::eat_if_and_eat_str
+        PASS [   0.002s] ( 387/2798) amazing-common tests::eat_str_ascii_ci_matches_whatwg_doctype_case
+        PASS [   0.002s] ( 388/2798) amazing-common tests::eat_str_ascii_ci_near_eof_is_safe
+        PASS [   0.002s] ( 389/2798) amazing-common tests::line_col_counts_lines_and_scalars
+        PASS [   0.002s] ( 390/2798) amazing-common tests::peek_and_consume
+        PASS [   0.002s] ( 391/2798) amazing-common tests::truncated_utf8_does_not_overrun
+        PASS [   0.002s] ( 392/2798) amazing-common tests::utf8_scalar_skipping
+        PASS [   0.003s] ( 393/2798) amazing-compositor animation::css::tests::computed_get_uses_css14_canonical_lists
+        PASS [   0.002s] ( 394/2798) amazing-compositor animation::css::tests::css14_keyframes_expand_selectors_and_keep_last_declaration
+        PASS [   0.002s] ( 395/2798) amazing-compositor animation::css::tests::css_animation_events_and_compositor_opacity_tick
+        PASS [   0.002s] ( 396/2798) amazing-compositor animation::css::tests::pinned_wpt_negative_delay_iteration_events
+        PASS [   0.002s] ( 397/2798) amazing-compositor animation::css::tests::pinned_wpt_transition_run_start_end_and_main_thread_value
+        PASS [   0.002s] ( 398/2798) amazing-compositor animation::css::tests::skipped_iterations_and_cancel_promises_are_ordered
+        PASS [   0.002s] ( 399/2798) amazing-compositor animation::css::tests::transition_last_matching_item_and_removed_property_cancel
+        PASS [   0.002s] ( 400/2798) amazing-compositor animation::handoff::tests::css_keyframe_animation_uses_shared_sample_and_completes_once
+        PASS [   0.011s] ( 401/2798) amazing-compositor animation::handoff::tests::opacity_transition_ticks_at_vsync_without_paint_and_hands_back_final_value
+        PASS [   0.002s] ( 402/2798) amazing-compositor animation::handoff::tests::transform_animation_uses_same_pure_sample_and_cancel_returns_value_once
+        PASS [   0.002s] ( 403/2798) amazing-compositor animation::scroll::tests::scroll_progress_uses_scrollable_extent_and_inactive_zero_range
+        PASS [   0.002s] ( 404/2798) amazing-compositor animation::scroll::tests::scroll_tick_changes_opacity_without_raster_and_returns_layout_value
+        PASS [   0.002s] ( 405/2798) amazing-compositor animation::scroll::tests::view_cover_progress_and_insets
+        PASS [   0.002s] ( 406/2798) amazing-compositor animation::tests::decomposed_rotation_follows_short_arc
+        PASS [   0.002s] ( 407/2798) amazing-compositor animation::tests::spec_easing_examples
+        PASS [   0.002s] ( 408/2798) amazing-compositor animation::tests::spec_timing_delay_iterations_and_direction
+        PASS [   0.002s] ( 409/2798) amazing-compositor animation::values::tests::color_interpolates_in_requested_space
+        PASS [   0.002s] ( 410/2798) amazing-compositor animation::values::tests::typed_interpolation_and_discrete_boundary
+        PASS [   0.002s] ( 411/2798) amazing-compositor animation::web::tests::keyframes_add_and_iteration_accumulate
+        PASS [   0.002s] ( 412/2798) amazing-compositor animation::web::tests::pinned_wpt_simple_iteration_progress_and_current_iteration
+        PASS [   0.002s] ( 413/2798) amazing-compositor animation::web::tests::play_pause_rate_reverse_finish_cancel_signal_host
+        PASS [   0.002s] ( 414/2798) amazing-compositor effect_tests::backdrop_blur_mirrors_its_border_and_preserves_uniform_color
+        PASS [   0.006s] ( 415/2798) amazing-compositor effect_tests::backdrop_filter_composites_scoped_image_source_over_parent
+        PASS [   0.020s] ( 416/2798) amazing-compositor effect_tests::blur_crosses_tile_edges_and_accepts_offscreen_contribution
+        PASS [   0.009s] ( 417/2798) amazing-compositor effect_tests::clip_shapes_curves_holes_and_luminance_mask
+        PASS [   0.002s] ( 418/2798) amazing-compositor effect_tests::color_filter_golden_pixels_and_all_blends_on_transparent_backdrop
+        PASS [   0.107s] ( 419/2798) amazing-canvas::canvas_wpt_native pinned_canvas_element_pixel_selection
+        PASS [   0.003s] ( 420/2798) amazing-compositor effect_tests::drop_shadow_preserves_foreground_and_offsets_alpha
+        PASS [   0.003s] ( 421/2798) amazing-compositor effect_tests::effect_snapshot_roundtrip_and_v1_fail_closed
+        PASS [   0.004s] ( 422/2798) amazing-compositor effect_tests::filter_and_blend_animation_reuses_tiles_without_source
+        PASS [   0.004s] ( 423/2798) amazing-compositor effect_tests::nested_filters_apply_once_to_whole_group_and_clip_after_blur
+        PASS [   0.011s] ( 424/2798) amazing-compositor effect_tests::nested_animation_reservations_sum_ancestors_but_not_siblings
+        PASS [   0.005s] ( 425/2798) amazing-compositor effect_tests::nested_isolation_changes_blending_backdrop
+        PASS [   0.007s] ( 426/2798) amazing-compositor effect_tests::promotion_squashing_limits_and_validation_are_explicit
+        PASS [   0.002s] ( 427/2798) amazing-compositor effect_tests::stale_bound_effect_batch_does_not_partially_apply
+        PASS [   0.002s] ( 428/2798) amazing-compositor frame::blend_tests::retained_frame_uses_paint_integer_source_over
+        PASS [   0.002s] ( 429/2798) amazing-compositor hit::tests::clip_rejects_hits_and_wheel_clamps_at_content_edge
+        PASS [   0.002s] ( 430/2798) amazing-compositor hit::tests::nested_scroller_hit_bubbles_at_edge_and_snaps
+        PASS [   0.002s] ( 431/2798) amazing-compositor hit::tests::topmost_hit_and_wheel_listener_gate
+        PASS [   0.003s] ( 432/2798) amazing-compositor paint_delta::tests::property_only_frame_skips_style_layout_paint_and_tile_uploads
+        PASS [   0.010s] ( 433/2798) amazing-compositor paint_delta::tests::stable_item_delta_rerasterizes_only_its_tile_and_matches_full_repaint
+        PASS [   0.002s] ( 434/2798) amazing-compositor property::scrolling_tests::fixed_ignores_scroll_and_sticky_respects_inset
+        PASS [   0.040s] ( 435/2798) amazing-compositor effect_tests::reserved_blur_animation_and_worker_jobs_keep_offscreen_tiles_ready
+        PASS [   0.011s] ( 436/2798) amazing-compositor property_binding::tests::bound_opacity_recomposes_without_paint_or_tile_upload
+        PASS [   0.002s] ( 437/2798) amazing-compositor property_binding::tests::newly_visible_uncached_tile_requires_paint
+        PASS [   0.002s] ( 438/2798) amazing-compositor property_binding::tests::stale_or_invalid_batches_do_not_mutate_tree
+        PASS [   0.002s] ( 439/2798) amazing-compositor quad::tests::normal_effect_blend_uses_integer_opacity_rounding
+        PASS [   0.002s] ( 440/2798) amazing-compositor quad::tests::parity_tolerates_one_unit_only_at_translucent_layer_boundary
+        PASS [   0.015s] ( 441/2798) amazing-compositor quad::tests::passes_resources_damage_and_rounded_clip_match_flattened
+        PASS [   0.002s] ( 442/2798) amazing-compositor scroll_input::tests::listener_gate_inputs_clamp_and_async_events_coalesce
+        PASS [   0.024s] ( 443/2798) amazing-compositor scroll_input::tests::fixed_and_sticky_pixels_follow_compositor_scroll_constraints
+        PASS [   0.002s] ( 444/2798) amazing-compositor scroll_input::tests::scroll_offsets_and_generation_follow_compositor_input
+        PASS [   0.002s] ( 445/2798) amazing-compositor scroll_input::tests::smooth_scroll_and_momentum_sample_at_vsync_and_stop_at_edges
+        PASS [   0.003s] ( 446/2798) amazing-compositor snapshot::tests::frame_and_resource_deltas_roundtrip_owned_state
+        PASS [   0.003s] ( 447/2798) amazing-compositor snapshot::tests::rejects_version_bounds_ids_pass_cycles_and_corrupt_tree
+        PASS [   0.020s] ( 448/2798) amazing-compositor scroll_input::tests::scroll_frame_uses_cached_tiles_and_matches_full_repaint
+        PASS [   0.002s] ( 449/2798) amazing-compositor tests::overlap_promotes_and_order_preserved
+        PASS [   0.002s] ( 450/2798) amazing-compositor tests::parent_cache_and_rounded_clip
+        PASS [   0.008s] ( 451/2798) amazing-compositor tests::damage_only_rerasterizes_affected_tile
+        PASS [   0.004s] ( 452/2798) amazing-compositor tests::rgba_surface_enters_compositor_as_one_retained_layer
+        PASS [   0.006s] ( 453/2798) amazing-compositor tests::scroll_blits_even_when_new_tile_enters_viewport
+        PASS [   0.008s] ( 454/2798) amazing-compositor tests::ticking_animation_changes_properties_without_raster
+        PASS [   0.071s] ( 455/2798) amazing-compositor tests::property_updates_reuse_raster_and_equal_full_repaint
+        PASS [   0.797s] ( 456/2798) amazing-a11y role_tests::html_aam_implicit_roles
+        PASS [   0.180s] ( 457/2798) amazing-compositor tile_raster::tests::parallel_and_deterministic_raster_produce_identical_pixels
+        PASS [   0.002s] ( 458/2798) amazing-compositor::css14_adapter css14_computed_lists_and_keyframe_records_feed_compositor
+        PASS [   0.028s] ( 459/2798) amazing-compositor tile_raster::tests::worker_pool_keeps_old_tile_until_new_generation_is_ready
+        PASS [   0.018s] ( 460/2798) amazing-compositor::paint_view_pages control_uses_baked_fallback_with_parity
+        PASS [   0.180s] ( 461/2798) amazing-compositor tile_raster::tests::prepaint_and_lru_keep_reverse_scroll_cached_without_checkerboard
+        PASS [   0.014s] ( 462/2798) amazing-compositor::paint_view_pages paint_view_owner_mapping_binds_dom_properties_to_tree_nodes
+        PASS [   0.101s] ( 463/2798) amazing-compositor::paint_view_pages pinned_real_pages_match_full_painter
+        PASS [   0.217s] ( 464/2798) amazing-compositor::paint_view_pages nested_opacity_matches_full_painter
+        PASS [   0.024s] ( 465/2798) amazing-compositor::paint_view_pages real_nested_overflow_fixed_sticky_and_snap_metadata
+        PASS [   0.177s] ( 466/2798) amazing-compositor::paint_view_pages raw_real_pages_match_full_painter
+        PASS [   1.150s] ( 467/2798) amazing-compositor::paint_view_pages real_page_style_change_trace_and_parity
+        PASS [   1.715s] ( 468/2798) amazing-compositor::paint_view_pages effects_scroller_512_matches_full_painter_at_opacity_edge
+        PASS [   0.022s] ( 469/2798) amazing-css cascade::tests::all_does_not_reset_inherited_custom_properties
+        PASS [   0.017s] ( 470/2798) amazing-css cascade::tests::all_resets_supported_properties_but_not_direction_or_unicode_bidi
+        PASS [   0.041s] ( 471/2798) amazing-css cascade::tests::author_beats_ua_specificity_and_order
+        PASS [   0.016s] ( 472/2798) amazing-css cascade::tests::author_border_shorthand_beats_ua_longhands
+        PASS [   0.019s] ( 473/2798) amazing-css cascade::tests::counter_style_descriptors_apply_to_markers_and_content
+        PASS [   0.028s] ( 474/2798) amazing-css cascade::tests::counters_reinstantiate_after_display_contents_reset_scope_ends
+        PASS [   0.016s] ( 475/2798) amazing-css cascade::tests::custom_properties_preserve_case_inherit_and_substitute
+        PASS [   0.016s] ( 476/2798) amazing-css cascade::tests::delta_view_reports_only_changes
+        PASS [   0.008s] ( 477/2798) amazing-css cascade::tests::dir_hint_inherits_but_author_direction_overrides_it
+        PASS [   0.024s] ( 478/2798) amazing-css cascade::tests::first_line_and_letter_only_exist_on_matching_originators
+        PASS [   0.039s] ( 479/2798) amazing-css cascade::tests::generated_content_attribute_fallback_and_unquoted_url
+        PASS [   0.040s] ( 480/2798) amazing-css cascade::tests::generated_content_data_url_and_gradient_image_runs
+        PASS [   0.019s] ( 481/2798) amazing-css cascade::tests::generated_images_use_winning_stylesheet_url_and_inherited_marker_image
+        PASS [   0.028s] ( 482/2798) amazing-css cascade::tests::important_overrides_higher_specificity
+        PASS [   0.012s] ( 483/2798) amazing-css cascade::tests::inheritance_flows_down_the_tree
+        PASS [   0.020s] ( 484/2798) amazing-css cascade::tests::inline_style_beats_sheet_unless_important
+        PASS [   0.040s] ( 485/2798) amazing-css cascade::tests::invalid_selector_drops_whole_rule
+        PASS [   0.016s] ( 486/2798) amazing-css cascade::tests::invalid_var_winner_defaults_instead_of_reviving_previous_declaration
+        PASS [   0.016s] ( 487/2798) amazing-css cascade::tests::later_declarations_win_within_one_rule
+        PASS [   0.016s] ( 488/2798) amazing-css cascade::tests::marker_generation_respects_list_style_type_and_content_none
+        PASS [   0.031s] ( 489/2798) amazing-css cascade::tests::media_groups_use_the_computation_environment_and_resize_invalidates
+        PASS [   0.066s] ( 490/2798) amazing-css cascade::tests::nested_and_reversed_list_counters_follow_document_order
+        PASS [   0.042s] ( 491/2798) amazing-css cascade::tests::pseudo_box_generation_and_selector_specificity
+        PASS [   0.016s] ( 492/2798) amazing-css cascade::tests::pseudo_class_selectors_match_in_cascade
+        PASS [   0.029s] ( 493/2798) amazing-css cascade::tests::pseudo_counter_operations_and_hidden_subtrees
+        PASS [   0.038s] ( 494/2798) amazing-css cascade::tests::pseudo_styles_content_and_counter_flow
+        PASS [   0.015s] ( 495/2798) amazing-css cascade::tests::quoted_list_style_type_is_literal_marker_text_including_escapes
+        PASS [   0.008s] ( 496/2798) amazing-css cascade::tests::rem_uses_the_computed_root_font_size
+        PASS [   0.031s] ( 497/2798) amazing-css cascade::tests::reversed_counters_derive_initial_value_and_respect_explicit_start
+        PASS [   0.027s] ( 498/2798) amazing-css cascade::tests::reversed_list_popped_scope_allows_counter_reads_and_later_increment
+        PASS [   0.008s] ( 499/2798) amazing-css cascade::tests::root_font_size_math_uses_initial_em_and_rem_basis
+        PASS [   0.036s] ( 500/2798) amazing-css cascade::tests::ruby_defaults_ua_mapping_and_inherited_properties
+        PASS [   0.015s] ( 501/2798) amazing-css cascade::tests::selector_list_uses_the_most_specific_selector_that_actually_matches
+        PASS [   0.010s] ( 502/2798) amazing-css cascade::tests::stylesheet_attr_casts_use_each_elements_attributes
+        PASS [   0.015s] ( 503/2798) amazing-css cascade::tests::ua_defaults_apply_without_author_css
+        PASS [   0.007s] ( 504/2798) amazing-css cascade::tests::ua_important_reverses_origin_order_and_ua_revert_defaults
+        PASS [   0.002s] ( 505/2798) amazing-css cascade::tests::ua_sheet_parses_with_supported_selectors_only
+        PASS [   0.006s] ( 506/2798) amazing-css cascade::tests::vertical_text_policy_inherits_to_descendant_text_boxes
+        PASS [   0.008s] ( 507/2798) amazing-css cascade::tests::viewport_environment_resolves_lengths_before_root_rem_inheritance
+        PASS [   0.020s] ( 508/2798) amazing-css cascade::tests::viewport_invalidation_selects_only_dependent_nodes
+        PASS [   0.020s] ( 509/2798) amazing-css cascade::tests::viewport_resize_recomputes_root_rem_descendants
+        PASS [   0.002s] ( 510/2798) amazing-css change_classification::tests::every_registered_longhand_has_exactly_one_classification
+        PASS [   0.002s] ( 511/2798) amazing-css color::tests::currentcolor_is_caller_resolved_not_parsed_here
+        PASS [   0.002s] ( 512/2798) amazing-css color::tests::deprecated_system_colors_resolve_to_modern_roles
+        PASS [   0.002s] ( 513/2798) amazing-css color::tests::hex_eight_digit_carries_alpha
+        PASS [   0.002s] ( 514/2798) amazing-css color::tests::hex_four_digit_short_alpha
+        PASS [   0.002s] ( 515/2798) amazing-css color::tests::hex_rejects_bad_lengths_and_digits
+        PASS [   0.002s] ( 516/2798) amazing-css color::tests::hex_six_digit_exact
+        PASS [   0.002s] ( 517/2798) amazing-css color::tests::hex_three_digit_expands_by_doubling
+        PASS [   0.002s] ( 518/2798) amazing-css color::tests::huge_finite_channels_clamp_instead_of_overflowing
+        PASS [   0.002s] ( 519/2798) amazing-css color::tests::lab_and_oklab_lightness_endpoints_gamut_map_to_black_and_white
+        PASS [   0.002s] ( 520/2798) amazing-css color::tests::named_colors_case_insensitive
+        PASS [   0.002s] ( 521/2798) amazing-css color::tests::parser_never_panics_on_hostile_input
+        PASS [   0.002s] ( 522/2798) amazing-css color::tests::relative_color_syntax_resolves_channel_keywords
+        PASS [   0.002s] ( 523/2798) amazing-css color::tests::rgb_channels_clamp_into_range
+        PASS [   0.002s] ( 524/2798) amazing-css color::tests::rgb_legacy_comma_syntax
+        PASS [   0.002s] ( 525/2798) amazing-css color::tests::rgb_modern_space_syntax
+        PASS [   0.002s] ( 526/2798) amazing-css color::tests::rgb_percent_channels_mixed_with_numbers
+        PASS [   0.002s] ( 527/2798) amazing-css color::tests::rgb_rejects_malformed_arguments
+        PASS [   0.002s] ( 528/2798) amazing-css color::tests::transparent_is_zero_alpha_black
+        PASS [   0.002s] ( 529/2798) amazing-css color::tests::unknown_names_are_rejected
+        PASS [   0.002s] ( 530/2798) amazing-css computed::tests::all_expands_supported_properties_but_excludes_direction_and_unicode_bidi
+        PASS [   0.003s] ( 531/2798) amazing-css computed::tests::case_sensitive_custom_properties_inherit_and_substitute
+        PASS [   0.003s] ( 532/2798) amazing-css computed::tests::css_wide_keywords_use_property_metadata
+        PASS [   0.002s] ( 533/2798) amazing-css computed::tests::cycle_members_are_invalid_before_consumer_fallback_runs
+        PASS [   0.002s] ( 534/2798) amazing-css computed::tests::deprecated_system_colors_resolve_before_paint_handoff
+        PASS [   0.002s] ( 535/2798) amazing-css computed::tests::flex_flow_rejects_unknown_and_duplicate_components
+        PASS [   0.002s] ( 536/2798) amazing-css computed::tests::font_shorthand_expands_size_line_height_family_and_resets_optionals
+        PASS [   0.002s] ( 537/2798) amazing-css computed::tests::grid_lines_validate_both_longhands_and_shorthand_halves
+        PASS [   0.002s] ( 538/2798) amazing-css computed::tests::grid_template_only_splits_on_a_top_level_solidus
+        PASS [   0.002s] ( 539/2798) amazing-css computed::tests::missing_var_is_invalid_at_computed_value_time_not_previous_cascade_value
+        PASS [   0.002s] ( 540/2798) amazing-css computed::tests::nested_fallback_and_fallback_commas_survive_substitution
+        PASS [   0.002s] ( 541/2798) amazing-css computed::tests::paint_properties_use_validated_computed_value_grammars
+        PASS [   0.002s] ( 542/2798) amazing-css computed::tests::public_set_uses_the_same_shorthand_expansion_seam
+        PASS [   0.002s] ( 543/2798) amazing-css computed::tests::substitution_preserves_token_boundaries
+        PASS [   0.002s] ( 544/2798) amazing-css computed::tests::typed_attributes_substitute_after_variables_and_validate_casts
+        PASS [   0.003s] ( 545/2798) amazing-css computed::tests::untyped_attribute_fallback_requires_a_string
+        PASS [   0.002s] ( 546/2798) amazing-css computed::tests::variable_grammar_distinguishes_nested_from_top_level_remnants
+        PASS [   0.002s] ( 547/2798) amazing-css counter_styles::tests::additive_predefined_styles_match_the_spec
+        PASS [   0.002s] ( 548/2798) amazing-css counter_styles::tests::cjk_longhand_styles_match_the_spec_examples
+        PASS [   0.002s] ( 549/2798) amazing-css counter_styles::tests::cjk_styles_use_their_spec_suffixes
+        PASS [   0.002s] ( 550/2798) amazing-css counter_styles::tests::numeric_and_alphabetic_predefined_styles
+        PASS [   0.002s] ( 551/2798) amazing-css effects::tests::blend_isolation_and_mask_grammar
+        PASS [   0.002s] ( 552/2798) amazing-css effects::tests::clip_path_invalid_values_from_wpt_are_rejected
+        PASS [   0.002s] ( 553/2798) amazing-css effects::tests::clip_path_valid_values_from_wpt_reach_the_parser
+        PASS [   0.002s] ( 554/2798) amazing-css effects::tests::filter_invalid_values_from_wpt_are_rejected
+        PASS [   0.002s] ( 555/2798) amazing-css effects::tests::filter_valid_values_from_wpt_reach_the_parser
+        PASS [   0.002s] ( 556/2798) amazing-css generated::tests::content_accepts_image_functions_as_image_runs
+        PASS [   0.002s] ( 557/2798) amazing-css generated::tests::rejects_invalid_content_counter_and_quotes_values
+        PASS [   0.002s] ( 558/2798) amazing-css parser::tests::custom_property_names_preserve_case
+        PASS [   0.002s] ( 559/2798) amazing-css parser::tests::font_face_exposes_ordered_local_url_and_extended_descriptors
+        PASS [   0.002s] ( 560/2798) amazing-css parser::tests::font_face_extracts_provider_neutral_descriptors
+        PASS [   0.002s] ( 561/2798) amazing-css parser::tests::font_face_recovery_consumes_invalid_rules_and_last_descriptor_wins
+        PASS [   0.002s] ( 562/2798) amazing-css parser::tests::function_values_keep_function_syntax
+        PASS [   0.002s] ( 563/2798) amazing-css parser::tests::important_flag_case_insensitive
+        PASS [   0.002s] ( 564/2798) amazing-css parser::tests::invalid_declarations_dropped_with_recovery
+        PASS [   0.002s] ( 565/2798) amazing-css parser::tests::invalid_font_face_descriptor_grammars_are_rejected
+        PASS [   0.002s] ( 566/2798) amazing-css parser::tests::invalid_top_level_var_fallback_remnants_drop_the_declaration
+        PASS [   0.002s] ( 567/2798) amazing-css parser::tests::media_rules_are_retained_and_imports_skipped
+        PASS [   0.002s] ( 568/2798) amazing-css parser::tests::selector_list_splits_on_commas
+        PASS [   0.002s] ( 569/2798) amazing-css parser::tests::simple_rule_parses
+        PASS [   0.002s] ( 570/2798) amazing-css parser::tests::supports_accepts_valid_variable_grammar_and_boolean_and
+        PASS [   0.002s] ( 571/2798) amazing-css parser::tests::supports_selector_and_at_rule_conditions
+        PASS [   0.002s] ( 572/2798) amazing-css parser::tests::unquoted_data_url_survives_declarations_and_font_sources
+        PASS [   0.002s] ( 573/2798) amazing-css parser::tests::unterminated_block_at_eof_recovers
+        PASS [   0.002s] ( 574/2798) amazing-css parser::tests::whitespace_normalized_in_values
+        PASS [   0.002s] ( 575/2798) amazing-css selectors::tests::anb_parser_forms
+        PASS [   0.002s] ( 576/2798) amazing-css selectors::tests::attribute_operators
+        PASS [   0.011s] ( 577/2798) amazing-css selectors::tests::complex_is_where_not_and_escaped_language_ranges
+        PASS [   0.002s] ( 578/2798) amazing-css selectors::tests::document_node_is_not_an_element_for_child_combinator
+        PASS [   0.002s] ( 579/2798) amazing-css selectors::tests::focus_pseudo_classes_follow_dom_focus_state
+        PASS [   0.002s] ( 580/2798) amazing-css selectors::tests::foreign_type_matching_uses_namespace_and_case_sensitive_local_names
+        PASS [   0.002s] ( 581/2798) amazing-css selectors::tests::functional_pseudos_and_root
+        PASS [   0.002s] ( 582/2798) amazing-css selectors::tests::invalid_selectors_rejected
+        PASS [   0.002s] ( 583/2798) amazing-css selectors::tests::language_direction_and_relative_has_match_dom_state
+        PASS [   0.002s] ( 584/2798) amazing-css selectors::tests::link_state_and_disabled
+        PASS [   0.002s] ( 585/2798) amazing-css selectors::tests::nth_last_child_of_complex_selector_list
+        PASS [   0.002s] ( 586/2798) amazing-css selectors::tests::nth_last_child_of_nested_nth_last_child
+        PASS [   0.002s] ( 587/2798) amazing-css selectors::tests::nth_of_filters_siblings_and_counts_from_either_end
+        PASS [   0.002s] ( 588/2798) amazing-css selectors::tests::open_state_and_no_namespace_attribute_selector
+        PASS [   0.002s] ( 589/2798) amazing-css selectors::tests::parses_and_matches_basic_selectors
+        PASS [   0.002s] ( 590/2798) amazing-css selectors::tests::processing_instructions_do_not_break_empty
+        PASS [   0.002s] ( 591/2798) amazing-css selectors::tests::pseudo_element_syntax_target_and_specificity
+        PASS [   0.002s] ( 592/2798) amazing-css selectors::tests::required_and_optional_match_only_eligible_form_controls
+        PASS [   0.002s] ( 593/2798) amazing-css selectors::tests::specificity_values
+        PASS [   0.002s] ( 594/2798) amazing-css selectors::tests::structural_pseudos
+        PASS [   0.002s] ( 595/2798) amazing-css syntax::tests::comments_are_dropped
+        PASS [   0.002s] ( 596/2798) amazing-css syntax::tests::escaped_identifier_keeps_its_token_boundary_when_serialized
+        PASS [   0.002s] ( 597/2798) amazing-css syntax::tests::idents_hashes_atkeywords_functions
+        PASS [   0.002s] ( 598/2798) amazing-css syntax::tests::numbers_dimensions_percentages
+        PASS [   0.002s] ( 599/2798) amazing-css syntax::tests::serialize_roundtrip_values
+        PASS [   0.002s] ( 600/2798) amazing-css syntax::tests::strings_with_escapes
+        PASS [   0.004s] ( 601/2798) amazing-css syntax::tests::unquoted_url_is_one_token_with_verbatim_data_payload
+        PASS [   0.003s] ( 602/2798) amazing-css syntax::tests::url_escape_has_decoded_value_and_reparseable_raw_spelling
+        PASS [   0.003s] ( 603/2798) amazing-css values::inheritance_tests::currentcolor_on_color_inherits_and_absolute_font_size_computes
+        PASS [   0.004s] ( 604/2798) amazing-css values::inheritance_tests::inherited_computed_lengths_do_not_resolve_again_against_child_font
+        PASS [   0.006s] ( 605/2798) amazing-css values::tests::absolute_units_and_percentages_have_distinct_bases
+        PASS [   0.002s] ( 606/2798) amazing-css values::tests::angles_preserve_turn_count_and_convert_all_units
+        PASS [   0.004s] ( 607/2798) amazing-css values::tests::calc_size_is_preserved_for_layout
+        PASS [   0.004s] ( 608/2798) amazing-css values::tests::color_and_layout_keywords_are_typed_without_changing_legacy_access
+        PASS [   0.002s] ( 609/2798) amazing-css values::tests::mutable_and_collected_styles_cannot_leave_stale_typed_values
+        PASS [   0.002s] ( 610/2798) amazing-css values::tests::numeric_ranges_and_integer_lexical_grammar_are_enforced
+        PASS [   0.005s] ( 611/2798) amazing-css values::tests::relative_currentcolor_rebinds_on_inheritance
+        PASS [   0.002s] ( 612/2798) amazing-css values::tests::ruby_one_grammars_and_display_values
+        PASS [   0.006s] ( 613/2798) amazing-css values::tests::transform_list_retains_operations_and_typed_angles
+        PASS [   0.003s] ( 614/2798) amazing-css values::tests::typed_values_follow_substitution_wide_keywords_and_invalid_winners
+        PASS [   0.002s] ( 615/2798) amazing-css values::tests::values_four_font_relative_units_keep_their_metric_basis
+        PASS [   0.002s] ( 616/2798) amazing-css viewport_units::tests::distinct_viewport_variants_and_math_are_resolved
+        PASS [   0.010s] ( 617/2798) amazing-css::author_provenance custom_properties_keep_case_and_do_not_inherit_provenance
+        PASS [   0.025s] ( 618/2798) amazing-css::author_provenance explicit_initial_inherit_unset_and_currentcolor_count_locally
+        PASS [   0.008s] ( 619/2798) amazing-css::author_provenance initial_values_and_inherited_values_do_not_imply_local_author_declarations
+        PASS [   0.020s] ( 620/2798) amazing-css::author_provenance invalid_parse_time_declarations_do_not_count_but_invalid_computed_winners_do
+        PASS [   0.014s] ( 621/2798) amazing-css::author_provenance logical_mapping_and_important_rollback_preserve_winner_provenance
+        PASS [   0.037s] ( 622/2798) amazing-css::author_provenance origin_and_layer_rollback_report_the_restored_winner
+        PASS [   0.016s] ( 623/2798) amazing-css::author_provenance shorthands_and_all_mark_only_their_expanded_properties
+        PASS [   0.008s] ( 624/2798) amazing-css::author_provenance synthetic_mutations_clear_only_the_replaced_properties_provenance
+        PASS [   0.039s] ( 625/2798) amazing-css::author_provenance whole_border_css_wide_values_apply_to_all_components
+        PASS [   0.015s] ( 626/2798) amazing-css::author_provenance whole_border_layer_rollback_restores_all_author_components
+        PASS [   0.033s] ( 627/2798) amazing-css::author_provenance whole_border_rollback_matches_explicit_longhands_for_control_chrome
+        PASS [   0.022s] ( 628/2798) amazing-css::author_provenance whole_border_variables_expand_atomically_after_substitution
+        PASS [   0.063s] ( 629/2798) amazing-css::cascade_context all_substitution_rolls_back_and_excludes_direction_and_custom_properties
+        PASS [   0.021s] ( 630/2798) amazing-css::cascade_context anonymous_layer_children_are_private_and_reopened_names_keep_order
+        PASS [   0.040s] ( 631/2798) amazing-css::cascade_context color_four_values_reach_legacy_paint_as_rgba_hex
+        PASS [   0.021s] ( 632/2798) amazing-css::cascade_context custom_properties_roll_back_before_substitution
+        PASS [   0.030s] ( 633/2798) amazing-css::cascade_context defaulting_keywords_work_after_layer_rollback
+        PASS [   0.021s] ( 634/2798) amazing-css::cascade_context deferred_shorthands_accept_substituted_rollback
+        PASS [   0.010s] ( 635/2798) amazing-css::cascade_context dir_inside_not_with_adjacent_sibling_matches_stylesheet
+        PASS [   0.039s] ( 636/2798) amazing-css::cascade_context grouping_recovery_does_not_activate_invalid_or_false_rules
+        PASS [   0.012s] ( 637/2798) amazing-css::cascade_context implicit_scope_uses_explicit_stylesheet_owner
+        PASS [   0.030s] ( 638/2798) amazing-css::cascade_context important_layer_rollback_removes_normal_interval
+        PASS [   0.012s] ( 639/2798) amazing-css::cascade_context important_reverses_layers_including_unlayered
+        PASS [   0.011s] ( 640/2798) amazing-css::cascade_context important_revert_layer_excludes_weaker_important_layers
+        PASS [   0.040s] ( 641/2798) amazing-css::cascade_context inline_precedence_and_rollback
+        PASS [   0.011s] ( 642/2798) amazing-css::cascade_context invalid_scope_does_not_reserve_layer_order
+        PASS [   0.086s] ( 643/2798) amazing-css::cascade_context layer_name_grammar_preserves_adjacency_and_allows_default
+        PASS [   0.031s] ( 644/2798) amazing-css::cascade_context layer_order_and_names_span_stylesheets_anonymous_layers_do_not
+        PASS [   0.021s] ( 645/2798) amazing-css::cascade_context layer_order_precedes_specificity_and_source_order
+        PASS [   0.021s] ( 646/2798) amazing-css::cascade_context logical_properties_rollback_with_physical_candidates
+        PASS [   3.321s] ( 647/2798) amazing-compositor::paint_view_pages retained_real_page_property_trace
+        PASS [   0.040s] ( 648/2798) amazing-css::cascade_context margin_inline_shorthand_expands_after_custom_property_substitution
+        PASS [   0.012s] ( 649/2798) amazing-css::cascade_context matching_selector_specificity_is_chosen_before_scope_proximity
+        PASS [   0.021s] ( 650/2798) amazing-css::cascade_context negative_calc_border_radius_clamps_after_winning_cascade
+        PASS [   0.031s] ( 651/2798) amazing-css::cascade_context nested_layers_group_under_parent_and_direct_rules_win
+        PASS [   0.021s] ( 652/2798) amazing-css::cascade_context nested_scopes_keep_outer_limits_and_bind_inner_start_to_outer_root
+        PASS [   0.012s] ( 653/2798) amazing-css::cascade_context overlapping_scopes_consider_all_roots_before_selecting_proximity
+        PASS [   0.017s] ( 654/2798) amazing-css::cascade_context nth_child_of_selector_after_comment_survives_stylesheet_parsing
+        PASS [   0.012s] ( 655/2798) amazing-css::cascade_context oversized_dotted_layer_names_are_rejected_without_recursion
+        PASS [   0.021s] ( 656/2798) amazing-css::cascade_context relative_scope_limits_and_nested_starts
+        PASS [   0.041s] ( 657/2798) amazing-css::cascade_context revert_layer_rolls_back_whole_layer_and_chains
+        PASS [   0.040s] ( 658/2798) amazing-css::cascade_context revert_restores_ua_instead_of_inheriting_or_reviving_author
+        PASS [   0.041s] ( 659/2798) amazing-css::cascade_context scope_proximity_follows_specificity_and_precedes_source_order
+        PASS [   0.040s] ( 660/2798) amazing-css::cascade_context scope_pseudo_class_binds_in_compounds_and_limits
+        PASS [   0.012s] ( 661/2798) amazing-css::cascade_context scope_root_limit_and_inheritance_are_separate
+        PASS [   0.040s] ( 662/2798) amazing-css::cascade_context substituted_rollback_and_invalid_substitution_are_distinct
+        PASS [   0.008s] ( 663/2798) amazing-css::color_parity canonical_css_parser_matches_transitional_paint_for_edges_and_generated_inputs
+        PASS [   0.002s] ( 664/2798) amazing-css::color_parity transitional_paint::tests::currentcolor_is_caller_resolved_not_parsed_here
+        PASS [   0.002s] ( 665/2798) amazing-css::color_parity transitional_paint::tests::hex_eight_digit_carries_alpha
+        PASS [   0.002s] ( 666/2798) amazing-css::color_parity transitional_paint::tests::hex_four_digit_short_alpha
+        PASS [   0.002s] ( 667/2798) amazing-css::color_parity transitional_paint::tests::hex_rejects_bad_lengths_and_digits
+        PASS [   0.002s] ( 668/2798) amazing-css::color_parity transitional_paint::tests::hex_six_digit_exact
+        PASS [   0.002s] ( 669/2798) amazing-css::color_parity transitional_paint::tests::hex_three_digit_expands_by_doubling
+        PASS [   0.002s] ( 670/2798) amazing-css::color_parity transitional_paint::tests::huge_finite_channels_clamp_instead_of_overflowing
+        PASS [   0.002s] ( 671/2798) amazing-css::color_parity transitional_paint::tests::named_colors_case_insensitive
+        PASS [   0.061s] ( 672/2798) amazing-css::cascade_context supported_system_color_aliases_share_resolved_paint_values
+        PASS [   0.002s] ( 673/2798) amazing-css::color_parity transitional_paint::tests::parser_never_panics_on_hostile_input
+        PASS [   0.002s] ( 674/2798) amazing-css::color_parity transitional_paint::tests::rgb_channels_clamp_into_range
+        PASS [   0.002s] ( 675/2798) amazing-css::color_parity transitional_paint::tests::rgb_legacy_comma_syntax
+        PASS [   0.002s] ( 676/2798) amazing-css::color_parity transitional_paint::tests::rgb_modern_space_syntax
+        PASS [   0.002s] ( 677/2798) amazing-css::color_parity transitional_paint::tests::rgb_percent_channels_mixed_with_numbers
+        PASS [   0.002s] ( 678/2798) amazing-css::color_parity transitional_paint::tests::rgb_rejects_malformed_arguments
+        PASS [   0.002s] ( 679/2798) amazing-css::color_parity transitional_paint::tests::transparent_is_zero_alpha_black
+        PASS [   0.002s] ( 680/2798) amazing-css::color_parity transitional_paint::tests::unknown_names_are_rejected
+        PASS [   0.012s] ( 681/2798) amazing-css::css10_svg_presentation document_and_standalone_paint_use_same_hint_winner_and_provenance
+        PASS [   0.026s] ( 682/2798) amazing-css::css10_svg_presentation svg_fill_hint_beats_initial_but_author_and_inline_beat_hint
+        PASS [   0.010s] ( 683/2798) amazing-css::css10_svg_presentation svg_paint_geometry_and_transform_attribute_grammars_are_typed
+        PASS [   0.026s] ( 684/2798) amazing-css::css10_svg_presentation svg_hint_inherits_and_invalid_or_non_svg_attributes_do_not_cascade
+        PASS [   0.009s] ( 685/2798) amazing-css::css11_zoom zoom_computes_number_and_percentage_and_multiplies_through_ancestors
+        PASS [   0.014s] ( 686/2798) amazing-css::css10_svg_presentation svg_transform_attribute_uses_element_specific_name
+        PASS [   0.008s] ( 687/2798) amazing-css::css11_zoom zoom_is_not_implicitly_inherited_but_explicit_inherit_and_vars_work
+        PASS [   0.007s] ( 688/2798) amazing-css::css12_font_features font_features_validate_and_inherit_as_computed_values
+        PASS [   0.015s] ( 689/2798) amazing-css::css12_font_features font_shorthand_resets_feature_properties_and_css_wide_values_work
+        PASS [   0.041s] ( 690/2798) amazing-css::css11_zoom zoom_zero_is_computed_zero_but_effective_one_and_invalid_values_drop
+        PASS [   0.002s] ( 691/2798) amazing-css::css12_lang selectors_four_language_ranges_use_extended_filtering
+        PASS [   0.017s] ( 692/2798) amazing-css::css12_oklab pinned_lab_reference_colors_match_predefined_spaces
+        PASS [   0.012s] ( 693/2798) amazing-css::css12_oklab pinned_oklab_and_oklch_colors_reach_computed_style
+        PASS [   0.046s] ( 694/2798) amazing-css::css12_font_features invalid_font_features_do_not_override_valid_declarations
+        PASS [   0.006s] ( 695/2798) amazing-css::css12_oklab relative_currentcolor_identity_rebinds_after_explicit_inheritance
+        PASS [   0.015s] ( 696/2798) amazing-css::css12_oklab pinned_predefined_color_spaces_reach_computed_style
+        PASS [   0.018s] ( 697/2798) amazing-css::css13_list_followup list_style_shorthand_resolves_variables_and_drops_invalid_atomically
+        PASS [   0.027s] ( 698/2798) amazing-css::css13_list_followup list_style_shorthand_resets_and_inherits_all_three_longhands
+        PASS [   0.025s] ( 699/2798) amazing-css::css13_list_followup nth_of_type_compound_before_marker_matches_only_target_item
+        PASS [   0.009s] ( 700/2798) amazing-css::css13b_class_delta class_transform_uses_cached_geometry_and_rejects_unresolved_geometry
+        PASS [   0.027s] ( 701/2798) amazing-css::css13b_class_delta edited_class_in_scope_start_or_end_recomputes
+        PASS [   0.010s] ( 702/2798) amazing-css::css13b_class_delta fixed_implicit_style_scope_keeps_class_edit_on_compositor_path
+        PASS [   0.018s] ( 703/2798) amazing-css::css13b_class_delta ia_opacity_class_edit_is_value_only_and_updates_retained_style
+        PASS [   0.003s] ( 704/2798) amazing-css::css14_animations animation_and_transition_shorthand_expand_to_computed_lists
+        PASS [   0.007s] ( 705/2798) amazing-css::css14_animations cascade_exposes_defaults_shorthand_reset_and_longhand_canonicalization
+        PASS [   0.002s] ( 706/2798) amazing-css::css14_animations invalid_shorthand_does_not_replace_existing_longhands
+        PASS [   0.002s] ( 707/2798) amazing-css::css14_animations keyframe_custom_properties_and_deferred_values_survive_parsing
+        PASS [   0.002s] ( 708/2798) amazing-css::css14_animations keyframes_extract_last_named_rule_and_valid_frames
+        PASS [   0.109s] ( 709/2798) amazing-css::css13b_class_delta class_edits_with_selector_or_cascade_dependencies_recompute
+        PASS [   0.011s] ( 710/2798) amazing-css::css14_animations pinned_wpt_invalid_shorthand_examples_are_atomic
+        PASS [   0.005s] ( 711/2798) amazing-css::css14_animations shorthand_variables_are_expanded_after_substitution
+        PASS [   0.002s] ( 712/2798) amazing-css::css14_handoff direction_fill_and_easing_are_sampled_by_one_function
+        PASS [   0.002s] ( 713/2798) amazing-css::css14_handoff keyframe_easing_applies_within_its_segment
+        PASS [   0.002s] ( 714/2798) amazing-css::css14_handoff multi_property_animation_emits_one_end_event_after_both_commits
+        PASS [   0.007s] ( 715/2798) amazing-css::css14_handoff computed_timing_and_transition_builder_use_css_longhands
+        PASS [   0.002s] ( 716/2798) amazing-css::css14_handoff shared_opacity_sampler_ownership_style_read_and_finish_event
+        PASS [   0.002s] ( 717/2798) amazing-css::css14_handoff transform_sampler_composes_origin_and_rejects_mixed_or_unresolved_handoffs
+        PASS [   0.002s] ( 718/2798) amazing-css::css14_handoff transition_completion_and_mutation_cancellation_are_main_thread_events
+        PASS [   0.002s] ( 719/2798) amazing-css::css14_handoff transition_from_none_uses_identity_functions
+        PASS [   0.014s] ( 720/2798) amazing-css::css15_gradient_markers invalid_image_function_falls_back_to_list_style_type
+        PASS [   0.023s] ( 721/2798) amazing-css::css15_gradient_markers gradient_list_style_image_generates_an_image_marker
+        PASS [   0.024s] ( 722/2798) amazing-css::css15_invalidation class_mutation_recomputes_inherited_descendants_and_reports_delta
+        PASS [   0.040s] ( 723/2798) amazing-css::css15_invalidation classified_attribute_update_covers_class_style_inheritance_and_rebuild
+        PASS [   0.032s] ( 724/2798) amazing-css::css15_invalidation compositor_values_need_stable_inline_winner_and_no_selector_dependency
+        PASS [   0.023s] ( 725/2798) amazing-css::css15_invalidation id_and_attribute_mutations_use_old_and_new_tokens
+        PASS [   0.018s] ( 726/2798) amazing-css::css15_invalidation oracle_reports_first_differing_node_and_property
+        PASS [   0.041s] ( 727/2798) amazing-css::css15_invalidation pseudo_generation_updates_and_recycled_generation_falls_back
+        PASS [   0.055s] ( 728/2798) amazing-css::css15_invalidation relational_tree_and_epoch_changes_fall_back_to_full
+        PASS [   0.026s] ( 729/2798) amazing-css::css15_invalidation root_font_change_recomputes_rem_from_initial_root_basis
+        PASS [   0.013s] ( 730/2798) amazing-css::css15_invalidation transform_matrix_uses_cached_box_for_origin_and_percentages
+        PASS [   0.024s] ( 731/2798) amazing-css::css15_invalidation sibling_selector_recalculates_following_sibling
+        PASS [   0.008s] ( 732/2798) amazing-css::css16_animation_origin animation_origin_beats_author_normal_layers_and_inline
+        PASS [   0.006s] ( 733/2798) amazing-css::css16_animation_origin author_revert_exposes_animation_origin
+        PASS [   0.009s] ( 734/2798) amazing-css::css16_animation_origin typed_samples_are_validated_and_plain_compute_remains_stable
+        PASS [   0.013s] ( 735/2798) amazing-css::css16_animation_origin important_author_beats_animation_but_transition_beats_important
+        PASS [   0.002s] ( 736/2798) amazing-css::css17_color_functions contrast_color_picks_black_on_light_and_white_on_dark
+        PASS [   0.006s] ( 737/2798) amazing-css::css17_color_functions color_functions_survive_cascade_and_custom_property_substitution
+        PASS [   0.004s] ( 738/2798) amazing-css::css17_color_functions deprecated_system_color_is_supported_and_matches_modern_alias
+        PASS [   0.002s] ( 739/2798) amazing-css::css17_color_functions lch_mix_normalizes_omitted_and_oversized_percentages
+        PASS [   0.012s] ( 740/2798) amazing-css::css17_color_functions currentcolor_inside_color_mix_uses_element_color_and_inherits_source
+        PASS [   0.006s] ( 741/2798) amazing-css::css17_color_functions relative_hsl_currentcolor_rebinds_after_inheritance
+        PASS [   0.008s] ( 742/2798) amazing-css::css19_effects blend_mode_class_edit_is_a_value_only_compositor_delta
+        PASS [   0.011s] ( 743/2798) amazing-css::css19_effects blend_isolation_and_mask_longhands_compute
+        PASS [   0.002s] ( 744/2798) amazing-css::css19_effects effect_only_changes_classify_as_compositor_only
+        PASS [   0.014s] ( 745/2798) amazing-css::css19_effects filter_and_backdrop_filter_compute_to_typed_function_lists
+        PASS [   0.010s] ( 746/2798) amazing-css::css19_effects filter_class_edit_is_a_value_only_compositor_delta
+        PASS [   0.037s] ( 747/2798) amazing-css::css19_effects clip_path_basic_shapes_and_geometry_boxes_compute
+        PASS [   0.016s] ( 748/2798) amazing-css::css6_grid_values grid_lanes_display_stays_typed
+        PASS [   0.015s] ( 749/2798) amazing-css::css6_grid_values grid_shorthand_carries_subgrid_and_resets_implicit_tracks
+        PASS [   0.060s] ( 750/2798) amazing-css::css19_effects invalid_effect_declarations_do_not_displace_valid_winners
+        PASS [   0.024s] ( 751/2798) amazing-css::css6_grid_values invalid_subgrid_forms_default_to_none
+        PASS [   0.020s] ( 752/2798) amazing-css::css6_grid_values subgrid_accepts_and_types_both_axes
+        PASS [   0.022s] ( 753/2798) amazing-css::css6_grid_values two_keyword_display_computes_to_existing_short_forms
+        PASS [   0.009s] ( 754/2798) amazing-css::css7_element_paint cascade_sources_and_inheritance
+        PASS [   0.005s] ( 755/2798) amazing-css::css7_element_paint unsupported_paint_is_explicit
+        PASS [   0.014s] ( 756/2798) amazing-css::css7_element_paint wide_keywords_and_variables_use_the_computed_resolver
+        PASS [   0.008s] ( 757/2798) amazing-css::css9_logical_math logical_sides_respect_writing_mode_direction_and_shorthands
+        PASS [   0.038s] ( 758/2798) amazing-css::css9_logical_math invalid_math_cannot_displace_valid_declarations
+        PASS [   0.020s] ( 759/2798) amazing-css::css9_logical_math mixed_math_is_typed_and_preserved_for_layout_basis
+        PASS [   0.043s] ( 760/2798) amazing-css::css9_logical_math logical_sizing_maps_through_computed_writing_mode_and_preserves_cascade_rank
+        PASS [   0.014s] ( 761/2798) amazing-css::css9_logical_math pinned_flex_gap_logical_sizing_reaches_physical_layout_inputs
+        PASS [   0.008s] ( 762/2798) amazing-css::css_fonts4_longhands font_shorthand_resets_font_owned_longhands_only
+        PASS [   0.083s] ( 763/2798) amazing-css::css9_logical_math pinned_css_values_cases_reach_computed_style
+        PASS [   0.013s] ( 764/2798) amazing-css::css_fonts4_longhands synthesis_shorthand_expands_and_supports_checks_grammar
+        PASS [   0.009s] ( 765/2798) amazing-css::css_values4_font_units font_relative_metric_units_reach_layout_in_computed_styles
+        PASS [   0.005s] ( 766/2798) amazing-css::presentational_hints aspect_ratio_does_not_turn_canvas_attributes_into_css_dimensions
+        PASS [   0.019s] ( 767/2798) amazing-css::presentational_hints dimensions_use_html_microsyntax_and_element_zero_rules
+        PASS [   0.015s] ( 768/2798) amazing-css::presentational_hints every_author_layer_beats_hints_and_rollback_obeys_origin
+        PASS [   0.024s] ( 769/2798) amazing-css::presentational_hints font_list_alignment_and_whitespace_mappings
+        PASS [   0.004s] ( 770/2798) amazing-css::presentational_hints hints_do_not_apply_to_foreign_namespaces
+        PASS [   0.008s] ( 771/2798) amazing-css::presentational_hints image_spacing_borders_and_document_background_are_low_priority
+        PASS [   0.017s] ( 772/2798) amazing-css::presentational_hints legacy_colors_are_not_css_color_parsing
+        PASS [   0.176s] ( 773/2798) amazing-css::css_fonts4_longhands fonts4_longhands_accept_and_inherit
+        PASS [   0.022s] ( 774/2798) amazing-css::presentational_hints replaced_dimensions_are_hints_not_intrinsic_or_author_values
+        PASS [   0.021s] ( 775/2798) amazing-css::presentational_hints reset_keywords_and_inheritance_keep_provenance_honest
+        PASS [   0.010s] ( 776/2798) amazing-css::presentational_hints table_cellspacing_zero_is_a_non_author_hint_below_every_author_layer
+        PASS [   0.021s] ( 777/2798) amazing-css::presentational_hints simple_background_shorthand_resets_hints_including_after_variables
+        PASS [   0.014s] ( 778/2798) amazing-css::presentational_hints table_hints_target_cells_and_stop_at_nested_tables
+        PASS [   0.002s] ( 779/2798) amazing-css::rc21_media_replaced media_queries_cover_types_ranges_preferences_and_boolean_forms
+        PASS [   0.002s] ( 780/2798) amazing-css::rc21_media_replaced sizes_select_first_matching_entry_and_resolve_viewport_lengths
+        PASS [   0.062s] ( 781/2798) amazing-css::rc21_media_replaced image_orientation_and_object_properties_compute_on_all_replaced_tags
+        PASS [   0.054s] ( 782/2798) amazing-css::side_borders color_functions_and_token_boundaries_survive_expansion
+        PASS [   0.141s] ( 783/2798) amazing-css::side_borders each_side_accepts_any_component_order_without_affecting_other_sides
+        PASS [   0.234s] ( 784/2798) amazing-css::side_borders css_wide_keywords_apply_to_every_longhand_before_and_after_substitution
+        PASS [   0.116s] ( 785/2798) amazing-css::side_borders partial_shorthands_reset_omitted_components
+        PASS [   0.049s] ( 786/2798) amazing-css::side_borders side_shorthand_order_importance_and_layer_rollback_are_per_longhand
+        PASS [   0.302s] ( 787/2798) amazing-css::side_borders invalid_shorthands_are_rejected_atomically
+        PASS [   0.005s] ( 788/2798) amazing-css::typed_compute deprecated_system_color_alias_has_a_typed_value
+        PASS [   0.008s] ( 789/2798) amazing-css::typed_compute existing_flex_math_constants_remain_available_to_layout
+        PASS [   0.004s] ( 790/2798) amazing-css::typed_compute invalid_color_identifier_does_not_get_the_unsupported_color_escape_hatch
+        PASS [   0.004s] ( 791/2798) amazing-css::typed_compute invalid_supported_color_after_var_defaults_without_reviving_prior_winner
+        PASS [   0.011s] ( 792/2798) amazing-css::typed_compute ruby_display_roles_survive_typed_computation
+        PASS [   0.006s] ( 793/2798) amazing-css::typed_compute unsupported_color_spaces_preserve_the_existing_cascade_winner
+        PASS [   0.002s] ( 794/2798) amazing-devtools base64::tests::encodes_known_vectors
+        PASS [   0.002s] ( 795/2798) amazing-devtools base64::tests::rejects_bad_input
+        PASS [   0.002s] ( 796/2798) amazing-devtools base64::tests::round_trips_every_length_and_byte
+        PASS [   0.002s] ( 797/2798) amazing-devtools domains::css::tests::computes_and_matches_styles
+        PASS [   0.002s] ( 798/2798) amazing-devtools domains::dom::tests::get_document_assigns_dense_node_ids
+        PASS [   0.002s] ( 799/2798) amazing-devtools domains::dom::tests::get_outer_html_and_backend_resolution
+        PASS [   0.002s] ( 800/2798) amazing-devtools domains::dom::tests::missing_node_is_a_server_error
+        PASS [   0.002s] ( 801/2798) amazing-devtools domains::dom::tests::query_selector_returns_zero_when_missing
+        PASS [   0.002s] ( 802/2798) amazing-devtools domains::input::tests::dispatches_mouse_key_touch_and_text
+        PASS [   0.100s] ( 803/2798) amazing-css::side_borders variables_expand_after_cascade_without_reviving_invalid_fallbacks
+        PASS [   0.002s] ( 804/2798) amazing-devtools domains::input::tests::missing_mouse_coordinates_are_invalid_params
+        PASS [   0.002s] ( 805/2798) amazing-devtools domains::log::tests::entry_event_serializes_optional_fields
+        PASS [   0.002s] ( 806/2798) amazing-devtools domains::network::tests::request_event_carries_headers_and_type
+        PASS [   0.002s] ( 807/2798) amazing-devtools domains::network::tests::response_event_has_status_and_type
+        PASS [   0.002s] ( 808/2798) amazing-devtools domains::page::tests::enable_emits_existing_frame_and_init
+        PASS [   0.002s] ( 809/2798) amazing-devtools domains::page::tests::navigate_returns_frame_and_emits_frame_navigated
+        PASS [   0.002s] ( 810/2798) amazing-devtools domains::page::tests::screenshot_is_base64_encoded
+        PASS [   0.002s] ( 811/2798) amazing-devtools domains::runtime::tests::enable_emits_execution_context
+        PASS [   0.002s] ( 812/2798) amazing-devtools domains::runtime::tests::evaluate_serializes_result_and_exception
+        PASS [   0.002s] ( 813/2798) amazing-devtools domains::runtime::tests::get_properties_maps_not_found_to_server_error
+        PASS [   0.002s] ( 814/2798) amazing-devtools domains::target::tests::browser_version_shape
+        PASS [   0.002s] ( 815/2798) amazing-devtools domains::target::tests::target_info_serializes_optionals
+        PASS [   0.002s] ( 816/2798) amazing-devtools host::tests::defaults_are_unsupported_not_panics
+        PASS [   0.002s] ( 817/2798) amazing-devtools host::tests::node_description_builders
+        PASS [   0.002s] ( 818/2798) amazing-devtools host::tests::remote_object_constructors
+        PASS [   0.002s] ( 819/2798) amazing-devtools http::tests::clean_eof_is_none
+        PASS [   0.002s] ( 820/2798) amazing-devtools http::tests::enforces_header_limit
+        PASS [   0.002s] ( 821/2798) amazing-devtools http::tests::parses_a_get_request
+        PASS [   0.002s] ( 822/2798) amazing-devtools http::tests::reads_a_request_and_stops_at_the_blank_line
+        PASS [   0.002s] ( 823/2798) amazing-devtools http::tests::rejects_malformed_requests
+        PASS [   0.002s] ( 824/2798) amazing-devtools http::tests::writes_a_response
+        PASS [   0.002s] ( 825/2798) amazing-devtools json::tests::inserts_and_replaces_members
+        PASS [   0.002s] ( 826/2798) amazing-devtools json::tests::parses_escapes_and_surrogates
+        PASS [   0.002s] ( 827/2798) amazing-devtools json::tests::parses_scalars
+        PASS [   0.002s] ( 828/2798) amazing-devtools json::tests::preserves_object_order_and_serializes_stably
+        PASS [   0.002s] ( 829/2798) amazing-devtools json::tests::rejects_excessive_depth_and_size
+        PASS [   0.002s] ( 830/2798) amazing-devtools json::tests::round_trips_integers_without_fraction
+        PASS [   0.002s] ( 831/2798) amazing-devtools json::tests::rejects_malformed_documents
+        PASS [   0.002s] ( 832/2798) amazing-devtools mock::tests::navigation_records_and_queues_lifecycle
+        PASS [   0.002s] ( 833/2798) amazing-devtools mock::tests::queries_the_mock_document
+        PASS [   0.001s] ( 834/2798) amazing-devtools protocol::tests::parses_a_request
+        PASS [   0.002s] ( 835/2798) amazing-devtools protocol::tests::host_errors_map_to_codes
+        PASS [   0.002s] ( 836/2798) amazing-devtools protocol::tests::parses_string_ids_and_sessions
+        PASS [   0.003s] ( 837/2798) amazing-devtools protocol::tests::parses_defaults_and_notifications
+        PASS [   0.002s] ( 838/2798) amazing-devtools protocol::tests::rejects_invalid_requests
+        PASS [   0.002s] ( 839/2798) amazing-devtools protocol::tests::serializes_messages
+        PASS [   0.002s] ( 840/2798) amazing-devtools server::tests::discovery_bodies_advertise_urls
+        PASS [   0.002s] ( 841/2798) amazing-devtools server::tests::host_uses_request_authority
+        PASS [   0.002s] ( 842/2798) amazing-devtools server::tests::validates_websocket_keys
+        PASS [   0.002s] ( 843/2798) amazing-devtools session::tests::node_ids_are_assigned_once_and_reversible
+        PASS [   0.002s] ( 844/2798) amazing-devtools session::tests::unknown_domain_is_method_not_found
+        PASS [   0.002s] ( 845/2798) amazing-devtools sha1::tests::rfc6455_accept_example
+        PASS [   0.003s] ( 846/2798) amazing-devtools ws::tests::accepts_unmasked_server_frame_as_client
+        PASS [   0.004s] ( 847/2798) amazing-devtools ws::tests::close_codes_are_validated
+        PASS [   0.003s] ( 848/2798) amazing-devtools ws::tests::close_is_surfaced_and_echoed
+        PASS [   0.003s] ( 849/2798) amazing-devtools ws::tests::encode_frame_uses_minimal_lengths
+        PASS [   0.002s] ( 850/2798) amazing-devtools ws::tests::enforces_frame_and_message_limits
+        PASS [   0.002s] ( 851/2798) amazing-devtools ws::tests::eof_during_frame_is_reported
+        PASS [   0.019s] ( 852/2798) amazing-devtools sha1::tests::matches_published_vectors
+        PASS [   0.002s] ( 853/2798) amazing-devtools ws::tests::parses_partial_frames_across_reads
+        PASS [   0.002s] ( 854/2798) amazing-devtools ws::tests::reassembles_fragmented_text_with_control_frames_between
+        PASS [   0.002s] ( 855/2798) amazing-devtools ws::tests::rejects_bad_control_frames
+        PASS [   0.002s] ( 856/2798) amazing-devtools ws::tests::rejects_invalid_utf8_text
+        PASS [   0.002s] ( 857/2798) amazing-devtools ws::tests::rejects_reserved_bits_and_unknown_opcodes
+        PASS [   0.002s] ( 858/2798) amazing-devtools ws::tests::rejects_unmasked_client_frame
+        PASS [   0.002s] ( 859/2798) amazing-devtools ws::tests::round_trips_a_text_message
+        PASS [   0.045s] ( 860/2798) amazing-devtools::cdp browser_endpoint_supports_flattened_sessions
+        PASS [   0.006s] ( 861/2798) amazing-devtools::cdp discovery_endpoints_advertise_websocket_urls
+        PASS [   0.004s] ( 862/2798) amazing-devtools::cdp errors_and_protocol_failures_are_reported
+        PASS [   0.005s] ( 863/2798) amazing-devtools::cdp page_endpoint_dispatches_input_and_hit_tests
+        PASS [   0.125s] ( 864/2798) amazing-devtools::cdp browser_endpoint_pushes_target_lifecycle_events
+        PASS [   0.006s] ( 865/2798) amazing-devtools::cdp page_endpoint_serves_inspector_read_paths
+        PASS [   0.003s] ( 866/2798) amazing-dom abort::tests::abort_any_propagates_once_in_source_then_dependent_order
+        PASS [   0.002s] ( 867/2798) amazing-dom collection::tests::filters_and_names_track_tree_and_attributes
+        PASS [   0.002s] ( 868/2798) amazing-dom collection::tests::live_collection_reuses_identity_and_invalidates_only_on_mutation
+        PASS [   0.002s] ( 869/2798) amazing-dom collection::tests::namespace_filter_and_named_item_follow_tree_order
+        PASS [   0.002s] ( 870/2798) amazing-dom collection::tests::tag_name_uses_qualified_name_and_html_document_case_rules
+        PASS [   0.002s] ( 871/2798) amazing-dom custom_elements::tests::definition_validation_upgrade_stack_and_initial_reactions
+        PASS [   0.002s] ( 872/2798) amazing-dom custom_elements::tests::live_mutations_enqueue_observed_lifecycle_reactions
+        PASS [   0.002s] ( 873/2798) amazing-dom custom_elements::tests::move_before_uses_connected_move_callback_or_lifecycle_fallback
+        PASS [   0.002s] ( 874/2798) amazing-dom document_surface::tests::html_title_body_and_readiness_follow_tree
+        PASS [   0.002s] ( 875/2798) amazing-dom document_surface::tests::svg_title_and_fragment_id
+        PASS [   0.002s] ( 876/2798) amazing-dom event_loop::tests::animation_frames_are_not_timers_and_use_supplied_frame_timestamp
+        PASS [   0.002s] ( 877/2798) amazing-dom event_loop::tests::animation_snapshot_honors_cancellation_and_defers_new_callbacks
+        PASS [   0.002s] ( 878/2798) amazing-dom event_loop::tests::checkpoint_reentrancy_is_suppressed_through_cleanup
+        PASS [   0.002s] ( 879/2798) amazing-dom event_loop::tests::cleanup_enqueued_jobs_wait_for_a_new_checkpoint
+        PASS [   0.002s] ( 880/2798) amazing-dom event_loop::tests::clear_timer_invalidates_already_queued_task_without_reusing_id
+        PASS [   0.002s] ( 881/2798) amazing-dom event_loop::tests::completion_tokens_guard_reentrancy_and_duplicate_completion
+        PASS [   0.002s] ( 882/2798) amazing-dom event_loop::tests::frame_requested_by_pre_render_microtask_is_in_current_snapshot
+        PASS [   0.002s] ( 883/2798) amazing-dom event_loop::tests::hidden_rendering_keeps_callbacks_and_opportunities_coalesce
+        PASS [   0.002s] ( 884/2798) amazing-dom event_loop::tests::host_callback_checkpoint_resumes_same_task_before_later_tasks
+        PASS [   0.002s] ( 885/2798) amazing-dom event_loop::tests::interval_rearms_after_callback_checkpoint_and_can_be_canceled_there
+        PASS [   0.002s] ( 886/2798) amazing-dom event_loop::tests::invalid_global_calls_fail_and_keep_existing_state
+        PASS [   0.002s] ( 887/2798) amazing-dom event_loop::tests::microtask_created_timer_does_not_inherit_timer_nesting
+        PASS [   0.002s] ( 888/2798) amazing-dom event_loop::tests::microtasks_drain_newly_queued_jobs_before_next_task
+        PASS [   0.002s] ( 889/2798) amazing-dom event_loop::tests::nested_callback_checkpoint_restores_render_frame_continuation
+        PASS [   0.002s] ( 890/2798) amazing-dom event_loop::tests::nested_timers_and_intervals_clamp_after_six_levels
+        PASS [   0.002s] ( 891/2798) amazing-dom event_loop::tests::source_queues_are_fair_and_fifo_within_each_source
+        PASS [   0.002s] ( 892/2798) amazing-dom event_loop::tests::tasks_skip_inactive_documents_but_microtasks_do_not
+        PASS [   0.002s] ( 893/2798) amazing-dom event_loop::tests::thrown_host_callback_still_allows_later_work
+        PASS [   0.002s] ( 894/2798) amazing-dom event_loop::tests::timer_active_time_excludes_document_inactivity
+        PASS [   0.002s] ( 895/2798) amazing-dom event_loop::tests::timer_deadlines_and_expiry_order_use_driver_time
+        PASS [   0.002s] ( 896/2798) amazing-dom event_loop::tests::visibility_is_rechecked_when_render_task_runs
+        PASS [   0.002s] ( 897/2798) amazing-dom events::tests::aborting_completed_continuation_does_not_clear_a_new_dispatch
+        PASS [   0.002s] ( 898/2798) amazing-dom events::tests::blocking_listener_query_covers_ancestors_and_window_with_generation
+        PASS [   0.002s] ( 899/2798) amazing-dom events::tests::callback_exceptions_are_reported_without_ending_dispatch
+        PASS [   0.002s] ( 900/2798) amazing-dom events::tests::cancellation_requires_cancelable_and_non_passive
+        PASS [   0.002s] ( 901/2798) amazing-dom events::tests::capture_target_and_bubble_order_and_cleanup
+        PASS [   0.002s] ( 902/2798) amazing-dom events::tests::cyclic_parent_hook_fails_without_setting_dispatch_flag
+        PASS [   0.002s] ( 903/2798) amazing-dom events::tests::default_passive_depends_on_type_and_document_target
+        PASS [   0.003s] ( 904/2798) amazing-dom events::tests::duplicate_identity_ignores_once_and_passive_but_includes_capture
+        PASS [   0.002s] ( 905/2798) amazing-dom events::tests::external_targets_and_retarget_hooks_are_bindable
+        PASS [   0.002s] ( 906/2798) amazing-dom events::tests::immediate_stop_skips_remaining_listeners_and_ancestors
+        PASS [   0.002s] ( 907/2798) amazing-dom events::tests::init_event_is_noop_during_dispatch_then_resets_flags
+        PASS [   0.003s] ( 908/2798) amazing-dom events::tests::listener_removed_after_snapshot_is_not_called_even_if_readded
+        PASS [   0.003s] ( 909/2798) amazing-dom events::tests::listeners_added_during_capture_can_run_in_later_bubble_snapshot
+        PASS [   0.002s] ( 910/2798) amazing-dom events::tests::non_bubbling_events_still_capture_and_invoke_both_target_groups
+        PASS [   0.002s] ( 911/2798) amazing-dom events::tests::non_composed_hook_does_not_cross_boundary
+        PASS [   0.002s] ( 912/2798) amazing-dom events::tests::once_removed_before_nested_dispatch
+        PASS [   0.002s] ( 913/2798) amazing-dom events::tests::removal_capture_flag_and_legacy_flags_follow_spec
+        PASS [   0.002s] ( 914/2798) amazing-dom events::tests::same_event_redispatch_rejected_and_reuse_resets_trust_not_cancellation
+        PASS [   0.002s] ( 915/2798) amazing-dom events::tests::stop_at_target_capture_prevents_target_bubble_invocation
+        PASS [   0.002s] ( 916/2798) amazing-dom events::tests::stop_propagation_keeps_current_listener_snapshot_only
+        PASS [   0.002s] ( 917/2798) amazing-dom events::tests::topology_changes_do_not_change_current_event_path
+        PASS [   0.002s] ( 918/2798) amazing-dom events::tests::window_target_is_document_event_parent_and_passive_root
+        PASS [   0.002s] ( 919/2798) amazing-dom events::tests::wpt_once_listener_is_removed_before_nested_dispatch
+        PASS [   0.002s] ( 920/2798) amazing-dom events::tests::wpt_stop_immediate_sets_cancel_bubble_and_suppresses_second_listener
+        PASS [   0.002s] ( 921/2798) amazing-dom focus::tests::disabled_fieldsets_prevent_focus_except_in_the_first_legend
+        PASS [   0.002s] ( 922/2798) amazing-dom focus::tests::focusability_and_document_state_follow_connected_elements
+        PASS [   0.002s] ( 923/2798) amazing-dom forms::temporal_tests::date_time_month_and_number_conversions
+        PASS [   0.002s] ( 924/2798) amazing-dom forms::tests::checked_content_attribute_reconciles_radio_group_without_dirtying_default
+        PASS [   0.002s] ( 925/2798) amazing-dom forms::tests::cloning_preserves_dirty_form_state
+        PASS [   0.002s] ( 926/2798) amazing-dom forms::tests::form_owner_uses_first_matching_id_then_ancestor_fallback
+        PASS [   0.002s] ( 927/2798) amazing-dom forms::tests::input_value_modes_dirty_flags_and_sanitization
+        PASS [   0.002s] ( 928/2798) amazing-dom forms::tests::option_selection_and_form_reset
+        PASS [   0.002s] ( 929/2798) amazing-dom forms::tests::radio_groups_follow_form_owner_and_reparenting
+        PASS [   0.002s] ( 930/2798) amazing-dom forms::tests::range_clamps_and_rounds_without_inverted_bounds
+        PASS [   0.002s] ( 931/2798) amazing-dom forms::tests::reparenting_a_checked_radio_reconciles_its_new_group
+        PASS [   0.002s] ( 932/2798) amazing-dom forms::tests::required_select_placeholder_and_disabled_fieldset_rules
+        PASS [   0.002s] ( 933/2798) amazing-dom forms::tests::textarea_keeps_raw_children_and_normalizes_api_value
+        PASS [   0.002s] ( 934/2798) amazing-dom forms::tests::validation_flags_and_custom_error
+        PASS [   0.002s] ( 935/2798) amazing-dom markup_tests::declarative_shadow_serialization_selects_roots_and_preserves_template_flags
+        PASS [   0.002s] ( 936/2798) amazing-dom markup_tests::document_import_clones_into_target_with_clonable_shadow
+        PASS [   0.002s] ( 937/2798) amazing-dom markup_tests::explicit_shadow_roots_include_nonserializable_closed_roots
+        PASS [   0.002s] ( 938/2798) amazing-dom markup_tests::foreign_namespaces_and_template_children_serialize
+        PASS [   0.002s] ( 939/2798) amazing-dom markup_tests::html_fragment_serialization_escapes_text_and_attributes_but_not_raw_text
+        PASS [   0.003s] ( 940/2798) amazing-dom markup_tests::inert_document_import_preserves_own_tree_and_metadata
+        PASS [   0.003s] ( 941/2798) amazing-dom markup_tests::parser_arena_import_preserves_namespace_and_tree_order
+        PASS [   0.002s] ( 942/2798) amazing-dom markup_tests::parser_fragment_import_keeps_declarative_shadow_contents
+        PASS [   0.002s] ( 943/2798) amazing-dom markup_tests::serialization_preserves_utf16_text_units
+        PASS [   0.002s] ( 944/2798) amazing-dom mutation::tests::attribute_filter_ignores_other_names_and_non_null_namespaces
+        PASS [   0.002s] ( 945/2798) amazing-dom mutation::tests::bulk_parser_attribute_updates_preserve_supplied_order
+        PASS [   0.002s] ( 946/2798) amazing-dom mutation::tests::callback_mutations_reach_later_observer_in_same_checkpoint
+        PASS [   0.002s] ( 947/2798) amazing-dom mutation::tests::checkpoint_batches_records_in_mutation_order
+        PASS [   0.002s] ( 948/2798) amazing-dom mutation::tests::comments_and_processing_instructions_are_character_data
+        PASS [   0.002s] ( 949/2798) amazing-dom mutation::tests::delivery_signal_only_changes_for_interested_records_and_rearms_after_checkpoint
+        PASS [   0.002s] ( 950/2798) amazing-dom mutation::tests::detached_subtree_is_observed_until_its_delivery
+        PASS [   0.002s] ( 951/2798) amazing-dom mutation::tests::disconnect_discards_records_and_transients
+        PASS [   0.002s] ( 952/2798) amazing-dom mutation::tests::image_relevant_attribute_mutations_are_queued_including_same_src
+        PASS [   0.002s] ( 953/2798) amazing-dom mutation::tests::namespaced_attribute_old_value_and_removal
+        PASS [   0.002s] ( 954/2798) amazing-dom mutation::tests::old_values_are_per_observer_and_unchanged_set_still_records
+        PASS [   0.002s] ( 955/2798) amazing-dom mutation::tests::options_validate_presence_not_only_truth
+        PASS [   0.002s] ( 956/2798) amazing-dom mutation::tests::overlapping_registrations_deliver_once_with_old_value_union
+        PASS [   0.002s] ( 957/2798) amazing-dom mutation::tests::pending_observer_order_follows_first_interested_registration
+        PASS [   0.002s] ( 958/2798) amazing-dom mutation::tests::reobserve_removes_transients_of_replaced_registration
+        PASS [   0.255s] ( 959/2798) amazing-devtools::cdp page_endpoint_round_trips_every_domain
+        PASS [   0.002s] ( 960/2798) amazing-dom mutation::tests::subtree_false_does_not_observe_descendant_changes
+        PASS [   0.002s] ( 961/2798) amazing-dom mutation::tests::take_records_drains_without_cancelling_scheduled_cleanup
+        PASS [   0.002s] ( 962/2798) amazing-dom mutation::tests::tree_records_capture_previous_and_next_siblings
+        PASS [   0.002s] ( 963/2798) amazing-dom namespace::tests::attributes_keep_one_insertion_order_across_namespaces_and_clones
+        PASS [   0.002s] ( 964/2798) amazing-dom namespace::tests::create_element_local_name_does_not_extract_colon_prefix
+        PASS [   0.002s] ( 965/2798) amazing-dom namespace::tests::detached_constructor_uses_requested_document_and_checked_attachment
+        PASS [   0.002s] ( 966/2798) amazing-dom namespace::tests::dom_name_validation_is_distinct_from_xml_tokenization
+        PASS [   0.002s] ( 967/2798) amazing-dom namespace::tests::expanded_attributes_clone_and_notify_by_local_name
+        PASS [   0.002s] ( 968/2798) amazing-dom namespace::tests::expanded_parser_creation_keeps_names_case_and_checked_tree_ownership
+        PASS [   0.002s] ( 969/2798) amazing-dom namespace::tests::invalid_names_and_reserved_prefixes_do_not_mutate_the_tree
+        PASS [   0.002s] ( 970/2798) amazing-dom namespace::tests::known_uris_preserve_existing_enum_values_and_parser_constructors
+        PASS [   0.002s] ( 971/2798) amazing-dom namespace::tests::namespace_survives_deep_clone_and_adoption
+        PASS [   0.002s] ( 972/2798) amazing-dom namespace::tests::namespace_survives_partial_range_cloning
+        PASS [   0.002s] ( 973/2798) amazing-dom namespace::tests::null_empty_and_arbitrary_namespaces_keep_identity_and_case
+        PASS [   0.002s] ( 974/2798) amazing-dom namespace::tests::processing_instruction_target_uses_xml_name_characters
+        PASS [   0.002s] ( 975/2798) amazing-dom namespace::tests::qualified_attribute_validation_precedes_mutation_and_supports_xmlns_attributes
+        PASS [   0.002s] ( 976/2798) amazing-dom namespace::tests::qualified_attributes_keep_prefix_and_expanded_lookup_identity
+        PASS [   0.002s] ( 977/2798) amazing-dom namespace::tests::wpt_doctype_name_allows_empty_and_punctuation_but_rejects_ascii_whitespace_and_gt
+        PASS [   0.002s] ( 978/2798) amazing-dom namespace::tests::xml_parser_can_create_unprefixed_xmlns_without_relaxing_dom_api
+        PASS [   0.002s] ( 979/2798) amazing-dom namespace_lookup::tests::wpt_lookup_uses_own_namespace_declarations_and_parent_element
+        PASS [   0.002s] ( 980/2798) amazing-dom node_mixins::tests::append_and_prepend_move_duplicates_and_preserve_identity
+        PASS [   0.002s] ( 981/2798) amazing-dom node_mixins::tests::child_mixins_work_for_comment_text_element_and_doctype
+        PASS [   0.002s] ( 982/2798) amazing-dom node_mixins::tests::before_and_after_skip_siblings_in_arguments_before_conversion
+        PASS [   0.002s] ( 983/2798) amazing-dom node_mixins::tests::detached_child_methods_do_not_convert_or_move_arguments
+        PASS [   0.002s] ( 984/2798) amazing-dom node_mixins::tests::element_navigation_skips_non_elements_and_tracks_tree_mutations
+        PASS [   0.002s] ( 985/2798) amazing-dom node_mixins::tests::invalid_receivers_and_single_node_cycles_do_not_mutate_tree
+        PASS [   0.002s] ( 986/2798) amazing-dom node_mixins::tests::failed_final_insertion_keeps_observable_conversion_moves
+        PASS [   0.002s] ( 987/2798) amazing-dom node_mixins::tests::replace_children_emits_one_combined_record_and_empty_call_removes_all
+        PASS [   0.002s] ( 988/2798) amazing-dom node_mixins::tests::replace_with_target_in_arguments_uses_saved_viable_sibling
+        PASS [   0.002s] ( 989/2798) amazing-dom node_mixins::tests::strings_are_distinct_text_nodes_and_cross_document_nodes_are_adopted
+        PASS [   0.002s] ( 990/2798) amazing-dom range::tests::boundary_order_uses_ancestor_offsets
+        PASS [   0.002s] ( 991/2798) amazing-dom range::tests::character_data_old_value_retains_lone_surrogate
+        PASS [   0.002s] ( 992/2798) amazing-dom range::tests::clone_and_release_live_handles
+        PASS [   0.002s] ( 993/2798) amazing-dom range::tests::clone_partial_contents_preserves_source_and_node_attributes
+        PASS [   0.002s] ( 994/2798) amazing-dom range::tests::cloning_document_preserves_metadata_and_document_kind
+        PASS [   0.002s] ( 995/2798) amazing-dom range::tests::collapsed_extract_clone_delete_are_empty_and_preserve_boundaries
+        PASS [   0.002s] ( 996/2798) amazing-dom range::tests::delete_partial_contents_leaves_partial_ancestors
+        PASS [   0.003s] ( 997/2798) amazing-dom range::tests::compare_modes_and_intersection
+        PASS [   0.002s] ( 998/2798) amazing-dom range::tests::doctype_extract_and_clone_throw_before_mutating_but_delete_works
+        PASS [   0.002s] ( 999/2798) amazing-dom range::tests::detached_split_clamps_instead_of_relocating
+        PASS [   0.002s] (1000/2798) amazing-dom range::tests::extract_partial_contents_moves_whole_children_and_collapses_before_mutation
+        PASS [   0.002s] (1001/2798) amazing-dom range::tests::extract_with_ancestor_start_and_character_data_end
+        PASS [   0.002s] (1002/2798) amazing-dom range::tests::fragment_removal_and_insertion_update_all_ranges
+        PASS [   0.002s] (1003/2798) amazing-dom range::tests::insert_validates_before_text_split_and_expands_collapsed_range
+        PASS [   0.002s] (1004/2798) amazing-dom range::tests::insertion_at_boundary_does_not_shift_it
+        PASS [   0.002s] (1005/2798) amazing-dom range::tests::normalize_merges_ranges_before_removing_text_nodes
+        PASS [   0.002s] (1006/2798) amazing-dom range::tests::normalize_reunites_surrogates_and_ignores_self
+        PASS [   0.002s] (1007/2798) amazing-dom range::tests::normalize_only_touches_exclusive_text_nodes
+        PASS [   0.002s] (1008/2798) amazing-dom range::tests::partially_contained_comment_is_not_a_text_exception_for_surround
+        PASS [   0.002s] (1009/2798) amazing-dom range::tests::removal_relocates_descendants_and_decrements_following_offsets
+        PASS [   0.002s] (1010/2798) amazing-dom range::tests::replace_data_endpoint_rules_and_utf16
+        PASS [   0.002s] (1011/2798) amazing-dom range::tests::replace_all_and_adoption_use_live_removal_hooks
+        PASS [   0.002s] (1012/2798) amazing-dom range::tests::setters_validate_then_collapse_across_roots_or_order
+        PASS [   0.002s] (1013/2798) amazing-dom range::tests::select_collapse_and_set_after_variants
+        PASS [   0.002s] (1014/2798) amazing-dom range::tests::split_text_preserves_surrogate_halves_and_parent_boundaries
+        PASS [   0.002s] (1015/2798) amazing-dom range::tests::static_range_can_be_invalid_and_never_moves
+        PASS [   0.002s] (1016/2798) amazing-dom range::tests::surround_rejects_partial_nontext_before_changes
+        PASS [   0.002s] (1017/2798) amazing-dom range::tests::surround_character_data_parent_errors_after_extraction
+        PASS [   0.002s] (1018/2798) amazing-dom range::tests::surround_text_splits_and_selects_wrapper
+        PASS [   0.002s] (1019/2798) amazing-dom render_mutation::tests::recycled_slot_has_new_generation_and_old_journal_identity_is_stable
+        PASS [   0.002s] (1020/2798) amazing-dom render_mutation::tests::tree_attribute_text_and_state_are_ordered_and_drain_at_epoch
+        PASS [   0.002s] (1021/2798) amazing-dom render_mutation::tests::shadow_slot_journal_and_full_rebuild_fallback
+        PASS [   0.002s] (1022/2798) amazing-dom selection::tests::selection_retains_live_range_and_rejects_foreign_document
+        PASS [   0.003s] (1023/2798) amazing-dom shadow::tests::attach_checks_hosts_and_exposes_only_open_roots
+        PASS [   0.002s] (1024/2798) amazing-dom shadow::tests::clonable_shadow_root_is_deep_copied_even_for_shallow_host_clone
+        PASS [   0.002s] (1025/2798) amazing-dom shadow::tests::fallback_change_signals_empty_slot_once_per_checkpoint
+        PASS [   0.002s] (1026/2798) amazing-dom shadow::tests::event_path_retargets_and_hides_closed_tree_from_outside_listener
+        PASS [   0.002s] (1027/2798) amazing-dom shadow::tests::flatten_uses_fallback_and_expands_nested_slots
+        PASS [   0.003s] (1028/2798) amazing-dom shadow::tests::named_and_manual_slots_assign_in_required_order_and_signal_once
+        PASS [   0.002s] (1029/2798) amazing-dom shadow::tests::related_target_is_retargeted_at_each_boundary
+        PASS [   0.002s] (1030/2798) amazing-dom shadow::tests::root_and_connectivity_cross_host_only_when_composed
+        PASS [   0.002s] (1031/2798) amazing-dom shadow::tests::slotted_path_crosses_shadow_even_when_not_composed_and_is_frozen
+        PASS [   0.002s] (1032/2798) amazing-dom template_tests::clone_and_adopt_copy_or_move_template_contents
+        PASS [   0.002s] (1033/2798) amazing-dom template_tests::import_preserves_template_fragment_and_nested_template_ownership
+        PASS [   0.002s] (1034/2798) amazing-dom template_tests::template_contents_are_persistent_inert_and_outside_light_dom
+        PASS [   0.002s] (1035/2798) amazing-dom tests::append_and_iterate_children
+        PASS [   0.002s] (1036/2798) amazing-dom tests::append_text_data_merges
+        PASS [   0.002s] (1037/2798) amazing-dom tests::attach_before_places_between_siblings
+        PASS [   0.003s] (1038/2798) amazing-dom tests::detach_repairs_links
+        PASS [   0.002s] (1039/2798) amazing-dom tests::document_is_root
+        PASS [   0.002s] (1040/2798) amazing-dom tests::dump_shows_tree_shape
+        PASS [   0.002s] (1041/2798) amazing-dom tests::sibling_links_are_bidirectional
+        PASS [   0.002s] (1042/2798) amazing-dom traversal::tests::callback_errors_clear_active_state_and_preserve_reference
+        PASS [   0.002s] (1043/2798) amazing-dom traversal::tests::filter_removal_adjusts_candidate_but_returns_original_node
+        PASS [   0.002s] (1044/2798) amazing-dom traversal::tests::iterator_reject_does_not_prune_children
+        PASS [   0.002s] (1045/2798) amazing-dom traversal::tests::iterator_visits_root_and_reverses_pointer
+        PASS [   0.002s] (1046/2798) amazing-dom traversal::tests::legacy_detach_is_noop_and_gc_release_is_explicit
+        PASS [   0.002s] (1047/2798) amazing-dom traversal::tests::nested_traversal_without_a_filter_candidate_returns_null
+        PASS [   0.002s] (1048/2798) amazing-dom traversal::tests::removal_adjusts_after_pointer_to_preceding_node
+        PASS [   0.002s] (1049/2798) amazing-dom traversal::tests::removal_adjusts_before_pointer_to_following_node
+        PASS [   0.002s] (1050/2798) amazing-dom traversal::tests::removing_root_or_ancestor_keeps_iterator_inside_detached_tree
+        PASS [   0.002s] (1051/2798) amazing-dom traversal::tests::reverse_filter_removal_moves_candidate_before_next_node
+        PASS [   0.003s] (1052/2798) amazing-dom traversal::tests::walker_children_siblings_and_parents_follow_filtered_tree
+        PASS [   0.002s] (1053/2798) amazing-dom traversal::tests::walker_current_is_unrestricted_and_not_relocated_by_removal
+        PASS [   0.003s] (1054/2798) amazing-dom traversal::tests::walker_previous_descends_before_accepting_sibling
+        PASS [   0.002s] (1055/2798) amazing-dom traversal::tests::walker_reject_prunes_and_skip_descends
+        PASS [   0.002s] (1056/2798) amazing-dom tree::tests::adoption_preserves_subtree_ids_and_changes_every_owner
+        PASS [   0.003s] (1057/2798) amazing-dom traversal::tests::what_to_show_skips_callback_but_descends
+        PASS [   0.002s] (1058/2798) amazing-dom tree::tests::comments_and_processing_instructions_can_surround_document_root
+        PASS [   0.002s] (1059/2798) amazing-dom tree::tests::compare_position_and_tree_predicates
+        PASS [   0.002s] (1060/2798) amazing-dom tree::tests::cycles_and_document_insertion_are_rejected_without_changes
+        PASS [   0.002s] (1061/2798) amazing-dom tree::tests::default_has_a_document
+        PASS [   0.002s] (1062/2798) amazing-dom tree::tests::document_has_one_element_and_no_text
+        PASS [   0.002s] (1063/2798) amazing-dom tree::tests::element_cannot_precede_doctype_even_through_comment
+        PASS [   0.005s] (1064/2798) amazing-dom tree::tests::doctype_order_uniqueness_and_parent_validity
+        PASS [   0.003s] (1065/2798) amazing-dom tree::tests::empty_fragment_does_not_queue_records_or_change_its_document
+        PASS [   0.003s] (1066/2798) amazing-dom tree::tests::fragment_insertion_batches_both_lists
+        PASS [   0.003s] (1067/2798) amazing-dom tree::tests::fragments_validate_document_children_before_emptying
+        PASS [   0.003s] (1068/2798) amazing-dom tree::tests::insertion_adopts_children_but_not_the_fragment_itself
+        PASS [   0.002s] (1069/2798) amazing-dom tree::tests::invalid_handles_return_error_at_checked_boundaries
+        PASS [   0.003s] (1070/2798) amazing-dom tree::tests::invalid_parent_precedes_reference_not_found
+        PASS [   0.002s] (1071/2798) amazing-dom tree::tests::invalid_replace_is_atomic_including_observer_queues
+        PASS [   0.002s] (1072/2798) amazing-dom tree::tests::removal_repairs_first_middle_last_and_only_child
+        PASS [   0.004s] (1073/2798) amazing-dom tree::tests::move_before_self_and_adjacent_sibling_preserves_links
+        PASS [   0.002s] (1074/2798) amazing-dom tree::tests::replace_all_is_one_parent_record_and_preserves_fragment_record
+        PASS [   0.003s] (1075/2798) amazing-dom tree::tests::replace_checks_old_child_membership_before_new_node_hierarchy
+        PASS [   0.002s] (1076/2798) amazing-dom tree::tests::replace_document_element_and_doctype_respects_exclusion
+        PASS [   0.002s] (1077/2798) amazing-dom tree::tests::replace_self_keeps_identity_and_records_adoption_removal
+        PASS [   0.002s] (1078/2798) amazing-dom tree::tests::replace_with_next_sibling_and_fragment
+        PASS [   0.002s] (1079/2798) amazing-dom tree::tests::wrong_reference_and_wrong_removal_are_not_found
+        PASS [   0.003s] (1080/2798) amazing-dom::wpt_assertion_ports clone_node_preserves_attributes_and_obeys_deep_flag
+        PASS [   0.002s] (1081/2798) amazing-dom::wpt_assertion_ports iterator_removal_moves_reference_to_next_or_previous
+        PASS [   0.002s] (1082/2798) amazing-dom::wpt_assertion_ports node_pre_insert_errors_precede_missing_reference_and_position_is_antisymmetric
+        PASS [   0.003s] (1083/2798) amazing-dom::wpt_assertion_ports normalize_merges_only_adjacent_nonempty_text
+        PASS [   0.003s] (1084/2798) amazing-dom::wpt_assertion_ports range_contents_on_one_text_node_clone_extract_and_delete
+        PASS [   0.002s] (1085/2798) amazing-dom::wpt_assertion_ports range_set_boundary_collapses_on_cross_root_and_rejects_invalid_nodes
+        PASS [   0.004s] (1086/2798) amazing-dom::wpt_assertion_ports range_point_checks_follow_wpt_root_type_offset_and_position_order
+        PASS [   0.002s] (1087/2798) amazing-dom::wpt_assertion_ports range_surround_rejects_partial_nontext_before_mutation
+        PASS [   0.002s] (1088/2798) amazing-dom::wpt_assertion_ports range_split_text_moves_live_boundaries_to_new_node
+        PASS [   0.003s] (1089/2798) amazing-dom::wpt_assertion_ports tree_walker_filter_error_keeps_current_node_and_can_retry
+        PASS [   0.003s] (1090/2798) amazing-encoding::codecs malformed_sequences_keep_ascii_and_chunk_equivalence
+        PASS [   0.002s] (1091/2798) amazing-encoding::codecs numeric_reference_fallback_and_gb18030_range
+        PASS [   0.004s] (1092/2798) amazing-encoding::codecs replacement_fatal_labels_and_bom
+        PASS [   0.002s] (1093/2798) amazing-encoding::codecs single_byte_encoder_vectors_cover_each_index
+        PASS [   0.002s] (1094/2798) amazing-encoding::codecs standard_exception_vectors
+        PASS [   0.002s] (1095/2798) amazing-encoding::codecs standard_vectors_for_every_codec_family
+        PASS [   0.004s] (1096/2798) amazing-fetch data_url::tests::fetch_api_serves_data_in_basic_and_cors_modes
+        PASS [   0.006s] (1097/2798) amazing-fetch cors::preflight_cache_tests::hit_expiry_credentials_and_header_separation
+        PASS [   0.002s] (1098/2798) amazing-fetch mime::tests::duplicate_parameters_and_quoted_values
+        PASS [   0.002s] (1099/2798) amazing-fetch mime::tests::fetch_extraction_keeps_charset_for_same_essence
+        PASS [   0.006s] (1100/2798) amazing-fetch service::tests::service_drives_network_then_serves_fresh_cache_entry
+        PASS [   0.010s] (1101/2798) amazing-fetch service::tests::service_drives_dispatcher_socket_after_service_id_is_gone
+        PASS [   0.008s] (1102/2798) amazing-fetch service::tests::service_recomputes_cookie_for_redirect_hop
+        PASS [   0.007s] (1103/2798) amazing-fetch service::tests::service_revalidates_304_and_reuses_stored_body
+        PASS [   0.002s] (1104/2798) amazing-fetch service::tests::service_serves_data_without_dispatch
+        PASS [   0.002s] (1105/2798) amazing-fetch service::tests::websocket_checks_connect_src_and_mixed_content_before_dispatch
+        PASS [   0.005s] (1106/2798) amazing-fetch service::tests::websocket_handshake_uses_cookie_jar
+        PASS [   0.002s] (1107/2798) amazing-fetch sri::tests::fips_vectors
+        PASS [   0.002s] (1108/2798) amazing-fetch sri::tests::strongest_and_invalid_tokens
+        PASS [   0.002s] (1109/2798) amazing-fetch::api_headers basic_case_normalize_and_combine
+        PASS [   0.002s] (1110/2798) amazing-fetch::api_headers guards_ignore_forbidden_names_and_reject_mutation_when_immutable
+        PASS [   0.002s] (1111/2798) amazing-fetch::api_headers invalid_names_values_and_webidl_bytestring
+        PASS [   0.002s] (1112/2798) amazing-fetch::api_headers no_cors_combined_safelist_and_privileged_range_removal
+        PASS [   0.002s] (1113/2798) amazing-fetch::api_headers sorted_iteration_keeps_set_cookie_separate
+        PASS [   0.002s] (1114/2798) amazing-fetch::api_headers typed_sequence_and_record_fill
+        PASS [   0.003s] (1115/2798) amazing-fetch::api_request about_blank_request_exposes_no_cors_header_guard
+        PASS [   0.002s] (1116/2798) amazing-fetch::api_request body_and_stream_restrictions
+        PASS [   0.002s] (1117/2798) amazing-fetch::api_request constructor_error_matrix
+        PASS [   0.002s] (1118/2798) amazing-fetch::api_request constructor_inherits_and_overrides_headers_body_and_defaults
+        PASS [   0.002s] (1119/2798) amazing-fetch::api_request fetch_checks_bad_port_and_abort_before_network
+        PASS [   0.033s] (1120/2798) amazing-fetch service::tests::service_uses_preflight_grants_until_expiry_and_separates_credentials
+        PASS [   0.002s] (1121/2798) amazing-fetch::api_request fetch_does_not_replay_stream_body_on_redirect
+        PASS [   0.002s] (1122/2798) amazing-fetch::api_response_body body_stream_consumption_json_and_empty
+        PASS [   0.002s] (1123/2798) amazing-fetch::api_response_body body_types_and_explicit_content_type
+        PASS [   0.002s] (1124/2798) amazing-fetch::api_response_body response_error_matrix
+        PASS [   0.002s] (1125/2798) amazing-fetch::api_response_body response_init_defaults_and_content_type
+        PASS [   0.002s] (1126/2798) amazing-fetch::api_response_body response_statics_and_clone
+        PASS [   0.002s] (1127/2798) amazing-fetch::cache entry_count_bytes_and_input_bounds_precede_insertion
+        PASS [   0.002s] (1128/2798) amazing-fetch::cache etag_304_replaces_metadata_preserves_body_and_rejects_mismatch
+        PASS [   0.002s] (1129/2798) amazing-fetch::cache expires_then_last_modified_heuristic_and_invalid_dates
+        PASS [   0.002s] (1130/2798) amazing-fetch::cache invalid_or_duplicate_freshness_never_falls_back_to_a_fresh_hit
+        PASS [   0.002s] (1131/2798) amazing-fetch::cache last_modified_validation_and_304_no_store
+        PASS [   0.002s] (1132/2798) amazing-fetch::cache max_age_and_age_account_for_response_delay_and_residence
+        PASS [   0.002s] (1133/2798) amazing-fetch::cache no_store_no_cache_must_revalidate_and_request_controls
+        PASS [   0.002s] (1134/2798) amazing-fetch::cache shared_s_maxage_private_and_authorization_rules
+        PASS [   0.002s] (1135/2798) amazing-fetch::cache storage_seam_restores_owned_entries_and_rechecks_limits
+        PASS [   0.002s] (1136/2798) amazing-fetch::cache unsafe_success_invalidates_every_variant_and_errors_do_not
+        PASS [   0.002s] (1137/2798) amazing-fetch::cache validation_updates_vary_and_rejects_mismatched_content_length
+        PASS [   0.002s] (1138/2798) amazing-fetch::cache vary_matches_headers_and_cookie_partition_preserves_shell_key
+        PASS [   0.003s] (1139/2798) amazing-fetch::cookies absent_equals_means_unnamed_cookie_and_empty_name_value_is_rejected
+        PASS [   0.003s] (1140/2798) amazing-fetch::cookies byte_inputs_and_hostile_dates_are_bounded_and_do_not_panic
+        PASS [   0.002s] (1141/2798) amazing-fetch::cookies canonical_cookie_host_rejects_unproven_alabels_and_invalid_labels
+        PASS [   0.002s] (1142/2798) amazing-fetch::cookies byte_size_limits_ignore_only_the_oversize_attribute
+        PASS [   0.002s] (1143/2798) amazing-fetch::cookies chips_is_secure_and_partitioned_by_schemeful_top_level_site
+        PASS [   0.002s] (1144/2798) amazing-fetch::cookies conservative_default_accepts_host_only_and_rejects_unproven_domains
+        PASS [   0.002s] (1145/2798) amazing-fetch::cookies control_characters_anywhere_reject_entire_field
+        PASS [   0.003s] (1146/2798) amazing-fetch::cookies cross_site_creation_requires_top_level_http_navigation_unless_none
+        PASS [   0.002s] (1147/2798) amazing-fetch::cookies dates_reject_impossible_values_and_preserve_previous_valid_attribute
+        PASS [   0.002s] (1148/2798) amazing-fetch::cookies default_path_memory_and_configured_store_limits_are_bounded
+        PASS [   0.002s] (1149/2798) amazing-fetch::cookies default_paths_and_matching_are_byte_exact
+        PASS [   0.002s] (1150/2798) amazing-fetch::cookies domain_quota_evicts_nonsecure_first_then_least_recently_accessed
+        PASS [   0.002s] (1151/2798) amazing-fetch::cookies duplicate_attributes_use_last_valid_value
+        PASS [   0.002s] (1152/2798) amazing-fetch::cookies expiration_precedes_eviction_and_session_end_keeps_persistent_only
+        PASS [   0.002s] (1153/2798) amazing-fetch::cookies global_quota_uses_lru_access_not_creation
+        PASS [   0.002s] (1154/2798) amazing-fetch::cookies header_limit_fails_atomically_and_grace_can_be_disabled
+        PASS [   0.002s] (1155/2798) amazing-fetch::cookies header_sorts_long_paths_first_then_original_creation_time
+        PASS [   0.002s] (1156/2798) amazing-fetch::cookies insecure_overlay_check_is_asymmetric_in_path_and_covers_deletion
+        PASS [   0.002s] (1157/2798) amazing-fetch::cookies ip_literals_never_suffix_match_and_ports_do_not_partition_cookies
+        PASS [   0.002s] (1158/2798) amazing-fetch::cookies ipv6_host_only_roundtrips_and_domain_matching_rejects_empty_inputs
+        PASS [   0.002s] (1159/2798) amazing-fetch::cookies legacy_date_forms_and_delimiters_are_interpreted_in_utc
+        PASS [   0.002s] (1160/2798) amazing-fetch::cookies max_age_overflow_clamps_without_wrapping_and_nonpositive_deletes
+        PASS [   0.002s] (1161/2798) amazing-fetch::cookies parsing_trims_only_space_and_tab_preserves_quotes_equals_and_octets
+        PASS [   0.002s] (1162/2798) amazing-fetch::cookies persistent_snapshot_restores_partition_key_but_not_session_cookie
+        PASS [   0.002s] (1163/2798) amazing-fetch::cookies pre_epoch_cookie_dates_and_saturating_future_clock
+        PASS [   0.002s] (1164/2798) amazing-fetch::cookies prefixes_are_case_insensitive_and_unnamed_values_cannot_spoof_them
+        PASS [   0.002s] (1165/2798) amazing-fetch::cookies private_suffix_boundary_separates_tenants_and_keeps_same_tenant_subdomains
+        PASS [   0.002s] (1166/2798) amazing-fetch::cookies provider_alabel_validation_is_independent_of_suffix_data
+        PASS [   0.003s] (1167/2798) amazing-fetch::cookies provider_controls_schemeful_site_and_default_does_not_guess
+        PASS [   0.003s] (1168/2798) amazing-fetch::cookies provider_enables_boundary_checked_domain_cookies
+        PASS [   0.002s] (1169/2798) amazing-fetch::cookies public_suffix_is_rechecked_when_provider_data_changes
+        PASS [   0.002s] (1170/2798) amazing-fetch::cookies replacement_preserves_creation_time_and_host_only_is_part_of_identity
+        PASS [   0.002s] (1171/2798) amazing-fetch::cookies public_suffix_rejects_children_but_exact_host_converts_to_host_only
+        PASS [   0.002s] (1172/2798) amazing-fetch::cookies samesite_none_requires_secure_and_allows_cross_site_subresources
+        PASS [   0.002s] (1173/2798) amazing-fetch::cookies secure_and_http_only_enforced_on_both_set_and_retrieval
+        PASS [   0.002s] (1174/2798) amazing-fetch::cookies strict_lax_default_and_unsafe_grace_have_distinct_retrieval_rules
+        PASS [   0.003s] (1175/2798) amazing-fetch::cookies two_digit_year_pivot_leap_days_and_400_day_expiry_cap
+        PASS [   0.002s] (1176/2798) amazing-fetch::csp fetch_pre_and_post_checks_return_typed_violations
+        PASS [   0.003s] (1177/2798) amazing-fetch::csp fallback_chains_and_report_only
+        PASS [   0.002s] (1178/2798) amazing-fetch::csp redirected_path_is_ignored_but_host_is_checked
+        PASS [   0.002s] (1179/2798) amazing-fetch::csp policy_list_dispositions_and_bounds
+        PASS [   0.002s] (1180/2798) amazing-fetch::csp script_nonce_integrity_and_strict_dynamic
+        PASS [   0.003s] (1181/2798) amazing-fetch::csp wildcard_host_port_path_and_scheme_upgrade
+        PASS [   0.004s] (1182/2798) amazing-fetch::dispatch fetch_api_dispatch_finishes_without_blocking_event_loop
+        PASS [   0.002s] (1183/2798) amazing-fetch::dispatch xhr_can_consume_dispatcher_events
+        PASS [   0.002s] (1184/2798) amazing-fetch::dispatch xhr_timeout_cancels_without_network_event
+        PASS [   0.011s] (1185/2798) amazing-fetch::font_fetch cross_origin_font_requires_cors
+        PASS [   0.012s] (1186/2798) amazing-fetch::font_fetch cross_origin_redirect_is_cors_tainted
+        PASS [   0.002s] (1187/2798) amazing-fetch::font_fetch data_font_obeys_caller_bound
+        PASS [   0.010s] (1188/2798) amazing-fetch::font_fetch cross_origin_then_same_origin_stays_cors_tainted
+        PASS [   0.005s] (1189/2798) amazing-fetch::font_fetch font_body_limit_fails_before_body_buffering
+        PASS [   0.002s] (1190/2798) amazing-fetch::form_data blob_file_and_multipart_roundtrip
+        PASS [   0.002s] (1191/2798) amazing-fetch::form_data form_data_rejects_unknown_mime_after_consuming
+        PASS [   0.006s] (1192/2798) amazing-fetch::font_fetch same_origin_font_allows_non_font_mime_and_credentials
+        PASS [   0.002s] (1193/2798) amazing-fetch::form_data multipart_preserves_semicolon_in_quoted_filename
+        PASS [   0.002s] (1194/2798) amazing-fetch::form_data response_blob_and_urlencoded_form
+        PASS [   0.002s] (1195/2798) amazing-fetch::form_data multipart_rejects_filename_without_field_name
+        PASS [   0.002s] (1196/2798) amazing-fetch::form_data response_blob_uses_current_content_type
+        PASS [   0.002s] (1197/2798) amazing-fetch::form_data response_form_data_uses_current_content_type
+        PASS [   0.007s] (1198/2798) amazing-fetch::hsts invalid_policy_does_not_replace_valid_policy
+        PASS [   0.008s] (1199/2798) amazing-fetch::hsts dynamic_hsts_expires_and_uses_domain_boundaries
+        PASS [   0.005s] (1200/2798) amazing-fetch::ipc5_api opaque_origin_identity_survives_reconstruction
+        PASS [   0.002s] (1201/2798) amazing-fetch::ipc5_api response_limit_accepts_bounded_sizes_and_rejects_excess
+        PASS [   0.009s] (1202/2798) amazing-fetch::hsts pinned_preload_applies_to_exact_and_subdomain_entries
+        PASS [   0.003s] (1203/2798) amazing-fetch::navigation_api frame_ancestors_and_xfo_guard_embedded_responses
+        PASS [   0.002s] (1204/2798) amazing-fetch::navigation_api trusted_child_navigation_has_frame_destination_and_manual_redirects
+        PASS [   0.002s] (1205/2798) amazing-fetch::navigation_api trusted_navigation_has_document_policy_and_preserves_browser_metadata
+        PASS [   0.002s] (1206/2798) amazing-fetch::navigation_api web_request_constructor_still_rejects_navigate_mode
+        PASS [   0.022s] (1207/2798) amazing-fetch::network_service_stream credit_starvation_and_buffered_parity
+        PASS [   0.012s] (1208/2798) amazing-fetch::network_service_stream final_head_marks_followed_redirect
+        PASS [   0.129s] (1209/2798) amazing-fetch::network_service_page page_sequence_uses_one_network_service
+        PASS [   0.106s] (1210/2798) amazing-fetch::network_service_stream head_before_slow_body_and_cancel_mid_body
+        PASS [   0.006s] (1211/2798) amazing-fetch::network_service_stream opaque_head_waits_for_bounded_sniff_prefix
+        PASS [   0.002s] (1212/2798) amazing-fetch::network_service_stream zero_initial_credit_waits_for_explicit_grant
+        PASS [   0.002s] (1213/2798) amazing-fetch::policy aggregate_safelist_limit_and_sorted_unique_names
+        PASS [   0.002s] (1214/2798) amazing-fetch::policy basic_filter_hides_cookies_but_keeps_custom_header
+        PASS [   0.002s] (1215/2798) amazing-fetch::policy cors_credentials_and_allow_origin_matrix
+        PASS [   0.002s] (1216/2798) amazing-fetch::policy cors_failure_never_returns_body
+        PASS [   0.002s] (1217/2798) amazing-fetch::policy cors_filter_exposes_only_safe_and_listed_headers
+        PASS [   0.002s] (1218/2798) amazing-fetch::policy cors_redirects_reject_credentials_even_when_chain_returns_to_origin
+        PASS [   0.002s] (1219/2798) amazing-fetch::policy cors_taint_stays_on_return_to_initiator
+        PASS [   0.002s] (1220/2798) amazing-fetch::policy credential_modes_apply_per_hop

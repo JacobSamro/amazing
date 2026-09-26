@@ -11,6 +11,7 @@ amazing-a11y = { path = "../amazing-a11y" }
 amazing-bindings = { path = "../amazing-bindings" }
 amazing-common = { path = "../amazing-common" }
 amazing-compositor = { path = "../amazing-compositor" }
+amazing-devtools = { path = "../amazing-devtools" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-html = { path = "../amazing-html" }
 amazing-ipc = { path = "../amazing-ipc" }

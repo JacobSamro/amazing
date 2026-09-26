@@ -471,6 +471,72 @@ mod tests {
     }
 
     #[test]
+    fn annex_b_object_accessor_helpers_define_and_lookup() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let get=function(){return 1}; let set=function(v){}; \
+                 let o={}; let r=o.__defineGetter__('x', get); \
+                 let defined = r===undefined && o.x===1; \
+                 o.__defineSetter__('x', set); \
+                 let proto={}; proto.__defineGetter__('y', get); \
+                 let child=Object.create(proto); \
+                 defined && o.__lookupGetter__('x')===get && o.__lookupSetter__('x')===set \
+                 && child.__lookupGetter__('y')===get && child.__lookupSetter__('y')===undefined \
+                 && o.__lookupGetter__('missing')===undefined \
+                 && (function(){ try { Object.prototype.__defineGetter__.call(null,'x',get); return false; } catch(e){ return e instanceof TypeError; } })() \
+                 && (function(){ try { o.__defineGetter__('bad', 3); return false; } catch(e){ return e instanceof TypeError; } })();",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn error_is_error_recognizes_only_real_error_brands() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "Error.isError(new Error('x')) && Error.isError(new TypeError()) \
+                 && Error.isError(new RangeError()) && !Error.isError({}) \
+                 && !Error.isError({name:'Error', message:'x'}) \
+                 && !Error.isError(Object.create(Error.prototype)) \
+                 && !Error.isError(Error.prototype) && !Error.isError(undefined) \
+                 && Error.isError.length===1 && typeof Error.isError==='function';",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn error_prototype_stack_accessor_formats_and_can_be_overwritten() {
+        // Non-string checks and the SameValue-with-home-object check run via
+        // the setter function directly (as the real Test262 suite does),
+        // and before any own "stack" property exists on `e` -- once one
+        // does, ordinary [[Set]] finds it first and never re-enters the
+        // accessor, so order matters here exactly as it does in the spec.
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let e=new TypeError('boom'); let set=Object.getOwnPropertyDescriptor(Error.prototype,'stack').set; \
+                 typeof e.stack==='string' \
+                 && e.stack==='TypeError: boom' \
+                 && !Object.getOwnPropertyDescriptor(e,'stack') \
+                 && new RangeError().stack==='RangeError' \
+                 && Object.getOwnPropertyDescriptor(Error.prototype,'stack').get.call(Object.create(Error.prototype))===undefined \
+                 && (function(){ try { set.call(e, 1); return false; } catch(x){ return x instanceof TypeError; } })() \
+                 && (function(){ try { set.call(Error.prototype, ''); return false; } catch(x){ return x instanceof TypeError; } })() \
+                 && !Object.getOwnPropertyDescriptor(e,'stack') \
+                 && (e.stack='custom', e.stack==='custom') \
+                 && (function(){ let d=Object.getOwnPropertyDescriptor(e,'stack'); \
+                    return d.value==='custom' && d.writable && d.enumerable && d.configurable; })() \
+                 && (function(){ let d=Object.getOwnPropertyDescriptor(Error.prototype,'stack'); \
+                    return typeof d.get==='function' && typeof d.set==='function' && !d.enumerable && d.configurable; })();",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn class_inheritance_dispatches_super_methods_with_the_real_receiver() {
         let mut i = Interpreter::new();
         let value = i
@@ -1241,6 +1307,32 @@ mod tests {
             "function F(a,b){this.sum=a+b}; Reflect.construct(F,{0:2,1:3,length:2}).sum===5",
             "var ta=new Uint8Array(2); Reflect.defineProperty(ta,'0',{value:3})===true && ta[0]===3 && Reflect.deleteProperty(ta,'0')===false",
             "new Map([[1,2]]).get(1)===2 && new Set([1,2]).has(2)",
+        ] {
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn proxy_traps_and_invariants_behave_per_spec() {
+        let mut i = Interpreter::new();
+        for source in [
+            "var t={a:1}; var p=new Proxy(t,{}); p.a===1 && (p.b=2, t.b===2)",
+            "var p=new Proxy({},{get(t,k){return k+'!'}}); p.hi==='hi!'",
+            "var log=[]; var p=new Proxy({},{set(t,k,v){log.push(k+'='+v); t[k]=v; return true}}); p.x=5; log.join(',')==='x=5' && p.x===5",
+            "var p=new Proxy({},{has(){return true}}); ('anything' in p)===true",
+            "var log=[]; var p=new Proxy({a:1},{deleteProperty(t,k){log.push(k); delete t[k]; return true}}); delete p.a; log.join(',')==='a' && !('a' in p)",
+            "var p=new Proxy({},{ownKeys(){return ['x','y']},getOwnPropertyDescriptor(){return {value:1,enumerable:true,configurable:true}}}); Object.keys(p).join(',')==='x,y'",
+            "var log=[]; var p=new Proxy({},{defineProperty(t,k,d){log.push(k); Object.defineProperty(t,k,d); return true}}); Object.defineProperty(p,'z',{value:9,enumerable:true,configurable:true,writable:true}); p.z===9 && log.join(',')==='z'",
+            "var proto={q:1}; var target=Object.setPrototypeOf({},proto); var p=new Proxy(target,{getPrototypeOf(){return proto}}); Object.getPrototypeOf(p)===proto && p.q===1",
+            "var calls=[]; var p=new Proxy({},{isExtensible(t){calls.push('ext'); return Reflect.isExtensible(t)},preventExtensions(t){calls.push('prevent'); return Reflect.preventExtensions(t)}}); Object.isExtensible(p)===true && Object.preventExtensions(p)===p && Object.isExtensible(p)===false && calls.join(',')==='ext,prevent,ext'",
+            "var p=new Proxy(function(a,b){return a+b},{apply(t,thisArg,args){return t.apply(thisArg,args)*10}}); p(2,3)===50",
+            "function F(a){this.a=a}; var p=new Proxy(F,{construct(t,args){return new t(...args)}}); new p(7).a===7",
+            "typeof new Proxy(function(){},{})==='function'",
+            "var r=Proxy.revocable({a:1},{}); r.proxy.a===1 && (r.revoke(), true) && (function(){try{r.proxy.a; return false}catch(e){return e instanceof TypeError}})()",
+            "var t={}; Object.defineProperty(t,'x',{value:1,writable:false,configurable:false}); var p=new Proxy(t,{get(){return 2}}); try{p.x; false}catch(e){e instanceof TypeError}",
+            "Proxy.prototype===undefined",
+            "try{Proxy({},{}); false}catch(e){e instanceof TypeError}",
+            "(function(){try{new Proxy(1,{}); return false}catch(e){return e instanceof TypeError}})() && (function(){try{new Proxy({},1); return false}catch(e){return e instanceof TypeError}})()",
         ] {
             assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
         }

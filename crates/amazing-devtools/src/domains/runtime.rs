@@ -2,7 +2,8 @@
 
 use super::{empty_array, exception_details, object, property_descriptor, remote_object};
 use crate::host::{
-    CallArgument, CallFunctionParams, ConsoleEvent, EvaluateParams, EvaluateResult, RemoteObject,
+    CallArgument, CallFunctionParams, ConsoleEvent, EvaluateParams, EvaluateResult, ExceptionEvent,
+    RemoteObject,
 };
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
@@ -191,6 +192,17 @@ pub fn console_event(item: &ConsoleEvent) -> Json {
     )
 }
 
+/// Builds the `Runtime.exceptionThrown` event.
+pub fn exception_thrown_event(item: &ExceptionEvent) -> Json {
+    crate::protocol::event(
+        "Runtime.exceptionThrown",
+        object(vec![
+            ("timestamp", Json::number(item.timestamp)),
+            ("exceptionDetails", exception_details(&item.details)),
+        ]),
+    )
+}
+
 /// Extracts `scheme://authority` from a URL, empty when there is none.
 pub fn origin_of(url: &str) -> String {
     match url.split_once("://") {
@@ -202,7 +214,9 @@ pub fn origin_of(url: &str) -> String {
     }
 }
 
-fn evaluate_result(result: &EvaluateResult) -> Json {
+/// Serializes a CDP `Runtime.RemoteObject`/`ExceptionDetails` evaluation
+/// result. Shared with `Debugger.evaluateOnCallFrame`.
+pub(crate) fn evaluate_result(result: &EvaluateResult) -> Json {
     let mut fields = vec![("result", remote_object(&result.result))];
     if let Some(exception) = &result.exception {
         fields.push(("exceptionDetails", exception_details(exception)));
@@ -335,6 +349,29 @@ mod tests {
                 .unwrap()
                 .as_str(),
             Some("Uncaught")
+        );
+    }
+
+    #[test]
+    fn exception_thrown_event_carries_timestamp_and_details() {
+        let item = ExceptionEvent {
+            details: crate::host::ExceptionDetails {
+                text: "Uncaught ReferenceError: x is not defined".into(),
+                line_number: 3,
+                column_number: 1,
+                url: Some("https://a/x.js".into()),
+                exception: None,
+                stack_trace: None,
+            },
+            timestamp: 5.0,
+        };
+        let event = exception_thrown_event(&item);
+        assert_eq!(event.get("method").unwrap().as_str(), Some("Runtime.exceptionThrown"));
+        let params = event.get("params").unwrap();
+        assert_eq!(params.get("timestamp").unwrap().as_f64(), Some(5.0));
+        assert_eq!(
+            params.get("exceptionDetails").unwrap().get("lineNumber").unwrap().as_u64(),
+            Some(3)
         );
     }
 

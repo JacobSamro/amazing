@@ -1,0 +1,11 @@
+with-build-slot[layout]: acquired slot-1 after 0s
+#< CLIXML
+MISMATCH   css-flexbox__flexbox_rtl-flow-reverse.html
+MISMATCH   css-flexbox__flexbox_rtl-order.html
+MISMATCH   css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-015.html
+MISMATCH   css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__baseline__row-grid-lanes-container-baseline-subgrid-001.html
+MISMATCH   css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-017.html
+MISMATCH   css-sizing__intrinsic-height-abspos-stretch-percentage-child.html
+Report: C:\Users\server\target\layout\layout18-loss-premerge\run-20260926T102821844Z-119860\report.json
+Counts: pass=0 mismatch=6 error=0 timeout=0 unsupported=0 crash=0; unexpected=0
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>

@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "sha256-path-stratified",
+    "per_category": 1000
+  },
+  "sparse_paths": [
+    "css/css-flexbox",
+    "css/css-grid",
+    "css/css-sizing"
+  ],
+  "tests": [
+    {
+      "id": "css-flexbox__flexbox_rtl-flow-reverse.html",
+      "test": "css/css-flexbox/flexbox_rtl-flow-reverse.html"
+    },
+    {
+      "id": "css-flexbox__flexbox_rtl-order.html",
+      "test": "css/css-flexbox/flexbox_rtl-order.html"
+    },
+    {
+      "id": "css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-015.html",
+      "test": "css/css-grid/grid-lanes/track-sizing/auto-repeat/row-auto-repeat-015.html"
+    },
+    {
+      "id": "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__baseline__row-grid-lanes-container-baseline-subgrid-001.html",
+      "test": "css/css-grid/grid-lanes/subgrid/grid-subgridded-to-grid-lanes/baseline/row-grid-lanes-container-baseline-subgrid-001.html"
+    },
+    {
+      "id": "css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-017.html",
+      "test": "css/css-grid/grid-lanes/track-sizing/auto-repeat/column-auto-repeat-017.html"
+    },
+    {
+      "id": "css-sizing__intrinsic-height-abspos-stretch-percentage-child.html",
+      "test": "css/css-sizing/intrinsic-height-abspos-stretch-percentage-child.html"
+    }
+  ]
+}

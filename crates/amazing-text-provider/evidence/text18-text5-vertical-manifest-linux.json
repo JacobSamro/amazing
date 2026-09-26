@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "manifest": "crates/amazing-text-provider/evidence/text5-vertical-manifest.json",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "text5-vertical-shaping",
+    "case_count": 7
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "run_directory": "/tmp/text18/text5-vertical-manifest-result-run",
+  "counts": {
+    "pass": 5,
+    "mismatch": 2,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vlr-100.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "text-orientation-mixed-vlr-100-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1c816b8c08560a92bae54dce25a625877ddad5aee18231ae0de64d65cf6c0716",
+      "reference_sha256": "1c816b8c08560a92bae54dce25a625877ddad5aee18231ae0de64d65cf6c0716",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-vlr-100.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "text-orientation-upright-vlr-100-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "92eee8b39e46360824880db1072b88dfdb4f5f538d35300840499f241ccf0213",
+      "reference_sha256": "92eee8b39e46360824880db1072b88dfdb4f5f538d35300840499f241ccf0213",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-sideways-vlr-100.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "text-orientation-sideways-vlr-100-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "b63797de53a9e1ee1de39cec1ee0747a898384d7d75caa9f6e69ed45815dbfe9",
+      "reference_sha256": "b63797de53a9e1ee1de39cec1ee0747a898384d7d75caa9f6e69ed45815dbfe9",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-directionality-001.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "text-orientation-upright-directionality-001-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "997f90f8f0e38c173dd6a20ced6acc80e270e285d5f27b7174d7e4610474d682",
+      "reference_sha256": "997f90f8f0e38c173dd6a20ced6acc80e270e285d5f27b7174d7e4610474d682",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-writing-modes__writing-mode-vertical-lr-002.xht",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/writing-mode-vertical-lr-002-ref.xht",
+      "differing_pixels": 1299,
+      "max_difference": 52,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "63554fac4573e1b4b5cd581aa6f7441474da2976f217f23d4b16a5856f644dfe",
+      "reference_sha256": "a3768014719530bb067876849a561192570cbc9772735e02370c6a864af3ca8e",
+      "detail": "maxDifference=52/0; totalPixels=1299/0"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "text-orientation-mixed-vrl-100-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "20ec82c63713ea77da431cf72399e04dbb5c5980106e702ae894bc13d121ccf8",
+      "reference_sha256": "20ec82c63713ea77da431cf72399e04dbb5c5980106e702ae894bc13d121ccf8",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css-writing-modes__direction-upright-001.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/direction-upright-001.html",
+      "differing_pixels": 4762,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "a6a6d853f24977a97c0ae31ca468808e91301d8665e8911c447b0871b44f60f9",
+      "reference_sha256": "5b0bdd312041ba1f79db5c23fe3dff463ae492e2bdb691240731d8f130393107",
+      "detail": "maxDifference=255/0; totalPixels=4762/0"
+    }
+  ],
+  "generated_at": "2026-09-26T15:20:36Z"
+}

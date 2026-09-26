@@ -198,9 +198,16 @@ pub struct EffectNode {
     /// paint coordinates (meaningful only when `backdrop_filter` is
     /// non-empty).
     pub backdrop_bounds: PaintBounds,
-    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()` only;
-    /// `polygon()`, `path()`, `url()` and a bare `<geometry-box>` are `None`).
+    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()`/
+    /// `polygon()`/a straight-edged `path()`; `url()` and a bare
+    /// `<geometry-box>` are `None`).
     pub clip: Option<crate::clip::ClipMask>,
+    /// Resolved single-layer `mask-image: url(...)` (see [`crate::mask`]).
+    pub mask_image: Option<crate::mask::MaskLayer>,
+    /// The border box `mask_image` is stretched to fill, in untransformed
+    /// document paint coordinates (meaningful only when `mask_image` is
+    /// `Some`).
+    pub mask_bounds: PaintBounds,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -360,6 +367,8 @@ impl<'a> DisplayListView<'a> {
                 backdrop_filter: crate::filter::FilterPlan::default(),
                 backdrop_bounds: PaintBounds::viewport(width, height),
                 clip: None,
+                mask_image: None,
+                mask_bounds: PaintBounds::viewport(width, height),
             }],
             scrolls: vec![
                 ScrollNode {
@@ -413,6 +422,8 @@ impl<'a> DisplayListView<'a> {
                         backdrop_filter: group.backdrop_filter,
                         backdrop_bounds: PaintBounds::from_layout(group.backdrop_bounds),
                         clip: group.clip,
+                        mask_image: group.mask_image,
+                        mask_bounds: PaintBounds::from_layout(group.mask_bounds),
                     });
                     state.effect = next;
                     if group.transform != Affine::IDENTITY {

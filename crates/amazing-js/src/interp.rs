@@ -5,7 +5,7 @@
 //! set of ES built-ins using only `std`. Modules, generators and a
 //! real asynchronous job queue remain explicit later milestones.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,10 +14,12 @@ use std::time::{Duration, Instant};
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, DerivedConstructor, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
-    JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
+    number_to_string, ClassElements, DerivedConstructor, Exotic, FieldKey, FunctionBody, HostCallPolicy,
+    HostFunctionId, HostHandle, InstanceElement, JsFunction, JsObject, JsValue, LegacyIteratorKind,
+    LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PrivateElementKind,
+    PrivateName, PromiseFate,
     PromiseState, Property, PropertyKey, CollectionIteratorKind, CollectionIteratorState,
-    SequenceIteratorKind, SequenceIteratorState,
+    SequenceIteratorKind, SequenceIteratorState, StaticElement,
     SetState, Throw, WellKnownSymbol, JsSymbol,
 };
 
@@ -148,6 +150,11 @@ struct CallFrame {
     home: Option<Obj>,
     super_constructor: Option<JsValue>,
     new_target: Option<JsValue>,
+    /// The function object actually executing in this frame (`None` for the
+    /// synthetic frame a field initializer/static block runs in). Lets an
+    /// explicit `super()` call find its OWN class's instance elements
+    /// without threading them through every call site separately.
+    own_function: Option<Obj>,
 }
 
 #[derive(Clone)]
@@ -161,6 +168,7 @@ struct DomListener {
 enum Reference {
     Binding(String),
     Property(JsValue, PropertyKey),
+    Private(JsValue, PrivateName),
 }
 
 /// Host hooks for the small browser-facing DOM surface.
@@ -229,6 +237,11 @@ pub struct Interpreter {
     pub date_proto: Obj,
     pub promise_proto: Obj,
     pub regexp_proto: Obj,
+    /// %Error.prototype%, kept as a stored field so the `stack` accessor's
+    /// setter can compare its receiver against the exact home object
+    /// (SetterThatIgnoresPrototypeProperties' SameValue check) without a
+    /// global-lookup round trip that user code could shadow.
+    pub error_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
@@ -245,6 +258,7 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
+    error_brands: std::collections::HashSet<u64>,
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
     pair_iterator_proto: Obj,
@@ -268,6 +282,12 @@ pub struct Interpreter {
     pending_history_update: Option<(String, bool, JsValue)>,
     history_state: JsValue,
     last_event_default_prevented: bool,
+    /// CDP-20's minimal debugger seam (`crate::debug_hook`): if set, called
+    /// before every statement. `None` by default, so hosts that never
+    /// install a hook pay nothing beyond the `Option` check.
+    debug_hook: Option<crate::debug_hook::SharedDebugHook>,
+    current_script_id: String,
+    current_script_url: String,
 }
 
 impl Interpreter {
@@ -354,6 +374,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let error_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -390,6 +415,7 @@ impl Interpreter {
             date_proto,
             promise_proto,
             regexp_proto,
+            error_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
@@ -406,6 +432,7 @@ impl Interpreter {
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
+            error_brands: std::collections::HashSet::new(),
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
             pair_iterator_proto,
@@ -429,6 +456,9 @@ impl Interpreter {
             pending_history_update: None,
             history_state: JsValue::Null,
             last_event_default_prevented: false,
+            debug_hook: None,
+            current_script_id: String::new(),
+            current_script_url: String::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -660,6 +690,26 @@ impl Interpreter {
 
     pub fn last_event_default_prevented(&self) -> bool {
         self.last_event_default_prevented
+    }
+
+    /// Installs (or, with `None`, removes) CDP-20's minimal debugger hook —
+    /// see `crate::debug_hook`. Cloning the `Rc` is cheap; call this once
+    /// per realm, not per script.
+    pub fn set_debug_hook(&mut self, hook: Option<crate::debug_hook::SharedDebugHook>) {
+        self.debug_hook = hook;
+    }
+
+    /// Tags every subsequent `on_statement` callback with `id`/`url` until
+    /// the next call. The interpreter does not itself track "which script is
+    /// this statement in" (a tree-walking interpreter has no script-level
+    /// frame of its own), so the host must call this immediately before
+    /// running a script it wants attributed correctly; an inline event
+    /// handler or a timer/microtask callback keeps whatever the last
+    /// top-level script set, which is an honest simplification, not real
+    /// per-callback script identity (see the driver's own doc comment).
+    pub fn set_current_script(&mut self, id: impl Into<String>, url: impl Into<String>) {
+        self.current_script_id = id.into();
+        self.current_script_url = url.into();
     }
 
     /// Opt into driver-owned time and checkpoints before running page code.
@@ -1108,6 +1158,15 @@ impl Interpreter {
         self.in_eval = false;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
+                // Bypasses `exec_stmt` for perf (no `Flow` unwrapping needed
+                // for a plain top-level expression statement), so CDP-20's
+                // debug hook is called explicitly here too — otherwise every
+                // top-level `expr;` statement (extremely common: every bare
+                // `Runtime.evaluate` call is exactly this) would be
+                // invisible to a line breakpoint.
+                if let Some(hook) = self.debug_hook.clone() {
+                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+                }
                 self.completion = self.eval_expr(e, &env)?;
                 continue;
             }
@@ -1239,6 +1298,9 @@ impl Interpreter {
     }
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
+        if let Some(hook) = self.debug_hook.clone() {
+            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+        }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
             StmtKind::Expression(e) => {
@@ -1640,7 +1702,7 @@ impl Interpreter {
                 .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => env.resolve_this_checked(),
-            ExprKind::NewTarget => Err(Throw::type_error("new.target is not implemented")),
+            ExprKind::NewTarget => Ok(self.frames.last().and_then(|frame| frame.new_target.clone()).unwrap_or(JsValue::Undefined)),
             ExprKind::DynamicImport(_) => Err(Throw::type_error("dynamic import is not implemented")),
             ExprKind::DynamicImportPhase { .. } => Err(Throw::type_error("dynamic import phase is not implemented")),
             ExprKind::ImportMeta => env.resolve("\0import.meta")
@@ -1789,6 +1851,15 @@ impl Interpreter {
                 if *op == ast::BinOp::Add {
                     return self.eval_add_chain(e, env);
                 }
+                if *op == ast::BinOp::In {
+                    if let ExprKind::PrivateName(identifier) = &left.kind {
+                        let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                        })?;
+                        let base = self.eval_expr(right, env)?;
+                        return private_field_has(&base, &name).map(JsValue::Bool);
+                    }
+                }
                 let a = self.eval_expr(left, env)?;
                 let b = self.eval_expr(right, env)?;
                 self.binary(*op, a, b)
@@ -1836,6 +1907,11 @@ impl Interpreter {
                 let o = self.eval_expr(obj, env)?;
                 if *optional && (o.is_null() || o.is_undefined()) {
                     Ok(JsValue::Undefined)
+                } else if let MemberProp::Private(identifier) = prop {
+                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                    })?;
+                    private_field_get(self, &o, &name)
                 } else {
                     let k = self.member_key(prop, env)?;
                     self.get_prop(&o, &k)
@@ -1907,6 +1983,12 @@ impl Interpreter {
                 self.unary_value(op, value)
             }
             ast::UnOp::Delete => match &x.kind {
+                ExprKind::Member { obj, prop, .. } if matches!(prop, MemberProp::Private(_)) => {
+                    // A private member's `delete` target is an early SyntaxError
+                    // (§13.5.1.1); the parser does not reject it yet, so guard here.
+                    let _ = self.eval_expr(obj, env)?;
+                    Err(Throw::syntax_error("private members cannot be deleted"))
+                }
                 ExprKind::Member { obj, prop, .. } => {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
@@ -1914,6 +1996,11 @@ impl Interpreter {
                         if let Some(result) = self.window_proxy_delete(&o, &k) {
                             let deleted = result?;
                             if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete WindowProxy property")); }
+                            return Ok(JsValue::Bool(deleted));
+                        }
+                        if let Some(result) = self.proxy_delete(&o, &k) {
+                            let deleted = result?;
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete proxy property")); }
                             return Ok(JsValue::Bool(deleted));
                         }
                         if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
@@ -2104,6 +2191,7 @@ impl Interpreter {
                 match b {
                     JsValue::Object(o) => {
                         if let Some(result) = self.window_proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
+                        if let Some(result) = self.proxy_has(&o, &k) { return Ok(JsValue::Bool(result?)); }
                         Ok(JsValue::Bool(match k.as_string() {
                         _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
@@ -2207,7 +2295,7 @@ impl Interpreter {
         if let Some(value) = env.resolve(name) {
             return Ok(Some(value));
         }
-        let exists = self.global_obj.borrow().has_property(name);
+        let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
         if exists {
             let global = JsValue::Object(self.global_obj.clone());
             self.get_prop(&global, name).map(Some)
@@ -2230,7 +2318,7 @@ impl Interpreter {
                 }
                 if let Some(value) = env.resolve(&identifier.name) {
                     Ok((Reference::Binding(identifier.name.clone()), value))
-                } else if self.global_obj.borrow().has_property(&identifier.name) {
+                } else if self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(identifier.name.as_str()))? {
                     let global = JsValue::Object(self.global_obj.clone());
                     let value = self.get_prop(&global, &identifier.name)?;
                     Ok((Reference::Property(global, identifier.name.clone().into()), value))
@@ -2243,13 +2331,16 @@ impl Interpreter {
             }
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
+                if let MemberProp::Private(identifier) = prop {
+                    let name = env.resolve_private(&identifier.name).ok_or_else(|| {
+                        Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                    })?;
+                    let value = private_field_get(self, &base, &name)?;
+                    return Ok((Reference::Private(base, name), value));
+                }
                 let key = match prop {
                     MemberProp::Ident(identifier) => identifier.name.clone().into(),
-                    MemberProp::Private(_) => {
-                        return Err(Throw::type_error(
-                            "private names are not yet supported by the runtime",
-                        ))
-                    }
+                    MemberProp::Private(_) => unreachable!("handled above"),
                     MemberProp::Computed(expression) => {
                         let property_value = self.eval_expr(expression, env)?;
                         if base.is_null() || base.is_undefined() {
@@ -2303,6 +2394,7 @@ impl Interpreter {
                     Err(Throw::type_error("cannot assign to property"))
                 }
             }
+            Reference::Private(base, name) => private_field_set(self, &base, &name, value),
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
@@ -2408,11 +2500,17 @@ impl Interpreter {
             let frame = self.frames.last().ok_or_else(|| Throw::syntax_error("super() used outside a constructor"))?;
             let constructor = frame.super_constructor.clone().ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
             let new_target = frame.new_target.clone().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+            let own_function = frame.own_function.clone();
             let argv = self.eval_args(args, e)?;
             let result = self.construct_with_new_target(&constructor, argv, new_target)?;
             e.initialize_this(result.clone())?;
             if let Some(frame) = self.frames.last_mut() {
                 frame.this = result.clone();
+            }
+            if let Some(own_function) = own_function {
+                if let Some(elements) = own_function.borrow().class_elements.clone() {
+                    initialize_instance_elements(self, &result, &elements)?;
+                }
             }
             return Ok(result);
         }
@@ -2426,13 +2524,21 @@ impl Interpreter {
             if (optional || *m) && (o.is_null() || o.is_undefined()) {
                 return Ok(JsValue::Undefined);
             }
-            let k = self.member_key(prop, e)?;
-            let receiver = if matches!(&obj.kind, ExprKind::Super) {
-                e.resolve_this_checked()?
+            if let MemberProp::Private(identifier) = prop {
+                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
+                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                })?;
+                let value = private_field_get(self, &o, &name)?;
+                (value, o.clone())
             } else {
-                o.clone()
-            };
-            (self.get_prop(&o, &k)?, receiver)
+                let k = self.member_key(prop, e)?;
+                let receiver = if matches!(&obj.kind, ExprKind::Super) {
+                    e.resolve_this_checked()?
+                } else {
+                    o.clone()
+                };
+                (self.get_prop(&o, &k)?, receiver)
+            }
         } else {
             (self.eval_expr(c, e)?, JsValue::Undefined)
         };
@@ -2509,6 +2615,12 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("value is not callable")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return match new_target {
+                Some(nt) => self.proxy_construct(&o, args, nt),
+                None => self.proxy_call(&o, this, args),
+            };
+        }
         let fun = o
             .borrow()
             .func
@@ -2538,6 +2650,7 @@ impl Interpreter {
             home: fun.home.clone(),
             super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
             new_target: new_target.clone().or(lexical_new_target),
+            own_function: Some(o.clone()),
         });
         let previous_completion = self.completion.clone();
         let previous_strict = self.strict_eval_context;
@@ -2603,11 +2716,19 @@ impl Interpreter {
                             let bound = self.construct_with_new_target(parent, args.clone(), new_target.clone().expect("newTarget"))?;
                             e.initialize_this(bound.clone())?;
                             if let Some(frame) = self.frames.last_mut() {
-                                frame.this = bound;
+                                frame.this = bound.clone();
+                            }
+                            if let Some(elements) = o.borrow().class_elements.clone() {
+                                initialize_instance_elements(self, &bound, &elements)?;
                             }
                         }
                     } else {
-                        if !fun.is_arrow { e.bind_this(this); }
+                        if !fun.is_arrow { e.bind_this(this.clone()); }
+                        if new_target.is_some() {
+                            if let Some(elements) = o.borrow().class_elements.clone() {
+                                initialize_instance_elements(self, &this, &elements)?;
+                            }
+                        }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
@@ -2702,6 +2823,9 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("constructor is not an object")),
         };
+        if matches!(o.borrow().exotic, Exotic::Proxy(_)) {
+            return self.proxy_construct(&o, args, new_target);
+        }
         let fun = o
             .borrow()
             .func
@@ -2868,8 +2992,13 @@ impl Interpreter {
                 None
             }
         });
+        // NewPrivateEnvironment (§9.2): every method, field initializer, and
+        // static block of this class captures `class_env`, not the raw outer
+        // scope, so `#name` inside any of them resolves through it.
+        let class_env = EnvHandle::new(EnvKind::Block, Some(e.clone()));
+        class_env.set_class_private(collect_private_names(&c.members));
         let f = if let Some(x) = ctor {
-            self.method_value(x, e, true)
+            self.method_value(x, &class_env, true)
         } else {
             self.make_function(
                 &ast::FunctionItem {
@@ -2885,7 +3014,7 @@ impl Interpreter {
                     is_async: false,
                     is_generator: false,
                 },
-                e,
+                &class_env,
             )
         };
         if let JsValue::Object(o) = &f {
@@ -2904,7 +3033,7 @@ impl Interpreter {
             if let Some(JsValue::Object(p)) = prototype {
                 p.borrow_mut().define("constructor", symbol_data(f.clone(), true, true)).unwrap();
                 if let Some(super_class) = &c.super_class {
-                    let super_value = self.eval_expr(super_class, e)?;
+                    let super_value = self.eval_expr(super_class, &class_env)?;
                     let super_prototype = match &super_value {
                         JsValue::Object(super_constructor) => match super_constructor
                             .borrow()
@@ -2932,21 +3061,41 @@ impl Interpreter {
                     function.home = Some(p.clone());
                 }
                 drop(class_function);
+                let mut instance_elements: Vec<InstanceElement> = Vec::new();
+                let mut static_elements: Vec<StaticElement> = Vec::new();
                 for m in &c.members {
-                    if let ast::ClassMember::Method(x) = m {
-                        if x.kind != ast::MethodKind::Constructor {
+                    match m {
+                        ast::ClassMember::Method(x) if x.kind != ast::MethodKind::Constructor => {
+                            let target_home = if x.is_static { o.clone() } else { p.clone() };
+                            let method = self.method_value(x, &class_env, true);
+                            if let JsValue::Object(method_object) = &method {
+                                method_object.borrow_mut().func.as_mut().unwrap().home = Some(target_home.clone());
+                            }
+                            if let ast::PropKey::Private(identifier) = &x.key {
+                                let name = class_env
+                                    .resolve_private(&identifier.name)
+                                    .expect("collect_private_names recorded every private key");
+                                let is_getter = x.kind == ast::MethodKind::Get;
+                                let is_accessor = matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set);
+                                if x.is_static {
+                                    upsert_static_private_accessor_or_method(
+                                        &mut static_elements, name, is_accessor, is_getter, method,
+                                    );
+                                } else {
+                                    upsert_instance_private_accessor_or_method(
+                                        &mut instance_elements, name, is_accessor, is_getter, method,
+                                    );
+                                }
+                                continue;
+                            }
                             let k = match &x.key_utf16 {
                                 Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
-                                None => self.prop_key(&x.key, e)?,
+                                None => self.prop_key(&x.key, &class_env)?,
                             };
-                            let method = self.method_value(x, e, true);
-                            if let JsValue::Object(method_object) = &method {
-                                method_object.borrow_mut().func.as_mut().unwrap().home =
-                                    Some(p.clone());
-                            }
+                            let target = if x.is_static { &o } else { &p };
                             if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
                                 let mut property =
-                                    p.borrow().own_prop(&k).cloned().unwrap_or(Property {
+                                    target.borrow().own_prop(&k).cloned().unwrap_or(Property {
                                         value: JsValue::Undefined,
                                         writable: false,
                                         enumerable: false,
@@ -2959,15 +3108,44 @@ impl Interpreter {
                                 } else {
                                     property.setter = Some(method);
                                 }
-                                p.borrow_mut().define(&k, property).map_err(|_| {
+                                target.borrow_mut().define(&k, property).map_err(|_| {
                                     Throw::type_error("could not define class accessor")
                                 })?;
                             } else {
-                                p.borrow_mut().define(k, symbol_data(method, true, true)).unwrap();
+                                target.borrow_mut().define(k, symbol_data(method, true, true)).unwrap();
                             }
+                        }
+                        ast::ClassMember::Method(_) => {}
+                        ast::ClassMember::Field(field) => {
+                            let key = if let ast::PropKey::Private(identifier) = &field.key {
+                                FieldKey::Private(
+                                    class_env
+                                        .resolve_private(&identifier.name)
+                                        .expect("collect_private_names recorded every private key"),
+                                )
+                            } else {
+                                FieldKey::Public(self.prop_key(&field.key, &class_env)?)
+                            };
+                            let init = field.init.clone();
+                            if field.is_static {
+                                static_elements.push(StaticElement::Field { key, init });
+                            } else {
+                                instance_elements.push(InstanceElement::Field { key, init });
+                            }
+                        }
+                        ast::ClassMember::StaticBlock(block) => {
+                            static_elements.push(StaticElement::Block(block.clone()));
                         }
                     }
                 }
+                if !instance_elements.is_empty() {
+                    o.borrow_mut().class_elements = Some(Rc::new(ClassElements {
+                        instance: instance_elements,
+                        class_env: class_env.clone(),
+                        home: p.clone(),
+                    }));
+                }
+                run_static_elements(self, &f, o.clone(), &class_env, &static_elements)?;
             }
         }
         Ok(f)
@@ -3304,9 +3482,24 @@ impl Interpreter {
             _ => 0,
         }
     }
+    /// True when `v` is an array whose `[Symbol.iterator]` still resolves to
+    /// the intrinsic `Array.prototype[Symbol.iterator]` (§22.1.3.34, aliased
+    /// to `Array.prototype.values`), so the O(1) index-based fast path below
+    /// is spec-equivalent to walking the general iterator protocol. A
+    /// subclass override or a deleted `Array.prototype[Symbol.iterator]`
+    /// must fall through to the slow path instead, so a missing/non-callable
+    /// method still throws per GetIterator (§7.4.2).
+    fn has_original_array_iterator(&mut self, v: &JsValue) -> Result<bool, Throw> {
+        let method = self.get_prop(v, WellKnownSymbol::Iterator.symbol())?;
+        let canonical = self.array_proto.borrow().get_own(WellKnownSymbol::Iterator.symbol());
+        Ok(matches!(
+            (&method, &canonical),
+            (JsValue::Object(a), Some(JsValue::Object(b))) if Rc::ptr_eq(&a.0, &b.0)
+        ))
+    }
     fn iterate(&mut self, v: &JsValue) -> Result<Vec<JsValue>, Throw> {
         if let JsValue::Object(object) = v {
-            if matches!(object.borrow().exotic, Exotic::Array) {
+            if matches!(object.borrow().exotic, Exotic::Array) && self.has_original_array_iterator(v)? {
                 let n = match object.borrow().get_own("length") {
                     Some(JsValue::Num(n)) => n as usize,
                     _ => 0,
@@ -3339,27 +3532,35 @@ impl Interpreter {
                         return Err(error);
                     }
                 };
-                let result_object = match result {
-                    JsValue::Object(result) => result,
+                let result_value = match result {
+                    JsValue::Object(_) => result,
                     _ => {
                         self.close_iterator(v);
                         return Err(Throw::type_error("iterator result is not an object"));
                     }
                 };
-                let done = result_object
-                    .borrow()
-                    .get_own("done")
-                    .map(|value| value.to_boolean())
-                    .unwrap_or(false);
+                // IteratorComplete/IteratorValue (§7.4.6/§7.4.7) go through
+                // the full [[Get]], not a raw own-property probe, so a
+                // `done`/`value` accessor that throws is observed instead of
+                // silently reading as absent (which would loop forever on an
+                // iterator whose result objects define `value` as a getter).
+                let done = match self.get_prop(&result_value, "done") {
+                    Ok(value) => value.to_boolean(),
+                    Err(error) => {
+                        self.close_iterator(v);
+                        return Err(error);
+                    }
+                };
                 if done {
                     return Ok(values);
                 }
-                values.push(
-                    result_object
-                        .borrow()
-                        .get_own("value")
-                        .unwrap_or(JsValue::Undefined),
-                );
+                match self.get_prop(&result_value, "value") {
+                    Ok(value) => values.push(value),
+                    Err(error) => {
+                        self.close_iterator(v);
+                        return Err(error);
+                    }
+                }
             }
             self.close_iterator(v);
             return Err(Throw::range_error("iterator exceeded the iteration limit"));
@@ -3423,25 +3624,30 @@ impl Interpreter {
                     return Err(error);
                 }
             };
-            let result_object = match result {
-                JsValue::Object(object) => object,
+            let result_value = match result {
+                JsValue::Object(_) => result,
                 _ => {
                     self.close_iterator(&iterator);
                     return Err(Throw::type_error("iterator result is not an object"));
                 }
             };
-            if result_object
-                .borrow()
-                .get_own("done")
-                .map(|value| value.to_boolean())
-                .unwrap_or(false)
-            {
+            let done = match self.get_prop(&result_value, "done") {
+                Ok(value) => value.to_boolean(),
+                Err(error) => {
+                    self.close_iterator(&iterator);
+                    return Err(error);
+                }
+            };
+            if done {
                 break;
             }
-            let value = result_object
-                .borrow()
-                .get_own("value")
-                .unwrap_or(JsValue::Undefined);
+            let value = match self.get_prop(&result_value, "value") {
+                Ok(value) => value,
+                Err(error) => {
+                    self.close_iterator(&iterator);
+                    return Err(error);
+                }
+            };
             let iteration_env = for_iteration_env(left, env);
             self.bind_for(left, value, &iteration_env)?;
             match self.exec_stmt(body, &iteration_env) {
@@ -3467,7 +3673,7 @@ impl Interpreter {
         let JsValue::Object(object) = value else {
             return Ok(None);
         };
-        if matches!(object.borrow().exotic, Exotic::Array) {
+        if matches!(object.borrow().exotic, Exotic::Array) && self.has_original_array_iterator(value)? {
             return Ok(None);
         }
         let method = self.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
@@ -3627,8 +3833,8 @@ impl Interpreter {
         let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
         if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
         if !a.is_object() { return Ok(JsValue::Bool(false)); }
-        let p = match r.borrow().get_own("prototype") {
-            Some(JsValue::Object(p)) => p,
+        let p = match self.get_prop(b, "prototype")? {
+            JsValue::Object(p) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
         };
         if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
@@ -3659,6 +3865,7 @@ include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
+include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
@@ -3666,6 +3873,8 @@ include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_array.rs");
 include!("interp_array_protocol.rs");
+include!("interp_array_factories.rs");
+include!("interp_class_private.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");
@@ -3676,13 +3885,18 @@ include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
+include!("builtins_binary_base64.rs");
 include!("builtins_intl_data.rs");
+include!("builtins_intl_unit_data.rs");
 include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");
 include!("builtins_intl_number.rs");
+include!("builtins_intl_number_digits.rs");
 include!("builtins_intl_plural.rs");
 include!("builtins_intl_datetime.rs");
+include!("builtins_intl_date_support.rs");
 include!("builtins_intl_relative_list.rs");
+include!("builtins_intl_duration.rs");
 include!("builtins_intl_collator.rs");
 include!("builtins_intl_segmenter.rs");
 include!("builtins_intl_names.rs");

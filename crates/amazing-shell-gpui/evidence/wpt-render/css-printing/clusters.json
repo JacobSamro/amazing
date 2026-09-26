@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "subdir": "css/printing",
+  "mismatch_count": 6,
+  "unreadable": 3,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__printing__select-combobox-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__printing__transition-in-media-print.tentative.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__printing__pseudo-animations-print.html"
+      ]
+    }
+  ]
+}

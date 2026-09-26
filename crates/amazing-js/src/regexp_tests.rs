@@ -225,3 +225,40 @@ fn symbol_split() {
     truth(r"/,/[Symbol.split]('').length===1 && /,/[Symbol.split]('')[0]===''");
     truth(r"var r=/a*/[Symbol.split]('ab');r.length===2 && r[0]==='' && r[1]==='b'");
 }
+// Regression coverage for two bugs that were open (and filed cross-lane) at
+// the top of this merge: a subclassed `exec` losing its custom `groups`
+// object's own+inherited properties through `$<name>` replacement, and
+// `String.prototype.split` not delegating to a regexp's `@@split`. Both are
+// fixed as of the `dev` merge this commit carries; kept here as an
+// executable record rather than only in commit prose.
+#[test]
+fn subclassed_exec_groups_flow_through_replace() {
+    truth(
+        r#"
+class FakeRegExp extends RegExp {
+  exec(subject) {
+    const fakeResult = ["ab", "a"];
+    fakeResult.index = 0;
+    fakeResult.groups = { a: "b" };
+    Object.getPrototypeOf(fakeResult.groups).b = "c";
+    return fakeResult;
+  }
+};
+const re = new FakeRegExp();
+const result = re.exec("ab");
+Object.getPrototypeOf(result) === Array.prototype
+  && result.hasOwnProperty("groups")
+  && result.groups.a === "b"
+  && "ab".replace(re, "$<a>") === "b"
+  && "ab".replace(re, "$<b>") === "c"
+"#,
+    );
+}
+#[test]
+fn string_split_delegates_to_regexp() {
+    truth(r#""xab".split(/a|b/).join('|')==='x||'"#);
+}
+#[test]
+fn duplicate_named_group_replace_with_dollar_name() {
+    truth(r#""ab".replace(/(?<x>a)|(?<x>b)/, "[$<x>]")==='[a]b'"#);
+}

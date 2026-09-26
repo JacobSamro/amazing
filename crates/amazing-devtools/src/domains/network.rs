@@ -1,7 +1,7 @@
 //! The `Network` domain: request/response/loading events from the engine.
 
 use super::{encode_body, headers, object};
-use crate::host::{NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent};
+use crate::host::{NetworkFailedEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent};
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
 use crate::session::{DispatchOutcome, SessionState};
@@ -18,7 +18,29 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             Ok(DispatchOutcome::empty())
         }
         "Network.setCacheDisabled" => {
-            request.optional_bool("cacheDisabled", false)?;
+            let disabled = request.bool_param("cacheDisabled")?;
+            session.dev.set_cache_disabled(disabled).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "Network.setExtraHTTPHeaders" => {
+            let headers_param = request
+                .params
+                .get("headers")
+                .ok_or_else(|| CdpError::invalid_params("headers is required"))?;
+            let entries = headers_param
+                .as_object()
+                .ok_or_else(|| CdpError::invalid_params("headers must be an object"))?;
+            let mut headers = Vec::with_capacity(entries.len());
+            for (name, value) in entries {
+                let value = value
+                    .as_str()
+                    .ok_or_else(|| CdpError::invalid_params("header values must be strings"))?;
+                headers.push((name.clone(), value.to_owned()));
+            }
+            session
+                .dev
+                .set_extra_http_headers(&headers)
+                .map_err(CdpError::from)?;
             Ok(DispatchOutcome::empty())
         }
         "Network.clearBrowserCache" => Ok(DispatchOutcome::empty()),
@@ -129,6 +151,20 @@ pub fn finished_event(item: &NetworkFinishedEvent) -> Json {
     )
 }
 
+/// Builds the `Network.loadingFailed` event.
+pub fn failed_event(item: &NetworkFailedEvent) -> Json {
+    crate::protocol::event(
+        "Network.loadingFailed",
+        object(vec![
+            ("requestId", Json::String(item.request_id.clone())),
+            ("timestamp", Json::number(item.timestamp)),
+            ("type", Json::String(item.resource_type.clone())),
+            ("errorText", Json::String(item.error_text.clone())),
+            ("canceled", Json::Bool(item.canceled)),
+        ]),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,6 +188,22 @@ mod tests {
         let request = event.get("params").unwrap().get("request").unwrap();
         assert_eq!(request.get("headers").unwrap().get("Accept").unwrap().as_str(), Some("*/*"));
         assert_eq!(request.get("hasPostData").unwrap().as_bool(), Some(false));
+    }
+
+    #[test]
+    fn failed_event_carries_error_text_and_type() {
+        let item = NetworkFailedEvent {
+            request_id: "1".into(),
+            resource_type: "Script".into(),
+            error_text: "net::ERR_CONNECTION_REFUSED".into(),
+            canceled: false,
+            timestamp: 4.0,
+        };
+        let event = failed_event(&item);
+        let params = event.get("params").unwrap();
+        assert_eq!(params.get("errorText").unwrap().as_str(), Some("net::ERR_CONNECTION_REFUSED"));
+        assert_eq!(params.get("type").unwrap().as_str(), Some("Script"));
+        assert_eq!(params.get("canceled").unwrap().as_bool(), Some(false));
     }
 
     #[test]

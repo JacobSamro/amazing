@@ -50,6 +50,18 @@ fn tz_zone(id: &str) -> Option<&'static TzZone> {
     else { zones.iter().find(|zone| zone.name == entry.canonical) }
 }
 
+fn tz_supported_ids() -> Vec<&'static str> {
+    // "Etc/GMT0" is a standalone IANA zone (not a Link), but it fails the
+    // structural IsValidTimeZoneName grammar (no +/- sign after "GMT") and
+    // ICU's own supported set omits it too; drop it alongside Etc/GMT/Etc/UTC.
+    let mut ids: Vec<_> = tz_zones().iter().filter(|zone| zone.name == zone.canonical)
+        .map(|zone| zone.name.as_str())
+        .filter(|name| !["Etc/GMT", "Etc/UTC", "Etc/GMT0", "GMT0"].contains(name)).collect();
+    if !ids.contains(&"UTC") { ids.push("UTC"); }
+    ids.sort_unstable();
+    ids
+}
+
 fn tz_fixed_offset_seconds(id: &str) -> Option<i32> {
     let bytes = id.as_bytes();
     let sign = match bytes.first()? { b'+' => 1, b'-' => -1, _ => return None };
@@ -78,7 +90,7 @@ pub(crate) fn tz_canonicalize(id: &str) -> Option<String> {
         return Some(["UTC", "Etc/UTC", "Etc/GMT"].into_iter()
             .find(|name| name.eq_ignore_ascii_case(id)).unwrap().into());
     }
-    if id.eq_ignore_ascii_case("GMT") { return Some("UTC".into()); }
+    if id.eq_ignore_ascii_case("GMT") { return Some("GMT".into()); }
     if let Some(seconds) = tz_fixed_offset_seconds(id) {
         let minutes = seconds.unsigned_abs() / 60;
         return Some(format!("{}{:02}:{:02}", if seconds < 0 { '-' } else { '+' },

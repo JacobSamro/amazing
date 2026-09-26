@@ -64,6 +64,38 @@ struct BinaryView {
 #[derive(Clone)]
 enum BinaryState { Buffer(Rc<RefCell<BinaryBuffer>>), View(BinaryView) }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BinaryIteratorKind { Keys, Values, Entries }
+
+#[derive(Clone)]
+struct BinaryIteratorState {
+    view: BinaryView,
+    kind: BinaryKind,
+    iteration: BinaryIteratorKind,
+    next_index: usize,
+    exhausted: bool,
+}
+
+thread_local! {
+    // TypedArray iterators are keyed by object identity rather than added to
+    // BinaryState, so the shared value model and other lanes' matches stay
+    // unchanged.
+    static BINARY_ITERATORS: RefCell<HashMap<usize, (Weak<RefCell<JsObject>>, Rc<RefCell<BinaryIteratorState>>)>> =
+        RefCell::new(HashMap::new());
+}
+fn binary_register_iterator(object: &Obj, state: BinaryIteratorState) {
+    BINARY_ITERATORS.with(|entries| {
+        entries.borrow_mut().insert(binary_identity(object), (Rc::downgrade(&object.0), Rc::new(RefCell::new(state))));
+    });
+}
+fn binary_iterator_state(object: &Obj) -> Option<Rc<RefCell<BinaryIteratorState>>> {
+    BINARY_ITERATORS.with(|entries| {
+        let entries = entries.borrow();
+        let (weak, state) = entries.get(&binary_identity(object))?;
+        weak.upgrade().filter(|live| Rc::ptr_eq(live, &object.0)).map(|_| state.clone())
+    })
+}
+
 thread_local! {
     static BINARY_OBJECTS: RefCell<HashMap<usize, (Weak<RefCell<JsObject>>, BinaryState)>> =
         RefCell::new(HashMap::new());
@@ -218,10 +250,12 @@ fn binary_round_shift(value: u64, shift: u32) -> u64 {
 }
 
 fn binary_read(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool) -> Result<JsValue, Throw> {
-    let buffer = view.buffer.borrow();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    // An out-of-bounds (or detached) DataView throws TypeError before any
+    // element access; a request past the declared view length throws RangeError.
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(kind.size()).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
+    let buffer = view.buffer.borrow();
     let start = view.offset + offset;
     if kind.big() {
         let mut raw = [0u8; 8];
@@ -235,11 +269,12 @@ fn binary_read(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool)
     Ok(JsValue::num(binary_number(&buffer.bytes[start..start + kind.size()], kind, little)))
 }
 fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: f64) -> Result<(), Throw> {
+    if view.buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(kind.size()).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
     let mut buffer = view.buffer.borrow_mut();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
-    if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
     let start = view.offset + offset;
     buffer.bytes[start..start + kind.size()].copy_from_slice(&binary_encode_number(value, kind, little));
     Ok(())
@@ -247,11 +282,12 @@ fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool
 fn binary_write_value(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: &JsValue) -> Result<(), Throw> {
     if !kind.big() { return binary_write(view, kind, offset, little, i.to_number(value)?); }
     let bigint = i.to_bigint(value)?;
+    if view.buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+    if binary_view_out_of_bounds(view) { return Err(Throw::type_error("out-of-bounds DataView")); }
     let end = offset.checked_add(8).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
     let mut buffer = view.buffer.borrow_mut();
-    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
-    if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
     let mut bytes = bigint.low_u64().to_le_bytes();
     if !little { bytes.reverse(); }
     let start = view.offset + offset;
@@ -290,6 +326,12 @@ fn binary_method(i: &Interpreter, object: &Obj, name: &str, f: crate::value::Nat
 }
 fn binary_getter(i: &Interpreter, object: &Obj, name: &str, f: crate::value::NativeFn) {
     let method = Interpreter::native(&format!("get {name}"), f, &i.function_proto);
+    if let JsValue::Object(callable) = &method {
+        // Accessor functions are built-in functions that are not constructors:
+        // remove the prototype and every own property a constructor would keep.
+        callable.borrow_mut().constructible = false;
+        callable.borrow_mut().delete_own("prototype");
+    }
     let _ = object.borrow_mut().define(name, binary_accessor(method, None, false));
 }
 
@@ -327,7 +369,7 @@ impl Interpreter {
         }))));
         JsValue::Object(object)
     }
-    fn binary_new_view(&mut self, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
+    fn binary_view_on(&mut self, object: Obj, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
         let buffer = binary_buffer(&JsValue::Object(buffer_object.clone()))?;
         let size = kind.map_or(1, BinaryKind::size);
         let bytes_len = buffer.borrow().bytes.len();
@@ -339,16 +381,19 @@ impl Interpreter {
         if kind.is_some() && length.is_none() && (bytes_len - offset) % size != 0 && !buffer.borrow().resizable {
             return Err(Throw::range_error("unaligned TypedArray length"));
         }
+        if kind.is_some() { object.borrow_mut().exotic = Exotic::TypedArray; }
+        binary_register(&object, BinaryState::View(BinaryView { buffer, buffer_object, offset, length, kind }));
+        Ok(JsValue::Object(object))
+    }
+    fn binary_new_view(&mut self, buffer_object: Obj, offset: usize, length: Option<usize>, kind: Option<BinaryKind>) -> Result<JsValue, Throw> {
         let name = kind.map_or("DataView", BinaryKind::name);
         let proto = self.global_env.resolve(name)
             .and_then(|ctor| self.get_prop(&ctor, "prototype").ok())
             .and_then(|value| if let JsValue::Object(o) = value { Some(o) } else { None })
             .unwrap_or_else(|| self.object_proto.clone());
         let mut raw = JsObject::ordinary(); raw.proto = Some(proto);
-        if kind.is_some() { raw.exotic = Exotic::TypedArray; }
         let object = Obj(Rc::new(RefCell::new(raw)));
-        binary_register(&object, BinaryState::View(BinaryView { buffer, buffer_object, offset, length, kind }));
-        Ok(JsValue::Object(object))
+        self.binary_view_on(object, buffer_object, offset, length, kind)
     }
     pub fn binding_create_array_buffer(&mut self, bytes: Vec<u8>) -> Result<JsValue, Throw> {
         let len = bytes.len(); Ok(self.binary_new_buffer(bytes, len, false, false))
@@ -449,6 +494,10 @@ impl Interpreter {
             ("subarray", 2), ("toLocaleString", 0), ("toReversed", 0), ("toSorted", 1),
             ("toString", 0), ("values", 0), ("with", 2),
         ] { binary_method(self, &typed_proto, name, binary_typed_method, arity); }
+        // %TypedArray%.prototype.toString is Array.prototype.toString.
+        if let Some(array_to_string) = self.array_proto.borrow().get_own("toString") {
+            let _ = typed_proto.borrow_mut().define("toString", binary_writable_property(array_to_string));
+        }
         let values_method = typed_proto.borrow().get_own("values").unwrap();
         let _ = typed_proto.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), binary_writable_property(values_method));
         let _ = typed_proto.borrow_mut().define("constructor", binary_writable_property(intrinsic.clone()));
@@ -477,8 +526,9 @@ impl Interpreter {
             let _ = proto.borrow_mut().define("constructor", binary_writable_property(ctor.clone()));
             binary_configure_constructor(function, name, 3, &proto);
             binary_species(self, function);
-            let _ = function.borrow_mut().define("BYTES_PER_ELEMENT", binary_property(JsValue::num(kind.size() as f64)));
-            let _ = proto.borrow_mut().define("BYTES_PER_ELEMENT", binary_property(JsValue::num(kind.size() as f64)));
+            let _ = function.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
+            let _ = proto.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
+            if kind == BinaryKind::Uint8 { self.install_uint8_base64_hex(function, &proto); }
             self.define_global(name, ctor);
         }
         let atomics = self.object_value();
@@ -486,8 +536,10 @@ impl Interpreter {
             for (name, arity) in [
                 ("add", 3), ("and", 3), ("compareExchange", 4), ("exchange", 3),
                 ("isLockFree", 1), ("load", 2), ("notify", 3), ("or", 3),
-                ("store", 3), ("sub", 3), ("wait", 4), ("waitAsync", 4), ("xor", 3),
+                ("pause", 0), ("store", 3), ("sub", 3), ("wait", 4), ("waitAsync", 4), ("xor", 3),
             ] { binary_method(self, object, name, binary_atomics, arity); }
+            let _ = object.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
+                binary_property(JsValue::str("Atomics")));
         }
         self.define_global("Atomics", atomics);
     }
@@ -742,7 +794,8 @@ fn binary_is_view(_: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         .is_some_and(|state| matches!(state, BinaryState::View(_)))))
 }
 fn binary_data_view_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    binary_require_new(&this)?;
+    if i.current_new_target().is_none() { return Err(Throw::type_error("DataView requires new")); }
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("DataView requires new")); };
     let buffer_object = binary_obj(args.first().unwrap_or(&JsValue::Undefined))?;
     let buffer = binary_buffer(&JsValue::Object(buffer_object.clone()))?;
     let offset = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
@@ -750,7 +803,7 @@ fn binary_data_view_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>)
         Some(binary_index(i, arg)?)
     } else if buffer.borrow().resizable { None }
     else { Some(buffer.borrow().bytes.len().saturating_sub(offset)) };
-    i.binary_new_view(buffer_object, offset, length, None)
+    i.binary_view_on(object.clone(), buffer_object, offset, length, None)
 }
 fn binary_view_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
@@ -795,6 +848,10 @@ fn binary_data_view_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     };
     let view = binary_view(&this)?;
     if view.kind.is_some() { return Err(Throw::type_error("not a DataView")); }
+    // SetViewValue checks IsImmutableBuffer before converting any argument.
+    if set && view.buffer.borrow().immutable {
+        return Err(Throw::type_error("immutable DataView buffer"));
+    }
     let offset = binary_index(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let little = args.get(if set { 2 } else { 1 }).is_some_and(JsValue::to_boolean);
     if set {
@@ -804,19 +861,20 @@ fn binary_data_view_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
 }
 
 fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    binary_require_new(&this)?;
+    if i.current_new_target().is_none() { return Err(Throw::type_error("TypedArray requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("TypedArray requires new")); };
     let name = binary_current_name(i);
     let kind = BinaryKind::from_name(&name).ok_or_else(|| Throw::type_error("TypedArray requires a concrete constructor"))?;
     let first = args.first().cloned().unwrap_or(JsValue::Undefined);
-    if let JsValue::Object(object) = &first {
-        match binary_state(object) {
+    if let JsValue::Object(first_object) = &first {
+        match binary_state(first_object) {
             Some(BinaryState::Buffer(buffer)) => {
                 let offset = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
                 let length = if let Some(arg) = args.get(2).filter(|x| !matches!(x, JsValue::Undefined)) {
                     Some(binary_index(i, arg)?.checked_mul(kind.size()).ok_or_else(|| Throw::range_error("view too large"))?)
                 } else if buffer.borrow().resizable { None }
                 else { Some(buffer.borrow().bytes.len().saturating_sub(offset)) };
-                return i.binary_new_view(object.clone(), offset, length, Some(kind));
+                return i.binary_view_on(object, first_object.clone(), offset, length, Some(kind));
             }
             Some(BinaryState::View(view)) if view.kind.is_some() => {
                 let old_kind = view.kind.unwrap();
@@ -824,7 +882,11 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
                 let values = (0..binary_length(&view)).map(|index|
                     binary_read(&view, old_kind, index * old_kind.size(), true)
                 ).collect::<Result<Vec<_>, _>>()?;
-                return binary_typed_from_values(i, kind, values);
+                return binary_typed_fill(i, object, kind, values);
+            }
+            Some(BinaryState::View(_)) => {
+                // A DataView source is not iterable and has no length.
+                return Err(Throw::type_error("invalid TypedArray source"));
             }
             _ => {}
         }
@@ -834,10 +896,10 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
         let byte_length = length.checked_mul(kind.size()).ok_or_else(|| Throw::range_error("TypedArray too large"))?;
         if byte_length > 256 * 1024 * 1024 { return Err(Throw::range_error("TypedArray too large")); }
         let buffer = i.binary_new_buffer(vec![0; byte_length], byte_length, false, false);
-        return i.binary_new_view(binary_obj(&buffer)?, 0, Some(byte_length), Some(kind));
+        return i.binary_view_on(object, binary_obj(&buffer)?, 0, Some(byte_length), Some(kind));
     }
     let values = binary_collect_source(i, &first)?;
-    binary_typed_from_values(i, kind, values)
+    binary_typed_fill(i, object, kind, values)
 }
 fn binary_collect_source(i: &mut Interpreter, source: &JsValue) -> Result<Vec<JsValue>, Throw> {
     let iterator = i.get_prop(source, WellKnownSymbol::Iterator.symbol())?;
@@ -853,38 +915,66 @@ fn binary_collect_source(i: &mut Interpreter, source: &JsValue) -> Result<Vec<Js
         else { length.trunc() as usize };
     (0..length).map(|index| i.get_prop(source, index.to_string())).collect()
 }
-fn binary_typed_from_values(i: &mut Interpreter, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn binary_typed_fill(i: &mut Interpreter, object: Obj, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
     let bytes = values.len().checked_mul(kind.size()).ok_or_else(|| Throw::range_error("TypedArray too large"))?;
     if bytes > 256 * 1024 * 1024 { return Err(Throw::range_error("TypedArray too large")); }
     let buffer = i.binary_new_buffer(vec![0; bytes], bytes, false, false);
-    let view = i.binary_new_view(binary_obj(&buffer)?, 0, Some(bytes), Some(kind))?;
+    let view = i.binary_view_on(object, binary_obj(&buffer)?, 0, Some(bytes), Some(kind))?;
     let state = binary_typed(&view)?.0;
     for (index, value) in values.into_iter().enumerate() {
         binary_write_value(i, &state, kind, index * kind.size(), true, &value)?;
     }
     Ok(view)
 }
+fn binary_typed_from_values(i: &mut Interpreter, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let proto = i.global_env.resolve(kind.name())
+        .and_then(|ctor| i.get_prop(&ctor, "prototype").ok())
+        .and_then(|value| if let JsValue::Object(o) = value { Some(o) } else { None })
+        .unwrap_or_else(|| i.object_proto.clone());
+    let mut raw = JsObject::ordinary(); raw.proto = Some(proto);
+    let object = Obj(Rc::new(RefCell::new(raw)));
+    binary_typed_fill(i, object, kind, values)
+}
 fn binary_typed_static(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let method = binary_current_name(i);
     binary_obj(&this)?;
-    let values = if method == "of" { args } else {
-        let source = args.first().cloned().unwrap_or(JsValue::Undefined);
-        let mut values = binary_collect_source(i, &source)?;
-        if let Some(callback) = args.get(1).filter(|v| !matches!(v, JsValue::Undefined)) {
-            for (index, value) in values.iter_mut().enumerate() {
-                *value = i.call_value(callback, args.get(2).cloned().unwrap_or(JsValue::Undefined),
-                    vec![value.clone(), JsValue::num(index as f64)])?;
-            }
+    if method == "of" {
+        let values = args;
+        let (result, view, kind) = binary_construct_typed_object(i, &this, values.len())?;
+        if binary_length(&view) < values.len() { return Err(Throw::type_error("TypedArray constructor returned a short array")); }
+        for (index, value) in values.iter().enumerate() {
+            binary_write_value(i, &view, kind, index * kind.size(), true, value)?;
         }
-        values
-    };
-    let result = i.construct(&this, vec![JsValue::num(values.len() as f64)])?;
-    let (view, kind) = binary_typed(&result)?;
-    if binary_length(&view) < values.len() { return Err(Throw::type_error("TypedArray constructor returned a short array")); }
+        return Ok(result);
+    }
+    // %TypedArray%.from: IsCallable(mapfn) is checked before Get(items, @@iterator).
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let callback = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned();
+    if let Some(callback) = &callback {
+        if callable_function(callback).is_none() {
+            return Err(Throw::type_error("mapfn is not a function"));
+        }
+    }
+    let values = binary_collect_source(i, &source)?;
+    let (result, view, kind) = binary_construct_typed_object(i, &this, values.len())?;
+    // Set ignores indices that are out of bounds because the mapper may detach
+    // or shrink the result buffer while it runs.
+    let this_arg = args.get(2).cloned().unwrap_or(JsValue::Undefined);
     for (index, value) in values.iter().enumerate() {
-        binary_write_value(i, &view, kind, index * kind.size(), true, value)?;
+        let mapped = match &callback {
+            Some(callback) => i.call_value(callback, this_arg.clone(), vec![value.clone(), JsValue::num(index as f64)])?,
+            None => value.clone(),
+        };
+        if binary_view_out_of_bounds(&view) || index >= binary_length(&view) { continue; }
+        binary_write_value(i, &view, kind, index * kind.size(), true, &mapped)?;
     }
     Ok(result)
+}
+
+fn binary_construct_typed_object(i: &mut Interpreter, constructor: &JsValue, len: usize) -> Result<(JsValue, BinaryView, BinaryKind), Throw> {
+    let result = i.construct(constructor, vec![JsValue::num(len as f64)])?;
+    let (view, kind) = binary_typed(&result)?;
+    Ok((result, view, kind))
 }
 
 fn binary_typed_values(view: &BinaryView, kind: BinaryKind) -> Result<Vec<JsValue>, Throw> {
@@ -898,8 +988,7 @@ fn binary_typed_species(i: &mut Interpreter, source: &JsValue, kind: BinaryKind)
     let species = i.get_prop(&constructor, WellKnownSymbol::Species.symbol())?;
     Ok(if matches!(species, JsValue::Null | JsValue::Undefined) { default } else { species })
 }
-fn binary_typed_species_from_values(i: &mut Interpreter, source: &JsValue, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let constructor = binary_typed_species(i, source, kind)?;
+fn binary_typed_from_constructor(i: &mut Interpreter, constructor: JsValue, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
     let result = i.construct(&constructor, vec![JsValue::num(values.len() as f64)])?;
     let (view, result_kind) = binary_typed(&result)?;
     if result_kind.big() != kind.big() || binary_length(&view) < values.len() {
@@ -910,10 +999,89 @@ fn binary_typed_species_from_values(i: &mut Interpreter, source: &JsValue, kind:
     }
     Ok(result)
 }
+fn binary_typed_species_from_values(i: &mut Interpreter, source: &JsValue, kind: BinaryKind, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let constructor = binary_typed_species(i, source, kind)?;
+    binary_typed_from_constructor(i, constructor, kind, values)
+}
+fn binary_iterator_result(i: &mut Interpreter, value: JsValue, done: bool) -> Result<JsValue, Throw> {
+    let object = i.object_value();
+    i.set_prop(&object, "value", value)?;
+    i.set_prop(&object, "done", JsValue::Bool(done))?;
+    Ok(object)
+}
+
+fn binary_array(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let mut raw = JsObject::array();
+    raw.proto = Some(i.array_proto.clone());
+    let array = JsValue::object(raw);
+    let mut length = 0;
+    for value in values {
+        i.set_prop(&array, length.to_string(), value)?;
+        length += 1;
+    }
+    i.set_prop(&array, "length", JsValue::num(length as f64))?;
+    Ok(array)
+}
+
+fn binary_typed_iterator(i: &mut Interpreter, view: BinaryView, kind: BinaryKind, iteration: BinaryIteratorKind) -> Result<JsValue, Throw> {
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(i.object_proto.clone());
+    let object = Obj(Rc::new(RefCell::new(raw)));
+    binary_method(i, &object, "next", binary_typed_iterator_next, 0);
+    let self_iter = Interpreter::native("[Symbol.iterator]", binary_typed_iterator_self, &i.function_proto);
+    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), binary_writable_property(self_iter)).unwrap();
+    object.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), binary_property(JsValue::str("Array Iterator"))).unwrap();
+    binary_register_iterator(&object, BinaryIteratorState {
+        view, kind, iteration, next_index: 0, exhausted: false,
+    });
+    Ok(JsValue::Object(object))
+}
+fn binary_typed_iterator_self(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("incompatible TypedArray iterator")); };
+    if binary_iterator_state(object).is_none() {
+        return Err(Throw::type_error("incompatible TypedArray iterator"));
+    }
+    Ok(this)
+}
+fn binary_typed_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("incompatible TypedArray iterator")); };
+    let Some(state) = binary_iterator_state(object) else {
+        return Err(Throw::type_error("incompatible TypedArray iterator"));
+    };
+    let mut state = state.borrow_mut();
+    if state.exhausted { return binary_iterator_result(i, JsValue::Undefined, true); }
+    if binary_view_out_of_bounds(&state.view) {
+        // A fixed-length view that leaves its buffer throws TypeError; a
+        // length-tracking view ends iteration and stays exhausted.
+        if state.view.length.is_some() { return Err(Throw::type_error("TypedArray went out of bounds")); }
+        state.exhausted = true;
+        return binary_iterator_result(i, JsValue::Undefined, true);
+    }
+    let length = binary_length(&state.view);
+    if state.next_index >= length {
+        state.exhausted = true;
+        return binary_iterator_result(i, JsValue::Undefined, true);
+    }
+    let index = state.next_index;
+    state.next_index += 1;
+    let value = match state.iteration {
+        BinaryIteratorKind::Keys => JsValue::num(index as f64),
+        BinaryIteratorKind::Values => binary_read(&state.view, state.kind, index * state.kind.size(), true)?,
+        BinaryIteratorKind::Entries => {
+            let element = binary_read(&state.view, state.kind, index * state.kind.size(), true)?;
+            binary_array(i, vec![JsValue::num(index as f64), element])?
+        }
+    };
+    binary_iterator_result(i, value, false)
+}
+
 fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
     let (view, kind) = binary_typed(&this)?;
-    if binary_view_out_of_bounds(&view) { return Err(Throw::type_error("out-of-bounds TypedArray")); }
+    let out_of_bounds = binary_view_out_of_bounds(&view);
+    if out_of_bounds {
+        return Err(Throw::type_error("out-of-bounds TypedArray"));
+    }
     let length = binary_length(&view);
     let values = binary_typed_values(&view, kind)?;
     let arg = |n: usize| args.get(n).cloned().unwrap_or(JsValue::Undefined);
@@ -925,7 +1093,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 binary_read(&view, kind, index as usize * kind.size(), true)
             } else { Ok(JsValue::Undefined) }
         }
-        "join" | "toString" | "toLocaleString" => {
+        "join" | "toString" => {
             let separator = if name == "join" && !matches!(arg(0), JsValue::Undefined) { i.to_string(&arg(0))? } else { ",".into() };
             let mut strings = Vec::with_capacity(length);
             for index in 0..length {
@@ -934,16 +1102,38 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             }
             Ok(JsValue::str(strings.join(&separator)))
         }
+        "toLocaleString" => {
+            // Array.prototype.toLocaleString semantics: invoke toLocaleString on
+            // each element and ToString its result.
+            let mut strings = Vec::with_capacity(length);
+            for index in 0..length {
+                let value = i.get_prop(&this, index.to_string())?;
+                if matches!(value, JsValue::Undefined | JsValue::Null) { strings.push(String::new()); continue; }
+                let method = i.get_prop(&value, "toLocaleString")?;
+                let rendered = i.call_value(&method, value.clone(), Vec::new())?;
+                strings.push(i.to_string(&rendered)?);
+            }
+            Ok(JsValue::str(strings.join(",")))
+        }
         "includes" | "indexOf" | "lastIndexOf" => {
             let needle = arg(0);
             let start = if args.get(1).is_some_and(|x| !matches!(x, JsValue::Undefined)) {
                 binary_relative(i, args.get(1), length as i64)?
             } else if name == "lastIndexOf" { length.saturating_sub(1) } else { 0 };
+            // Coercing fromIndex can detach or shrink the buffer. A view that is
+            // no longer usable reports "not found" rather than throwing.
+            if binary_view_out_of_bounds(&view) || binary_length(&view) == 0 {
+                return Ok(if name == "includes" { JsValue::Bool(false) } else { JsValue::num(-1.0) });
+            }
+            let values = binary_typed_values(&view, kind)?;
+            let length = values.len();
+            let start = start.min(length);
             let found = if name == "lastIndexOf" { values.iter().enumerate().rev().find(|(j, v)| *j <= start && i.strict_eq(v, &needle)).map(|(j, _)| j) }
                 else { values.iter().enumerate().find(|(j, v)| *j >= start && (i.strict_eq(v, &needle) || name == "includes" && matches!((v, &needle), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()))).map(|(j, _)| j) };
             Ok(if name == "includes" { JsValue::Bool(found.is_some()) } else { JsValue::num(found.map_or(-1, |x| x as i64) as f64) })
         }
         "fill" => {
+            if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
             let fill = if kind.big() { Interpreter::bigint_value(i.to_bigint(&arg(0))?) }
                 else { JsValue::num(i.to_number(&arg(0))?) };
             let start = if args.get(1).is_some_and(|x| !matches!(x, JsValue::Undefined)) { binary_relative(i, args.get(1), length as i64)? } else { 0 };
@@ -978,9 +1168,15 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                     return Err(Throw::type_error("incompatible TypedArray subarray species"));
                 }
                 Ok(result)
-            } else { binary_typed_species_from_values(i, &this, kind, values[start..end].to_vec()) }
+            } else {
+                let constructor = binary_typed_species(i, &this, kind)?;
+                // Getting @@species can detach the buffer; slice then throws.
+                if binary_view_out_of_bounds(&view) { return Err(Throw::type_error("detached ArrayBuffer")); }
+                binary_typed_from_constructor(i, constructor, kind, values[start..end].to_vec())
+            }
         }
         "set" => {
+            if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
             let source = arg(0);
             let source_values = if let Ok((source_view, source_kind)) = binary_typed(&source) {
                 binary_typed_values(&source_view, source_kind)?
@@ -995,6 +1191,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(JsValue::Undefined)
         }
         "copyWithin" => {
+            if view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
             let target = if args.first().is_some_and(|x| !matches!(x, JsValue::Undefined)) { binary_relative(i, args.first(), length as i64)? } else { 0 };
             let start = if args.get(1).is_some_and(|x| !matches!(x, JsValue::Undefined)) { binary_relative(i, args.get(1), length as i64)? } else { 0 };
             let end = binary_relative(i, args.get(2), length as i64)?;
@@ -1009,14 +1206,27 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(this)
         }
         "with" => {
-            let index = i.to_number(&arg(0))?;
-            let index = if index < 0.0 { length as i64 + index as i64 } else { index as i64 };
-            if index < 0 || index as usize >= length { return Err(Throw::range_error("index outside TypedArray")); }
-            let mut copy = values; copy[index as usize] = arg(1);
-            binary_typed_from_values(i, kind, copy)
+            // ToIntegerOrInfinity(index), then coerce value, then validate the
+            // index against the current length (value coercion may resize).
+            let raw_index = i.to_number(&arg(0))?;
+            let relative = if raw_index.is_nan() { 0.0 } else { raw_index.trunc() };
+            let value = if kind.big() { Interpreter::bigint_value(i.to_bigint(&arg(1))?) }
+                else { JsValue::num(i.to_number(&arg(1))?) };
+            let current_length = binary_length(&view);
+            let target = if relative < 0.0 { current_length as f64 + relative } else { relative };
+            if target < 0.0 || target as usize >= current_length {
+                return Err(Throw::range_error("index outside TypedArray"));
+            }
+            let mut copy = binary_typed_values(&view, kind)?;
+            copy[target as usize] = value;
+            binary_typed_species_from_values(i, &this, kind, copy)
         }
         "sort" | "toSorted" => {
+            if name == "sort" && view.buffer.borrow().immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
             let compare = arg(0);
+            if !matches!(compare, JsValue::Undefined) && callable_function(&compare).is_none() {
+                return Err(Throw::type_error("comparefn must be a function"));
+            }
             let mut copy = values;
             for index in 1..copy.len() {
                 let mut cursor = index;
@@ -1047,7 +1257,26 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
         }
         "map" | "filter" | "forEach" | "every" | "some" | "find" | "findIndex" | "findLast" | "findLastIndex" => {
             let callback = arg(0);
+            if callable_function(&callback).is_none() {
+                return Err(Throw::type_error("callback is not a function"));
+            }
             let receiver = arg(1);
+            // %TypedArray%.prototype.map creates the result (and gets
+            // @@species) before invoking the callback for the first element.
+            if name == "map" {
+                let constructor = binary_typed_species(i, &this, kind)?;
+                if binary_view_out_of_bounds(&view) { return Err(Throw::type_error("out-of-bounds TypedArray")); }
+                let (result, result_view, result_kind) = binary_construct_typed_object(i, &constructor, length)?;
+                if binary_length(&result_view) < length {
+                    return Err(Throw::type_error("incompatible TypedArray species result"));
+                }
+                for j in 0..length {
+                    let value = i.get_prop(&this, j.to_string())?;
+                    let mapped = i.call_value(&callback, receiver.clone(), vec![value, JsValue::num(j as f64), this.clone()])?;
+                    binary_write_value(i, &result_view, result_kind, j * result_kind.size(), true, &mapped)?;
+                }
+                return Ok(result);
+            }
             let indices: Vec<_> = if name.ends_with("Last") || name.ends_with("LastIndex") { (0..length).rev().collect() } else { (0..length).collect() };
             let mut selected = Vec::new();
             for j in indices {
@@ -1073,6 +1302,9 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
         }
         "reduce" | "reduceRight" => {
             let callback = arg(0);
+            if callable_function(&callback).is_none() {
+                return Err(Throw::type_error("callback is not a function"));
+            }
             let indices: Vec<_> = if name == "reduceRight" { (0..length).rev().collect() }
                 else { (0..length).collect() };
             let mut iter = indices.into_iter();
@@ -1089,15 +1321,61 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(accumulator)
         }
         "keys" | "values" | "entries" => {
-            let iterator_kind = match name.as_str() {
-                "keys" => SequenceIteratorKind::ArrayKeys,
-                "entries" => SequenceIteratorKind::ArrayEntries,
-                _ => SequenceIteratorKind::ArrayValues,
+            let iteration = match name.as_str() {
+                "keys" => BinaryIteratorKind::Keys,
+                "entries" => BinaryIteratorKind::Entries,
+                _ => BinaryIteratorKind::Values,
             };
-            Ok(i.sequence_iterator(this, iterator_kind))
+            binary_typed_iterator(i, view, kind, iteration)
         }
         _ => Err(Throw::type_error("unknown TypedArray operation")),
     }
+}
+
+fn binary_wait_async_result(i: &mut Interpreter, async_value: bool, value: JsValue) -> Result<JsValue, Throw> {
+    let object = i.object_value();
+    i.set_prop(&object, "async", JsValue::Bool(async_value))?;
+    i.set_prop(&object, "value", value)?;
+    Ok(object)
+}
+
+fn binary_wait_async_promise(i: &mut Interpreter, settle: Option<&str>) -> Result<JsValue, Throw> {
+    let constructor = i.global_env.resolve("Promise").ok_or_else(|| Throw::type_error("Promise unavailable"))?;
+    match settle {
+        Some(text) => {
+            let resolve = i.get_prop(&constructor, "resolve")?;
+            i.call_value(&resolve, constructor, vec![JsValue::str(text)])
+        }
+        None => {
+            let executor = Interpreter::native("executor", binary_noop_promise_executor, &i.function_proto);
+            i.construct(&constructor, vec![executor])
+        }
+    }
+}
+fn binary_noop_promise_executor(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::Undefined)
+}
+
+fn binary_wait_async(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, index: usize,
+    value_arg: Option<&JsValue>, timeout_arg: Option<&JsValue>,
+) -> Result<JsValue, Throw> {
+    let old = binary_read(view, kind, index * kind.size(), true)?;
+    let equal = if kind.big() {
+        let value = i.to_bigint(value_arg.unwrap_or(&JsValue::Undefined))?;
+        matches!(&old, JsValue::BigInt(current) if current.as_ref() == &value)
+    } else {
+        let value = i.to_number(value_arg.unwrap_or(&JsValue::Undefined))?;
+        matches!(&old, JsValue::Num(current) if *current == value)
+    };
+    if !equal { return binary_wait_async_result(i, false, JsValue::str("not-equal")); }
+    let timeout = i.to_number(timeout_arg.unwrap_or(&JsValue::Undefined))?;
+    let timeout = if timeout.is_nan() { f64::INFINITY } else { timeout };
+    if timeout <= 0.0 { return binary_wait_async_result(i, false, JsValue::str("timed-out")); }
+    // This engine has no other agent to call Atomics.notify, so a finite wait
+    // settles as "timed-out"; an infinite wait stays pending.
+    let promise = if timeout.is_finite() { binary_wait_async_promise(i, Some("timed-out"))? }
+        else { binary_wait_async_promise(i, None)? };
+    binary_wait_async_result(i, true, promise)
 }
 
 fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1106,11 +1384,21 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         let size = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
         return Ok(JsValue::Bool(matches!(size.trunc() as i64, 1 | 2 | 4 | 8)));
     }
+    if name == "pause" {
+        return Ok(JsValue::Undefined);
+    }
     let target = args.first().cloned().unwrap_or(JsValue::Undefined);
     let (view, kind) = binary_typed(&target)?;
     if !kind.integer() || kind == BinaryKind::Uint8Clamped || (matches!(name.as_str(), "wait" | "waitAsync" | "notify")
         && !matches!(kind, BinaryKind::Int32 | BinaryKind::BigInt64)) {
         return Err(Throw::type_error("invalid Atomics TypedArray"));
+    }
+    // Mutability is checked before any argument coercion for the read-modify-write
+    // operations. Atomics.load is a pure read and notify/waitAsync are handled below.
+    if matches!(name.as_str(), "add" | "and" | "compareExchange" | "exchange" | "or" | "store" | "sub" | "xor")
+        && view.buffer.borrow().immutable
+    {
+        return Err(Throw::type_error("immutable ArrayBuffer"));
     }
     if matches!(name.as_str(), "wait" | "waitAsync" | "notify") && !view.buffer.borrow().shared {
         return Err(Throw::type_error("Atomics wait/notify requires SharedArrayBuffer"));
@@ -1118,6 +1406,7 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     let index = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
     if index >= binary_length(&view) { return Err(Throw::range_error("Atomics index outside TypedArray")); }
     if name == "wait" { return Err(Throw::type_error("Atomics.wait cannot block this agent")); }
+    if name == "waitAsync" { return binary_wait_async(i, &view, kind, index, args.get(2), args.get(3)); }
     if name == "notify" { return Ok(JsValue::num(0.0)); }
     let offset = index * kind.size();
     let old = binary_read(&view, kind, offset, true)?;
@@ -1159,7 +1448,10 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
         _ => return Err(Throw::type_error("unknown Atomics operation")),
     };
     binary_write(&view, kind, offset, true, next)?;
-    Ok(if name == "store" { JsValue::num(input) } else { old })
+    Ok(if name == "store" {
+        // Atomics.store returns ToIntegerOrInfinity(value); -0 normalises to +0.
+        JsValue::num(if input == 0.0 { 0.0 } else { input.trunc() })
+    } else { old })
 }
 
 #[cfg(test)]

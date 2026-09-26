@@ -52,7 +52,7 @@ def main() -> None:
         "    decimal: &'static str, group: &'static str, plus: &'static str, minus: &'static str,",
         "    percent: &'static str, nan: &'static str, infinity: &'static str,",
         "    decimal_pattern: &'static str, percent_pattern: &'static str,",
-        "    currency_pattern: &'static str, minimum_grouping: usize,",
+        "    currency_pattern: &'static str, currency_accounting_pattern: &'static str, minimum_grouping: usize,",
         "}",
         "const INTL_NUMBER_DATA: &[IntlNumberData] = &[",
     ]
@@ -80,25 +80,216 @@ def main() -> None:
             + ", decimal_pattern: " + rust_string(fields[9])
             + ", percent_pattern: " + rust_string(fields[10])
             + ", currency_pattern: " + rust_string(fields[11])
+            + ", currency_accounting_pattern: " + rust_string(main_data[f"currencyFormats-numberSystem-{numbering}"].get("accounting", fields[11]))
             + ", minimum_grouping: " + str(int(main_data.get("minimumGroupingDigits", "1")))
             + " },"
         )
     lines.append("];")
 
+    numbering_systems = cldr("cldr-core/supplemental/numberingSystems.json")["supplemental"]["numberingSystems"]
+    # Every system with a simple numeric digit table is advertised and rendered.
+    simple_systems = sorted(code for code, value in numbering_systems.items()
+                            if value.get("_type") == "numeric" and "_digits" in value
+                            and 3 <= len(code) <= 8 and code.isascii() and code.isalnum())
+    lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
+                 + rust_string(" ".join(simple_systems)) + ";")
+
+    # AvailableCollations is the fixed bcp47 collation type list, not the
+    # localized CLDR display names (which are words, sometimes over 8 chars).
+    collation_codes = {"big5han", "compat", "dict", "direct", "ducet", "emoji",
+                       "eor", "gb2312", "phonebk", "phonetic", "pinyin",
+                       "reformed", "searchjl", "stroke", "trad", "unihan", "zhuyin"}
+    lines.append("const INTL_SUPPORTED_COLLATIONS: &str = "
+                 + rust_string(" ".join(sorted(collation_codes))) + ";")
+    lines.append("const INTL_ALL_CURRENCIES: &str = "
+                 + rust_string(" ".join(sorted({code
+                     for locale in LOCALES
+                     for code in cldr(f"cldr-numbers-full/main/{locale}/currencies.json")["main"][locale]["numbers"]["currencies"]
+                     if len(code) == 3 and code.isascii() and code.isalpha()}))) + ";")
+
+    lines += [
+        "struct IntlCompactData { locale: &'static str, style: &'static str,",
+        "    magnitude: u32, divisor: u32, suffix: &'static str }",
+        "const INTL_COMPACT_DATA: &[IntlCompactData] = &[",
+    ]
+    for locale in LOCALES:
+        number_data = cldr(f"cldr-numbers-full/main/{locale}/numbers.json")["main"][locale]["numbers"]
+        for style in ("short", "long"):
+            formats = number_data[f"decimalFormats-numberSystem-{number_data['defaultNumberingSystem']}"][style]["decimalFormat"]
+            for key, pattern in sorted(formats.items()):
+                if "-count-one" in key:
+                    continue
+                magnitude = int(key.split("-")[0])
+                if magnitude < 1000:
+                    continue
+                zeros = pattern.count("0")
+                if zeros == 0:
+                    continue
+                # CLDR escapes apostrophes; the placeholder digits are '0'.
+                unquoted = []
+                index = 0
+                while index < len(pattern):
+                    if pattern[index] == "'":
+                        if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                            unquoted.append("'")
+                            index += 2
+                            continue
+                        index += 1
+                        continue
+                    unquoted.append(pattern[index])
+                    index += 1
+                suffix = "".join(unquoted).replace("0", "")
+                divisor = len(str(magnitude)) - 1 - (zeros - 1)
+                lines.append(
+                    f"    IntlCompactData {{ locale: {rust_string(locale)}, style: {rust_string(style)}, "
+                    f"magnitude: {len(str(magnitude)) - 1}, divisor: {divisor}, suffix: {rust_string(suffix)} }},"
+                )
+    lines.append("];")
+
+    # ECMA-402 unit identifiers mapped to their CLDR unit keys.
+    unit_keys = {
+        "acre": "area-acre", "bit": "digital-bit", "byte": "digital-byte",
+        "celsius": "temperature-celsius", "centimeter": "length-centimeter",
+        "day": "duration-day", "degree": "angle-degree",
+        "fahrenheit": "temperature-fahrenheit", "fluid-ounce": "volume-fluid-ounce",
+        "foot": "length-foot", "gallon": "volume-gallon", "gigabit": "digital-gigabit",
+        "gigabyte": "digital-gigabyte", "gram": "mass-gram", "hectare": "area-hectare",
+        "hour": "duration-hour", "inch": "length-inch", "kilobit": "digital-kilobit",
+        "kilobyte": "digital-kilobyte", "kilogram": "mass-kilogram",
+        "kilometer": "length-kilometer", "liter": "volume-liter",
+        "megabit": "digital-megabit", "megabyte": "digital-megabyte",
+        "meter": "length-meter", "microsecond": "duration-microsecond",
+        "mile": "length-mile", "mile-scandinavian": "length-mile-scandinavian",
+        "milliliter": "volume-milliliter", "millimeter": "length-millimeter",
+        "millisecond": "duration-millisecond", "minute": "duration-minute",
+        "month": "duration-month", "nanosecond": "duration-nanosecond",
+        "ounce": "mass-ounce", "percent": "concentr-percent",
+        "petabyte": "digital-petabyte", "pound": "mass-pound",
+        "second": "duration-second", "stone": "mass-stone", "terabit": "digital-terabit",
+        "terabyte": "digital-terabyte", "week": "duration-week", "yard": "length-yard",
+        "year": "duration-year",
+    }
+    unit_compounds = {
+        "kilometer-per-hour": "speed-kilometer-per-hour",
+        "meter-per-second": "speed-meter-per-second",
+        "mile-per-hour": "speed-mile-per-hour",
+        "liter-per-kilometer": "consumption-liter-per-kilometer",
+        "liter-per-100-kilometer": "consumption-liter-per-100-kilometer",
+        "mile-per-gallon": "consumption-mile-per-gallon",
+        "mile-per-gallon-imperial": "consumption-mile-per-gallon-imperial",
+    }
+    unit_compound_simple = {
+        "kilometer-per-hour": ("kilometer", "hour"),
+        "meter-per-second": ("meter", "second"),
+        "mile-per-hour": ("mile", "hour"),
+        "liter-per-kilometer": ("liter", "kilometer"),
+        "liter-per-100-kilometer": ("liter", "kilometer"),
+        "mile-per-gallon": ("mile", "gallon"),
+        "mile-per-gallon-imperial": ("mile", "gallon"),
+    }
+
+    def singular_name(entry):
+        pattern = entry.get("unitPattern-count-one") or entry.get("unitPattern-count-other") or "{0}"
+        return pattern.replace("{0}", "").strip()
+
+    # INTL_UNIT_DATA lives in its own generated file (not `lines`/`args.output`):
+    # with both "other" and "one" (CLDR plural-category) rows per locale/style/
+    # unit it runs well past the workspace's 4,000-line-per-file budget if left
+    # in builtins_intl_data.rs. A "one" row is only emitted when CLDR's
+    # `unitPattern-count-one` differs from `-other` (e.g. "day"/"days"); callers
+    # fall back to the "other" row for every category with no dedicated row, so
+    # locales/styles where CLDR carries no distinct singular are unaffected.
+    unit_lines = [
+        "// Generated by scripts/generate_intl_data.py. Do not edit.",
+        f"// Unicode CLDR JSON {VERSION}; archive SHA-256 {ARCHIVE_SHA256}.",
+        "struct IntlUnitData { locale: &'static str, unit: &'static str, style: &'static str, category: &'static str,",
+        "    prefix: &'static str, suffix: &'static str, unit_name: &'static str }",
+        "const INTL_UNIT_DATA: &[IntlUnitData] = &[",
+    ]
+
+    def emit_unit_row(locale, intl_unit, style, category, pattern):
+        if "{0}" not in pattern:
+            return
+        prefix, suffix = pattern.split("{0}", 1)
+        unit_name = suffix.strip() or intl_unit
+        unit_lines.append(
+            f"    IntlUnitData {{ locale: {rust_string(locale)}, unit: {rust_string(intl_unit)}, "
+            f"style: {rust_string(style)}, category: {rust_string(category)}, prefix: {rust_string(prefix)}, "
+            f"suffix: {rust_string(suffix)}, unit_name: {rust_string(unit_name)} }},"
+        )
+
+    for locale in LOCALES:
+        units = cldr(f"cldr-units-full/main/{locale}/units.json")["main"][locale]["units"]
+        for style in ("long", "short", "narrow"):
+            table = units[style]
+            entries = {}
+            for intl_unit, cldr_key in sorted(unit_keys.items()):
+                entry = table.get(cldr_key)
+                if entry is None:
+                    continue
+                other = entry.get("unitPattern-count-other") or entry.get("unitPattern-count-one")
+                if other is None:
+                    continue
+                entries[intl_unit] = (other, entry.get("unitPattern-count-one"))
+            for intl_unit, cldr_key in unit_compounds.items():
+                entry = table.get(cldr_key)
+                if entry is not None:
+                    other = entry.get("unitPattern-count-other") or entry.get("unitPattern-count-one")
+                    if other is not None:
+                        entries[intl_unit] = (other, entry.get("unitPattern-count-one"))
+                        continue
+                # Compose from the two simple units when CLDR has no dedicated key.
+                first, second = unit_compound_simple[intl_unit]
+                first_entry = table.get(unit_keys[first])
+                second_entry = table.get(unit_keys[second])
+                per = table.get("per", {}).get("compoundUnitPattern")
+                if first_entry is None or second_entry is None or per is None:
+                    continue
+                second_name = singular_name(second_entry)
+                other_first = first_entry.get("unitPattern-count-other") or first_entry.get("unitPattern-count-one")
+                other = per.replace("{0}", other_first).replace("{1}", second_name)
+                one_first = first_entry.get("unitPattern-count-one")
+                one = per.replace("{0}", one_first).replace("{1}", second_name) if one_first is not None else None
+                entries[intl_unit] = (other, one)
+            for intl_unit, (other, one) in sorted(entries.items()):
+                emit_unit_row(locale, intl_unit, style, "other", other)
+                if one is not None and one != other:
+                    emit_unit_row(locale, intl_unit, style, "one", one)
+    unit_lines.append("];")
+    unit_path = args.output.parent / "builtins_intl_unit_data.rs"
+    unit_path.write_text("\n".join(unit_lines) + "\n")
+    print(f"{unit_path}: {len(unit_lines)} lines")
+
     lines += [
         "struct IntlDateData { locale: &'static str, date: [&'static str; 4], time: [&'static str; 4],",
         "    date_time: [&'static str; 4], months_wide: [&'static str; 12], months_abbr: [&'static str; 12],",
         "    weekdays_wide: [&'static str; 7], weekdays_abbr: [&'static str; 7],",
-        "    am: &'static str, pm: &'static str,",
+        "    am: &'static str, pm: &'static str, day_period_long: [&'static str; 24],",
+        "    day_period_short: [&'static str; 24], day_period_narrow: [&'static str; 24],",
         "}",
         "const INTL_DATE_DATA: &[IntlDateData] = &[",
     ]
     array = lambda values: "[" + ", ".join(map(rust_string, values)) + "]"
+    period_rules = cldr("cldr-core/supplemental/dayPeriods.json")["supplemental"]["dayPeriodRuleSet"]
     for locale in LOCALES:
         date_data = cldr(f"cldr-dates-full/main/{locale}/ca-gregorian.json")["main"][locale]["dates"]["calendars"]["gregorian"]
         months = date_data["months"]["format"]
         days = date_data["days"]["format"]
         periods = date_data["dayPeriods"]["format"]["wide"]
+        rules = period_rules.get(locale, period_rules.get(locale.split("-")[0], period_rules["en"]))
+        def period_at(hour: int) -> str:
+            if hour == 12 and "noon" in rules:
+                return "noon"
+            for name, rule in rules.items():
+                if "_from" not in rule:
+                    continue
+                start = int(rule["_from"].split(":")[0])
+                end = int(rule["_before"].split(":")[0])
+                if start <= hour < end or (start > end and (hour >= start or hour < end)):
+                    return name
+            return "am" if hour < 12 else "pm"
+        period_keys = [period_at(hour) for hour in range(24)]
+        period_names = date_data["dayPeriods"]["format"]
         styles = ("full", "long", "medium", "short")
         weekdays = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
         lines.append(
@@ -110,7 +301,10 @@ def main() -> None:
             f"months_abbr: {array(months['abbreviated'][str(n)] for n in range(1, 13))}, "
             f"weekdays_wide: {array(days['wide'][day] for day in weekdays)}, "
             f"weekdays_abbr: {array(days['abbreviated'][day] for day in weekdays)}, "
-            f"am: {rust_string(periods['am'])}, pm: {rust_string(periods['pm'])} }},"
+            f"am: {rust_string(periods['am'])}, pm: {rust_string(periods['pm'])}, "
+            f"day_period_long: {array(period_names['wide'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))}, "
+            f"day_period_short: {array(period_names['abbreviated'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))}, "
+            f"day_period_narrow: {array(period_names['narrow'].get(key, periods['am' if hour < 12 else 'pm']) for hour, key in enumerate(period_keys))} }},"
         )
     lines.append("];")
 
@@ -222,6 +416,24 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("\n".join(lines) + "\n")
     print(f"{args.output}: {len(lines)} lines")
+
+    digits = [
+        "// Generated by scripts/generate_intl_data.py. Do not edit.",
+        f"// Unicode CLDR JSON {VERSION}; numberingSystems.json simple digit tables.",
+        "const INTL_NUMBERING_SYSTEM_DIGITS: &[(&str, &str)] = &[",
+    ]
+    for code in simple_systems:
+        digits.append(f"    ({rust_string(code)}, {rust_string(numbering_systems[code]['_digits'])}),")
+    digits += [
+        "];",
+        "",
+        "fn intl_numbering_digits(system: &str) -> Option<&'static str> {",
+        "    INTL_NUMBERING_SYSTEM_DIGITS.iter().find(|(name, _)| *name == system).map(|(_, digits)| *digits)",
+        "}",
+    ]
+    digits_path = args.output.parent / "builtins_intl_number_digits.rs"
+    digits_path.write_text("\n".join(digits) + "\n")
+    print(f"{digits_path}: {len(digits)} lines")
 
     names = [
         "// Generated by scripts/generate_intl_data.py. Do not edit.",

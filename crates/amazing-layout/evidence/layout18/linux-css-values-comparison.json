@@ -1,0 +1,32 @@
+{
+  "before": "crates/amazing-layout/evidence/layout18/linux-css-values-before.json",
+  "after": "crates/amazing-layout/evidence/layout18/linux-css-values-after.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 17,
+  "before_counts": {
+    "pass": 4,
+    "mismatch": 13,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 7,
+    "mismatch": 10,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-values__attr-in-max.html",
+    "css-values__calc-offsets-relative-bottom-1.html",
+    "css-values__calc-offsets-relative-top-1.html"
+  ],
+  "losses": [],
+  "actual_hash_changes": 3,
+  "reference_hash_changes": 0,
+  "before_projection_sha256": "9788472a199de953e83cc66286c7aa7473a435f85063b8edb9f71b2148afc198",
+  "after_projection_sha256": "fca894d2e374793429386ec2efa04a9816779b7c18385fad9f96ac2e8d2c15af"
+}

@@ -137,14 +137,30 @@ libvpx 1.16, nextest, the pinned Test262). Related lanes share one sandbox (`POO
 `scripts/boat-lane.py`); each lane syncs into its own `~/amazing/wt/<lane>` and writes outputs to
 `$OUT` (`~/amazing/out/<lane>`). All lanes on a sandbox share `~/amazing/target`, so cargo's lock
 serializes their compiles ("Blocking waiting for file lock" means another lane is building; it is
-normal). `scripts/boat-idle-reaper.py` stops a sandbox after 5 idle minutes; the next run resumes
+normal). `scripts/boat-idle-reaper.py` stops a sandbox after 30 idle minutes (40 when Boat starts run low; raised 2026-09-27 after the fleet used up the 200 starts/day quota); the next run resumes
 it in seconds. `scripts/boat-lane.py pool-report` shows busy and overlap per pool.
 **Linux desktop and WPT (2026-09-26).** Sandboxes are Ubuntu 24.04 with a GNOME desktop, no
 GPU; Mesa software Vulkan (llvmpipe), Xvfb, xdotool and ImageMagick are in the template.
 `scripts/linux-shell-capture.sh <lane> -- [shell args]` builds the GPUI shell, runs it on a virtual
 display and copies a window PNG plus metadata to `.agents/<lane>/captures/`. The pinned WPT
 (`c2a2fce`) is at `~/corpora/wpt`; on an older sandbox run `bash scripts/ensure-wpt.sh` first.
-Linux pixel results are reported as Linux numbers.
+Linux pixel results are reported as Linux numbers. `~/corpora/wpt` is shared by every lane on a
+sandbox: treat it as read-only, never run `git sparse-checkout` on it (clone a sparse copy under
+`$OUT` if you need one), and start WPT commands with `bash scripts/ensure-wpt.sh &&`, which
+restores the full tree if another lane narrowed it.
+**Linux reftests (2026-09-26, extended 2026-09-26 SHELL-L5):** `scripts/linux-render-wpt.sh <lane>
+<wpt-subdir> [<wpt-subdir> ...]` renders the self-contained static reftests of one or more
+pinned-WPT subdirs (e.g. `css/css-backgrounds css/css-color`; batch a lane's whole sweep into one
+call, sharing a single build) with the headless `amazing` renderer and fuzzy-compares them
+(`scripts/wpt_render_compare.py`, `--jobs N` parallel), writing one `report.json` per subdir plus a
+`clusters.json` grouping mismatches by diff bounding-box and colour
+(`scripts/wpt_render_cluster.py`); it replaces win-001 render sweeps while Windows is deferred.
+`--baseline auto|<dir>|<file>` turns a run into a zero-loss gate: it diffs the run's per-test
+classifications against a previous report (checked-in evidence by default with `auto`) and prints
+gained/lost/changed/unchanged/new/removed counts, failing the run (and every remaining subdir still
+runs) if anything regressed from passing. `--compact` writes/commits `compact.json` (test id ->
+classification only, no per-test detail) instead of the full `report.json`, so gating evidence
+stays small over repeated runs. Baselines: `crates/amazing-shell-gpui/evidence/wpt-render/`.
 **Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
 `boat data-retention`, `boat billing`, ...): the account, its templates and its retention
 settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in

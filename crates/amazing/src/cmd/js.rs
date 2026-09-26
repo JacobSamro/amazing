@@ -1,11 +1,40 @@
 //! JavaScript commands and page script execution.
-use std::{cell::RefCell, rc::Rc, process::ExitCode};
+use std::{cell::RefCell, rc::Rc, process::ExitCode, time::{Duration, Instant}};
 use amazing_js::DomHost;
 use crate::dom_host::BrowserDomHost;
 use super::parse::read_source;
 pub(crate) struct PageScript {
+    /// HTML-29: the script element's own tree position, so a top-level
+    /// script's `document.write` call can be narrowed to the parser's
+    /// insertion point right after it (`DriverScheduler::
+    /// narrow_write_insertion_point`) rather than always landing at the end
+    /// of the body.
+    pub(crate) node: amazing_dom::NodeIdx,
     pub(crate) src: Option<String>,
     pub(crate) body: String,
+}
+
+/// A `<script>` is classic JavaScript only when its `type` is absent, empty, or
+/// a JavaScript MIME type. Data blocks (`application/ld+json`, `text/template`,
+/// `importmap`, ...) must never execute, and modules are not supported here, so
+/// both are skipped instead of being parsed as classic scripts. Executing a
+/// data block or a module as classic JS produced spurious parse errors on real
+/// pages.
+fn is_classic_javascript_type(raw: Option<&str>) -> bool {
+    let Some(raw) = raw else { return true };
+    let value = raw.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    value.is_empty()
+        || matches!(
+            value.as_str(),
+            "text/javascript"
+                | "application/javascript"
+                | "application/ecmascript"
+                | "text/ecmascript"
+                | "application/x-javascript"
+                | "text/x-javascript"
+                | "text/jscript"
+                | "text/livescript"
+        )
 }
 
 pub(crate) fn collect_script_text(
@@ -14,18 +43,26 @@ pub(crate) fn collect_script_text(
     scripts: &mut Vec<PageScript>,
 ) {
     if dom.name(node) == Some("script") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let script_type = attrs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("type"))
+            .map(|(_, value)| value.as_str());
+        if !is_classic_javascript_type(script_type) {
+            return;
+        }
         let mut source = String::new();
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
                 source.push_str(data);
             }
         }
-        let src = dom
-            .attrs_of(node)
-            .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+        let src = attrs
+            .iter()
+            .find(|(name, _)| name == "src")
             .map(|(_, value)| value.clone());
         if src.is_some() || !source.trim().is_empty() {
-            scripts.push(PageScript { src, body: source });
+            scripts.push(PageScript { node, src, body: source });
         }
         return;
     }
@@ -59,15 +96,29 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     Ok(())
 }
 
+/// Result of the lenient real-page script pass: the collected failures plus the
+/// console lines produced by the optional API probe script.
+pub(crate) struct LenientScriptResult {
+    pub(crate) errors: Vec<String>,
+    pub(crate) probe: Vec<String>,
+}
+
 /// Real-page headless path: run every script, handler and the bounded event
 /// loop, but collect each failure instead of aborting at the first one. The
 /// page still paints, and the caller reports the errors. The reftest path keeps
 /// the strict `prepare_page_scripts`, where a thrown script is never a pass.
+///
+/// When `probe` is supplied it runs in the same interpreter after the page's
+/// scripts, events and event-loop steps; only its console output is returned in
+/// `probe`, so a live corpus can report missing globals per page.
 pub(crate) fn execute_page_scripts_lenient(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
-) -> Vec<String> {
+    probe: Option<&str>,
+    viewport: (f32, f32),
+) -> LenientScriptResult {
     let mut errors = Vec::new();
+    let mut probe_lines = Vec::new();
     let (scripts, handlers) = {
         let host_ref = host.borrow();
         let mut scripts = Vec::new();
@@ -76,21 +127,72 @@ pub(crate) fn execute_page_scripts_lenient(
         collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
         (scripts, handlers)
     };
-    if scripts.is_empty() && handlers.is_empty() {
-        return errors;
+    if scripts.is_empty() && handlers.is_empty() && probe.is_none() {
+        return LenientScriptResult { errors, probe: probe_lines };
     }
     let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
         host.clone(), crate::js_scheduler::JS_CAPACITY) {
         Ok(scheduler) => scheduler,
-        Err(error) => { errors.push(format!("scheduler init: {}", error.describe())); return errors; }
+        Err(error) => {
+            errors.push(format!("scheduler init: {}", error.describe()));
+            return LenientScriptResult { errors, probe: probe_lines };
+        }
     };
     scheduler.set_location_url(page);
+    // IA-LIVE-3: give matchMedia the real per-page viewport instead of the
+    // interpreter's hardcoded default (runtime_host_integrator_assist.rs).
+    scheduler.set_viewport(viewport.0, viewport.1);
+    // IA-LIVE-2: a real page's script phase can burn far more wall time than
+    // any single sub-operation's own timeout suggests. Each blocking
+    // synchronous network primitive underneath (external <script src> fetch,
+    // sync/async XHR bridging in `runtime_host_net.rs`) is individually
+    // bounded (10-15s), but nothing previously capped how many of those a
+    // page's own script could chain sequentially -- `docs.rs/serde` and
+    // `vuejs.org` each burned minutes of real wall time this way with zero
+    // errors surfaced (a script-level fetch/XHR failure is an unhandled
+    // promise rejection, invisible to this harness, not a `Throw` from
+    // `run_script`). Cap the WHOLE script phase (handlers, scripts, the
+    // load/DOMContentLoaded dispatch and the event-loop pump) at one overall
+    // deadline so one page can no longer blow a corpus run's per-page
+    // budget; remaining scripts/handlers/pumps are skipped and reported
+    // instead of silently eating the rest of the process's time. 45s is
+    // comfortably under the 150s the corpus harnesses kill a child at, while
+    // leaving room for the paint phase's own (separately bounded) font/image
+    // fetches.
+    let budget = std::env::var("AMAZING_SCRIPT_PHASE_BUDGET_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(45u64);
+    let deadline = Instant::now() + Duration::from_secs(budget);
+    let mut budget_exceeded = false;
+    macro_rules! check_budget {
+        ($skipped:expr) => {
+            if !budget_exceeded && Instant::now() >= deadline {
+                budget_exceeded = true;
+                errors.push(format!(
+                    "script phase exceeded its {budget}s budget; {} skipped",
+                    $skipped
+                ));
+            }
+            if budget_exceeded {
+                continue;
+            }
+        };
+    }
     for (node, event, body) in handlers {
+        check_budget!("remaining inline handlers");
         if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
             errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
         }
     }
+    // HTML-29: brackets the page's own top-level script phase so a
+    // `document.write` call inserts at the parser's insertion point
+    // (narrowed to right after each script) rather than always implicitly
+    // reopening the document; ended once the load event has fired below.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
+        check_budget!("remaining page scripts");
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
@@ -109,6 +211,11 @@ pub(crate) fn execute_page_scripts_lenient(
             errors.push(format!("page script: {}", error.describe()));
         }
     }
+    if budget_exceeded {
+        errors.push("skipped DOMContentLoaded/load dispatch and the event loop: script phase budget already exceeded".to_owned());
+        scheduler.end_document_parsing(0);
+        return LenientScriptResult { errors, probe: probe_lines };
+    }
     if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
         errors.push(format!("DOMContentLoaded listener: {}", error.describe()));
     }
@@ -121,15 +228,28 @@ pub(crate) fn execute_page_scripts_lenient(
     {
         errors.push(format!("body load listener: {}", error.describe()));
     }
+    scheduler.end_document_parsing(0);
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
+        if Instant::now() >= deadline {
+            errors.push(format!("script phase exceeded its {budget}s budget during the event loop"));
+            break;
+        }
         match scheduler.pump_at(std::time::Duration::from_millis(16), true) {
             Ok(true) => {},
             Ok(false) => break,
             Err(error) => { errors.push(format!("page event loop: {}", error.describe())); break; }
         }
     }
-    errors
+    if let Some(source) = probe {
+        let before = scheduler.js.output.borrow().len();
+        if let Err(error) = scheduler.run_script(source) {
+            errors.push(format!("probe script: {}", error.describe()));
+        }
+        let output = scheduler.js.output.borrow();
+        probe_lines.extend(output.iter().skip(before).cloned());
+    }
+    LenientScriptResult { errors, probe: probe_lines }
 }
 
 /// Starts the page's script and event-loop lifetime. WPT keeps this scheduler
@@ -162,7 +282,10 @@ pub(crate) fn prepare_page_scripts(
         scheduler.install_inline_handler(node, &event, &body)
             .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
     }
+    // HTML-29: see the matching comment in `execute_page_scripts_lenient`.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
@@ -187,6 +310,7 @@ pub(crate) fn prepare_page_scripts(
         scheduler.dispatch_dom_event(body, "load")
             .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
     }
+    scheduler.end_document_parsing(0);
     Ok(Some(scheduler))
 }
 
@@ -396,5 +520,28 @@ mod tests {
         assert_eq!(wpt_root_relative_url("https://example.org/page", "/common/helper.js", &root), None);
         assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), "/C:/outside.js", &root), Some("about:invalid#blocked-wpt-resource".into()));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_classic_javascript_script_types_execute() {
+        assert!(is_classic_javascript_type(None));
+        assert!(is_classic_javascript_type(Some("")));
+        assert!(is_classic_javascript_type(Some("text/javascript")));
+        assert!(is_classic_javascript_type(Some("TEXT/JavaScript; charset=utf-8")));
+        assert!(is_classic_javascript_type(Some("application/javascript")));
+        for data in [
+            "module",
+            "application/ld+json",
+            "application/json",
+            "text/template",
+            "importmap",
+            "text/html",
+            "speculationrules",
+        ] {
+            assert!(
+                !is_classic_javascript_type(Some(data)),
+                "{data} must not run as classic JS"
+            );
+        }
     }
 }

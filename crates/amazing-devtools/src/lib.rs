@@ -11,7 +11,9 @@
 //!   flattened `sessionId` routing.
 //! * [`session`] and [`domains`] — the state machine for the `Target`, `Page`,
 //!   `Runtime`, `DOM`, `CSS`, `Network`, `Log`, `Input`, `Fetch`, `Emulation`,
-//!   `Overlay`, `Performance`, `Security` and `Accessibility` domains.
+//!   `Overlay`, `Performance`, `Security`, `Accessibility`, `Debugger`,
+//!   `Profiler`, `HeapProfiler`, `DOMSnapshot`, `Storage`, `DOMStorage`,
+//!   `IndexedDB` and `Tracing` domains.
 //! * [`host`] — the seam the driver implements: [`host::DevToolsHost`] and
 //!   [`host::DevToolsSession`]. Every method is optional and defaults to
 //!   "unsupported", so domains can be adopted one at a time.

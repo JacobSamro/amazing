@@ -1,0 +1,721 @@
+{
+  "schema": 1,
+  "subdir": "css/css-grid",
+  "mismatch_count": 597,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 85,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-fill-reverse-dense-packing-flow-tolerance-001.html",
+        "css__css-grid__grid-lanes__grid-placement__column-explicit-placement-003.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__column-fill-reverse-definite-size-002.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-007.html",
+        "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-multi-span-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 48,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row__grid-lanes-subgrid-001c.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row__grid-lanes-subgrid-002c.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-alignment-in-subgridded-axis-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002a.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 41,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-auto-placed-subgrid-nested-subgrid-inherited-tracks-003.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-006.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-auto-placed-subgrid-nested-subgrid-inherited-tracks-002.html",
+        "css__css-grid__subgrid__item-percentage-height-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-007.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 29,
+      "examples": [
+        "css__css-grid__abspos__grid-abspos-staticpos-align-self-last-baseline-001.html",
+        "css__css-grid__grid-lanes__alignment__column-fill-reverse-align-items-multi-span-indefinite-size-001.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-002.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-align-items-self-end-large-border-padding.html",
+        "css__css-grid__subgrid__writing-directions-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 28,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-009.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-016.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-028.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-019.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-items-005.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 27,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-001.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-item-baseline-005.html",
+        "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-abs-pos-002.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 25,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__row-negative-margin-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-014.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-extra-margin-009.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-017.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-auto-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 19,
+      "examples": [
+        "css__css-grid__grid-model__grid-first-line-002.html",
+        "css__css-grid__grid-model__grid-inline-first-letter-003.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__column-reverse-002.html",
+        "css__css-grid__grid-model__grid-first-letter-002.html",
+        "css__css-grid__grid-model__grid-inline-first-line-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 17,
+      "examples": [
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-003.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-002.html",
+        "css__css-grid__grid-lanes__intrinsic-sizing__grid-lanes-contain-intrinsic-size-002.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, lighter than reference",
+      "count": 15,
+      "examples": [
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-003.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-002.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-011.html",
+        "css__css-grid__abspos__positioned-grid-items-003.html",
+        "css__css-grid__abspos__positioned-grid-items-negative-indices-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 14,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-auto-fill-005.html",
+        "css__css-grid__abspos__positioned-grid-items-negative-indices-003.html",
+        "css__css-grid__child-border-box-and-max-content-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__auto-track-sizing-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-writing-direction-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 11,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-014.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__independent-formatting-context.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-003c.html",
+        "css__css-grid__subgrid__independent-formatting-context.html",
+        "css__css-grid__grid-lanes__row-min-max-content-container.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 11,
+      "examples": [
+        "css__css-grid__abspos__grid-abspos-staticpos-align-self-001.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-001.html",
+        "css__css-grid__grid-lanes__alignment__column-fill-reverse-justify-items-003.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-001.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 10,
+      "examples": [
+        "css__css-grid__alignment__grid-justify-baseline-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid-intrinsic-sizing.html",
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid-flex.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-002.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-align-self-rtl-last-baseline-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 10,
+      "examples": [
+        "css__css-grid__grid-lanes__items__column-item-percentage-sizes-002.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__column-reverse-dense-packing-multi-span-004.html",
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-items-002.html",
+        "css__css-grid__grid-lanes__alignment__column-dense-packing-align-self-002.html",
+        "css__css-grid__abspos__positioned-grid-items-022.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 10,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row-subgrid-orthogonal-writing-mode-001.html",
+        "css__css-grid__grid-lanes__intrinsic-sizing__grid-lanes-contain-intrinsic-size-008.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-007.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-001.html",
+        "css__css-grid__stretch-grid-item-text-input-overflow.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 9,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-001.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-002b.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-scroller-padding-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-007.html",
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less red than reference",
+      "count": 9,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__grid-lanes-align-content-001.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-012.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-005.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-004.html",
+        "css__css-grid__grid-lanes__alignment__grid-lanes-justify-content-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 9,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__column-track-reverse-dense-packing-align-items-multi-span-001.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-items-010.html",
+        "css__css-grid__grid-lanes__track-sizing__row-track-sizing-001.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-011.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-005.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 8,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-auto-fill-003.html",
+        "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-004.html",
+        "css__css-grid__grid-lanes__item-placement__column-negative-margin-001.html",
+        "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-005.html",
+        "css__css-grid__alignment__grid-align-baseline-explicit-placement.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 7,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-minmax-001.html",
+        "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-003.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-auto-012.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-auto-013.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-auto-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 7,
+      "examples": [
+        "css__css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-track-reverse-definite-size-001.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__column-fill-reverse-track-reverse-definite-size-001.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-definite-size-001.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-definite-size-002.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__column-fill-reverse-track-reverse-indefinite-size-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-grid__abspos__positioned-grid-descendant-containing-block-014.html",
+        "css__css-grid__abspos__descendant-static-position-002.html",
+        "css__css-grid__grid-lanes__alignment__column-fill-reverse-justify-content-indefinite-size-001.html",
+        "css__css-grid__grid-lanes__alignment__column-fill-reverse-justify-content-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 7,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-019.html",
+        "css__css-grid__grid-definition__grid-support-named-grid-lines-002.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-004.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-013.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-024.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 6,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-justify-items-011.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-007a.html",
+        "css__css-grid__alignment__grid-self-alignment-stretch-input-range.html",
+        "css__css-grid__grid-lanes__baseline__row-grid-lanes-item-baseline-005.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-012.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-028.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-001.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-027.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 6,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__column__independent-formatting-context.html",
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__row__independent-formatting-context.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-003.html",
+        "css__css-grid__subgrid__subgrid-item-block-size-001.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-align-self-vertWM-004.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-content-002.html",
+        "css__css-grid__grid-lanes__alignment__row-align-items-center-001.html",
+        "css__css-grid__grid-lanes__alignment__column-overflow-alignment-001.html",
+        "css__css-grid__grid-lanes__alignment__row-align-items-end-align-self-start-001.html",
+        "css__css-grid__grid-lanes__gap__column-gaps-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, bluer than reference",
+      "count": 5,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-011.html",
+        "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-002.html",
+        "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-dense-packing-001.html",
+        "css__css-grid__grid-lanes__grid-placement__grid-lanes-grid-placement-named-lines-001.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-009.html",
+        "css__css-grid__subgrid__line-names-008.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-004b.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-005b.html",
+        "css__css-grid__grid-lanes__baseline__row-grid-lanes-item-baseline-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less blue than reference",
+      "count": 5,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-justify-items-008.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-001.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-004.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-item-baseline-004b.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-minmax-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__column-align-items-015.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-items-014.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-items-003.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-self-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__row-negative-margin-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-009.html",
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid__track-sizing__grid-lanes-subgrid-flex.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-last-baseline-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less blue than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-018.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-017.html",
+        "css__css-grid__grid-lanes__baseline__row-grid-lanes-item-baseline-002.html",
+        "css__css-grid__grid-lanes__intrinsic-sizing__grid-lanes-contain-intrinsic-size-007.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, bluer than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-dense-packing-justify-items-multi-span-001.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-003a.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-003b.html",
+        "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-multi-span-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row__grid-lanes-subgrid-001b.html",
+        "css__css-grid__grid-model__display-inline-grid.html",
+        "css__css-grid__grid-lanes__item-placement__grid-lanes-item-placement-001.html",
+        "css__css-grid__grid-lanes__order__grid-lanes-order-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__column-align-items-007.html",
+        "css__css-grid__subgrid__scrollbar-gutter-002.html",
+        "css__css-grid__grid-lanes__alignment__column-align-items-001.html",
+        "css__css-grid__subgrid__scrollbar-gutter-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-008.html",
+        "css__css-grid__abspos__descendant-static-position-001.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__row-reverse-dense-packing-multi-span-004.html",
+        "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-004.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less blue than reference",
+      "count": 4,
+      "examples": [
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-004.html",
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid__row__grid-lanes-subgrid-002a.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-014.html",
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-last-baseline-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__gap__grid-lanes-gap-002.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-013.html",
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-007.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__baseline__grid-lanes-grid-item-self-baseline-002b.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-stretch-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__column-subgrid-stretch-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-multi-span-003.html",
+        "css__css-grid__grid-lanes__item-placement__row-auto-placement-max-content.html",
+        "css__css-grid__grid-lanes__alignment__row-justify-items-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__abspos__orthogonal-positioned-grid-items-015.html",
+        "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-002.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-008.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__column-track-sizing-005.html",
+        "css__css-grid__subgrid__grid-gap-003.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-larger-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-smaller-001.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-normal-001.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-028.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-row-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__row-subgrid-grid-gap-003.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-row-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-row-004.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-row-001.html",
+        "css__css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-column-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__tentative__item-placement__column-fill-reverse-orthogonal-container-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-extra-margin-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, greener than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-justify-self-001.html",
+        "css__css-grid__grid-lanes__alignment__column-align-self-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__column-fill-reverse-dense-packing-align-items-multi-span-002.html",
+        "css__css-grid__grid-definition__grid-support-named-grid-lines-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-022.html",
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__column-auto-repeat-021.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, greener than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row-scrollbar-gutter-002.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row-scrollbar-gutter-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-right, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-indefinite-size-001.html",
+        "css__css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-track-reverse-indefinite-size-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less blue than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-001.html",
+        "css__css-grid__abspos__descendant-static-position-004.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less green than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-031.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-item-baseline-004a.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-multi-span-005.html",
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__row-subgrid-abs-pos-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 2,
+      "examples": [
+        "css__css-grid__alignment__grid-gutters-015.html",
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-007b.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__row-auto-repeat-auto-030.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid__row__grid-lanes-subgrid-001a.html"
+      ]
+    },
+    {
+      "signature": "large-region, bottom-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__subgrid__grid-gap-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-grid-lanes-align-self-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__tentative__item-placement__column-reverse-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, right, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__track-sizing__auto-repeat__intrinsic-auto-repeat__column-auto-repeat-auto-032.html"
+      ]
+    },
+    {
+      "signature": "medium-region, bottom-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__column-align-items-010.html"
+      ]
+    },
+    {
+      "signature": "large-region, right, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-items-indefinite-size-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__column-subgrid-auto-fill-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__item-placement__dense-packing__column-dense-packing-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__abspos__row-grid-lanes-oof-fill-reverse-002.html"
+      ]
+    },
+    {
+      "signature": "full-frame, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__baseline__grid-lanes-grid-item-self-baseline-002a.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-001a.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__abspos__grid-abspos-staticpos-justify-self-last-baseline-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002a.html"
+      ]
+    },
+    {
+      "signature": "large-region, right, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-items-indefinite-size-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-right, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-fill-reverse-align-self-indefinite-size-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-grid__grid-lanes__alignment__row-dense-packing-justify-items-multi-span-002.html"
+      ]
+    }
+  ]
+}

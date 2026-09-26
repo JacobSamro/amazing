@@ -583,3 +583,39 @@ fn non_composed_hook_does_not_cross_boundary() {
         .unwrap();
     assert!(r.next_listener(&mut s).is_none());
 }
+
+#[test]
+fn utf16_listener_keys_distinguish_lone_surrogates_from_replacement_characters() {
+    let (d, mut registry, targets) = fixture();
+    let lone = [0xd800];
+    let replacement = [0xfffd];
+    let second_lone = [0xd801];
+    for (name, callback) in [(&lone, 1), (&replacement, 2), (&second_lone, 3)] {
+        registry.add_listener_utf16(&d, targets[2], name, Some(CallbackId(callback)), ListenerOptions::default());
+    }
+    let id = registry.create_event(Event::new_utf16(&lone, EventInit::default(), Duration::ZERO));
+    assert_eq!(registry.event(id).event_type_utf16(), lone);
+    let mut dispatch = registry.begin_dispatch(&d, targets[2], id, DispatchOrigin::Script).unwrap();
+    assert_eq!(drain(&mut registry, &mut dispatch).iter().map(|i| i.callback).collect::<Vec<_>>(), vec![CallbackId(1)]);
+    registry.event_mut(id).init_event("�", false, false);
+    let mut dispatch = registry.begin_dispatch(&d, targets[2], id, DispatchOrigin::Script).unwrap();
+    assert_eq!(drain(&mut registry, &mut dispatch).iter().map(|i| i.callback).collect::<Vec<_>>(), vec![CallbackId(2)]);
+    assert!(registry.remove_listener(targets[2], "�", Some(CallbackId(1)), false).is_empty());
+    assert_eq!(registry.remove_listener_utf16(targets[2], &lone, Some(CallbackId(1)), false), vec![CallbackId(1)]);
+}
+
+#[test]
+fn utf16_init_during_dispatch_is_ignored_and_once_removes_exact_listener() {
+    let (d, mut registry, targets) = fixture();
+    let lone = [0xdc00];
+    registry.add_listener_utf16(&d, targets[2], &lone, Some(CallbackId(1)), ListenerOptions { once: true, ..Default::default() });
+    registry.add_listener(&d, targets[2], "�", Some(CallbackId(2)), ListenerOptions::default());
+    let id = registry.create_event(Event::new_custom_utf16(&lone, EventInit::default(), Duration::ZERO, None));
+    let mut dispatch = registry.begin_dispatch(&d, targets[2], id, DispatchOrigin::Script).unwrap();
+    assert_eq!(registry.next_listener(&mut dispatch).unwrap().callback, CallbackId(1));
+    assert_eq!(registry.event_mut(id).init_custom_event_utf16(&[0xfffd], false, false, None), None);
+    assert_eq!(registry.event(id).event_type_utf16(), lone);
+    assert!(registry.next_listener(&mut dispatch).is_none());
+    assert!(registry.listener_callbacks_utf16(targets[2], &lone, false).is_empty());
+    assert_eq!(registry.listener_callbacks(targets[2], "�", false), vec![CallbackId(2)]);
+}

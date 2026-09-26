@@ -25,8 +25,11 @@ impl Interpreter {
             ("concat", 1, std_string_concat as crate::value::NativeFn),
             ("at", 1, std_string_at as crate::value::NativeFn),
             ("lastIndexOf", 1, std_string_last_index_of as crate::value::NativeFn),
+            ("split", 2, native_string_split as crate::value::NativeFn),
             ("replaceAll", 2, std_string_replace_all as crate::value::NativeFn),
             ("matchAll", 1, std_string_match_all as crate::value::NativeFn),
+            ("match", 1, std_string_match as crate::value::NativeFn),
+            ("search", 1, std_string_search as crate::value::NativeFn),
             ("substr", 2, std_string_substr as crate::value::NativeFn),
             ("anchor", 1, std_string_html as crate::value::NativeFn),
             ("big", 0, std_string_html as crate::value::NativeFn),
@@ -48,6 +51,19 @@ impl Interpreter {
         let end = prototype.borrow().get_own("trimEnd").unwrap();
         prototype.borrow_mut().define("trimLeft", symbol_data(start, true, true)).unwrap();
         prototype.borrow_mut().define("trimRight", symbol_data(end, true, true)).unwrap();
+        // The RegExp well-known-symbol methods live here so the engine's regexp
+        // internals stay behind String's entry points.
+        for (symbol, name, native, length) in [
+            (WellKnownSymbol::Match, "[Symbol.match]", std_regexp_symbol_match as crate::value::NativeFn, 1),
+            (WellKnownSymbol::Search, "[Symbol.search]", std_regexp_symbol_search as crate::value::NativeFn, 1),
+            (WellKnownSymbol::MatchAll, "[Symbol.matchAll]", std_regexp_symbol_match_all as crate::value::NativeFn, 1),
+            (WellKnownSymbol::Replace, "[Symbol.replace]", std_regexp_symbol_replace as crate::value::NativeFn, 2),
+            (WellKnownSymbol::Split, "[Symbol.split]", std_regexp_symbol_split as crate::value::NativeFn, 2),
+        ] {
+            let method = symbol_method(self, name, native);
+            symbol_method_length(&method, length);
+            self.regexp_proto.borrow_mut().define(symbol.symbol(), symbol_data(method, true, true)).unwrap();
+        }
         if let Some(JsValue::Object(constructor)) = self.global_env.resolve("String") {
             std_core_define(self, &constructor, "fromCodePoint", 1, std_string_from_code_point);
             std_core_define(self, &constructor, "raw", 1, std_string_raw);
@@ -224,15 +240,188 @@ fn std_string_replacement(i: &mut Interpreter, replacement: &JsValue,
     }
     Ok(out)
 }
-fn std_string_replace_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn std_is_regexp(i: &mut Interpreter, value: &JsValue) -> Result<bool, Throw> {
+    if !value.is_object() { return Ok(false); }
+    let matcher = i.get_prop(value, WellKnownSymbol::Match.symbol())?;
+    if !matcher.is_undefined() { return Ok(matcher.to_boolean()); }
+    Ok(regexp_data(value).is_some())
+}
+
+fn std_string_match(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = std_reflect_arg(&args, 0);
+    if value.is_object() {
+        let matcher = i.get_prop(&value, WellKnownSymbol::Match.symbol())?;
+        if !matcher.is_null() && !matcher.is_undefined() {
+            if callable_function(&matcher).is_none() {
+                return Err(Throw::type_error("@@match is not a function"));
+            }
+            let source = std_string_receiver(i, this)?;
+            return i.call_value(&matcher, value, vec![JsValue::str(source)]);
+        }
+    }
     let source = std_string_receiver(i, this)?;
+    let regexp = native_regexp(i, JsValue::Undefined, vec![value])?;
+    let matcher = i.get_prop(&regexp, WellKnownSymbol::Match.symbol())?;
+    if !matcher.is_null() && !matcher.is_undefined() {
+        if callable_function(&matcher).is_none() {
+            return Err(Throw::type_error("@@match is not a function"));
+        }
+        return i.call_value(&matcher, regexp, vec![JsValue::str(source)]);
+    }
+    native_string_match(i, JsValue::str(source), vec![regexp])
+}
+
+fn std_string_search(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = std_reflect_arg(&args, 0);
+    if value.is_object() {
+        let searcher = i.get_prop(&value, WellKnownSymbol::Search.symbol())?;
+        if !searcher.is_null() && !searcher.is_undefined() {
+            if callable_function(&searcher).is_none() {
+                return Err(Throw::type_error("@@search is not a function"));
+            }
+            let source = std_string_receiver(i, this)?;
+            return i.call_value(&searcher, value, vec![JsValue::str(source)]);
+        }
+    }
+    let source = std_string_receiver(i, this)?;
+    let regexp = native_regexp(i, JsValue::Undefined, vec![value])?;
+    let searcher = i.get_prop(&regexp, WellKnownSymbol::Search.symbol())?;
+    if !searcher.is_null() && !searcher.is_undefined() {
+        if callable_function(&searcher).is_none() {
+            return Err(Throw::type_error("@@search is not a function"));
+        }
+        return i.call_value(&searcher, regexp, vec![JsValue::str(source)]);
+    }
+    native_string_search(i, JsValue::str(source), vec![regexp])
+}
+
+// Collect every match of `regex` over `source` as a RegExp match record and
+// wrap the list in an array iterator. Empty matches advance lastIndex.
+fn std_regexp_match_records(i: &mut Interpreter, regex: &JsValue, source: &crate::value::JsString) -> Result<JsValue, Throw> {
+    let regex_inner = regexp_data(regex).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
+    let units = regexp_units(source)?;
+    i.set_prop(regex, "lastIndex", JsValue::num(0.0))?;
+    let mut values = Vec::new();
+    loop {
+        let matched = regexp_match(i, regex, source)?;
+        let Some(matched) = matched else { break };
+        if values.len() >= 100_000 { return Err(Throw::range_error("matchAll collection limit")); }
+        let empty = matched.range.is_empty();
+        values.push(regexp_result(i, source, matched, regex_inner.group_names(), regex_inner.flags().has_indices)?);
+        if empty {
+            let last_token = i.get_prop(regex, "lastIndex")?;
+            let last = i.to_number(&last_token)?;
+            let next = amazing_regex::advance_index(&units, last.max(0.0) as usize, regex_inner.flags().unicode);
+            i.set_prop(regex, "lastIndex", JsValue::num(next as f64))?;
+        }
+    }
+    let array = array_values(i, values)?;
+    native_array_iterator_values(i, array, vec![])
+}
+
+fn std_regexp_symbol_match(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    native_string_match(i, JsValue::str(source), vec![this])
+}
+
+fn std_regexp_symbol_search(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    native_string_search(i, JsValue::str(source), vec![this])
+}
+
+fn std_regexp_symbol_match_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    std_regexp_species_constructor(i, &this)?;
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    std_regexp_match_records(i, &this, &source)
+}
+
+// SpeciesConstructor(R, %RegExp%): the host does not construct through the
+// species yet, but it must still perform the spec validation.
+fn std_regexp_species_constructor(i: &mut Interpreter, regexp: &JsValue) -> Result<JsValue, Throw> {
+    let default_constructor = i.global_env.resolve("RegExp").unwrap_or(JsValue::Undefined);
+    let constructor = i.get_prop(regexp, "constructor")?;
+    if constructor.is_undefined() { return Ok(default_constructor); }
+    if !constructor.is_object() {
+        return Err(Throw::type_error("species constructor is not an object"));
+    }
+    let species = i.get_prop(&constructor, WellKnownSymbol::Species.symbol())?;
+    if species.is_null() || species.is_undefined() { return Ok(default_constructor); }
+    let constructible = matches!(&species, JsValue::Object(object)
+        if object.borrow().func.is_some() && object.borrow().constructible);
+    if constructible { Ok(species) } else {
+        Err(Throw::type_error("species is not a constructor"))
+    }
+}
+
+fn std_regexp_symbol_replace(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if regexp_data(&this).is_none() { return Err(Throw::type_error("incompatible RegExp receiver")); }
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    let replacement = std_reflect_arg(&args, 1);
+    regexp_replace(i, &source, &[this, replacement])
+}
+
+fn std_regexp_symbol_split(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let regex = regexp_data(&this).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
+    let source = i.to_js_string(&std_reflect_arg(&args, 0))?;
+    let limit = match args.get(1) {
+        Some(value) if !value.is_undefined() => i.to_uint32(value)? as usize,
+        _ => u32::MAX as usize,
+    };
+    let units = regexp_units(&source)?;
+    let values = regexp_split_units(&regex, &units, limit)?;
+    array_values(i, values)
+}
+
+fn std_string_replace_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() { return Err(Throw::type_error("String receiver is null or undefined")); }
     let search_value = std_reflect_arg(&args, 0);
-    if let Some(regex) = regexp_data(&search_value) {
-        if !regex.flags().global { return Err(Throw::type_error("replaceAll requires a global RegExp")); }
-        return regexp_replace(i, &source, &args);
+    let replace_value = std_reflect_arg(&args, 1);
+    // IsRegExp reads @@match before this is coerced to a string, so an abrupt
+    // @@match getter wins over a throwing receiver toString.
+    let is_regexp = if search_value.is_null() || search_value.is_undefined() {
+        false
+    } else {
+        std_is_regexp(i, &search_value)?
+    };
+    let internal_regexp = regexp_data(&search_value);
+    // Step 2.b validates flags and globality before step 3 coerces this.
+    if is_regexp {
+        let flags = i.get_prop(&search_value, "flags")?;
+        if flags.is_null() || flags.is_undefined() {
+            return Err(Throw::type_error("replaceAll requires RegExp flags"));
+        }
+        if !i.to_string(&flags)?.contains('g')
+            || internal_regexp.as_ref().is_some_and(|regex| !regex.flags().global)
+        {
+            return Err(Throw::type_error("replaceAll requires a global RegExp"));
+        }
+    }
+    // Step 2.c-d: read @@replace before this and replaceValue are coerced. A
+    // custom replacer receives the raw this value; an abrupt or non-callable
+    // value throws before any ToString.
+    if search_value.is_object() {
+        let replacer = i.get_prop(&search_value, WellKnownSymbol::Replace.symbol())?;
+        if !replacer.is_null() && !replacer.is_undefined() {
+            if callable_function(&replacer).is_none() {
+                return Err(Throw::type_error("@@replace is not a function"));
+            }
+            return i.call_value(&replacer, search_value, vec![this, replace_value]);
+        }
+    }
+    let source = std_string_receiver(i, this)?;
+    if search_value.is_undefined() {
+        return Ok(JsValue::str(source));
     }
     let search = i.to_js_string(&search_value)?;
-    let replacement = std_reflect_arg(&args, 1);
+    // ToString(replaceValue) happens once for a non-callable replacement.
+    let replacement = if callable_function(&replace_value).is_some() {
+        replace_value
+    } else {
+        JsValue::str(i.to_js_string(&replace_value)?)
+    };
     let mut positions = Vec::new();
     if search.is_empty() { positions.extend(0..=source.len()); }
     else {
@@ -255,21 +444,40 @@ fn std_string_replace_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     Ok(JsValue::str_units(out))
 }
 fn std_string_match_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let source = std_string_receiver(i, this)?;
+    if this.is_null() || this.is_undefined() { return Err(Throw::type_error("String receiver is null or undefined")); }
     let value = std_reflect_arg(&args, 0);
-    let regex = if let Some(regex) = regexp_data(&value) {
-        let flags = i.get_prop(&value, "flags")?;
-        if flags.is_null() || flags.is_undefined() {
-            return Err(Throw::type_error("matchAll requires RegExp flags"));
+    if value.is_object() {
+        if std_is_regexp(i, &value)? {
+            let flags = i.get_prop(&value, "flags")?;
+            if flags.is_null() || flags.is_undefined() {
+                return Err(Throw::type_error("matchAll requires RegExp flags"));
+            }
+            if !i.to_string(&flags)?.contains('g') {
+                return Err(Throw::type_error("matchAll requires a global RegExp"));
+            }
         }
-        if !i.to_string(&flags)?.contains('g') || !regex.flags().global {
-            return Err(Throw::type_error("matchAll requires a global RegExp"));
+        let matcher = i.get_prop(&value, WellKnownSymbol::MatchAll.symbol())?;
+        if !matcher.is_null() && !matcher.is_undefined() {
+            if callable_function(&matcher).is_none() {
+                return Err(Throw::type_error("@@matchAll is not a function"));
+            }
+            let source = std_string_receiver(i, this)?;
+            return i.call_value(&matcher, value, vec![JsValue::str(source)]);
         }
-        value
-    } else { native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])? };
-    let matches = native_string_match(i, JsValue::str(source), vec![regex])?;
-    let array = if matches.is_null() { array_values(i, vec![])? } else { matches };
-    native_array_iterator_values(i, array, vec![])
+    }
+    let source = std_string_receiver(i, this)?;
+    // Step 4: RegExpCreate(searchValue, "g") is always a fresh RegExp, even when
+    // searchValue already is one; @@matchAll is read from that copy.
+    let regex = native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])?;
+    // Step 5: Invoke(rx, @@matchAll, «S») unconditionally -- there is no
+    // fallback to an internal match-record implementation when the
+    // constructed RegExp's own @@matchAll has been removed from
+    // RegExp.prototype; Invoke throws TypeError for a non-callable method.
+    let matcher = i.get_prop(&regex, WellKnownSymbol::MatchAll.symbol())?;
+    if callable_function(&matcher).is_none() {
+        return Err(Throw::type_error("@@matchAll is not a function"));
+    }
+    i.call_value(&matcher, regex, vec![JsValue::str(source)])
 }
 
 fn std_string_html(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

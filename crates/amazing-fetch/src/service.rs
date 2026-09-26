@@ -505,6 +505,16 @@ impl NetworkService {
             .ok_or(amazing_net::websocket::Error::Closed)?;
         self.dispatcher.close_websocket(wire, close)
     }
+    /// Fail a WebSocket that has not yet reached `Open` (JS `close()` during
+    /// CONNECTING) without a close handshake. Returns false if `id` is
+    /// unknown or already terminal.
+    pub fn forget_websocket(&mut self, id: ServiceId) -> bool {
+        let Some(wire) = self.websockets.remove(&id) else {
+            return false;
+        };
+        self.dispatcher.forget_websocket(wire);
+        true
+    }
     pub fn start(
         &mut self,
         request: ApiRequest,
@@ -1080,7 +1090,8 @@ impl NetworkService {
                 WebSocketEvent::Open { id, .. }
                 | WebSocketEvent::Message { id, .. }
                 | WebSocketEvent::Close { id, .. }
-                | WebSocketEvent::Error { id, .. } => *id,
+                | WebSocketEvent::Error { id, .. }
+                | WebSocketEvent::Sent { id, .. } => *id,
             };
             if let Some(id) = self
                 .websockets

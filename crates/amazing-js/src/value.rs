@@ -227,6 +227,7 @@ impl fmt::Debug for Obj {
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
+            (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -600,6 +601,120 @@ pub(crate) struct DerivedConstructor {
     pub implicit: bool,
 }
 
+/// A lexically-scoped private name (`#x`). Identity is the `Rc` pointer, not
+/// the text: two classes that each spell a field `#x` get distinct,
+/// non-interchangeable names, matching §15.7's per-class private
+/// environment. The text (with its leading `#`) is kept only for
+/// diagnostics and for building the class's private-name lookup map.
+#[derive(Clone)]
+pub struct PrivateName(pub(crate) Rc<str>);
+
+impl PrivateName {
+    pub fn new(text: impl Into<Rc<str>>) -> PrivateName {
+        PrivateName(text.into())
+    }
+    /// Includes the leading `#`.
+    pub fn text(&self) -> &str {
+        &self.0
+    }
+}
+
+impl PartialEq for PrivateName {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for PrivateName {}
+impl std::hash::Hash for PrivateName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (Rc::as_ptr(&self.0) as *const () as usize).hash(state);
+    }
+}
+impl std::fmt::Debug for PrivateName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PrivateName({})", self.0)
+    }
+}
+
+/// A field/method/accessor whose brand is a [`PrivateName`] rather than a
+/// [`PropertyKey`]. Kept off `JsObject::props` entirely (never a
+/// `PropertyKey`, never enumerable, never visible to reflection) in a flat
+/// `Vec` on the object itself, per §6.2.10's PrivateElement record.
+#[derive(Debug, Clone)]
+pub struct PrivateElement {
+    pub name: PrivateName,
+    pub kind: PrivateElementKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum PrivateElementKind {
+    Field(JsValue),
+    /// Shared by reference across every instance of the declaring class.
+    Method(JsValue),
+    Accessor {
+        get: Option<JsValue>,
+        set: Option<JsValue>,
+    },
+}
+
+/// One instance-scoped class element, replayed into every new instance at
+/// `InitializeInstanceElements` time (§15.7.11) in declaration order,
+/// interleaved regardless of field/private-method kind.
+#[derive(Debug, Clone)]
+pub(crate) enum InstanceElement {
+    Field {
+        key: FieldKey,
+        init: Option<ast::Expr>,
+    },
+    PrivateMethod {
+        name: PrivateName,
+        value: JsValue,
+    },
+    PrivateAccessor {
+        name: PrivateName,
+        get: Option<JsValue>,
+        set: Option<JsValue>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum FieldKey {
+    Public(PropertyKey),
+    Private(PrivateName),
+}
+
+/// One static-side class element, run once in declaration order right after
+/// the class's own methods are installed, with `this` bound to the
+/// constructor itself.
+#[derive(Debug, Clone)]
+pub(crate) enum StaticElement {
+    Field {
+        key: FieldKey,
+        init: Option<ast::Expr>,
+    },
+    PrivateMethod {
+        name: PrivateName,
+        value: JsValue,
+    },
+    PrivateAccessor {
+        name: PrivateName,
+        get: Option<JsValue>,
+        set: Option<JsValue>,
+    },
+    Block(ast::Block),
+}
+
+/// Per-class instance-element template plus the environment private names
+/// inside it (and its methods, and its field initializers) resolve against,
+/// and the class's own prototype as the [[HomeObject]] `super` resolves
+/// through inside a field initializer (matching an ordinary instance method).
+#[derive(Debug, Clone)]
+pub(crate) struct ClassElements {
+    pub instance: Vec<InstanceElement>,
+    pub class_env: crate::env::EnvHandle,
+    pub home: Obj,
+}
+
 /// Function body: block for declarations/functions/methods, expression for
 /// concise arrows, native for built-ins.
 #[derive(Debug, Clone)]
@@ -648,6 +763,7 @@ pub enum Exotic {
     SymbolObject(JsSymbol),
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
+    Proxy(Rc<crate::interp::ProxyState>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -806,6 +922,13 @@ pub struct JsObject {
     pub(crate) constructible: bool,
     pub(crate) class_constructor: bool,
     pub(crate) derived_constructor: Option<DerivedConstructor>,
+    /// Instance-element template replayed into each new instance; `None` for
+    /// a class (or plain function) with no instance fields/private methods.
+    pub(crate) class_elements: Option<Rc<ClassElements>>,
+    /// PrivateElement records (§6.2.10): fields/methods/accessors branded by
+    /// a [`PrivateName`] instead of a [[PropertyKey]]. Never enumerable,
+    /// never a `PropertyKey`, never visible to reflection.
+    pub(crate) private_elements: Vec<PrivateElement>,
     pub(crate) lexical_super_constructor: Option<JsValue>,
     pub(crate) lexical_new_target: Option<JsValue>,
     /// Engine-private brand and identity; never reflected as a JS property.
@@ -818,6 +941,10 @@ pub struct JsObject {
     pub(crate) async_body_code: Option<Result<crate::interp::vm::FunctionCode, crate::interp::vm::CompileError>>,
     /// Promise capability captured by a native resolve or reject function.
     pub(crate) promise_target: Option<Obj>,
+    /// State a `Proxy.revocable` revoke function closes over. Orthogonal to
+    /// `exotic`: the revoke function is an ordinary callable, not itself a
+    /// Proxy exotic object, so it must not be caught by the Proxy trap hooks.
+    pub(crate) proxy_revoke: Option<Rc<crate::interp::ProxyState>>,
 }
 
 impl Default for JsObject {
@@ -839,6 +966,8 @@ impl JsObject {
             constructible: true,
             class_constructor: false,
             derived_constructor: None,
+            class_elements: None,
+            private_elements: Vec::new(),
             lexical_super_constructor: None,
             lexical_new_target: None,
             host_identity: None,
@@ -846,6 +975,7 @@ impl JsObject {
             strict_function: false,
             async_body_code: None,
             promise_target: None,
+            proxy_revoke: None,
         }
     }
 
@@ -910,6 +1040,32 @@ impl JsObject {
         }).unwrap();
         o.func = Some(func);
         o
+    }
+
+    pub fn private_find(&self, name: &PrivateName) -> Option<&PrivateElement> {
+        self.private_elements.iter().find(|element| element.name == *name)
+    }
+
+    pub fn private_find_mut(&mut self, name: &PrivateName) -> Option<&mut PrivateElement> {
+        self.private_elements.iter_mut().find(|element| element.name == *name)
+    }
+
+    pub fn private_has(&self, name: &PrivateName) -> bool {
+        self.private_find(name).is_some()
+    }
+
+    /// PrivateFieldAdd / PrivateMethodOrAccessorAdd (§7.3.29 / §7.3.30):
+    /// throws rather than overwriting if the brand is already present (the
+    /// double-`super()`-with-private-fields case).
+    pub fn private_add(&mut self, name: PrivateName, kind: PrivateElementKind) -> Result<(), Throw> {
+        if self.private_has(&name) {
+            return Err(Throw::type_error(format!(
+                "cannot add private member {} twice on the same object",
+                name.text()
+            )));
+        }
+        self.private_elements.push(PrivateElement { name, kind });
+        Ok(())
     }
 
     /// Define an own property, replacing any existing entry in place

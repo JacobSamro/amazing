@@ -22,12 +22,6 @@ pub(crate) fn handles(op: O) -> bool {
 pub(crate) fn key<H: BindingHost>(host: &H, slot: u64) -> PlatformKey {
     PlatformKey { arena: host.node_platform_key(host.current_document()).arena, slot, generation: 1 }
 }
-fn utf16_string<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<String, H::Error> {
-    let units = host.to_dom_string(value)?;
-    // The native Event registry still stores event types as Rust String. A
-    // separate UTF-16 native migration is required for lone-surrogate types.
-    String::from_utf16(&units).map_err(|_| host.type_error("Invalid event type"))
-}
 pub(crate) fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H::Error> {
     let key = host.platform_object(value, InterfaceBrand::EVENT)
         .ok_or_else(|| host.type_error("Expected an Event"))?;
@@ -115,10 +109,11 @@ pub(crate) fn dispatch_created_event<H: BindingHost>(host: &mut H, target: Event
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };
-        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
         if invocation.once { host.release_value(invocation.callback); }
         if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
     }
+    crate::input_activation_bindings::complete(host, &mut dispatch)?;
     host.with_dom(|dom| dom.events().dispatch_result(event))
 }
 pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_dom::NodeIdx,
@@ -135,10 +130,11 @@ pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_d
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };
-        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
         if invocation.once { host.release_value(invocation.callback); }
         if result.is_err() { dispatch.report_exception("Focus event listener threw".into()); }
     }
+    crate::input_activation_bindings::complete(host, &mut dispatch)?;
     host.with_dom(|dom| dom.events().dispatch_result(event)).map(|_| ())
 }
 fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) -> Result<bool, H::Error> {
@@ -159,18 +155,28 @@ pub(crate) fn passive_option<H: BindingHost>(host: &mut H, options: Option<&H::V
     Ok((!host.is_undefined(&passive)).then(|| host.to_boolean(&passive)))
 }
 fn callback_call<H: BindingHost>(
-    host: &mut H, callback: CallbackId, this_target: EventTarget, event: EventId,
+    host: &mut H, callback: CallbackId, this_target: EventTarget, event: EventId, handler: bool,
 ) -> Result<(), H::Error> {
     let value = host.root_value(callback).ok_or_else(|| host.type_error("Released EventListener"))?;
     let event_value = host.wrap_platform_object(key(host, event.slot() as u64), InterfaceBrand::EVENT)?;
     let (function, this) = if host.is_callable(&value) {
         (value, wrap_target(host, Some(this_target))?)
+    } else if handler {
+        // Event handler IDL attributes (onclick, etc.) are EventHandlerNonNull
+        // callback *functions*, not EventListener callback *interfaces*: a
+        // non-callable object stored there is never invoked and its
+        // `handleEvent` property must never be read.
+        return Ok(());
     } else {
         let function = host.get_property(&value, "handleEvent")?;
         if !host.is_callable(&function) { return Err(host.type_error("EventListener.handleEvent is not callable")); }
         (function, value)
     };
-    host.call(&function, &this, &[event_value]).map(|_| ())
+    let result = host.call(&function, &this, &[event_value])?;
+    if handler && host.same_value(&result, &host.boolean(false)) {
+        host.with_dom(|dom| { dom.events_mut().event_mut(event).prevent_default(); Ok(()) })?;
+    }
+    Ok(())
 }
 enum Output { Undefined, Boolean(bool), Number(f64), String(Vec<u16>), Target(Option<EventTarget>), Path(Vec<EventTarget>) }
 
@@ -295,11 +301,9 @@ pub(crate) fn invoke<H: BindingHost>(
                 else { Err(DomError::TypeError) })?;
         }
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let event_type = if op == O::CreateEvent {
-            // Interface names are ASCII aliases. An unmatched DOMString, including
-            // lone surrogates, takes the NotSupportedError path rather than TypeError.
-            String::from_utf16_lossy(&host.to_dom_string(raw_type)?)
-        } else { utf16_string(host, raw_type)? };
+        let event_type_units = host.to_dom_string(raw_type)?;
+        // Legacy interface aliases are ASCII; event payloads retain exact DOMStrings.
+        let event_type = String::from_utf16_lossy(&event_type_units);
         if op == O::CreateEvent && event_type.eq_ignore_ascii_case("MessageEvent") {
             return crate::message_event_bindings::create_legacy(host);
         }
@@ -331,11 +335,11 @@ pub(crate) fn invoke<H: BindingHost>(
                 _ => host.undefined(),
             };
             let root = if host.is_nullish(&detail) { None } else { Some(host.retain_value(detail)) };
-            Event::new_custom(event_type.clone(), init, Duration::ZERO, root)
+            Event::new_custom_utf16(&event_type_units, init, Duration::ZERO, root)
         } else if legacy_custom {
             Event::new_custom("", init, Duration::ZERO, None)
         } else {
-            Event::new(if op == O::CreateEvent { "" } else { &event_type }, init, Duration::ZERO)
+            Event::new_utf16(if op == O::CreateEvent { &[] } else { &event_type_units }, init, Duration::ZERO)
         };
         if let Some(class) = event_class(op) {
             event.set_class(class);
@@ -355,10 +359,17 @@ pub(crate) fn invoke<H: BindingHost>(
         if op == O::CreateEvent {
             let class = match event_type.to_ascii_lowercase().as_str() {
                 "compositionevent" => EventClass::Composition,
+                "hashchangeevent" => EventClass::HashChange,
+                "beforeunloadevent" => EventClass::BeforeUnload,
                 "focusevent" => EventClass::Focus,
                 "keyboardevent" => EventClass::Keyboard,
                 "mouseevent" | "mouseevents" => EventClass::Mouse,
                 "uievent" | "uievents" => EventClass::Ui,
+                "devicemotionevent" => EventClass::DeviceMotion,
+                "deviceorientationevent" => EventClass::DeviceOrientation,
+                "dragevent" => EventClass::Drag,
+                "storageevent" => EventClass::Storage,
+                "textevent" => EventClass::Text,
                 _ => event.class(),
             };
             event.set_class(class);
@@ -376,15 +387,16 @@ pub(crate) fn invoke<H: BindingHost>(
             loop {
                 let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
                 let Some(invocation) = invocation else { break };
-                let result = callback_call(host, invocation.callback, invocation.current_target, event);
+                let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
                 if invocation.once { host.release_value(invocation.callback); }
                 if result.is_err() { dispatch.report_exception("EventListener callback threw".into()); }
             }
+            crate::input_activation_bindings::complete(host, &mut dispatch)?;
             let result = host.with_dom(|dom| dom.events().dispatch_result(event))?;
             return Ok(host.boolean(result));
         }
         if args.len() < 2 { return Err(host.type_error("Not enough arguments")); }
-        let event_type = utf16_string(host, &args[0])?;
+        let event_type = host.to_dom_string(&args[0])?;
         let callback = &args[1];
         let null_callback = host.is_nullish(callback);
         if !null_callback && !host.is_object_value(callback)? {
@@ -411,19 +423,19 @@ pub(crate) fn invoke<H: BindingHost>(
         }
         if null_callback { return Ok(host.undefined()); }
         let capture = listener_options.capture;
-        let existing = host.with_dom(|dom| Ok(dom.events().listener_callbacks(target, &event_type, capture)))?;
+        let existing = host.with_dom(|dom| Ok(dom.events().listener_callbacks_utf16(target, &event_type, capture)))?;
         let matched = existing.into_iter().find(|id| host.root_value(*id)
             .is_some_and(|value| host.same_value(&value, callback)));
         if op == O::RemoveEventListener {
             if let Some(id) = matched {
-                host.with_dom(|dom| { dom.events_mut().remove_listener(target, &event_type, Some(id), capture); Ok(()) })?;
+                host.with_dom(|dom| { dom.events_mut().remove_listener_utf16(target, &event_type, Some(id), capture); Ok(()) })?;
                 host.release_value(id);
             }
             return Ok(host.undefined());
         }
         if matched.is_some() { return Ok(host.undefined()); }
         let id = host.retain_value(callback.clone());
-        let result = host.with_dom(|dom| dom.add_abortable_event_listener(
+        let result = host.with_dom(|dom| dom.add_abortable_event_listener_utf16(
             target, &event_type, Some(id), listener_options, signal));
         if !matches!(result, Ok(Some(_))) { host.release_value(id); }
         result?;
@@ -459,7 +471,7 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     let new_type = if matches!(op, O::EventInitEvent | O::CustomEventInit) {
         let event_type_arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        Some(utf16_string(host, event_type_arg)?)
+        Some(host.to_dom_string(event_type_arg)?)
     } else { None };
     let bubbles = if matches!(op, O::EventInitEvent | O::CustomEventInit) { args.get(1).is_some_and(|v| host.to_boolean(v)) } else { false };
     let cancelable = if matches!(op, O::EventInitEvent | O::CustomEventInit) { args.get(2).is_some_and(|v| host.to_boolean(v)) } else { false };
@@ -474,7 +486,7 @@ pub(crate) fn invoke<H: BindingHost>(
         let detail = args.get(3).cloned().unwrap_or_else(|| host.null());
         let root = if host.is_nullish(&detail) { None } else { Some(host.retain_value(detail)) };
         let old = host.with_dom(|dom| Ok(dom.events_mut().event_mut(id)
-            .init_custom_event(new_type.unwrap(), bubbles, cancelable, root)))?;
+            .init_custom_event_utf16(&new_type.unwrap(), bubbles, cancelable, root)))?;
         match old {
             Some(previous) => { if let Some(previous) = previous { host.release_value(previous); } },
             None => { if let Some(root) = root { host.release_value(root); } },
@@ -484,7 +496,7 @@ pub(crate) fn invoke<H: BindingHost>(
     let output = host.with_dom(|dom| {
         let event = dom.events_mut().event_mut(id);
         let result = match op {
-            O::EventType => Output::String(event.event_type().encode_utf16().collect()),
+            O::EventType => Output::String(event.event_type_utf16()),
             O::EventTargetValue => Output::Target(event.target()),
             O::EventCurrentTarget => Output::Target(event.current_target()),
             O::EventPhase => Output::Number(event.phase() as u8 as f64),
@@ -502,7 +514,7 @@ pub(crate) fn invoke<H: BindingHost>(
             O::EventPreventDefault => { event.prevent_default(); Output::Undefined },
             O::EventSetCancelBubble => { event.set_cancel_bubble(boolean_arg); Output::Undefined },
             O::EventSetReturnValue => { event.set_return_value(boolean_arg); Output::Undefined },
-            O::EventInitEvent => { event.init_event(new_type.unwrap(), bubbles, cancelable); Output::Undefined },
+            O::EventInitEvent => { event.init_event_utf16(&new_type.unwrap(), bubbles, cancelable); Output::Undefined },
             _ => unreachable!(),
         };
         Ok(result)

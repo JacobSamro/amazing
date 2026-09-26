@@ -400,11 +400,22 @@ fn first_listed_gradient_layer_paints_above_later_layers() {
 fn unsupported_gradient_syntax_paints_no_layer() {
     for image in [
         "linear-gradient(to right, red, blue, not-a-color)",
-        "linear-gradient(to right, red)",
         "radial-gradient(to right, red, blue)",
     ] {
         let s = draw(&block(&[("background-image", image)], 8.0, 8.0));
         assert_eq!(s.get_pixel(4, 4), Some([255; 4]), "{image}");
+    }
+}
+
+/// CSS Images 3 allows a gradient with a single color stop, rendering as a
+/// solid fill of that color (`linear-gradient(green)` and friends; see WPT
+/// `css-images/gradient/gradient-single-stop-*.html`). This used to be
+/// mis-treated as unsupported syntax alongside genuinely invalid gradients.
+#[test]
+fn single_stop_gradient_paints_a_solid_fill() {
+    for image in ["linear-gradient(red)", "linear-gradient(to right, red)"] {
+        let s = draw(&block(&[("background-image", image)], 8.0, 8.0));
+        assert_eq!(s.get_pixel(4, 4), Some([255, 0, 0, 255]), "{image}");
     }
 }
 

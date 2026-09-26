@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "subdir": "css/css-anchor-position",
+  "mismatch_count": 64,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 12,
+      "examples": [
+        "css__css-anchor-position__anchor-size-function-chain-pseudo-elements.html",
+        "css__css-anchor-position__anchor-function-chain-pseudo-elements.html",
+        "css__css-anchor-position__position-area-chain-pseudo-elements.html",
+        "css__css-anchor-position__anchor-position-circular.html",
+        "css__css-anchor-position__anchor-position-grid-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 8,
+      "examples": [
+        "css__css-anchor-position__pseudo-element-implicit-anchor.html",
+        "css__css-anchor-position__position-visibility-anchors-visible-css-visibility.html",
+        "css__css-anchor-position__position-area-percents-001.html",
+        "css__css-anchor-position__position-visibility-no-overflow-without-anchor.html",
+        "css__css-anchor-position__anchor-in-css-min-max-function.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__css-anchor-position__position-anchor-none-pseudo-element-named.html",
+        "css__css-anchor-position__position-anchor-auto-pseudo-element-implicit-002.html",
+        "css__css-anchor-position__position-anchor-normal-pseudo-element-implicit-003.html",
+        "css__css-anchor-position__position-anchor-auto-pseudo-element-implicit-001.html",
+        "css__css-anchor-position__position-anchor-normal-pseudo-element-implicit-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-anchor-position__anchor-position-005-print.html",
+        "css__css-anchor-position__auto-margins-position-area.html",
+        "css__css-anchor-position__anchor-position-multicol-004.html",
+        "css__css-anchor-position__anchor-position-multicol-nested-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-anchor-position__anchor-center-safe-rtl.html",
+        "css__css-anchor-position__grid-position-area-basic.html",
+        "css__css-anchor-position__anchor-center-overflow-003.html",
+        "css__css-anchor-position__anchor-center-safe.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-anchor-position__position-visibility-anchors-visible-in-overflow.html",
+        "css__css-anchor-position__position-area-inset-one-side-auto.tentative.html",
+        "css__css-anchor-position__under-invalidation.html",
+        "css__css-anchor-position__position-visibility-anchors-visible-clip.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-anchor-position__position-area-overflow-icb-004.html",
+        "css__css-anchor-position__position-area-overflow-icb-002.html",
+        "css__css-anchor-position__position-area-overflow-icb-003.html",
+        "css__css-anchor-position__position-area-overflow-icb-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-anchor-position__anchor-name-multicol-003.html",
+        "css__css-anchor-position__anchor-position-multicol-fixed-001.html",
+        "css__css-anchor-position__anchored-c-v-hidden.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-anchor-position__anchor-center-overflow-001.html",
+        "css__css-anchor-position__anchor-center-overflow-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-anchor-position__position-try-005.html",
+        "css__css-anchor-position__position-visibility-anchors-visible-both-position-fixed.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-anchor-position__anchor-fieldset-001.html",
+        "css__css-anchor-position__no-anchor-anchor-center.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__pseudo-element-with-slotted-anchor.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__position-area-justify-self-safe-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-center-overflow-005.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__pseudo-element-implicit-anchor-center.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__position-try-order-logical.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__position-area-anchor-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__position-anchor-005.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-center-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__position-area-alignment-inset-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-size-css-zoom.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__grid-lanes-position-area-basic.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-css-zoom.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-position-multicol-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-anchor-position__anchor-center-overflow-002.html"
+      ]
+    }
+  ]
+}

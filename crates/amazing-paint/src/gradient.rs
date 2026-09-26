@@ -63,9 +63,6 @@ pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Opti
         _ => return None,
     };
     let parts = comma_parts(&tokens[2..tokens.len() - 1])?;
-    if parts.len() < 2 {
-        return None;
-    }
     // An optional leading geometry part precedes the color stops. If the first
     // part begins with a color it is already a stop; otherwise it must parse as
     // valid geometry or the whole gradient is rejected (never guessed).
@@ -75,7 +72,11 @@ pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Opti
         kind = geometry(parts[0], kind, width, height, font_size)?;
         1
     };
-    if parts.len() - first < 2 {
+    // CSS Images 3 allows a gradient with just one color stop (and no
+    // explicit geometry-only case): `linear-gradient(green)` is valid and
+    // renders as a solid fill of that color (`sample` below already
+    // degenerates correctly to a single color when `stops.len() == 1`).
+    if parts.len() - first < 1 {
         return None;
     }
     let conic = matches!(kind, Kind::Conic { .. });
@@ -95,7 +96,7 @@ pub(crate) fn raster(css: &str, width: u32, height: u32, font_size: f32) -> Opti
             }
         }
     }
-    if stops.len() < 2 {
+    if stops.is_empty() {
         return None;
     }
     resolve_stops(&mut stops);
@@ -468,6 +469,30 @@ mod tests {
         }
         assert!(raster("url(x.png)", 12, 12, 16.0).is_none());
         assert!(raster("linear-gradient(red, blue)", 5000, 5000, 16.0).is_none());
+    }
+
+    #[test]
+    fn single_color_stop_is_a_solid_fill() {
+        // CSS Images 3: a gradient with exactly one color stop is valid and
+        // renders as a solid fill of that color (WPT
+        // css-images/gradient/gradient-single-stop-*.html).
+        for case in [
+            "linear-gradient(green)",
+            "linear-gradient(to right, green)",
+            "radial-gradient(green)",
+            "conic-gradient(green)",
+        ] {
+            let image = raster(case, 8, 8, 16.0).expect(case);
+            for chunk in image.pixels.chunks_exact(4) {
+                assert_eq!(chunk, [0, 128, 0, 255], "{case}");
+            }
+        }
+        // A single color stop with a geometry-invalidating rest is still
+        // rejected outright (no guessing at a broken gradient).
+        assert!(raster("radial-gradient(to right, red)", 8, 8, 16.0).is_none());
+        // An empty gradient (no color stops at all) is still rejected.
+        assert!(raster("linear-gradient()", 8, 8, 16.0).is_none());
+        assert!(raster("linear-gradient(to right)", 8, 8, 16.0).is_none());
     }
 
     fn pixel(image: &Image, x: u32, y: u32) -> [u8; 4] {

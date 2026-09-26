@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-18",
+  "base_commit": "bbd741b6",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "host": "Boat sandbox (pool-layout), Linux/fontconfig/freetype, per-lane target",
+  "note": "First Linux measurement of the lane's pinned css-fonts/css-writing-modes pixel selections. WPT was unavailable on the Boat sandbox through TEXT-14/15/16 (filed in .agents/text/questions.md); scripts/ensure-wpt.sh now provisions the pinned revision there. Renderer/comparator: crates/amazing-text-provider/evidence/text18-render-wpt.py, a Python port of scripts/run-render-wpt.ps1's comparison (exact PPM diff, <meta name=fuzzy> tolerance, mismatch-relation inversion), run via `amazing render-wpt <page> <out.ppm> 800 600` with AMAZING_WPT_ROOT set to the checkout. Each selection run twice back to back with identical counts and per-test actual/reference/diff SHA-256 (stable).",
+  "selections": {
+    "fonts-15": {
+      "manifest": "text1-fonts-manifest.json",
+      "result_file": "text18-text1-fonts-manifest-linux.json",
+      "counts": { "pass": 14, "mismatch": 1, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0 },
+      "compare_to": "TEXT-13 win-001: 14 pass / 1 mismatch (text13-font15-before.json)",
+      "notes": "Matches the last Windows measurement exactly. The one mismatch is font-unicode-PUA-primary-font, the environment-owned Arial/Times PUA-glyph case (TEXT-6/TEXT-13); on Linux the installed-fallback face differs (DejaVu, see TEXT-17) but the case still mismatches for the same PUA-coverage reason."
+    },
+    "font-face-8": {
+      "manifest": "text2-font-face-manifest.json",
+      "result_file": "text18-text2-font-face-manifest-linux.json",
+      "counts": { "pass": 4, "mismatch": 4, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0 },
+      "compare_to": "TEXT-12/13 win-001: 4 pass / 4 mismatch (retained, unchanged both tickets)",
+      "notes": "Same 4/8 split as the last two Windows measurements. The four matching__* mismatches (fixed-stretch-style-over-weight, range-descriptor-reversed, stretch-distance-over-weight-distance, style-ranges-over-weight-direction) are the pre-existing @font-face descriptor-matching gap noted since TEXT-2/TEXT-12; the four variations__* cases pass."
+    },
+    "vertical-7": {
+      "manifest": "text5-vertical-manifest.json",
+      "result_file": "text18-text5-vertical-manifest-linux.json",
+      "counts": { "pass": 5, "mismatch": 2, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0 },
+      "compare_to": "TEXT-12 win-001: 5 pass / 2 mismatch",
+      "notes": "Same split as TEXT-12's Windows measurement. writing-mode-vertical-lr-002 and direction-upright-001 remain layout-owned per the TEXT-7..13 routing."
+    },
+    "expanded-40": {
+      "manifest": "text12-expanded-manifest.json",
+      "result_file": "text18-text12-expanded-manifest-linux.json",
+      "counts": { "pass": 40, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0 },
+      "compare_to": "TEXT-13 win-001: 38 pass / 2 mismatch (font-kerning-02, font-size-adjust-zero-2 area)",
+      "notes": "All 40 pass on current dev (bbd741b6, past TEXT-14's kerning axis fix and TEXT-15/16). No regression from the TEXT-13 baseline; the two prior mismatches are gone, consistent with TEXT-14's font-kerning-02/03 fix landing afterward. This is the first Linux run of this selection."
+    }
+  },
+  "totals": { "pass": 63, "mismatch": 7, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0, "cases": 70 },
+  "relationship_to_text17": "Before TEXT-17's fix, register_system_text_faces registered zero faces for any family on Linux (Windows-only hardcoded paths), so this entire corpus would have rendered as full-coverage boxes rather than exercising real shaping/rasterization/fallback paths. These are the first Linux numbers for this corpus and were only meaningful once TEXT-17 landed.",
+  "gates": {
+    "linux_crate_nextest": "amazing-text + amazing-text-provider + amazing 340 passed, 6 skipped",
+    "linux_crate_doctests": "green",
+    "linux_workspace_nextest": "2993 passed, 11 skipped, 0 failed (--locked --no-fail-fast)",
+    "linux_workspace_doctests": "green (--locked --doc)"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/cssom-view",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:05:28Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-cssom-view/run-20260926T160528Z-88298",
+  "inventory": {
+    "document_files": 255,
+    "testharness_files": 226,
+    "reftests": 11,
+    "eligible_static_self_contained": 1,
+    "selected": 1,
+    "excluded": {
+      "not-reftest": 244,
+      "scripted": 8,
+      "xml-reference-mode": 2
+    }
+  },
+  "counts": {
+    "pass": 0,
+    "mismatch": 0,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 1
+  },
+  "tests": [
+    {
+      "id": "css__cssom-view__window-scrollBy-display-change.html",
+      "classification": "crash",
+      "detail": "renderer exit code 1: amazing render-wpt: body load listener failed: TypeError: value is not callable"
+    }
+  ]
+}

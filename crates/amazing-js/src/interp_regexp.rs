@@ -469,6 +469,36 @@ fn regexp_result(
     }
     Ok(array)
 }
+/// Builds a `groups` object from captures already materialized as
+/// `JsString`s (the default-`exec` fast path in `regexp_replace`, which
+/// skips building a full match-result object per match). Same dedup rule as
+/// `regexp_result`'s `groups`: a name declared on more than one
+/// mutually-exclusive alternative picks whichever declaration's capture
+/// actually participated.
+fn regexp_named_captures(
+    i: &mut Interpreter,
+    group_names: &[(Box<str>, usize)],
+    captures: &[Option<crate::value::JsString>],
+) -> Result<JsValue, Throw> {
+    let mut object = JsObject::ordinary();
+    object.proto = None;
+    let groups = JsValue::object(object);
+    let mut seen: Vec<&str> = Vec::new();
+    for (name, _) in group_names {
+        if seen.contains(&name.as_ref()) {
+            continue;
+        }
+        seen.push(name.as_ref());
+        let value = group_names
+            .iter()
+            .filter(|(n, _)| n.as_ref() == name.as_ref())
+            .find_map(|(_, idx)| captures.get(*idx).and_then(|c| c.clone()))
+            .map(JsValue::str)
+            .unwrap_or(JsValue::Undefined);
+        i.set_prop(&groups, name.as_ref(), value)?;
+    }
+    Ok(groups)
+}
 /// MakeIndicesArray ( S, indices, groupNames, hasGroups ): a match array's
 /// `.indices` property, parallel to the match array itself, with a `[start,
 /// end]` UTF-16 code-unit pair per participating capture (`undefined` for
@@ -515,6 +545,61 @@ fn regexp_indices_array(
     };
     i.set_prop(&array, "groups", groups)?;
     Ok(array)
+}
+// RegExpExec(R, S) (21.2.5.2.1): reads "exec" and calls it when callable --
+// which for a plain RegExp is RegExp.prototype.exec (native_regexp_exec)
+// itself, so this has no effect on the common case beyond one indirect call
+// -- falling back to RegExpBuiltinExec only when "exec" is not callable. The
+// @@match/@@replace/@@matchAll algorithms all dispatch through this, not
+// through the internal matcher directly, so an overridden `exec`, a
+// non-writable `lastIndex`, or an abrupt `groups`/`0` getter on a custom
+// result all take effect exactly where the spec puts them.
+// True when `exec` is exactly the unmodified RegExp.prototype.exec (the
+// overwhelmingly common case): callers matching in a loop over one very long
+// string skip materializing a JS result object per match and re-reading it
+// back out, and go straight to the internal matcher instead. `Get(this,
+// "exec")` still runs every iteration either way, so an override installed
+// mid-loop by a getter side effect is still observed on the next match.
+fn regexp_exec_default(exec: &JsValue) -> bool {
+    matches!(callable_function(exec), Some(crate::value::JsFunction { body: crate::value::FunctionBody::Native(f), .. })
+        if std::ptr::fn_addr_eq(f, native_regexp_exec as crate::value::NativeFn))
+}
+fn regexp_exec_call(
+    i: &mut Interpreter,
+    this: &JsValue,
+    source: &crate::value::JsString,
+    exec: &JsValue,
+) -> Result<JsValue, Throw> {
+    if callable_function(exec).is_some() {
+        let result = i.call_value(exec, this.clone(), vec![JsValue::str(source.clone())])?;
+        if !result.is_object() && !result.is_null() {
+            return Err(Throw::type_error("RegExp exec must return an object or null"));
+        }
+        return Ok(result);
+    }
+    let Some(regex) = regexp_data(this) else {
+        return Err(Throw::type_error("incompatible RegExp receiver"));
+    };
+    match regexp_match(i, this, source.clone())? {
+        Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
+        None => Ok(JsValue::Null),
+    }
+}
+// RegExpExec(R, S) (21.2.5.2.1): reads "exec" and calls it when callable --
+// which for a plain RegExp is RegExp.prototype.exec (native_regexp_exec)
+// itself, so this has no effect on the common case beyond one indirect call
+// -- falling back to RegExpBuiltinExec only when "exec" is not callable. The
+// @@match/@@replace/@@matchAll algorithms all dispatch through this, not
+// through the internal matcher directly, so an overridden `exec`, a
+// non-writable `lastIndex`, or an abrupt `groups`/`0` getter on a custom
+// result all take effect exactly where the spec puts them.
+fn regexp_exec_dispatch(
+    i: &mut Interpreter,
+    this: &JsValue,
+    source: &crate::value::JsString,
+) -> Result<JsValue, Throw> {
+    let exec = i.get_prop(this, "exec")?;
+    regexp_exec_call(i, this, source, &exec)
 }
 fn native_regexp_exec(
     i: &mut Interpreter,
@@ -906,30 +991,37 @@ fn native_string_match(
     };
     let regex = regexp_data(&regexp).unwrap();
     if !regex.flags().global {
-        return match regexp_match(i, &regexp, &source)? {
-            Some(m) => regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices),
-            None => Ok(JsValue::Null),
-        };
+        return regexp_exec_dispatch(i, &regexp, &source);
     }
     i.set_prop(&regexp, "lastIndex", JsValue::num(0.0))?;
     let units = regexp_units(&source)?;
     let mut matches = Vec::new();
-    let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
-    while let Some(m) = regexp_match_with(i, &regexp, regex.flags(), &mut matcher)? {
+    loop {
+        let exec = i.get_prop(&regexp, "exec")?;
+        let match_str = if regexp_exec_default(&exec) {
+            match regexp_match(i, &regexp, &source)? {
+                None => break,
+                Some(m) => crate::value::JsString::from_units(units[m.range].to_vec()),
+            }
+        } else {
+            let result = regexp_exec_call(i, &regexp, &source, &exec)?;
+            if result.is_null() { break; }
+            let match_value = i.get_prop(&result, "0")?;
+            i.to_js_string(&match_value)?
+        };
         if matches.len() >= 100_000 {
             return Err(Throw::range_error("RegExp match collection limit"));
         }
-        matches.push(JsValue::str_units(units[m.range.clone()].to_vec()));
-        if m.range.is_empty() {
-            i.set_prop(
-                &regexp,
-                "lastIndex",
-                JsValue::num(amazing_regex::advance_index(
-                    &units,
-                    m.range.end,
-                    regex.flags().unicode,
-                ) as f64),
-            )?;
+        matches.push(JsValue::str(match_str.clone()));
+        if match_str.is_empty() {
+            let last_index = i.get_prop(&regexp, "lastIndex")?;
+            let last = i.to_number(&last_index)?;
+            let next = amazing_regex::advance_index(
+                &units,
+                if last.is_nan() { 0 } else { last.max(0.0) as usize },
+                regex.flags().unicode,
+            );
+            i.set_prop(&regexp, "lastIndex", JsValue::num(next as f64))?;
         }
     }
     if matches.is_empty() {
@@ -958,9 +1050,17 @@ fn native_string_search(
         result?.map(|m| m.range.start as f64).unwrap_or(-1.0),
     ))
 }
+struct RegexpReplaceMatch {
+    matched: crate::value::JsString,
+    position: usize,
+    captures: Vec<Option<crate::value::JsString>>,
+    named: Option<JsValue>,
+}
 fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[JsValue]) -> Result<JsValue, Throw> {
     let regexp = &args[0];
     let regex = regexp_data(regexp).unwrap();
+    let global = regex.flags().global;
+    let unicode = regex.flags().unicode;
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let callable = callable_function(&replacement).is_some();
     let text = if callable {
@@ -971,77 +1071,122 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
     if text.len() > 16_777_216 {
         return Err(Throw::range_error("RegExp replacement text limit"));
     }
-    if regex.flags().global {
+    if global {
         i.set_prop(regexp, "lastIndex", JsValue::num(0.0))?;
     }
     let units = regexp_units(source)?;
     let mut matches = Vec::new();
     let mut slots = 0;
-    let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
-    while let Some(m) = regexp_match_with(i, regexp, regex.flags(), &mut matcher)? {
-        slots += m.captures.len();
-        if matches.len() >= 100_000 || slots > 1_048_576 {
-            return Err(Throw::range_error("RegExp replacement collection limit"));
-        }
-        let end = m.range.end;
-        let empty = m.range.is_empty();
-        matches.push(m);
-        if !regex.flags().global {
-            break;
-        }
+    loop {
+        // RegExpExec, not the internal matcher directly: an overridden `exec`,
+        // a `0`/`groups` getter with side effects, or a non-writable
+        // `lastIndex` must all be observed exactly where the spec puts them.
+        // The unmodified-`exec` case skips materializing and re-reading a JS
+        // result object per match -- it matters when matching over one very
+        // long string produces many thousands of matches in a single call.
+        let exec = i.get_prop(regexp, "exec")?;
+        let (matched, position, captures, named) = if regexp_exec_default(&exec) {
+            match regexp_match(i, regexp, source)? {
+                None => break,
+                Some(m) => {
+                    let matched = crate::value::JsString::from_units(units[m.range.clone()].to_vec());
+                    let captures = std::iter::once(Some(matched.clone()))
+                        .chain(m.captures.iter().skip(1).map(|r| r.clone()
+                            .map(|r| crate::value::JsString::from_units(units[r].to_vec()))))
+                        .collect::<Vec<_>>();
+                    let named = if regex.group_names().is_empty() {
+                        JsValue::Undefined
+                    } else {
+                        regexp_named_captures(i, regex.group_names(), &captures)?
+                    };
+                    (matched, m.range.start, captures, named)
+                }
+            }
+        } else {
+            let result = regexp_exec_call(i, regexp, source, &exec)?;
+            if result.is_null() { break; }
+            let length_value = i.get_prop(&result, "length")?;
+            let length_number = i.to_number(&length_value)?;
+            let length = if length_number.is_nan() || length_number <= 0.0 { 0 }
+                else { length_number.min(9_007_199_254_740_991.0) as usize };
+            let n_captures = length.saturating_sub(1);
+            slots += n_captures;
+            if matches.len() >= 100_000 || slots > 1_048_576 {
+                return Err(Throw::range_error("RegExp replacement collection limit"));
+            }
+            let matched_value = i.get_prop(&result, "0")?;
+            let matched = i.to_js_string(&matched_value)?;
+            let position_value = i.get_prop(&result, "index")?;
+            let position_number = i.to_number(&position_value)?;
+            let position = if position_number.is_nan() || position_number <= 0.0 { 0 }
+                else { (position_number as usize).min(units.len()) };
+            // `regexp_substitution`'s $&/$N indexing treats slot 0 as the
+            // whole match and slot N (N >= 1) as capture group N, matching
+            // amazing_regex::Match.captures's own convention -- so slot 0 is
+            // seeded with `matched` up front rather than left for group 1.
+            let mut captures = Vec::with_capacity(n_captures + 1);
+            captures.push(Some(matched.clone()));
+            for index in 1..=n_captures {
+                let capture = i.get_prop(&result, &index.to_string())?;
+                captures.push(if capture.is_undefined() { None } else { Some(i.to_js_string(&capture)?) });
+            }
+            // Get(result, "groups") happens unconditionally per match, before
+            // the functional/string-replacement branch decides what to do
+            // with it; the string branch's ToObject(namedCaptures) is where a
+            // null/primitive groups value throws (e.g. `groups: null` on a
+            // custom exec result).
+            let named = i.get_prop(&result, "groups")?;
+            (matched, position, captures, named)
+        };
+        let named = if named.is_undefined() { None } else if !callable {
+            Some(std_legacy_to_object(i, named)?)
+        } else { Some(named) };
+        let empty = matched.is_empty();
+        matches.push(RegexpReplaceMatch { matched, position, captures, named });
+        if !global { break; }
         if empty {
-            i.set_prop(
-                regexp,
-                "lastIndex",
-                JsValue::num(
-                    amazing_regex::advance_index(&units, end, regex.flags().unicode) as f64,
-                ),
-            )?;
+            let last_index = i.get_prop(regexp, "lastIndex")?;
+            let last = i.to_number(&last_index)?;
+            let next = amazing_regex::advance_index(
+                &units,
+                if last.is_nan() { 0 } else { last.max(0.0) as usize },
+                unicode,
+            );
+            i.set_prop(regexp, "lastIndex", JsValue::num(next as f64))?;
         }
     }
     let mut out = Vec::<u16>::new();
-    let mut end = 0;
+    let mut end = 0usize;
     for m in matches {
-        out.extend_from_slice(&units[end..m.range.start]);
-        let captures = m
-            .captures
-            .iter()
-            .map(|r| r.clone().map(|r| crate::value::JsString::from_units(units[r].to_vec())))
-            .collect::<Vec<_>>();
+        // A match whose reported position precedes the end of the previous
+        // replacement (possible only with a custom `exec`) is skipped whole,
+        // per spec step 14's "if position >= nextSourcePosition" guard.
+        if m.position < end { continue; }
+        out.extend_from_slice(&units[end..m.position]);
         if callable {
-            let mut args: Vec<_> = captures
-                .iter()
+            // m.captures[0] is the synthetic whole-match slot (see above);
+            // the call arguments are matched, then groups 1..=n, so skip it.
+            let mut call_args: Vec<_> = m.captures[1..].iter()
                 .map(|c| c.clone().map(JsValue::str).unwrap_or(JsValue::Undefined))
                 .collect();
-            args.push(JsValue::num(m.range.start as f64));
-            args.push(JsValue::str(source));
-            if !regex.group_names().is_empty() {
-                let mut object = JsObject::ordinary();
-                object.proto = None;
-                let groups = JsValue::object(object);
-                for (name, index) in regex.group_names() {
-                    let value = captures
-                        .get(*index)
-                        .cloned()
-                        .flatten()
-                        .map(JsValue::str)
-                        .unwrap_or(JsValue::Undefined);
-                    i.set_prop(&groups, name.as_ref(), value)?;
-                }
-                args.push(groups);
-            }
-            let value = i.call_value(&replacement, JsValue::Undefined, args)?;
+            call_args.insert(0, JsValue::str(m.matched.clone()));
+            call_args.push(JsValue::num(m.position as f64));
+            call_args.push(JsValue::str(source));
+            if let Some(named) = &m.named { call_args.push(named.clone()); }
+            let value = i.call_value(&replacement, JsValue::Undefined, call_args)?;
             out.extend_from_slice(i.to_js_string(&value)?.units());
         } else {
+            let range = m.position..(m.position + m.matched.units().len()).min(units.len());
             out.extend_from_slice(&regexp_substitution(
+                i,
                 &text,
-                &captures,
+                &m.captures,
                 &units,
-                m.range.clone(),
-                regex.group_names(),
+                range,
+                m.named.as_ref(),
             )?);
         }
-        end = m.range.end;
+        end = (m.position + m.matched.units().len()).min(units.len());
         if out.len() > 16_777_216 {
             return Err(Throw::range_error("RegExp replacement output limit"));
         }
@@ -1053,11 +1198,12 @@ fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[
     Ok(JsValue::str_units(out))
 }
 fn regexp_substitution(
+    i: &mut Interpreter,
     text: &crate::value::JsString,
     captures: &[Option<crate::value::JsString>],
     input: &[u16],
     range: std::ops::Range<usize>,
-    group_names: &[(Box<str>, usize)],
+    named: Option<&JsValue>,
 ) -> Result<Vec<u16>, Throw> {
     let mut out = Vec::new();
     let mut chars = text.units().iter().copied().peekable();
@@ -1086,7 +1232,7 @@ fn regexp_substitution(
                 chars.next();
                 out.extend_from_slice(&input[range.end..]);
             }
-            Some(0x3c) if !group_names.is_empty() => {
+            Some(0x3c) if named.is_some() => {
                 let mut look = chars.clone();
                 look.next();
                 let mut name_units = Vec::new();
@@ -1106,10 +1252,13 @@ fn regexp_substitution(
                         chars.next();
                     }
                     chars.next();
-                    if let Some((_, index)) = group_names.iter().find(|(n, _)| n.as_ref() == name)
-                    {
-                        if let Some(capture) = &captures[*index] {
-                            out.extend_from_slice(capture.units());
+                    // Get(namedCaptures, groupName): undefined (missing name,
+                    // or a name absent from a custom `exec`'s own `groups`
+                    // object) contributes the empty string, not an error.
+                    if let Some(named) = named {
+                        let value = i.get_prop(named, &name)?;
+                        if !value.is_undefined() {
+                            out.extend_from_slice(i.to_js_string(&value)?.units());
                         }
                     }
                 } else {

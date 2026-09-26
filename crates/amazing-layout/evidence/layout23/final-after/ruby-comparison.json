@@ -1,0 +1,28 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/final-after/ruby/report.json",
+  "after": "/home/user/amazing/out/layout/layout23/final-after/ruby/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 118,
+  "before_counts": {
+    "pass": 70,
+    "mismatch": 48,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 70,
+    "mismatch": 48,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [],
+  "losses": [],
+  "actual_hash_changes": 0,
+  "reference_hash_changes": 0,
+  "before_projection_sha256": "95f11651bc13ed63cded5bd91fdbea0d2b9f9969a2b9fcff8d9af56e3ae14a2a",
+  "after_projection_sha256": "95f11651bc13ed63cded5bd91fdbea0d2b9f9969a2b9fcff8d9af56e3ae14a2a"
+}

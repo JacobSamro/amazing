@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "subdir": "css/css-shadow",
+  "mismatch_count": 35,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 33,
+      "examples": [
+        "css__css-shadow__has-slotted-functional-003.tentative.html",
+        "css__css-shadow__part__exportparts-layered.html",
+        "css__css-shadow__has-slotted-functional-001.tentative.html",
+        "css__css-shadow__host-is-006.html",
+        "css__css-shadow__has-slotted-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shadow__same-rules-bug-2044746.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-shadow__scoped-reference-animation-001.html"
+      ]
+    }
+  ]
+}

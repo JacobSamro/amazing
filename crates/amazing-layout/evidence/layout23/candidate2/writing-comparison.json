@@ -1,0 +1,31 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/final-after/writing/report.json",
+  "after": "/home/user/amazing/out/layout/layout23/candidate2/writing/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 1112,
+  "before_counts": {
+    "pass": 243,
+    "mismatch": 736,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 133,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 245,
+    "mismatch": 734,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 133,
+    "crash": 0
+  },
+  "gains": [
+    "css-writing-modes__abs-pos-non-replaced-icb-vlr-003.xht",
+    "css-writing-modes__abs-pos-non-replaced-icb-vrl-002.xht"
+  ],
+  "losses": [],
+  "actual_hash_changes": 165,
+  "reference_hash_changes": 72,
+  "before_projection_sha256": "69e14cb5b40bca8e8648137dd4019cb73fe39ebc43a59ade884a0758db1d5acd",
+  "after_projection_sha256": "bc0f8b918716281ffe48a13860d9af532d1e922e644566fea7425890e884b51c"
+}

@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "subdir": "css/css-rhythm",
+  "mismatch_count": 9,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 8,
+      "examples": [
+        "css__css-rhythm__definite-height-rounds-up-to-step-unit.html",
+        "css__css-rhythm__block-step-size-establishes-block-formatting-context-list-item.html",
+        "css__css-rhythm__replaced-elements__block-level-embed-margins-affected-by-block-step-size.html",
+        "css__css-rhythm__definite-height-rounds-up-to-next-multiple-of-step-unit.html",
+        "css__css-rhythm__block-step-size-establishes-block-formatting-context.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-rhythm__zero-outer-size-rounded-up-to-block-step-size.html"
+      ]
+    }
+  ]
+}

@@ -1,15 +1,95 @@
-//! Fetch and XHR runtime adapter owned by the net lane.
+//! Fetch, XHR and WebSocket runtime adapter owned by the net lane.
 use super::*;
 use amazing_bindings::fetch_interfaces::{FetchHeaders, FetchHost, FetchInterface, FetchObject, FetchOperation, HeaderIterationKind};
-use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
-use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent};
+use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId, WebSocketClient}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
+use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent};
+use amazing_net::websocket::{Close as WsClose, Event as WsEvent};
 use std::time::{Duration, Instant};
+
+/// Own brand namespace for WebSocket instances, disjoint from Fetch's
+/// InterfaceBrand(200..206) and messaging's MESSAGING_BRAND_BASE (200).
+const WEBSOCKET_BRAND_BASE: u64 = 300;
 
 #[derive(Clone, Copy)]
 pub(super) enum NetNativeEntry {
     Operation(FetchOperation),
     PromiseExecutor,
     Pump,
+    WebSocket(WebSocketOp),
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum WebSocketOp {
+    Constructor,
+    UrlGet,
+    ProtocolGet,
+    ExtensionsGet,
+    ReadyStateGet,
+    BufferedAmountGet,
+    BinaryTypeGet,
+    BinaryTypeSet,
+    Send,
+    Close,
+    AddEventListener,
+    RemoveEventListener,
+    DispatchEvent,
+    OnOpenGet,
+    OnOpenSet,
+    OnMessageGet,
+    OnMessageSet,
+    OnErrorGet,
+    OnErrorSet,
+    OnCloseGet,
+    OnCloseSet,
+    CloseEventConstructor,
+}
+
+#[derive(Clone)]
+struct WsListener {
+    kind: String,
+    callback: JsValue,
+    once: bool,
+}
+
+/// One `WebSocket` instance. Kept for the object's whole lifetime once
+/// allocated (mirrors `fetch_objects`/`xhr_pending`'s own retention), since
+/// its `HostHandle` slot must stay valid for as long as the JS wrapper lives.
+struct WsObject {
+    wrapper: JsValue,
+    service_id: Option<ServiceId>,
+    url: String,
+    ready_state: u16,
+    protocol: String,
+    binary_type_arraybuffer: bool,
+    /// Bytes handed to `send()` that have not yet actually been written to
+    /// the transport (WHATWG `bufferedAmount`): increased synchronously by
+    /// every `send()` call, decreased as `WebSocketEvent::Sent` reports the
+    /// dispatcher's write progress, and never decreased for a CLOSING/
+    /// CLOSED socket since nothing is ever transmitted.
+    buffered_amount: u64,
+    listeners: Vec<WsListener>,
+    handlers: HashMap<&'static str, JsValue>,
+    /// Set when the connection must fail (CSP/mixed-content/transport
+    /// rejection at construction time, or `close()` called while
+    /// CONNECTING). Consumed on the next pump tick, which fires `error`
+    /// then a synthesized abnormal `close`.
+    deferred_failure: bool,
+}
+impl WsObject {
+    fn new(url: String) -> Self {
+        Self {
+            wrapper: JsValue::Undefined,
+            service_id: None,
+            url,
+            ready_state: 0,
+            protocol: String::new(),
+            binary_type_arraybuffer: false,
+            buffered_amount: 0,
+            listeners: Vec::new(),
+            handlers: HashMap::new(),
+            deferred_failure: false,
+        }
+    }
 }
 
 enum XhrTransport {
@@ -37,6 +117,10 @@ pub(super) struct NetRuntime {
     xhr_pending: Vec<XhrPending>,
     xhr_ready_state_override: Option<(u64, XhrState)>,
     xhr_document_nodes: HashMap<u64, (u64, NodeIdx)>,
+    websockets: Vec<WsObject>,
+    ws_by_service: HashMap<ServiceId, usize>,
+    websocket_prototype: Option<JsValue>,
+    close_event_prototype: Option<JsValue>,
 }
 
 impl NetRuntime {
@@ -54,6 +138,10 @@ impl NetRuntime {
             xhr_pending: Vec::new(),
             xhr_ready_state_override: None,
             xhr_document_nodes: HashMap::new(),
+            websockets: Vec::new(),
+            ws_by_service: HashMap::new(),
+            websocket_prototype: None,
+            close_event_prototype: None,
         }
     }
 }
@@ -70,6 +158,7 @@ impl RuntimeBindingHost<'_> {
         let env = EnvHandle::new(EnvKind::Global, Some(self.js.global_env.clone()));
         env.declare_lexical("fetch", fetch, false)?;
         self.js.global_env = env;
+        self.install_websocket()?;
         Ok(())
     }
 
@@ -85,6 +174,7 @@ impl RuntimeBindingHost<'_> {
                 Ok(JsValue::Undefined)
             }
             NetNativeEntry::Pump => self.fetch_pump(),
+            NetNativeEntry::WebSocket(op) => self.websocket_invoke(op, this, args),
         }
     }
 
@@ -138,6 +228,10 @@ impl RuntimeBindingHost<'_> {
                     self.xhr_network_event(event)?;
                     continue;
                 }
+                ServiceEvent::WebSocket { id, event } => {
+                    self.websocket_event(id, event)?;
+                    continue;
+                }
                 _ => continue,
             };
             let pending = {
@@ -166,7 +260,9 @@ impl RuntimeBindingHost<'_> {
             }
         }
         self.xhr_drive()?;
-        if !self.state.borrow().net.fetch_pending.is_empty() || !self.state.borrow().net.xhr_pending.is_empty() {
+        self.websocket_pump_deferred()?;
+        if !self.state.borrow().net.fetch_pending.is_empty() || !self.state.borrow().net.xhr_pending.is_empty()
+            || !self.state.borrow().net.ws_by_service.is_empty() {
             self.schedule_fetch_pump()?;
         }
         Ok(JsValue::Undefined)
@@ -248,6 +344,725 @@ impl RuntimeBindingHost<'_> {
             if keep { survivors.push(task); }
         }
         self.state.borrow_mut().net.xhr_pending.extend(survivors);
+        Ok(())
+    }
+}
+
+fn is_ws_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes().all(|b| {
+            b.is_ascii_alphanumeric()
+                || matches!(b, b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~')
+        })
+}
+
+fn clamp_u16(n: f64) -> u16 {
+    if n.is_nan() { 0 } else { n.clamp(0.0, 65535.0).round() as u16 }
+}
+
+/// WebSocket (RFC6455 client transport already lives in `amazing-net`/
+/// `amazing-fetch`; this is the JS interface, installed the same way IPC
+/// installs MessageChannel/BroadcastChannel in `runtime_host_messaging.rs`:
+/// its own local host-object family (brand `WEBSOCKET_BRAND_BASE`), its own
+/// hand-rolled addEventListener/removeEventListener/dispatchEvent and on*
+/// handler storage (mirroring this same file's XHR listener plumbing above),
+/// not the shared `amazing_dom::events` EventTarget registry. `MessageEvent`
+/// reuses the global constructor messaging already installs; `CloseEvent`
+/// (code/reason/wasClean) has no existing shared binding, so a minimal one is
+/// installed here, in the same style as messaging's own `MessageEvent`.
+impl RuntimeBindingHost<'_> {
+    fn dom_string(&mut self, value: &JsValue) -> Result<String, Throw> {
+        self.js
+            .binding_to_dom_string(value)
+            .map(|units| String::from_utf16_lossy(&units))
+    }
+    fn ws_dom_exception(&mut self, message: &str, name: &str) -> Throw {
+        match invoke(self, Operation::DOMExceptionConstructor, JsValue::Undefined,
+            &[JsValue::str(message), JsValue::str(name)]) {
+            Ok(value) => self.throw_value(value),
+            Err(failure) => failure,
+        }
+    }
+    fn ws_syntax_error(&mut self, message: &str) -> Throw {
+        self.ws_dom_exception(message, "SyntaxError")
+    }
+    fn ws_invalid_access_error(&mut self, message: &str) -> Throw {
+        self.ws_dom_exception(message, "InvalidAccessError")
+    }
+    fn ws_invalid_state_error(&mut self, message: &str) -> Throw {
+        self.ws_dom_exception(message, "InvalidStateError")
+    }
+
+    fn websocket_slot(&self, value: &JsValue) -> Result<usize, Throw> {
+        let handle = self
+            .js
+            .binding_host_handle(value, WEBSOCKET_BRAND_BASE)
+            .ok_or_else(|| Throw::type_error("Incompatible WebSocket receiver"))?;
+        if handle.arena != self.state.borrow().arena || handle.generation != 1 {
+            return Err(Throw::type_error("Stale WebSocket receiver"));
+        }
+        let slot = handle.slot as usize;
+        if slot >= self.state.borrow().net.websockets.len() {
+            return Err(Throw::type_error("Invalid WebSocket receiver"));
+        }
+        Ok(slot)
+    }
+    fn websocket_wrapper(&self, slot: usize) -> JsValue {
+        self.state.borrow().net.websockets[slot].wrapper.clone()
+    }
+
+    /// `(DOMString or sequence<DOMString>)`: a string is one protocol; an
+    /// object is walked through its own `Symbol.iterator`, falling back to a
+    /// single-item DOMString conversion when neither applies.
+    fn websocket_read_protocols(&mut self, value: &JsValue) -> Result<Vec<String>, Throw> {
+        if value.is_undefined() {
+            return Ok(Vec::new());
+        }
+        if matches!(value, JsValue::Str(_)) {
+            return Ok(vec![self.dom_string(value)?]);
+        }
+        let JsValue::Object(object) = value else {
+            return Ok(vec![self.dom_string(value)?]);
+        };
+        let symbol = amazing_js::value::WellKnownSymbol::Iterator.symbol();
+        let mut current = Some(object.clone());
+        let mut method = None;
+        while let Some(object) = current {
+            let borrowed = object.borrow();
+            if let Some(property) = borrowed.own_prop(&symbol) {
+                method = Some(property.value.clone());
+                break;
+            }
+            current = borrowed.proto.clone();
+        }
+        let Some(method) = method else {
+            return Ok(vec![self.dom_string(value)?]);
+        };
+        if !self.js.binding_is_callable(&method) {
+            return Ok(vec![self.dom_string(value)?]);
+        }
+        let iterator = binding_call(self.js, &method, value, &[])?;
+        let next = self.js.binding_get_property(&iterator, "next")?;
+        let mut items = Vec::new();
+        for _ in 0..1024 {
+            let item = binding_call(self.js, &next, &iterator, &[])?;
+            let done = self.js.binding_get_property(&item, "done")?;
+            if self.js.binding_to_boolean(&done) {
+                return Ok(items);
+            }
+            let entry = self.js.binding_get_property(&item, "value")?;
+            items.push(self.dom_string(&entry)?);
+        }
+        Err(self.fetch_type_error("WebSocket protocols sequence too long"))
+    }
+
+    fn websocket_construct(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let url_value = args.first().cloned().unwrap_or(JsValue::Undefined);
+        let url_str = self.dom_string(&url_value)?;
+        let base_str = self.state.borrow().document_url.clone().unwrap_or_default();
+        let base = amazing_net::ParsedUrl::parse(&base_str).ok();
+        let mut resolved = amazing_net::ParsedUrl::parse_with_base(&url_str, base.as_ref())
+            .map_err(|_| self.ws_syntax_error("Invalid WebSocket URL"))?;
+        // WebSockets living standard, constructor steps: after parsing
+        // (relative to the entry settings object's API base URL), an
+        // `http`/`https` scheme is rewritten to `ws`/`wss` before the
+        // scheme is validated -- this is what lets a relative `url` (e.g.
+        // `""`, `"test"`) resolve against the document's own http(s)
+        // location and still construct successfully.
+        match resolved.scheme() {
+            "http" => resolved.set_protocol("ws"),
+            "https" => resolved.set_protocol("wss"),
+            _ => {}
+        }
+        if !matches!(resolved.scheme(), "ws" | "wss") {
+            return Err(self.ws_syntax_error("WebSocket URL must use the ws: or wss: scheme"));
+        }
+        if resolved.fragment().is_some() {
+            return Err(self.ws_syntax_error("WebSocket URL must not include a fragment"));
+        }
+        let protocols_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        let protocols = self.websocket_read_protocols(&protocols_value)?;
+        // WebSockets living standard constructor steps: duplicate detection
+        // among the requested subprotocols is ASCII-case-insensitive (two
+        // values differing only by case are still "the same" protocol).
+        let mut seen = HashSet::new();
+        for protocol in &protocols {
+            if !is_ws_token(protocol) || !seen.insert(protocol.to_ascii_lowercase()) {
+                return Err(self.ws_syntax_error("Invalid or duplicate WebSocket subprotocol"));
+            }
+        }
+        let url_string = resolved.serialize();
+
+        let slot = {
+            let mut state = self.state.borrow_mut();
+            let slot = state.net.websockets.len();
+            state.net.websockets.push(WsObject::new(url_string.clone()));
+            slot
+        };
+        let prototype = self
+            .state
+            .borrow()
+            .net
+            .websocket_prototype
+            .clone()
+            .ok_or_else(|| Throw::type_error("WebSocket interface not installed"))?;
+        let arena = self.state.borrow().arena;
+        let wrapper = self.js.binding_wrap_host(
+            HostHandle { arena, slot: slot as u64, generation: 1, brand: WEBSOCKET_BRAND_BASE },
+            &prototype,
+        )?;
+        self.state.borrow_mut().net.websockets[slot].wrapper = wrapper.clone();
+
+        let base = self.fetch_base()?;
+        let origin = base.origin();
+        // WPT `websockets/mixed-content.https.any.js`: a secure top-level
+        // document must not be able to open an insecure `ws://` connection,
+        // the same "client restricts mixed content" gate `fetch()` and
+        // subresource requests already go through.
+        let mut context = ClientContext::default();
+        context.security.client_restricts_mixed_content = base.as_parsed().scheme() == "https";
+        let client = WebSocketClient { origin: origin.clone(), context };
+        let started = self
+            .state
+            .borrow_mut()
+            .net
+            .fetch_network
+            .open_websocket(&url_string, protocols, client);
+        match started {
+            Ok(id) => {
+                let mut state = self.state.borrow_mut();
+                state.net.websockets[slot].service_id = Some(id);
+                state.net.ws_by_service.insert(id, slot);
+            }
+            // "Establish a WebSocket connection" fails for CSP/mixed-content/
+            // transport reasons: per spec this is an async failure, observed
+            // as readyState CONNECTING followed by error+close, never a
+            // synchronous constructor exception.
+            Err(_) => self.state.borrow_mut().net.websockets[slot].deferred_failure = true,
+        }
+        self.schedule_fetch_pump()?;
+        Ok(wrapper)
+    }
+
+    fn websocket_send(&mut self, this: &JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let slot = self.websocket_slot(this)?;
+        let ready_state = self.state.borrow().net.websockets[slot].ready_state;
+        if ready_state == 0 {
+            return Err(self.ws_invalid_state_error("WebSocket is still CONNECTING"));
+        }
+        let data = args.first().cloned().unwrap_or(JsValue::Undefined);
+        // WebIDL `(USVString or Blob or ArrayBuffer or ArrayBufferView) data`:
+        // the interface-typed branches are checked structurally; anything
+        // else (including a plain string, `null`, `undefined`, a number, or
+        // an object with its own `toString`) falls through to the USVString
+        // conversion via `ToString`, per the union-type conversion algorithm
+        // -- `send(null)` is required to transmit the text "null", not throw.
+        let (message, len) = if let Some(bytes) = self.fetch_buffer_source_bytes(&data)? {
+            let len = bytes.len() as u64;
+            (WsEvent::Binary(bytes), len)
+        } else if let Ok(blob) = self.blob_record(&data) {
+            let len = blob.bytes.len() as u64;
+            (WsEvent::Binary(blob.bytes), len)
+        } else {
+            let text = self.dom_string(&data)?;
+            let len = text.len() as u64;
+            (WsEvent::Text(text), len)
+        };
+        // WHATWG "send a WebSocket message": bufferedAmount increases by the
+        // message length synchronously, before any of the data is actually
+        // written to the network. If the connection is CLOSING/CLOSED (or
+        // the queue attempt is rejected outright), nothing is ever
+        // transmitted and this increase is permanent; otherwise it comes
+        // back down as `WebSocketEvent::Sent` reports bytes actually
+        // flushed to the transport (see `websocket_event`).
+        self.state.borrow_mut().net.websockets[slot].buffered_amount += len;
+        if ready_state >= 2 {
+            return Ok(JsValue::Undefined);
+        }
+        let service_id = self.state.borrow().net.websockets[slot].service_id;
+        if let Some(id) = service_id {
+            let _ = self.state.borrow_mut().net.fetch_network.send_websocket(id, message);
+        }
+        Ok(JsValue::Undefined)
+    }
+
+    fn websocket_close(&mut self, this: &JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let slot = self.websocket_slot(this)?;
+        let code = match args.first() {
+            None | Some(JsValue::Undefined) => None,
+            Some(value) => {
+                let n = self.js.binding_to_number(value)?;
+                let code = clamp_u16(n);
+                if code != 1000 && !(3000..=4999).contains(&code) {
+                    return Err(self.ws_invalid_access_error(
+                        "WebSocket close code must be 1000 or in the range 3000-4999",
+                    ));
+                }
+                Some(code)
+            }
+        };
+        let reason = match args.get(1) {
+            None | Some(JsValue::Undefined) => String::new(),
+            Some(value) => self.dom_string(value)?,
+        };
+        if reason.len() > 123 {
+            return Err(self.ws_syntax_error("WebSocket close reason must be at most 123 UTF-8 bytes"));
+        }
+        let (ready_state, service_id) = {
+            let state = self.state.borrow();
+            let ws = &state.net.websockets[slot];
+            (ws.ready_state, ws.service_id)
+        };
+        match ready_state {
+            2 | 3 => {} // CLOSING or CLOSED: no-op.
+            0 => {
+                // CONNECTING: "fail the WebSocket connection" -- there is no
+                // handshake to close, so drop the pending connection and
+                // synthesize the failure on the next pump tick.
+                if let Some(id) = service_id {
+                    self.state.borrow_mut().net.fetch_network.forget_websocket(id);
+                    self.state.borrow_mut().net.ws_by_service.remove(&id);
+                }
+                let mut state = self.state.borrow_mut();
+                let ws = &mut state.net.websockets[slot];
+                ws.ready_state = 2;
+                ws.deferred_failure = true;
+                drop(state);
+                self.schedule_fetch_pump()?;
+            }
+            _ => {
+                self.state.borrow_mut().net.websockets[slot].ready_state = 2;
+                if let Some(id) = service_id {
+                    let close = code.map(|code| WsClose { code, reason });
+                    let _ = self.state.borrow_mut().net.fetch_network.close_websocket(id, close);
+                }
+            }
+        }
+        Ok(JsValue::Undefined)
+    }
+
+    fn websocket_binary_type_set(&mut self, slot: usize, value: &JsValue) -> Result<(), Throw> {
+        let text = self.dom_string(value)?;
+        match text.as_str() {
+            "arraybuffer" => self.state.borrow_mut().net.websockets[slot].binary_type_arraybuffer = true,
+            "blob" => self.state.borrow_mut().net.websockets[slot].binary_type_arraybuffer = false,
+            _ => {} // WHATWG binaryType setter: ignore any other value.
+        }
+        Ok(())
+    }
+
+    fn websocket_add_listener(&mut self, slot: usize, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let kind = self.dom_string(args.first().unwrap_or(&JsValue::Undefined))?;
+        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        if !self.js.binding_is_callable(&callback) {
+            return Ok(JsValue::Undefined);
+        }
+        let once = args.get(2).is_some_and(|options| {
+            if self.js.binding_to_boolean(options) {
+                return true;
+            }
+            self.js
+                .binding_get_property(options, "once")
+                .map(|value| self.js.binding_to_boolean(&value))
+                .unwrap_or(false)
+        });
+        let duplicate = self.state.borrow().net.websockets[slot]
+            .listeners
+            .iter()
+            .any(|l| l.kind == kind && binding_same_value(self.js, &l.callback, &callback));
+        if !duplicate {
+            self.state.borrow_mut().net.websockets[slot]
+                .listeners
+                .push(WsListener { kind, callback, once });
+        }
+        Ok(JsValue::Undefined)
+    }
+    fn websocket_remove_listener(&mut self, slot: usize, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let kind = self.dom_string(args.first().unwrap_or(&JsValue::Undefined))?;
+        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        self.state.borrow_mut().net.websockets[slot]
+            .listeners
+            .retain(|l| !(l.kind == kind && binding_same_value(self.js, &l.callback, &callback)));
+        Ok(JsValue::Undefined)
+    }
+    fn websocket_dispatch_event(&mut self, slot: usize, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let event = args.first().cloned().unwrap_or(JsValue::Undefined);
+        let kind = self
+            .js
+            .binding_get_property(&event, "type")
+            .and_then(|value| self.dom_string(&value))
+            .unwrap_or_default();
+        self.websocket_dispatch(slot, &kind, event)?;
+        Ok(JsValue::Bool(true))
+    }
+    fn websocket_handler_get(&self, slot: usize, key: &str) -> JsValue {
+        self.state
+            .borrow()
+            .net
+            .websockets
+            .get(slot)
+            .and_then(|ws| ws.handlers.get(key).cloned())
+            .unwrap_or(JsValue::Null)
+    }
+    fn websocket_handler_set(&mut self, slot: usize, key: &'static str, value: JsValue) {
+        // WebHTML "event handler IDL attributes" setter, `EventHandler`
+        // being [TreatNonCallableAsNull]: a value that is not callable
+        // (including null/undefined, but also e.g. a plain number or a
+        // non-callable object) converts to null, not a stored non-function
+        // value -- the getter must read back null, never the raw input.
+        let callable = self.js.binding_is_callable(&value);
+        let mut state = self.state.borrow_mut();
+        let handlers = &mut state.net.websockets[slot].handlers;
+        if callable {
+            handlers.insert(key, value);
+        } else {
+            handlers.remove(key);
+        }
+    }
+
+    /// Fire `kind` at `slot`'s on-handler and its listeners, in that order,
+    /// matching this file's XHR event dispatch (`fetch_xhr_event`) rather
+    /// than the shared `amazing_dom::events` registry: WebSocket is its own
+    /// local host-object family, like MessagePort/BroadcastChannel.
+    fn websocket_dispatch(&mut self, slot: usize, kind: &str, event: JsValue) -> Result<(), Throw> {
+        let wrapper = self.websocket_wrapper(slot);
+        let flags = BindingPropertyFlags::METHOD;
+        self.js.binding_define_data_property(&event, "target", wrapper.clone(), flags)?;
+        self.js.binding_define_data_property(&event, "currentTarget", wrapper.clone(), flags)?;
+        let handler = self.state.borrow().net.websockets[slot].handlers.get(kind).cloned();
+        if let Some(handler) = handler {
+            if self.js.binding_is_callable(&handler) {
+                binding_call(self.js, &handler, &wrapper, &[event.clone()])?;
+            }
+        }
+        let listeners = self.state.borrow().net.websockets[slot].listeners.clone();
+        let mut remaining = Vec::with_capacity(listeners.len());
+        for listener in listeners {
+            let matched = listener.kind == kind;
+            if matched {
+                binding_call(self.js, &listener.callback, &wrapper, &[event.clone()])?;
+            }
+            if !(matched && listener.once) {
+                remaining.push(listener);
+            }
+        }
+        self.state.borrow_mut().net.websockets[slot].listeners = remaining;
+        Ok(())
+    }
+    fn websocket_fire_simple(&mut self, slot: usize, kind: &str) -> Result<(), Throw> {
+        let event = invoke(self, Operation::EventConstructor, JsValue::Undefined, &[JsValue::str(kind)])?;
+        self.websocket_dispatch(slot, kind, event)
+    }
+    fn websocket_fire_message(&mut self, slot: usize, message: WsEvent) -> Result<(), Throw> {
+        let arraybuffer = self.state.borrow().net.websockets[slot].binary_type_arraybuffer;
+        let data = match message {
+            WsEvent::Text(text) => JsValue::str(text),
+            WsEvent::Binary(bytes) => {
+                if arraybuffer {
+                    self.fetch_array_buffer(bytes)?
+                } else {
+                    let blob = Blob::from_bytes(bytes, "");
+                    self.blob_new(blob)?
+                }
+            }
+            WsEvent::Close(_) => return Ok(()), // never surfaced through Message.
+        };
+        // The installed global `MessageEvent` constructor is messaging's own
+        // hand-rolled `MessagingOp::MessageEventConstructor` (see
+        // runtime_host_messaging.rs), which takes a single init-dictionary
+        // argument (no separate `type`) and hardcodes `type: "message"`.
+        let ctor = self.js.binding_get_property(&self.js.binding_global_object(), "MessageEvent")?;
+        let init = self.js.binding_create_object(None)?;
+        self.js.binding_define_data_property(&init, "data", data, BindingPropertyFlags::METHOD)?;
+        let event = self.js.binding_construct(&ctor, vec![init])?;
+        self.websocket_dispatch(slot, "message", event)
+    }
+    fn websocket_make_close_event(&mut self, code: u16, reason: &str, was_clean: bool) -> Result<JsValue, Throw> {
+        let prototype = self
+            .state
+            .borrow()
+            .net
+            .close_event_prototype
+            .clone()
+            .unwrap_or_else(|| self.js.binding_object_prototype());
+        let event = self.js.binding_create_object(Some(&prototype))?;
+        let flags = BindingPropertyFlags::METHOD;
+        self.js.binding_define_data_property(&event, "type", JsValue::str("close"), flags)?;
+        self.js.binding_define_data_property(&event, "code", JsValue::num(code as f64), flags)?;
+        self.js.binding_define_data_property(&event, "reason", JsValue::str(reason), flags)?;
+        self.js.binding_define_data_property(&event, "wasClean", JsValue::Bool(was_clean), flags)?;
+        self.js.binding_define_data_property(&event, "bubbles", JsValue::Bool(false), flags)?;
+        self.js.binding_define_data_property(&event, "cancelable", JsValue::Bool(false), flags)?;
+        self.js.binding_define_data_property(&event, "isTrusted", JsValue::Bool(true), flags)?;
+        Ok(event)
+    }
+    fn websocket_fire_close(&mut self, slot: usize, code: u16, reason: String, was_clean: bool) -> Result<(), Throw> {
+        let event = self.websocket_make_close_event(code, &reason, was_clean)?;
+        self.websocket_dispatch(slot, "close", event)
+    }
+    fn websocket_close_event_construct(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let prototype = self
+            .state
+            .borrow()
+            .net
+            .close_event_prototype
+            .clone()
+            .unwrap_or_else(|| self.js.binding_object_prototype());
+        let event = self.js.binding_create_object(Some(&prototype))?;
+        let ty = args.first().cloned().unwrap_or(JsValue::Undefined);
+        let ty = self.dom_string(&ty)?;
+        let init = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        let read = |host: &mut Self, name: &str| -> Result<JsValue, Throw> {
+            if host.js.binding_is_nullish(&init) {
+                return Ok(JsValue::Undefined);
+            }
+            host.js.binding_get_property(&init, name)
+        };
+        let code = read(self, "code")?;
+        let reason = read(self, "reason")?;
+        let was_clean = read(self, "wasClean")?;
+        let flags = BindingPropertyFlags::METHOD;
+        self.js.binding_define_data_property(&event, "type", JsValue::str(ty), flags)?;
+        self.js.binding_define_data_property(
+            &event, "code", if code.is_undefined() { JsValue::num(0.0) } else { code }, flags,
+        )?;
+        self.js.binding_define_data_property(
+            &event, "reason", if reason.is_undefined() { JsValue::str("") } else { reason }, flags,
+        )?;
+        let was_clean = if was_clean.is_undefined() { false } else { self.js.binding_to_boolean(&was_clean) };
+        self.js.binding_define_data_property(&event, "wasClean", JsValue::Bool(was_clean), flags)?;
+        self.js.binding_define_data_property(&event, "bubbles", JsValue::Bool(false), flags)?;
+        self.js.binding_define_data_property(&event, "cancelable", JsValue::Bool(false), flags)?;
+        self.js.binding_define_data_property(&event, "isTrusted", JsValue::Bool(false), flags)?;
+        Ok(event)
+    }
+
+    /// Route one `ServiceEvent::WebSocket` to its object. Exactly one of
+    /// `Close`/`Error` ever arrives per socket; both remove it from
+    /// `ws_by_service` so the pump loop stops driving it.
+    fn websocket_event(&mut self, id: ServiceId, event: WebSocketEvent) -> Result<(), Throw> {
+        let Some(slot) = self.state.borrow().net.ws_by_service.get(&id).copied() else {
+            return Ok(());
+        };
+        match event {
+            WebSocketEvent::Open { protocol, .. } => {
+                {
+                    let mut state = self.state.borrow_mut();
+                    let ws = &mut state.net.websockets[slot];
+                    ws.ready_state = 1;
+                    ws.protocol = protocol.unwrap_or_default();
+                }
+                self.websocket_fire_simple(slot, "open")
+            }
+            WebSocketEvent::Message { message, .. } => self.websocket_fire_message(slot, message),
+            WebSocketEvent::Close { close, .. } => {
+                let (code, reason) = match close {
+                    Some(close) => (close.code, close.reason),
+                    // WHATWG default when no status code was received.
+                    None => (1005, String::new()),
+                };
+                {
+                    let mut state = self.state.borrow_mut();
+                    state.net.websockets[slot].ready_state = 3;
+                    state.net.ws_by_service.remove(&id);
+                }
+                self.websocket_fire_close(slot, code, reason, true)
+            }
+            WebSocketEvent::Error { .. } => {
+                {
+                    let mut state = self.state.borrow_mut();
+                    state.net.websockets[slot].ready_state = 3;
+                    state.net.ws_by_service.remove(&id);
+                }
+                self.websocket_fire_simple(slot, "error")?;
+                self.websocket_fire_close(slot, 1006, String::new(), false)
+            }
+            WebSocketEvent::Sent { bytes, .. } => {
+                // WHATWG: `bufferedAmount` decreases as previously-queued
+                // `send()` payload bytes are actually transmitted; it never
+                // fires a script-observable event by itself.
+                let mut state = self.state.borrow_mut();
+                let buffered = &mut state.net.websockets[slot].buffered_amount;
+                *buffered = buffered.saturating_sub(bytes);
+                Ok(())
+            }
+        }
+    }
+
+    /// Fire the deferred error+close pair for sockets whose connection
+    /// attempt was rejected synchronously (CSP/mixed-content/transport) or
+    /// whose `close()` arrived while still CONNECTING. Called every pump
+    /// tick so the failure surfaces as a real task, not inline with the
+    /// constructor or `close()` call that requested it.
+    fn websocket_pump_deferred(&mut self) -> Result<(), Throw> {
+        let slots: Vec<usize> = {
+            let mut state = self.state.borrow_mut();
+            let mut found = Vec::new();
+            for (index, ws) in state.net.websockets.iter_mut().enumerate() {
+                if ws.deferred_failure && ws.ready_state != 3 {
+                    ws.deferred_failure = false;
+                    found.push(index);
+                }
+            }
+            found
+        };
+        for slot in slots {
+            self.state.borrow_mut().net.websockets[slot].ready_state = 3;
+            self.websocket_fire_simple(slot, "error")?;
+            self.websocket_fire_close(slot, 1006, String::new(), false)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn websocket_invoke(&mut self, op: WebSocketOp, this: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        match op {
+            WebSocketOp::Constructor => self.websocket_construct(args),
+            WebSocketOp::UrlGet => {
+                let slot = self.websocket_slot(&this)?;
+                Ok(JsValue::str(self.state.borrow().net.websockets[slot].url.clone()))
+            }
+            WebSocketOp::ProtocolGet => {
+                let slot = self.websocket_slot(&this)?;
+                Ok(JsValue::str(self.state.borrow().net.websockets[slot].protocol.clone()))
+            }
+            WebSocketOp::ExtensionsGet => {
+                self.websocket_slot(&this)?;
+                Ok(JsValue::str(""))
+            }
+            WebSocketOp::ReadyStateGet => {
+                let slot = self.websocket_slot(&this)?;
+                Ok(JsValue::num(self.state.borrow().net.websockets[slot].ready_state as f64))
+            }
+            WebSocketOp::BufferedAmountGet => {
+                let slot = self.websocket_slot(&this)?;
+                Ok(JsValue::num(self.state.borrow().net.websockets[slot].buffered_amount as f64))
+            }
+            WebSocketOp::BinaryTypeGet => {
+                let slot = self.websocket_slot(&this)?;
+                let arraybuffer = self.state.borrow().net.websockets[slot].binary_type_arraybuffer;
+                Ok(JsValue::str(if arraybuffer { "arraybuffer" } else { "blob" }))
+            }
+            WebSocketOp::BinaryTypeSet => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_binary_type_set(slot, args.first().unwrap_or(&JsValue::Undefined))?;
+                Ok(JsValue::Undefined)
+            }
+            WebSocketOp::Send => self.websocket_send(&this, args),
+            WebSocketOp::Close => self.websocket_close(&this, args),
+            WebSocketOp::AddEventListener => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_add_listener(slot, args)
+            }
+            WebSocketOp::RemoveEventListener => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_remove_listener(slot, args)
+            }
+            WebSocketOp::DispatchEvent => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_dispatch_event(slot, args)
+            }
+            WebSocketOp::OnOpenGet => { let slot = self.websocket_slot(&this)?; Ok(self.websocket_handler_get(slot, "open")) }
+            WebSocketOp::OnOpenSet => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_handler_set(slot, "open", args.first().cloned().unwrap_or(JsValue::Undefined));
+                Ok(JsValue::Undefined)
+            }
+            WebSocketOp::OnMessageGet => { let slot = self.websocket_slot(&this)?; Ok(self.websocket_handler_get(slot, "message")) }
+            WebSocketOp::OnMessageSet => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_handler_set(slot, "message", args.first().cloned().unwrap_or(JsValue::Undefined));
+                Ok(JsValue::Undefined)
+            }
+            WebSocketOp::OnErrorGet => { let slot = self.websocket_slot(&this)?; Ok(self.websocket_handler_get(slot, "error")) }
+            WebSocketOp::OnErrorSet => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_handler_set(slot, "error", args.first().cloned().unwrap_or(JsValue::Undefined));
+                Ok(JsValue::Undefined)
+            }
+            WebSocketOp::OnCloseGet => { let slot = self.websocket_slot(&this)?; Ok(self.websocket_handler_get(slot, "close")) }
+            WebSocketOp::OnCloseSet => {
+                let slot = self.websocket_slot(&this)?;
+                self.websocket_handler_set(slot, "close", args.first().cloned().unwrap_or(JsValue::Undefined));
+                Ok(JsValue::Undefined)
+            }
+            WebSocketOp::CloseEventConstructor => self.websocket_close_event_construct(args),
+        }
+    }
+
+    fn install_websocket(&mut self) -> Result<(), Throw> {
+        let global = self.js.binding_global_object();
+        let object_proto = self.js.binding_object_prototype();
+
+        // CloseEvent: no shared binding exists yet (see .agents/dom-bindings/
+        // questions.md), so install a minimal constructible one, in the same
+        // driver-local style as messaging's MessageEvent.
+        let close_prototype = self.js.binding_create_object(Some(&object_proto))?;
+        let close_ctor = self.native(
+            "CloseEvent", 1,
+            NativeEntry::Net(NetNativeEntry::WebSocket(WebSocketOp::CloseEventConstructor)),
+            HostCallPolicy::ConstructOnly,
+        );
+        self.define_data_property(&close_ctor, "prototype", close_prototype.clone(), false, false, false)?;
+        self.define_data_property(&close_prototype, "constructor", close_ctor.clone(), true, false, true)?;
+        self.define_data_property(&global, "CloseEvent", close_ctor, true, false, true)?;
+        self.state.borrow_mut().net.close_event_prototype = Some(close_prototype);
+
+        let prototype = self.js.binding_create_object(Some(&object_proto))?;
+        let constructor = self.native(
+            "WebSocket", 1,
+            NativeEntry::Net(NetNativeEntry::WebSocket(WebSocketOp::Constructor)),
+            HostCallPolicy::ConstructOnly,
+        );
+        self.define_data_property(&constructor, "prototype", prototype.clone(), false, false, false)?;
+        self.define_data_property(&prototype, "constructor", constructor.clone(), true, false, true)?;
+
+        for (name, value) in [("CONNECTING", 0.0), ("OPEN", 1.0), ("CLOSING", 2.0), ("CLOSED", 3.0)] {
+            self.define_data_property(&constructor, name, JsValue::num(value), false, false, false)?;
+            self.define_data_property(&prototype, name, JsValue::num(value), false, false, false)?;
+        }
+
+        for (name, op) in [
+            ("url", WebSocketOp::UrlGet),
+            ("readyState", WebSocketOp::ReadyStateGet),
+            ("bufferedAmount", WebSocketOp::BufferedAmountGet),
+            ("extensions", WebSocketOp::ExtensionsGet),
+            ("protocol", WebSocketOp::ProtocolGet),
+        ] {
+            let getter = self.native(name, 0, NativeEntry::Net(NetNativeEntry::WebSocket(op)), HostCallPolicy::CallOnly);
+            self.define_accessor_property(&prototype, name, Some(getter), None, true, true)?;
+        }
+        {
+            let getter = self.native("binaryType", 0,
+                NativeEntry::Net(NetNativeEntry::WebSocket(WebSocketOp::BinaryTypeGet)), HostCallPolicy::CallOnly);
+            let setter = self.native("binaryType", 1,
+                NativeEntry::Net(NetNativeEntry::WebSocket(WebSocketOp::BinaryTypeSet)), HostCallPolicy::CallOnly);
+            self.define_accessor_property(&prototype, "binaryType", Some(getter), Some(setter), true, true)?;
+        }
+
+        for (name, length, op) in [
+            ("send", 1u8, WebSocketOp::Send),
+            ("close", 0, WebSocketOp::Close),
+            ("addEventListener", 2, WebSocketOp::AddEventListener),
+            ("removeEventListener", 2, WebSocketOp::RemoveEventListener),
+            ("dispatchEvent", 1, WebSocketOp::DispatchEvent),
+        ] {
+            let function = self.native(name, length, NativeEntry::Net(NetNativeEntry::WebSocket(op)), HostCallPolicy::CallOnly);
+            self.define_data_property(&prototype, name, function, true, false, true)?;
+        }
+
+        for (name, get_op, set_op) in [
+            ("onopen", WebSocketOp::OnOpenGet, WebSocketOp::OnOpenSet),
+            ("onmessage", WebSocketOp::OnMessageGet, WebSocketOp::OnMessageSet),
+            ("onerror", WebSocketOp::OnErrorGet, WebSocketOp::OnErrorSet),
+            ("onclose", WebSocketOp::OnCloseGet, WebSocketOp::OnCloseSet),
+        ] {
+            let getter = self.native(name, 0, NativeEntry::Net(NetNativeEntry::WebSocket(get_op)), HostCallPolicy::CallOnly);
+            let setter = self.native(name, 1, NativeEntry::Net(NetNativeEntry::WebSocket(set_op)), HostCallPolicy::CallOnly);
+            self.define_accessor_property(&prototype, name, Some(getter), Some(setter), true, true)?;
+        }
+
+        self.define_data_property(&global, "WebSocket", constructor, true, false, true)?;
+        self.state.borrow_mut().net.websocket_prototype = Some(prototype);
         Ok(())
     }
 }
@@ -737,10 +1552,380 @@ impl FetchHost for RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::time::Duration;
 
     use amazing_js::value::JsValue;
 
     use crate::{dom_host::BrowserDomHost, js_scheduler::DriverScheduler};
+
+    // Minimal SHA-1, used only to compute the WebSocket handshake's
+    // Sec-WebSocket-Accept header for the local echo server below.
+    // `amazing_net::websocket::handshake::{base64, accept}` are `pub(crate)`
+    // to amazing-net and intentionally not widened for this driver-level test.
+    fn sha1(data: &[u8]) -> [u8; 20] {
+        let mut h: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+        let ml = (data.len() as u64) * 8;
+        let mut msg = data.to_vec();
+        msg.push(0x80);
+        while msg.len() % 64 != 56 {
+            msg.push(0);
+        }
+        msg.extend_from_slice(&ml.to_be_bytes());
+        for chunk in msg.chunks(64) {
+            let mut w = [0u32; 80];
+            for (i, word) in w.iter_mut().take(16).enumerate() {
+                *word = u32::from_be_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]]);
+            }
+            for i in 16..80 {
+                w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+            }
+            let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
+            for (i, word) in w.iter().enumerate() {
+                let (f, k) = if i < 20 {
+                    ((b & c) | ((!b) & d), 0x5A82_7999u32)
+                } else if i < 40 {
+                    (b ^ c ^ d, 0x6ED9_EBA1u32)
+                } else if i < 60 {
+                    ((b & c) | (b & d) | (c & d), 0x8F1B_BCDCu32)
+                } else {
+                    (b ^ c ^ d, 0xCA62_C1D6u32)
+                };
+                let temp = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(*word);
+                e = d;
+                d = c;
+                c = b.rotate_left(30);
+                b = a;
+                a = temp;
+            }
+            h[0] = h[0].wrapping_add(a);
+            h[1] = h[1].wrapping_add(b);
+            h[2] = h[2].wrapping_add(c);
+            h[3] = h[3].wrapping_add(d);
+            h[4] = h[4].wrapping_add(e);
+        }
+        let mut out = [0u8; 20];
+        for (i, word) in h.iter().enumerate() {
+            out[i * 4..i * 4 + 4].copy_from_slice(&word.to_be_bytes());
+        }
+        out
+    }
+    fn base64_encode(data: &[u8]) -> String {
+        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = *chunk.get(1).unwrap_or(&0);
+            let b2 = *chunk.get(2).unwrap_or(&0);
+            let n = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+            out.push(CHARS[((n >> 18) & 0x3F) as usize] as char);
+            out.push(CHARS[((n >> 12) & 0x3F) as usize] as char);
+            out.push(if chunk.len() > 1 { CHARS[((n >> 6) & 0x3F) as usize] as char } else { '=' });
+            out.push(if chunk.len() > 2 { CHARS[(n & 0x3F) as usize] as char } else { '=' });
+        }
+        out
+    }
+    fn read_ws_frame(stream: &mut TcpStream) -> Option<(u8, Vec<u8>)> {
+        let mut head = [0u8; 2];
+        stream.read_exact(&mut head).ok()?;
+        let opcode = head[0] & 0x0F;
+        let masked = head[1] & 0x80 != 0;
+        let mut len = (head[1] & 0x7F) as u64;
+        if len == 126 {
+            let mut ext = [0u8; 2];
+            stream.read_exact(&mut ext).ok()?;
+            len = u16::from_be_bytes(ext) as u64;
+        } else if len == 127 {
+            let mut ext = [0u8; 8];
+            stream.read_exact(&mut ext).ok()?;
+            len = u64::from_be_bytes(ext);
+        }
+        let mut mask = [0u8; 4];
+        if masked {
+            stream.read_exact(&mut mask).ok()?;
+        }
+        let mut payload = vec![0u8; len as usize];
+        stream.read_exact(&mut payload).ok()?;
+        if masked {
+            for (i, byte) in payload.iter_mut().enumerate() {
+                *byte ^= mask[i % 4];
+            }
+        }
+        Some((opcode, payload))
+    }
+    fn write_ws_frame(stream: &mut TcpStream, opcode: u8, payload: &[u8]) {
+        let mut frame = vec![0x80 | opcode];
+        let len = payload.len();
+        if len < 126 {
+            frame.push(len as u8);
+        } else if len < 65536 {
+            frame.push(126);
+            frame.extend_from_slice(&(len as u16).to_be_bytes());
+        } else {
+            frame.push(127);
+            frame.extend_from_slice(&(len as u64).to_be_bytes());
+        }
+        frame.extend_from_slice(payload);
+        let _ = stream.write_all(&frame);
+        let _ = stream.flush();
+    }
+    /// A one-shot RFC6455 echo server: accepts a single connection, completes
+    /// the handshake, then echoes back every text/binary frame and answers a
+    /// close frame with its own close frame before dropping the socket.
+    fn spawn_ws_echo_server() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else { return; };
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            loop {
+                let n = stream.read(&mut tmp).unwrap_or(0);
+                if n == 0 {
+                    return;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let text = String::from_utf8_lossy(&buf);
+            let key = text
+                .lines()
+                .find_map(|line| line.strip_prefix("Sec-WebSocket-Key:"))
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string();
+            let accept_input = format!("{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            let accept = base64_encode(&sha1(accept_input.as_bytes()));
+            let response = format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            );
+            if stream.write_all(response.as_bytes()).is_err() {
+                return;
+            }
+            let _ = stream.flush();
+            loop {
+                let Some((opcode, payload)) = read_ws_frame(&mut stream) else { return; };
+                match opcode {
+                    0x8 => {
+                        write_ws_frame(&mut stream, 0x8, &payload);
+                        return;
+                    }
+                    0x1 | 0x2 => write_ws_frame(&mut stream, opcode, &payload),
+                    _ => {}
+                }
+            }
+        });
+        port
+    }
+
+    /// A loopback server requiring `Authorization: Basic Zm9vOmJhcg==`
+    /// (`foo:bar`) before completing the opening handshake, matching WPT's
+    /// `websockets/basic_auth` shim handler -- for NET-39's URL-userinfo
+    /// (`ws://foo:bar@host/...`) -> `Authorization` header fix.
+    fn spawn_ws_basic_auth_server() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else { return; };
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            loop {
+                let n = stream.read(&mut tmp).unwrap_or(0);
+                if n == 0 {
+                    return;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let text = String::from_utf8_lossy(&buf);
+            let authorized = text
+                .lines()
+                .any(|line| line.trim() == "Authorization: Basic Zm9vOmJhcg==");
+            if !authorized {
+                let _ = stream.write_all(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nWWW-Authenticate: Basic realm=\"x\"\r\n\r\n",
+                );
+                return;
+            }
+            let key = text
+                .lines()
+                .find_map(|line| line.strip_prefix("Sec-WebSocket-Key:"))
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string();
+            let accept_input = format!("{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            let accept = base64_encode(&sha1(accept_input.as_bytes()));
+            let response = format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        port
+    }
+
+    /// Full round trip against a real local server: constructor connects,
+    /// `onopen` sends a text message, the echo server bounces it back through
+    /// `onmessage`, and a client-initiated `close(1000, ...)` completes with a
+    /// clean `onclose` (code 1000, `wasClean === true`).
+    #[test]
+    fn websocket_echo_open_message_close() {
+        let port = spawn_ws_echo_server();
+
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+
+        scheduler
+            .run_script(&format!(
+                "var opened=false, received=null, closed=false, closeCode=null, closeClean=null; \
+                 var ws = new WebSocket('ws://127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ opened = true; ws.send('hello'); }}; \
+                 ws.onmessage = function(e) {{ received = e.data; ws.close(1000, 'bye'); }}; \
+                 ws.onclose = function(e) {{ closed = true; closeCode = e.code; closeClean = e.wasClean; }};"
+            ))
+            .unwrap();
+
+        let mut closed = false;
+        for _ in 0..400 {
+            if scheduler.run_script("closed").unwrap() == JsValue::Bool(true) {
+                closed = true;
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(closed, "WebSocket echo round-trip did not complete: no close event fired");
+        assert_eq!(scheduler.run_script("opened").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("received === 'hello'").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("closeCode === 1000").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("closeClean === true").unwrap(), JsValue::Bool(true));
+    }
+
+    /// A large (65000-byte) single-frame text message round-trips the same
+    /// way `hello` does: `bufferedAmount` reflects the queued length right
+    /// after `send()` (WHATWG "send a WebSocket message"), the echo server's
+    /// reply still arrives, and `bufferedAmount` decreases via
+    /// `WebSocketEvent::Sent` once the frame is actually flushed.
+    #[test]
+    fn websocket_large_message_round_trip_tracks_buffered_amount() {
+        let port = spawn_ws_echo_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, received=null, closed=false, bufAfterSend=null; \
+                 var ws = new WebSocket('ws://127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ \
+                     opened = true; \
+                     var data = ''; for (var i = 0; i < 65000; i++) {{ data += 'c'; }} \
+                     ws.send(data); \
+                     bufAfterSend = ws.bufferedAmount; \
+                 }}; \
+                 ws.onmessage = function(e) {{ received = e.data.length; ws.close(1000, 'bye'); }}; \
+                 ws.onclose = function(e) {{ closed = true; }};"
+            ))
+            .unwrap();
+        let mut closed = false;
+        for _ in 0..2000 {
+            if scheduler.run_script("closed").unwrap() == JsValue::Bool(true) {
+                closed = true;
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(closed, "large message round-trip did not complete");
+        assert_eq!(scheduler.run_script("opened").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("bufAfterSend === 65000").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("received === 65000").unwrap(), JsValue::Bool(true));
+    }
+
+    /// NET-39 (WPT `websockets/basic-auth.any.js`): a `ws://user:pass@host/`
+    /// URL authenticates via an `Authorization: Basic` header derived from
+    /// the userinfo, the same as `fetch()`/XHR, rather than being rejected.
+    #[test]
+    fn websocket_url_userinfo_sends_basic_auth_header() {
+        let port = spawn_ws_basic_auth_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, errored=false; \
+                 var ws = new WebSocket('ws://foo:bar@127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ opened = true; ws.close(); }}; \
+                 ws.onerror = function() {{ errored = true; }};"
+            ))
+            .unwrap();
+        let mut opened = false;
+        for _ in 0..400 {
+            if scheduler.run_script("opened || errored").unwrap() == JsValue::Bool(true) {
+                opened = scheduler.run_script("opened").unwrap() == JsValue::Bool(true);
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(opened, "WebSocket with URL userinfo should authenticate and open");
+    }
+
+    /// Constructor-time URL validation: relative-to-base resolution, scheme
+    /// restricted to ws/wss, and no fragment -- all synchronous SyntaxError
+    /// per the WHATWG WebSocket constructor steps, so no server is needed.
+    #[test]
+    fn websocket_constructor_rejects_bad_urls() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+
+        let cases = [
+            "ftp://example.test/",        // scheme not http(s)/ws(s), and not rewritten
+            "ws://example.test/#frag",    // fragment not allowed
+            "ws://",                      // special scheme requires a non-empty host
+        ];
+        for case in cases {
+            let script = format!(
+                "(function() {{ try {{ new WebSocket('{case}'); return false; }} \
+                 catch (e) {{ return e.name === 'SyntaxError'; }} }})()"
+            );
+            let result = scheduler.run_script(&script).unwrap();
+            assert_eq!(result, JsValue::Bool(true), "expected SyntaxError for {case:?}");
+        }
+
+        // A valid construction starts CONNECTING and exposes the resolved URL.
+        let ok = scheduler
+            .run_script("var w = new WebSocket('ws://example.test/socket'); w.readyState === 0 && w.url === 'ws://example.test/socket'")
+            .unwrap();
+        assert_eq!(ok, JsValue::Bool(true));
+
+        // WebSockets living standard constructor steps 4-5: an `http`/`https`
+        // scheme (typically from a relative URL resolved against the
+        // document's own location) is rewritten to `ws`/`wss` before the
+        // scheme is validated, so an absolute `http://` URL constructs
+        // successfully rather than throwing.
+        let rewritten = scheduler
+            .run_script("var w2 = new WebSocket('http://example.test/socket'); w2.url === 'ws://example.test/socket'")
+            .unwrap();
+        assert_eq!(rewritten, JsValue::Bool(true), "http scheme should rewrite to ws");
+    }
 
     #[test]
     fn fetch_wrappers_do_not_alias_storage_wrappers() {

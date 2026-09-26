@@ -660,3 +660,214 @@ missing Proxy support, and property-based primitive slot storage remain separate
 Next: synchronous Array.from/of construction, mapping and iterator-close order;
 then Array.fromAsync suspension and proper private primitive slots with owner
 coordination for stdlib/binary/structured-clone callers.
+
+## JSRT-13 synchronous Array factories (completed, 2026-09-26)
+
+Array.from/of construct through the generic constructor path: they invoke the
+receiver (or bound newTarget) with the specified argument list rather than
+always allocating an ordinary Array. Array.from caches the iterator's `next`
+method once and steps it lazily, so a mapper function observes live mutation
+of the source between steps. Mapper and own-data-property-definition errors
+close the iterator while preserving the original error as the thrown value;
+failures from the iterator's own `next`/`done`/`value` steps propagate without
+an extra `IteratorClose`. Both factories create own data properties (never
+invoking an inherited setter) and finish with the spec-required throwing
+`Set` of `length`. Array-like (non-iterable) input still boxes a primitive
+receiver and reads live indices at each step.
+
+On fixed base 6683ceaa, Linux workspace: 2,825 tests passed (10 skipped) in
+65.852 seconds, plus four doctests. The raw single `--jobs 4` full pinned
+Test262 sweep at the 60s deadline moved 33,092 → 33,112 passing files
+(64,030 → 64,070 variants), but recorded 4 lost variants across two
+`staging/sm` files unrelated to Array.from/of:
+`staging/sm/TypedArray/sort_modifications.js` (timeout, both variants) and
+`staging/sm/regress/regress-610026.js` (host.abnormal-exit, exit -9, both
+variants).
+
+Diagnosis (both retained, not silently reclassified): direct single-process
+probes of both frozen before/after hosts show `regress-610026.js` completes
+in ~4.5s using ~3.9GB RSS on both binaries in isolation — no timeout, no
+abnormal exit — so the exit -9 under the full sweep is this sandbox's OOM
+killer reacting to several `--jobs 4-8` concurrent Test262 workers competing
+for the 8GB box, not a fault introduced by this change. `sort_modifications.js`
+completes in ~49-54s wall time on both hosts in isolation (11 TypedArray
+constructors x 5 size classes x 3 sorts each), leaving only 6-11s of margin
+under the pinned 60s deadline in both old and new code; it is a pre-existing
+marginal/flaky timing case on this hardware (the same file caused JSRT-9's
+one documented timing loss). A complete recheck of both directories
+(`staging/sm/TypedArray/`, 96 files, and `staging/sm/regress/`, 106 files)
+with both frozen hosts at the identical 60s deadline but `--jobs 1`
+(serialized, no concurrent workers) lost zero variants. Substituting those
+202 directory records into the raw sweep (the JSRT-9 combined-measurement
+method) gives 33,092 → 33,114 passing files (64,030 → 64,074 variants),
+zero lost passes; this is a combined measurement, not a claim that the
+original single `--jobs 4` sweep itself had zero lost variants.
+`built-ins/Array` gained 19 files (2,931 → 2,950), `staging/sm/Array` gained
+3. Evidence, including the raw 4-loss comparison and the directory-recheck
+numbers, is retained in full at
+`docs/lanes/js-runtime_array_factories_evidence.json`.
+
+Not implemented: Proxy support and Array.fromAsync suspension for pending
+input remain separate areas (Array.fromAsync's synchronous-iterable path was
+already covered by JSRT-8).
+
+## JSRT-14 private and public class elements (completed, 2026-09-26)
+
+Implements §15.7's per-class private environment and instance/static element
+templates: `PrivateName` identity (`value.rs`, `Rc<str>` + `Rc::ptr_eq`, so
+textually identical `#x` in different classes never collide),
+`EnvHandle::class_private`/`resolve_private` (§9.2's NewPrivateEnvironment,
+chained through parents so a nested class's own `#x` shadows an enclosing
+one), and `crates/amazing-js/src/interp_class_private.rs`
+(`define_field`/`initialize_instance_elements`/`run_static_elements`/
+`private_field_get`/`set`/`has`). `eval_class_inner` now builds one
+`ClassElements` template per class (instance fields, private instance
+methods/accessors merged by `PrivateName` identity regardless of getter/setter
+declaration order) and one static-element list (fields, private static
+methods/accessors, static blocks, run once with `this` = the constructor).
+Instance elements replay at all three construction sites: base-class
+allocation, the implicit default derived constructor's `super(...args)`, and
+an explicit `super()` call (`CallFrame` gained `own_function` to find the
+running class's own template from the `super()` call site). Member access
+(`obj.#x` read/write/call, `#x in obj` brand check, `delete obj.#x` early
+SyntaxError) routes through a new `Reference::Private` variant instead of
+`PropertyKey`, since a private name is never a property key. Bonus fix in the
+same area: `new.target` now resolves from `CallFrame.new_target` instead of
+throwing "not implemented" (~85 Test262 occurrences).
+
+While scoping this ticket's failure cluster (5,727 Test262 failures tagged
+"private names are not yet supported"), found and fixed two more bugs
+in-lane, both pre-existing and unrelated to private fields:
+- `eval_class_inner` installed every method — including `static` ones — onto
+  the prototype; only instance methods belong there (static methods belong on
+  the constructor object itself). Public/private instance and static fields
+  were also previously unhandled (`ClassMember::Field` was a no-op, so public
+  fields silently did nothing).
+- `bind_pattern_mode`'s `Binding::Array` arm (`interp_helpers.rs`) swallowed
+  every error from array-pattern destructuring via `.unwrap_or_default()`,
+  masking any `TypeError`/`RangeError` a bad iterable should raise, and
+  collected via `Interpreter::iterate`'s eager collect-everything, which is
+  wrong for a pattern without a trailing rest element (§8.6.3 pulls only as
+  many values as the pattern declares, then performs IteratorClose — an
+  iterator that legitimately never signals `done` must not be drained first).
+  Replaced with `PatternIter`, a lazily-stepped iterator (index fast path for
+  an array whose `[Symbol.iterator]` is still the untouched intrinsic via new
+  `Interpreter::has_original_array_iterator`, also applied to `iterate`'s and
+  `custom_iterator`'s own array fast paths so a deleted/overridden
+  `Array.prototype[Symbol.iterator]` is honored). While fixing this, also
+  found that both `iterate`'s generic protocol loop and `exec_for_of`'s custom
+  iterator loop read a `next()` result's `done`/`value` with `get_own`
+  (raw own-property probe) instead of the full `[[Get]]` — a `value` defined
+  as a throwing getter was silently read as absent instead of propagating,
+  which for an iterator that never sets `done` looped until the 100,000-step
+  guard instead of throwing immediately; fixed to go through `get_prop`
+  (§7.4.6/§7.4.7 IteratorComplete/IteratorValue).
+
+On fixed base 69ea3ea7, Linux workspace: 2,825 tests passed (10 skipped) in
+51.961 seconds, plus doctests all `ok` (including `amazing_js`, `amazing_html`).
+`amazing-js` crate: 363 passed (1 skipped). Full pinned Test262 sweep:
+33,103 → 35,606 passing files (+2,503), 64,052 → 69,011 passing variants
+(+4,959). Repeated with `--compare` against the same after-run: identical
+classification hash, zero flakiness.
+
+126 variants (63 distinct files) lost relative to the raw before/after diff —
+fully diagnosed, not a regression from this ticket's own code. Every one
+requires a real generator or async-generator object (`features` tagged
+`generators` or `async-iteration`: `function*(){...}()` as a custom iterable,
+or an async generator method), which this interpreter does not implement at
+all (`ExprKind::Yield` already throws "generators are not implemented", a
+known, tracked gap — see ARCHITECTURE.md's locked single-threaded/tree-walking
+decisions). These files previously passed only because two of this ticket's
+own bug fixes had been masking that gap: the static-method-placement bug made
+`C.method(...)` throw "not a function" (accidentally matching a test's
+expected `TypeError` for the wrong reason), and the destructuring
+error-swallow bug silently no-op'd a failed generator-backed destructure
+(accidentally matching a test that expected quiet completion). Fixing both
+bugs correctly is what exposed the real, pre-existing "no generators" gap as
+the genuine failure it always was. Evidence, including the full lost-variant
+list with each one's `features` tag and observed error, is retained at
+`docs/lanes/js-runtime_class_private_elements_evidence.json`.
+
+Not implemented (at the time): real generators/async-generators (separate,
+large, pre-existing gap — see ADR-locked single-threaded tree-walking
+decisions; a cross-lane request is filed against js-vm, which already has
+resumable VM generator frames from JSVM-5), Proxy support, and the `accessor`
+keyword proposal for class fields (parsed but not given distinct semantics
+from an ordinary field).
+
+## JSRT-15 Proxy support (2026-09-26)
+
+Implemented `Proxy` (revocable and non-revocable) end to end: a new
+`Exotic::Proxy(Rc<ProxyState>)` variant, all 13 fundamental traps (`get`,
+`set`, `has`, `deleteProperty`, `ownKeys`, `getOwnPropertyDescriptor`,
+`defineProperty`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`,
+`preventExtensions`, `apply`, `construct`), and the `Proxy`/`Proxy.revocable`
+globals, in a new `crates/amazing-js/src/interp_proxy.rs`. Follows the
+`interp_window_proxy.rs` hook pattern exactly: every fundamental object
+operation gets a `proxy_*` check (`Option<Result<T, Throw>>`, `None` = not a
+proxy, proceed ordinarily) alongside its existing `window_proxy_*` check, at
+every site that already had one, plus the two new [[Call]]/[[Construct]]
+interception points in `call_value_with_new_target_inner` and
+`construct_with_new_target` (added before either function touches
+`.func`/`.constructible`, since a Proxy's own storage never carries real
+callable state — a dummy `FunctionBody::Native` is set only so
+`typeof`/IsCallable/IsConstructor checks that read `.func.is_some()` /
+`.constructible` directly still see a callable-target proxy correctly;
+invocation itself is always intercepted before that body could run).
+`Reflect.*`'s duplicated ad hoc WindowProxy-only logic
+(`isExtensible`/`preventExtensions`/`getPrototypeOf`/`setPrototypeOf`/`has`/
+`deleteProperty`) was collapsed to call the new shared `default_get_prototype`
+/ `default_set_prototype` / `default_is_extensible` / `default_prevent_extensions`
+/ `default_has_property` / `default_delete_property` helpers, which are
+themselves proxy-aware and used identically by `Object.*`; this also gave
+`Object.freeze`/`seal`/`isFrozen`/`isSealed` real (if not fully spec-exhaustive)
+Proxy support essentially for free, by routing their per-key mutation through
+`define_own_property` instead of raw storage writes.
+
+Two more pre-existing bugs were found and fixed while gating (both raw
+`.proto`/`.has_property()` walks that predate this ticket and bypass every
+exotic-object hook, not just Proxy's):
+- `ordinary_has_instance` read `b.borrow().get_own("prototype")` (raw own-storage)
+  instead of `Get(b, "prototype")`, so `x instanceof someProxy` on a
+  Proxy-wrapped constructor could never observe a `get` trap on `"prototype"`.
+  Fixed to call `self.get_prop(b, "prototype")`.
+- Unqualified global identifier resolution (`identifier_value` and
+  `resolve_reference`'s `ExprKind::Ident` arm) checked
+  `self.global_obj.borrow().has_property(name)` — `JsObject::has_property`'s
+  own prototype-chain walk, which has no exotic-object awareness at all.
+  Fixed both call sites to `self.default_has_property(...)`. That in turn
+  exposed a second layer of the same bug one level down: `legacy_has_property`
+  (`interp_legacy.rs`)'s own chain-walking loop checked `window_proxy_has` at
+  each step but never `proxy_has`, so a Proxy discovered while walking a
+  prototype chain (e.g. `Object.setPrototypeOf(globalThis, someProxy)`) was
+  silently skipped. Fixed by adding the missing `proxy_has` check beside the
+  existing `window_proxy_has` one in that loop.
+
+Known, accepted gaps (documented rather than chased, per the same "diagnose
+transparently, don't chase every corner" standard as JSRT-14's generator
+gap): invariant enforcement covers the highest-value checks per trap
+(revocation, non-callable traps, non-configurable/non-extensible-target
+agreement) but not the complete ECMA-262 invariant list — e.g. the `ownKeys`
+"extensible target must report every non-configurable target key" superset
+rule is unenforced. A Proxy inserted mid-prototype-chain is honored at the
+well-known entry points fixed above (`instanceof`, unqualified identifiers,
+`Object`/`Reflect` getPrototypeOf/setPrototypeOf, direct property access) but
+a handful of other raw `.proto` walks elsewhere (e.g. `set_with_receiver`'s
+receiver-shadowing walk was upgraded; `ordinary_has_instance`'s own chain
+walk past the first hop was not) still do not call through it.
+
+Gated on Linux (fixed base `76af29d4`): `amazing-js` crate 384 passed (1
+skipped) + 1 doctest; workspace `cargo nextest run --workspace --locked` 3122
+passed (14 skipped) in 53.929s; `cargo test --workspace --locked --doc` all
+`ok`. Full pinned Test262 sweep: 36,335 → 36,821 passing files (+486),
+70,468 → 71,427 passing variants (+959), **zero lost files, zero lost
+variants** (verified against the pre-Proxy baseline at the same base commit,
+then re-verified after both `legacy_has_property` fixes eliminated the one
+transient regression found mid-gate — see
+`docs/lanes/js-runtime_proxy_evidence.json`).
+
+Not implemented: real generators/async-generators (cross-lane request filed
+to js-vm), the `ownKeys`/invariant gaps above, and full defineProperty-trap
+routing for `Object.freeze`/`seal` (extensibility and per-key attribute
+changes are trap-routed; the TypedArray/array-length special cases are not
+re-verified against a Proxy target).

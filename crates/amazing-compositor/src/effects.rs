@@ -93,6 +93,9 @@ pub struct EffectMask {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EffectOperations {
     pub filters: Vec<FilterOperation>,
+    /// Imported painter programs retain its pixel-kernel choices. The resolved
+    /// operation lists must match; changing them requires resolving a new plan.
+    pub painter_filters: Option<(amazing_paint::filter::FilterPlan, amazing_paint::filter::FilterPlan)>,
     pub backdrop_filters: Vec<FilterOperation>,
     /// Border-box clipping of the filtered backdrop, before foreground draw.
     pub backdrop_bounds: Option<Rect>,
@@ -100,6 +103,14 @@ pub struct EffectOperations {
     pub isolate: bool,
     pub clip_path: Option<EffectClip>,
     pub mask: Option<EffectMask>,
+    /// The group's own resolved CSS `transform` (origin already applied),
+    /// mapping its local pre-transform pixels to the pixels it composites
+    /// into once its parent has no transform of its own (COMP-16). `None`
+    /// keeps the pre-COMP-16 identity-space behavior; a group whose own
+    /// transform sits under an ancestor transform, or that nests with
+    /// another filter/backdrop/clip group, is refused at import instead of
+    /// being resolved here (see `PainterFilterSource::from_view`).
+    pub local_transform: Option<Matrix4>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectError {
@@ -135,6 +146,12 @@ impl FilterOperation {
 }
 impl EffectOperations {
     pub fn validate(&self) -> Result<(), EffectError> {
+        if self.painter_filters.is_some_and(|(filter, backdrop)|
+            filter.ops().map(super::paint_filters::import_filter).collect::<Vec<_>>() != self.filters
+            || backdrop.ops().map(super::paint_filters::import_filter).collect::<Vec<_>>() != self.backdrop_filters)
+        {
+            return Err(EffectError::UnresolvedFilter);
+        }
         if self.filters.len() + self.backdrop_filters.len() > MAX_EFFECT_FILTERS {
             return Err(EffectError::LimitExceeded);
         }
@@ -154,6 +171,9 @@ impl EffectOperations {
         }
         if let Some(clip) = &self.clip_path {
             clip.validate()?;
+        }
+        if self.local_transform.is_some_and(|m| m.unmap(0.5, 0.5).is_none()) {
+            return Err(EffectError::InvalidValue);
         }
         if let Some(mask) = &self.mask {
             let len = u64::from(mask.image.width) * u64::from(mask.image.height);

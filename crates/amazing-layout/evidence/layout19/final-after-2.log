@@ -1,0 +1,872 @@
+        PASS [   0.048s] (2220/2768) amazing-net coding::stream::tests::brotli_one_byte_input_and_output_below_limit
+        PASS [  22.748s] (2221/2768) amazing::real_pages real_pages_corpus_renders_without_crashes
+        PASS [   0.010s] (2222/2768) amazing-net coding::stream::tests::real_brotli_bomb_ratio_is_cumulative_across_output_chunks
+        PASS [   0.277s] (2223/2768) amazing-net coding::stream::tests::one_byte_deflate_gzip_zlib_and_adversarial_output_splits
+        PASS [   0.003s] (2224/2768) amazing-net coding::tests::checksum_known_answers
+        PASS [   0.002s] (2225/2768) amazing-net coding::tests::dynamic_empty_distance_and_single_end_code_are_valid
+        PASS [   0.002s] (2226/2768) amazing-net coding::tests::dynamic_repeat_without_previous_and_repeat_overrun_fail
+        PASS [   0.019s] (2227/2768) amazing-net coding::tests::exact_output_limits_and_zero_length_streams
+        PASS [   0.003s] (2228/2768) amazing-net coding::tests::gzip_checks_crc_isize_method_flags_and_garbage
+        PASS [   0.003s] (2229/2768) amazing-net coding::tests::gzip_concatenated_members_share_budget_but_not_history
+        PASS [   0.003s] (2230/2768) amazing-net coding::tests::gzip_optional_headers_and_header_crc
+        PASS [   0.029s] (2231/2768) amazing-net coding::tests::independent_encoder_corpus_covers_all_blocks_framings_and_window_history
+        PASS [   0.003s] (2232/2768) amazing-net coding::tests::malformed_block_types_and_stored_lengths
+        PASS [   0.002s] (2233/2768) amazing-net coding::tests::malformed_byte_streams_never_panic_or_exceed_the_bound
+        PASS [   0.004s] (2234/2768) amazing-net coding::tests::maximum_distance_can_reference_a_previous_stored_block
+        PASS [   0.003s] (2235/2768) amazing-net coding::tests::reserved_fixed_symbols_and_impossible_distance_fail
+        PASS [   0.003s] (2236/2768) amazing-net coding::tests::zlib_checks_header_dictionary_adler_and_trailing_bytes
+        PASS [   0.003s] (2237/2768) amazing-net dispatch::tests::chunked_trailer_completes_and_connection_is_reused
+        PASS [   0.002s] (2238/2768) amazing-net dispatch::tests::configured_bounds_have_typed_signals
+        PASS [   0.003s] (2239/2768) amazing-net dispatch::tests::gzip_decodes_after_framing_and_emits_within_step_budget
+        PASS [   0.002s] (2240/2768) amazing-net dispatch::tests::gzip_emits_decoded_bytes_before_wire_body_completes
+        PASS [   0.002s] (2241/2768) amazing-net dispatch::tests::interleaved_out_of_order_and_abort_mid_body
+        PASS [   0.002s] (2242/2768) amazing-net dispatch::tests::timeout_and_keepalive_reuse
+        PASS [   0.234s] (2243/2768) amazing-net coding::tests::all_fixture_prefix_truncations_fail_closed
+        PASS [   0.085s] (2244/2768) amazing-net dispatch::tests::tls_h2_head_does_not_decode_advertised_encoding
+        PASS [   0.129s] (2245/2768) amazing-net dispatch::tests::tls_h2_dispatch_multiplexes_and_aborts_one_stream
+        PASS [   0.552s] (2246/2768) amazing-net coding::stream::tests::independent_brotli_vectors_stream_in_single_byte_reads
+        PASS [   0.048s] (2247/2768) amazing-net dispatch::websocket::tests::fragmented_echo_ping_pong_and_client_close
+        PASS [   0.009s] (2248/2768) amazing-net dispatch::websocket::tests::server_close_and_oversized_frame
+        PASS [   0.002s] (2249/2768) amazing-net fetch::tests::empty_input_fails_without_panicking
+        PASS [   0.002s] (2250/2768) amazing-net fetch::tests::caller_response_limit_is_enforced_before_a_local_file_read
+        PASS [   0.003s] (2251/2768) amazing-net fetch::tests::bare_filesystem_path_is_read_as_a_local_file
+        PASS [   0.002s] (2252/2768) amazing-net fetch::tests::exceeding_five_redirect_hops_is_an_error
+        PASS [   0.002s] (2253/2768) amazing-net fetch::tests::five_redirects_are_still_followed
+        PASS [   0.002s] (2254/2768) amazing-net fetch::tests::file_url_roundtrip_through_temp_dir
+        PASS [   0.002s] (2255/2768) amazing-net fetch::tests::follows_a_302_then_301_chain_to_the_final_url_and_body
+        PASS [   0.002s] (2256/2768) amazing-net fetch::tests::https_urls_use_the_tls_default_port
+        PASS [   0.002s] (2257/2768) amazing-net fetch::tests::missing_bare_path_surfaces_io_error_not_url_error
+        PASS [   0.002s] (2258/2768) amazing-net fetch::tests::redirect_without_location_header_is_an_error
+        PASS [   0.002s] (2259/2768) amazing-net fetch::tests::unknown_network_schemes_are_rejected_not_mistaken_for_paths
+        PASS [   0.002s] (2260/2768) amazing-net fetch::tests::windows_drive_paths_are_dispatched_to_the_filesystem
+        PASS [   0.002s] (2261/2768) amazing-net headers::tests::contains_and_iteration
+        PASS [   0.002s] (2262/2768) amazing-net headers::tests::empty_map_defaults_to_no_entries
+        PASS [   0.002s] (2263/2768) amazing-net headers::tests::lookup_is_case_insensitive_in_both_directions
+        PASS [   0.002s] (2264/2768) amazing-net headers::tests::public_append_preserves_duplicates_in_order
+        PASS [   0.002s] (2265/2768) amazing-net headers::tests::public_append_rejects_invalid_names_and_line_breaks
+        PASS [   0.002s] (2266/2768) amazing-net headers::tests::repeated_headers_preserve_order
+        PASS [   0.002s] (2267/2768) amazing-net http2::hpack::tests::dynamic_updates_only_at_start_and_overflow_before_insert
+        PASS [   0.002s] (2268/2768) amazing-net http2::hpack::tests::encoder_dynamic_indexing_sensitive_literals_and_minimum_size_update
+        PASS [   0.002s] (2269/2768) amazing-net http2::hpack::tests::huffman_padding_eos_truncation_and_decoded_limit
+        PASS [   0.002s] (2270/2768) amazing-net http2::hpack::tests::integers_literal_modes_and_invalid_indices
+        PASS [   0.002s] (2271/2768) amazing-net http2::hpack::tests::rfc7541_appendix_c_request_sequences_plain_and_huffman
+        PASS [   0.002s] (2272/2768) amazing-net http2::hpack::tests::rfc7541_response_huffman_sequence_eviction_at_256_bytes
+        PASS [   0.003s] (2273/2768) amazing-net http2::hpack::tests::malformed_byte_corpus_is_bounded_and_never_panics
+        PASS [   0.002s] (2274/2768) amazing-net http2::tests::acknowledged_lower_table_limit_requires_hpack_size_update
+        PASS [   0.002s] (2275/2768) amazing-net http2::tests::completed_response_survives_late_closed_frames_and_error_goaway
+        PASS [   0.002s] (2276/2768) amazing-net http2::tests::continuations_are_connection_ordered_and_closed_streams_preserve_hpack
+        PASS [   0.002s] (2277/2768) amazing-net http2::tests::early_response_survives_no_error_reset_or_fatal_eof
+        PASS [   0.002s] (2278/2768) amazing-net http2::tests::fatal_errors_and_cancel_write_failure_drop_transport
+        PASS [   0.002s] (2279/2768) amazing-net http2::tests::frame_lengths_reject_before_payload_read_and_fixed_shapes_are_checked
+        PASS [   0.002s] (2280/2768) amazing-net http2::tests::goaway_drains_accepted_streams_and_never_replays_unprocessed_requests
+        PASS [   0.002s] (2281/2768) amazing-net http2::tests::goaway_last_stream_cannot_increase_and_truncated_frames_fail
+        PASS [   0.002s] (2282/2768) amazing-net http2::tests::head_response_does_not_decode_absent_encoded_body
+        PASS [   0.002s] (2283/2768) amazing-net http2::tests::header_list_block_body_stream_and_frame_budgets_fail_closed
+        PASS [   0.002s] (2284/2768) amazing-net http2::tests::multiplex_interleaved_streams_finish_out_of_order
+        PASS [   0.002s] (2285/2768) amazing-net http2::tests::padded_data_counts_full_flow_credit_but_only_data_in_content_length
+        PASS [   0.002s] (2286/2768) amazing-net http2::tests::reset_is_stream_local_and_idle_reset_is_connection_error
+        PASS [   0.002s] (2287/2768) amazing-net http2::tests::response_larger_than_initial_window_returns_both_credits
+        PASS [   0.002s] (2288/2768) amazing-net http2::tests::response_semantics_informational_trailers_and_content_length
+        PASS [   0.002s] (2289/2768) amazing-net http2::tests::retained_frame_io_interleaves_two_streams_and_resets_one
+        PASS [   0.002s] (2290/2768) amazing-net http2::tests::server_preface_and_push_are_rejected_and_ping_is_acknowledged
+        PASS [   0.002s] (2291/2768) amazing-net http2::tests::settings_concurrency_table_updates_acknowledgement_and_invalid_values
+        PASS [   0.002s] (2292/2768) amazing-net http2::tests::settings_zero_window_and_negative_shrink_resume_only_after_credit
+        PASS [   0.002s] (2293/2768) amazing-net http2::tests::stream_and_connection_flow_control_gate_upload_independently
+        PASS [   0.002s] (2294/2768) amazing-net http2::tests::streaming_events_release_data_before_end_and_keep_cumulative_length
+        PASS [   0.002s] (2295/2768) amazing-net http2::tests::te_trailers_is_allowed_only_in_requests
+        PASS [   0.002s] (2296/2768) amazing-net http2::tests::window_update_zero_and_overflow_have_correct_error_scope
+        PASS [   0.002s] (2297/2768) amazing-net http::coding_tests::ambiguous_lengths_and_invalid_coding_chains_fail_closed
+        PASS [   0.002s] (2298/2768) amazing-net http::coding_tests::bodyless_responses_do_not_decode_representation_metadata
+        PASS [   0.003s] (2299/2768) amazing-net http::coding_tests::corrupted_gzip_and_unknown_coding_never_reach_the_consumer
+        PASS [   0.005s] (2300/2768) amazing-net http::coding_tests::declared_content_length_is_encoded_length_not_decoded_length
+        PASS [   0.253s] (2301/2768) amazing-net http2::tests::authenticated_h2_fetch_and_http1_fallback_use_production_dispatch
+        PASS [   0.003s] (2302/2768) amazing-net http::coding_tests::incomplete_chunk_trailers_and_trailing_garbage_cannot_validate_tls_eof
+        PASS [   0.003s] (2303/2768) amazing-net http::coding_tests::real_http_brotli_content_length_and_chunked_roundtrip
+        PASS [   0.004s] (2304/2768) amazing-net http::coding_tests::real_http_expansion_is_bounded_by_caller_budget
+        PASS [   0.004s] (2305/2768) amazing-net http::coding_tests::real_http_path_decodes_gzip_zlib_and_chunked_gzip
+        PASS [   0.003s] (2306/2768) amazing-net http::coding_tests::stacked_brotli_and_gzip_apply_limit_to_each_layer
+        PASS [   0.003s] (2307/2768) amazing-net http::coding_tests::transfer_codings_and_content_layers_decode_in_reverse_header_order
+        PASS [   0.002s] (2308/2768) amazing-net http::tests::connect_refused_maps_to_io_error
+        PASS [   0.002s] (2309/2768) amazing-net http::tests::content_length_rejects_overlong_stream_data
+        PASS [   0.002s] (2310/2768) amazing-net http::tests::dechunk_handles_multiple_chunks_and_returns_trailer_slice
+        PASS [   0.002s] (2311/2768) amazing-net http::tests::dechunk_rejects_bad_sizes_and_truncation
+        PASS [   0.002s] (2312/2768) amazing-net http::tests::dechunk_skips_chunk_extensions
+        PASS [   0.002s] (2313/2768) amazing-net http::tests::embedding_headers_are_sent_and_control_injection_is_ignored
+        PASS [   0.002s] (2314/2768) amazing-net http::tests::eof_delimited_body_is_accepted_without_cl_or_chunked
+        PASS [   0.002s] (2315/2768) amazing-net http::tests::fetches_content_length_body_and_sends_required_headers
+        PASS [   0.002s] (2316/2768) amazing-net http::tests::header_line_without_colon_is_rejected
+        PASS [   0.002s] (2317/2768) amazing-net http::tests::header_lookup_is_case_insensitive_across_the_wire
+        PASS [   0.002s] (2318/2768) amazing-net http::tests::malformed_status_line_is_rejected
+        PASS [   0.002s] (2319/2768) amazing-net http::tests::missing_header_terminator_is_rejected
+        PASS [   0.002s] (2320/2768) amazing-net http::tests::oversized_chunk_is_refused_by_the_cap
+        PASS [   0.002s] (2321/2768) amazing-net http::tests::post_request_sends_content_type_length_and_body
+        PASS [   0.298s] (2322/2768) amazing-net http2::tests::authenticated_h2_pull_stream_yields_data_before_second_frame
+        PASS [   0.002s] (2323/2768) amazing-net http::tests::reassembles_chunked_body_with_extensions_and_trailer
+        PASS [   0.002s] (2324/2768) amazing-net http::tests::repeated_set_cookie_headers_survive_parsing
+        PASS [   0.002s] (2325/2768) amazing-net http::tests::short_content_length_body_is_an_error_not_a_truncation
+        PASS [   0.002s] (2326/2768) amazing-net http::tests::unclean_tls_eof_requires_http_body_framing
+        PASS [   0.002s] (2327/2768) amazing-net http::tests::status_line_without_reason_phrase_is_accepted
+        PASS [   0.002s] (2328/2768) amazing-net response::tests::content_type_strips_parameters_and_reports_none_when_absent
+        PASS [   0.002s] (2329/2768) amazing-net response::tests::is_success_covers_the_2xx_band_only
+        PASS [   0.002s] (2330/2768) amazing-net response::tests::text_decodes_utf8_and_replaces_invalid_bytes
+        PASS [   0.002s] (2331/2768) amazing-net stream::tests::complete_framing_survives_unclean_tls_eof_but_eof_framing_does_not
+        PASS [   0.003s] (2332/2768) amazing-net stream::tests::decoded_budget_rejects_before_exposing_expansion
+        PASS [   0.002s] (2333/2768) amazing-net url::tests::absolute_input_ignores_the_base
+        PASS [   0.002s] (2334/2768) amazing-net url::tests::bare_relative_resolution_merges_with_base_directory
+        PASS [   0.002s] (2335/2768) amazing-net url::tests::display_roundtrips_a_reconstructed_url
+        PASS [   0.002s] (2336/2768) amazing-net url::tests::dot_segment_removal_during_resolution
+        PASS [   0.002s] (2337/2768) amazing-net url::tests::drops_userinfo_and_keeps_host
+        PASS [   0.002s] (2338/2768) amazing-net url::tests::empty_port_falls_back_to_default
+        PASS [   0.002s] (2339/2768) amazing-net url::tests::empty_reference_resolves_to_the_base_itself
+        PASS [   0.002s] (2340/2768) amazing-net url::tests::file_url_localhost_authority_is_tolerated
+        PASS [   0.002s] (2341/2768) amazing-net url::tests::file_url_percent_decoding_reaches_the_path
+        PASS [   0.002s] (2342/2768) amazing-net url::tests::file_url_unix_path_roundtrip
+        PASS [   0.002s] (2343/2768) amazing-net url::tests::file_url_windows_drive_letter
+        PASS [   0.002s] (2344/2768) amazing-net url::tests::first_hash_splits_the_fragment
+        PASS [   0.026s] (2345/2768) amazing-net stream::tests::one_byte_http_reads_split_chunk_size_gzip_header_and_brotli_block
+        PASS [   0.002s] (2346/2768) amazing-net url::tests::lowercases_scheme_and_host_but_preserves_path_case
+        PASS [   0.281s] (2347/2768) amazing-net http::coding_tests::http_brotli_limits_truncation_trailing_data_and_tls_framing
+        PASS [   0.002s] (2348/2768) amazing-net url::tests::normalize_path_table
+        PASS [   0.002s] (2349/2768) amazing-net url::tests::parses_full_url_with_port_query_and_fragment
+        PASS [   0.002s] (2350/2768) amazing-net url::tests::parses_ipv6_literal_host_and_port
+        PASS [   0.002s] (2351/2768) amazing-net url::tests::parses_minimal_http_url_with_default_port_and_root_path
+        PASS [   0.002s] (2352/2768) amazing-net url::tests::path_absolute_resolution_keeps_authority
+        PASS [   0.002s] (2353/2768) amazing-net url::tests::percent_decoding_of_paths
+        PASS [   0.003s] (2354/2768) amazing-net url::tests::query_only_and_fragment_only_resolution
+        PASS [   0.002s] (2355/2768) amazing-net url::tests::query_only_url_gets_root_path
+        PASS [   0.002s] (2356/2768) amazing-net url::tests::rejects_malformed_inputs_without_panicking
+        PASS [   0.002s] (2357/2768) amazing-net url::tests::request_target_keeps_raw_encoding_and_appends_query
+        PASS [   0.002s] (2358/2768) amazing-net url::tests::resolution_works_against_file_bases
+        PASS [   0.002s] (2359/2768) amazing-net url::tests::scheme_relative_resolution_borrows_base_scheme
+        PASS [   0.002s] (2360/2768) amazing-net url::tests::surrounding_control_characters_are_trimmed
+        PASS [   0.002s] (2361/2768) amazing-net url::tests::to_file_path_rejects_non_file_schemes
+        PASS [   0.002s] (2362/2768) amazing-net websocket::client::bounds_tests::control_queue_rejection_precedes_payload_read_and_allocation
+        PASS [   0.002s] (2363/2768) amazing-net websocket::client::bounds_tests::frame_rejection_precedes_reserve_and_payload_read
+        PASS [   0.002s] (2364/2768) amazing-net websocket::client::bounds_tests::message_rejection_preserves_existing_capacity_before_payload_read
+        PASS [   0.002s] (2365/2768) amazing-net websocket::tests::binary_has_no_utf8_requirement_and_fragment_limit_is_cumulative
+        PASS [   0.003s] (2366/2768) amazing-net websocket::tests::close_reason_must_be_utf8_and_status_must_be_complete
+        PASS [   0.002s] (2367/2768) amazing-net websocket::tests::empty_close_and_reserved_status_codes
+        PASS [   0.002s] (2368/2768) amazing-net websocket::tests::entropy_failure_prevents_writes_and_poisons_existing_connection
+        PASS [   0.002s] (2369/2768) amazing-net websocket::tests::fragmentation_and_interleaved_ping_pong_preserve_message
+        PASS [   0.002s] (2370/2768) amazing-net websocket::tests::handshake_rejects_bad_accept_status_extensions_and_subprotocols
+        PASS [   0.002s] (2371/2768) amazing-net websocket::tests::handshake_and_request_bounds_and_injection
+        PASS [   0.003s] (2372/2768) amazing-net websocket::tests::handshake_stops_at_terminator_without_eating_first_frame
+        PASS [   0.002s] (2373/2768) amazing-net websocket::tests::invalid_fragment_sequences_and_control_shapes_fail
+        PASS [   0.002s] (2374/2768) amazing-net websocket::tests::invalid_urls_and_limits_fail_before_connecting
+        PASS [   0.002s] (2375/2768) amazing-net websocket::tests::invalid_utf8_fails_connection_and_sends_1007
+        PASS [   0.002s] (2376/2768) amazing-net websocket::tests::local_and_simultaneous_close_send_exactly_one_close
+        PASS [   0.003s] (2377/2768) amazing-net websocket::tests::lengths_125_126_65535_and_65536_roundtrip
+        PASS [   0.002s] (2378/2768) amazing-net websocket::tests::nonminimal_lengths_high_bit_and_oversize_fail_before_payload_read
+        PASS [   0.002s] (2379/2768) amazing-net websocket::tests::outbound_fragmentation_uses_masked_continuations_and_size_bound
+        PASS [   0.002s] (2380/2768) amazing-net websocket::tests::peer_initiated_close_echo_and_no_data_after_close
+        PASS [   0.002s] (2381/2768) amazing-net websocket::tests::production_entropy_is_requested_for_each_frame
+        PASS [   0.002s] (2382/2768) amazing-net websocket::tests::queued_controls_and_empty_fragment_cpu_budgets_fail_closed
+        PASS [   0.002s] (2383/2768) amazing-net websocket::tests::rfc_handshake_key_accept_and_request_vector
+        PASS [   0.002s] (2384/2768) amazing-net websocket::tests::rfc_masked_hello_vector_and_empty_binary
+        PASS [   0.002s] (2385/2768) amazing-net websocket::tests::truncated_frame_and_abrupt_eof_are_not_a_clean_close
+        PASS [   0.002s] (2386/2768) amazing-net websocket::tests::utf8_scalar_can_span_every_fragment_boundary
+        PASS [   0.002s] (2387/2768) amazing-net::idna joiner_bidi_and_punycode_label_validation
+        PASS [   0.001s] (2388/2768) amazing-net::idna punycode_rfc3492_roundtrips_and_rejects_overflow
+        PASS [   0.002s] (2389/2768) amazing-net::idna uts46_maps_normalizes_and_preserves_deviations
+        PASS [   0.002s] (2390/2768) amazing-net::parsed_url file_drive_root_survives_shortening_and_localhost_normalizes
+        PASS [   0.002s] (2391/2768) amazing-net::parsed_url idna_seam_receives_decoded_unicode_and_cannot_inject_authority
+        PASS [   0.002s] (2392/2768) amazing-net::parsed_url ipv4_radix_short_forms_and_bounds
+        PASS [   0.001s] (2393/2768) amazing-net::parsed_url ipv6_uses_hex_for_mapped_addresses_and_first_longest_zero_run
+        PASS [   0.002s] (2394/2768) amazing-net::parsed_url opaque_host_is_not_lowercased_or_idna_processed
+        PASS [   0.001s] (2395/2768) amazing-net::parsed_url opaque_paths_do_not_get_hierarchical_resolution
+        PASS [   0.001s] (2396/2768) amazing-net::parsed_url percent_encode_sets_match_their_distinct_boundaries
+        PASS [   0.001s] (2397/2768) amazing-net::parsed_url relative_reference_preserves_or_replaces_each_component
+        PASS [   0.001s] (2398/2768) amazing-net::parsed_url serialization_preserves_empty_query_fragment_and_roundtrips
+        PASS [   0.002s] (2399/2768) amazing-net::parsed_url special_scheme_default_ports_are_null_but_effective_ports_exist
+        PASS [   0.002s] (2400/2768) amazing-net::parsed_url url_origin_projects_tuples_and_signals_fresh_opaque_identity
+        PASS [   0.002s] (2401/2768) amazing-net::parsed_url userinfo_is_encoded_and_not_lost_before_cors_policy
+        PASS [   0.002s] (2402/2768) amazing-net::parsed_url validation_error_recovery_is_distinct_from_failure
+        PASS [   0.004s] (2403/2768) amazing-net::transport_url file_conversion_rejects_remote_hosts_nul_and_encoded_separators
+        PASS [   0.002s] (2404/2768) amazing-net::transport_url http_target_rejects_non_http_urls_and_preserves_empty_query
+        PASS [   0.002s] (2405/2768) amazing-net::transport_url loading_canonicalizes_host_path_and_wire_target
+        PASS [   0.002s] (2406/2768) amazing-net::transport_url loading_redirect_inherits_missing_fragment
+        PASS [   0.002s] (2407/2768) amazing-net::transport_url loading_redirects_resolve_dot_segments_and_inherit_fragments
+        PASS [   0.002s] (2408/2768) amazing-net::transport_url local_file_loading_decodes_unicode_spaces_and_normalizes_localhost
+        PASS [   0.002s] (2409/2768) amazing-net::transport_url malformed_urls_fail_before_connecting_and_idna_hosts_parse
+        PASS [   0.002s] (2410/2768) amazing-net::transport_url network_redirects_cannot_load_local_files_or_unsupported_schemes
+        PASS [   0.002s] (2411/2768) amazing-net::urlsearchparams_wpt append_delete_get_getall_has_set
+        PASS [   0.001s] (2412/2768) amazing-net::urlsearchparams_wpt form_urlencoded_parse_and_serialize
+        PASS [   0.002s] (2413/2768) amazing-net::urlsearchparams_wpt live_url_query_update
+        PASS [   0.001s] (2414/2768) amazing-net::urlsearchparams_wpt stable_utf16_sort_and_stringification
+        PASS [   0.166s] (2415/2768) amazing-net websocket::tests::loopback_ws_echo_uses_live_connect_handshake_masks_and_close
+        PASS [   0.010s] (2416/2768) amazing-net-brotli tests::compression_bomb_keeps_scratch_bounded_and_returns_no_output
+        PASS [   0.115s] (2417/2768) amazing-net-brotli tests::all_nonempty_vectors_fail_one_byte_below_limit
+        PASS [   0.062s] (2418/2768) amazing-net-brotli tests::independent_google_brotli_vectors_roundtrip_at_exact_limit
+        PASS [   0.002s] (2419/2768) amazing-net-brotli tests::malformed_and_large_window_extensions_fail_closed
+        PASS [   0.002s] (2420/2768) amazing-net-brotli tests::output_rejection_precedes_allocation_and_preserves_bytes
+        PASS [   0.255s] (2421/2768) amazing-net websocket::tests::loopback_wss_echo_negotiates_http1_even_when_peer_prefers_h2
+        PASS [   0.002s] (2422/2768) amazing-net-brotli tests::scratch_rejection_precedes_allocation_including_integer_overflow
+        PASS [   0.002s] (2423/2768) amazing-net-brotli tests::shared_scratch_budget_releases_memory_and_fails_closed
+        PASS [   0.002s] (2424/2768) amazing-net-brotli tests::valid_google_large_window_extension_is_rejected_by_strict_decoder
+        PASS [   0.118s] (2425/2768) amazing-net-brotli tests::rejects_trailing_bytes_and_concatenated_streams
+        PASS [   0.004s] (2426/2768) amazing-net-tls test_support::tests::pending_handshake_retains_state_across_would_block
+        PASS [   0.003s] (2427/2768) amazing-net-tls test_support::tests::production_roots_do_not_trust_the_test_ca
+        PASS [   0.002s] (2428/2768) amazing-net-tls tests::invalid_server_names_fail_before_network_io
+        PASS [   0.002s] (2429/2768) amazing-net-tls tests::legacy_config_advertises_only_http_1_1
+        PASS [   0.002s] (2430/2768) amazing-paint blend::tests::opacity_quantization_handles_edges_and_nan
+        PASS [   0.002s] (2431/2768) amazing-paint blend::tests::source_over_uses_one_integer_rounding_rule
+        PASS [   0.002s] (2432/2768) amazing-paint color::tests::currentcolor_is_caller_resolved_not_parsed_here
+        PASS [   0.002s] (2433/2768) amazing-paint color::tests::hex_eight_digit_carries_alpha
+        PASS [   0.002s] (2434/2768) amazing-paint color::tests::hex_four_digit_short_alpha
+        PASS [   0.002s] (2435/2768) amazing-paint color::tests::hex_rejects_bad_lengths_and_digits
+        PASS [   0.002s] (2436/2768) amazing-paint color::tests::hex_six_digit_exact
+        PASS [   0.002s] (2437/2768) amazing-paint color::tests::hex_three_digit_expands_by_doubling
+        PASS [   0.002s] (2438/2768) amazing-paint color::tests::huge_finite_channels_clamp_instead_of_overflowing
+        PASS [   0.002s] (2439/2768) amazing-paint color::tests::named_colors_case_insensitive
+        PASS [   0.002s] (2440/2768) amazing-paint color::tests::parser_never_panics_on_hostile_input
+        PASS [   0.134s] (2441/2768) amazing-net-tls test_support::tests::alpn_h2_h1_and_absent_with_verified_fixture
+        PASS [   0.002s] (2442/2768) amazing-paint color::tests::rgb_channels_clamp_into_range
+        PASS [   0.002s] (2443/2768) amazing-paint color::tests::rgb_legacy_comma_syntax
+        PASS [   0.002s] (2444/2768) amazing-paint color::tests::rgb_modern_space_syntax
+        PASS [   0.002s] (2445/2768) amazing-paint color::tests::rgb_percent_channels_mixed_with_numbers
+        PASS [   0.002s] (2446/2768) amazing-paint color::tests::rgb_rejects_malformed_arguments
+        PASS [   0.002s] (2447/2768) amazing-paint color::tests::transparent_is_zero_alpha_black
+        PASS [   0.002s] (2448/2768) amazing-paint color::tests::unknown_names_are_rejected
+        PASS [   0.003s] (2449/2768) amazing-paint display_list_view::delta_tests::changed_replaced_pixels_keep_key_and_damage_content_item
+        PASS [   0.004s] (2450/2768) amazing-paint display_list_view::delta_tests::changed_opacity_group_and_invalid_ink_bounds_fall_back
+        PASS [   0.002s] (2451/2768) amazing-paint display_list_view::delta_tests::dom_generation_resolver_is_used_for_item_keys
+        PASS [   0.003s] (2452/2768) amazing-paint display_list_view::delta_tests::missing_generation_and_property_changes_fall_back
+        PASS [   0.002s] (2453/2768) amazing-paint display_list_view::delta_tests::removed_reused_and_reordered_nodes_require_fresh_view
+        PASS [   0.003s] (2454/2768) amazing-paint display_list_view::delta_tests::retired_background_resource_is_reported
+        PASS [   0.002s] (2455/2768) amazing-paint display_list_view::delta_tests::scroll_offset_and_stacking_order_use_full_fallback
+        PASS [   0.004s] (2456/2768) amazing-paint display_list_view::delta_tests::stable_keys_and_tile_edge_damage_match_fresh_full_view
+        PASS [   0.002s] (2457/2768) amazing-paint display_list_view::retained::tests::keyed_damage_rasterizes_only_changed_chunk_and_keeps_other_pixels_owned
+        PASS [   0.002s] (2458/2768) amazing-paint display_list_view::retained::tests::new_item_is_inserted_at_its_stable_order_position
+        PASS [   0.002s] (2459/2768) amazing-paint display_list_view::retained::tests::removed_item_retires_only_unreferenced_resource
+        PASS [   0.020s] (2460/2768) amazing-paint display_list_view::delta_tests::text_mutation_is_checked_against_full_oracle
+        PASS [   0.015s] (2461/2768) amazing-paint display_list_view::tests::content_bounds_scroll_extent_and_sticky_constraints_are_local
+        PASS [   0.011s] (2462/2768) amazing-paint display_list_view::tests::display_list_follows_insert_before_instead_of_arena_id
+        PASS [   0.019s] (2463/2768) amazing-paint display_list_view::tests::document_viewport_is_a_root_scroll_node_without_css_overflow
+        PASS [   0.023s] (2464/2768) amazing-paint display_list_view::tests::effects_scroller_property_owners_stay_unique_across_reopened_clips
+        PASS [   0.013s] (2465/2768) amazing-paint display_list_view::tests::generated_source_order_reorders_boxes_without_changing_dom_fallback
+        PASS [   0.014s] (2466/2768) amazing-paint display_list_view::tests::ordered_items_raster_to_the_same_document_pixels
+        PASS [   0.014s] (2467/2768) amazing-paint display_list_view::tests::property_ids_and_direct_hints_follow_nested_state
+        PASS [   0.013s] (2468/2768) amazing-paint display_list_view::tests::property_owners_bind_to_one_dom_generation_or_require_rebuild
+        PASS [   0.014s] (2469/2768) amazing-paint display_list_view::tests::range_translation_and_target_clip_select_only_requested_ink
+        PASS [   0.013s] (2470/2768) amazing-paint display_list_view::tests::raw_tile_leaves_ancestor_clip_to_compositor
+        PASS [   0.011s] (2471/2768) amazing-paint display_list_view::tests::raw_tile_raster_skips_group_effects_and_uses_tile_origin
+        PASS [   0.002s] (2472/2768) amazing-paint display_list_view::tests::raw_tile_rasterizes_inline_replaced_content_and_retains_it
+        PASS [   0.011s] (2473/2768) amazing-paint display_list_view::tests::raw_tile_rasterizes_shaped_text_at_tile_origin
+        PASS [   0.010s] (2474/2768) amazing-paint display_list_view::tests::raw_tile_rejects_unseparable_control_without_mutating_target
+        PASS [   0.002s] (2475/2768) amazing-paint image::tests::all_fit_modes_and_scale_down_have_distinct_geometry
+        PASS [   0.002s] (2476/2768) amazing-paint gradient::tests::generated_gradient_kinds_and_repeats_rasterize
+        PASS [   0.002s] (2477/2768) amazing-paint image::tests::invalid_geometry_fails_closed
+        PASS [   0.002s] (2478/2768) amazing-paint image::tests::positions_include_negative_leftover_and_edge_offsets
+        PASS [   0.002s] (2479/2768) amazing-paint image::tests::styled_images_forward_resolved_url_lookup
+        PASS [   0.002s] (2480/2768) amazing-paint paint::background_tests::center_before_horizontal_edge_keeps_vertical_axis
+        PASS [   0.002s] (2481/2768) amazing-paint paint::background_tests::defaults_repeat_and_negative_positions_are_phase_correct
+        PASS [   0.002s] (2482/2768) amazing-paint paint::background_tests::first_listed_gradient_layer_paints_above_later_layers
+        PASS [   0.002s] (2483/2768) amazing-paint paint::background_tests::fractional_object_edges_and_backgrounds_share_pixel_center_coverage
+        PASS [   0.002s] (2484/2768) amazing-paint paint::background_tests::linear_gradient_background_fills_the_positioning_area
+        PASS [   0.002s] (2485/2768) amazing-paint paint::background_tests::origin_and_clip_are_independent_and_color_uses_bottom_layer_clip
+        PASS [   0.002s] (2486/2768) amazing-paint paint::background_tests::position_percentages_use_leftover_space_not_box_width
+        PASS [   0.002s] (2487/2768) amazing-paint paint::background_tests::repeat_x_y_and_no_repeat_do_not_fill_other_axes
+        PASS [   0.002s] (2488/2768) amazing-paint paint::background_tests::repeating_gradient_tiles_through_background_size
+        PASS [   0.002s] (2489/2768) amazing-paint paint::background_tests::rounded_backgrounds_opacity_and_children_keep_display_list_order
+        PASS [   0.002s] (2490/2768) amazing-paint paint::background_tests::sampling_budget_fails_closed_instead_of_spinning_on_tiny_tiles
+        PASS [   0.002s] (2491/2768) amazing-paint paint::background_tests::size_keywords_auto_percent_and_position_use_positioning_area
+        PASS [   0.002s] (2492/2768) amazing-paint paint::background_tests::space_and_round_repeats_are_bounded_and_have_expected_gaps
+        PASS [   0.002s] (2493/2768) amazing-paint paint::background_tests::topmost_layer_is_first_and_none_keeps_longhand_list_slot
+        PASS [   0.002s] (2494/2768) amazing-paint paint::background_tests::unsupported_gradient_syntax_paints_no_layer
+        PASS [   0.002s] (2495/2768) amazing-paint paint::background_tests::url_commas_css_escapes_and_list_limits_are_not_naive_split
+        PASS [   0.046s] (2496/2768) amazing-paint paint::control_tests::author_initial_unset_and_rollback_control_native_chrome
+        PASS [   0.011s] (2497/2768) amazing-paint paint::control_tests::button_has_face_and_waits_for_positioned_label
+        PASS [   0.011s] (2498/2768) amazing-paint paint::control_tests::checkbox_mark_comes_only_from_provider_state
+        PASS [   0.073s] (2499/2768) amazing-paint paint::control_tests::author_background_border_and_appearance_none_override_chrome
+        PASS [   0.011s] (2500/2768) amazing-paint paint::control_tests::control_opacity_and_ancestor_clip_use_display_list_groups
+        PASS [   0.011s] (2501/2768) amazing-paint paint::control_tests::disabled_state_and_accent_color_are_provider_driven
+        PASS [   0.011s] (2502/2768) amazing-paint paint::control_tests::positioned_control_labels_use_existing_glyph_ids_and_content_clip
+        PASS [   0.020s] (2503/2768) amazing-paint paint::control_tests::explicit_author_defaults_suppress_chrome_with_css_provenance
+        PASS [   0.011s] (2504/2768) amazing-paint paint::control_tests::radio_has_round_outline_and_provider_dot
+        PASS [   0.025s] (2505/2768) amazing-paint paint::control_tests::positioned_stacking_contexts_remain_above_or_below_controls
+        PASS [   0.011s] (2506/2768) amazing-paint paint::control_tests::text_input_has_field_chrome
+        PASS [   0.021s] (2507/2768) amazing-paint paint::control_tests::select_has_face_and_directional_indicator
+        PASS [   0.002s] (2508/2768) amazing-paint paint::image_tests::contain_leaves_letterbox_and_cover_clips_to_content_even_with_visible_overflow
+        PASS [   0.002s] (2509/2768) amazing-paint paint::image_tests::fitted_pixels_obey_ancestor_clip_and_bad_buffers_do_not_panic
+        PASS [   0.002s] (2510/2768) amazing-paint paint::image_tests::position_moves_unscaled_object_and_preserves_transparent_layer_alpha
+        PASS [   0.002s] (2511/2768) amazing-paint paint::tests::background_covers_padding_box_exactly
+        PASS [   0.011s] (2512/2768) amazing-paint paint::control_tests::textarea_has_field_chrome
+        PASS [   0.002s] (2513/2768) amazing-paint paint::tests::calc_border_radius_uses_layouts_axis_specific_used_values
+        PASS [   0.002s] (2514/2768) amazing-paint paint::tests::currentcolor_border_resolves_against_computed_color
+        PASS [   0.002s] (2515/2768) amazing-paint paint::tests::deep_tree_paints_children_after_parents_everywhere
+        PASS [   0.002s] (2516/2768) amazing-paint paint::tests::garbage_background_value_paints_nothing
+        PASS [   0.002s] (2517/2768) amazing-paint paint::tests::generated_url_image_does_not_fall_back_to_originating_dom_image
+        PASS [   0.014s] (2518/2768) amazing-paint paint::tests::generated_gradient_renders_through_replaced_image_key
+        PASS [   0.002s] (2519/2768) amazing-paint paint::tests::none_style_border_is_skipped_even_with_width
+        PASS [   0.002s] (2520/2768) amazing-paint paint::tests::overflow_hidden_clips_descendant_background_to_padding_box
+        PASS [   0.017s] (2521/2768) amazing-paint paint::tests::list_style_gradient_reaches_generated_image_painter
+        PASS [   0.002s] (2522/2768) amazing-paint paint::tests::oversized_geometry_clips_without_panicking
+        PASS [   0.002s] (2523/2768) amazing-paint paint::tests::paints_inline_replaced_content_through_the_resource_seam
+        PASS [   0.002s] (2524/2768) amazing-paint paint::tests::positioned_child_paints_after_normal_flow_inside_relative_parent
+        PASS [   0.002s] (2525/2768) amazing-paint paint::tests::shaped_painter_fills_inline_decorations_before_glyphs
+        PASS [   0.002s] (2526/2768) amazing-paint paint::tests::shaped_painter_rasterizes_glyph_ids_without_legacy_words
+        PASS [   0.002s] (2527/2768) amazing-paint paint::tests::solid_border_strips_frame_the_box
+        PASS [   0.002s] (2528/2768) amazing-paint paint::tests::svg_provider_paints_inline_content_rect
+        PASS [   0.002s] (2529/2768) amazing-paint paint::tests::svg_root_paints_block_content_rect
+        PASS [   0.004s] (2530/2768) amazing-paint paint::tests::transparent_background_paints_nothing
+        PASS [   0.012s] (2531/2768) amazing-paint paint::tests::sideways_glyph_pose_rotates_the_rasterized_ink
+        PASS [   0.002s] (2532/2768) amazing-paint paint::tests::two_box_tree_paints_backgrounds_in_painter_order
+        PASS [   0.011s] (2533/2768) amazing-paint paint::tests::vertical_rl_starts_its_column_at_the_logical_right_edge
+        PASS [   0.002s] (2534/2768) amazing-paint surface::tests::bmp_even_width_needs_no_padding
+        PASS [   0.002s] (2535/2768) amazing-paint surface::tests::bmp_odd_width_pads_rows_to_four_bytes
+        PASS [   0.002s] (2536/2768) amazing-paint surface::tests::clear_overwrites_everything
+        PASS [   0.002s] (2537/2768) amazing-paint surface::tests::fill_rect_clips_negative_and_overflowing_edges
+        PASS [   0.002s] (2538/2768) amazing-paint surface::tests::fill_rect_inside_surface_is_pixel_exact
+        PASS [   0.022s] (2539/2768) amazing-paint paint::tests::two_generated_images_on_one_node_paint_by_distinct_url_keys
+        PASS [   0.003s] (2540/2768) amazing-paint surface::tests::new_surface_starts_transparent_black
+        PASS [   0.002s] (2541/2768) amazing-paint surface::tests::ppm_header_matches_hand_computed_bytes
+        PASS [   0.002s] (2542/2768) amazing-paint surface::tests::set_and_get_roundtrip_with_bounds_checks
+        PASS [   0.002s] (2543/2768) amazing-paint surface::tests::save_encoders_agree_with_in_memory_encoding
+        PASS [   0.002s] (2544/2768) amazing-paint text::tests::flattened_curve_bbox_excludes_control_point
+        PASS [   0.002s] (2545/2768) amazing-paint text::tests::empty_and_degenerate_outlines_are_none
+        PASS [   0.002s] (2546/2768) amazing-paint text::tests::full_coverage_ink_is_opaque_pen_color_over_background
+        PASS [   0.002s] (2547/2768) amazing-paint text::tests::hole_cancels_under_nonzero_winding
+        PASS [   0.002s] (2548/2768) amazing-paint text::tests::ink_starts_at_pen_x_and_stops_at_advance
+        PASS [   0.002s] (2549/2768) amazing-paint text::tests::multiple_characters_accumulate_advances
+        PASS [   0.002s] (2550/2768) amazing-paint text::tests::partial_coverage_blends_with_integer_math
+        PASS [   0.002s] (2551/2768) amazing-paint text::tests::provider_falls_back_to_rect_ink_without_a_real_font
+        PASS [   0.002s] (2552/2768) amazing-paint text::tests::provider_rasterizes_ttf_letterform_end_to_end
+        PASS [   0.002s] (2553/2768) amazing-paint text::tests::rect_ink_bar_sits_on_the_baseline
+        PASS [   0.002s] (2554/2768) amazing-paint text::tests::rect_provider_rejects_whitespace_and_bad_sizes
+        PASS [   0.002s] (2555/2768) amazing-paint text::tests::square_outline_rasterizes_to_solid_rect
+        PASS [   0.002s] (2556/2768) amazing-paint text::tests::text_is_clipped_to_the_surface_without_panicking
+        PASS [   0.002s] (2557/2768) amazing-paint text::tests::triangle_diagonal_coverage_is_unimodal_and_partial
+        PASS [   0.002s] (2558/2768) amazing-paint text::tests::whitespace_produces_no_ink_but_consumes_advance
+        PASS [   0.002s] (2559/2768) amazing-paint text::tests::zero_and_negative_sizes_draw_nothing
+        PASS [   0.022s] (2560/2768) amazing-paint::collapsed_table_wpt empty_cells_hide_row_background_through_layout_hole
+        PASS [   0.002s] (2561/2768) amazing-process history::opaque_state_tests::renderer_retains_opaque_history_state_until_discard
+        PASS [   0.002s] (2562/2768) amazing-process messaging::tests::broadcast_excludes_sender_and_keeps_fifo_per_client
+        PASS [   0.004s] (2563/2768) amazing-process messaging::tests::messaging_service_round_trips_over_ipc
+        PASS [   0.002s] (2564/2768) amazing-process messaging::tests::ports_queue_until_start_then_deliver_in_order
+        PASS [   0.002s] (2565/2768) amazing-process messaging::tests::transfer_close_and_disconnect_are_bounded
+        PASS [   0.012s] (2566/2768) amazing-process::gpu gpu_child_preserves_full_property_tree_and_pass_snapshot
+        PASS [   0.010s] (2567/2768) amazing-process::gpu gpu_child_retains_resource_deltas_and_matches_cpu_presenter
+        PASS [   0.016s] (2568/2768) amazing-process::history bfcache_demo_freeze_restore_eviction_and_crash
+        PASS [   0.002s] (2569/2768) amazing-process::history bfcache_evicts_for_memory_pressure
+        PASS [   0.002s] (2570/2768) amazing-process::history bfcache_evicts_oldest_when_count_limit_is_reached
+        PASS [   0.002s] (2571/2768) amazing-process::history discarded_document_can_reload_but_cannot_push_state
+        PASS [   0.002s] (2572/2768) amazing-process::history freeze_ack_timeout_discards_document
+        PASS [   0.002s] (2573/2768) amazing-process::history html_traversal_queue_preserves_synchronous_fragment_race
+        PASS [   0.002s] (2574/2768) amazing-process::history navigation_freezes_outgoing_document_before_process_swap_and_restores_after_traverse
+        PASS [   0.002s] (2575/2768) amazing-process::history optional_history_state_round_trips_without_interpreting_bytes
+        PASS [   0.002s] (2576/2768) amazing-process::history renderer_cannot_forge_ids_origin_or_unbounded_snapshot
+        PASS [   0.002s] (2577/2768) amazing-process::history top_level_navigation_can_freeze_child_before_parent
+        PASS [   0.002s] (2578/2768) amazing-process::history traversable_steps_child_entries_same_document_and_forward_pruning
+        PASS [   0.007s] (2579/2768) amazing-process::locks if_available_and_steal_match_the_coordinator
+        PASS [   0.005s] (2580/2768) amazing-process::locks storage_process_arbitrates_web_locks_fifo_and_release
+        PASS [   0.006s] (2581/2768) amazing-process::network_cache bounded_snapshot_evicts_entries_and_rejects_corruption
+        PASS [   0.003s] (2582/2768) amazing-process::network_cache cache_survives_restart_and_preserves_vary_and_validators
+        PASS [   0.034s] (2583/2768) amazing-process::network_cache network_child_serves_disk_cache_after_restart
+        PASS [   0.003s] (2584/2768) amazing-process::network_cache request_and_response_no_store_do_not_enter_disk
+        PASS [   0.003s] (2585/2768) amazing-process::network_cache simultaneous_network_children_leave_a_valid_snapshot
+        PASS [   0.063s] (2586/2768) amazing-process::network_contract browser_loads_multi_resource_page_through_network_child_with_direct_parity
+        PASS [   0.017s] (2587/2768) amazing-process::network_contract browser_navigation_uses_explicit_initiator_context
+        PASS [   0.015s] (2588/2768) amazing-process::network_contract browser_only_subresource_receives_validated_no_cors_body
+        PASS [   0.026s] (2589/2768) amazing-process::network_contract browser_restarts_manual_navigation_redirect_in_same_epoch
+        PASS [   0.030s] (2590/2768) amazing-process::network_contract child_navigation_checks_embedding_and_keeps_manual_redirect_epoch
+        PASS [   0.010s] (2591/2768) amazing-process::network_contract document_cookie_roundtrips_in_network_child_and_hides_httponly
+        PASS [   0.003s] (2592/2768) amazing-process::network_contract malformed_start_and_ownership_are_rejected_before_fetch
+        PASS [   0.024s] (2593/2768) amazing-process::network_contract network_session_preserves_non_success_head_and_body
+        PASS [   0.009s] (2594/2768) amazing-process::network_contract opaque_origin_identity_survives_the_wire
+        PASS [   0.025s] (2595/2768) amazing-process::network_contract redirected_head_reports_final_url_and_redirect_flag
+        PASS [   0.017s] (2596/2768) amazing-process::network_contract response_bytes_arrive_under_credit_before_network_completion
+        PASS [   0.022s] (2597/2768) amazing-process::network_contract v2_matches_direct_http_bytes_status_and_content_type
+        PASS [   0.009s] (2598/2768) amazing-process::network_contract versioned_contract_roundtrip_and_malformed_frames
+        PASS [   0.009s] (2599/2768) amazing-process::network_security_store cookies_and_hsts_survive_network_profile_restart
+        PASS [   0.154s] (2600/2768) amazing-process::process bootstrap_acknowledges_only_after_handlers_are_bound
+        PASS [   0.012s] (2601/2768) amazing-process::process child_roundtrip_crash_and_restart
+        PASS [   0.003s] (2602/2768) amazing-process::process site_assignment
+        PASS [   0.790s] (2603/2768) amazing-paint::collapsed_table_wpt collapsed_empty_rows_have_only_the_known_unresolved_layout_gaps
+        PASS [   0.066s] (2604/2768) amazing-process::sandbox_linux sandbox_launch_is_fail_closed
+        PASS [   0.004s] (2605/2768) amazing-process::split all_interface_decoders_are_bounded_and_panic_free
+        PASS [   0.140s] (2606/2768) amazing-process::split browser_crash_reaps_renderer_at_each_transfer_phase
+        PASS [   0.019s] (2607/2768) amazing-process::split crash_during_navigation_reports_one_sad_tab
+        PASS [   0.119s] (2608/2768) amazing-process::split demand_driven_acquire_skips_superseded_frames
+        PASS [   0.022s] (2609/2768) amazing-process::split forged_transferred_handle_closes_the_channel
+        PASS [   0.135s] (2610/2768) amazing-process::split renderer_network_frame_parity_and_input_events
+        PASS [   0.070s] (2611/2768) amazing-process::split shared_frame_survives_renderer_crash_and_releases_handles
+        PASS [   0.160s] (2612/2768) amazing-process::split shared_frames_match_byte_fallback_at_multiple_viewports
+        PASS [   0.011s] (2613/2768) amazing-process::utility_storage decoder_crash_does_not_kill_browser_or_other_utility
+        PASS [   0.023s] (2614/2768) amazing-process::utility_storage storage_process_matches_diskstore_quota_partition_and_crash_recovery
+        PASS [   0.042s] (2615/2768) amazing-process::utility_storage utility_image_corpus_decodes_bounded_web_formats_and_exif_orientation
+        PASS [   0.078s] (2616/2768) amazing-process::utility_storage utility_sandbox_launch_fails_closed_when_user_namespaces_are_blocked
+        PASS [   0.005s] (2617/2768) amazing-process::utility_storage utility_sfnt_matches_public_text_provider_decoder
+        PASS [   0.019s] (2618/2768) amazing-process::utility_storage utility_shared_image_and_audio_match_public_decoders
+        PASS [   0.003s] (2619/2768) amazing-regex tests::alternation_and_backtracking
+        PASS [   0.006s] (2620/2768) amazing-regex tests::capture_reset_and_empty_repetitions
+        PASS [   0.006s] (2621/2768) amazing-regex tests::captures_and_lookahead_are_atomic
+        PASS [   0.003s] (2622/2768) amazing-regex tests::classes_and_anchors
+        PASS [   0.054s] (2623/2768) amazing-regex tests::shared_budget_and_compile_limits_fail_closed
+        PASS [   0.003s] (2624/2768) amazing-regex tests::sticky_and_search_indices
+        PASS [   0.049s] (2625/2768) amazing-regex tests::syntax_errors_and_bounds
+        PASS [   0.002s] (2626/2768) amazing-regex tests::unicode_casefold_and_legacy_restrictions
+        PASS [   0.010s] (2627/2768) amazing-regex tests::unicode_sets_operations_strings_and_properties
+        PASS [   0.002s] (2628/2768) amazing-regex tests::upstream_testharness_patterns
+        PASS [   0.002s] (2629/2768) amazing-regex tests::utf16_and_unicode_modes
+        PASS [   0.002s] (2630/2768) amazing-regex tests::utf16_pattern_preserves_lone_surrogates
+        PASS [   0.002s] (2631/2768) amazing-regex tests::utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units
+        PASS [   0.004s] (2632/2768) amazing-storage idb::codec::graph_tests::persisted_graph_round_trips_cycles_and_shared_references
+        PASS [   0.002s] (2633/2768) amazing-storage locks::tests::client_disconnect_releases_held_and_queued_locks
+        PASS [   0.002s] (2634/2768) amazing-storage locks::tests::if_available_and_steal_respect_waiters_and_revoke_holders
+        PASS [   0.002s] (2635/2768) amazing-storage locks::tests::shared_requests_queue_behind_exclusive_and_release_in_order
+        PASS [   0.002s] (2636/2768) amazing-storage tests::bucket_names_follow_the_lowercase_charset_and_length
+        PASS [   0.004s] (2637/2768) amazing-storage tests::bucket_registry_persists_policy_and_invalidates_deleted_handles
+        PASS [   0.002s] (2638/2768) amazing-storage tests::cache_vary_and_options
+        PASS [   0.143s] (2639/2768) amazing-storage tests::disk_log_survives_every_truncated_tail
+        PASS [   0.012s] (2640/2768) amazing-storage tests::durable_web_cache_and_idb_reopen
+        PASS [   0.005s] (2641/2768) amazing-storage tests::idb_index_cursor_primary_key_and_transaction_scheduling
+        PASS [   0.002s] (2642/2768) amazing-storage tests::idb_keys_ranges_indexes_and_cursor
+        PASS [   0.002s] (2643/2768) amazing-storage tests::idb_multientry_skips_invalid_array_members
+        PASS [   0.003s] (2644/2768) amazing-storage tests::idb_versionchange_block_and_transaction_rollback
+        PASS [   0.007s] (2645/2768) amazing-storage tests::partition_quota_eviction_and_rollback
+        PASS [   0.008s] (2646/2768) amazing-storage tests::profile_quota_counts_web_idb_and_cache_together_and_persists_grant
+        PASS [   0.002s] (2647/2768) amazing-storage tests::web_storage_order_events_and_sessions
+        PASS [   0.002s] (2648/2768) amazing-text tests::fallback_exposes_a_centered_synthesized_vertical_baseline
+        PASS [   0.002s] (2649/2768) amazing-text tests::fallback_keeps_the_requested_size_for_font_size_adjust
+        PASS [   0.002s] (2650/2768) amazing-text tests::fallback_lb20_breaks_around_atomic_inlines_with_neighbor_guards
+        PASS [   0.002s] (2651/2768) amazing-text tests::fallback_shapes_utf8_clusters_and_rasterizes_the_returned_glyph
+        PASS [   0.002s] (2652/2768) amazing-text tests::fallback_soft_hyphen_has_no_advance_until_selected
+        PASS [   0.001s] (2653/2768) amazing-text tests::font_matching_policy_prefers_attribute_distance_inside_one_family
+        PASS [   0.002s] (2654/2768) amazing-text tests::font_matching_uses_width_style_then_css_weight_direction
+        PASS [   0.002s] (2655/2768) amazing-text tests::font_relative_units_use_css_values_fallbacks
+        PASS [   0.001s] (2656/2768) amazing-text tests::non_finite_variation_values_are_rejected_at_the_interface
+        PASS [   0.002s] (2657/2768) amazing-text tests::synthesis_only_adds_missing_weight_and_slant
+        PASS [   0.002s] (2658/2768) amazing-text tests::variation_and_synthesis_state_participate_in_the_cache_key
+        PASS [   0.002s] (2659/2768) amazing-text tests::vertical_fallback_preserves_the_inline_axis_advance
+        PASS [   0.004s] (2660/2768) amazing-text-provider font_matching::tests::exact_oblique_angle_and_style_order
+        PASS [   0.005s] (2661/2768) amazing-text-provider font_matching::tests::fractional_width_and_direction_come_before_style_and_weight
+        PASS [   0.003s] (2662/2768) amazing-text-provider font_matching::tests::weight_four_hundred_to_five_hundred_order
+        PASS [   0.010s] (2663/2768) amazing-text-provider font_relative_metrics::tests::font_size_adjust_scales_the_used_size_by_the_metric_ratio
+        PASS [   0.003s] (2664/2768) amazing-text-provider font_relative_metrics::tests::font_size_adjust_zero_negative_and_missing_fonts_are_bounded
+        PASS [   0.008s] (2665/2768) amazing-text-provider font_relative_metrics::tests::zero_advance_uses_selected_font_glyph
+        PASS [   0.008s] (2666/2768) amazing-text-provider line_break_objects::tests::breaks_between_and_around_atomic_inlines
+        PASS [   0.005s] (2667/2768) amazing-text-provider line_break_objects::tests::higher_priority_neighbours_still_prohibit_breaks
+        PASS [   0.002s] (2668/2768) amazing-text-provider tests::aggregate_font_set_bytes_are_bounded
+        PASS [   0.003s] (2669/2768) amazing-text-provider tests::author_metric_and_feature_descriptors_reach_shaping
+        PASS [   0.003s] (2670/2768) amazing-text-provider tests::bidi_override_applies_css_direction_to_every_cluster
+        PASS [   0.005s] (2671/2768) amazing-text-provider tests::bidi_scope_closes_before_and_reopens_after_paragraph_break
+        PASS [   0.004s] (2672/2768) amazing-text-provider tests::bidi_scope_does_not_reset_at_a_non_b_line_separator
+        PASS [   0.010s] (2673/2768) amazing-text-provider tests::bidi_scope_paragraph_break_cross_product_has_an_operation_cap
+        PASS [   0.006s] (2674/2768) amazing-text-provider tests::blank_raster_cache_entries_have_a_hard_count_limit
+        PASS [   0.002s] (2675/2768) amazing-text-provider tests::break_all_adds_only_grapheme_cluster_opportunities
+        PASS [   0.002s] (2676/2768) amazing-text-provider tests::css_override_remains_resolved_when_a_line_ends_inside_the_span
+        PASS [   0.002s] (2677/2768) amazing-text-provider tests::default_ignorable_controls_stay_with_the_surrounding_face
+        PASS [   0.002s] (2678/2768) amazing-text-provider tests::earlier_named_family_beats_later_face_regardless_of_attribute_distance
+        PASS [   0.002s] (2679/2768) amazing-text-provider tests::explicit_kerning_off_still_disables_the_axis_feature
+        PASS [   0.002s] (2680/2768) amazing-text-provider tests::fallback_grapheme_is_not_split_at_a_dom_span_boundary
+        PASS [   0.003s] (2681/2768) amazing-text-provider tests::fallback_selects_a_covering_face_per_grapheme_cluster
+        PASS [   0.012s] (2682/2768) amazing-text-provider tests::feature_on_and_off_reach_opentype_shaping
+        PASS [   0.003s] (2683/2768) amazing-text-provider tests::first_available_font_for_metrics_must_cover_space
+        PASS [   0.002s] (2684/2768) amazing-text-provider tests::font_face_rejects_invalid_ranges_and_keeps_failed_author_family_missing
+        PASS [   0.002s] (2685/2768) amazing-text-provider tests::font_face_tries_sources_in_order_and_records_display
+        PASS [   0.003s] (2686/2768) amazing-text-provider tests::font_face_unicode_ranges_form_reverse_order_composite_and_shadow_installed
+        PASS [   0.002s] (2687/2768) amazing-text-provider tests::font_table_and_glyph_counts_have_explicit_limits
+        PASS [   0.002s] (2688/2768) amazing-text-provider tests::installed_fallback_chooses_the_matching_face_within_its_family
+        PASS [   0.002s] (2689/2768) amazing-text-provider tests::isolate_override_uses_first_strong_isolate_around_override
+        PASS [   0.002s] (2690/2768) amazing-text-provider tests::keep_all_preserves_the_break_after_ideographic_space
+        PASS [   0.003s] (2691/2768) amazing-text-provider tests::kerning_features_are_limited_to_their_shaping_axis
+        PASS [   0.003s] (2692/2768) amazing-text-provider tests::line_break_anywhere_adds_typographic_character_boundaries
+        PASS [   0.004s] (2693/2768) amazing-text-provider tests::line_break_tailoring_follows_each_style_span
+        PASS [   0.007s] (2694/2768) amazing-text-provider tests::ltr_paragraph_keeps_an_rtl_isolate_before_a_following_number
+        PASS [   0.004s] (2695/2768) amazing-text-provider tests::malformed_woff2_fails_closed_without_changing_generation
+        PASS [   0.003s] (2696/2768) amazing-text-provider tests::manual_soft_hyphen_exposes_a_discretionary_break
+        PASS [   0.005s] (2697/2768) amazing-text-provider tests::missing_author_family_uses_covering_installed_fallback
+        PASS [   0.005s] (2698/2768) amazing-text-provider tests::missing_glyph_in_selected_face_advances_to_next_family
+        PASS [   0.005s] (2699/2768) amazing-text-provider tests::mixed_bidi_line_reorders_whole_grapheme_clusters
+        PASS [   0.007s] (2700/2768) amazing-text-provider tests::mixed_vertical_orientation_follows_unicode_vo_for_each_base_character
+        PASS [   0.003s] (2701/2768) amazing-text-provider tests::nested_bidi_scope_is_stable_across_descendant_style_spans
+        PASS [   0.005s] (2702/2768) amazing-text-provider tests::overflow_wrap_exposes_separate_emergency_cluster_breaks
+        PASS [   0.005s] (2703/2768) amazing-text-provider tests::oversized_web_font_is_rejected_before_decode
+        PASS [   0.038s] (2704/2768) amazing-text-provider tests::paragraph_cluster_limit_is_checked_before_itemized_output_allocation
+        PASS [   0.003s] (2705/2768) amazing-text-provider tests::private_use_ignores_generic_faces_but_uses_named_faces
+        PASS [   0.004s] (2706/2768) amazing-text-provider tests::public_web_font_decoder_matches_registration_validation
+        PASS [   0.010s] (2707/2768) amazing-text-provider tests::registered_face_shapes_clusters_and_rasterizes_the_same_glyph_id
+        PASS [   0.007s] (2708/2768) amazing-text-provider tests::sfnt_directory_bounds_and_checksums_reject_corrupt_input
+        PASS [   0.002s] (2709/2768) amazing-text-provider tests::synchronous_registration_has_no_pending_font_loads
+        PASS [   0.003s] (2710/2768) amazing-text-provider tests::synthetic_bold_changes_the_registered_face_outline
+        PASS [   0.006s] (2711/2768) amazing-text-provider tests::synthetic_oblique_changes_the_registered_face_outline
+        PASS [   0.009s] (2712/2768) amazing-text-provider tests::unicode_range_can_exclude_space_from_the_first_available_font
+        PASS [   0.002s] (2713/2768) amazing-text-provider tests::unsafe_breaks_include_internal_and_flagged_harf_edges
+        PASS [   0.015s] (2714/2768) amazing-text-provider tests::upright_vertical_text_forces_left_to_right_bidi_direction
+        PASS [   0.004s] (2715/2768) amazing-text-provider tests::vertical_upright_uses_vert_and_never_defaults_to_vrt2
+        PASS [   0.002s] (2716/2768) amazing-webrtc h264_rtp::tests::malformed_fu_and_oversized_access_unit_are_rejected
+        PASS [   0.002s] (2717/2768) amazing-webrtc h264_rtp::tests::sequence_gap_drops_damage_and_next_marker_recovers
+        PASS [   0.002s] (2718/2768) amazing-webrtc h264_rtp::tests::single_nal_and_fu_a_packets_reconstruct_one_access_unit
+        PASS [   0.002s] (2719/2768) amazing-webrtc jitter::tests::adaptive_playout_raises_delay_and_reschedules_queued_packets
+        PASS [   0.002s] (2720/2768) amazing-webrtc jitter::tests::bounds_storage_and_classifies_duplicate_and_late_packets
+        PASS [   0.003s] (2721/2768) amazing-webrtc jitter::tests::emits_explicit_gap_when_missing_packet_reaches_playout
+        PASS [   0.002s] (2722/2768) amazing-webrtc jitter::tests::l16_and_pcmu_adapters_decode_real_wire_samples
+        PASS [   0.008s] (2723/2768) amazing-webrtc jitter::tests::public_probe_crosses_jitter_and_both_codec_adapters
+        PASS [   0.003s] (2724/2768) amazing-webrtc jitter::tests::reorders_packets_and_extends_sequence_across_wrap
+        PASS [   0.005s] (2725/2768) amazing-webrtc jitter::tests::sdp_negotiation_constructs_jitter_and_both_decoders
+        PASS [   0.002s] (2726/2768) amazing-webrtc jitter::tests::sdp_negotiation_rejects_changed_or_unsupported_codec_sets
+        PASS [   0.006s] (2727/2768) amazing-webrtc sync::tests::sender_report_clock_maps_fraction_and_rtp_wrap
+        PASS [   0.003s] (2728/2768) amazing-webrtc sync::tests::timeline_holds_presents_and_drops_against_audio_master
+        PASS [   0.003s] (2729/2768) amazing-webrtc tests::audio_and_video_media_sections_round_trip_in_order
+        PASS [   0.003s] (2730/2768) amazing-webrtc tests::authenticated_487_and_controlled_retry_round_trip
+        PASS [   0.005s] (2731/2768) amazing-webrtc tests::authenticated_ice_request_verifies_and_detects_tampering
+        PASS [   0.005s] (2732/2768) amazing-webrtc tests::authenticated_ice_success_preserves_mapped_address
+        PASS [   0.003s] (2733/2768) amazing-webrtc tests::binding_request_round_trips_through_public_interface
+        PASS [   0.003s] (2734/2768) amazing-webrtc tests::binding_success_recovers_xor_mapped_ipv4_address
+        PASS [   0.002s] (2735/2768) amazing-webrtc tests::checklist_adds_and_deduplicates_peer_reflexive_pair
+        PASS [   0.004s] (2736/2768) amazing-webrtc tests::chromium_offer_keeps_relay_candidates_direction_and_dynamic_codecs
+        PASS [   0.005s] (2737/2768) amazing-webrtc tests::compound_receiver_report_round_trips_with_sdes_cname
+        PASS [   0.006s] (2738/2768) amazing-webrtc tests::compound_sender_report_round_trips_with_sdes_cname
+        PASS [   0.005s] (2739/2768) amazing-webrtc tests::consent_freshness_schedules_refresh_and_expires_after_thirty_seconds
+        PASS [   0.005s] (2740/2768) amazing-webrtc tests::ice_checklist_orders_checks_and_completes_on_nomination
+        PASS [   0.006s] (2741/2768) amazing-webrtc tests::ice_role_conflict_follows_tiebreaker_rules
+        PASS [   0.003s] (2742/2768) amazing-webrtc tests::live_ice_probe_drops_packets_switches_role_and_learns_remote
+        PASS [   0.002s] (2743/2768) amazing-webrtc tests::minimal_ice_dtls_sdp_round_trips
+        PASS [   0.005s] (2744/2768) amazing-webrtc tests::reception_statistics_compute_loss_sequence_and_jitter
+        PASS [   0.004s] (2745/2768) amazing-webrtc tests::reception_statistics_handle_wrap_late_duplicates_and_dlsr
+        PASS [   0.004s] (2746/2768) amazing-webrtc tests::rejects_conflicting_ice_role_attributes
+        PASS [   0.002s] (2747/2768) amazing-webrtc tests::rejects_sdp_outside_the_declared_dtls_rtp_subset
+        PASS [   0.004s] (2748/2768) amazing-webrtc tests::rejects_unauthenticated_attribute_after_message_integrity
+        PASS [   0.005s] (2749/2768) amazing-webrtc tests::rfc5769_request_integrity_and_fingerprint_verify
+        PASS [   0.003s] (2750/2768) amazing-webrtc tests::rtcp_picture_loss_indication_round_trips_rfc4585_shape
+        PASS [   0.003s] (2751/2768) amazing-webrtc tests::rtcp_sender_report_round_trips_rfc3550_sender_info
+        PASS [   0.002s] (2752/2768) amazing-webrtc tests::rtp_packet_round_trips_header_and_payload
+        PASS [   0.002s] (2753/2768) amazing-webrtc tests::stun_retransmission_matches_default_rfc8489_schedule
+        PASS [   0.006s] (2754/2768) amazing-webrtc turn::tests::authenticated_allocate_permission_relay_and_delete_complete
+        PASS [   0.005s] (2755/2768) amazing-webrtc turn::tests::long_term_key_matches_rfc8489_example
+        PASS [   0.004s] (2756/2768) amazing-webrtc turn::tests::turn_parser_rejects_wrong_cookie_and_duplicate_required_attribute
+        PASS [   0.003s] (2757/2768) amazing-webrtc video::tests::assembler_bounds_frames_and_recovers_after_marker
+        PASS [   0.004s] (2758/2768) amazing-webrtc video::tests::playout_queue_orders_wraps_and_rejects_stale_frames
+        PASS [   0.007s] (2759/2768) amazing-webrtc video::tests::probe_reorders_frame_and_drops_damage
+        PASS [   0.021s] (2760/2768) amazing-webrtc-codecs tests::decoded_video_surfaces_are_opaque_rgba
+        PASS [   0.015s] (2761/2768) amazing-webrtc-codecs tests::h264_encoder_forces_idr_after_picture_loss_feedback
+        PASS [   0.020s] (2762/2768) amazing-webrtc-codecs tests::h264_key_and_delta_frames_round_trip_to_pixels
+        PASS [   0.053s] (2763/2768) amazing-webrtc-codecs tests::h264_rtp_packetization_round_trips_real_openh264_access_unit
+        PASS [   0.010s] (2764/2768) amazing-webrtc-codecs tests::opus_roundtrip_and_plc_cross_the_core_codec_seam
+        PASS [   0.030s] (2765/2768) amazing-webrtc-codecs tests::vp8_keyframe_and_interframes_decode_to_pixels
+        PASS [   9.528s] (2766/2768) amazing-net-brotli tests::every_prefix_of_small_vectors_is_truncated_or_invalid
+        PASS [  14.343s] (2767/2768) amazing-process::process_leaks thousand_spawn_navigate_map_kill_cycles_bound_handles
+        PASS [  49.352s] (2768/2768) amazing-compositor::parallel_tile_pages ia_oracle_pages_and_long_article_scroll_trace
+────────────
+     Summary [  60.574s] 2768 tests run: 2768 passed, 10 skipped
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+warning: unused import: `LockOptions as WireLockOptions`
+ --> crates/amazing-process/src/storage.rs:4:69
+  |
+4 |     LockClient, LockInfo as WireLockInfo, LockMode as WireLockMode, LockOptions as WireLockOptions,
+  |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-process` (lib) generated 1 warning (run `cargo fix --lib -p amazing-process` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+   Doc-tests amazing_a11y
+
+running 1 test
+test crates/amazing-a11y/src/lib.rs - (line 10) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.12s; merged doctests compilation took 0.12s
+   Doc-tests amazing_bindings
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_canvas
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_common
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_compositor
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_css
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_devtools
+
+running 1 test
+test crates/amazing-devtools/src/lib.rs - (line 22) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.08s; merged doctests compilation took 0.08s
+   Doc-tests amazing_dom
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_encoding
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_fetch
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_html
+
+running 1 test
+test crates/amazing-html/src/lib.rs - (line 31) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.10s; merged doctests compilation took 0.09s
+   Doc-tests amazing_image
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_ipc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_ipc_platform
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_js
+
+running 1 test
+test crates/amazing-js/src/lib.rs - (line 13) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.11s; merged doctests compilation took 0.11s
+   Doc-tests amazing_layout
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_media
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net_brotli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net_tls
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_paint
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_process
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_regex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_svg
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text_provider
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_wasm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_codecs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_crypto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Linux render runner: pixel counts, channel maximum, diff bytes, first reftest link, fuzzy limits verified
+{"output": "/home/user/amazing/out/layout/layout19/final-after/tables", "source": "0bf7475b-layout19-candidate3", "counts": {"pass": 272, "mismatch": 114, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout/layout19/final-after/retained", "source": "0bf7475b-layout19-candidate3", "counts": {"pass": 280, "mismatch": 169, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{
+  "before": "/home/user/amazing/out/layout/layout19/final-before/tables/report.json",
+  "after": "/home/user/amazing/out/layout/layout19/final-after/tables/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 386,
+  "before_counts": {
+    "pass": 241,
+    "mismatch": 145,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 272,
+    "mismatch": 114,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": 31,
+  "losses": 0,
+  "actual_hash_changes": 41,
+  "reference_hash_changes": 3,
+  "before_projection_sha256": "3334e5f256cb3fb57714ab5090f3ba0f20c664228998e4c6f5dccf98bd1ed047",
+  "after_projection_sha256": "3567bdecafd8d5ef4c47e02019cff6c7fdd65c1161fefdda20c81090e80b91ad"
+}
+{
+  "before": "/home/user/amazing/out/layout/layout19/final-before/retained/report.json",
+  "after": "/home/user/amazing/out/layout/layout19/final-after/retained/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": 0,
+  "losses": 0,
+  "actual_hash_changes": 0,
+  "reference_hash_changes": 0,
+  "before_projection_sha256": "b38e0eadfc9687defa61f8a47baaf0833190a8312e93294ff7e0245a3dbf1b9e",
+  "after_projection_sha256": "b38e0eadfc9687defa61f8a47baaf0833190a8312e93294ff7e0245a3dbf1b9e"
+}
+width constraints: {"pass": 26, "mismatch": 25}
+collapsed borders: {"pass": 26, "mismatch": 22}
+tree repair: {"mismatch": 17, "pass": 54}
+other tables: {"mismatch": 16, "pass": 15}
+borders and backgrounds: {"mismatch": 11, "pass": 26}
+row heights: {"mismatch": 7, "pass": 13}
+vertical flow: {"mismatch": 4, "pass": 7}
+visibility: {"mismatch": 4, "pass": 1}
+fixed widths: {"pass": 66, "mismatch": 3}
+border spacing: {"mismatch": 2, "pass": 3}
+positioning: {"pass": 9, "mismatch": 2}
+captions: {"pass": 17, "mismatch": 1}
+empty cells: {"pass": 9}

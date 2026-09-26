@@ -116,6 +116,33 @@ pub enum Hyphens {
     Auto,
 }
 
+/// CSS Text Module `text-transform`'s case keyword. Mutually exclusive with
+/// itself (only one of `capitalize`/`uppercase`/`lowercase` can be set at a
+/// time), but independent of, and combinable with, `full-width` and
+/// `full-size-kana` -- see `TextTransform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TextTransformCase {
+    #[default]
+    None,
+    Capitalize,
+    Uppercase,
+    Lowercase,
+}
+
+/// The resolved value of the CSS `text-transform` property. Grammar is
+/// `none | [ capitalize | uppercase | lowercase ] || full-width ||
+/// full-size-kana`: the `case` keyword and the two width/kana keywords are
+/// independent axes that combine. This type only carries the resolved
+/// value; a caller resolves the property text itself (e.g. from
+/// `ComputedStyle`) and applies it via
+/// `amazing_text_provider::apply_text_transform`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TextTransform {
+    pub case: TextTransformCase,
+    pub full_width: bool,
+    pub full_size_kana: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LineBreak {
     #[default]
@@ -212,6 +239,12 @@ pub fn resolve_synthesis(
         style: policy.style
             && request.slant != FontSlant::Normal
             && candidate.slant == FontSlant::Normal,
+        // Small-caps and super/subscript synthesis depend on the selected
+        // face's actual GSUB feature support (`smcp`/`c2sc`/`sups`/`subs`),
+        // which this attribute-only comparison has no access to. The
+        // provider resolves those two per glyph cluster and merges them in.
+        small_caps: false,
+        position: false,
     }
 }
 
@@ -242,6 +275,14 @@ pub struct VariationSetting {
 pub struct FontSynthesis {
     pub weight: bool,
     pub style: bool,
+    /// CSS Fonts 4 section 6's `small-caps` synthesis keyword: allows a
+    /// scaled-glyph fallback for `font-variant-caps: small-caps`/
+    /// `all-small-caps` when the selected face has no `smcp`/`c2sc` feature.
+    pub small_caps: bool,
+    /// CSS Fonts 4 section 6's `position` synthesis keyword: allows a
+    /// scaled-and-shifted fallback for `font-variant-position: super`/`sub`
+    /// when the selected face has no `sups`/`subs` feature.
+    pub position: bool,
 }
 
 impl Default for FontSynthesis {
@@ -249,13 +290,18 @@ impl Default for FontSynthesis {
         Self {
             weight: true,
             style: true,
+            small_caps: true,
+            position: true,
         }
     }
 }
 
 impl FontSynthesis {
     pub fn bits(self) -> u8 {
-        u8::from(self.weight) | (u8::from(self.style) << 1)
+        u8::from(self.weight)
+            | (u8::from(self.style) << 1)
+            | (u8::from(self.small_caps) << 2)
+            | (u8::from(self.position) << 3)
     }
 }
 
@@ -1406,9 +1452,14 @@ mod tests {
             stretch: 100,
             slant,
         };
+        // `resolve_synthesis` never sets small_caps/position (it has no GSUB
+        // access), so every expected value below keeps them false regardless
+        // of what the policy argument allows.
         let auto = FontSynthesis {
             weight: true,
             style: true,
+            small_caps: true,
+            position: true,
         };
         assert_eq!(
             resolve_synthesis(
@@ -1416,7 +1467,12 @@ mod tests {
                 face(400, FontSlant::Normal),
                 auto
             ),
-            auto
+            FontSynthesis {
+                weight: true,
+                style: true,
+                small_caps: false,
+                position: false
+            }
         );
         assert_eq!(
             resolve_synthesis(
@@ -1426,7 +1482,9 @@ mod tests {
             ),
             FontSynthesis {
                 weight: false,
-                style: false
+                style: false,
+                small_caps: false,
+                position: false
             }
         );
         assert_eq!(
@@ -1437,7 +1495,9 @@ mod tests {
             ),
             FontSynthesis {
                 weight: false,
-                style: false
+                style: false,
+                small_caps: false,
+                position: false
             }
         );
         assert_eq!(
@@ -1446,12 +1506,16 @@ mod tests {
                 face(400, FontSlant::Normal),
                 FontSynthesis {
                     weight: false,
-                    style: false
+                    style: false,
+                    small_caps: false,
+                    position: false
                 }
             ),
             FontSynthesis {
                 weight: false,
-                style: false
+                style: false,
+                small_caps: false,
+                position: false
             }
         );
     }
@@ -1467,6 +1531,8 @@ mod tests {
             FontSynthesis {
                 weight: true,
                 style: false,
+                small_caps: false,
+                position: false,
             },
         );
 

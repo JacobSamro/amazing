@@ -1,0 +1,93 @@
+linux-run[layout]: boat from /Users/jMac/Projects/OpenSource/amazing-wt/layout (97d79da4, with uncommitted edits)
+linux-run[layout]: boat sandbox bx_cp5jbn5z (pool-layout)
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i64, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/wt/layout/crates/amazing-layout)
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+warning: unused import: `RubyColumn`
+  --> crates/amazing-layout/src/box_tree.rs:27:5
+   |
+27 |     RubyColumn, RubyText, TextSourceMapping,
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0057]: this function takes 1 argument but 2 arguments were supplied
+   --> crates/amazing-layout/src/block.rs:323:40
+    |
+323 |             "auto" | "min-content" => (intrinsic(b, true) - chrome).max(0.0),
+    |                                        ^^^^^^^^^ - unexpected argument #1 of type `&mut LayoutBox`
+    |
+note: closure defined here
+   --> crates/amazing-layout/src/block.rs:319:25
+    |
+319 |         let intrinsic = |minimum| if crate::grid::is_grid_lanes(&b.style) {
+    |                         ^^^^^^^^^
+help: remove the extra argument
+    |
+323 -             "auto" | "min-content" => (intrinsic(b, true) - chrome).max(0.0),
+323 +             "auto" | "min-content" => (intrinsic(true) - chrome).max(0.0),
+    |
+
+error[E0057]: this function takes 1 argument but 2 arguments were supplied
+   --> crates/amazing-layout/src/block.rs:324:31
+    |
+324 |             "max-content" => (intrinsic(b, false) - chrome).max(0.0),
+    |                               ^^^^^^^^^ - unexpected argument #1 of type `&mut LayoutBox`
+    |
+note: closure defined here
+   --> crates/amazing-layout/src/block.rs:319:25
+    |
+319 |         let intrinsic = |minimum| if crate::grid::is_grid_lanes(&b.style) {
+    |                         ^^^^^^^^^
+help: remove the extra argument
+    |
+324 -             "max-content" => (intrinsic(b, false) - chrome).max(0.0),
+324 +             "max-content" => (intrinsic(false) - chrome).max(0.0),
+    |
+
+For more information about this error, try `rustc --explain E0057`.
+warning: `amazing-layout` (lib) generated 1 warning
+error: could not compile `amazing-layout` (lib) due to 2 previous errors; 1 warning emitted

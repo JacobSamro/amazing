@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::value::{JsValue, Obj, Property, Throw};
+use crate::value::{JsValue, Obj, PrivateName, Property, Throw};
 
 /// Shared handle to one environment frame. The only way code outside this
 /// module touches an environment.
@@ -122,6 +122,12 @@ pub struct Env {
     pub this_binding: Option<JsValue>,
     /// Derived constructors have a local `this` binding that throws until super().
     this_uninitialized: bool,
+    /// This class body's own `#name -> PrivateName` map (§9.2's private
+    /// environment), set once by `eval_class_inner` on the frame every
+    /// method/field-initializer/static-block of that class captures. `None`
+    /// everywhere else; lookup walks outward through parents regardless, so
+    /// a nested class's own names shadow an enclosing class's same-named one.
+    class_private: Option<Rc<HashMap<String, PrivateName>>>,
 }
 
 impl Env {
@@ -272,7 +278,31 @@ impl EnvHandle {
             vars: HashMap::new(),
             this_binding: None,
             this_uninitialized: false,
+            class_private: None,
         })))
+    }
+
+    /// Installs this frame's own class's private-name map (§9.2 NewPrivateEnvironment).
+    /// Only `eval_class_inner` calls this, once per class, on the frame every
+    /// element of that class captures as its defining environment.
+    pub(crate) fn set_class_private(&self, names: HashMap<String, PrivateName>) {
+        self.0.borrow_mut().class_private = Some(Rc::new(names));
+    }
+
+    /// Resolves a `#name` textual reference to its `PrivateName` identity by
+    /// walking outward through enclosing class private environments, nearest
+    /// first, so a nested class's own name shadows an outer one. `None`
+    /// means no enclosing class declares that name (an unresolvable private
+    /// reference — a SyntaxError at parse time per spec; the interpreter has
+    /// no static pass, so callers throw at evaluation time instead).
+    pub fn resolve_private(&self, name: &str) -> Option<PrivateName> {
+        let frame = self.0.borrow();
+        if let Some(map) = &frame.class_private {
+            if let Some(found) = map.get(name) {
+                return Some(found.clone());
+            }
+        }
+        frame.parent.as_ref().and_then(|parent| parent.resolve_private(name))
     }
 
     pub(crate) fn set_global_object(&self, object: Obj) { self.0.borrow_mut().global_object = Some(object); }

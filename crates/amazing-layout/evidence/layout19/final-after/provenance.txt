@@ -1,0 +1,5 @@
+source=0bf7475b-layout19-candidate3
+target=/home/user/amazing/target
+b2857a95000733cdeee1a65cc8793047778d6f9557b4a834852b6c8c5a6f40cb  crates/amazing-layout/src/table.rs
+7d079eb4462a1963d90349a68caca0af7c611762a7c68eb5df06c716d398c508  crates/amazing-layout/src/table_tests.rs
+82c44f388fb12c452e9eff4cf23b0466b2382c32545c86d3883cbf743b9ed8df  Cargo.lock

@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "subdir": "css/css-transforms",
+  "mismatch_count": 184,
+  "unreadable": 7,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 40,
+      "examples": [
+        "css__css-transforms__css-transform-3d-rotate3d-X-positive.html",
+        "css__css-transforms__composited-under-rotateY-180deg-clip-perspective.html",
+        "css__css-transforms__perspective-translateZ-negative.html",
+        "css__css-transforms__css-transform-3d-rotate3d-Y-negative.html",
+        "css__css-transforms__rotate_45deg.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 38,
+      "examples": [
+        "css__css-transforms__perspective-translateZ-positive.html",
+        "css__css-transforms__backface-visibility-hidden-005.html",
+        "css__css-transforms__transforms-rotateY-degree-60.html",
+        "css__css-transforms__perspective-zero-3.html",
+        "css__css-transforms__perspective-zero-point-five.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 19,
+      "examples": [
+        "css__css-transforms__transform-input-010.html",
+        "css__css-transforms__transform-input-014.html",
+        "css__css-transforms__transform-input-008.html",
+        "css__css-transforms__transform-input-011.html",
+        "css__css-transforms__transform-table-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 16,
+      "examples": [
+        "css__css-transforms__transform-rotate-004.html",
+        "css__css-transforms__transform-rotate-005.html",
+        "css__css-transforms__transform-rotate-002.html",
+        "css__css-transforms__transform-origin-007.html",
+        "css__css-transforms__transform-scale-test.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 13,
+      "examples": [
+        "css__css-transforms__transform3d-scale-007.html",
+        "css__css-transforms__transform-inherit-002.html",
+        "css__css-transforms__transform-stresstest-001.html",
+        "css__css-transforms__transform-inherit-origin-002.html",
+        "css__css-transforms__transform-inherit-origin-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 9,
+      "examples": [
+        "css__css-transforms__individual-transform__individual-transform-3.html",
+        "css__css-transforms__transform3d-backface-visibility-007.html",
+        "css__css-transforms__transform3d-sorting-005.html",
+        "css__css-transforms__transform3d-backface-visibility-003.html",
+        "css__css-transforms__transform3d-backface-visibility-004.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 8,
+      "examples": [
+        "css__css-transforms__transformed-preserve-3d-1.html",
+        "css__css-transforms__backface-visibility-hidden-006.html",
+        "css__css-transforms__transform-transformed-th-contains-fixed-position.html",
+        "css__css-transforms__transform3d-preserve3d-010.html",
+        "css__css-transforms__transform-table-007.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__css-transforms__css-transform-3d-rotate3d-Z-negative.html",
+        "css__css-transforms__transform-transformable-inline-block.html",
+        "css__css-transforms__css-transform-3d-rotateZ-positive.html",
+        "css__css-transforms__css-transform-3d-rotateZ-negative.html",
+        "css__css-transforms__css-transform-3d-rotate3d-Z-positive.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 4,
+      "examples": [
+        "css__css-transforms__preserve3d-and-flattening-z-order-007.html",
+        "css__css-transforms__preserve3d-and-flattening-002.html",
+        "css__css-transforms__preserve3d-and-flattening-z-order-006.html",
+        "css__css-transforms__preserve3d-and-flattening-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-transforms__individual-transform__individual-transform-2a.html",
+        "css__css-transforms__individual-transform__individual-transform-2b.html",
+        "css__css-transforms__individual-transform__individual-transform-2d.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-abspos-004.html",
+        "css__css-transforms__transform-abspos-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-abspos-007.html",
+        "css__css-transforms__transform-abspos-006.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-box__cssbox-content-box-002.html",
+        "css__css-transforms__individual-transform__individual-transform-2e.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-propagate-inherit-boolean-001.html",
+        "css__css-transforms__transform-generated-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transforms-rotate-translate-scale.html",
+        "css__css-transforms__css-transform-scale-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-input-017.html",
+        "css__css-transforms__transform-transformed-caption-contains-fixed-position.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-transforms__transform-abspos-001.html",
+        "css__css-transforms__transform-abspos-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__individual-transform__animation__individual-transform-combine.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__transformed-rotateX-3.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__individual-transform__individual-transform-1.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__transform3d-sorting-006.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__transform3d-matrix3d-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__transform-compound-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__individual-transform__individual-transform-2c.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-transforms__transform-input-019.html"
+      ]
+    }
+  ]
+}

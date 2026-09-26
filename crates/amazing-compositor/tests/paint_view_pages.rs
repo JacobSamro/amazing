@@ -7,6 +7,7 @@ use amazing_paint::controls::NoControls;
 use amazing_paint::display_list_view::DisplayListView;
 use amazing_paint::{paint_document_with_text_resources_and_controls, NoImages};
 use amazing_text::FallbackTextSystem;
+use std::path::Path;
 use std::time::Instant;
 
 const VIEWPORT: u32 = 96;
@@ -185,8 +186,27 @@ fn retained_real_page_property_trace() {
         .unwrap();
     let initial = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     assert!(!initial.resources.uploads.is_empty());
+    // The same effect node used for the opacity scenario: `EffectOperations`
+    // carries filters/blend/clip, not opacity, so animating one does not
+    // disturb the other. Reserve both endpoint halos up front, exactly as
+    // `effect_tests::reserved_blur_animation_...` does for a synthetic scene,
+    // so a sampled blur never needs a source raster mid-animation.
+    let filter_from = compositor
+        .trees()
+        .effect_operations(effect)
+        .cloned()
+        .unwrap_or_default();
+    let mut filter_to = filter_from.clone();
+    filter_to.filters = vec![amazing_compositor::FilterOperation::Blur(6.)];
+    compositor
+        .reserve_effect_animation(effect, &filter_from, &filter_to)
+        .unwrap();
+    // Reserving a wider halo can itself dirty tiles that now need the extra
+    // margin; absorb that one-time cost here so it does not land inside the
+    // "scroll" scenario's timed, zero-upload loop below.
+    let _ = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     println!("scenario,frames,full_paint_us,retained_build_us,uploads");
-    for scenario in ["scroll", "transform", "opacity"] {
+    for scenario in ["scroll", "transform", "opacity", "filter"] {
         let mut full_us = 0;
         let mut retained_us = 0;
         let mut uploads = 0;
@@ -214,6 +234,17 @@ fn retained_real_page_property_trace() {
                 "opacity" => compositor
                     .set_opacity(effect, 0.5 + index as f32 / 100.)
                     .unwrap(),
+                "filter" => compositor
+                    .set_effect_operations(
+                        effect,
+                        amazing_compositor::sample_effect_operations(
+                            &filter_from,
+                            &filter_to,
+                            (index + 1) as f32 / 20.,
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap(),
                 _ => unreachable!(),
             }
             let start = Instant::now();
@@ -232,6 +263,119 @@ fn retained_real_page_property_trace() {
     assert!(compositor.dirty_tiles() > 0);
     let _damaged = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     assert_eq!(compositor.dirty_tiles(), 0);
+}
+
+/// COMP-17: the scaffold's `fixed`/`scroller`/`moving`/`fade` elements are
+/// prepended inside `<body>` so scroll/transform/opacity/filter keep the
+/// same deterministic property IDs `retained_real_page_property_trace`
+/// already relies on (`ScrollId(2)`, `TransformId(1)`, `EffectId(2)`), while
+/// the fixture's own body content (after its own `<body>` tag; its `<head>`
+/// is dropped, since layout does not execute scripts/stylesheets there
+/// anyway) drives realistic real-page scene scale.
+fn scaffolded_real_page(name: &str) -> (String, String) {
+    let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/real-pages");
+    let base_css = std::fs::read_to_string(root_dir.join("assets/base.css"))
+        .expect("real-pages base.css fixture");
+    let page = std::fs::read_to_string(root_dir.join("pages").join(format!("{name}.html")))
+        .unwrap_or_else(|e| panic!("read {name}.html: {e}"));
+    let real_body = page.split_once("<body>").map_or(page.as_str(), |(_, rest)| rest);
+    let scaffold_open = EFFECTS_PAGE
+        .strip_suffix("</body>")
+        .expect("EFFECTS_PAGE scaffold ends its own body");
+    let html = format!("{scaffold_open}{real_body}");
+    let css = format!(
+        "body{{margin:0;background:white}}\
+         .fixed{{position:fixed;left:2px;top:2px;background:red}}\
+         .scroller{{width:300px;height:180px;overflow:scroll;background:#ddd}}\
+         .moving{{will-change:transform;transform:translate(3px,4px);background:blue;width:120px;height:80px}}\
+         .fade{{opacity:.5;background:green;width:120px;height:80px}}\
+         {base_css}"
+    );
+    (html, css)
+}
+
+/// COMP-17: a real-page frame-time report for the shell -- the compositor
+/// path versus a full repaint for scroll, transform, opacity and filter
+/// animations, on 5 real-pages fixtures instead of one synthetic page. See
+/// `evidence/comp17/real-page-frame-time.md` for the committed numbers.
+#[test]
+fn real_page_frame_time_report() {
+    const SIZE: u32 = 1024;
+    let scroll = ScrollId(2);
+    let transform = amazing_compositor::TransformId(1);
+    let effect = amazing_compositor::EffectId(2);
+    println!("page,scenario,frames,full_paint_us,retained_build_us,uploads");
+    for page in [
+        "app-kanban",
+        "docs-guide",
+        "news-section",
+        "shop-category",
+        "wiki-portal",
+    ] {
+        let (html, css) = scaffolded_real_page(page);
+        let text = FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(&html, &css, SIZE as f32, &text);
+        let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        let source = PaintViewSource::new(&view);
+        assert_eq!(source.mode(), PaintViewRasterMode::RawLocal, "{page}");
+        let mut compositor = source.compositor(SIZE, SIZE).unwrap();
+        let bounds = compositor.trees().scroll(scroll).unwrap().container;
+        compositor
+            .set_scroll_contents(scroll, Rect::new(bounds.x, bounds.y, bounds.w, bounds.h + 100.))
+            .unwrap();
+        let initial = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+        assert!(!initial.resources.uploads.is_empty(), "{page}");
+        let filter_from = compositor.trees().effect_operations(effect).cloned().unwrap_or_default();
+        let mut filter_to = filter_from.clone();
+        filter_to.filters = vec![amazing_compositor::FilterOperation::Blur(6.)];
+        compositor.reserve_effect_animation(effect, &filter_from, &filter_to).unwrap();
+        // Absorb the halo reservation's one-time reraster outside any timed,
+        // zero-upload scenario below (see `retained_real_page_property_
+        // trace`'s own comment on this).
+        let _ = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+        for scenario in ["scroll", "transform", "opacity", "filter"] {
+            let mut full_us = 0;
+            let mut retained_us = 0;
+            let mut uploads = 0;
+            for index in 0..20 {
+                let start = Instant::now();
+                let _ = paint_document_with_text_resources_and_controls(
+                    &root, SIZE, SIZE, &text, &NoImages, &NoControls,
+                );
+                full_us += start.elapsed().as_micros();
+                match scenario {
+                    "scroll" => compositor.set_scroll(scroll, (0., (index + 1) as f32)).unwrap(),
+                    "transform" => compositor
+                        .set_transform(
+                            transform,
+                            amazing_compositor::Matrix4::translation((index + 1) as f32, 4., 0.),
+                        )
+                        .unwrap(),
+                    "opacity" => compositor.set_opacity(effect, 0.5 + index as f32 / 100.).unwrap(),
+                    "filter" => compositor
+                        .set_effect_operations(
+                            effect,
+                            amazing_compositor::sample_effect_operations(
+                                &filter_from, &filter_to, (index + 1) as f32 / 20.,
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap(),
+                    _ => unreachable!(),
+                }
+                let start = Instant::now();
+                let frame = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+                retained_us += start.elapsed().as_micros();
+                uploads += frame.resources.uploads.len();
+            }
+            println!("{page},{scenario},20,{full_us},{retained_us},{uploads}");
+            assert_eq!(uploads, 0, "{page}/{scenario} rerasterized retained tiles");
+            assert!(
+                retained_us * 10 <= full_us,
+                "{page}/{scenario} retained frame exceeded 10% of full paint ({retained_us}us vs {full_us}us)"
+            );
+        }
+    }
 }
 
 #[test]
@@ -260,6 +404,44 @@ fn control_uses_baked_fallback_with_parity() {
         &NoControls,
     );
     assert_eq!(actual.pixels, expected.pixels);
+}
+
+/// Regression for a shell-reported panic: `PaintViewSource::new` treated
+/// `RawRasterError::RasterFailed` (a `PaintDecorations`/`PaintContent` item
+/// that `raster_raw_item` declines) as an unexpected error and panicked,
+/// instead of falling back like `UnseparableItem`. `app-mail.html` and
+/// `docs-reference.html` both have a `<table>` under `base.css`'s
+/// `table{border-collapse:collapse}`, which routes the table's row/cell
+/// backgrounds and borders through the table decoration path that
+/// `raster_raw_item` explicitly declines (`suppress_background`,
+/// `suppress_border`, non-empty `background_holes` or table `borders`).
+#[test]
+fn real_pages_with_border_collapse_tables_use_baked_fallback_without_panicking() {
+    const VIEWPORT: u32 = 1024;
+    let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/real-pages");
+    let base_css = std::fs::read_to_string(root_dir.join("assets/base.css"))
+        .expect("real-pages base.css fixture");
+    for name in ["app-mail", "docs-reference"] {
+        let html = std::fs::read_to_string(root_dir.join("pages").join(format!("{name}.html")))
+            .unwrap_or_else(|e| panic!("read {name}.html: {e}"));
+        let text = FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(&html, &base_css, VIEWPORT as f32, &text);
+        let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+        // The regression is this call not panicking.
+        let source = PaintViewSource::new(&view);
+        assert_eq!(
+            source.mode(),
+            PaintViewRasterMode::BakedFallback,
+            "{name}: a border-collapse table item declines raw-local raster"
+        );
+        let mut compositor = source.compositor(VIEWPORT, VIEWPORT).unwrap();
+        let frame = source.build_frame(&mut compositor, VIEWPORT, VIEWPORT).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls,
+        );
+        assert_eq!(actual.pixels, expected.pixels, "{name} baked-fallback pixel parity");
+    }
 }
 
 #[test]

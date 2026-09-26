@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/css-logical",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:02:41Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-logical/run-20260926T160239Z-84732",
+  "inventory": {
+    "document_files": 98,
+    "testharness_files": 86,
+    "reftests": 6,
+    "eligible_static_self_contained": 5,
+    "selected": 5,
+    "excluded": {
+      "not-reftest": 92,
+      "scripted": 1
+    }
+  },
+  "counts": {
+    "pass": 1,
+    "mismatch": 4,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css__css-logical__logical-values-float-clear-2.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/logical-values-float-clear-2-ref.html",
+      "differing_pixels": 173450,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "2d4a531b43b1ed6a06e9bf879fe46b9550c34aaf862f6ce12bd75bb2470b2eb9",
+      "reference_sha256": "dbc568c4dc7ad6cd7196abbdf563a57bc8651bf1e1ec1573366e32a8c525baec",
+      "diff_sha256": "b487691f1cfd3de382081607654ae93e1cbc283edf8874c61e57802ef66faee7",
+      "detail": "maxDifference=255/0; totalPixels=173450/0"
+    },
+    {
+      "id": "css__css-logical__logical-values-float-clear-3.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/logical-values-float-clear-3-ref.html",
+      "differing_pixels": 77177,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "061c2fe7e6b3cdaa45ada033d6608e09872c7eed4fe1dd27d5761795f691be2f",
+      "reference_sha256": "1a0c5b201188b4c759e9140b973005bfe8eda3c5eb0ad2e306cb4991f9c809c8",
+      "diff_sha256": "0820169dc7e477dbca6be9b87d10e24710d2aa32f06eb6175360715411503206",
+      "detail": "maxDifference=255/0; totalPixels=77177/0"
+    },
+    {
+      "id": "css__css-logical__cascading-001.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "cascading-001-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "821ce5a0bbf73342f1bb859251c7fdb25ba8104745bffb5f457949064c897b2e",
+      "reference_sha256": "821ce5a0bbf73342f1bb859251c7fdb25ba8104745bffb5f457949064c897b2e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-logical__logical-values-float-clear-1.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/logical-values-float-clear-1-ref.html",
+      "differing_pixels": 86749,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "3af71a613ac2b75e4e4159c4536d21496b3c9e593af34e501f290d3a6cc832d8",
+      "reference_sha256": "3641e06edb5c5f355774535135e4100c13aed387e6000cdef4023e3dfb933ebe",
+      "diff_sha256": "d00e5f084c6c016a4f1722b152d8dd5117393c713dea9bda818beb0746ebf72d",
+      "detail": "maxDifference=255/0; totalPixels=86749/0"
+    },
+    {
+      "id": "css__css-logical__logical-values-float-clear-4.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/logical-values-float-clear-4-ref.html",
+      "differing_pixels": 23287,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "4f3a4842110b392fcdf6175715fb580169d7cfbaa860134b384d40fef0ef9f93",
+      "reference_sha256": "4db7418cb0686ca5a12ef8f20c34dfd09a6caea7651b24dd41ac0f717dc3171e",
+      "diff_sha256": "ab5eb38d21c89bd7b62633d566fb8fe9bedc40d778abeaaf96b75a4251bebb98",
+      "detail": "maxDifference=255/0; totalPixels=23287/0"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+[
+  {
+    "case": "CSS2__positioning__left-004.xht",
+    "image": "actual.ppm.gz",
+    "blue": 480,
+    "orange": 480,
+    "colors": [
+      [
+        [
+          255,
+          255,
+          255
+        ],
+        473705
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ],
+        5335
+      ],
+      [
+        [
+          255,
+          165,
+          0
+        ],
+        480
+      ],
+      [
+        [
+          0,
+          0,
+          255
+        ],
+        480
+      ]
+    ]
+  },
+  {
+    "case": "CSS2__positioning__left-004.xht",
+    "image": "reference.ppm.gz",
+    "blue": 0,
+    "orange": 0,
+    "colors": [
+      [
+        [
+          255,
+          255,
+          255
+        ],
+        474665
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ],
+        5335
+      ]
+    ]
+  },
+  {
+    "case": "CSS2__positioning__absolute-replaced-height-002.xht",
+    "image": "actual.ppm.gz",
+    "blue": 0,
+    "orange": 225,
+    "colors": [
+      [
+        [
+          255,
+          255,
+          255
+        ],
+        474693
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ],
+        5082
+      ],
+      [
+        [
+          255,
+          165,
+          0
+        ],
+        225
+      ]
+    ]
+  },
+  {
+    "case": "CSS2__positioning__absolute-replaced-height-002.xht",
+    "image": "reference.ppm.gz",
+    "blue": 0,
+    "orange": 0,
+    "colors": [
+      [
+        [
+          255,
+          255,
+          255
+        ],
+        474918
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ],
+        5082
+      ]
+    ]
+  }
+]

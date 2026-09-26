@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "subdir": "css/css-viewport",
+  "mismatch_count": 27,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-viewport__zoom__explicit-inherit__top.html",
+        "css__css-viewport__zoom__explicit-inherit__left.html",
+        "css__css-viewport__zoom__matrix-zoom-anim.html"
+      ]
+    },
+    {
+      "signature": "large-region, bottom, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-viewport__zoom__shape-outside-circle.html",
+        "css__css-viewport__zoom__shape-outside-ellipse.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-viewport__zoom__filters-blur.html",
+        "css__css-viewport__zoom__explicit-inherit__bottom.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-viewport__zoom__explicit-inherit__webkit-border-radius.html",
+        "css__css-viewport__zoom__explicit-inherit__flex-basis.html"
+      ]
+    },
+    {
+      "signature": "medium-region, bottom-left, less green than reference",
+      "count": 2,
+      "examples": [
+        "css__css-viewport__zoom__transform-translate.html",
+        "css__css-viewport__zoom__transform-matrix-2d.html"
+      ]
+    },
+    {
+      "signature": "medium-region, right, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__row-gap.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__explicit-inherit__webkit-flex-basis.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__mask-border-width.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__grid.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__box-shadow-inset-spread.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__border-spacing-without-border.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__column-gap.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__border-width.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__filters-drop-shadow.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__matrix3d-zoom.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__matrix-zoom.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__margin.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__block-step-size.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__explicit-inherit__right.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__border-spacing.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-viewport__zoom__contain-intrinsic-width.html"
+      ]
+    }
+  ]
+}

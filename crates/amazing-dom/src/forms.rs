@@ -9,6 +9,8 @@ pub struct ControlState {
     user_edited: bool,
     checked: Option<bool>,
     dirty_checked: bool,
+    indeterminate: bool,
+    click_in_progress: bool,
     selected: Option<bool>,
     dirty_selected: bool,
     custom_error: Vec<u16>,
@@ -459,7 +461,8 @@ impl Dom {
             // HTML cloning steps propagate the live value, checkedness and
             // selectedness (and their dirty flags). Per-element runtime state
             // that is not cloned: the text selection, custom validity message,
-            // user-edited flag, cached type transition and event guards.
+            // user-edited flag, cached type transition, event guards, and
+            // click reentrancy guard.
             let mut state = state;
             state.selection = None;
             state.custom_error = Vec::new();
@@ -467,6 +470,7 @@ impl Dom {
             state.last_type = None;
             state.constructing_entry_list = false;
             state.firing_submission_events = false;
+            state.click_in_progress = false;
             *self.form_state_mut(to) = state;
         }
     }
@@ -836,22 +840,8 @@ impl Dom {
         state.dirty_checked = true;
         self.record_render_state(node, "checked", old_checked, checked);
         if checked && self.input_type(node)? == "radio" {
-            let name = self.attr(node, "name").unwrap_or("").to_owned();
-            let owner = self.form_owner(node);
-            let document = self.owner_document(node).unwrap_or(node);
-            let root = self.root(node);
-            let peers: Vec<_> = (0..self.node_count())
-                .map(|i| NodeIdx(i as u32))
-                .filter(|peer| {
-                    *peer != node
-                        && self.html_tag(*peer, "input")
-                        && self.input_type(*peer).ok() == Some("radio")
-                        && self.attr(*peer, "name").unwrap_or("") == name
-                        && self.form_owner(*peer) == owner
-                        && self.owner_document(*peer) == Some(document)
-                        && self.root(*peer) == root
-                })
-                .collect();
+            let peers: Vec<_> = (0..self.node_count()).map(|i| NodeIdx(i as u32))
+                .filter(|peer| *peer != node && self.same_radio_group(node, *peer)).collect();
             for peer in peers {
                 let old_peer = self.input_checked(peer)?;
                 self.form_state_mut(peer).checked = Some(false);
@@ -1989,3 +1979,7 @@ mod temporal_tests {
         );
     }
 }
+
+#[path = "input_activation.rs"]
+mod activation;
+pub use activation::InputActivation;

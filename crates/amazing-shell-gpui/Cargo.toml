@@ -7,6 +7,7 @@ license = "MIT"
 rust-version = "1.89"
 
 [dependencies]
+amazing-a11y = { path = "../amazing-a11y" }
 amazing-css = { path = "../amazing-css" }
 amazing-compositor = { path = "../amazing-compositor" }
 amazing-dom = { path = "../amazing-dom" }
@@ -25,7 +26,18 @@ amazing-webrtc-codecs = { path = "../amazing-webrtc-codecs" }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
 image = { version = "0.25.9", default-features = false, features = [] }
+
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Media_Audio"] }
+
+# gpui_linux (behind gpui_platform) sets default-features = false at the
+# zed workspace level, so without this the Linux backend compiles with
+# neither windowing system wired in and panics at startup ("At least one
+# of the wayland or x11 features must be enabled"). The sandboxes here run
+# Xvfb (X11); wayland is enabled too so a real Wayland desktop session works
+# the same way gpui_linux's own default does.
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48", features = ["x11", "wayland"] }
 
 [[bin]]
 name = "amazing-shell"
@@ -38,6 +50,11 @@ path = "src/compositor_presenter.rs"
 [[bin]]
 name = "amazing-compositor-proof"
 path = "src/bin/compositor_proof.rs"
+test = false
+
+[[bin]]
+name = "amazing-a11y-proof"
+path = "src/bin/a11y_proof.rs"
 test = false
 
 [profile.release]
