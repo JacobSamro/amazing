@@ -1162,3 +1162,67 @@ fn page_endpoint_supports_breakpoints_stepping_and_call_frame_eval() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_profiles_cpu_and_heap() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Profiler.enable", empty());
+    client.result("Profiler.setSamplingInterval", obj! { "interval" => n(200.0) });
+    client.result("Profiler.start", empty());
+    let stop = client.result("Profiler.stop", empty());
+    let profile = stop.get("profile").unwrap();
+    let nodes = profile.get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(
+        nodes[0]
+            .get("callFrame")
+            .unwrap()
+            .get("functionName")
+            .unwrap()
+            .as_str(),
+        Some("f")
+    );
+    assert_eq!(profile.get("samples").unwrap().as_array().unwrap().len(), 2);
+
+    client.result("HeapProfiler.enable", empty());
+    let snapshot = client.command("HeapProfiler.takeHeapSnapshot", empty(), None);
+    assert_eq!(snapshot.get("result").unwrap(), &empty());
+    let chunk = client.wait_event("HeapProfiler.addHeapSnapshotChunk");
+    assert_eq!(
+        chunk.get("params").unwrap().get("chunk").unwrap().as_str(),
+        Some("{\"snapshot\":1}")
+    );
+    client.wait_event("HeapProfiler.reportHeapSnapshotProgress");
+
+    client.result("HeapProfiler.collectGarbage", empty());
+    let heap_id = client.result(
+        "HeapProfiler.getHeapObjectId",
+        obj! { "objectId" => s("obj-1") },
+    );
+    assert_eq!(
+        heap_id.get("heapSnapshotObjectId").unwrap().as_str(),
+        Some("heap-1")
+    );
+    let resolved = client.result(
+        "HeapProfiler.getObjectByHeapObjectId",
+        obj! { "objectId" => s("heap-1") },
+    );
+    assert_eq!(
+        resolved.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(9.0)
+    );
+
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        assert_eq!(script.profiler_enabled, Some(true));
+        assert_eq!(script.sampling_interval, Some(200));
+        assert_eq!(script.profiling_starts, 1);
+        assert_eq!(script.heap_profiler_enabled, Some(true));
+        assert_eq!(script.garbage_collections, 1);
+    }
+
+    shutdown.store(true, Ordering::Relaxed);
+}

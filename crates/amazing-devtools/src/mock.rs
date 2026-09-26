@@ -10,14 +10,15 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    AxNode, BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession,
-    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern,
-    FrameInfo, FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
-    InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule,
-    MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
-    NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor, Quad, Rect,
-    RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, ScriptInfo,
-    ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
+    AxNode, BoxModel, ConsoleEvent, CpuProfile, CpuProfileNode, DeviceMetrics, DevToolsHost,
+    DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
+    FetchDecision, FetchPattern, FrameInfo, FrameResourceTree, FrameTree, HighlightConfig,
+    HostError, HostInfo, HeapUsage, InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent,
+    LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
+    Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams,
+    ScriptInfo, ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo,
+    TouchEvent, Viewport,
 };
 use std::collections::HashMap;
 use crate::json::Json;
@@ -169,6 +170,24 @@ pub struct MockScript {
     pub scripts_parsed: VecDeque<ScriptInfo>,
     /// Queued `Debugger.paused` events.
     pub debugger_paused_events: VecDeque<PausedEvent>,
+    /// Last `Profiler.enable`/`disable` call.
+    pub profiler_enabled: Option<bool>,
+    /// Last `Profiler.setSamplingInterval` value.
+    pub sampling_interval: Option<u32>,
+    /// Count of `Profiler.start` calls.
+    pub profiling_starts: u32,
+    /// Result returned by `Profiler.stop`.
+    pub cpu_profile: CpuProfile,
+    /// Last `HeapProfiler.enable`/`disable` call.
+    pub heap_profiler_enabled: Option<bool>,
+    /// Chunks returned by `HeapProfiler.takeHeapSnapshot`.
+    pub heap_snapshot_chunks: Vec<String>,
+    /// Count of `HeapProfiler.collectGarbage` calls.
+    pub garbage_collections: u32,
+    /// Value returned by `HeapProfiler.getHeapObjectId`.
+    pub heap_object_id: String,
+    /// Value returned by `HeapProfiler.getObjectByHeapObjectId`.
+    pub heap_object_lookup: RemoteObject,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -346,6 +365,29 @@ impl Default for MockScript {
             script_source: "function f() { return 42; }".into(),
             scripts_parsed: VecDeque::new(),
             debugger_paused_events: VecDeque::new(),
+            profiler_enabled: None,
+            sampling_interval: None,
+            profiling_starts: 0,
+            cpu_profile: CpuProfile {
+                nodes: vec![CpuProfileNode {
+                    id: 1,
+                    function_name: "f".into(),
+                    script_id: "script-1".into(),
+                    url: "https://a/x.js".into(),
+                    line_number: 3,
+                    hit_count: 5,
+                    children: Vec::new(),
+                }],
+                start_time: 0.0,
+                end_time: 100.0,
+                samples: vec![1, 1],
+                time_deltas: vec![0, 50],
+            },
+            heap_profiler_enabled: None,
+            heap_snapshot_chunks: vec!["{\"snapshot\":1}".into()],
+            garbage_collections: 0,
+            heap_object_id: "heap-1".into(),
+            heap_object_lookup: RemoteObject::number(9.0),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -1267,6 +1309,51 @@ impl DevToolsSession for MockSession {
             .debugger_paused_events
             .drain(..)
             .collect()
+    }
+
+    fn profiler_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().profiler_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_sampling_interval(&mut self, microseconds: u32) -> Result<(), HostError> {
+        self.script.lock().unwrap().sampling_interval = Some(microseconds);
+        Ok(())
+    }
+
+    fn start_profiling(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().profiling_starts += 1;
+        Ok(())
+    }
+
+    fn stop_profiling(&mut self) -> Result<CpuProfile, HostError> {
+        Ok(self.script.lock().unwrap().cpu_profile.clone())
+    }
+
+    fn heap_profiler_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().heap_profiler_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn take_heap_snapshot(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(self.script.lock().unwrap().heap_snapshot_chunks.clone())
+    }
+
+    fn collect_garbage(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().garbage_collections += 1;
+        Ok(())
+    }
+
+    fn get_heap_object_id(&mut self, _object_id: &str) -> Result<String, HostError> {
+        Ok(self.script.lock().unwrap().heap_object_id.clone())
+    }
+
+    fn get_object_by_heap_object_id(
+        &mut self,
+        _heap_object_id: &str,
+        _object_group: Option<&str>,
+    ) -> Result<RemoteObject, HostError> {
+        Ok(self.script.lock().unwrap().heap_object_lookup.clone())
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {

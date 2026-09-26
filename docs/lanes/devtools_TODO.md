@@ -251,3 +251,20 @@ so later tickets implement their domain layer against an already-stable
 seam. Recorded the `Debugger`/`Profiler`/`HeapProfiler` seam for the JS
 engine in `.agents/js-runtime/questions.md` (the engine implements
 `DevToolsSession` for these methods, not this crate).
+
+## CDP-11 — Profiler and HeapProfiler domains — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 99/99
+nextest (0 skipped) and 1 doctest; workspace 2875 passed, 0 failed, 10
+skipped, doctests 4 passed.
+
+`Profiler.enable`/`disable`, `setSamplingInterval`, `start`, `stop` (returns
+`Profiler.Profile`, serialized from the `CpuProfile`/`CpuProfileNode` seam
+defined in CDP-10). `HeapProfiler.enable`/`disable`, `takeHeapSnapshot`
+(streams `HeapProfiler.addHeapSnapshotChunk` per chunk the engine returns,
+then one `reportHeapSnapshotProgress {finished:true}`), `collectGarbage`,
+`getHeapObjectId`, `getObjectByHeapObjectId`. No new seam types beyond
+CDP-10's; both domains are advisory-enable with no continuous push events
+(no `EnabledDomains` flag added). `MockHost` scripts a one-node CPU profile,
+a two-chunk heap snapshot and a heap-object round trip. Real profiling and
+heap data need the JS engine (`.agents/js-runtime/questions.md`, CDP-10).
