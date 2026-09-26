@@ -35,6 +35,26 @@ impl Dom {
         let html = self.namespace(node) == Some(Namespace::Html);
         if html && matches!(name, "button" | "input" | "select" | "textarea" | "fieldset" | "optgroup" | "option")
             && self.attribute_utf16(node, "disabled").is_some() { return false; }
+        // HTML's actually-disabled predicate includes ancestor fieldsets, but
+        // exempts descendants of each fieldset's first HTML legend child.
+        // This must precede tabindex: tabindex cannot enable disabled controls.
+        if html && matches!(name, "button" | "input" | "select" | "textarea" | "fieldset") {
+            let mut ancestor = self.get(node).parent;
+            while let Some(parent) = ancestor {
+                if self.namespace(parent) == Some(Namespace::Html)
+                    && self.local_name(parent) == Some("fieldset")
+                    && self.attribute_utf16(parent, "disabled").is_some()
+                {
+                    let legend = self.children(parent).find(|child|
+                        self.namespace(*child) == Some(Namespace::Html)
+                            && self.local_name(*child) == Some("legend"));
+                    if !legend.is_some_and(|legend| self.contains(legend, Some(node))) {
+                        return false;
+                    }
+                }
+                ancestor = self.get(parent).parent;
+            }
+        }
         if html && name == "input" && self.attribute_utf16(node, "type")
             .is_some_and(|value| String::from_utf16_lossy(&value).eq_ignore_ascii_case("hidden")) { return false; }
         if self.attribute_utf16(node, "tabindex").is_some_and(|value| {
@@ -103,4 +123,37 @@ mod tests {
         assert!(!dom.is_focusable_area(input));
         assert!(!dom.is_focusable_area(div));
     }
+
+    #[test]
+    fn disabled_fieldsets_prevent_focus_except_in_the_first_legend() {
+        let mut dom = Dom::new();
+        let body = dom.create_element(NodeIdx(0), "body");
+        let fieldset = dom.create_element(body, "fieldset");
+        dom.set_attribute(fieldset, "disabled", "").unwrap();
+        let first = dom.create_element(fieldset, "legend");
+        let allowed = dom.create_element(first, "input");
+        let second = dom.create_element(fieldset, "legend");
+        let blocked = dom.create_element(second, "input");
+        assert!(dom.is_focusable_area(allowed));
+        assert!(!dom.is_focusable_area(blocked));
+        for tag in ["input", "button", "select", "textarea", "fieldset"] {
+            let control = dom.create_element(fieldset, tag);
+            dom.set_attribute(control, "tabindex", "0").unwrap();
+            assert!(!dom.is_focusable_area(control), "{tag}");
+        }
+        let link = dom.create_element(fieldset, "a");
+        dom.set_attribute(link, "href", "#").unwrap();
+        assert!(dom.is_focusable_area(link));
+        // An inner first legend does not exempt its controls from the outer
+        // disabled fieldset when the inner fieldset is outside its legend.
+        let inner = dom.create_element(fieldset, "fieldset");
+        dom.set_attribute(inner, "disabled", "").unwrap();
+        let inner_legend = dom.create_element(inner, "legend");
+        let nested = dom.create_element(inner_legend, "input");
+        assert!(!dom.is_focusable_area(nested));
+        dom.remove_attribute(fieldset, "disabled").unwrap();
+        assert!(dom.is_focusable_area(nested));
+        assert!(dom.is_focusable_area(blocked));
+    }
+
 }
