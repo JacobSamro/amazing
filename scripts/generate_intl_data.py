@@ -86,12 +86,11 @@ def main() -> None:
         )
     lines.append("];")
 
-    numbering_systems = cldr("cldr-core/supplemental/numberingSystems.json")["supplemental"]["numberingSystems"]
-    # AvailableNumberingSystems includes both simple and algorithmic systems.
-    simple_systems = sorted(code for code in numbering_systems
-                            if 3 <= len(code) <= 8 and code.isascii() and code.isalnum())
-    lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
-                 + rust_string(" ".join(simple_systems)) + ";")
+    # Only the numbering systems this engine renders native digits for may be
+    # advertised: supportedValuesOf must never name a system whose digits the
+    # formatter cannot produce. Implementing the remaining CLDR `_digits`
+    # tables is a follow-up; until then the advertised set matches the renderer.
+    lines.append('const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "arab deva latn";')
 
     # AvailableCollations is the fixed bcp47 collation type list, not the
     # localized CLDR display names (which are words, sometimes over 8 chars).

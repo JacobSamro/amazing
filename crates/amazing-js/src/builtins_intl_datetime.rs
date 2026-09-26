@@ -99,7 +99,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let ca_option = if calendar_present { Some(i.to_string(&calendar_raw)?) } else { None };
     let (ca_retained, calendar_effective) = intl_resolve_keyword(
         ca_extension, ca_option, intl_calendar_supported, "gregory");
-    let calendar = match calendar_effective.as_str() {
+    let calendar = match calendar_effective.to_ascii_lowercase().as_str() {
         "gregorian" | "gregory" => "gregory", "islamicc" | "islamic-civil" => "islamic-civil",
         "ethiopic-amete-alem" | "ethioaa" => "ethioaa", other => other,
     }.to_string();

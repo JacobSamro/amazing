@@ -19,7 +19,7 @@ const INTL_NUMBER_DATA: &[IntlNumberData] = &[
     IntlNumberData { locale: "hi", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##,##0.###", percent_pattern: "#,##,##0%", currency_pattern: "¤#,##,##0.00", currency_accounting_pattern: "¤#,##,##0.00", minimum_grouping: 1 },
     IntlNumberData { locale: "ru", numbering_system: "latn", decimal: ",", group: " ", plus: "+", minus: "-", percent: "%", nan: "не число", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤", minimum_grouping: 1 },
 ];
-const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "adlm ahom arab arabext armn armnlow bali beng bhks brah cakm cham cyrl deva diak ethi fullwide gara geor gong gonm grek greklow gujr gukh guru hanidays hanidec hans hansfin hant hantfin hebr hmng hmnp java jpan jpanfin jpanyear kali kawi khmr knda krai lana lanatham laoo latn lepc limb mathbold mathdbl mathmono mathsanb mathsans mlym modi mong mroo mtei mymr mymrepka mymrpao mymrshan mymrtlng nagm newa nkoo olck onao orya osma outlined rohg roman romanlow saur segment shrd sind sinh sora sund sunu takr talu taml tamldec telu thai tibt tirh tnsa tols vaii wara wcho";
+const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "arab deva latn";
 // Fixed AvailableCollations list (bcp47 collation types), not CLDR display
 // names, which are localized words and can exceed the 3-8 subtag production.
 const INTL_SUPPORTED_COLLATIONS: &str = "big5han compat dict direct ducet emoji eor gb2312 phonebk phonetic pinyin reformed searchjl stroke trad unihan zhuyin";
