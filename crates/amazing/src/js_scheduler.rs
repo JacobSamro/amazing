@@ -125,6 +125,9 @@ impl DriverScheduler {
         // Cross-document storage notifications enter this document as tasks,
         // after requests already emitted by its own script execution.
         self.bindings.schedule_storage_events(&mut self.js)?;
+        // Cross-document messages (postMessage/MessageChannel/BroadcastChannel)
+        // enter this document as tasks at the same checkpoint.
+        self.bindings.schedule_messages(&mut self.js)?;
         self.pending.extend(self.js.take_scheduling_requests());
         while let Some(request) = self.pending.front().copied() {
             self.admit(request)?;
