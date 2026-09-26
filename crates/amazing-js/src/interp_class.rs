@@ -167,8 +167,41 @@ impl Interpreter {
             .map_err(|_| Throw::type_error("could not define class method"))
     }
 
+    // NamedEvaluation supplies an anonymous class's name before static work.
+    // It does not create a class-local lexical binding for the inferred name.
+    pub(super) fn eval_named_class_expr(&mut self, expression: &ast::Expr,
+        env: &EnvHandle, name: &crate::value::JsString) -> Result<JsValue, Throw>
+    {
+        match &expression.kind {
+            ast::ExprKind::Paren(inner) => self.eval_named_class_expr(inner, env, name),
+            ast::ExprKind::Class(class) if class.name.is_none() =>
+                self.eval_class_named(class, env, Some(name)),
+            _ => self.eval_expr(expression, env),
+        }
+    }
+
+    pub(super) fn class_binding_name(name: &str) -> crate::value::JsString {
+        // The module front end lowers anonymous default exports into this slot.
+        if name == "\0module.default" { "default".into() } else { name.into() }
+    }
+
+    pub(super) fn property_function_name(key: &PropertyKey) -> crate::value::JsString {
+        match key {
+            PropertyKey::String(name) => name.clone(),
+            PropertyKey::Symbol(symbol) => match symbol.description() {
+                Some(description) => {
+                    let mut units = vec![b'[' as u16];
+                    units.extend_from_slice(description.units());
+                    units.push(b']' as u16);
+                    crate::value::JsString::from_units(units)
+                }
+                None => crate::value::JsString::from(""),
+            },
+        }
+    }
+
     fn class_initializer(&mut self, expression: &ast::Expr, env: &EnvHandle,
-        receiver: &JsValue, home: &Obj) -> Result<JsValue, Throw>
+        receiver: &JsValue, home: &Obj, name: &crate::value::JsString) -> Result<JsValue, Throw>
     {
         let field_env = EnvHandle::new(EnvKind::Function, Some(env.clone()));
         field_env.bind_this(receiver.clone());
@@ -176,7 +209,7 @@ impl Interpreter {
             this: receiver.clone(), home: Some(home.clone()),
             super_constructor: None, new_target: None, class_constructor: None,
         });
-        let result = self.eval_expr(expression, &field_env);
+        let result = self.eval_named_class_expr(expression, &field_env, name);
         self.frames.pop();
         result
     }
@@ -184,18 +217,17 @@ impl Interpreter {
     fn define_class_field(&mut self, receiver: &JsValue, field: &ClassFieldDefinition,
         env: &EnvHandle, home: &Obj) -> Result<(), Throw>
     {
+        let name = match &field.key {
+            ClassFieldKey::Public(key) => Self::property_function_name(key),
+            // Private identifier descriptions already include the leading '#'.
+            ClassFieldKey::Private(symbol) => symbol.description().cloned().unwrap_or_else(|| "".into()),
+        };
         let mut value = match &field.initializer {
-            Some(expression) => self.class_initializer(expression, env, receiver, home)?,
+            Some(expression) => self.class_initializer(expression, env, receiver, home, &name)?,
             None => JsValue::Undefined,
         };
         if field.initializer.is_some() {
-            let name = match &field.key {
-                ClassFieldKey::Public(PropertyKey::String(name)) => name.to_utf8_lossy(),
-                ClassFieldKey::Public(PropertyKey::Symbol(symbol)) => symbol.descriptive_string(),
-                ClassFieldKey::Private(symbol) => format!("#{}", symbol.description()
-                    .map(|name| name.to_utf8_lossy()).unwrap_or_default()),
-            };
-            self.infer_function_name(&mut value, &name);
+            self.infer_function_name(&mut value, &name.to_utf8_lossy());
         }
         match &field.key {
             ClassFieldKey::Private(id) =>
@@ -224,14 +256,21 @@ impl Interpreter {
     pub(super) fn eval_class(&mut self, class: &ast::ClassItem, outer: &EnvHandle)
         -> Result<JsValue, Throw>
     {
+        self.eval_class_named(class, outer, None)
+    }
+
+    fn eval_class_named(&mut self, class: &ast::ClassItem, outer: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>) -> Result<JsValue, Throw>
+    {
         let previous_strict = self.strict_eval_context;
         self.strict_eval_context = true;
-        let result = self.eval_class_inner(class, outer);
+        let result = self.eval_class_inner(class, outer, inferred_name);
         self.strict_eval_context = previous_strict;
         result
     }
 
-    fn eval_class_inner(&mut self, class: &ast::ClassItem, outer: &EnvHandle)
+    fn eval_class_inner(&mut self, class: &ast::ClassItem, outer: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>)
         -> Result<JsValue, Throw>
     {
         let class_env = EnvHandle::new(EnvKind::Block, Some(outer.clone()));
@@ -308,12 +347,14 @@ impl Interpreter {
         }
         if let Some(name) = &class.name {
             class_env.declare_lexical(&name.name, value.clone(), false)?;
-            function.borrow_mut().func.as_mut().unwrap().name = name.name.clone();
-            function.borrow_mut().define("name", Property {
-                value: JsValue::str(&name.name), writable: false, enumerable: false,
-                configurable: true, getter: None, setter: None,
-            }).expect("class name property");
         }
+        let class_name = class.name.as_ref().map(|name| crate::value::JsString::from(name.name.clone()))
+            .or_else(|| inferred_name.cloned()).unwrap_or_else(|| crate::value::JsString::from(""));
+        function.borrow_mut().func.as_mut().unwrap().name = class_name.to_utf8_lossy();
+        function.borrow_mut().define("name", Property {
+            value: JsValue::str(class_name), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("class name property");
         function.borrow_mut().define("length", Property {
             value: JsValue::num(constructor.map_or(0, |method| method.params.iter()
                 .take_while(|param| !param.rest && param.default.is_none()).count()) as f64),
@@ -378,4 +419,120 @@ impl Interpreter {
         }
         Ok(value)
     }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+    use crate::interp::ExecutionBackend;
+
+    #[test]
+    fn class_named_evaluation_precedes_static_elements_and_preserves_own_name() {
+        // Static and private class elements use the shared interpreter evaluator.
+        for backend in [ExecutionBackend::TreeWalk] {
+            for source in [
+                "var C = class { static seen = this.name; static name(){} }; C.seen === C.name && typeof C.name === 'function'",
+                "var C = class { static name = ''; }; C.name === ''",
+                "var calls=0; var C=class { static get name(){calls++;return 'custom'} }; calls===0 && C.name==='custom' && calls===1",
+                "var C=class { static { Object.defineProperty(this,'name',{value:'fixed',configurable:false}); } }; C.name==='fixed'",
+                "var C=class Explicit { static seen=this.name; }; C.name==='Explicit' && C.seen==='Explicit'",
+                "var C=class {static seen=typeof C;}; C.seen==='undefined'",
+                "var C=class { constructor(){} }; C.name==='C' && Object.getOwnPropertyDescriptor(C,'name').writable===false",
+                "var C; C=(class {static seen=this.name;}); C.name==='C' && C.seen==='C'",
+                "var C; C ??= class {static seen=this.name;}; C.seen==='C'",
+                "var holder={}; holder.C=class {}; holder.C.name===''",
+                "var alias; alias=(0,class {}); alias.name===''",
+            ] {
+                let mut i = Interpreter::new();
+                assert_eq!(i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}")), JsValue::Bool(true), "{backend:?}: {source}");
+            }
+        }
+    }
+
+    #[test]
+    fn class_names_cover_bindings_properties_fields_and_default_patterns() {
+        for backend in [ExecutionBackend::TreeWalk] {
+            for source in [
+                "var C=class {}; C.name==='C'",
+                "let C=class {}; C.name==='C'",
+                "const C=class {}; C.name==='C'",
+                "function f(C=class {static name(){}}){return typeof C.name==='function'} f()",
+                "function f([C=class {static seen=this.name;}]=[]){return C.seen==='C'} f()",
+                "var [C=class {static seen=this.name;}]=[]; C.seen==='C'",
+                "var {C=class {static seen=this.name;}}={}; C.seen==='C'",
+                "var C; [C=class {static name(){}}]=[]; typeof C.name==='function'",
+                "var C; ({C=class {static seen=this.name;}}={}); C.seen==='C'",
+                "var o={C:class {static seen=this.name;}}; o.C.name==='C' && o.C.seen==='C'",
+                "var key='dynamic'; var o={[key]:class {static seen=this.name;}}; o[key].seen===key",
+                "var key='\\uD800'; var o={[key]:class {static seen=this.name;}}; o[key].name===key && o[key].seen===key",
+                "var key=Symbol('tag'); var o={[key]:class {static seen=this.name;}}; o[key].name==='[tag]' && o[key].seen==='[tag]'",
+                "var key=Symbol(); var o={[key]:class {static seen=this.name;}}; o[key].name==='' && o[key].seen===''",
+                "class C { field=class {static seen=this.name;}; #hidden=class{}; get(){return this.#hidden.name} } var c=new C; c.field.seen==='field' && c.get()==='#hidden'",
+                "var o={__proto__:class {static seen=this.name;}}; Object.getPrototypeOf(o).seen===''",
+            ] {
+                let mut i = Interpreter::new();
+                assert_eq!(i.run_script_with_backend(source, backend).unwrap_or_else(|error| panic!("{backend:?}: {source}: {error:?}")), JsValue::Bool(true), "{backend:?}: {source}");
+            }
+        }
+    }
+
+    #[test]
+    fn for_await_class_defaults_preserve_names_and_static_members() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for head in [
+                "[C=class {static seen=this.name; static name(){}}]",
+                "var [C=class {static seen=this.name; static name(){}}]",
+                "let [C=class {static seen=this.name; static name(){}}]",
+                "const [C=class {static seen=this.name; static name(){}}]",
+            ] {
+                let source = format!("var passed=false, error=''; var C; async function f(){{for await ({head} of [[]]){{passed=C.seen===C.name && typeof C.name==='function';}}}} f().catch(e=>{{error=String(e)}});");
+                let mut i = Interpreter::new();
+                i.run_script_with_backend(&source, backend).unwrap();
+                i.drain_microtasks().unwrap();
+                assert_eq!(i.run_script("error").unwrap(), JsValue::str(""), "{backend:?}: {head}");
+                assert_eq!(i.run_script("passed").unwrap(), JsValue::Bool(true), "{backend:?}: {head}");
+            }
+        }
+    }
+    #[test]
+    fn anonymous_default_export_class_uses_public_name_before_static_work() {
+        for source in [
+            "export default class { static seen=this.name; }",
+            "export default (class { static seen=this.name; });",
+            "export default class { static seen=this.name; static name='custom'; }",
+        ] {
+            let resolver = |_: &str, _: &str| Err("no imports".to_owned());
+            let mut linker = crate::module::ModuleLinker::new(resolver);
+            linker.link("root", source).unwrap();
+            let mut i = Interpreter::new();
+            let namespace = linker.evaluate("root", &mut i).unwrap();
+            assert_eq!(i.get_prop(&namespace["default"], "seen").unwrap(), JsValue::str("default"));
+            assert_eq!(i.get_prop(&namespace["default"], "name").unwrap(),
+                JsValue::str(if source.contains("custom") { "custom" } else { "default" }));
+        }
+    }
+
+    #[test]
+    fn bytecode_class_names_cover_compiled_expression_contexts() {
+        for source in [
+            "var C=class {}; C.name==='C'",
+            "let C=class {}; C.name==='C'",
+            "const C=class {}; C.name==='C'",
+            "var C; C=(class{}); C.name==='C'",
+            "var C; C ??= class{}; C.name==='C'",
+            "var C=class Explicit {}; C.name==='Explicit'",
+            "var holder={}; holder.C=class {}; holder.C.name===''",
+            "var alias; alias=(0,class{}); alias.name===''",
+            "var o={C:class {}}; o.C.name==='C'",
+            "var key='dynamic'; var o={[key]:class{}}; o[key].name===key",
+            "var key=Symbol('tag'); var o={[key]:class{}}; o[key].name==='[tag]'",
+            "function f(C=class{}){return C.name} f()==='C'",
+            "var C=class{}; var caught=false; try{C()}catch(e){caught=e.constructor===TypeError} caught",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script_with_backend(source, ExecutionBackend::Bytecode)
+                .unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        }
+    }
+
 }

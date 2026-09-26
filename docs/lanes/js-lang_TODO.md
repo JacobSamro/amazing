@@ -1,10 +1,10 @@
 # JS language conformance decision map
 
-Frontier: **JS-15 — Annex B RegExp grammar**.
+Frontier: **JS-17 — class named evaluation and for-await-of contexts**.
 JS-12 bounded regex folding is complete; its Linux gates and evidence appear below.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
-`amazing-regex`. `ast.rs` is the front-end-owned contract consumed by js-runtime;
+`amazing-regex` historically; RegExp moved to js-date/JSD-2 on 2026-09-26. `ast.rs` is the front-end-owned contract consumed by js-runtime;
 AST change requests come back to this lane. Execution, builtins, values,
 environments, VM and GC belong to js-runtime. JS-3 finishes its explicitly
 granted runner and host work before the next language ticket.

@@ -48,7 +48,7 @@ enum Condition {
     Nullish,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum KeyOperand {
     Static(JsString),
     Dynamic(Register),
@@ -70,6 +70,7 @@ struct ClassMethodCode {
 #[derive(Debug)]
 struct ClassCode {
     constructor: FunctionCode,
+    inferred_name: Option<KeyOperand>,
     methods: Vec<ClassMethodCode>,
 }
 
@@ -656,6 +657,16 @@ impl Program {
                     Instruction::MakeClass(dst, class) => {
                         let constructor = class.constructor.instantiate(i, &env);
                         let JsValue::Object(callable) = &constructor else { unreachable!() };
+                        if let Some(key) = &class.inferred_name {
+                            let name = Interpreter::property_function_name(&key.resolve(&registers)?);
+                            let mut object = callable.borrow_mut();
+                            object.func.as_mut().unwrap().name = name.to_utf8_lossy();
+                            object.define("name", Property {
+                                value: JsValue::str(name), writable: false, enumerable: false,
+                                configurable: true, getter: None, setter: None,
+                            }).map_err(|_| Throw::type_error("could not define class name"))?;
+                        }
+                        callable.borrow_mut().class_constructor = true;
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };

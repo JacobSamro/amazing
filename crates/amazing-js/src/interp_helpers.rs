@@ -76,7 +76,9 @@ impl Interpreter {
             },
             Binding::Default(inner, expression) => {
                 let value = if value.is_undefined() {
-                    let mut value = self.eval_expr(expression, env)?;
+                    let mut value = if let Binding::Ident(name) = inner.as_ref() {
+                        self.eval_named_class_expr(expression, env, &name.name.clone().into())?
+                    } else { self.eval_expr(expression, env)? };
                     if let Binding::Ident(name) = inner.as_ref() {
                         self.infer_function_name(&mut value, &name.name);
                     }

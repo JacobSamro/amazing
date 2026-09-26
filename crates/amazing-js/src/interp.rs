@@ -1240,7 +1240,10 @@ impl Interpreter {
                     let v = x
                         .init
                         .as_ref()
-                        .map(|e| self.eval_expr(e, env))
+                        .map(|e| match &x.binding {
+                            Binding::Ident(name) => self.eval_named_class_expr(e, env, &Self::class_binding_name(&name.name)),
+                            _ => self.eval_expr(e, env),
+                        })
                         .transpose()?
                         .unwrap_or(JsValue::Undefined);
                     if d.kind == ast::VarKind::Const && x.init.is_none() {
@@ -1730,7 +1733,11 @@ impl Interpreter {
                             let v = match &p.value {
                                 ast::PropValue::Shorthand(i) => self.identifier_value(env, &i.name)?
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
-                                ast::PropValue::Init(x) => self.eval_expr(x, env)?,
+                                ast::PropValue::Init(x) => {
+                                    if !matches!(&p.key, PropKey::Computed(_)) && k.as_string().is_some_and(|name| *name == "__proto__") {
+                                        self.eval_expr(x, env)?
+                                    } else { self.eval_named_class_expr(x, env, &Self::property_function_name(&k))? }
+                                },
                                 ast::PropValue::CoverInitializedName { .. } => {
                                     return Err(Throw::syntax_error("cover initialized name outside assignment pattern"));
                                 }
@@ -2144,7 +2151,9 @@ impl Interpreter {
             } else { self.resolve_reference(t, e)? }
         } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
-            let mut v = self.eval_expr(r, e)?;
+            let mut v = if let Some(name) = event_handler::identifier_name(t) {
+                self.eval_named_class_expr(r, e, &name.into())?
+            } else { self.eval_expr(r, e)? };
             if let Some(name) = reference_name(&reference) {
                 self.infer_function_name(&mut v, &name);
             }
@@ -2165,7 +2174,11 @@ impl Interpreter {
         if op == ast::AssignOp::Nullish && !old.is_null() && !old.is_undefined() {
             return Ok(old);
         }
-        let mut v = self.eval_expr(r, e)?;
+        let mut v = if matches!(op, ast::AssignOp::And | ast::AssignOp::Or | ast::AssignOp::Nullish) {
+            if let Some(name) = event_handler::identifier_name(t) {
+                self.eval_named_class_expr(r, e, &name.into())?
+            } else { self.eval_expr(r, e)? }
+        } else { self.eval_expr(r, e)? };
         if let Some(name) = reference_name(&reference) {
             self.infer_function_name(&mut v, &name);
         }
@@ -2199,6 +2212,8 @@ impl Interpreter {
     fn infer_function_name(&self, value: &mut JsValue, name: &str) {
         if let JsValue::Object(object) = value {
             let mut object = object.borrow_mut();
+            // Class names are installed before static elements by NamedEvaluation.
+            if object.class_constructor { return; }
             if let Some(function) = &mut object.func {
                 if function.name.is_empty() {
                     function.name = name.to_string();
@@ -2325,7 +2340,9 @@ impl Interpreter {
                 value: default,
             } => {
                 if value.is_undefined() {
-                    let fallback = self.eval_expr(default, env)?;
+                    let fallback = if let Some(name) = event_handler::identifier_name(target) {
+                        self.eval_named_class_expr(default, env, &name.into())?
+                    } else { self.eval_expr(default, env)? };
                     self.assign_pattern_expr(target, &fallback, env)
                 } else {
                     self.assign_pattern_expr(target, value, env)
@@ -2375,7 +2392,7 @@ impl Interpreter {
                                 }
                                 ast::PropValue::CoverInitializedName { binding, default } => {
                                     let assigned = if matches!(&item, JsValue::Undefined) {
-                                        self.eval_expr(default, env)?
+                                        self.eval_named_class_expr(default, env, &binding.name.clone().into())?
                                     } else {
                                         item
                                     };
@@ -2688,7 +2705,9 @@ impl Interpreter {
             };
             let v = if v.is_undefined() {
                 if let Some(default) = &p.default {
-                    let mut value = self.eval_expr(default, e)?;
+                    let mut value = if let Binding::Ident(name) = &p.binding {
+                        self.eval_named_class_expr(default, e, &name.name.clone().into())?
+                    } else { self.eval_expr(default, e)? };
                     if let Binding::Ident(name) = &p.binding {
                         self.infer_function_name(&mut value, &name.name);
                     }

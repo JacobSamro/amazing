@@ -261,7 +261,7 @@ impl Compiler {
                 methods.push(ClassMethodCode { key, kind: method.kind, code });
             }
         }
-        Ok(ClassCode { constructor, methods })
+        Ok(ClassCode { constructor, methods, inferred_name: None })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -371,7 +371,7 @@ impl Compiler {
                         return Err(self.error(binding.span, "const requires an initializer"));
                     }
                     let value = match &binding.init {
-                        Some(expression) => self.expression(expression)?,
+                        Some(expression) => self.named_class_expression(expression, KeyOperand::Static(super::Interpreter::class_binding_name(&name.name)))?,
                         None => 0, // Register zero is immutable undefined.
                     };
                     self.emit(Instruction::Declare(
@@ -568,6 +568,27 @@ impl Compiler {
         Ok(())
     }
 
+    fn named_class_expression(&mut self, expression: &Expr, name: KeyOperand) -> Result<Register, CompileError> {
+        self.enter(expression.span)?;
+        let result = self.named_class_expression_inner(expression, name);
+        self.depth -= 1;
+        result
+    }
+
+    fn named_class_expression_inner(&mut self, expression: &Expr, name: KeyOperand) -> Result<Register, CompileError> {
+        match &expression.kind {
+            ExprKind::Paren(inner) => self.named_class_expression(inner, name),
+            ExprKind::Class(class) if class.name.is_none() => {
+                let mut code = self.compile_class(class, expression.span)?;
+                code.inferred_name = Some(name);
+                let dst = self.register(expression.span)?;
+                self.emit(Instruction::MakeClass(dst, code));
+                Ok(dst)
+            }
+            _ => self.expression(expression),
+        }
+    }
+
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
         let result = self.expression_inner(expression);
@@ -662,7 +683,12 @@ impl Compiler {
                             self.emit(Instruction::LoadName(value, name.name.clone(), false));
                             value
                         }
-                        ast::PropValue::Init(value) => self.expression(value)?,
+                        ast::PropValue::Init(value) => {
+                            if !matches!(&property.key, ast::PropKey::Computed(_))
+                                && matches!(&key, KeyOperand::Static(name) if *name == "__proto__") {
+                                self.expression(value)?
+                            } else { self.named_class_expression(value, key.clone())? }
+                        },
                         ast::PropValue::CoverInitializedName { .. } => {
                             return Err(self.error(property.span, "cover initialized name"));
                         }
@@ -850,7 +876,9 @@ impl Compiler {
                     self.emit(Instruction::ResolveWriteName(slot, name.to_owned()));
                     slot
                 } else { self.reference(target)?.0 };
-                let value = self.expression(value)?;
+                let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                    self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                } else { self.expression(value)? };
                 self.emit(Instruction::StoreReference(slot, value));
                 return Ok(value);
             }
@@ -887,7 +915,9 @@ impl Compiler {
                     let rhs = self.emit(Instruction::Branch(old, condition, 0));
                     let end = self.emit(Instruction::Jump(0));
                     self.patch(rhs);
-                    let right = self.expression(value)?;
+                    let right = if let Some(name) = super::super::event_handler::identifier_name(target) {
+                        self.named_class_expression(value, KeyOperand::Static(name.into()))?
+                    } else { self.expression(value)? };
                     self.emit(Instruction::Move(dst, right));
                     self.emit(Instruction::StoreReference(slot, dst));
                     self.patch(end);
