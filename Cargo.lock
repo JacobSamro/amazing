@@ -108,6 +108,13 @@ dependencies = [
 [[package]]
 name = "amazing-a11y"
 version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-html",
+ "amazing-layout",
+ "amazing-text",
+]
 
 [[package]]
 name = "amazing-bindings"
