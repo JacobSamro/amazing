@@ -32,7 +32,8 @@ mod windows {
     use amazing_paint::Surface;
     use amazing_compositor::PropertyUpdate;
 
-    use crate::{BrowserDomHost, PageMedia, load_page_media};
+    use crate::{BrowserDomHost, PageMedia};
+    use crate::page::load_page_media_in_viewport;
     use crate::animation_scene::AnimationScene;
     use crate::page::load_page_text_from_sheets;
     use crate::page::PagePaint;
@@ -551,6 +552,9 @@ mod windows {
         fn scroll(&mut self, delta: i32) {
             self.tab_mut().scroll_y = self.tab().scroll_y.saturating_add(delta);
             self.clamp_scroll();
+            if self.tab().runtime.as_ref().is_some_and(|runtime| runtime.media.has_pending_lazy()) {
+                self.repaint_runtime();
+            }
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
             unsafe { InvalidateRect(self.hwnd, null(), 0) };
@@ -559,6 +563,7 @@ mod windows {
         fn repaint_runtime(&mut self) {
             let width = self.width;
             let viewport_height = self.viewport_height.max(1) as f32;
+            let scroll_y = self.tab().scroll_y;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
             let Some(runtime) = tab.runtime.as_mut() else {
@@ -583,7 +588,7 @@ mod windows {
             };
             let styled = amazing_css::compute_with_animations_and_environment(
                 &host_ref.dom, &sheets, runtime.animations.animated(), &environment);
-            let media = load_page_media(&host_ref.dom, &page, &styled);
+            let mut media = load_page_media_in_viewport(&host_ref.dom, &page, &styled, width.max(1) as f32, 1.0);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
@@ -591,7 +596,7 @@ mod windows {
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let layout = amazing_layout::layout_styled_document(
+            let mut layout = amazing_layout::layout_styled_document(
                 &host_ref.dom,
                 &styled,
                 &page_text.provider,
@@ -599,6 +604,18 @@ mod windows {
                 width.max(1) as f32,
                 Some(viewport_height),
             );
+            if media.load_visible_lazy(&layout, amazing_media::loading::ViewportRect {
+                x: 0.0, y: scroll_y.max(0) as f32,
+                width: width.max(1) as f32, height: viewport_height,
+            }) > 0 {
+                layout = amazing_layout::layout_styled_document(
+                    &host_ref.dom, &styled, &page_text.provider, &media,
+                    width.max(1) as f32, Some(viewport_height),
+                );
+            }
+            if let Err(error) = runtime.js.set_image_loader_states(&media) {
+                eprintln!("amazing gui: image decode promise: {}", error.describe());
+            }
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
@@ -613,7 +630,7 @@ mod windows {
             runtime.layout = layout;
             runtime.media = media;
             tab.surface = Some(surface);
-            tab.scroll_y = 0;
+            tab.scroll_y = scroll_y;
             self.clamp_scroll();
         }
 
@@ -693,48 +710,62 @@ mod windows {
 
         fn pump_timers(&mut self) {
             let page = self.tab().current_url().unwrap_or("").to_owned();
-            let mut fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                match runtime.js.pump_now(true) {
-                    Ok(fired) => fired,
-                    Err(error) => {
-                        eprintln!("amazing gui: timer callback failed: {}", error.describe());
-                        false
+            let mut fired = false;
+            let mut render_output: Option<amazing_compositor::AnimationFrameOutput> = None;
+            let mut render_error: Option<String> = None;
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                let now_ms = runtime.animation_started.elapsed().as_secs_f64() * 1000.;
+                {
+                    let host = runtime.host.clone();
+                    let js = &mut runtime.js;
+                    let animations = &mut runtime.animations;
+                    let page = page.as_str();
+                    let output_slot = &mut render_output;
+                    let error_slot = &mut render_error;
+                    let pumped = js.pump_now_with_render(true, |phase, _timestamp| {
+                        // The frame's animation sample runs at the loop's post-rAF
+                        // render step, after any rAF callbacks have mutated the DOM.
+                        if phase != amazing_dom::event_loop::RenderPhase::AfterAnimationFrames {
+                            return;
+                        }
+                        let dom = host.borrow();
+                        let mut sources = Vec::new();
+                        if collect_author_css(&dom.dom, NodeIdx(0), page, &mut sources).is_err() {
+                            return;
+                        }
+                        let sheets = sources.into_iter().map(|(source, url)| {
+                            let mut sheet = amazing_css::parse_stylesheet(&source);
+                            sheet.base_url = Some(url);
+                            sheet
+                        }).collect::<Vec<_>>();
+                        match animations.frame(&dom.dom, &sheets, now_ms) {
+                            Ok(output) => *output_slot = Some(output),
+                            Err(error) => *error_slot = Some(error),
+                        }
+                    });
+                    match pumped {
+                        Ok(worked) => fired = worked,
+                        Err(error) => eprintln!("amazing gui: timer callback failed: {}", error.describe()),
                     }
                 }
-            } else {
-                false
-            };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                let sampled = (|| -> Result<_, String> {
-                    let host = runtime.host.borrow();
-                    let mut sources = Vec::new();
-                    collect_author_css(&host.dom, NodeIdx(0), &page, &mut sources)?;
-                    let sheets = sources.into_iter().map(|(source, url)| {
-                        let mut sheet = amazing_css::parse_stylesheet(&source);
-                        sheet.base_url = Some(url);
-                        sheet
-                    }).collect::<Vec<_>>();
-                    runtime.animations.frame(&host.dom, &sheets,
-                        runtime.animation_started.elapsed().as_secs_f64() * 1000.)
-                })();
-                match sampled {
-                    Ok(output) => {
-                        if !output.events.is_empty() {
-                            // An event listener can mutate the page without changing
-                            // this frame's sampled animation values.
-                            fired = true;
-                        }
-                        for event in &output.events {
-                            if let Err(error) = runtime.js.dispatch_animation_event(event) {
-                                eprintln!("amazing gui: animation listener failed: {}", error.describe());
-                            }
-                        }
-                        if runtime.animation_updates != output.main_thread_updates {
-                            runtime.animation_updates = output.main_thread_updates;
-                            fired = true;
+                if let Some(error) = render_error {
+                    eprintln!("amazing gui: animation frame failed: {error}");
+                }
+                if let Some(output) = render_output {
+                    if !output.events.is_empty() {
+                        // An event listener can mutate the page without changing
+                        // this frame's sampled animation values.
+                        fired = true;
+                    }
+                    for event in &output.events {
+                        if let Err(error) = runtime.js.dispatch_animation_event(event) {
+                            eprintln!("amazing gui: animation listener failed: {}", error.describe());
                         }
                     }
-                    Err(error) => eprintln!("amazing gui: animation frame failed: {error}"),
+                    if runtime.animation_updates != output.main_thread_updates {
+                        runtime.animation_updates = output.main_thread_updates;
+                        fired = true;
+                    }
                 }
             }
             if let Some(delta) = self
@@ -1145,7 +1176,7 @@ mod windows {
         let host_ref = host.borrow();
         let styled = amazing_css::compute_with_animations_and_environment(
             &host_ref.dom, &sheets, animations.animated(), &environment);
-        let media = load_page_media(&host_ref.dom, input, &styled);
+        let mut media = load_page_media_in_viewport(&host_ref.dom, input, &styled, width.max(1) as f32, 1.0);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
@@ -1153,7 +1184,7 @@ mod windows {
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let root = amazing_layout::layout_styled_document(
+        let mut root = amazing_layout::layout_styled_document(
             &host_ref.dom,
             &styled,
             &page_text.provider,
@@ -1161,6 +1192,17 @@ mod windows {
             width.max(1) as f32,
             Some(700.0),
         );
+        if media.load_visible_lazy(&root, amazing_media::loading::ViewportRect {
+            x: 0.0, y: 0.0, width: width.max(1) as f32, height: 700.0,
+        }) > 0 {
+            root = amazing_layout::layout_styled_document(
+                &host_ref.dom, &styled, &page_text.provider, &media,
+                width.max(1) as f32, Some(700.0),
+            );
+        }
+        if let Err(error) = js.set_image_loader_states(&media) {
+            eprintln!("amazing gui: image decode promise: {}", error.describe());
+        }
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;

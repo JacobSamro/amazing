@@ -53,6 +53,7 @@ impl ComputedStyle {
         &mut self,
         opacity: Option<f32>,
         transform: Option<(&str, Vec<crate::values::Transform>)>,
+        effects: &[(String, String)],
     ) {
         if let Some(value) = opacity {
             let css = value.to_string();
@@ -62,6 +63,11 @@ impl ComputedStyle {
         if let Some((css, value)) = transform {
             self.props.insert("transform".into(), css.to_owned());
             self.typed.insert("transform".into(), ComputedValue::Transform(value));
+        }
+        for (property, css) in effects {
+            self.props.insert(property.clone(), css.clone());
+            let typed = values::parse(property, css).unwrap_or(ComputedValue::Unparsed);
+            self.typed.insert(property.clone(), typed);
         }
     }
 
@@ -908,7 +914,24 @@ const PROPERTIES: &[PropertyMetadata] = &[
         inherited: false,
     },
     PropertyMetadata { name: "zoom", initial: "1", inherited: false },
+    PropertyMetadata { name: "filter", initial: "none", inherited: false },
+    PropertyMetadata { name: "backdrop-filter", initial: "none", inherited: false },
+    PropertyMetadata { name: "mix-blend-mode", initial: "normal", inherited: false },
+    PropertyMetadata { name: "isolation", initial: "auto", inherited: false },
+    PropertyMetadata { name: "mask-image", initial: "none", inherited: false },
+    PropertyMetadata { name: "mask-mode", initial: "match-source", inherited: false },
+    PropertyMetadata { name: "mask-repeat", initial: "repeat", inherited: false },
+    PropertyMetadata { name: "mask-position", initial: "0% 0%", inherited: false },
+    PropertyMetadata { name: "mask-clip", initial: "border-box", inherited: false },
+    PropertyMetadata { name: "mask-origin", initial: "border-box", inherited: false },
+    PropertyMetadata { name: "mask-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "mask-composite", initial: "add", inherited: false },
+    PropertyMetadata { name: "mask-type", initial: "luminance", inherited: true },
 ];
+
+pub(crate) fn initial_value(name: &str) -> Option<&'static str> {
+    metadata(name).map(|property| property.initial)
+}
 
 pub(crate) fn known_properties() -> impl Iterator<Item = &'static str> {
     PROPERTIES.iter().map(|property| property.name)

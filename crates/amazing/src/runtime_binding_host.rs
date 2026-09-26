@@ -11,6 +11,7 @@ use amazing_bindings::{
         BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition,
         MemberKind, Operation, OptionalHookInstall, PlatformKey, RootId, LegacyPlatformHooks, IterableKind,
         FragmentParser, FragmentContext, SelectorEngine, AbortHost, DocumentHost, DocumentField, UrlReflection,
+        ImageLoaderState,
     },
     install as install_interfaces, invoke,
 };
@@ -31,6 +32,13 @@ use amazing_js::{
 #[path = "runtime_host_storage.rs"]
 mod runtime_host_storage;
 use runtime_host_storage::StorageRuntime;
+#[path = "runtime_host_net.rs"]
+mod runtime_host_net;
+use runtime_host_net::{NetNativeEntry, NetRuntime};
+
+#[path = "runtime_host_messaging.rs"]
+pub(crate) mod runtime_host_messaging;
+use runtime_host_messaging::MessagingOp;
 
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
@@ -44,10 +52,12 @@ mod dom_bindings;
 enum NativeEntry {
     Canvas(CanvasTarget, Member),
     Operation(Operation),
+    Net(NetNativeEntry),
     IllegalConstructor,
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
 }
 
@@ -62,6 +72,8 @@ enum WebObject {
 }
 
 struct BindingState {
+    image_states: HashMap<NodeIdx, (ImageLoaderState, u64, u64, crate::runtime_host_replaced_content::ImageDecodeDecision)>,
+    image_decodes: Vec<(NodeIdx, u64, Option<u64>, Option<Vec<u16>>, JsValue)>,
     canvas_text_system: Option<Rc<dyn amazing_text::TextSystem>>,
     canvas_dirty: HashSet<NodeIdx>,
     canvas_style_values: HashMap<(NodeIdx, &'static str), JsValue>,
@@ -89,6 +101,8 @@ struct BindingState {
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
+    messaging: Option<runtime_host_messaging::MessagingRealm>,
+    net: NetRuntime,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -103,6 +117,51 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn set_image_loader_states(&self, js: &mut Interpreter, media: &crate::page::PageMedia) -> Result<(), Throw> {
+        let snapshots = media.image_snapshots();
+        let mut states = HashMap::new();
+        {
+            let host = self.state.borrow().host.clone();
+            let dom = &host.borrow().dom;
+            for snapshot in snapshots {
+                let Some(node_generation) = dom.node_generation(snapshot.node) else { continue; };
+                states.insert(snapshot.node, (ImageLoaderState {
+                    current_src: snapshot.state.current_src.encode_utf16().collect(),
+                    complete: snapshot.state.complete,
+                    natural_width: snapshot.state.natural_width,
+                    natural_height: snapshot.state.natural_height,
+                }, node_generation, snapshot.generation, snapshot.decode));
+            }
+        }
+        let pending = {
+            let mut state = self.state.borrow_mut();
+            state.image_states = states;
+            std::mem::take(&mut state.image_decodes)
+        };
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        for (node, node_generation, requested_generation, requested_src, promise) in pending {
+            let decision = {
+                let state = adapter.state.borrow();
+                state.image_states.get(&node).map(|(image, dom_generation, request_generation, decision)| {
+                    if *dom_generation != node_generation
+                        || requested_generation.is_some_and(|generation| generation != *request_generation)
+                        || requested_src.as_ref().is_some_and(|src| src != &image.current_src) {
+                        crate::runtime_host_replaced_content::ImageDecodeDecision::Reject
+                    } else { *decision }
+                })
+            };
+            match decision {
+                Some(crate::runtime_host_replaced_content::ImageDecodeDecision::Resolve) =>
+                    adapter.resolve_promise(&promise, JsValue::Undefined)?,
+                Some(crate::runtime_host_replaced_content::ImageDecodeDecision::Reject) => {
+                    let reason = adapter.image_decode_error()?;
+                    adapter.reject_promise(&promise, reason)?;
+                }
+                _ => adapter.state.borrow_mut().image_decodes.push((node, node_generation, requested_generation, requested_src, promise)),
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
         content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
@@ -173,6 +232,27 @@ impl RuntimeBindings {
     }
 
     pub(crate) fn deliver_mutations(&self, js: &mut Interpreter) -> Result<(), Throw> {
+        let affected = {
+            let host = self.state.borrow().host.clone();
+            let mut host = host.borrow_mut();
+            let mutations = host.dom.take_image_relevant_mutations();
+            crate::runtime_host_replaced_content::affected_images(&host.dom, &mutations)
+        };
+        if !affected.is_empty() {
+            let mut rejected = Vec::new();
+            {
+                let mut state = self.state.borrow_mut();
+                for node in &affected { state.image_states.remove(node); }
+                state.image_decodes.retain(|(node, _, _, _, promise)| {
+                    if affected.contains(node) { rejected.push(promise.clone()); false } else { true }
+                });
+            }
+            let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+            for promise in rejected {
+                let reason = adapter.image_decode_error()?;
+                adapter.reject_promise(&promise, reason)?;
+            }
+        }
         let mut adapter = RuntimeBindingHost {
             js,
             state: self.state.clone(),
@@ -194,6 +274,14 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn image_decode_error(&mut self) -> Result<JsValue, Throw> {
+        let global = self.js.binding_global_object();
+        let constructor = self.js.binding_get_property(&global, "DOMException")?;
+        self.js.binding_construct(&constructor, vec![
+            JsValue::str("The image could not be decoded"),
+            JsValue::str("EncodingError"),
+        ])
+    }
     fn materialize_location_unforgeables(&self, wrapper: &JsValue) -> Result<(), Throw> {
         let JsValue::Object(object) = wrapper else { return Err(Throw::type_error("Location wrapper")); };
         let prototype = self.prototype(Interface::Location)
@@ -420,6 +508,31 @@ impl RuntimeBindingHost<'_> {
 
 }
 
+#[cfg(test)]
+mod image_loader_tests {
+    use super::*;
+
+    #[test]
+    fn html_image_properties_and_decode_observe_loaded_pixels() {
+        let url = "data:image/x-portable-pixmap,P6%0A2%201%0A255%0A%FF%00%00%00%FF%00";
+        let dom = amazing_html::parse(&format!("<img id=photo src='{url}'>"));
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(),
+            crate::js_scheduler::JS_CAPACITY).unwrap();
+        let media = {
+            let page = host.borrow();
+            let styled = amazing_css::compute(&page.dom, &[]);
+            crate::page::load_page_media_in_viewport(&page.dom, "https://example.test/", &styled, 800.0, 1.0)
+        };
+        scheduler.set_image_loader_states(&media).unwrap();
+        let properties = scheduler.run_script("var photo = document.getElementById('photo'); [photo.complete, photo.naturalWidth, photo.naturalHeight, photo.currentSrc].join('|')").unwrap();
+        assert_eq!(properties, JsValue::str(&format!("true|2|1|{url}")));
+        scheduler.run_script("var decoded = false; photo.decode().then(() => { decoded = true; });").unwrap();
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(scheduler.run_script("decoded").unwrap(), JsValue::Bool(true));
+    }
+}
+
 /// Install once before the first page script. The existing legacy host remains
 /// available for browser features that DOM-7 does not yet define.
 pub(crate) fn install(
@@ -434,6 +547,8 @@ pub(crate) fn install(
         slot
     };
     let state = Rc::new(RefCell::new(BindingState {
+        image_states: HashMap::new(),
+        image_decodes: Vec::new(),
         canvas_text_system: None,
         canvas_dirty: HashSet::new(),
         canvas_style_values: HashMap::new(),
@@ -461,6 +576,8 @@ pub(crate) fn install(
         storage: None,
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
+        messaging: None,
+        net: NetRuntime::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -477,6 +594,7 @@ pub(crate) fn install(
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
+            NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -487,6 +605,7 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
     });
@@ -500,6 +619,7 @@ pub(crate) fn install(
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
+    adapter.install_messaging()?;
     adapter.install_canvas()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
@@ -523,6 +643,7 @@ pub(crate) fn install(
     fresh.declare_lexical("localStorage",local_storage,false)?;
     fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
+    adapter.install_net()?;
     adapter
         .js
         .global_obj
@@ -870,6 +991,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             *value = None;
         }
     }
+    fn create_frozen_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+        self.dom_frozen_array(values)
+    }
     fn create_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
         binding_create_array(self.js, values)
     }
@@ -891,6 +1015,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     operation,
                     Operation::EventConstructor
                         | Operation::CustomEventConstructor
+                        | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor
                         | Operation::StaticRangeConstructor
                 ) {
@@ -1086,6 +1211,44 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn dom_exception_value(&mut self, error: DomError) -> Result<JsValue, Throw> {
         Ok(throw_dom_error(self, error).0)
+    }
+    fn image_loader_state(&mut self, node: NodeIdx) -> Result<Option<ImageLoaderState>, Throw> {
+        let state = self.state.borrow();
+        let Some((image, generation, _, _)) = state.image_states.get(&node) else { return Ok(None); };
+        let current = state.host.borrow().dom.node_generation(node);
+        Ok((current == Some(*generation)).then(|| image.clone()))
+    }
+    fn image_decode(&mut self, node: NodeIdx, promise: &JsValue) -> Result<OptionalHookInstall, Throw> {
+        let host = self.state.borrow().host.clone();
+        let host_ref = host.borrow();
+        let dom = &host_ref.dom;
+        let Some(node_generation) = dom.node_generation(node) else {
+            let reason = self.image_decode_error()?;
+            self.reject_promise(promise, reason)?;
+            return Ok(OptionalHookInstall::Installed);
+        };
+        let selected = self.state.borrow().image_states.get(&node)
+            .filter(|(_, generation, _, _)| *generation == node_generation)
+            .map(|(image, _, request_generation, decision)| (*request_generation, image.current_src.clone(), *decision));
+        let has_source = dom.attribute_utf16(node, "src").is_some_and(|value| !value.is_empty())
+            || dom.attribute_utf16(node, "srcset").is_some_and(|value| !value.is_empty());
+        drop(host_ref);
+        match selected {
+            Some((_, _, crate::runtime_host_replaced_content::ImageDecodeDecision::Resolve)) =>
+                self.resolve_promise(promise, JsValue::Undefined)?,
+            Some((_, _, crate::runtime_host_replaced_content::ImageDecodeDecision::Reject)) => {
+                let reason = self.image_decode_error()?;
+                self.reject_promise(promise, reason)?;
+            }
+            Some((request_generation, current_src, crate::runtime_host_replaced_content::ImageDecodeDecision::Wait(_))) =>
+                self.state.borrow_mut().image_decodes.push((node, node_generation, Some(request_generation), Some(current_src), promise.clone())),
+            None if has_source => self.state.borrow_mut().image_decodes.push((node, node_generation, None, None, promise.clone())),
+            None => {
+                let reason = self.image_decode_error()?;
+                self.reject_promise(promise, reason)?;
+            }
+        }
+        Ok(OptionalHookInstall::Installed)
     }
     fn report_custom_element_exception(&mut self, error: Throw) -> Result<(), Throw> {
         eprintln!("Uncaught custom element reaction: {}", error.describe());
