@@ -35,6 +35,9 @@ if not (root / DIRECTORIES[0]).exists():
     subprocess.run(['git', '-C', str(root), 'fetch', '--depth=1', '--filter=blob:none', 'origin', REVISION], check=True)
     subprocess.run(['git', '-C', str(root), 'checkout', '--detach', REVISION], check=True)
 assert subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() == REVISION
+# Extend an existing lane-local sparse clone when a new whole area is selected.
+subprocess.run(['git', '-C', str(root), 'sparse-checkout', 'add', 'resources', 'common', *DIRECTORIES], check=True)
+assert all((root / directory).is_dir() for directory in DIRECTORIES), 'missing selected corpus directory'
 selection = []
 excluded = []
 for directory in DIRECTORIES:
