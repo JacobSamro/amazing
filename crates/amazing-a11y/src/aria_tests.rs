@@ -1,6 +1,6 @@
 //! State and property computation fixtures.
 
-use crate::aria::{InvalidState, Orientation, Tristate};
+use crate::aria::{InvalidState, Orientation, Tristate, aria_mixin_attribute, aria_mixin_get, aria_mixin_set};
 use crate::test_support::{ax_of_tag, document};
 
 #[test]
@@ -161,5 +161,47 @@ fn aria_level_overrides_heading_tag() {
 fn dialog_modal_state() {
     let doc = document("<dialog aria-modal=\"true\">x</dialog>");
     assert!(ax_of_tag(&doc, "dialog").unwrap().states.modal);
+}
+
+/// A11Y-14: `aria_mixin_attribute`'s mechanical IDL-name → content-attribute
+/// mapping, spot-checked against `ARIAMixin`'s own members (see its doc
+/// comment for why no hand-maintained list is needed instead).
+#[test]
+fn aria_mixin_attribute_name_mapping() {
+    assert_eq!(aria_mixin_attribute("role").as_deref(), Some("role"));
+    assert_eq!(aria_mixin_attribute("ariaLabel").as_deref(), Some("aria-label"));
+    assert_eq!(aria_mixin_attribute("ariaChecked").as_deref(), Some("aria-checked"));
+    assert_eq!(aria_mixin_attribute("ariaValueNow").as_deref(), Some("aria-value-now"));
+    assert_eq!(
+        aria_mixin_attribute("ariaColIndexText").as_deref(),
+        Some("aria-col-index-text")
+    );
+    assert_eq!(
+        aria_mixin_attribute("ariaBrailleRoleDescription").as_deref(),
+        Some("aria-braille-role-description")
+    );
+    assert_eq!(aria_mixin_attribute("aria-label"), None, "kebab input is not an IDL name");
+    assert_eq!(aria_mixin_attribute("tabIndex"), None, "not an ARIAMixin member at all");
+    assert_eq!(aria_mixin_attribute("aria"), None, "bare prefix with nothing after it");
+}
+
+/// A11Y-14: the getter/setter halves are plain content-attribute reflection
+/// — no accessibility computation, matching WebIDL's `DOMString?` reflection
+/// exactly (present → `Some`, absent → `None`/removed).
+#[test]
+fn aria_mixin_get_and_set_reflect_the_content_attribute() {
+    use crate::test_support::dom_of_tag;
+
+    let mut doc = document("<div id=\"x\" aria-checked=\"true\"></div>");
+    let node = dom_of_tag(&doc, "div").unwrap();
+    let attr = aria_mixin_attribute("ariaChecked").unwrap();
+
+    assert_eq!(aria_mixin_get(&doc.dom, node, &attr), Some("true"));
+
+    aria_mixin_set(&mut doc.dom, node, &attr, Some("mixed")).unwrap();
+    assert_eq!(aria_mixin_get(&doc.dom, node, &attr), Some("mixed"));
+
+    aria_mixin_set(&mut doc.dom, node, &attr, None).unwrap();
+    assert_eq!(aria_mixin_get(&doc.dom, node, &attr), None);
 }
 

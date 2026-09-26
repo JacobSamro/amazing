@@ -26,7 +26,29 @@
 //! devtools lane's file, not this lane's. [`ax_tree_for_page`] drives the
 //! same headless parse/style/layout pipeline `amazing layout`/`amazing
 //! render` use, for the `a11y-tree` CLI subcommand and this file's own test.
+//!
+//! A11Y-14 adds [`AxTreeWatcher`], the stateful per-document wrapper around
+//! [`diff_ax_tree`] that a shell or devtools panel drains for a live change-
+//! event stream (see its own doc comment for the call-site handoff), and
+//! confirms — by running `amazing wpt-harness` against the pinned WPT files
+//! directly (not just this crate's own tests) — that `amazing_a11y`'s
+//! shadow-DOM-aware content collection (added this ticket in
+//! `amazing-a11y::accname`) plus the driver's existing `get_computed_label`/
+//! `get_computed_role` testdriver hooks (`runtime_host_integrator_assist.rs`,
+//! IA-TESTDRIVER) already make `accname/name/shadowdom/{basic,slot}.html`
+//! pass with no further wiring here: those files build their tested content
+//! with real `attachShadow`/`<slot>` calls that only need to run through the
+//! real DOM+JS engine once, not be re-executed by this file.
+//! `html-aam/roles-dynamic-switch.tentative.window.js` mostly passes through
+//! that same existing hook too, except for the `switch` IDL attribute itself
+//! (`input.switch = true`), which needs a WebIDL boolean-attribute
+//! reflection this lane cannot add without editing `amazing-bindings` — see
+//! `.agents/a11y/questions.md`. `wai-aria/aria-actions/idl-reflection.
+//! tentative.html` needs `ariaActionsElements` (an element-reference/
+//! FrozenArray reflection over custom elements and shadow trees), also filed
+//! there rather than attempted here.
 
+use std::collections::VecDeque;
 use std::process::ExitCode;
 
 use amazing_a11y::{AxEvent, AxTree};
@@ -61,6 +83,73 @@ pub(crate) fn diff_ax_tree(
     previous: &AxTree,
 ) -> (AxTree, Vec<AxEvent>) {
     amazing_a11y::rebuild_and_diff(dom, styled, layout, previous)
+}
+
+/// A11Y-14: the stateful half of [`diff_ax_tree`] — holds the tree from the
+/// last checkpoint and a drainable queue of the events every checkpoint
+/// since has produced, so a caller with continuous access to a live
+/// document (a `gui` frame, `BrowserDomHost`, or `amazing wpt-harness`'s
+/// `test_driver` hooks) does not have to thread `previous` through itself
+/// call to call, or poll for changes it might otherwise miss between two
+/// reads. One watcher per live document/tab; `record_checkpoint` is meant to
+/// be called at the same granularity `deliver_mutations`/
+/// `deliver_custom_element_reactions` already coalesce mutation-observer
+/// callbacks to (see `runtime_binding_host.rs`'s `deliver_mutations`) —
+/// once per batch of applied mutations, *after* that batch's style and
+/// layout have been refreshed, not once per individual attribute/child-list
+/// change.
+///
+/// Devtools' future `Accessibility.nodesUpdated` (CDP-15,
+/// `amazing-devtools::host::drain_ax_nodes_updated`) and a shell's live
+/// accessibility panel are both consumers of [`Self::drain_events`]; wiring
+/// either to this type's `record_checkpoint` is filed in
+/// `.agents/a11y/questions.md` / the corresponding lane's `questions.md`,
+/// since the call site (wherever a live document's style+layout are
+/// actually refreshed) lives in another lane's file, not this one — the
+/// same reasoning [`diff_ax_tree`]'s own doc comment already gives for CDP.
+#[derive(Default)]
+pub(crate) struct AxTreeWatcher {
+    current: Option<AxTree>,
+    pending: VecDeque<AxEvent>,
+}
+
+impl AxTreeWatcher {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// The tree as of the last [`Self::record_checkpoint`] call, or `None`
+    /// before the first one.
+    pub(crate) fn current_tree(&self) -> Option<&AxTree> {
+        self.current.as_ref()
+    }
+
+    /// Rebuilds the tree from `dom`/`styled`/`layout` and diffs it against
+    /// whatever checkpoint came before (or builds fresh, with no events, on
+    /// the first call for this watcher). Newly produced events are appended
+    /// to the pending queue in the order they occurred; call
+    /// [`Self::drain_events`] to take them.
+    pub(crate) fn record_checkpoint(&mut self, dom: &Dom, styled: &StyledDom, layout: &LayoutBox) {
+        let (next, events) = match &self.current {
+            Some(previous) => diff_ax_tree(dom, styled, layout, previous),
+            None => (build_ax_tree(dom, styled, layout), Vec::new()),
+        };
+        self.pending.extend(events);
+        self.current = Some(next);
+    }
+
+    /// Takes every event queued since the last drain, oldest first. Once
+    /// taken, an event is not replayed to a later drain — the same
+    /// at-most-once delivery a `MutationObserver` callback queue gives.
+    pub(crate) fn drain_events(&mut self) -> Vec<AxEvent> {
+        self.pending.drain(..).collect()
+    }
+
+    /// Whether anything is waiting to be drained, for a caller that only
+    /// wants to do work (e.g. wake a devtools panel) when there is some.
+    pub(crate) fn has_pending_events(&self) -> bool {
+        !self.pending.is_empty()
+    }
 }
 
 /// Parses, styles (author `<style>`/`<link rel=stylesheet>`, this page's
@@ -196,6 +285,95 @@ mod tests {
             .unwrap_or_else(|| panic!("expected a NameChanged event, got {events:?}"));
         assert_eq!(changed.previous_name.as_deref(), Some("old"));
         assert_eq!(changed.name, "new");
+    }
+
+    /// A11Y-14: a watcher's first checkpoint has no `previous`, so it builds
+    /// fresh and reports no events — matching a freshly attached observer
+    /// seeing no mutations before it started watching.
+    #[test]
+    fn watcher_first_checkpoint_reports_no_events() {
+        let mut watcher = AxTreeWatcher::new();
+        assert!(watcher.current_tree().is_none());
+
+        let (dom, styled, layout) = build_pipeline("<div role=\"status\">hello</div>");
+        watcher.record_checkpoint(&dom, &styled, &layout);
+
+        assert!(watcher.current_tree().is_some());
+        assert!(!watcher.has_pending_events());
+        assert!(watcher.drain_events().is_empty());
+    }
+
+    /// A11Y-14: successive checkpoints accumulate events across calls until
+    /// drained, and a drain empties the queue without losing anything that
+    /// arrives after — the same at-most-once, no-polling-gap contract a
+    /// `MutationObserver` callback queue gives.
+    #[test]
+    fn watcher_accumulates_and_drains_events_across_checkpoints() {
+        use amazing_a11y::AxEventKind;
+
+        let mut watcher = AxTreeWatcher::new();
+        let (dom, styled, layout) = build_pipeline("<div role=\"status\">old</div>");
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        assert!(watcher.drain_events().is_empty(), "first checkpoint has nothing to diff against");
+
+        let (dom, styled, layout) = build_pipeline("<div role=\"status\">new</div>");
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        assert!(watcher.has_pending_events());
+
+        let (dom, styled, layout) = build_pipeline(
+            "<div role=\"status\">new</div><button>added</button>",
+        );
+        watcher.record_checkpoint(&dom, &styled, &layout);
+
+        let events = watcher.drain_events();
+        assert!(
+            events.iter().any(|event| event.kind == AxEventKind::NameChanged),
+            "expected a NameChanged event from the first->second checkpoint, got {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| event.kind == AxEventKind::Added),
+            "expected an Added event from the second->third checkpoint, got {events:?}"
+        );
+        assert!(watcher.drain_events().is_empty(), "drain must empty the queue");
+
+        // A live-region announcement (LiveRegionInfo on the changed status
+        // node) is carried on the event itself, not a separate stream: a
+        // consumer filters `drain_events()` by `event.live.is_some()` for
+        // "what should be announced," matching how `event::diff` already
+        // attaches `live` per A11Y-8.
+        let (dom, styled, layout) = build_pipeline(
+            "<div role=\"status\">new</div><button>added</button>",
+        );
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        assert!(watcher.drain_events().is_empty(), "no change since the last checkpoint");
+    }
+
+    /// A11Y-14: removing one of two siblings is reported as a `Removed`
+    /// event naming the removed node, not merely a size change on its
+    /// former parent — even though the watcher rebuilds the whole tree on
+    /// every checkpoint rather than tracking a diff incrementally
+    /// node-by-node (per `amazing_a11y::event`'s own module doc on why a
+    /// whole-tree rebuild still yields a correct incremental diff).
+    #[test]
+    fn watcher_reports_node_removal() {
+        use amazing_a11y::AxEventKind;
+
+        let mut watcher = AxTreeWatcher::new();
+        let (dom, styled, layout) =
+            build_pipeline("<button>keep</button><button>bye</button>");
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        watcher.drain_events();
+
+        let (dom, styled, layout) = build_pipeline("<button>keep</button>");
+        watcher.record_checkpoint(&dom, &styled, &layout);
+
+        let events = watcher.drain_events();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.kind == AxEventKind::Removed && event.name == "bye"),
+            "expected a Removed event for the \"bye\" button, got {events:?}"
+        );
     }
 
     #[test]
