@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "subdir": "svg/struct",
+  "mismatch_count": 10,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 10,
+      "examples": [
+        "svg__struct__reftests__use-external-html-resource-with-doctype.html",
+        "svg__struct__reftests__use-external-html-resource.html",
+        "svg__struct__reftests__use-external-resource-nested-image.html",
+        "svg__struct__reftests__use-external-resource-no-svg-root.html",
+        "svg__struct__reftests__use-external-resource-target-pseudo-001.html"
+      ]
+    }
+  ]
+}

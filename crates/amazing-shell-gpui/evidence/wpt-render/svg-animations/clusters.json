@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "subdir": "svg/animations",
+  "mismatch_count": 2,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "svg__animations__invalid-attribute-type-does-not-block-same-group-animation.html",
+        "svg__animations__invalid-attribute-type-does-not-block-other-animations.html"
+      ]
+    }
+  ]
+}
