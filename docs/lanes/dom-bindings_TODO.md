@@ -1782,3 +1782,30 @@ is in `crates/amazing-bindings/evidence/messageevent/`.
 
 Next independent DOM-B event cluster: UIEvent dictionary Window validation,
 conversion order, signed-long detail, and related-target validation/root cleanup.
+
+## DOM-B UI event dictionary conversion complete (2026-09-26)
+
+`01e52255` validates Window views and related EventTargets, reads supported
+inherited dictionary fields in WebIDL order, converts UIEvent.detail as signed
+long, and roots values only after fallible conversion completes. Native tests
+cover all six UI event constructors, nullable/default fields, numeric edges,
+conversion ordering, invalid dictionaries, and root cleanup.
+
+Linux Boat exact-source workspace **2534 passed / 10 skipped**, docs **2/2**;
+owned/driver **517 passed / 4 skipped**, owned docs **0**. Pinned event subclass
+constructors improve **48/49→49/49**; the seven-source selection gains one file
+and one assertion with **zero losses**. Evidence:
+`crates/amazing-bindings/evidence/event-dictionaries/`.
+
+## DOM-B legacy event factory complete (2026-09-26)
+
+Legacy event factory complete: implementation `03856580`, fixed base `f14340c8`.
+Document.createEvent selects the matching UI event class, preserves ASCII-case
+aliases, and throws DOMException NotSupportedError for unsupported names.
+Linux final gate: **2536 passed / 10 skipped**, doctests **2/2**; owned/driver
+iteration **519 passed / 4 skipped**, owned doctests **0**.
+Pinned Document-createEvent improves **75→249 passing subtests**, with **zero
+lost passes** across the seven-source selection (409 pass / 31 fail / 6 errors).
+Evidence: `crates/amazing-bindings/evidence/legacy-events/`.
+
+Next: routed DOMException conformance and event-handler content attributes.

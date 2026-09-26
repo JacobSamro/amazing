@@ -122,3 +122,17 @@ Adds the read paths a DevTools front end uses after connect, plus the
 
 `mock::MockHost` implements all of it over the fixed document and gains
 scriptable target events (`push_target_created`/`push_target_destroyed`).
+
+## CDP-3 — Input domain and DOM hit testing — done
+
+Linux gate on Boat `bx_xbhqabax`: `amazing-devtools` 72/72 nextest (0 skipped)
+and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped, doctests 4 passed.
+
+- `Input`: `setIgnoreInputEvents`, `dispatchMouseEvent`, `dispatchKeyEvent`,
+  `dispatchTouchEvent`, `insertText`. New seam types `MouseEvent`, `KeyEvent`,
+  `TouchPoint`/`TouchEvent` and the matching `dispatch_*`/`insert_text`/
+  `set_ignore_input_events` methods.
+- `DOM.getNodeForLocation`: hit-tests the document via
+  `DevToolsSession::node_for_location` and returns the node id, backend node id
+  and frame id.
+- `MockHost` records every input event and returns a configurable `hit_test`.

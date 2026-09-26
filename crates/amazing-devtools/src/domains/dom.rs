@@ -227,6 +227,23 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
                 Json::Array(ids),
             )])))
         }
+        "DOM.getNodeForLocation" => {
+            let x = request.number_param("x")?;
+            let y = request.number_param("y")?;
+            let _shadow = request.optional_bool("includeUserAgentShadowDOM", false)?;
+            let engine = session.dev.node_for_location(x, y).map_err(CdpError::from)?;
+            let node_id = session.nodes.id(engine);
+            let frame_id = session
+                .dev
+                .frame_tree()
+                .map(|tree| tree.frame.id)
+                .unwrap_or_default();
+            Ok(DispatchOutcome::result(object(vec![
+                ("backendNodeId", Json::number(engine.0 as f64)),
+                ("frameId", Json::String(frame_id)),
+                ("nodeId", Json::number(node_id as f64)),
+            ])))
+        }
         other => Err(CdpError::method_not_found(other)),
     }
 }

@@ -1,0 +1,13 @@
+{
+  "source": "0385658011cbcc3e1895b2e7a2ce03d29fd01fb6",
+  "platform": "Linux Boat dom-bindings",
+  "workspace_pass": 2536,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 2,
+  "owned_pass": 519,
+  "owned_skip": 4,
+  "owned_doctests": 0,
+  "new_passing_subtests": 174,
+  "lost_passing_subtests": 0,
+  "baseline": "../event-dictionaries/after.json"
+}
