@@ -663,3 +663,70 @@ mod object_iterator_tests {
         "#).unwrap(), JsValue::Bool(true));
     }
 }
+
+#[cfg(test)]
+mod object_string_wrapper_tests {
+    use super::*;
+
+    #[test]
+    fn string_wrappers_expose_immutable_code_units_to_object_operations() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var boxed = Object('a\uD800b');
+            var descriptor = Object.getOwnPropertyDescriptor(boxed, '1');
+            var length = Object.getOwnPropertyDescriptor(boxed, 'length');
+            var copied = Object.assign({}, boxed);
+            var before = boxed[1];
+            boxed[1] = 'changed';
+            var deleted = delete boxed[1];
+            Object.keys(boxed).join(',') === '0,1,2' &&
+                Object.values(boxed)[1] === '\uD800' &&
+                Object.entries(boxed)[1][1] === '\uD800' &&
+                copied[1] === '\uD800' && descriptor.value === '\uD800' &&
+                descriptor.enumerable && !descriptor.writable && !descriptor.configurable &&
+                length.value === 3 && !length.enumerable && !length.writable &&
+                !length.configurable && boxed[1] === before && !deleted;
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn from_entries_accepts_boxed_string_entries_and_constructed_strings() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var entries = Object.fromEntries([Object('ab'), new String('cd')]);
+            var receiver = {};
+            var called = String.call(receiver, 'text');
+            var boxed = new String('xy');
+            var same = Object.defineProperty(boxed, '0', { value: 'x' });
+            var rejected = false;
+            try { Object.defineProperty(boxed, '0', { value: 'z' }); }
+            catch (error) { rejected = error instanceof TypeError; }
+            called === 'text' && !Object.hasOwn(receiver, 'length') &&
+                entries.a === 'b' && entries.c === 'd' && same === boxed && rejected &&
+                Object.keys(boxed).join(',') === '0,1';
+        "#).unwrap(), JsValue::Bool(true));
+    }
+}
+
+#[cfg(test)]
+mod object_assignment_tests {
+    use super::*;
+
+    #[test]
+    fn unsuccessful_property_assignment_only_throws_for_strict_references() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            for prefix in ["", "'use strict';"] {
+                let mut i = Interpreter::new();
+                let source = format!(r#"{prefix}
+                    var object = {{}};
+                    Object.defineProperty(object, 'fixed', {{value: 3}});
+                    var threw = false;
+                    try {{ object.fixed = 4; }} catch (error) {{ threw = error instanceof TypeError; }}
+                    threw === {} && object.fixed === 3;
+                "#, !prefix.is_empty());
+                assert_eq!(i.run_script_with_backend(&source, backend).unwrap(), JsValue::Bool(true),
+                    "{backend:?}: {prefix}");
+            }
+        }
+    }
+}
