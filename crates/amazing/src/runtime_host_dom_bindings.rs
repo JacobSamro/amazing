@@ -144,6 +144,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn token_list_reads_live_state_after_argument_conversion() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('token list conversion'); }
+            const element = document.createElement('div');
+            const list = element.classList;
+            element.className = 'old';
+            list.add({toString() { element.className = 'fresh'; return 'added'; }});
+            check(list.value === 'fresh added');
+            check(list.item({valueOf() { element.className = 'changed'; return 0; }}) === 'changed');
+            let marker = {};
+            let caught;
+            try { list.add('', {toString() { throw marker; }}); } catch (error) { caught = error; }
+            check(caught === marker && list.value === 'changed');
+            element.removeAttribute('class');
+            list.remove('missing');
+            check(!element.hasAttribute('class'));
+            check(list.contains('') === false && list.contains('a b') === false);
+            element.className = 'c b a';
+            check(list.replace('c', 'a') && list.value === 'a b');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn abortable_listeners_handle_recursive_dispatch_dependents_and_conversion_order() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

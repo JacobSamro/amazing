@@ -15,7 +15,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('label')
 parser.add_argument('source')
 parser.add_argument('--reuse-binary', action='store_true', help='Use the frozen executable from an interrupted corpus run')
+parser.add_argument('--directory', action='append', help='Run whole selected directories; defaults to all four DOM-B areas')
 args = parser.parse_args()
+if args.directory:
+    DIRECTORIES = args.directory
 output = Path(os.environ['OUT']) / ('dom-b-audit-' + args.label)
 output.mkdir(parents=True, exist_ok=True)
 # Freeze the executable before other pooled lanes build into the shared target.

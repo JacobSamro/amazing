@@ -2536,3 +2536,6 @@ mod tests_legacy_document;
 
 #[path = "tests_listener_registration.rs"]
 mod tests_listener_registration;
+
+#[path = "tests_tokenlist_semantics.rs"]
+mod tests_tokenlist_semantics;
