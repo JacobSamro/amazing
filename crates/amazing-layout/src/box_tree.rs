@@ -389,6 +389,24 @@ fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<N
             Flow::Empty => None,
         })
         .or(Some(0));
+    // An anonymous inline run can straddle an out-of-flow source slot. Its
+    // first text (often whitespace) does not prove the whole line precedes it.
+    box_.source_end_order = if box_.node.is_some() { box_.source_order } else {
+        match &box_.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) =>
+                children.iter().filter_map(|child| child.source_end_order).max(),
+            Flow::Inlines(items) => items.iter().filter_map(|item| match item {
+                InlineNode::Text { node, source_order, .. } =>
+                    (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
+                InlineNode::Replaced { node, replaced, .. } =>
+                    replaced.source_order.or_else(|| slot(*node, None).map(|rank| rank << 32)),
+                InlineNode::Atomic { node, .. } | InlineNode::Ruby { node, .. } =>
+                    slot(*node, None).map(|rank| rank << 32),
+                _ => None,
+            }).max(),
+            Flow::Empty => box_.source_order,
+        }
+    };
 }
 
 fn apply_first_letter(dom: &Dom, origin: NodeIdx, style: &ComputedStyle, flow: &mut Flow) {

@@ -89,6 +89,7 @@ pub mod grid;
 mod grid_algorithm;
 pub mod inline;
 pub mod position;
+mod position_constraints;
 pub mod replaced;
 pub mod retained;
 mod svg;
@@ -158,6 +159,8 @@ pub struct LayoutBox {
     pub node: Option<NodeIdx>,
     /// Source-order key for synthetic boxes.
     pub source_order: Option<u64>,
+    /// Last in-flow source slot, including anonymous inline runs.
+    pub(crate) source_end_order: Option<u64>,
     pub(crate) generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     /// Computed ::first-line style; applied to the first formatted line.
     pub first_line_style: Option<ComputedStyle>,
@@ -193,6 +196,8 @@ pub struct LayoutBox {
     pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
     pub(crate) containing_block_height: Option<f32>,
+    /// Direction of the normal containing block, for physical width constraints.
+    pub(crate) containing_block_rtl: bool,
     /// Available physical height for orthogonal auto sizing; unlike a definite
     /// containing-block height, this does not resolve percentage heights.
     pub(crate) available_height: Option<f32>,
@@ -225,6 +230,7 @@ impl LayoutBox {
         LayoutBox {
             node,
             source_order: None,
+            source_end_order: None,
             generated_pseudo: None,
             first_line_style: None,
             outside_marker: false,
@@ -246,6 +252,7 @@ impl LayoutBox {
             table_colspan: 1,
             table_rowspan: 1,
             containing_block_height: None,
+            containing_block_rtl: false,
             available_height: None,
             grid_subgrid: None,
             margin: values::SidesM::default(),

@@ -353,6 +353,28 @@ fn layout_block_in_context(
         .and_then(|value| value.resolve(Some(cbw))).or_else(|| calc_size_width_limit("max-width"));
     content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
+    // Resolve the normal-flow width equation again after min/max clamping.
+    // Direction belongs to the containing block, including when the child's
+    // own direction differs. Auto margins never go negative as a pair.
+    if !floating && !b.inline_atomic {
+        let specified = values::resolve_margins_with_units(&b.style, font_units, cbw);
+        let free = cbw - content_w - chrome;
+        let (mut left, mut right) = (specified.left, specified.right);
+        if free - left.unwrap_or(0.0) - right.unwrap_or(0.0) < 0.0 {
+            left = Some(left.unwrap_or(0.0));
+            right = Some(right.unwrap_or(0.0));
+        }
+        match (left, right) {
+            (None, None) => { b.margin.left = Some(free / 2.0); b.margin.right = Some(free / 2.0); }
+            (None, Some(right)) => { b.margin.left = Some(free - right); b.margin.right = Some(right); }
+            (Some(left), None) => { b.margin.left = Some(left); b.margin.right = Some(free - left); }
+            (Some(_), Some(right)) if b.containing_block_rtl => {
+                b.margin.left = Some(free - right); b.margin.right = Some(right);
+            }
+            (Some(left), Some(_)) => { b.margin.left = Some(left); b.margin.right = Some(free - left); }
+        }
+    }
+
     // Margin edges: the box's border box starts after its own margins.
     let mt = b.margin.top.unwrap_or(0.0);
     let border_x = x + b.margin.left.unwrap_or(0.0);
@@ -380,6 +402,8 @@ fn layout_block_in_context(
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children.iter_mut() {
                 c.containing_block_height = inline_basis;
+                c.containing_block_rtl = b.style.get("direction") == Some("rtl")
+                    && !vertical_text;
                 c.available_height = inline_basis.or_else(|| height_constraint("max-height"))
                     .or(b.available_height);
                 if c.node.is_none() {
@@ -592,7 +616,7 @@ fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amaz
     Some((cross, inline))
 }
 
-fn layout_atomic_inlines(parent: &mut LayoutBox, x: f32, y: f32, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {
+pub(crate) fn layout_atomic_inlines(parent: &mut LayoutBox, x: f32, y: f32, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {
     for child in parent.positioned.iter_mut().filter(|child| child.inline_atomic) {
         let inline_block = is_inline_block(&child.style);
         let outer_width = if inline_block || child.table_wrapper {

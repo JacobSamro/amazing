@@ -1488,10 +1488,20 @@ reproduces candidate4 case/hash projections exactly: writing230→243/1112 (+13/
 (default th alignment must inherit non-start values rather than unconditional
 UA center). Do not mark done or merge until the raw loss is resolved/approved.
 
-## LAYOUT-23 — positioned axis constraints (active)
+## LAYOUT-23 — positioned axis constraints (held on image reference)
 
 Frozen complete static css-position and CSS2/positioning selection645:
 226pass,410mismatch,9unsupported;126 script exclusions. Baseline engine749555ca.
 Implement containing-block direction, static edges, shrink-to-fit, automatic
 margins and replaced sizing in bulk; retain writing1112,ruby118,tables386,union449.
 LAYOUT-22 remains held on its CSS-owned th default regression.
+
+Final Linux workspace2823pass/10skip,60.334s,four doctests;layout370pass/1skip,
+zero docs. Position226→255/645 (+30/-1),writing243→245/1112 (+2/-0),ruby70
+unchanged,tables309→310/386 (+1/-0),retained303→304/449 (+1/-0). No new
+non-rendered cases. Final five case/hash projections equal candidate2. The
+right-113 loss is a missing PNG-reference dependency: correct black96×96 actual,
+zero red,blank reference. Routed;raw loss retained;do not call done/zero-loss.
+All15 own candidate1 losses repaired. Axis constraints,auto margins,replaced
+ratios,shrink widths,CB direction,normal RTL,zoom and static source ranges landed.
+Next: inline positioned ancestors and fragment containing blocks (LAYOUT-24).
