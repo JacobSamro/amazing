@@ -198,22 +198,58 @@ fn event_class(op: O) -> Option<EventClass> {
     })
 }
 
+// Inherited dictionaries precede derived dictionaries; each dictionary's
+// supported members are visited in lexicographic order (WebIDL conversion).
 fn event_fields(class: EventClass) -> &'static [&'static str] {
-    const UI: &[&str] = &["view", "detail"];
-    const FOCUS: &[&str] = &["view", "detail", "relatedTarget"];
-    const MOUSE: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget"];
-    const WHEEL: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget",
-        "deltaX", "deltaY", "deltaZ", "deltaMode"];
-    const KEYBOARD: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
-        "key", "code", "location", "repeat", "isComposing", "charCode", "keyCode", "which"];
-    const COMPOSITION: &[&str] = &["view", "detail", "data"];
+    const UI: &[&str] = &["detail", "view"];
+    const FOCUS: &[&str] = &["detail", "view", "relatedTarget"];
+    const MOUSE: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY"];
+    const WHEEL: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY",
+        "deltaMode", "deltaX", "deltaY", "deltaZ"];
+    const KEYBOARD: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
+        "charCode", "code", "isComposing", "key", "keyCode", "location", "repeat", "which"];
+    const COMPOSITION: &[&str] = &["detail", "view", "data"];
     match class {
         EventClass::Ui => UI, EventClass::Focus => FOCUS, EventClass::Mouse => MOUSE,
         EventClass::Wheel => WHEEL, EventClass::Keyboard => KEYBOARD,
         EventClass::Composition => COMPOSITION, _ => &[],
     }
+}
+
+fn ui_detail<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<f64, H::Error> {
+    let number = host.to_number(value)?;
+    if !number.is_finite() || number == 0. { return Ok(0.); }
+    Ok(number.trunc().rem_euclid(4294967296.) as u32 as i32 as f64)
+}
+
+enum ConvertedExtra<V> { Native(EventExtra), Root(Option<V>) }
+fn convert_extras<H: BindingHost>(host: &mut H, dictionary: &H::Value, class: EventClass)
+    -> Result<Vec<(&'static str, ConvertedExtra<H::Value>)>, H::Error> {
+    let mut extras = Vec::new();
+    for &name in event_fields(class) {
+        let value = host.get_property(dictionary, name)?;
+        if host.is_undefined(&value) { continue; }
+        let extra = match extra_spec(name) {
+            EventExtra::Boolean(_) => ConvertedExtra::Native(EventExtra::Boolean(host.to_boolean(&value))),
+            EventExtra::Number(_) => ConvertedExtra::Native(EventExtra::Number(
+                if name == "detail" { ui_detail(host, &value)? } else { host.to_number(&value)? })),
+            EventExtra::String(_) => ConvertedExtra::Native(EventExtra::String(host.to_dom_string(&value)?)),
+            EventExtra::Root(_) => {
+                if host.is_nullish(&value) { ConvertedExtra::Root(None) }
+                else {
+                    if name == "view" && host.window_event_target_slot(&value).is_none() {
+                        return Err(host.type_error("UIEvent.view must be a Window"));
+                    }
+                    if name == "relatedTarget" { target(host, &value)?; }
+                    ConvertedExtra::Root(Some(value))
+                }
+            },
+        };
+        extras.push((name, extra));
+    }
+    Ok(extras)
 }
 
 pub(crate) fn invoke<H: BindingHost>(
@@ -234,12 +270,19 @@ pub(crate) fn invoke<H: BindingHost>(
                 else { Err(DomError::TypeError) })?;
         }
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let event_type = utf16_string(host, raw_type)?;
+        let event_type = if op == O::CreateEvent {
+            // Interface names are ASCII aliases. An unmatched DOMString, including
+            // lone surrogates, takes the NotSupportedError path rather than TypeError.
+            String::from_utf16_lossy(&host.to_dom_string(raw_type)?)
+        } else { utf16_string(host, raw_type)? };
         if op == O::CreateEvent && event_type.eq_ignore_ascii_case("MessageEvent") {
             return crate::message_event_bindings::create_legacy(host);
         }
         let init = if op != O::CreateEvent {
             let dictionary = args.get(1);
+            if let Some(value) = dictionary.filter(|value| !host.is_nullish(value)) {
+                host.require_object(value)?;
+            }
             EventInit {
                 bubbles: option(host, dictionary, "bubbles")?,
                 cancelable: option(host, dictionary, "cancelable")?,
@@ -251,7 +294,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 "HashChangeEvent", "HTMLEvents", "KeyboardEvent", "MessageEvent",
                 "MouseEvent", "MouseEvents", "StorageEvent", "SVGEvents", "TextEvent",
                 "UIEvent", "UIEvents"].iter().any(|name| name.eq_ignore_ascii_case(&event_type)) {
-                return Err(host.type_error("Unsupported legacy event interface"));
+                return host.with_dom(|_| Err(DomError::NotSupportedError));
             }
             EventInit::default()
         };
@@ -263,7 +306,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 _ => host.undefined(),
             };
             let root = if host.is_nullish(&detail) { None } else { Some(host.retain_value(detail)) };
-            Event::new_custom(event_type, init, Duration::ZERO, root)
+            Event::new_custom(event_type.clone(), init, Duration::ZERO, root)
         } else if legacy_custom {
             Event::new_custom("", init, Duration::ZERO, None)
         } else {
@@ -272,21 +315,29 @@ pub(crate) fn invoke<H: BindingHost>(
         if let Some(class) = event_class(op) {
             event.set_class(class);
             if let Some(dictionary) = args.get(1).filter(|value| !host.is_nullish(value)) {
-                for &name in event_fields(class) {
-                    let value = host.get_property(dictionary, name)?;
-                    if host.is_undefined(&value) { continue; }
-                    let extra = match extra_spec(name) {
-                        EventExtra::Boolean(_) => EventExtra::Boolean(host.to_boolean(&value)),
-                        EventExtra::Number(_) => EventExtra::Number(host.to_number(&value)?),
-                        EventExtra::String(_) => EventExtra::String(host.to_dom_string(&value)?),
-                        EventExtra::Root(_) => EventExtra::Root(if host.is_nullish(&value) { None }
-                            else { Some(host.retain_value(value)) }),
+                // Conversion can run user code and fail. Retain roots only once all
+                // fields have converted so later exceptions cannot leak earlier roots.
+                for (name, extra) in convert_extras(host, dictionary, class)? {
+                    let extra = match extra {
+                        ConvertedExtra::Native(value) => value,
+                        ConvertedExtra::Root(value) => EventExtra::Root(value.map(|value| host.retain_value(value))),
                     };
                     event.set_extra(name, extra);
                 }
             }
         }
-        if op == O::CreateEvent { event.mark_uninitialized(); }
+        if op == O::CreateEvent {
+            let class = match event_type.to_ascii_lowercase().as_str() {
+                "compositionevent" => EventClass::Composition,
+                "focusevent" => EventClass::Focus,
+                "keyboardevent" => EventClass::Keyboard,
+                "mouseevent" | "mouseevents" => EventClass::Mouse,
+                "uievent" | "uievents" => EventClass::Ui,
+                _ => event.class(),
+            };
+            event.set_class(class);
+            event.mark_uninitialized();
+        }
         let id = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }
