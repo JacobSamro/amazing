@@ -349,9 +349,10 @@ enum Decision {
 /// already computed.
 pub fn build(dom: &Dom, styled: &StyledDom, layout: &LayoutBox) -> AxTree {
     let (ids, labels_by_target) = collect_indices(dom);
+    let owned_by = collect_owned_by(dom, styled, &ids);
     let bounds = bounds::collect_bounds(dom, layout);
     let mut builder =
-        Builder { dom, styled, ids: ids.clone(), labels_by_target, bounds, nodes: Vec::new() };
+        Builder { dom, styled, ids: ids.clone(), labels_by_target, owned_by, bounds, nodes: Vec::new() };
     let root = builder.build_root();
     builder.apply_owns();
     let mut tree = builder.finish(root);
@@ -479,11 +480,81 @@ pub(crate) fn collect_indices(dom: &Dom) -> (HashMap<String, NodeIdx>, HashMap<S
     (ids, labels)
 }
 
+/// `aria-owns` target → owner, "first owner wins" in document order — the
+/// same precedence [`Builder::apply_owns`] uses for the AX-tree reparenting
+/// pass, but computed here, ahead of it, for `accname::NameContext` (A11Y-13,
+/// w3c/aria PR #1839): name-from-content is computed per node while the tree
+/// is first built (`push_node`, below), before `apply_owns` ever runs, so
+/// accname needs its own copy of the same ownership decision rather than
+/// waiting for the AX tree's `children`/`parent` to reflect it.
+///
+/// A target already recorded, or already a genuine DOM child of `owner`
+/// (nothing to relocate — the same no-op `apply_owns` itself skips), is left
+/// out. So is a target owned by an `owner` that is itself unconditionally
+/// hidden (w3c/aria PR #1839 rule 1: `aria-owns` set on an element excluded
+/// from the accessibility tree must not resolve) — `apply_owns` gets this for
+/// free by scanning only nodes that already have an `AxNode`, which a hidden
+/// owner never does; this DOM-only pass checks
+/// [`accname::is_hard_hidden_raw`] directly instead.
+pub(crate) fn collect_owned_by(
+    dom: &Dom,
+    styled: &StyledDom,
+    ids: &HashMap<String, NodeIdx>,
+) -> HashMap<NodeIdx, NodeIdx> {
+    let mut owned_by = HashMap::new();
+    for owner in dom.tree_order(NodeIdx(0)) {
+        let Some(references) = dom.get_attribute_ns(owner, None, "aria-owns") else { continue };
+        if accname::is_hard_hidden_raw(dom, styled, owner) {
+            continue;
+        }
+        for id in references.split_ascii_whitespace() {
+            let Some(&target) = ids.get(id) else { continue };
+            if target == owner || owned_by.contains_key(&target) {
+                continue;
+            }
+            if dom.get(target).parent == Some(owner) {
+                continue;
+            }
+            if has_non_rendered_ancestor(dom, styled, target) {
+                continue;
+            }
+            owned_by.insert(target, owner);
+        }
+    }
+    owned_by
+}
+
+/// Walks from `node` up through its DOM ancestors (`node` itself excluded)
+/// for one that is genuinely not rendered: `[hidden]` or `display:none`.
+/// Deliberately excludes `aria-hidden` — an AT-only annotation that doesn't
+/// make an ancestor "hidden from all users" in the sense w3c/aria PR #1839's
+/// rule 2 means (`accname/aria-owns.html`'s "aria-owns to specify its
+/// label"/"concatenate extra text" cases both rely on an `aria-hidden`
+/// *ancestor* not blocking the relocation rescue, while its "ignore
+/// aria-owns when it targets an element with an ancestor that is hidden from
+/// all users" case requires a native-`hidden` ancestor to block it).
+fn has_non_rendered_ancestor(dom: &Dom, styled: &StyledDom, node: NodeIdx) -> bool {
+    let mut current = dom.get(node).parent;
+    while let Some(ancestor) = current {
+        if dom.get_attribute_ns(ancestor, None, "hidden").is_some()
+            || styled
+                .get(ancestor)
+                .and_then(|style| style.get("display"))
+                .is_some_and(|v| v.eq_ignore_ascii_case("none"))
+        {
+            return true;
+        }
+        current = dom.get(ancestor).parent;
+    }
+    false
+}
+
 struct Builder<'a> {
     dom: &'a Dom,
     styled: &'a StyledDom,
     ids: HashMap<String, NodeIdx>,
     labels_by_target: HashMap<String, Vec<NodeIdx>>,
+    owned_by: HashMap<NodeIdx, NodeIdx>,
     bounds: BoundsMap,
     nodes: Vec<AxNode>,
 }
@@ -684,6 +755,7 @@ impl<'a> Builder<'a> {
                     self.styled,
                     &self.ids,
                     &self.labels_by_target,
+                    &self.owned_by,
                 );
                 (
                     accname::accessible_name(&ctx, node),
