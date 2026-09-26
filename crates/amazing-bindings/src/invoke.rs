@@ -44,6 +44,7 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
         | O::ElementTagName => matches!(kind, NodeKind::Element { .. }),
         O::DocumentTypeName | O::DocumentTypePublicId | O::DocumentTypeSystemId =>
             matches!(kind, NodeKind::DocumentType { .. }),
+        O::ProcessingInstructionTarget => matches!(kind, NodeKind::ProcessingInstruction { .. }),
         _ => true,
     };
     if good {
@@ -200,11 +201,17 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::element_reflection::handles(operation) {
         return crate::element_reflection::invoke(host, operation, receiver, args);
     }
+    if crate::image_bindings::handles(operation) {
+        return crate::image_bindings::invoke(host, operation, receiver);
+    }
     if crate::markup_bindings::handles(operation) {
         return crate::markup_bindings::invoke(host, operation, receiver, args);
     }
     if crate::range_bindings::handles(operation) {
         return crate::range_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::selection_bindings::handles(operation) {
+        return crate::selection_bindings::invoke(host, operation, receiver, args);
     }
     if crate::factories::handles(operation) {
         return crate::factories::invoke(host, operation, receiver, args);
@@ -250,7 +257,8 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     let required = match operation {
         O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild
-        | O::Contains | O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace | O::NodeIsSameNode => 1,
+        | O::Contains | O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace | O::NodeIsSameNode
+        | O::NodeIsEqualNode | O::NodeCompareDocumentPosition => 1,
         O::InsertBefore | O::ReplaceChild | O::MoveBefore => 2,
         _ => 0,
     };
@@ -294,6 +302,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     let argument_node = if matches!(
         operation,
         O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild | O::MoveBefore
+            | O::NodeCompareDocumentPosition
     ) {
         Some(required_node(host, args.first())?)
     } else if operation == O::Contains {
@@ -315,7 +324,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             Some(String::from_utf16(&units).map_err(|_| host.type_error("Invalid namespace string"))?)
         }
     } else { None };
-    let same_node = if operation == O::NodeIsSameNode {
+    let same_node = if matches!(operation, O::NodeIsSameNode | O::NodeIsEqualNode) {
         if host.is_nullish(&args[0]) { None } else { Some(required_node(host, args.first())?) }
     } else { None };
     let html = if matches!(operation, O::NodeName | O::ElementTagName | O::CreateCDATASection) {
@@ -444,6 +453,12 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                 };
                 R::String(value.encode_utf16().collect())
             }
+            O::ProcessingInstructionTarget => {
+                let NodeKind::ProcessingInstruction { target, .. } = &dom.get(target).kind else {
+                    unreachable!("validated ProcessingInstruction receiver")
+                };
+                R::String(target.encode_utf16().collect())
+            }
             O::NodeValue => if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
                 R::String(dom.attr_snapshot(target)?.value)
             } else { dom.character_data_utf16(target).map_or(R::Null, R::String) },
@@ -508,6 +523,8 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             O::NodeIsDefaultNamespace => R::Boolean(dom.is_default_namespace(target, namespace_argument.as_deref())?),
             O::NodeNormalize => { dom.normalize(target)?; R::Undefined },
             O::NodeIsSameNode => R::Boolean(same_node == Some(target)),
+            O::NodeIsEqualNode => R::Boolean(same_node.is_some_and(|other| dom.is_equal_node(target, other))),
+            O::NodeCompareDocumentPosition => R::Number(dom.compare_document_position(target, argument_node.unwrap()) as f64),
             O::Data => R::String(dom.character_data_utf16(target).unwrap()),
             O::SetData => {
                 set_data(dom, target, &data)?;

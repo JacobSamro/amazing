@@ -27,6 +27,7 @@ fn access<'a>(url: &'a HttpUrl, http_api: bool) -> CookieAccess<'a> {
         http_api,
         top_level_navigation: false,
         method: "GET",
+        partition_key: None,
     }
 }
 

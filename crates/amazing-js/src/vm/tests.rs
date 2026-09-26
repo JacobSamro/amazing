@@ -17,6 +17,10 @@ fn differential(source: &str, names: &[&str]) {
     let expected = tree.run_script(source);
     let actual = vm.run_script_with_backend(source, ExecutionBackend::Bytecode);
     match (expected, actual) {
+        (Ok(a), Ok(b)) if source == "this" => {
+            assert_eq!(a, JsValue::Object(tree.global_obj.clone()));
+            assert_eq!(b, JsValue::Object(vm.global_obj.clone()));
+        }
         (Ok(a), Ok(b)) => assert!(same_value(&a, &b), "{source}: {a:?} != {b:?}"),
         (Err(a), Err(b)) => assert_eq!(a.describe(), b.describe(), "{source}"),
         (a, b) => panic!("{source}: {a:?} != {b:?}"),
@@ -60,6 +64,12 @@ fn primitive_and_operator_differential_corpus() {
         "typeof null",
         "typeof 3",
         "typeof this",
+        "(function(){ return this===globalThis })()",
+        "(function(){ 'use strict'; return this===undefined })()",
+        "(function(){ return Object.getPrototypeOf(this)===Number.prototype }).call(5)",
+        "function outer(a,b){ return [0].map(() => arguments.length)[0] }; outer(1,2)",
+        "var inner; function outer(x){ inner=()=>arguments[0] }; outer(42); inner()",
+
         "'10' < '2'",
         "'10' > 2",
         "2 <= 2",
@@ -191,12 +201,12 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A {}",
+        "changed = 1; class A extends Object {}",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
-        "changed = 1; 2n;",
+        "changed = 1; async function* g() { yield 1; }",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);

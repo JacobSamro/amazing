@@ -34,7 +34,7 @@ fn intl_plural_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
-        .unwrap_or_else(|| i.object_value());
+        .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null PluralRules options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let kind = intl_string_option(i, &options, "type", &["cardinal", "ordinal"], "cardinal")?;

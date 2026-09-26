@@ -75,6 +75,7 @@ pub(crate) struct Lexer {
     /// Plain-code brace depth at each open template substitution.
     template_bases: Vec<usize>,
     annex_b_comments: bool,
+    line_has_code: bool,
 }
 
 impl Lexer {
@@ -90,6 +91,7 @@ impl Lexer {
             brace_depth: 0,
             template_bases: Vec::new(),
             annex_b_comments: true,
+            line_has_code: false,
         }
     }
 
@@ -144,6 +146,7 @@ impl Lexer {
             _ => tokens.push(self.punct_token(start, newline_before)?),
         }
         self.pending.extend(tokens);
+        self.line_has_code = true;
         Ok(self
             .pending
             .pop_front()
@@ -268,6 +271,7 @@ impl Lexer {
                 Some(c) if is_js_whitespace(c) => self.advance(),
                 Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
                     newline = true;
+                    self.line_has_code = false;
                     self.advance();
                 }
                 Some('#') if self.idx == 0 && self.peek(1) == Some('!') => {
@@ -281,15 +285,13 @@ impl Lexer {
                     }
                 }
                 Some('-') if self.annex_b_comments && self.peek(1) == Some('-') && self.peek(2) == Some('>')
-                    && self.chars[..self.idx].iter().rev()
-                        .take_while(|&&c| !is_line_terminator(c))
-                        .all(|&c| is_js_whitespace(c)) => {
+                    && !self.line_has_code => {
                     while !self.at_end() && !self.cur().is_some_and(is_line_terminator) {
                         self.advance();
                     }
                 }
                 Some('/') if self.peek(1) == Some('/') => {
-                    while !self.at_end() && self.cur() != Some('\n') {
+                    while !self.at_end() && !self.cur().is_some_and(is_line_terminator) {
                         self.advance();
                     }
                 }
@@ -301,6 +303,7 @@ impl Lexer {
                         match self.cur() {
                             Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
                                 newline = true;
+                                self.line_has_code = false;
                                 self.advance();
                             }
                             Some('*') if self.peek(1) == Some('/') => {

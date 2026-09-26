@@ -73,10 +73,11 @@ impl Parser {
         imports: &mut HashSet<String>,
     ) -> Result<ImportDeclaration, SyntaxError> {
         self.bump(); // import
-        let phase = if (self.word("source") || self.word("defer"))
+        let phase = if (self.word("source")
             && (matches!(self.nth(1).kind, TokenKind::Ident(_))
                 || self.nth_punct(1, Punct::Star)
-                || self.nth_punct(1, Punct::Lbrace))
+                || self.nth_punct(1, Punct::Lbrace)))
+            || (self.word("defer") && self.nth_punct(1, Punct::Star))
         {
             match self.bump().kind {
                 TokenKind::Ident(name) => Some(name),

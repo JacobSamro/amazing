@@ -1317,3 +1317,65 @@ pass losses. The 72-case cascade selection remained **68 pass / 2 mismatch /
 classifications are in `crates/amazing-css/evidence/css17-*-case-results.jsonl`
 and the summary in `css17-color-results.json`. Windows exact-source gate:
 CSS **266/266**, workspace **2027/2027** plus five skipped, doctests **2/2**.
+
+## CSS-18 selector serialization and complex logical lists
+
+Commit `3172976` re-escapes decoded identifiers when declaration and selector
+tokens are serialized, so `:lang(\*-FR)` retains its wildcard language range
+through stylesheet parsing. `:is()`, `:where()`, and `:not()` accept complex
+selector-list arguments with combinators. The first two drop invalid list
+items and match nothing when none remain. Complex arguments use their full
+selector specificity, while `:where()` stays zero. Style invalidation takes
+the conservative relational fallback for these complex arguments.
+
+The pinned 259-case broad WPT selection moved from **202 pass / 57 mismatch**
+to **204 pass / 55 mismatch**, gaining `is-where-pseudo-elements` and
+`lang-015` with zero losses. Both are Chrome/Safari pass-consensus cases.
+The 72-case cascade selection remained **68 pass / 2 mismatch / 2
+unsupported** with identical classifications. Per-case classifications and
+pixel hashes are in `crates/amazing-css/evidence/css18-*-case-results.jsonl`;
+`css18-selector-results.json` records counts and report hashes. Linux CSS
+**268/268** and workspace **2027/2027** plus five skipped passed.
+The exact-source Windows gate passed CSS **268/268**, workspace **2029/2029**
+plus five skipped, and doctests **2/2**.
+
+## CSS Ruby 1 property handoff for LAYOUT-16
+
+The ruby display values were already accepted by the typed `display` parser and the UA sheet already mapped `ruby`, `rb`, `rt`, `rtc`, and `rp`. Add `rbc` mapping and complete the UA defaults (annotation size only once within `rtc`, nonwrapping bases/annotations, ruby font variant, and isolation). Register the inherited `ruby-align`, `ruby-position`, `ruby-overhang`, and `ruby-merge` properties with their CSS Ruby 1 initials and value grammars. The `ruby-position` unordered two-keyword form canonicalizes to `alternate over/under`; legacy `ruby-overhang: none` computes to `spaces`. See [CSS Ruby 1](https://drafts.csswg.org/css-ruby-1/).
+
+Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped. Windows exact-source gate and doctests are recorded in `.agents/css/report.md`.
+
+## CSS-13 style-change severity and compositor handoff (ADR 0010)
+
+`StyleChangeKind` orders `None`, `CompositorOnly`, `PaintOnly`, `Layout`, and `Rebuild`. The explicit table covers all 193 registered longhands; its registry test fails when a new property lacks a classification. `StyleDelta::change_kind(node)` reports the most severe computed change from incremental recalculation. Changes to pseudo boxes or unknown computed state require rebuild. The normal recomputation path escalates transform changes to layout and opacity changes to rebuild because it cannot prove a retained property-tree-only update.
+
+`StyleInvalidator::update_attribute` handles a single class/style mutation and returns `AttributeStyleUpdate`. Its `CompositorOnly` variant is a value-only path: it parses only the old/new inline declarations and existing cached style, never calls CSS `compute`, and carries `opacity: Option<f32>` plus a final row-major local `transform_matrix`. The matrix includes the default 50%/50% transform origin; `Matrix4(matrix)` is the compositor conversion, with no second origin application. `update_attribute_with_box` accepts `CachedBoxSize` from unchanged retained layout for percent translations and rotation/scale origin composition. `CompositorStyleDelta::apply_to_styles` patches the retained computed style for repeated updates. The fast path rejects selector dependencies on `style`, `:has`, `attr()` dependencies, invalid or important declarations, non-inline winners, a transform that appears/disappears, child elements under a changed transform, unsupported relative lengths, explicit transform-origin, and opacity crossing 1. All rejected cases use incremental recomputation and a conservative severity.
+## CSS-13b class-edit compositor classification (ADR 0010)
+
+- `StyleInvalidator::update_attribute_with_box` compares old/new class selector matches without CSS compute, rejects descendant and sibling invalidation sets, relational and pseudo dependencies, and non-compositor declaration changes.
+- Normal unlayered opacity and transform winners produce the existing resolved `CompositorStyleDelta`; retained style source, stable effect node, and cached transform geometry remain required. Layered or important competitors recompute.
+- `css13b_class_delta.rs` covers the IA opacity class fixture, unchanged shared declarations, cached transform geometry, combinators, `:has()`, inherited declarations, pseudo content, class attributes, and layered important competition.
+- The follow-up admits fixed implicit `<style>` scopes and stable explicit `@scope` roots. It evaluates scope start/end limits before comparing the old/new subject selector match and rejects scopes whose selectors depend on the edited class.
+
+
+## CSS-14 compositor animation handoff (COMP-12)
+
+`animation::CompositorAnimation` is the CSS-owned handoff: node/generation, property, resolved keyframes, timing, start time, and animation identity. `CompositorAnimation::from_keyframes` rejects mixed main-thread properties, missing endpoints, incompatible transform function lists, matrix functions requiring decomposition, and unresolved box geometry; `for_transition` resolves old/new values. `AnimationTiming::from_computed_style` reads the selected animation or transition list item. Transform frames include a row-major local 4x4 matrix plus resolved translation/rotation/scale/skew functions and default transform origin. `animation::sample(&handoff, t_ms)` is pure and is the single sampler for compositor frames and main-thread reads. The compositor constructs its `Matrix4` from the sampled matrix field.
+
+`AnimatedValues::handoff` marks the node/property compositor-owned and suppresses per-frame insertion. `sample_owned` and `read_owned_style` call the same sampler on demand. `commit_property_update` validates id/generation and completion, commits forward fill at the animation/transition cascade origin once, then calls a main-thread event callback for `animationend` or `transitionend`; a two-property animation emits one end event after both updates. `cancel_for_mutation` cancels all owned properties for that node/generation, returns the handoffs for main-thread resumption, retains the last sampled value, and emits cancel events. Driver integration must invoke these APIs at the rendering-update boundary; no compositor dependency enters amazing-css. See [CSS Animations 1](https://drafts.csswg.org/css-animations/) and [Web Animations 1](https://drafts.csswg.org/web-animations-1/) for fill and iteration timing.
+
+## RC-21 CSS handoff: image and media selection
+
+`image-orientation` now computes to inherited `from-image` initially, accepts `none` as the opt-out, and retains legacy angle/flip forms for parsing. `object-fit` and `object-position` are registered non-inherited values for all elements, including replaced contexts. The image loader reads all three through `ComputedStyle::get`; invalid declarations leave the appropriate initial value. `@supports` accepts the new image properties.
+
+`media_queries::MediaEnvironment` supplies viewport size, DPR, media type, and user preferences. `MediaQueryList::parse` with `evaluate` matches screen/print, width/height/resolution, orientation, and common `prefers-*` features. `parse_sizes_attribute` selects the first matching source size, resolves viewport/absolute/font-relative lengths and common CSS math, and accepts an optional auto width; invalid entries fall through to 100vw.
+
+## Next CSS-15 bulk css/ WPT sweep
+
+Pinned WPT revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12` has the largest document counts in `css-grid` (3410), `css-flexbox` (1974), `css-backgrounds` (1355), `css-transforms` (1245), `css-images` (751), `selectors` (684), `css-values` (603), `css-color` (517), `css-variables` (268), and `css-cascade` (158). Grid/flexbox are layout-owned and backgrounds/images paint-owned. The selected CSS-owned directories are `selectors`, `css-values`, and `css-color`: 80 path-stratified static reftests from each, in `crates/amazing-css/evidence/css15-manifest.json`.
+
+The fixed-base baseline is **190 pass / 50 mismatch / 0 error / 0 unsupported**. Directory splits are selectors **74/6**, values **43/37**, and color **73/7**. CSS fixes cover `an+b` whitespace sign tokenization in nested `:nth-last-child`, typed `attr()` substitution against the originating element with fallbacks and case-insensitive HTML attribute names, deprecated system-color aliases, Lab/OKLab lightness endpoints, and root font-size math using the initial `em`/`rem` basis. Layout-owned sizing, relative offsets, viewport scrollbar units, and first-line/first-letter cases were routed to `.agents/layout/questions.md` with the pinned IDs. Final after counts and exact-source gates are recorded in `.agents/css/report.md`.
+
+## Viewport computed values and resize invalidation
+
+`compute_with_environment(dom, sheets, &MediaEnvironment)` is the driver entry point. `compute()` supplies a default 800×600 CSS-pixel environment for existing callers. `vw`/`vh`/`vmin`/`vmax` and their `sv`/`lv`/`dv` variants become computed px before inheritance; the small, large, and dynamic sizes default to the layout viewport when absent. This resolves root `font-size: 100vw` before child `rem` values. `StyleInvalidator::new_with_environment` captures the prior environment; `collect_viewport_resize` selects nodes with matching viewport-dependent rules or viewport units in inline styles, and `recompute_roots` uses the new environment for those subtrees. The driver creates a fresh invalidator with the new environment after applying the delta. Container units remain future work.

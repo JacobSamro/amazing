@@ -35,6 +35,37 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
         self.mode
     }
 
+    /// Resolve paint's stable DOM owner and property into this view's tree ID.
+    /// Missing generations or ambiguous owners disable the property-only path.
+    pub fn property_bindings(&self) -> Option<Vec<(NodePropertyKey, BoundPropertyNode)>> {
+        if self.mode != PaintViewRasterMode::RawLocal {
+            return None;
+        }
+        let owners = self.view.property_owner_mapping()?;
+        let mut bindings = Vec::with_capacity(
+            owners.transforms.len() + owners.effects.len() + owners.scrolls.len(),
+        );
+        for (owner, id) in owners.transforms {
+            bindings.push((NodePropertyKey {
+                node: owner.node.0, generation: owner.generation,
+                property: BoundProperty::Transform,
+            }, BoundPropertyNode::Transform(TransformId(id as usize))));
+        }
+        for (owner, id) in owners.effects {
+            bindings.push((NodePropertyKey {
+                node: owner.node.0, generation: owner.generation,
+                property: BoundProperty::Opacity,
+            }, BoundPropertyNode::Opacity(EffectId(id as usize))));
+        }
+        for (owner, id) in owners.scrolls {
+            bindings.push((NodePropertyKey {
+                node: owner.node.0, generation: owner.generation,
+                property: BoundProperty::Scroll,
+            }, BoundPropertyNode::Scroll(ScrollId(id as usize))));
+        }
+        Some(bindings)
+    }
+
     pub fn compositor(&self, width: u32, height: u32) -> Result<Compositor, SceneError> {
         match self.mode {
             PaintViewRasterMode::RawLocal => {
@@ -170,7 +201,8 @@ pub fn paint_view_metadata(
     for node in view.scrolls().iter().skip(1) {
         let bounds = rect(node.bounds);
         trees
-            .add_scroll(ScrollId(node.parent as usize), (0., 0.), bounds, bounds)
+            .add_scroll(ScrollId(node.parent as usize), node.initial_offset, bounds,
+                rect(node.contents))
             .map_err(|_| SceneError::InvalidState)?;
     }
     let chunks = view

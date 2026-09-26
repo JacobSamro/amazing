@@ -177,6 +177,7 @@ impl RasterState {
         if let Some(mask) = rounded {
             self.begin_group_with_mask(
                 GroupEffect {
+                    owner: box_.node,
                     opacity: 1.0,
                     transform: crate::display_list::Affine::IDENTITY,
                     origin_x: 0.0,
@@ -384,6 +385,7 @@ pub fn paint_document_with_resources(
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
                 paint_lines(&mut state.surface, box_, color, fonts, glyphs, images, clip);
+                paint_table_borders(&mut state.surface, box_, clip);
             }
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
             PaintCommand::PopClip => state.pop_clip(),
@@ -466,6 +468,7 @@ pub fn paint_document_with_text_resources_and_controls(
             PaintCommand::PaintContent(box_) => {
                 let clip = state.clip();
                 paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+                paint_table_borders(&mut state.surface, box_, clip);
             }
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
             PaintCommand::PopClip => state.pop_clip(),
@@ -544,6 +547,7 @@ pub(crate) fn raster_command_range(
             PaintCommand::PaintContent(box_) if draw => {
                 let clip = state.clip();
                 paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+                paint_table_borders(&mut state.surface, box_, clip);
             }
             _ => {}
         }
@@ -599,6 +603,9 @@ pub(crate) fn raster_raw_item(
 ) -> bool {
     match command {
         PaintCommand::PaintDecorations(box_, background) => {
+            if box_.table_decoration().suppress_background
+                || box_.table_decoration().suppress_border
+                || !box_.table_decoration().background_holes.is_empty() { return false; }
             let mut local = LayoutBox::new(
                 box_.node,
                 box_.display,
@@ -631,6 +638,7 @@ pub(crate) fn raster_raw_item(
             )
         }
         PaintCommand::PaintContent(box_) => {
+            if !box_.table_decoration().borders.is_empty() { return false; }
             if box_.lines.iter().any(|line| !line.replaced.is_empty()) {
                 return false;
             }
@@ -681,9 +689,11 @@ fn paint_decorations(
     budget: &mut usize,
 ) -> bool {
     paint_box_shadow(surface, box_, text_color, clip);
-    paint_background(surface, box_, text_color, background.color_clip, clip);
-    if !background_raster::paint(surface, box_, background, images, clip, budget) {
-        return false;
+    if !box_.table_decoration().suppress_background {
+        paint_background(surface, box_, text_color, background.color_clip, clip);
+        if !background_raster::paint(surface, box_, background, images, clip, budget) {
+            return false;
+        }
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
@@ -789,12 +799,16 @@ fn fill_rounded_rect_clipped(
     rounded: RoundedRect,
     color: [u8; 4],
     clip: ClipRect,
+    holes: &[amazing_layout::Rect],
 ) {
     let clipped = clip.intersect(rounded.x, rounded.y, rounded.width, rounded.height);
     let [x0, y0, x1, y1] = clipped.pixels();
     for y in y0.max(0)..y1.min(surface.height as i64) {
         for x in x0.max(0)..x1.min(surface.width as i64) {
-            if !rounded.contains(x as f32 + 0.5, y as f32 + 0.5) {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            if !rounded.contains(px, py) || holes.iter().any(|hole| {
+                px >= hole.x && px < hole.x + hole.w && py >= hole.y && py < hole.y + hole.h
+            }) {
                 continue;
             }
             let destination = surface
@@ -887,6 +901,7 @@ fn paint_box_shadow(surface: &mut Surface, box_: &LayoutBox, text_color: [u8; 4]
         },
         shadow.color,
         clip,
+        &[],
     );
 }
 
@@ -1433,7 +1448,7 @@ fn paint_background(
         Some(c) => c,
         None => return,
     };
-    fill_rounded_rect_clipped(surface, background_raster::area(b, area), bg, clip);
+    fill_rounded_rect_clipped(surface, background_raster::area(b, area), bg, clip, &b.table_decoration().background_holes);
 }
 
 fn inset_radii(
@@ -1474,6 +1489,7 @@ fn inset_radii(
 /// Sides whose style is none/hidden or whose resolved width is <= 0 are
 /// skipped defensively (layout already zeroes them).
 fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
+    if b.table_decoration().suppress_border { return; }
     let bb = &b.border_box;
 
     let width_of = |side: &str| -> f32 {
@@ -1568,6 +1584,24 @@ fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip
             color_of("right"),
             double("right"),
             false,
+            clip,
+        );
+    }
+}
+
+/// Layout has selected the winning collapsed edges and split them at grid
+/// intersections. Paint consumes their absolute rectangles exactly once.
+fn paint_table_borders(surface: &mut Surface, table: &LayoutBox, clip: ClipRect) {
+    for edge in &table.table_decoration().borders {
+        let rect = edge.rect;
+        if ![rect.x, rect.y, rect.w, rect.h].iter().all(|v| v.is_finite())
+            || rect.w <= 0.0 || rect.h <= 0.0 { continue; }
+        paint_border_strip(
+            surface,
+            [rect.x, rect.y, rect.w, rect.h],
+            edge.color,
+            edge.style.eq_ignore_ascii_case("double"),
+            edge.horizontal,
             clip,
         );
     }

@@ -36,6 +36,49 @@ impl DocumentPosition {
     pub const IMPLEMENTATION_SPECIFIC: u16 = 32;
 }
 impl Dom {
+    /// DOM node equality compares node data and the complete child sequence.
+    pub fn is_equal_node(&self, a: NodeIdx, b: NodeIdx) -> bool {
+        let same_data = match (&self.get(a).kind, &self.get(b).kind) {
+            (NodeKind::Document, NodeKind::Document)
+            | (NodeKind::DocumentFragment, NodeKind::DocumentFragment) => true,
+            (NodeKind::DocumentType { name: an, public_id: ap, system_id: as_ },
+             NodeKind::DocumentType { name: bn, public_id: bp, system_id: bs }) =>
+                an == bn && ap == bp && as_ == bs,
+            (NodeKind::Element { .. }, NodeKind::Element { .. }) => {
+                let aa = self.attributes_expanded(a).unwrap();
+                let ba = self.attributes_expanded(b).unwrap();
+                self.namespace_uri(a) == self.namespace_uri(b)
+                    && self.get(a).prefix == self.get(b).prefix
+                    && self.local_name(a) == self.local_name(b)
+                    && aa.len() == ba.len()
+                    && aa.iter().all(|left| ba.iter().any(|right|
+                        left.namespace_uri == right.namespace_uri
+                            && left.local_name == right.local_name
+                            && left.value == right.value))
+            }
+            (NodeKind::Attr { namespace_uri: an, local_name: al, value: av, .. },
+             NodeKind::Attr { namespace_uri: bn, local_name: bl, value: bv, .. }) =>
+                an == bn && al == bl && av == bv,
+            (NodeKind::Text { .. }, NodeKind::Text { .. })
+            | (NodeKind::CDATASection { .. }, NodeKind::CDATASection { .. })
+            | (NodeKind::Comment { .. }, NodeKind::Comment { .. }) =>
+                self.character_data_utf16(a) == self.character_data_utf16(b),
+            (NodeKind::ProcessingInstruction { target: at, .. },
+             NodeKind::ProcessingInstruction { target: bt, .. }) =>
+                at == bt && self.character_data_utf16(a) == self.character_data_utf16(b),
+            _ => false,
+        };
+        if !same_data { return false; }
+        let mut left = self.children(a);
+        let mut right = self.children(b);
+        loop {
+            match (left.next(), right.next()) {
+                (None, None) => return true,
+                (Some(a), Some(b)) if self.is_equal_node(a, b) => (),
+                _ => return false,
+            }
+        }
+    }
     pub(crate) fn check_node(&self, node: NodeIdx) -> Result<(), DomError> {
         if self.node_slot_live.get(node.0 as usize) == Some(&true) {
             Ok(())
@@ -304,6 +347,8 @@ impl Dom {
         node: NodeIdx,
         parent: NodeIdx,
     ) -> Result<NodeIdx, DomError> {
+        self.check_node(parent)?;
+        self.check_node(child)?;
         self.insertion_validity(node, parent, Some(child), &[child])?;
         let mut reference = self.get(child).next_sibling;
         if reference == Some(node) {

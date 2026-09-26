@@ -168,7 +168,10 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{FrameHandle, FrameView, HandleChannel};
 #[cfg(windows)]
-pub use windows_sandbox::{current_process_handle_count, probe_open_process, spawn_renderer_appcontainer, WindowsSandboxChild};
+pub use windows_sandbox::{
+    current_process_handle_count, probe_open_process, spawn_renderer_appcontainer,
+    spawn_utility_appcontainer, WindowsSandboxChild,
+};
 #[cfg(not(any(target_os = "linux", windows)))]
 mod unsupported;
 #[cfg(not(any(target_os = "linux", windows)))]

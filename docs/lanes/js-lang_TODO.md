@@ -1285,3 +1285,55 @@ ExportDefaultExpression, ExportDefaultDeclaration}`;
 `ImportDeclaration { from, phase, bindings, attributes }`,
 `ImportBinding { imported, local }`, `ExportName { local, exported }`,
 and `ImportAttribute { key, value }`. `parse_module` is publicly exported.
+
+## JS-10 part 2 — synchronous ES modules
+
+Fixed base `7c61b9fcc33078685d2e552e648f2e486f93492b`, module code
+`af57d53a8e2cf8883ece77e79f0ccb2f166ad7a4`. `module::ModuleLinker` exposes
+`link` and `evaluate` with a host `ModuleResolver`; imported bindings alias the
+exporter's cells, preserving live updates and TDZ through cycles. Module namespace
+objects use the `Exotic::ModuleNamespace` property path. The Test262 host and
+runner now execute synchronous module tests; dynamic `import()` and top-level
+await evaluation remain with js-vm.
+
+Pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, 53,872 sources,
+same input hash and 60-second timeout on venus-001: before **24,762 files /
+48,074 variants pass** (classification `a07a0061664bc09ba404c5358a9d66fbd249b3a115feb50ee67d21a567ce3421`),
+after **25,057 files / 48,370 variants pass** (classification
+`dd94095047cc6b5efb7088b561bad982cf7d7fb19cd7d13d8ef02ed07518a84d`).
+There are **295 file and 296 variant gains, zero passing losses**. Of 843 module
+variants, 295 pass, 286 fail, and 262 are explicitly unsupported for async
+evaluation. The only classic classification difference is a pre-existing long
+TypedArray test's strict variant moving from 60-second timeout to pass; all
+other classic status/reason pairs are identical. Windows win-002: amazing-js
+nextest **273 passed, 1 skipped**, workspace nextest **2,154 passed**, separate
+JS and workspace doctests passed. No new VM fallback arms were needed in this
+series.
+
+## JS-10 front-end follow-up
+
+Fixed base `5860d66` plus the module binding-cell compatibility fix
+`c775d02`; front-end commit `8cd37e6`. The pinned full Test262 pair ran
+53,872 sources with identical input and runner hashes: 25,295 to 25,371
+passing files and 48,824 to 48,954 passing variants. There were 76 file and
+130 variant gains with zero passing losses. Windows win-002 passed 292 JS
+tests and 2,226 workspace tests; separate JS and workspace doctests passed.
+The fixed-base classification hashes are `4c618ad3` before and `4446e075`
+after. The changes tighten early errors, `super` and `await` contexts, lexical
+declaration placement, and Annex B HTML comment parsing.
+
+## Test262 host capability consistency
+
+Fixed local `dev` base `ef925d7`; commit `d351fd47`. Both
+`--capabilities` and `--capabilities-v2` serialize one `Capabilities`
+value. Protocol 1 alone masks `module`; all shared flags, including
+`intl402`, are set once. The emitted v1 and v2 JSON lines are byte-identical
+to the fixed base. Pinned Test262 `intl402/` selection: 805 passing files and
+1,610 passing variants before and after, zero losses, identical classification
+SHA-256 `f9bcf0576e6247ca2fc2cae6b3e7a3ff5ddd875a2f0605ea8c8b27f24583dd69`.
+The full-tree pair on earlier base `2cc7347` retained 720 Intl passes and
+had no passing losses at 60 seconds; four staging variants moved out of
+timeouts. The 120-second pair had one staging string timeout only; that test's
+two variants both passed when selected alone. Win-002 ran 295 JS and 2,279
+workspace nextest cases; both commands and separate JS/workspace doctests
+passed.

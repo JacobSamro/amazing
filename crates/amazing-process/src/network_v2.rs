@@ -2,10 +2,12 @@
 use crate::protocol::*;
 use amazing_fetch::api::{
     ApiHeaders, ApiRequest, ApiRequestInit, ApiRequestInput, BodyInput, HeaderGuard,
-    NavigationRequestInit,
+    NavigationRequestInit, NavigableContext,
 };
-use amazing_fetch::cookies::CookieSite;
-use amazing_fetch::service::{ClientContext, NetworkService, ServiceEvent, ServiceId};
+use amazing_fetch::cookies::{CookieAccess, CookieSite};
+use amazing_fetch::service::{
+    ApiResponseHead, ClientContext, NetworkService, ServiceEvent, ServiceId,
+};
 use amazing_fetch::{
     CspDestination, CspPolicyList, Destination, EmbedderPolicy, HeaderList, HttpUrl,
     NoCorsMediaState, Origin, SecurityContext,
@@ -158,9 +160,22 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
             .append_string(&h.name, &h.value)
             .map_err(|_| invalid("invalid request header"))?;
     }
+    let child_navigation = wire.mode == "navigate" && wire.destination == "frame";
+    let top_level_navigation = wire.mode == "navigate" && wire.destination == "document";
+    if wire.context.ancestor_origins.len() > 32 || wire.context.sandbox_flags & !0xffff != 0 {
+        return Err(invalid("invalid ancestor context"));
+    }
+    let frame_ancestors: Vec<Origin> = wire.context.ancestor_origins.iter()
+        .map(origin).collect::<Result<_, _>>()?;
+    let top_level_origin = wire.context.top_level_origin.as_ref().map(origin).transpose()?;
+    if child_navigation && (wire.context.top_level_navigation
+        || frame_ancestors.is_empty()
+        || frame_ancestors.last() != Some(&request_origin)
+        || frame_ancestors.first() != top_level_origin.as_ref()) {
+        return Err(invalid("invalid child navigation context"));
+    }
     let mut request = if wire.mode == "navigate" {
-        if wire.destination != "document"
-            || !wire.context.top_level_navigation
+        if !(top_level_navigation && wire.context.top_level_navigation || child_navigation)
             || wire.credentials != "include"
             || wire.redirect != "manual"
             || wire.cache != "default"
@@ -168,7 +183,22 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
             return Err(invalid("invalid navigation options"));
         }
         let url = HttpUrl::parse(&wire.url).map_err(|_| invalid("invalid navigation URL"))?;
-        let mut navigation = ApiRequest::navigation(
+        let mut navigation = if child_navigation {
+            if wire.method != "GET" || wire.body_present || !wire.body.0.is_empty()
+                || wire.navigation_reload_or_history || wire.navigation_client_reserved_id.is_some() {
+                return Err(invalid("invalid child navigation method"));
+            }
+            ApiRequest::child_navigation(url, &NavigableContext {
+                top_level_origin: top_level_origin.clone().unwrap(),
+                parent_origin: request_origin.clone(),
+                ancestor_origins: frame_ancestors.clone(),
+                sandbox_flags: wire.context.sandbox_flags,
+                frame_csp: csp.clone(),
+                referrer: wire.referrer.clone(),
+                referrer_policy: wire.referrer_policy.clone(),
+                now_unix: wire.context.now_unix,
+            })
+        } else { ApiRequest::navigation(
             url,
             NavigationRequestInit {
                 method: wire.method,
@@ -179,7 +209,7 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
                 reload_or_history: wire.navigation_reload_or_history,
                 client_reserved_id: wire.navigation_client_reserved_id,
             },
-        )
+        ) }
         .map_err(|e| Error::Remote(format!("navigation: {e:?}")))?;
         for h in &wire.headers {
             navigation
@@ -223,7 +253,15 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
     Ok((
         request,
         ClientContext {
-            cookie_site,
+            cookie_site: if child_navigation {
+                let site = top_level_origin.as_ref().unwrap().site(&amazing_fetch::psl::PublicSuffixList);
+                if frame_ancestors.iter().all(|ancestor| ancestor.site(&amazing_fetch::psl::PublicSuffixList) == site) {
+                    CookieSite::Origin(top_level_origin.as_ref().unwrap().clone())
+                } else { CookieSite::CrossSite }
+            } else { cookie_site },
+            partition_key: top_level_origin.as_ref()
+                .map(|origin| origin.site(&amazing_fetch::psl::PublicSuffixList)),
+            frame_ancestors: if child_navigation { frame_ancestors } else { Vec::new() },
             security: SecurityContext {
                 client_restricts_mixed_content: wire.context.restricts_mixed_content,
                 destination,
@@ -247,12 +285,67 @@ struct Active {
     credit_remaining: u32,
     seen_head: bool,
     terminal: bool,
+    subresource: bool,
     events: VecDeque<NetworkReply>,
+}
+fn wire_head(id: u64, active: &Active, head: ApiResponseHead) -> Result<NetworkHead, Error> {
+    let outgoing = NetworkHead {
+        id,
+        client_id: active.client_id,
+        epoch: active.epoch,
+        status: head.status,
+        redirected: head.redirected,
+        url: head.final_url,
+        reason: head.reason,
+        headers: head
+            .headers
+            .into_iter()
+            .map(|(name, value)| HeaderField { name, value })
+            .collect(),
+        response_type: format!("{:?}", head.response_type),
+        url_list: head.url_list,
+        redirect_tainted: head.redirect_tainted,
+    };
+    if outgoing.url.len() > MAX_URL_BYTES
+        || outgoing.reason.len() > 1024
+        || outgoing.response_type.len() > 64
+        || check_headers(&outgoing.headers).is_err()
+        || outgoing.url_list.len() > 32
+        || outgoing
+            .url_list
+            .iter()
+            .any(|url| url.len() > MAX_URL_BYTES)
+    {
+        return Err(invalid("response head limit"));
+    }
+    Ok(outgoing)
 }
 struct State {
     service: NetworkService,
     active: BTreeMap<u64, Active>,
     epochs: BTreeMap<u64, u64>,
+}
+fn http_cache_dir() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("AMAZING_HTTP_CACHE_DIR") {
+        return path.into();
+    }
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        return std::path::PathBuf::from(path)
+            .join("Amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("XDG_CACHE_HOME") {
+        return std::path::PathBuf::from(path)
+            .join("amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(path)
+            .join(".cache")
+            .join("amazing")
+            .join("http-cache");
+    }
+    std::env::temp_dir().join("amazing-http-cache")
 }
 impl Drop for State {
     fn drop(&mut self) {
@@ -263,9 +356,59 @@ impl Drop for State {
     }
 }
 impl State {
+    fn document_cookie(&mut self, request: DocumentCookie) -> Result<String, Error> {
+        if request.client_id == 0 || request.epoch == 0
+            || request.document_url.len() > MAX_URL_BYTES
+            || request.assignment.as_ref().is_some_and(|value| value.len() > 65536)
+            || self.epochs.get(&request.client_id).is_some_and(|epoch| *epoch != request.epoch)
+        {
+            return Err(invalid("invalid document cookie request"));
+        }
+        let url = HttpUrl::parse(&request.document_url).map_err(|_| invalid("invalid document URL"))?;
+        if !matches!(url.as_parsed().scheme(), "http" | "https") {
+            return Err(invalid("invalid document scheme"));
+        }
+        let top = origin(&request.top_level_origin)?;
+        let access = CookieAccess {
+            url: &url,
+            site_for_cookies: CookieSite::Origin(top.clone()),
+            http_api: false,
+            top_level_navigation: false,
+            method: "GET",
+            partition_key: Some(top.site(&amazing_fetch::psl::PublicSuffixList)),
+        };
+        if let Some(assignment) = request.assignment {
+            // HTML's setter silently ignores a rejected cookie.
+            if self.service.cookies.set_cookie(assignment.as_bytes(), &access, request.now_unix).is_ok() {
+                self.service.persist_cookies(request.now_unix);
+            }
+            Ok(String::new())
+        } else {
+            let bytes = self.service.cookies.cookie_header(&access, request.now_unix)
+                .map_err(|_| invalid("cookie retrieval failed"))?;
+            String::from_utf8(bytes).map_err(|_| invalid("cookie bytes are not UTF-8"))
+        }
+    }
     fn new() -> Self {
+        let mut service = NetworkService::new(DispatchLimits::default());
+        match crate::network_cache::DiskCache::open(
+            http_cache_dir(), amazing_fetch::cache::CacheLimits::default(),
+        ) {
+            Ok((cache, disk)) => service.install_cache(cache, Box::new(disk)),
+            Err(error) => eprintln!("HTTP cache unavailable: {error}"),
+        }
+        let wall = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+        match crate::network_hsts::DiskHsts::open(&http_cache_dir(), wall) {
+            Ok((hsts, disk)) => service.install_hsts(hsts, Box::new(disk)),
+            Err(error) => eprintln!("HSTS store unavailable: {error}"),
+        }
+        match crate::network_cookies::DiskCookies::open(&http_cache_dir(), wall) {
+            Ok((cookies, disk)) => service.install_cookies(cookies, Box::new(disk)),
+            Err(error) => eprintln!("cookie store unavailable: {error}"),
+        }
         Self {
-            service: NetworkService::new(DispatchLimits::default()),
+            service,
             active: BTreeMap::new(),
             epochs: BTreeMap::new(),
         }
@@ -280,29 +423,10 @@ impl State {
                     if active.seen_head || active.terminal {
                         continue;
                     }
-                    let outgoing = NetworkHead {
-                        id: id.0,
-                        client_id: active.client_id,
-                        epoch: active.epoch,
-                        status: head.status,
-                        redirected: head.redirected,
-                        url: head.final_url,
-                        reason: head.reason,
-                        headers: head
-                            .headers
-                            .iter()
-                            .map(|(name, value)| HeaderField {
-                                name: name.clone(),
-                                value: value.clone(),
-                            })
-                            .collect(),
-                        response_type: format!("{:?}", head.response_type),
-                    };
-                    if outgoing.url.len() > MAX_URL_BYTES
-                        || outgoing.reason.len() > 1024
-                        || outgoing.response_type.len() > 64
-                        || check_headers(&outgoing.headers).is_err()
-                    {
+                    if let Ok(outgoing) = wire_head(id.0, active, head) {
+                        active.seen_head = true;
+                        active.events.push_back(NetworkReply::Head(outgoing));
+                    } else {
                         self.service.cancel(id);
                         active.terminal = true;
                         active
@@ -312,9 +436,6 @@ impl State {
                                 epoch: active.epoch,
                                 error: Some("response head limit".into()),
                             }));
-                    } else {
-                        active.seen_head = true;
-                        active.events.push_back(NetworkReply::Head(outgoing));
                     }
                 }
                 ServiceEvent::BodyChunk { id, bytes } => {
@@ -380,14 +501,100 @@ impl State {
                             }));
                     }
                 }
+                ServiceEvent::SubresourceFinished { id, response } => {
+                    let Some(active) = self.active.get_mut(&id.0) else {
+                        continue;
+                    };
+                    if !active.subresource || active.terminal {
+                        continue;
+                    }
+                    active.terminal = true;
+                    if response.body.len() > active.response_limit as usize {
+                        active
+                            .events
+                            .push_back(NetworkReply::Complete(NetworkComplete {
+                                id: id.0,
+                                epoch: active.epoch,
+                                error: Some("subresource body limit".into()),
+                            }));
+                        continue;
+                    }
+                    let response_type = format!("{:?}", response.response_type);
+                    match wire_head(id.0, active, response.head) {
+                        Ok(mut head) => {
+                            head.response_type = response_type;
+                            active.seen_head = true;
+                            active.events.push_back(NetworkReply::Head(head));
+                            for bytes in response.body.chunks(NETWORK_CHUNK as usize) {
+                                active.events.push_back(NetworkReply::Body(NetworkBody {
+                                    id: id.0,
+                                    epoch: active.epoch,
+                                    bytes: ByteBuf(bytes.to_vec()),
+                                }));
+                            }
+                            active
+                                .events
+                                .push_back(NetworkReply::Complete(NetworkComplete {
+                                    id: id.0,
+                                    epoch: active.epoch,
+                                    error: None,
+                                }));
+                        }
+                        Err(error) => {
+                            active
+                                .events
+                                .push_back(NetworkReply::Complete(NetworkComplete {
+                                    id: id.0,
+                                    epoch: active.epoch,
+                                    error: Some(format!("{error}")),
+                                }))
+                        }
+                    }
+                }
+                ServiceEvent::SubresourceFailed { id, error } => {
+                    let Some(active) = self.active.get_mut(&id.0) else {
+                        continue;
+                    };
+                    if active.subresource && !active.terminal {
+                        active.terminal = true;
+                        active
+                            .events
+                            .push_back(NetworkReply::Complete(NetworkComplete {
+                                id: id.0,
+                                epoch: active.epoch,
+                                error: Some(format!("{error:?}")),
+                            }));
+                    }
+                }
                 _ => {}
             }
         }
     }
     fn start(&mut self, wire: NetworkStart) -> Result<NetworkStarted, Error> {
+        self.start_kind(wire, false)
+    }
+    fn start_subresource(&mut self, wire: NetworkStart) -> Result<NetworkStarted, Error> {
+        self.start_kind(wire, true)
+    }
+    fn start_kind(
+        &mut self,
+        wire: NetworkStart,
+        subresource: bool,
+    ) -> Result<NetworkStarted, Error> {
         let client_id = wire.client_id;
         let epoch = wire.epoch;
         let response_limit = wire.response_limit;
+        let requested_destination = wire.destination.clone();
+        if subresource
+            && (!matches!(
+                requested_destination.as_str(),
+                "image" | "font" | "style" | "script"
+            ) || !matches!(wire.mode.as_str(), "no-cors" | "cors")
+                || wire.method != "GET"
+                || wire.body_present)
+        {
+            return Err(invalid("invalid browser subresource"));
+        }
         let (request, context) = build_request(wire)?;
         if let Some(&current) = self.epochs.get(&client_id) {
             if epoch < current {
@@ -403,10 +610,14 @@ impl State {
         if self.active.len() >= MAX_ACTIVE {
             return Err(invalid("too many active requests"));
         }
-        let id = self
-            .service
-            .start_stream_with_credit(request, context, 0)
-            .map_err(|e| Error::Remote(format!("start: {e:?}")))?;
+        let id = if subresource {
+            self.service
+                .start_subresource(request, context, destination(&requested_destination)?.0)
+        } else {
+            self.service
+                .start_stream_with_credit(request, context, 0)
+                .map_err(|e| Error::Remote(format!("start: {e:?}")))?
+        };
         self.epochs.insert(client_id, epoch);
         self.active.insert(
             id.0,
@@ -418,6 +629,7 @@ impl State {
                 credit_remaining: 0,
                 seen_head: false,
                 terminal: false,
+                subresource,
                 events: VecDeque::new(),
             },
         );
@@ -439,7 +651,7 @@ impl State {
             return Err(invalid("request ownership"));
         }
         if active.events.is_empty() && !active.terminal {
-            if active.credit_remaining == 0 {
+            if !active.subresource && active.credit_remaining == 0 {
                 if !self
                     .service
                     .grant_credit(ServiceId(request.id), request.credit as usize)
@@ -518,9 +730,11 @@ impl State {
 
 enum Command {
     Start(NetworkStart, mpsc::Sender<Result<NetworkStarted, Error>>),
+    Subresource(NetworkStart, mpsc::Sender<Result<NetworkStarted, Error>>),
     Read(NetworkRead, mpsc::Sender<Result<NetworkReply, Error>>),
     Cancel(NetworkCancel, mpsc::Sender<Result<NetworkComplete, Error>>),
     CancelEpoch(NetworkEpoch, mpsc::Sender<Vec<NetworkComplete>>),
+    DocumentCookie(DocumentCookie, mpsc::Sender<Result<String, Error>>),
 }
 pub struct NetworkEndpointV2 {
     tx: mpsc::SyncSender<Command>,
@@ -535,6 +749,9 @@ impl NetworkEndpointV2 {
                     Command::Start(v, out) => {
                         let _ = out.send(state.start(v));
                     }
+                    Command::Subresource(v, out) => {
+                        let _ = out.send(state.start_subresource(v));
+                    }
                     Command::Read(v, out) => {
                         let _ = out.send(state.read(v));
                     }
@@ -543,6 +760,9 @@ impl NetworkEndpointV2 {
                     }
                     Command::CancelEpoch(v, out) => {
                         let _ = out.send(state.cancel_epoch(v));
+                    }
+                    Command::DocumentCookie(v, out) => {
+                        let _ = out.send(state.document_cookie(v));
                     }
                 }
             }
@@ -574,6 +794,12 @@ impl NetworkRequestsV2 for NetworkEndpointV2 {
     }
     fn cancel_epoch(&self, request: NetworkEpoch) -> Result<Vec<NetworkComplete>, Error> {
         self.ask(|tx| Command::CancelEpoch(request, tx))
+    }
+    fn subresource(&self, request: NetworkStart) -> Result<NetworkStarted, Error> {
+        self.ask(|tx| Command::Subresource(request, tx))?
+    }
+    fn document_cookie(&self, request: DocumentCookie) -> Result<String, Error> {
+        self.ask(|tx| Command::DocumentCookie(request, tx))?
     }
 }
 pub fn serve(connection: &Arc<Connection>) {
@@ -627,6 +853,12 @@ pub fn get_request(
     }
 }
 impl NetworkSession {
+    /// Browser-owned synchronous document.cookie access in the network process.
+    pub fn document_cookie(&self, mut request: DocumentCookie) -> Result<String, Error> {
+        request.client_id = self.client_id;
+        request.epoch = self.epoch;
+        self.remote.document_cookie(request)
+    }
     pub fn launch(
         exe: &std::path::Path,
         client_id: u64,
@@ -692,6 +924,35 @@ impl NetworkSession {
         request.epoch = self.epoch;
         self.remote.start(request)
     }
+    /// The browser's HTML navigation algorithm issues a new manual redirect
+    /// hop. It stays in the current navigation epoch; only begin_navigation
+    /// advances that epoch and cancels sibling requests.
+    pub fn restart_navigation(
+        &self,
+        previous: &NetworkStarted,
+        head: &NetworkHead,
+        request: NetworkStart,
+    ) -> Result<NetworkStarted, Error> {
+        if (previous.client_id, previous.epoch) != (self.client_id, self.epoch)
+            || (head.id, head.client_id, head.epoch)
+                != (previous.id, previous.client_id, previous.epoch)
+            || !matches!(head.status, 301 | 302 | 303 | 307 | 308)
+            || !head
+                .headers
+                .iter()
+                .any(|h| h.name.eq_ignore_ascii_case("location") && !h.value.is_empty())
+            || request.mode != "navigate"
+            || request.redirect != "manual"
+            || !(request.destination == "document" && request.context.top_level_navigation
+                || request.destination == "frame" && !request.context.top_level_navigation)
+        {
+            return Err(invalid("invalid navigation restart"));
+        }
+        // A streamed redirect may still have an active body. A fully fetched
+        // redirect has already been retired; both are safe to supersede.
+        let _ = self.cancel(previous);
+        self.start(request)
+    }
     pub fn read(&self, started: &NetworkStarted, credit: u32) -> Result<NetworkReply, Error> {
         if (started.client_id, started.epoch) != (self.client_id, self.epoch) {
             return Err(invalid("stale request"));
@@ -722,6 +983,30 @@ impl NetworkSession {
     pub fn fetch(&self, request: NetworkStart) -> Result<NetworkResponse, Error> {
         let response_limit = request.response_limit as usize;
         let started = self.start(request)?;
+        self.collect_response(started, response_limit)
+    }
+    /// Browser-only subresource fetch. The network role applies Fetch's
+    /// destination policy before returning its internal decoded body; this
+    /// method must never be used for a JS-visible Response.
+    pub fn fetch_subresource(&self, mut request: NetworkStart) -> Result<NetworkResponse, Error> {
+        if !matches!(
+            request.destination.as_str(),
+            "image" | "font" | "style" | "script"
+        ) {
+            return Err(invalid("invalid subresource destination"));
+        }
+        let response_limit = request.response_limit as usize;
+        request.version = NETWORK_VERSION;
+        request.client_id = self.client_id;
+        request.epoch = self.epoch;
+        let started = self.remote.subresource(request)?;
+        self.collect_response(started, response_limit)
+    }
+    fn collect_response(
+        &self,
+        started: NetworkStarted,
+        response_limit: usize,
+    ) -> Result<NetworkResponse, Error> {
         let deadline = Instant::now() + self.timeout;
         let mut head = None;
         let mut body = Vec::new();

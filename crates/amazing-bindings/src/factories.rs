@@ -128,8 +128,13 @@ pub(crate) fn invoke<H: BindingHost>(
         }
         O::ImplementationCreateDocument => {
             let uri_arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+            if args.len() < 2 { return Err(host.type_error("Not enough arguments")); }
             let uri = if host.is_nullish(uri_arg) { None } else { Some(string(host, uri_arg)?) };
-            let qualified = argument(host, args, 1)?;
+            let qualified = match args.get(1) {
+                Some(value) if host.is_nullish(value) && !host.is_undefined(value) => String::new(),
+                Some(value) => string(host, value)?,
+                None => unreachable!("qualified name is required"),
+            };
             let doctype = match args.get(2) {
                 None => None,
                 Some(value) if host.is_nullish(value) => None,
@@ -140,8 +145,13 @@ pub(crate) fn invoke<H: BindingHost>(
                     if !matches!(dom.get(node).kind, NodeKind::DocumentType { .. }) { return Err(DomError::TypeError); }
                 }
                 let doc = dom.create_document();
+                let content_type = match uri.as_deref() {
+                    Some("http://www.w3.org/1999/xhtml") => "application/xhtml+xml",
+                    Some("http://www.w3.org/2000/svg") => "image/svg+xml",
+                    _ => "application/xml",
+                };
                 dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
-                    url: "about:blank".into(), content_type: "application/xml".into(),
+                    url: "about:blank".into(), content_type: content_type.into(),
                     character_set: "UTF-8".into(),
                 })?;
                 dom.set_document_ready_state(doc, amazing_dom::document_surface::ReadyState::Complete)?;
@@ -155,7 +165,10 @@ pub(crate) fn invoke<H: BindingHost>(
             host.wrap_node(new_doc)
         }
         O::ImplementationCreateHTMLDocument => {
-            let title = if let Some(value) = args.first() { Some(host.to_dom_string(value)?) } else { None };
+            let title = match args.first() {
+                Some(value) if !host.is_undefined(value) => Some(host.to_dom_string(value)?),
+                _ => None,
+            };
             let new_doc = host.with_dom(|dom| {
                 let doc = dom.create_document();
                 dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {

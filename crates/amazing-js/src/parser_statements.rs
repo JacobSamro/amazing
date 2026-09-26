@@ -117,7 +117,8 @@ impl Parser {
                 let object = self.parse_expression()?;
                 self.expect_punct(Punct::RParen)?;
                 let body = self.parse_statement_position()?;
-                if matches!(body.kind, StmtKind::Var(_) | StmtKind::Function(_) | StmtKind::Class(_))
+                if matches!(&body.kind, StmtKind::Var(decl) if decl.kind != VarKind::Var)
+                    || matches!(body.kind, StmtKind::Function(_) | StmtKind::Class(_))
                     || is_labeled_function(&body) {
                     return Err(self.err_at(body.span.start, "with body cannot be a declaration"));
                 }
@@ -218,6 +219,14 @@ impl Parser {
         loop {
             let dstart = self.cur_loc();
             let binding = self.parse_binding()?;
+            if kind != VarKind::Var {
+                let mut seen = HashSet::new();
+                for name in binding_names(&binding) {
+                    if !seen.insert(&name.name) {
+                        return Err(self.err_at(name.span.start, "duplicate lexical binding"));
+                    }
+                }
+            }
             if kind != VarKind::Var && binding_names(&binding).iter().any(|name| name.name == "let") {
                 return Err(self.err_at(dstart, "let cannot be a lexical binding name"));
             }
@@ -236,6 +245,14 @@ impl Parser {
             });
             if !self.eat_punct(Punct::Comma) {
                 break;
+            }
+        }
+        if kind != VarKind::Var {
+            let mut seen = HashSet::new();
+            for name in decls.iter().flat_map(|decl| binding_names(&decl.binding)) {
+                if !seen.insert(&name.name) {
+                    return Err(self.err_at(name.span.start, "duplicate lexical binding"));
+                }
             }
         }
         Ok(VarDecl { kind, decls, resource_kind: None })
@@ -460,20 +477,29 @@ impl Parser {
         let await_using = self.word("await")
             && matches!(self.nth(1).kind, TokenKind::Ident(ref word) if word == "using")
             && !self.nth(1).newline_before;
-        if self.word("using") && !matches!(self.nth(1).kind, TokenKind::Ident(ref name) if name == "of") || await_using {
+        if (self.word("using")
+            && (!matches!(self.nth(1).kind, TokenKind::Ident(ref name) if name == "of")
+                || self.nth_punct(2, Punct::Eq))) || await_using {
             let decl = self.parse_using_decl(await_using, true)?;
-            if !self.word("of") { return Err(self.err("for using requires an of clause")); }
-            let decl = validate_for_decl(&decl, self.cur_loc(), false)?;
-            self.bump();
-            let right = self.parse_assignment_expr()?;
-            self.expect_punct(Punct::RParen)?;
-            self.loop_depth += 1;
-            let body = Box::new(self.parse_statement_position()?);
-            reject_statement_position_declaration(&body, true, true)?;
-            self.loop_depth -= 1;
-            validate_for_head_body(&decl, &body, self.cur_loc())?;
-            return Ok(if for_await { StmtKind::ForAwaitOf { left: ForLeft::Decl(Box::new(decl)), right, body } }
-                else { StmtKind::ForOf { left: ForLeft::Decl(Box::new(decl)), right, body } });
+            if self.word("of") {
+                let decl = validate_for_decl(&decl, self.cur_loc(), false)?;
+                self.bump();
+                let right = self.parse_assignment_expr()?;
+                self.expect_punct(Punct::RParen)?;
+                self.loop_depth += 1;
+                let body = Box::new(self.parse_statement_position()?);
+                reject_statement_position_declaration(&body, true, true)?;
+                self.loop_depth -= 1;
+                validate_for_head_body(&decl, &body, self.cur_loc())?;
+                return Ok(if for_await { StmtKind::ForAwaitOf { left: ForLeft::Decl(Box::new(decl)), right, body } }
+                    else { StmtKind::ForOf { left: ForLeft::Decl(Box::new(decl)), right, body } });
+            }
+            if for_await { return Err(self.err("for await requires an of clause")); }
+            if decl.decls.iter().any(|item| item.init.is_none()) {
+                return Err(self.err("for using requires an initializer"));
+            }
+            self.expect_punct(Punct::Semi)?;
+            return self.parse_for_c_style(Some(ForInit::Decl(Box::new(decl))));
         }
         // Empty init: C-style only.
         if self.at_punct(Punct::Semi) {
@@ -608,6 +634,9 @@ impl Parser {
         let body = Box::new(self.parse_statement_position()?);
         reject_statement_position_declaration(&body, true, true)?;
         self.loop_depth -= 1;
+        if let Some(ForInit::Decl(decl)) = &init {
+            validate_for_head_body(decl, &body, body.span.start)?;
+        }
         Ok(StmtKind::For {
             init,
             test,
@@ -763,15 +792,32 @@ impl Parser {
                         self.validate_strict_statements(std::slice::from_ref(els.as_ref()))?;
                     }
                 }
+                StmtKind::For { init, body, .. } => {
+                    if let Some(ForInit::Decl(decl)) = init {
+                        self.validate_strict_for_decl(decl)?;
+                    }
+                    self.validate_strict_statements(std::slice::from_ref(body.as_ref()))?;
+                }
+                StmtKind::ForIn { left, body, .. } | StmtKind::ForOf { left, body, .. }
+                | StmtKind::ForAwaitOf { left, body, .. } => {
+                    if let ForLeft::Decl(decl) = left {
+                        self.validate_strict_for_decl(decl)?;
+                    }
+                    self.validate_strict_statements(std::slice::from_ref(body.as_ref()))?;
+                }
                 StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. }
-                | StmtKind::For { body, .. } | StmtKind::ForIn { body, .. }
-                | StmtKind::ForOf { body, .. } | StmtKind::ForAwaitOf { body, .. }
                 | StmtKind::Labeled { body, .. } => {
                     self.validate_strict_statements(std::slice::from_ref(body.as_ref()))?;
                 }
                 StmtKind::Try(try_stmt) => {
                     self.validate_strict_statements(&try_stmt.block.body)?;
                     if let Some(catch) = &try_stmt.catch {
+                        if let Some(binding) = &catch.binding {
+                            if let Some(name) = binding_names(binding).into_iter()
+                                .find(|name| strict_binding_name(&name.name)) {
+                                return Err(self.err_at(name.span.start, "invalid strict catch binding"));
+                            }
+                        }
                         self.validate_strict_statements(&catch.body.body)?;
                     }
                     if let Some(finally) = &try_stmt.finally {
@@ -784,6 +830,15 @@ impl Parser {
                     }
                 }
                 _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_strict_for_decl(&self, decl: &VarDecl) -> Result<(), SyntaxError> {
+        for name in decl.decls.iter().flat_map(|item| binding_names(&item.binding)) {
+            if strict_binding_name(&name.name) {
+                return Err(self.err_at(name.span.start, "invalid strict loop binding name"));
             }
         }
         Ok(())
@@ -812,6 +867,10 @@ impl Parser {
                 }
             }
             ExprKind::Paren(inner) | ExprKind::Spread(inner) => self.validate_strict_expression(inner)?,
+            ExprKind::Unary { op: UnOp::Delete, operand }
+                if matches!(operand.kind, ExprKind::Ident(_)) => {
+                return Err(self.err_at(expr.span.start, "cannot delete an identifier in strict mode"));
+            }
             ExprKind::Sequence(items) => {
                 for item in items { self.validate_strict_expression(item)?; }
             }
@@ -858,6 +917,21 @@ impl Parser {
                 _ => None,
             };
             let body = self.parse_block()?;
+            if let Some(binding) = &binding {
+                let names: HashSet<_> = binding_names(binding).into_iter()
+                    .map(|name| name.name.as_str()).collect();
+                for statement in &body.body {
+                    let lexical = match &statement.kind {
+                        StmtKind::Var(decl) if decl.kind != VarKind::Var => decl.decls.iter()
+                            .flat_map(|item| binding_names(&item.binding)).collect::<Vec<_>>(),
+                        StmtKind::Class(class) => class.name.iter().collect(),
+                        _ => Vec::new(),
+                    };
+                    if let Some(name) = lexical.into_iter().find(|name| names.contains(name.name.as_str())) {
+                        return Err(self.err_at(name.span.start, "catch binding conflicts with lexical declaration"));
+                    }
+                }
+            }
             catch = Some(CatchClause { param, binding, body });
         }
         if self.eat_kw(crate::tokens::Keyword::Finally) {

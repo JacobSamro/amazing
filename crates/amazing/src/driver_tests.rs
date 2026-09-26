@@ -107,7 +107,7 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
          removeEventListener.call(null, 'load', one); \
          typeof hit"
     ).unwrap(), amazing_js::value::JsValue::str("number"));
-    scheduler.js.dispatch_dom_event(0, "load").unwrap();
+    scheduler.dispatch_dom_event(0, "load").unwrap();
     assert_eq!(scheduler.run_script("hit").unwrap(), amazing_js::value::JsValue::num(10.0));
     assert_eq!(scheduler.run_script(
         "let rejected = false; try { addEventListener.call({}, 'load', one); } catch (error) { rejected = true; } rejected"
@@ -351,6 +351,36 @@ fn document_title_ignores_svg_title_elements() {
         <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
         "html title"
     );
+}
+
+#[test]
+fn dom_host_set_attribute_queues_same_value_and_only_named_attribute() {
+    let mut host = BrowserDomHost {
+        dom: amazing_html::parse("<body><div id='same' class='old'></div></body>"),
+        native_forwarded: false,
+    };
+    let element = amazing_dom::NodeIdx(host.query_selector("div").unwrap());
+    let observer = host.dom.create_mutation_observer(1);
+    host.dom
+        .observe(
+            observer,
+            element,
+            amazing_dom::mutation::ObserveOptions {
+                attributes: Some(true),
+                attribute_old_value: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    host.set_attribute(element.0, "id", "same").unwrap();
+    host.set_attribute(element.0, "class", "new").unwrap();
+    let records = host.dom.take_mutation_records(observer);
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].attribute_name.as_deref(), Some("id"));
+    assert_eq!(records[0].old_value.as_deref(), Some("same"));
+    assert_eq!(records[1].attribute_name.as_deref(), Some("class"));
+    assert_eq!(records[1].old_value.as_deref(), Some("old"));
 }
 
 #[test]

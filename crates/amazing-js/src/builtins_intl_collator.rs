@@ -26,8 +26,13 @@ impl Interpreter {
 fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("Collator requires new")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
-    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(|| i.object_value());
+    let mut locale = intl_lookup(&requested);
+    let extension = requested.iter().find(|tag| {
+        tag.split("-u-").next().unwrap_or(tag).starts_with(&locale)
+    });
+    let ext_numeric = extension.and_then(|tag| intl_unicode_keyword(tag, "kn"));
+    let ext_case_first = extension.and_then(|tag| intl_unicode_keyword(tag, "kf"));
+    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Collator options")); }
     let usage = intl_string_option(i, &options, "usage", &["sort", "search"], "sort")?;
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
@@ -37,8 +42,22 @@ fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
         return Err(Throw::range_error("invalid collation"));
     }
     let numeric_value = i.get_prop(&options, "numeric")?;
-    let numeric = if numeric_value.is_undefined() { false } else { numeric_value.to_boolean() };
-    let case_first = intl_string_option(i, &options, "caseFirst", &["upper", "lower", "false"], "false")?;
+    let ext_numeric_value = ext_numeric.as_deref().and_then(|value| match value {
+        "" | "true" => Some(true), "false" => Some(false), _ => None,
+    });
+    let numeric = if numeric_value.is_undefined() { ext_numeric_value.unwrap_or(false) }
+        else { numeric_value.to_boolean() };
+    let case_first = intl_string_option(i, &options, "caseFirst", &["upper", "lower", "false"],
+        ext_case_first.as_deref().filter(|value| ["upper", "lower", "false"].contains(value))
+            .unwrap_or("false"))?;
+    let mut extension_parts = Vec::new();
+    if ext_case_first.as_deref() == Some(case_first.as_str()) {
+        extension_parts.push(format!("kf-{case_first}"));
+    }
+    if ext_numeric_value == Some(numeric) {
+        extension_parts.push(if numeric { "kn".into() } else { "kn-false".into() });
+    }
+    if !extension_parts.is_empty() { locale.push_str(&format!("-u-{}", extension_parts.join("-"))); }
     let ignore_value = i.get_prop(&options, "ignorePunctuation")?;
     let ignore_punctuation = if ignore_value.is_undefined() { false } else { ignore_value.to_boolean() };
     intl_register(&object, IntlState::Collator(IntlCollatorState {
@@ -111,9 +130,11 @@ fn intl_base_char(ch: char) -> &'static str {
 fn intl_primary_key(state: &IntlCollatorState, text: &str) -> String {
     let mut output = String::new();
     for ch in text.chars() {
-        if state.ignore_punctuation && (ch.is_ascii_punctuation() || ['“', '”', '‘', '’', '—', '–'].contains(&ch)) {
+        if state.ignore_punctuation && (ch.is_ascii_punctuation() || ch.is_whitespace()
+            || ['“', '”', '‘', '’', '—', '–'].contains(&ch)) {
             continue;
         }
+        if matches!(ch as u32, 0x0300..=0x036f) { continue; }
         let mapped = intl_base_char(ch);
         if !mapped.is_empty() { output.push_str(mapped); }
         else { output.extend(ch.to_lowercase()); }
@@ -149,6 +170,32 @@ fn intl_compare_numeric(left: &str, right: &str) -> std::cmp::Ordering {
     }
 }
 
+fn intl_canonical_latin(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    for ch in text.chars() {
+        let pair = match ch {
+            'à' => Some(('a', '\u{300}')), 'á' => Some(('a', '\u{301}')),
+            'â' => Some(('a', '\u{302}')), 'ã' => Some(('a', '\u{303}')),
+            'ä' => Some(('a', '\u{308}')), 'å' => Some(('a', '\u{30a}')),
+            'ç' => Some(('c', '\u{327}')), 'è' => Some(('e', '\u{300}')),
+            'é' => Some(('e', '\u{301}')), 'ê' => Some(('e', '\u{302}')),
+            'ë' => Some(('e', '\u{308}')), 'ì' => Some(('i', '\u{300}')),
+            'í' => Some(('i', '\u{301}')), 'î' => Some(('i', '\u{302}')),
+            'ï' => Some(('i', '\u{308}')), 'ñ' => Some(('n', '\u{303}')),
+            'ò' => Some(('o', '\u{300}')), 'ó' => Some(('o', '\u{301}')),
+            'ô' => Some(('o', '\u{302}')), 'õ' => Some(('o', '\u{303}')),
+            'ö' => Some(('o', '\u{308}')), 'ù' => Some(('u', '\u{300}')),
+            'ú' => Some(('u', '\u{301}')), 'û' => Some(('u', '\u{302}')),
+            'ü' => Some(('u', '\u{308}')), 'ý' => Some(('y', '\u{301}')),
+            'ÿ' => Some(('y', '\u{308}')),
+            _ => None,
+        };
+        if let Some((base, mark)) = pair { normalized.push(base); normalized.push(mark); }
+        else { normalized.push(ch); }
+    }
+    normalized
+}
+
 fn intl_collate(state: &IntlCollatorState, left: &str, right: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let left_primary = intl_primary_key(state, left);
@@ -157,13 +204,14 @@ fn intl_collate(state: &IntlCollatorState, left: &str, right: &str) -> std::cmp:
         else { left_primary.cmp(&right_primary) };
     if primary != Ordering::Equal { return primary; }
     if ["accent", "variant"].contains(&state.sensitivity.as_str()) {
-        let accents = left.to_lowercase().cmp(&right.to_lowercase());
+        let accents = intl_canonical_latin(&left.to_lowercase())
+            .cmp(&intl_canonical_latin(&right.to_lowercase()));
         if accents != Ordering::Equal { return accents; }
     }
     if ["case", "variant"].contains(&state.sensitivity.as_str()) {
         let cases = match state.case_first.as_str() {
-            "upper" => right.cmp(left),
-            _ => left.cmp(right),
+            "upper" => intl_canonical_latin(right).cmp(&intl_canonical_latin(left)),
+            _ => intl_canonical_latin(left).cmp(&intl_canonical_latin(right)),
         };
         if cases != Ordering::Equal { return cases; }
     }

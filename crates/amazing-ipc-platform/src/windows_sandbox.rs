@@ -32,13 +32,12 @@ use windows_sys::Win32::System::JobObjects::{
 };
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess,
+    CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetProcessHandleCount,
     InitializeProcThreadAttributeList, OpenProcess, OpenProcessToken, ResumeThread,
     TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject, CREATE_SUSPENDED,
     CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, INFINITE, PROCESS_DUP_HANDLE,
     PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
     PROC_THREAD_ATTRIBUTE_JOB_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-    GetProcessHandleCount,
     STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
 
@@ -338,6 +337,15 @@ impl Drop for WindowsSandboxChild {
 }
 
 pub fn spawn_renderer_appcontainer(exe: &Path, nonce: &str) -> io::Result<WindowsSandboxChild> {
+    spawn_appcontainer(exe, nonce, "renderer")
+}
+
+/// Launch a decoder utility with the same deny-by-default AppContainer profile.
+pub fn spawn_utility_appcontainer(exe: &Path, nonce: &str) -> io::Result<WindowsSandboxChild> {
+    spawn_appcontainer(exe, nonce, "utility")
+}
+
+fn spawn_appcontainer(exe: &Path, nonce: &str, role: &str) -> io::Result<WindowsSandboxChild> {
     let profile = Profile::create(nonce, exe).map_err(|e| stage("AppContainer profile", e))?;
     let job = job().map_err(|e| stage("job", e))?;
     let (child_stdin, parent_stdin) = pipe()?;
@@ -383,8 +391,8 @@ pub fn spawn_renderer_appcontainer(exe: &Path, nonce: &str) -> io::Result<Window
     startup.lpAttributeList = list.ptr();
     let path = wide(profile.executable.as_os_str());
     let mut command = wide_str(&format!(
-        "\"{}\" --type=renderer",
-        profile.executable.display()
+        "\"{}\" --type={role}",
+        profile.executable.display(),
     ));
     let root = std::env::var_os("SystemRoot")
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "SystemRoot missing"))?;

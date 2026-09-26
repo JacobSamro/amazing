@@ -14,8 +14,6 @@
 //!   zero
 //!
 //! Deferred/deviations:
-//! - arguments of `:not()`/`:is()` accept compound selectors but not
-//!   combinator-containing complex selectors
 //! - namespace prefixes (`svg|rect`) are not supported
 //! - `:has()` currently accepts single-compound relative arguments; complex
 //!   relative selectors remain unsupported
@@ -75,6 +73,10 @@ pub enum Simple {
     /// `:where(compound, …)` — same matching as [`Simple::Matches`], zero
     /// specificity.
     Where(Vec<Compound>),
+    /// Complex selector-list arguments, including combinators.
+    ComplexNegation(Vec<Selector>),
+    ComplexMatches(Vec<Selector>),
+    ComplexWhere(Vec<Selector>),
     /// Relative one-step selectors, with `>` for child and whitespace for descendant.
     Has(Vec<(Combinator, Compound)>),
     Lang(Vec<String>),
@@ -224,6 +226,9 @@ fn compound_contains_pseudo_element(compound: &Compound) -> bool {
         Simple::Negation(args) | Simple::Matches(args) | Simple::Where(args) => {
             args.iter().any(compound_contains_pseudo_element)
         }
+        Simple::ComplexNegation(args) | Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => {
+            args.iter().any(|selector| selector.compounds.iter().any(compound_contains_pseudo_element))
+        }
         Simple::Has(args) => args
             .iter()
             .any(|(_, compound)| compound_contains_pseudo_element(compound)),
@@ -261,6 +266,9 @@ fn simple_specificity(s: &Simple) -> Specificity {
                 .unwrap_or_default();
             spec = spec + max;
         }
+        Simple::ComplexNegation(args) | Simple::ComplexMatches(args) => {
+            spec = spec + args.iter().map(Selector::specificity).max().unwrap_or_default();
+        }
         Simple::Has(args) => {
             spec = spec
                 + args
@@ -279,7 +287,7 @@ fn simple_specificity(s: &Simple) -> Specificity {
                     .unwrap_or_default();
         }
         Simple::Lang(_) | Simple::Dir(_) => spec.b += 1,
-        Simple::Universal | Simple::Where(_) => {}
+        Simple::Universal | Simple::Where(_) | Simple::ComplexWhere(_) => {}
     }
     spec
 }
@@ -666,33 +674,31 @@ impl<'t> SelParser<'t> {
                 Some(Simple::Has(args))
             }
             "not" | "is" | "matches" | "where" => {
-                let mut args = Vec::new();
-                loop {
-                    self.skip_ws();
-                    // An empty argument list (`:not()`) is invalid. Check
-                    // before simple(), which consumes what it rejects — a
-                    // bare `?` here would silently swallow the ')'.
-                    if matches!(self.peek(), Some(Token::CloseParen)) {
-                        return None;
-                    }
-                    let first = self.simple()?;
-                    let compound = self.compound_tail(first);
-                    if compound_contains_pseudo_element(&compound) {
-                        return None;
-                    }
-                    args.push(compound);
-                    self.skip_ws();
-                    match self.peek() {
-                        Some(Token::Comma) => self.pos += 1,
-                        Some(Token::CloseParen) => break,
-                        _ => return None,
-                    }
+                let forgiving = name != "not";
+                let mut selectors = self.selector_list_until_close(forgiving)?;
+                if !forgiving && selectors.iter().any(|selector| selector.compounds.iter().any(compound_contains_pseudo_element)) {
+                    return None;
                 }
-                self.pos += 1; // ')'
+                selectors.retain(|selector| !selector.compounds.iter().any(compound_contains_pseudo_element));
+                if selectors.is_empty() {
+                    return match name.as_str() {
+                        "where" => Some(Simple::Where(Vec::new())),
+                        "not" => None,
+                        _ => Some(Simple::Matches(Vec::new())),
+                    };
+                }
+                if selectors.iter().all(|selector| selector.compounds.len() == 1) {
+                    let args: Vec<_> = selectors.into_iter().map(|selector| selector.compounds.into_iter().next().unwrap()).collect();
+                    return match name.as_str() {
+                        "not" => Some(Simple::Negation(args)),
+                        "where" => Some(Simple::Where(args)),
+                        _ => Some(Simple::Matches(args)),
+                    };
+                }
                 match name.as_str() {
-                    "not" => Some(Simple::Negation(args)),
-                    "where" => Some(Simple::Where(args)),
-                    _ => Some(Simple::Matches(args)),
+                    "not" => Some(Simple::ComplexNegation(selectors)),
+                    "where" => Some(Simple::ComplexWhere(selectors)),
+                    _ => Some(Simple::ComplexMatches(selectors)),
                 }
             }
             _ => None,
@@ -735,7 +741,7 @@ impl<'t> SelParser<'t> {
         }
         .anb()?;
         self.pos = of_index + 1;
-        let selectors = self.selector_list_until_close()?;
+        let selectors = self.selector_list_until_close(false)?;
         if selectors.iter().any(|selector| {
             selector
                 .compounds
@@ -752,7 +758,7 @@ impl<'t> SelParser<'t> {
         })
     }
 
-    fn selector_list_until_close(&mut self) -> Option<Vec<Selector>> {
+    fn selector_list_until_close(&mut self, forgiving: bool) -> Option<Vec<Selector>> {
         let mut selectors = Vec::new();
         let mut start = self.pos;
         let mut depth = 0usize;
@@ -762,11 +768,16 @@ impl<'t> SelParser<'t> {
                 Token::OpenParen => depth += 1,
                 Token::CloseParen if depth > 0 => depth -= 1,
                 Token::Comma | Token::CloseParen if depth == 0 => {
-                    selectors.push(parse_selector(&serialize(&self.toks[start..end]))?);
+                    let parsed = parse_selector(&serialize(&self.toks[start..end]));
+                    if let Some(selector) = parsed {
+                        selectors.push(selector);
+                    } else if !forgiving {
+                        return None;
+                    }
                     let closing = matches!(self.peek(), Some(Token::CloseParen));
                     self.pos += 1;
                     if closing {
-                        return Some(selectors);
+                        return (forgiving || !selectors.is_empty()).then_some(selectors);
                     }
                     start = self.pos;
                     continue;
@@ -796,6 +807,13 @@ impl<'t> SelParser<'t> {
                     true
                 }
                 Token::Ident(s) if !text.contains('n') => {
+                    text.push_str(&s);
+                    true
+                }
+                // CSS Syntax tokenizes a separated sign (`2n - 2`) as an
+                // identifier, while an adjacent sign is a delimiter or part
+                // of the following number.
+                Token::Ident(s) if matches!(s.as_str(), "+" | "-") => {
                     text.push_str(&s);
                     true
                 }
@@ -1018,6 +1036,9 @@ fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -
         Simple::Negation(args) => !args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
         Simple::Matches(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
         Simple::Where(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
+        Simple::ComplexNegation(args) => !args.iter().any(|s| match_rightward(dom, el, s, s.compounds.len() - 1, scope)),
+        Simple::ComplexMatches(args) | Simple::ComplexWhere(args) =>
+            args.iter().any(|s| match_rightward(dom, el, s, s.compounds.len() - 1, scope)),
         Simple::Has(args) => args.iter().any(|(relation, compound)| match relation {
             Combinator::Child => dom.children(el).any(|child| {
                 dom.name(child).is_some() && compound_in_scope(dom, child, compound, scope)
@@ -1509,6 +1530,31 @@ mod tests {
     }
 
     #[test]
+    fn nth_last_child_of_nested_nth_last_child() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let paragraphs: Vec<_> = (0..12)
+            .map(|index| {
+                let paragraph = dom.create_element(body, "p");
+                if index % 2 == 1 {
+                    dom.set_attrs(paragraph, vec![("class".into(), "target".into())]);
+                }
+                paragraph
+            })
+            .collect();
+        assert!(parse_selector(":nth-last-child(n of .target)").is_some());
+        assert!(parse_selector(":nth-last-child(2n - 2 of .target)").is_some());
+        assert!(parse_selector(":nth-child(2n + 2 of .target)").is_some());
+        let selector = parse_selector(
+            ":nth-last-child(2n - 2 of :nth-last-child(n of .target))",
+        ).expect("nested nth syntax");
+        for (index, paragraph) in paragraphs.into_iter().enumerate() {
+            assert_eq!(matches(&dom, paragraph, &selector), [1, 5, 9].contains(&index), "p {index}");
+        }
+    }
+
+    #[test]
     fn parses_and_matches_basic_selectors() {
         let d = fixture();
         // Paths resolve document > html > body > (p, ul, div).
@@ -1671,6 +1717,9 @@ mod tests {
         assert_eq!(s(":not(#a, .b)"), Specificity { a: 1, b: 0, c: 0 });
         assert_eq!(s(":is(em, #a.b)"), Specificity { a: 1, b: 1, c: 0 });
         assert_eq!(s(":where(#a)"), Specificity { a: 0, b: 0, c: 0 });
+        assert_eq!(s(":is(#a + div, main > .b)"), Specificity { a: 1, b: 0, c: 1 });
+        assert_eq!(s(":not(main > #a, .b + em)"), Specificity { a: 1, b: 0, c: 1 });
+        assert_eq!(s("div:where(main > #a, .b + em)"), Specificity { a: 0, b: 0, c: 1 });
         // FOO is a type argument: :not contributes its (0,0,1).
         assert_eq!(s("#s12:not(FOO)#s34"), Specificity { a: 2, b: 0, c: 1 });
         assert_eq!(
@@ -1753,7 +1802,6 @@ mod tests {
             "p::unknown",
             "p::before.class",
             "p::before span",
-            "p:is(::before)",
             "p:has(::before)",
             "p:nth-child(1 of ::before)",
             "p:not()",
@@ -1765,6 +1813,33 @@ mod tests {
         ] {
             assert!(parse_selector(bad).is_none(), "{bad:?} should not parse");
         }
+    }
+
+    #[test]
+    fn complex_is_where_not_and_escaped_language_ranges() {
+        let mut dom = Dom::new();
+        let main = dom.create_element(NodeIdx(0), "main");
+        let a = dom.create_element(main, "div");
+        dom.set_attrs(a, vec![("id".into(), "a".into())]);
+        let b = dom.create_element(main, "div");
+        dom.set_attrs(b, vec![("id".into(), "b".into()), ("lang".into(), "fr-Latn-FR".into())]);
+        let d = dom.create_element(main, "div");
+        dom.set_attrs(d, vec![("id".into(), "d".into())]);
+        let e = dom.create_element(main, "div");
+        let before = parse_selector(":is(#a, #c) + :is(main :is(#b, #d))::before").unwrap();
+        assert!(matches_pseudo_in_scope(&dom, b, &before, PseudoElement::Before, None));
+        let after = parse_selector(":is(#d + div, #d ~ #h)::after").unwrap();
+        assert!(matches_pseudo_in_scope(&dom, e, &after, PseudoElement::After, None));
+        assert!(matches_in_scope(&dom, e, &parse_selector(":where(main > #d + div)").unwrap(), None));
+        assert!(!matches_in_scope(&dom, e, &parse_selector(":not(#d + div)").unwrap(), None));
+        assert!(matches_in_scope(&dom, b, &parse_selector(r":lang(\*-FR)").unwrap(), None));
+        let sheet = crate::parse_stylesheet(r":lang(\*-FR) { color: green }");
+        assert_eq!(sheet.rules[0].selector_srcs, [r":lang(\*-FR)"]);
+        assert_eq!(crate::compute(&dom, &[sheet]).get(b).unwrap().get("color"), Some("green"));
+        assert!(parse_selector(":is(::before, #b)").is_some());
+        let empty = parse_selector(":is(::before)").unwrap();
+        assert!(!matches(&dom, b, &empty));
+        assert!(parse_selector(":where()").is_some());
     }
 
     #[test]

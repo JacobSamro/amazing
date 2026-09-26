@@ -59,7 +59,7 @@ impl Interpreter {
             let getter = std_collection_method(self, "get size", 0, std_collection_size);
             proto.borrow_mut().define("size", Property {
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
-                getter: callable_function(&getter).map(Box::new), setter: None,
+                getter: Some(getter), setter: None,
             }).unwrap();
         }
         self.define_global("Map", map.clone());
