@@ -39,23 +39,26 @@ Wires `amazing_storage::locks::LockCoordinator` (storage lane, committed
 
 ### 11b. Cross-document/process messaging
 
+Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
+
 - `amazing-process/src/messaging.rs`: browser-owned `MessageRouter`
   - BroadcastChannel registry keyed by (partition, name), FIFO delivery,
-    sender excluded, bounded subscribers/messages.
+    sender excluded, bounded subscribers/messages. **Done.**
   - MessagePort entanglement pairs with FIFO queues, ports start paused until
-    `start()`, transfer and close, bounded queues.
-  - Client disconnect/crash cleanup; bounded totals.
+    `start()`, transfer and close, bounded queues. **Done.**
+  - Client disconnect/crash cleanup; bounded totals. **Done.**
 - Wire: `MessagingService(15)` (browser<->renderer), structured-clone payloads
-  as bounded byte graphs (`SerializedValue` wire), port transfer ids.
-- Driver: a shared browser-level router so documents in one browser (and the
-  WPT harness's page + iframes) share BroadcastChannel/MessagePort state.
-- WebIDL (lane-owned adapter, minimal shared hook lines): `BroadcastChannel`,
-  `MessageChannel`, `MessagePort`, `MessageEvent`, `Window.postMessage`,
-  `onmessage`/`onmessageerror`, `addEventListener('message')`.
-- Structured clone through `SerializedValue`; driver `StructuredCloneHost` for
-  host-transferable values where required.
-- Tests: router unit tests, driver JS tests (`postMessage`, entangled ports,
-  broadcast to two documents), WPT `webmessaging/` before/after.
+  as bounded byte graphs (`SerializedValue` wire), port transfer ids. **Done.**
+- Driver: thread-local browser router shared across documents; each realm
+  drains its inbox at the scheduler checkpoint. **Done**
+  (`runtime_host_messaging.rs`, minimal shared hook in `runtime_binding_host.rs`
+  and `js_scheduler.rs`).
+- WebIDL (lane-owned): `BroadcastChannel`, `MessageChannel`, `MessagePort`,
+  `MessageEvent`, `Window.postMessage`, `onmessage`/`onmessageerror`,
+  `addEventListener('message')`. **Done as stubs**; dom-bindings will replace
+  `MessageEvent` and make the ports real `EventTarget`s.
+- Linux: `amazing-process` 56/56 (3 skipped); `amazing` 191/191 (3 skipped,
+  including 3 messaging driver tests). WPT `webmessaging/` gate in progress.
 
 ### 11c. Follow-ups
 
