@@ -77,7 +77,7 @@ impl Interpreter {
             }
             let mut methods: Vec<(&str, u32, crate::value::NativeFn)> = vec![
                 ("toString", 0, std_epoch_to_string), ("toJSON", 0, std_epoch_to_json),
-                ("toLocaleString", 0, std_epoch_to_string), ("valueOf", 0, std_epoch_value_of),
+                ("toLocaleString", 0, std_epoch_to_locale_string), ("valueOf", 0, std_epoch_value_of),
                 ("equals", 1, std_epoch_equals), ("add", 1, std_epoch_add),
                 ("subtract", 1, std_epoch_subtract), ("until", 1, std_epoch_until),
                 ("since", 1, std_epoch_since), ("round", 1, std_epoch_round),
@@ -401,12 +401,15 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
     if !matches!(offset_option.as_str(), "reject" | "use" | "ignore" | "prefer") {
         return Err(Throw::range_error("invalid Temporal offset option"));
     }
+    let reject = kind == StdEpochKind::ZonedDateTime && std_temporal_overflow(i, options.clone())?;
     match value {
         JsValue::Str(text) => std_epoch_parse(&text.to_utf8_lossy(), kind, &offset_option, &disambiguation),
         JsValue::Object(_) if kind == StdEpochKind::ZonedDateTime => {
             let zone_value = i.get_prop(&value, "timeZone")?;
             let zone = std_epoch_zone_value(i, &zone_value)?;
-            let fields = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            let mut fields = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut fields, reject);
+            std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
             let local_ns = std_temporal_epoch_ns(&fields);
             let given_offset = i.get_prop(&value, "offset")?;
             let epoch_ns = if given_offset.is_undefined() || offset_option == "ignore" {
@@ -557,6 +560,17 @@ fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
     else { Ok(format!("{date}T{time}{}[{}]", std_epoch_offset_text(std_epoch_offset(data)),
         data.zone_id)) }
 }
+// toLocaleString(locale, options) takes an Intl.DateTimeFormat-style options
+// bag (dateStyle/timeStyle/...), NOT toString's own (calendarName/offset/
+// timeZoneName/...) options -- passing it straight through to
+// std_epoch_to_string would misinterpret it (or reject a non-object locale
+// argument as an invalid Temporal option). No locale-sensitive formatting is
+// implemented; this only has to return *a* string, per the spec's minimal
+// requirement absent a full Intl.DateTimeFormat.
+fn std_epoch_to_locale_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    std_epoch_to_string(i, this, vec![])
+}
+
 fn std_epoch_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let mut data = std_epoch_record(&this, None)?;
     let option = std_reflect_arg(&args, 0);
@@ -647,14 +661,152 @@ fn std_epoch_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     std_temporal_calendar_from_value(i, &std_reflect_arg(&args, 0))?;
     std_epoch_make(i, data.kind, data.epoch_ns, data.zone_id.clone())
 }
+// PrepareTemporalFields's "string"-typed fields (monthCode, offset) read via
+// ToPrimitive with a string hint, then require the result to already be a
+// String -- NOT the ordinary ToString coercion used for e.g. option names,
+// which would happily turn a bare number/boolean/bigint into a (wrongly
+// formatted but well-typed) string and mask what must be a TypeError as a
+// RangeError instead.
+fn std_epoch_string_field(i: &mut Interpreter, value: JsValue) -> Result<String, Throw> {
+    let primitive = if value.is_object() { i.primitive_with_hint(value, true)? } else { value };
+    match primitive {
+        JsValue::Str(text) => Ok(text.to_utf8_lossy()),
+        _ => Err(Throw::type_error("Temporal field must be a string")),
+    }
+}
+
 fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
-    let disambiguation = std_temporal_option_string(i, &std_reflect_arg(&args, 1), "disambiguation")?
-        .unwrap_or_else(|| "compatible".into());
-    let local = std_temporal_make(i, StdTemporalKind::PlainDateTime, std_epoch_local_fields(&data)?)?;
-    let changed = std_temporal_with(i, local, args)?;
-    let fields = std_temporal_record(&changed, Some(StdTemporalKind::PlainDateTime))?.fields;
-    let epoch_ns = std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&fields), &disambiguation)?;
+    let like = std_reflect_arg(&args, 0);
+    if !like.is_object() { return Err(Throw::type_error("with() argument must be an object")); }
+    // RejectObjectWithCalendarOrTimeZone: `calendar`/`timeZone` are always
+    // read (even on a recognized Temporal object, where they're simply
+    // undefined since those getters are named calendarId/timeZoneId
+    // instead), then rejected if either came back defined OR the argument is
+    // itself a Temporal date/time/zoned object (which carries an internal
+    // calendar/time-zone concept regardless of what properties it exposes).
+    let calendar = i.get_prop(&like, "calendar")?;
+    let time_zone = i.get_prop(&like, "timeZone")?;
+    let is_temporal_object = std_temporal_record(&like, None).is_ok_and(|d| d.kind != StdTemporalKind::Duration)
+        || std_epoch_record(&like, None).is_ok();
+    if !calendar.is_undefined() || !time_zone.is_undefined() || is_temporal_object {
+        return Err(Throw::type_error("with() argument must be a plain property bag"));
+    }
+    // PrepareTemporalFields reads the bag's own fields in alphabetical
+    // order, extended with `offset` (defaulting to the receiver's current
+    // offset when the bag doesn't name one), and merges them onto the
+    // receiver's own current local date-time.
+    let mut merged = std_epoch_local_fields(&data)?;
+    let mut month_seen: Option<i64> = None;
+    let mut month_code_text: Option<String> = None;
+    let mut offset_field = std_epoch_offset_text(std_epoch_offset(&data));
+    let mut present = false;
+    // Each field's own lower bound (day/month >= 1, every time field >= 0) is
+    // enforced immediately as it's read -- unconditionally, before the
+    // options argument's type is even inspected (a wrong options type is a
+    // TypeError, but an out-of-range field value throwing first is itself
+    // observable behavior, per options-wrong-type.js). The upper bound (day
+    // <= days in that month, month <= 12, hour <= 23, ...) is overflow-
+    // dependent instead (clamped under "constrain", rejected under "reject")
+    // and is checked below, once overflow is known -- so hour: 29 must NOT
+    // fail here, only day: -1 does.
+    let number_field = |i: &mut Interpreter, raw: JsValue, minimum: i64| -> Result<i64, Throw> {
+        let value = std_temporal_number(i, raw, None)?;
+        if value < minimum { return Err(Throw::range_error("Temporal field out of range")); }
+        Ok(value)
+    };
+    for key in ["day", "hour", "microsecond", "millisecond", "minute", "month", "monthCode",
+        "nanosecond", "offset", "second", "year"] {
+        let raw = i.get_prop(&like, key)?;
+        if raw.is_undefined() { continue; }
+        match key {
+            "day" => { merged[2] = number_field(i, raw, 1)?; present = true; }
+            "hour" => { merged[3] = number_field(i, raw, 0)?; present = true; }
+            "microsecond" => { merged[7] = number_field(i, raw, 0)?; present = true; }
+            "millisecond" => { merged[6] = number_field(i, raw, 0)?; present = true; }
+            "minute" => { merged[4] = number_field(i, raw, 0)?; present = true; }
+            "month" => { let value = number_field(i, raw, 1)?; merged[1] = value; month_seen = Some(value); present = true; }
+            // Only the field's own type is validated here (must be a string
+            // at all); resolving that string against the (iso8601) calendar
+            // -- and rejecting month/monthCode disagreement -- is a
+            // calendar-dependent step deferred to InterpretTemporalDateTimeFields,
+            // after options has been fully read (options-read-before-
+            // algorithmic-validation.js).
+            "monthCode" => { month_code_text = Some(std_epoch_string_field(i, raw)?); present = true; }
+            "nanosecond" => { merged[8] = number_field(i, raw, 0)?; present = true; }
+            "offset" => { offset_field = std_epoch_string_field(i, raw)?; present = true; }
+            "second" => { merged[5] = number_field(i, raw, 0)?; present = true; }
+            "year" => { merged[0] = std_temporal_number(i, raw, None)?; present = true; }
+            _ => unreachable!(),
+        }
+    }
+    if !present { return Err(Throw::type_error("no Temporal fields provided")); }
+    let options = std_reflect_arg(&args, 1);
+    if !options.is_undefined() && !options.is_object() {
+        return Err(Throw::type_error("Temporal options must be an object"));
+    }
+    let disambiguation = std_temporal_option_string(i, &options, "disambiguation")?.unwrap_or_else(|| "compatible".into());
+    let offset_option = std_temporal_option_string(i, &options, "offset")?.unwrap_or_else(|| "prefer".into());
+    let reject_overflow = std_temporal_overflow(i, options)?;
+    if !matches!(disambiguation.as_str(), "compatible" | "earlier" | "later" | "reject") {
+        return Err(Throw::range_error("invalid disambiguation"));
+    }
+    if !matches!(offset_option.as_str(), "prefer" | "use" | "ignore" | "reject") {
+        return Err(Throw::range_error("invalid offset option"));
+    }
+    // InterpretTemporalDateTimeFields's calendar-dependent step: resolve
+    // monthCode against iso8601 (which has no leap months, so any "M##L"
+    // code is simply invalid) now that options has been read in full.
+    if let Some(text) = month_code_text {
+        let month = text.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
+            .filter(|month| text.len() == 3 && (1..=12).contains(month))
+            .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+        if month_seen.is_some_and(|value| value != month) {
+            return Err(Throw::range_error("month and monthCode disagree"));
+        }
+        merged[1] = month;
+    }
+    // Upper bounds are overflow-dependent: "constrain" (the default) clamps
+    // each field into range, "reject" throws once any of them is out of
+    // range (checked together, matching Duration/Plain*'s own with()).
+    if reject_overflow {
+        if merged[1] > 12 || merged[2] > std_temporal_days_in_month(merged[0], merged[1])
+            || merged[3] > 23 || merged[4] > 59 || merged[5] > 59
+            || merged[6..9].iter().any(|value| *value > 999) {
+            return Err(Throw::range_error("Temporal field out of range"));
+        }
+    } else {
+        merged[1] = merged[1].clamp(1, 12);
+        merged[2] = merged[2].clamp(1, std_temporal_days_in_month(merged[0], merged[1]));
+        merged[3] = merged[3].clamp(0, 23);
+        merged[4] = merged[4].clamp(0, 59);
+        merged[5] = merged[5].clamp(0, 59);
+        for field in &mut merged[6..9] { *field = (*field).clamp(0, 999); }
+    }
+    std_temporal_validate(StdTemporalKind::PlainDateTime, &merged)?;
+    let local_ns = std_temporal_epoch_ns(&merged);
+    let epoch_ns = if offset_option == "ignore" {
+        std_epoch_disambiguate(&data.zone_id, local_ns, &disambiguation)?
+    } else {
+        let offset_ns = std_epoch_parse_offset(&offset_field)?;
+        match offset_option.as_str() {
+            "use" => local_ns - offset_ns,
+            "reject" => tz_possible_epoch_ns(&data.zone_id, local_ns).into_iter()
+                .find(|&candidate| tz_offset_ns(&data.zone_id, candidate) == offset_ns)
+                .ok_or_else(|| Throw::range_error("offset does not match time zone"))?,
+            _ => {
+                // "prefer" (the default): keep the given offset if it names
+                // one of the local time's actual possible offsets (resolving
+                // an ambiguous local time in its favor), else fall back to
+                // ordinary disambiguation.
+                match tz_possible_epoch_ns(&data.zone_id, local_ns).into_iter()
+                    .find(|&candidate| tz_offset_ns(&data.zone_id, candidate) == offset_ns) {
+                    Some(candidate) => candidate,
+                    None => std_epoch_disambiguate(&data.zone_id, local_ns, &disambiguation)?,
+                }
+            }
+        }
+    };
     std_epoch_make(i, data.kind, epoch_ns, data.zone_id)
 }
 fn std_epoch_with_plain_time(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -663,7 +815,7 @@ fn std_epoch_with_plain_time(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
     let time = std_reflect_arg(&args, 0);
     if time.is_undefined() { fields[3..9].fill(0); }
     else {
-        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time)?;
+        let parts = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
         fields[3..9].copy_from_slice(&parts[3..9]);
     }
     let epoch_ns = std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&fields), "compatible")?;
@@ -689,9 +841,8 @@ fn std_epoch_transition(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) 
 }
 fn std_epoch_start_of_day(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
-    let mut fields = std_epoch_local_fields(&data)?;
-    fields[3..9].fill(0);
-    let epoch_ns = std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&fields), "compatible")?;
+    let fields = std_epoch_local_fields(&data)?;
+    let epoch_ns = std_epoch_start_of_day_ns(&data.zone_id, &fields)?;
     std_epoch_make(i, data.kind, epoch_ns, data.zone_id)
 }
 
@@ -707,7 +858,7 @@ fn std_temporal_plain_to_zoned(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     if data.kind == StdTemporalKind::PlainDate {
         let time = i.get_prop(&input, "plainTime")?;
         if !time.is_undefined() {
-            let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time)?;
+            let parsed = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
             fields[3..9].copy_from_slice(&parsed[3..9]);
         }
     }
@@ -730,7 +881,7 @@ fn std_temporal_now_zoned(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -
 
 fn std_epoch_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, sign: i64) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, None)?;
-    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0))?;
+    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?;
     if data.kind == StdEpochKind::Instant && duration[..4].iter().any(|part| *part != 0) {
         return Err(Throw::range_error("date units are not valid for Instant"));
     }
@@ -812,28 +963,120 @@ fn std_epoch_until(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
 fn std_epoch_since(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_epoch_difference(i, this, args, true)
 }
+// Epoch nanoseconds of local midnight for `date` (only fields 0..2 are used)
+// in `zone_id`, i.e. GetStartOfDay. Disambiguates a nonexistent local
+// midnight (a DST "spring forward" that skips it) the same way the
+// constructor and `startOfDay` do, and enforces the representable Instant
+// range itself, since callers reuse this both for `startOfDay` and for
+// `round`'s day-bracket search, where landing one day past the maximum (or
+// before the minimum) representable date must throw here rather than
+// producing a silently out-of-range value.
+fn std_epoch_start_of_day_ns(zone_id: &str, date: &[i64; 10]) -> Result<i128, Throw> {
+    let mut fields = *date;
+    fields[3..9].fill(0);
+    let epoch_ns = std_epoch_disambiguate(zone_id, std_temporal_epoch_ns(&fields), "compatible")?;
+    if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
+        return Err(Throw::range_error("start of day outside Temporal range"));
+    }
+    Ok(epoch_ns)
+}
+
 fn std_epoch_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, None)?;
     let option = std_reflect_arg(&args, 0);
     if option.is_undefined() { return Err(Throw::type_error("round options are required")); }
-    let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
-        else { std_temporal_option_string(i, &option, "smallestUnit")?
-            .ok_or_else(|| Throw::range_error("smallestUnit is required"))? };
-    let unit = unit.strip_suffix('s').unwrap_or(&unit);
-    // Instant only supports exact time units; day and larger require a zone.
-    if data.kind == StdEpochKind::Instant
-        && !matches!(unit, "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
+    // Every option value is read and coerced before any algorithmic
+    // validation of it runs, in this exact order: roundingIncrement (ToNumber
+    // via GetOption, ToTemporalRoundingIncrement's own finite/safe-integer
+    // check happening as part of that same read), roundingMode (ToString),
+    // then smallestUnit (ToString, required). A bare string short-circuits to
+    // just smallestUnit, matching Duration.prototype.round's own options.
+    let (increment, mode, unit_raw) = if let JsValue::Str(value) = &option {
+        (1i64, "halfExpand".to_string(), value.to_utf8_lossy())
+    } else {
+        if !option.is_object() { return Err(Throw::type_error("Temporal options must be an object")); }
+        let increment_value = i.get_prop(&option, "roundingIncrement")?;
+        let increment = std_temporal_number(i, increment_value, Some(1))?;
+        let mode_value = i.get_prop(&option, "roundingMode")?;
+        let mode = if mode_value.is_undefined() { "halfExpand".to_string() } else { i.to_string(&mode_value)? };
+        let unit_value = i.get_prop(&option, "smallestUnit")?;
+        if unit_value.is_undefined() { return Err(Throw::range_error("smallestUnit is required")); }
+        (increment, mode, i.to_string(&unit_value)?)
+    };
+    // Algorithmic validation, deferred until every option has been read:
+    // smallestUnit must be one of day..nanosecond (year/month/week are valid
+    // Duration units but not valid here), Instant additionally excludes day
+    // (it has no zone to resolve a calendar day against), roundingMode must
+    // be a recognized name, and roundingIncrement must be in range.
+    let unit = std_temporal_singular_unit(&unit_raw);
+    if !matches!(unit.as_str(), "day" | "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
         return Err(Throw::range_error("invalid smallestUnit"));
     }
-    let step = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
-    let mode = if option.is_object() {
-        std_temporal_option_string(i, &option, "roundingMode")?
-            .unwrap_or_else(|| "halfExpand".to_string())
-    } else { "halfExpand".to_string() };
-    let increment = if option.is_object() { std_temporal_option_value(i, &option, "roundingIncrement")? }
-        else { JsValue::Undefined };
-    let increment = std_temporal_number(i, increment, Some(1))?;
-    if increment < 1 { return Err(Throw::range_error("invalid roundingIncrement")); }
-    let rounded = std_temporal_round_integer(data.epoch_ns, step * increment as i128, &mode)?;
-    std_epoch_make(i, data.kind, rounded, data.zone_id.clone())
+    if data.kind == StdEpochKind::Instant && unit == "day" {
+        return Err(Throw::range_error("invalid smallestUnit"));
+    }
+    if !std_temporal_round_mode_valid(&mode) { return Err(Throw::range_error("invalid roundingMode")); }
+    if !(1..=1_000_000_000).contains(&increment) {
+        return Err(Throw::range_error("invalid roundingIncrement"));
+    }
+    if data.kind == StdEpochKind::Instant {
+        // Instant has no local calendar day at all -- a day is always
+        // exactly 86,400 SI seconds, so (unlike ZonedDateTime, where an hour
+        // increment of 24 might not land on an actual local day boundary
+        // under DST) any increment that evenly divides a full day is valid,
+        // up to and including the full day itself (hour:24, minute:1440,
+        // second:86400, ... are all accepted).
+        let step = std_temporal_unit_ns(&unit).unwrap() * increment as i128;
+        if STD_TEMPORAL_NS_DAY % step != 0 {
+            return Err(Throw::range_error("invalid roundingIncrement"));
+        }
+        let rounded = std_temporal_round_integer(data.epoch_ns, step, &mode)?;
+        return std_epoch_make(i, data.kind, rounded, data.zone_id.clone());
+    }
+    if unit == "day" {
+        if increment != 1 { return Err(Throw::range_error("invalid roundingIncrement")); }
+    } else {
+        let maximum = match unit.as_str() {
+            "hour" => 24, "minute" | "second" => 60,
+            _ => 1_000,
+        };
+        if increment >= maximum || maximum % increment != 0 {
+            return Err(Throw::range_error("invalid roundingIncrement"));
+        }
+    }
+    // ZonedDateTime: round the LOCAL wall-clock date-time (always a
+    // non-negative time-of-day, regardless of how far in the past/future the
+    // overall instant is -- rounding the raw, possibly enormous-negative
+    // epoch nanoseconds directly, as Instant.round does, gets the boundary
+    // wrong), then reinterpret the rounded local date-time back into an
+    // instant the same way the constructor would.
+    let local = std_epoch_local_fields(&data)?;
+    let epoch_ns = if unit == "day" {
+        // Variable-length local day (DST can make it shorter/longer than 24h):
+        // bracket epoch_ns between the start of the current local day and the
+        // start of the next, and round its position within that bracket.
+        let start_ns = std_epoch_start_of_day_ns(&data.zone_id, &local)?;
+        let next_day = std_temporal_epoch_day(local[0], local[1], local[2]) + 1;
+        let mut next_date = local;
+        (next_date[0], next_date[1], next_date[2]) = std_temporal_civil_from_epoch_day(next_day);
+        let end_ns = std_epoch_start_of_day_ns(&data.zone_id, &next_date)?;
+        let day_length_ns = end_ns - start_ns;
+        if day_length_ns <= 0 { return Err(Throw::range_error("invalid Temporal day length")); }
+        let offset_in_day = data.epoch_ns - start_ns;
+        let rounded = std_temporal_round_integer(offset_in_day, day_length_ns, &mode)?;
+        start_ns + rounded
+    } else {
+        let step = std_temporal_unit_ns(&unit).unwrap() * increment as i128;
+        let time_ns = std_temporal_time_ns(&local);
+        let rounded_time = std_temporal_round_integer(time_ns, step, &mode)?;
+        let mut new_local = local;
+        let day_delta = rounded_time.div_euclid(STD_TEMPORAL_NS_DAY);
+        if day_delta != 0 {
+            let day = std_temporal_epoch_day(local[0], local[1], local[2]) + day_delta as i64;
+            (new_local[0], new_local[1], new_local[2]) = std_temporal_civil_from_epoch_day(day);
+        }
+        std_temporal_set_time_ns(&mut new_local, rounded_time);
+        std_epoch_disambiguate(&data.zone_id, std_temporal_epoch_ns(&new_local), "compatible")?
+    };
+    std_epoch_make(i, data.kind, epoch_ns, data.zone_id.clone())
 }

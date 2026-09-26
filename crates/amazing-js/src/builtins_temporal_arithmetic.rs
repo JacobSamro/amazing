@@ -95,7 +95,7 @@ fn std_temporal_add_calendar(base: &[i64; 10], duration: &[i64; 10], factor: i64
 
 fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, factor: i64) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0))?;
+    let duration = std_temporal_from_fields(i, StdTemporalKind::Duration, std_reflect_arg(&args, 0), false)?;
     let mut result = data.fields;
     match data.kind {
         StdTemporalKind::Duration => {
@@ -241,7 +241,7 @@ fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], large
 
 fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, since: bool) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
-    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0))?;
+    let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
     let options = std_reflect_arg(&args, 1);
     let smallest_default = if matches!(data.kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth) {
         if data.kind == StdTemporalKind::PlainYearMonth { "month" } else { "day" }
@@ -350,54 +350,158 @@ fn std_temporal_since(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     std_temporal_difference(i, this, args, true)
 }
 
+// The field this loop is currently reading, resolved per Temporal kind below
+// in the exact alphabetical order PrepareTemporalFields/PrepareCalendarFields
+// specifies (and that with()'s many order-of-operations.js tests observe via
+// a Proxy). MonthCode and Year get their own arms because they need special
+// handling (a calendar-format string; and, for PlainMonthDay, a value that
+// regulates the result without being stored in it).
+enum StdWithField { Plural(usize), Year, Month, MonthCode, Day, Hour, Minute, Second, Millisecond, Microsecond, Nanosecond }
+
 fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
     let bag = std_reflect_arg(&args, 0);
-    if !bag.is_object() { return Err(Throw::type_error("Temporal fields must be an object")); }
+    if data.kind == StdTemporalKind::Duration {
+        if !bag.is_object() { return Err(Throw::type_error("Temporal fields must be an object")); }
+    } else {
+        // IsPartialTemporalObject + RejectObjectWithCalendarOrTimeZone: a bag
+        // that is itself a recognized Temporal object (of ANY kind, not just
+        // this receiver's own) is rejected outright, without ever touching
+        // its calendar/timeZone properties -- those may be throwing getters
+        // on a real Temporal instance, and real internal-slot access never
+        // triggers a getter. An ordinary object IS allowed to carry other,
+        // unrelated properties (extras are just ignored), but not calendar
+        // or timeZone specifically.
+        if !bag.is_object()
+            || std_temporal_record(&bag, None).is_ok()
+            || std_epoch_record(&bag, Some(StdEpochKind::ZonedDateTime)).is_ok() {
+            return Err(Throw::type_error("with() argument must be a plain object"));
+        }
+        let calendar = i.get_prop(&bag, "calendar")?;
+        if !calendar.is_undefined() {
+            return Err(Throw::type_error("with() argument must not have a calendar property"));
+        }
+        let time_zone = i.get_prop(&bag, "timeZone")?;
+        if !time_zone.is_undefined() {
+            return Err(Throw::type_error("with() argument must not have a timeZone property"));
+        }
+    }
+    let fields: &[(&str, StdWithField)] = match data.kind {
+        StdTemporalKind::Duration => &[
+            ("days", StdWithField::Plural(3)), ("hours", StdWithField::Plural(4)),
+            ("microseconds", StdWithField::Plural(8)), ("milliseconds", StdWithField::Plural(7)),
+            ("minutes", StdWithField::Plural(5)), ("months", StdWithField::Plural(1)),
+            ("nanoseconds", StdWithField::Plural(9)), ("seconds", StdWithField::Plural(6)),
+            ("weeks", StdWithField::Plural(2)), ("years", StdWithField::Plural(0)),
+        ],
+        StdTemporalKind::PlainTime => &[
+            ("hour", StdWithField::Hour), ("microsecond", StdWithField::Microsecond),
+            ("millisecond", StdWithField::Millisecond), ("minute", StdWithField::Minute),
+            ("nanosecond", StdWithField::Nanosecond), ("second", StdWithField::Second),
+        ],
+        StdTemporalKind::PlainDate => &[
+            ("day", StdWithField::Day), ("month", StdWithField::Month),
+            ("monthCode", StdWithField::MonthCode), ("year", StdWithField::Year),
+        ],
+        StdTemporalKind::PlainDateTime => &[
+            ("day", StdWithField::Day), ("hour", StdWithField::Hour),
+            ("microsecond", StdWithField::Microsecond), ("millisecond", StdWithField::Millisecond),
+            ("minute", StdWithField::Minute), ("month", StdWithField::Month),
+            ("monthCode", StdWithField::MonthCode), ("nanosecond", StdWithField::Nanosecond),
+            ("second", StdWithField::Second), ("year", StdWithField::Year),
+        ],
+        StdTemporalKind::PlainYearMonth => &[
+            ("month", StdWithField::Month), ("monthCode", StdWithField::MonthCode),
+            ("year", StdWithField::Year),
+        ],
+        StdTemporalKind::PlainMonthDay => &[
+            ("day", StdWithField::Day), ("month", StdWithField::Month),
+            ("monthCode", StdWithField::MonthCode), ("year", StdWithField::Year),
+        ],
+    };
     let mut result = data.fields;
     let mut present = false;
     let mut month_seen = None;
-    let names: &[(&str, usize)] = if data.kind == StdTemporalKind::Duration {
-        &[("years", 0), ("months", 1), ("weeks", 2), ("days", 3), ("hours", 4),
-          ("minutes", 5), ("seconds", 6), ("milliseconds", 7), ("microseconds", 8), ("nanoseconds", 9)]
-    } else {
-        &[("year", 0), ("month", 1), ("day", 2), ("hour", 3), ("minute", 4),
-          ("second", 5), ("millisecond", 6), ("microsecond", 7), ("nanosecond", 8)]
-    };
-    for (name, index) in names {
+    // PlainMonthDay only: a supplied "year" regulates (e.g. decides whether
+    // Feb 29 constrains to Feb 28) without ever being stored -- the result's
+    // reference year is always 1972, matching std_temporal_bag's convention.
+    let mut year_hint = None;
+    // The monthCode string is only *read* (ToString, an observable call)
+    // during this loop; its calendar-format validation and disagreement
+    // check against "month" are calendar-dependent resolution that must wait
+    // until after options.overflow has been read, per
+    // options-read-before-algorithmic-validation.js.
+    let mut month_code_text: Option<String> = None;
+    for (name, field) in fields {
         let property = i.get_prop(&bag, *name)?;
-        if !property.is_undefined() {
-            result[*index] = if data.kind == StdTemporalKind::Duration {
-                std_temporal_duration_number(i, property, None)?
-            } else { std_temporal_number(i, property, None)? };
-            if *name == "month" { month_seen = Some(result[*index]); }
-            present = true;
-        }
-    }
-    if data.kind != StdTemporalKind::Duration {
-        let month_code = i.get_prop(&bag, "monthCode")?;
-        if !month_code.is_undefined() {
-            let code = i.to_string(&month_code)?;
-            let month = code.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
-                .filter(|month| code.len() == 3 && (1..=12).contains(month))
-                .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
-            if month_seen.is_some_and(|value| value != month) {
-                return Err(Throw::range_error("month and monthCode disagree"));
+        if property.is_undefined() { continue; }
+        present = true;
+        match field {
+            StdWithField::Plural(index) => result[*index] = std_temporal_duration_number(i, property, None)?,
+            StdWithField::Year => {
+                let value = std_temporal_number(i, property, None)?;
+                if data.kind == StdTemporalKind::PlainMonthDay { year_hint = Some(value); }
+                else { result[0] = value; }
             }
-            result[1] = month; present = true;
+            // PrepareCalendarFields reads "month" and "day" via
+            // ToPositiveIntegerWithTruncation: a value below 1 throws a
+            // RangeError immediately, regardless of the overflow option --
+            // unlike the upper bound, which regulates below only once
+            // overflow is known.
+            StdWithField::Month => {
+                let value = std_temporal_number(i, property, None)?;
+                if value < 1 { return Err(Throw::range_error("month must be a positive integer")); }
+                result[1] = value;
+                month_seen = Some(value);
+            }
+            StdWithField::MonthCode => month_code_text = Some(i.to_string(&property)?),
+            StdWithField::Day => {
+                let value = std_temporal_number(i, property, None)?;
+                if value < 1 { return Err(Throw::range_error("day must be a positive integer")); }
+                result[2] = value;
+            }
+            StdWithField::Hour => result[3] = std_temporal_number(i, property, None)?,
+            StdWithField::Minute => result[4] = std_temporal_number(i, property, None)?,
+            StdWithField::Second => result[5] = std_temporal_number(i, property, None)?,
+            StdWithField::Millisecond => result[6] = std_temporal_number(i, property, None)?,
+            StdWithField::Microsecond => result[7] = std_temporal_number(i, property, None)?,
+            StdWithField::Nanosecond => result[8] = std_temporal_number(i, property, None)?,
         }
     }
     if !present { return Err(Throw::type_error("no Temporal fields provided")); }
-    let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
-    if !reject && data.kind != StdTemporalKind::Duration {
-        result[1] = result[1].clamp(1, 12);
-        let year = if data.kind == StdTemporalKind::PlainMonthDay { result[9] } else { result[0] };
-        result[2] = result[2].clamp(1, std_temporal_days_in_month(year, result[1]));
-        result[3] = result[3].clamp(0, 23);
-        result[4] = result[4].clamp(0, 59);
-        result[5] = result[5].clamp(0, 59);
-        for field in &mut result[6..9] { *field = (*field).clamp(0, 999); }
+    let reject = if data.kind == StdTemporalKind::Duration { false }
+        else { std_temporal_overflow(i, std_reflect_arg(&args, 1))? };
+    if let Some(code) = month_code_text {
+        let month = code.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
+            .filter(|month| code.len() == 3 && (1..=12).contains(month))
+            .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+        if month_seen.is_some_and(|value| value != month) {
+            return Err(Throw::range_error("month and monthCode disagree"));
+        }
+        result[1] = month;
     }
+    if data.kind == StdTemporalKind::PlainMonthDay {
+        // The reference year is always 1972 in the stored result (and is
+        // never itself range-checked against a supplied "year" -- only the
+        // ISO reference year is), but a supplied "year" still decides, via
+        // its own leap-ness, whether day 29 in February regulates. Applying
+        // that decision through the shared std_temporal_regulate/validate
+        // pair (which read the *stored* reference year for both jobs) would
+        // either miss the supplied year's leap-ness or wrongly range-check
+        // it, so PlainMonthDay resolves its day bound directly instead.
+        if !reject { result[1] = result[1].clamp(1, 12); }
+        if (1..=12).contains(&result[1]) {
+            let max_day = std_temporal_days_in_month(year_hint.unwrap_or(1972), result[1]);
+            if result[2] > max_day {
+                if reject { return Err(Throw::range_error("day is invalid for month")); }
+                result[2] = max_day;
+            }
+        }
+        result[9] = 1972;
+    } else {
+        std_temporal_regulate(data.kind, &mut result, reject);
+    }
+    std_temporal_validate(data.kind, &result)?;
     std_temporal_make(i, data.kind, result)
 }
 
@@ -406,7 +510,7 @@ fn std_temporal_datetime_with_time(i: &mut Interpreter, this: JsValue, args: Vec
     let time = std_reflect_arg(&args, 0);
     if time.is_undefined() { fields[3..9].fill(0); }
     else {
-        let values = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time)?;
+        let values = std_temporal_from_fields(i, StdTemporalKind::PlainTime, time, false)?;
         fields[3..9].copy_from_slice(&values[3..9]);
     }
     std_temporal_make(i, StdTemporalKind::PlainDateTime, fields)
@@ -434,13 +538,31 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
             .ok_or_else(|| Throw::range_error("unit is required"))? };
     let relative = if option.is_object() { std_temporal_option_value(i, &option, "relativeTo")? }
         else { JsValue::Undefined };
+    // ToRelativeTemporalObject (spec) resolves relativeTo -- and so must
+    // throw on a malformed value -- whenever it is present, not only when a
+    // calendar unit ends up actually needing it. Same two checks as
+    // Duration.prototype.round: a relativeTo property bag naming a
+    // `timeZone` must still have that value resolved even though only the
+    // local date ends up kept, and a relativeTo string carrying both a
+    // bracketed zone annotation and an explicit numeric UTC offset must be
+    // internally consistent.
+    if relative.is_object() {
+        let time_zone = i.get_prop(&relative, "timeZone")?;
+        if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
+    }
+    if let JsValue::Str(text) = &relative {
+        std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
+    }
+    let base = if relative.is_undefined() { None } else {
+        Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?)
+    };
     if (fields[0] != 0 || fields[1] != 0 || matches!(unit.as_str(), "year" | "years" | "month" | "months"))
-        && relative.is_undefined() {
+        && base.is_none() {
         return Err(Throw::range_error("calendar units require relativeTo"));
     }
     let total_ns = if fields[0] != 0 || fields[1] != 0 {
-        let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative.clone())?;
-        let target = std_temporal_add_calendar(&base, &fields, 1, false)?;
+        let base = base.as_ref().unwrap();
+        let target = std_temporal_add_calendar(base, &fields, 1, false)?;
         let days = std_temporal_epoch_day(target[0], target[1], target[2])
             - std_temporal_epoch_day(base[0], base[1], base[2]);
         days as i128 * STD_TEMPORAL_NS_DAY
@@ -448,10 +570,10 @@ fn std_temporal_duration_total(i: &mut Interpreter, this: JsValue, args: Vec<JsV
             - (fields[2] as i128 * 7 + fields[3] as i128) * STD_TEMPORAL_NS_DAY
     } else { std_temporal_duration_time_ns(&fields) };
     let unit_ns = if matches!(unit.as_str(), "year" | "years" | "month" | "months") {
-        let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?;
+        let base = base.as_ref().unwrap();
         let mut single = [0; 10];
         single[if unit.starts_with("year") { 0 } else { 1 }] = 1;
-        let next = std_temporal_add_calendar(&base, &single, 1, false)?;
+        let next = std_temporal_add_calendar(base, &single, 1, false)?;
         (std_temporal_epoch_day(next[0], next[1], next[2])
             - std_temporal_epoch_day(base[0], base[1], base[2])) as i128 * STD_TEMPORAL_NS_DAY
     } else { std_temporal_unit_ns(&unit).ok_or_else(|| Throw::range_error("invalid unit"))? };
@@ -760,7 +882,7 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
     if let JsValue::Str(text) = &relative {
         std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
     }
-    let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?;
+    let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative, false)?;
     let target_ns = std_temporal_duration_apply(&base, &fields)?;
     let result = if smallest_index <= 2 {
         std_temporal_round_to_calendar_unit(&base, target_ns, &smallest, &largest, increment, &mode)?
