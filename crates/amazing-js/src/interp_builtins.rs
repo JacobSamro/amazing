@@ -3152,10 +3152,21 @@ fn native_array_includes(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let object = array_receiver(i, this)?;
+    let length = array_search_length(i, &object)?;
+    if length == 0 { return Ok(JsValue::Bool(false)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
-    Ok(JsValue::Bool(
-        i.iterate(&this)?.into_iter().any(|value| value == search),
-    ))
+    let start = array_index(i, args.get(1), length, 0.0)?;
+    if length.saturating_sub(start) > 1_000_000 {
+        return Err(Throw::range_error("array search exceeds iteration limit"));
+    }
+    for index in start..length {
+        let value = array_get_index(i, &object, index)?;
+        if value == search || matches!((&value, &search), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()) {
+            return Ok(JsValue::Bool(true));
+        }
+    }
+    Ok(JsValue::Bool(false))
 }
 
 fn native_array_index_of(
@@ -3164,7 +3175,7 @@ fn native_array_index_of(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let object = array_receiver(i, this)?;
-    let length = array_like_length(i, &object)?;
+    let length = array_search_length(i, &object)?;
     if length == 0 { return Ok(JsValue::num(-1.0)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
     let start = array_index(i, args.get(1), length, 0.0)?;
