@@ -227,6 +227,11 @@ pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsi
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    HTMLElementClick,
+    HTMLElementOnClick,
+    HTMLElementSetOnClick,
+    InputIndeterminate,
+    InputSetIndeterminate,
     ErrorEventConstructor,
     PromiseRejectionEventConstructor,
     ErrorEventGet(&'static str),

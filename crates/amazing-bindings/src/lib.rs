@@ -68,3 +68,5 @@ pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for
 
 #[cfg(test)]
 mod tests;
+
+mod input_activation_bindings;

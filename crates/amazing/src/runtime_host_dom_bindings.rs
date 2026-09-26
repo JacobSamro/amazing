@@ -171,6 +171,161 @@ mod tests {
     use super::*;
 
     #[test]
+    fn checkbox_radio_activation_orders_events_rolls_back_and_handles_tree_changes() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'activation check ' + step; }
+            function input(type, attached = true) {
+                const node = document.createElement('input'); node.type = type;
+                if (attached) document.body.append(node); return node;
+            }
+            const checkbox = input('checkbox'); checkbox.indeterminate = true;
+            const log = [];
+            checkbox.addEventListener('click', e => {
+                log.push('click:' + checkbox.checked + ':' + checkbox.indeterminate + ':' + e.isTrusted);
+                checkbox.click();
+            });
+            checkbox.addEventListener('input', e => log.push('input:' + e.bubbles + ':' + e.composed + ':' + e.isTrusted));
+            checkbox.addEventListener('change', e => log.push('change:' + e.bubbles + ':' + e.composed));
+            checkbox.click();
+            check(log.join(',') === 'click:true:false:false,input:true:true:true,change:true:false');
+            const canceled = input('checkbox'); canceled.indeterminate = true; let seen = false, changed = false;
+            canceled.addEventListener('click', e => { seen = canceled.checked && !canceled.indeterminate; e.preventDefault(); });
+            canceled.addEventListener('input', () => changed = true);
+            canceled.click(); check(seen && !changed && !canceled.checked && canceled.indeterminate);
+            const copy = canceled.cloneNode(); check(copy.indeterminate);
+            const detached = input('checkbox', false); detached.addEventListener('input', () => changed = true);
+            detached.click(); check(detached.checked && !changed);
+            const disabled = input('checkbox'); disabled.disabled = true; let clicks = 0, inputs = 0;
+            disabled.addEventListener('click', () => clicks++); disabled.addEventListener('input', () => inputs++);
+            disabled.click(); check(!disabled.checked && clicks === 0);
+            disabled.dispatchEvent(new MouseEvent('click')); check(disabled.checked && clicks === 1 && inputs === 1);
+            disabled.dispatchEvent(new Event('click')); check(disabled.checked && inputs === 1);
+            const a = input('radio'), b = input('radio'); a.checked = true; b.checked = true;
+            check(a.checked && b.checked); a.name = 'group'; b.name = 'group'; a.checked = true;
+            check(a.checked && !b.checked);
+            let rename = false;
+            b.addEventListener('click', e => { if (rename) a.name = 'elsewhere'; e.preventDefault(); });
+            b.click(); check(a.checked && !b.checked);
+            rename = true; b.click(); check(!a.checked && !b.checked);
+            const parent = input('checkbox'); const textInput = input('text', false); parent.append(textInput);
+            textInput.dispatchEvent(new MouseEvent('click', {bubbles: true})); check(!parent.checked);
+            const text = document.createTextNode('child'); parent.append(text);
+            text.dispatchEvent(new MouseEvent('click')); check(!parent.checked);
+            const click = new MouseEvent('click', {bubbles: true}); let cleaned = false;
+            parent.addEventListener('input', () => cleaned = click.eventPhase === 0 && click.currentTarget === null && click.composedPath().length === 0);
+            text.dispatchEvent(click); check(parent.checked && cleaned);
+            const shell = document.createElement('div'); document.body.append(shell);
+            const shadow = shell.attachShadow({mode: 'closed'}); const shadowInput = input('checkbox', false); shadow.append(shadowInput);
+            let hostInput = 0, hostChange = 0;
+            shell.addEventListener('input', () => hostInput++); shell.addEventListener('change', () => hostChange++);
+            shadowInput.click(); check(shadowInput.checked && hostInput === 1 && hostChange === 0);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn onclick_ordering_replacement_removal_and_non_callable_interop_addeventlistener() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'onclick check ' + step; }
+            const div = document.createElement('div'); document.body.append(div);
+
+            // onclick registers at the position it is first assigned, ordered
+            // among addEventListener registrations; getter reads it back.
+            const log = [];
+            div.addEventListener('click', () => log.push('before'));
+            div.onclick = () => log.push('onclick-1');
+            check(div.onclick && log.length === 0);
+            div.addEventListener('click', () => log.push('after'));
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,onclick-1,after');
+
+            // Reassigning onclick replaces in place (position preserved).
+            log.length = 0;
+            div.onclick = () => log.push('onclick-2');
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,onclick-2,after');
+
+            // Clearing then re-adding moves the registration to the end.
+            log.length = 0;
+            div.onclick = null;
+            check(div.onclick === null);
+            div.onclick = () => log.push('onclick-3');
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,onclick-3');
+
+            // The same function used as both onclick and via addEventListener
+            // is two independent registrations; removeEventListener never
+            // touches the onclick slot.
+            log.length = 0;
+            function shared() { log.push('shared'); }
+            div.onclick = shared;
+            div.addEventListener('click', shared);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,shared,shared');
+            log.length = 0;
+            div.removeEventListener('click', shared);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,shared' && div.onclick === shared);
+
+            // Returning exactly `false` cancels the event; any other return
+            // value (including a falsy non-boolean) does not.
+            log.length = 0;
+            div.onclick = () => false;
+            const cancel = new MouseEvent('click', {cancelable: true});
+            div.dispatchEvent(cancel);
+            check(cancel.defaultPrevented === true);
+            div.onclick = () => 0;
+            const noCancel = new MouseEvent('click', {cancelable: true});
+            div.dispatchEvent(noCancel);
+            check(noCancel.defaultPrevented === false);
+
+            // A thrown handler reports and continues; onclick keeps running
+            // on later dispatches and does not disturb sibling listeners.
+            log.length = 0;
+            div.onclick = () => { throw 'boom'; };
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after');
+
+            // Assigning a non-callable object never throws and is silently
+            // ignored: its `handleEvent` (unlike a real EventListener) must
+            // never be read.
+            log.length = 0;
+            let handleEventRead = false;
+            const notCallable = { get handleEvent() { handleEventRead = true; return () => log.push('handleEvent'); } };
+            div.onclick = notCallable;
+            check(div.onclick === notCallable);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(!handleEventRead && log.join(',') === 'before,after');
+
+            // A non-object primitive assigned to onclick clears the handler
+            // (EventHandlerNonNull's [LegacyTreatNonObjectAsNull]).
+            div.onclick = 5;
+            check(div.onclick === null);
+            div.onclick = undefined;
+            check(div.onclick === null);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn error_event_payloads_preserve_identity_defaults_and_conversion_order() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

@@ -109,10 +109,11 @@ pub(crate) fn dispatch_created_event<H: BindingHost>(host: &mut H, target: Event
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };
-        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
         if invocation.once { host.release_value(invocation.callback); }
         if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
     }
+    crate::input_activation_bindings::complete(host, &mut dispatch)?;
     host.with_dom(|dom| dom.events().dispatch_result(event))
 }
 pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_dom::NodeIdx,
@@ -129,10 +130,11 @@ pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_d
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };
-        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
         if invocation.once { host.release_value(invocation.callback); }
         if result.is_err() { dispatch.report_exception("Focus event listener threw".into()); }
     }
+    crate::input_activation_bindings::complete(host, &mut dispatch)?;
     host.with_dom(|dom| dom.events().dispatch_result(event)).map(|_| ())
 }
 fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) -> Result<bool, H::Error> {
@@ -153,18 +155,28 @@ pub(crate) fn passive_option<H: BindingHost>(host: &mut H, options: Option<&H::V
     Ok((!host.is_undefined(&passive)).then(|| host.to_boolean(&passive)))
 }
 fn callback_call<H: BindingHost>(
-    host: &mut H, callback: CallbackId, this_target: EventTarget, event: EventId,
+    host: &mut H, callback: CallbackId, this_target: EventTarget, event: EventId, handler: bool,
 ) -> Result<(), H::Error> {
     let value = host.root_value(callback).ok_or_else(|| host.type_error("Released EventListener"))?;
     let event_value = host.wrap_platform_object(key(host, event.slot() as u64), InterfaceBrand::EVENT)?;
     let (function, this) = if host.is_callable(&value) {
         (value, wrap_target(host, Some(this_target))?)
+    } else if handler {
+        // Event handler IDL attributes (onclick, etc.) are EventHandlerNonNull
+        // callback *functions*, not EventListener callback *interfaces*: a
+        // non-callable object stored there is never invoked and its
+        // `handleEvent` property must never be read.
+        return Ok(());
     } else {
         let function = host.get_property(&value, "handleEvent")?;
         if !host.is_callable(&function) { return Err(host.type_error("EventListener.handleEvent is not callable")); }
         (function, value)
     };
-    host.call(&function, &this, &[event_value]).map(|_| ())
+    let result = host.call(&function, &this, &[event_value])?;
+    if handler && host.same_value(&result, &host.boolean(false)) {
+        host.with_dom(|dom| { dom.events_mut().event_mut(event).prevent_default(); Ok(()) })?;
+    }
+    Ok(())
 }
 enum Output { Undefined, Boolean(bool), Number(f64), String(Vec<u16>), Target(Option<EventTarget>), Path(Vec<EventTarget>) }
 
@@ -370,10 +382,11 @@ pub(crate) fn invoke<H: BindingHost>(
             loop {
                 let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
                 let Some(invocation) = invocation else { break };
-                let result = callback_call(host, invocation.callback, invocation.current_target, event);
+                let result = callback_call(host, invocation.callback, invocation.current_target, event, invocation.handler);
                 if invocation.once { host.release_value(invocation.callback); }
                 if result.is_err() { dispatch.report_exception("EventListener callback threw".into()); }
             }
+            crate::input_activation_bindings::complete(host, &mut dispatch)?;
             let result = host.with_dom(|dom| dom.events().dispatch_result(event))?;
             return Ok(host.boolean(result));
         }

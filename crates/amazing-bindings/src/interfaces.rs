@@ -571,6 +571,8 @@ const HTML_BODY: &[Member] = &[
     getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    method("click", O::HTMLElementClick, 0),
+    getter("onclick", O::HTMLElementOnClick), setter("onclick", O::HTMLElementSetOnClick),
     getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),
     method("blur", O::ElementBlur, 0),
@@ -643,6 +645,7 @@ const INPUT: &[Member] = &[
     getter("form", O::FormControlForm),
     getter("value", O::InputValue), setter("value", O::InputSetValue),
     getter("defaultValue", O::InputDefaultValue), setter("defaultValue", O::InputSetDefaultValue),
+    getter("indeterminate", O::InputIndeterminate), setter("indeterminate", O::InputSetIndeterminate),
     getter("checked", O::InputChecked), setter("checked", O::InputSetChecked),
     getter("defaultChecked", O::InputDefaultChecked), setter("defaultChecked", O::InputSetDefaultChecked),
     getter("valueAsNumber", O::InputValueAsNumber), setter("valueAsNumber", O::InputSetValueAsNumber),

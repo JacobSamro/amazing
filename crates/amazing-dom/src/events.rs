@@ -386,6 +386,7 @@ struct Listener {
     event_type: String,
     event_type_units: Option<Vec<u16>>,
     callback: CallbackId,
+    handler: bool,
     capture: bool,
     once: bool,
     passive: bool,
@@ -416,6 +417,7 @@ pub struct Dispatch {
     active_entry: Option<PathEntry>,
     finished: bool,
     clear_targets: bool,
+    input_activation: Option<crate::forms::InputActivation>,
     exceptions: Vec<String>,
 }
 impl Dispatch {
@@ -441,6 +443,7 @@ pub struct EventInvocation {
     pub phase: EventPhase,
     /// The listener has been removed from the native registry before invocation.
     pub once: bool,
+    pub handler: bool,
 }
 impl EventTargets {
     /// Changes whenever the effective listener set changes. A compositor can
@@ -459,7 +462,7 @@ impl EventTargets {
     pub fn listener_id_utf16(&self, target: EventTarget, units: &[u16], callback: CallbackId,
         capture: bool) -> Option<ListenerId> {
         let (event_type, event_type_units) = event_type_parts(units);
-        self.listeners.iter().find(|listener| listener.target == target
+        self.listeners.iter().find(|listener| !listener.handler && listener.target == target
             && listener.event_type == event_type && listener.event_type_units == event_type_units
             && listener.callback == callback && listener.capture == capture).map(|listener| listener.id)
     }
@@ -468,9 +471,33 @@ impl EventTargets {
     }
     pub fn listener_callbacks_utf16(&self, target: EventTarget, units: &[u16], capture: bool) -> Vec<CallbackId> {
         let (event_type, event_type_units) = event_type_parts(units);
-        self.listeners.iter().filter(|listener| listener.target == target
+        self.listeners.iter().filter(|listener| !listener.handler && listener.target == target
             && listener.event_type == event_type && listener.event_type_units == event_type_units && listener.capture == capture)
             .map(|listener| listener.callback).collect()
+    }
+    pub fn event_handler(&self, target: EventTarget, event_type: &str) -> Option<CallbackId> {
+        self.listeners.iter().find(|listener| listener.handler && listener.target == target
+            && listener.event_type == event_type).map(|listener| listener.callback)
+    }
+    /// Replacement preserves the registration position. Clearing and setting
+    /// again creates a new registration at the end of the listener list.
+    pub fn set_event_handler(&mut self, target: EventTarget, event_type: &str,
+        callback: Option<CallbackId>) -> Option<CallbackId> {
+        let old = self.listeners.iter().position(|listener| listener.handler
+            && listener.target == target && listener.event_type == event_type);
+        self.listener_generation = self.listener_generation.wrapping_add(1);
+        if let Some(index) = old {
+            let previous = self.listeners[index].callback;
+            if let Some(callback) = callback { self.listeners[index].callback = callback; }
+            else { self.listeners.remove(index); }
+            return Some(previous);
+        }
+        if let Some(callback) = callback {
+            let id = ListenerId(self.next_listener); self.next_listener += 1;
+            self.listeners.push(Listener { id, target, event_type: event_type.into(), event_type_units: None,
+                callback, handler: true, capture: false, once: false, passive: false });
+        }
+        None
     }
     pub fn create_event(&mut self, event: Event) -> EventId {
         let id = EventId(self.events.len());
@@ -494,14 +521,14 @@ impl EventTargets {
         callback: Option<CallbackId>, options: ListenerOptions) -> Option<ListenerId> {
         let callback = callback?;
         let (event_type, event_type_units) = event_type_parts(units);
-        if let Some(existing) = self.listeners.iter().find(|listener| listener.target == target
+        if let Some(existing) = self.listeners.iter().find(|listener| !listener.handler && listener.target == target
             && listener.event_type == event_type && listener.event_type_units == event_type_units
             && listener.callback == callback && listener.capture == options.capture) { return Some(existing.id); }
         let passive = options.passive.unwrap_or_else(|| tree.default_passive(target, &event_type));
         let id = ListenerId(self.next_listener);
         self.next_listener += 1;
         self.listeners.push(Listener { id, target, event_type, event_type_units, callback,
-            capture: options.capture, once: options.once, passive });
+            capture: options.capture, once: options.once, passive, handler: false });
         self.listener_generation = self.listener_generation.wrapping_add(1);
         Some(id)
     }
@@ -514,7 +541,7 @@ impl EventTargets {
         let (event_type, event_type_units) = event_type_parts(units);
         let mut removed = Vec::new();
         self.listeners.retain(|listener| {
-            let matches = listener.target == target && listener.event_type == event_type
+            let matches = !listener.handler && listener.target == target && listener.event_type == event_type
                 && listener.event_type_units == event_type_units && Some(listener.callback) == callback && listener.capture == capture;
             if matches { removed.push(listener.callback); }
             !matches
@@ -592,6 +619,7 @@ impl EventTargets {
             active_entry: None,
             finished: false,
             clear_targets,
+            input_activation: None,
             exceptions: vec![],
         })
     }
@@ -618,6 +646,7 @@ impl EventTargets {
                     }
                     let callback = listener.callback;
                     let once = listener.once;
+                    let handler = listener.handler;
                     let passive = listener.passive;
                     if once {
                         let _ = self.remove_listener_id(id);
@@ -634,6 +663,7 @@ impl EventTargets {
                         related_target: entry.adjusted_related,
                         phase: event.phase,
                         once,
+                        handler,
                     });
                 }
             }
@@ -725,11 +755,19 @@ impl Dom {
         self.events = events;
         result
     }
+    /// Complete only after next_listener has cleaned up the dispatch state.
+    /// The returned node needs trusted input then change events from bindings.
+    pub fn finish_input_activation(&mut self, dispatch: &mut Dispatch) -> Option<NodeIdx> {
+        if !dispatch.finished { return None; }
+        let state = dispatch.input_activation.take()?;
+        let canceled = self.events.event(dispatch.event).default_prevented();
+        self.complete_input_activation(state, canceled)
+    }
     pub fn begin_event_dispatch(
         &mut self, target: EventTarget, event: EventId, origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
         let mut events = std::mem::take(&mut self.events);
-        let result = events.begin_dispatch(self, target, event, origin);
+        let mut result = events.begin_dispatch(self, target, event, origin);
         if result.is_ok() {
             let roots = events.event(event).raw_path().iter().map(|target| match target {
                 EventTarget::Node(node) => self.shadow_including_ancestors(*node).into_iter()
@@ -740,6 +778,15 @@ impl Dom {
             events.event_mut(event).set_closed_path_roots(roots);
         }
         self.events = events;
+        if let Ok(dispatch) = &mut result {
+            let event = self.events.event(event);
+            if matches!(event.class(), EventClass::Mouse | EventClass::Wheel) && event.event_type() == "click" {
+                let target = dispatch.path.iter().filter(|entry| entry.at_target || event.bubbles())
+                    .filter_map(|entry| match entry.invocation { EventTarget::Node(node) => Some(node), _ => None })
+                    .find(|node| self.has_html_activation_behavior(*node));
+                dispatch.input_activation = target.and_then(|node| self.prepare_input_activation(node));
+            }
+        }
         result
     }
 }
