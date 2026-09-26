@@ -1809,3 +1809,21 @@ lost passes** across the seven-source selection (409 pass / 31 fail / 6 errors).
 Evidence: `crates/amazing-bindings/evidence/legacy-events/`.
 
 Next: routed DOMException conformance and event-handler content attributes.
+
+# DOM-B DOMException conformance ready
+
+Implementation `82bb3868`, fixed base `129cde71`. Explicit undefined uses the
+constructor defaults; native name/message/code accessors remain inherited.
+The existing constructor, 25 legacy constants and native thrown exceptions
+are covered by the full pinned WebIDL exception directory.
+
+Linux Boat gate: **2709 passed / 10 skipped**, workspace doctests **4/4**.
+Baseline owned/driver tests: **533 passed / 4 skipped**. Whole-directory WPT
+subtests **112→123 passed, 19→8 failed**, **11 gains / zero lost passes**.
+Files: **2→4 pass**, **4→2 fail**, **1 timeout**. The remaining eight failures
+need JS Error.isError/stack support; the iframe portion of exceptions.html is
+deferred for JSRT-9 → HTML-25 part 2. Its six local assertions now pass.
+
+Evidence: `crates/amazing-bindings/evidence/dom-exception/`.
+Windows deferred. Next: DOMStringMap, with numeric named-property hooks routed
+to JS runtime; handler scope/compiler facade also routed there.
