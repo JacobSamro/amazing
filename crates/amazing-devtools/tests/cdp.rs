@@ -606,3 +606,60 @@ fn browser_endpoint_pushes_target_lifecycle_events() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_dispatches_input_and_hit_tests() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Input.setIgnoreInputEvents", obj! { "ignore" => Json::Bool(true) });
+    assert_eq!(host.script().lock().unwrap().ignore_input, Some(true));
+
+    client.result(
+        "Input.dispatchMouseEvent",
+        obj! {
+            "type" => s("mousePressed"),
+            "x" => n(3.0),
+            "y" => n(4.0),
+            "button" => s("left"),
+            "buttons" => n(1.0),
+            "clickCount" => n(1.0),
+        },
+    );
+    client.result(
+        "Input.dispatchKeyEvent",
+        obj! {
+            "type" => s("keyDown"),
+            "key" => s("Enter"),
+            "code" => s("Enter"),
+            "windowsVirtualKeyCode" => n(13.0),
+        },
+    );
+    client.result(
+        "Input.dispatchTouchEvent",
+        obj! {
+            "type" => s("touchStart"),
+            "touchPoints" => Json::Array(vec![obj! { "x" => n(1.0), "y" => n(2.0), "id" => n(7.0) }]),
+        },
+    );
+    client.result("Input.insertText", obj! { "text" => s("hi") });
+
+    let script = host.script();
+    {
+        let recording = script.lock().unwrap();
+        assert_eq!(recording.mouse_events.len(), 1);
+        assert_eq!(recording.mouse_events[0].x, 3.0);
+        assert_eq!(recording.mouse_events[0].click_count, 1);
+        assert_eq!(recording.key_events[0].windows_virtual_key_code, Some(13));
+        assert_eq!(recording.touch_events[0].points[0].id, 7.0);
+        assert_eq!(recording.inserted_text, ["hi"]);
+    }
+
+    let hit = client.result("DOM.getNodeForLocation", obj! { "x" => n(5.0), "y" => n(6.0) });
+    assert_eq!(hit.get("backendNodeId").unwrap().as_u64(), Some(4));
+    assert_eq!(hit.get("frameId").unwrap().as_str(), Some("F1"));
+    assert!(hit.get("nodeId").unwrap().as_u64().unwrap() > 0);
+
+    shutdown.store(true, Ordering::Relaxed);
+}

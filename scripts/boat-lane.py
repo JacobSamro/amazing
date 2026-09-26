@@ -10,15 +10,14 @@ lanes never pay for time they do not use.
 
 Lanes share pooled sandboxes (2026-09-26). One sandbox per lane kept 24
 sandboxes billed while agents were thinking, not building; related lanes now
-share one, each in its own ~/amazing/wt/<lane> tree against one shared
-CARGO_TARGET_DIR. Cargo's build-directory lock serializes their compiles, so
-two lanes never fight over the 4 vCPUs, and dependencies stay warm for all.
+share one, each in its own ~/amazing/wt/<lane> tree with its own
+CARGO_TARGET_DIR (see target_of).
 `pool-report` measures each pool's busy time and overlap from
 .agents/.boat-runs.log (written by linux-run.sh) so hot pools can be split or
 moved to a larger type.
 
 Usage:
-  boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool>"
+  boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool> <target>"
   boat-lane.py heal <lane>                      restart it if its lazy filesystem died; print as ensure
   boat-lane.py stop <lane>
   boat-lane.py list
@@ -66,6 +65,18 @@ POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 
 def pool_of(lane: str) -> str:
     return POOL_OF.get(lane, lane)
+
+
+def target_of(lane: str) -> str:
+    """Each lane needs its own CARGO_TARGET_DIR. Cargo hashes workspace members
+    relative to the workspace root, so two lanes' trees on one sandbox produce
+    the same artifact names; with one shared target a lane linked another
+    lane's stale rlib (compositor, 2026-09-26). The pool's first lane keeps the
+    template's warm ~/amazing/target; the others build their own once."""
+    pool = POOL_OF.get(lane)
+    if pool is None or POOLS[pool][0] == lane:
+        return "amazing/target"
+    return f"amazing/targets/{lane}"
 STOPPED = {"archived", "stopped"}
 
 
@@ -183,12 +194,12 @@ def main() -> int:
         size = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--type" else "default"
         d = ensure(lane, size)
         host, port = d["sshEndpoint"].rsplit(":", 1)
-        print(f"user@{host} {port} {d['id']} {pool_of(lane)}")
+        print(f"user@{host} {port} {d['id']} {pool_of(lane)} {target_of(lane)}")
         return 0
     if cmd == "heal":
         d = heal(sys.argv[2])
         host, port = d["sshEndpoint"].rsplit(":", 1)
-        print(f"user@{host} {port} {d['id']} {pool_of(sys.argv[2])}")
+        print(f"user@{host} {port} {d['id']} {pool_of(sys.argv[2])} {target_of(sys.argv[2])}")
         return 0
     if cmd == "stop":
         sid = load_map().get(pool_of(sys.argv[2]))

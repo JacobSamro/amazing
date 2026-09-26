@@ -168,6 +168,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Runtime" => domains::runtime::dispatch(session, request),
         "DOM" => domains::dom::dispatch(session, request),
         "CSS" => domains::css::dispatch(session, request),
+        "Input" => domains::input::dispatch(session, request),
         "Network" => domains::network::dispatch(session, request),
         "Log" => domains::log::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
