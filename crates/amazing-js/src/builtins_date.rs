@@ -1269,11 +1269,14 @@ impl Interpreter {
             binary_writable_property(constructor.clone()),
         );
         // Objects with [[DateValue]] report "[object Date]". Date.prototype is
-        // itself ordinary, so this tag must live on the prototype; Test262 does
-        // not observe the (spec-invisible) distinction for Date.prototype.
+        // itself ordinary, so this tag must live on the prototype. It is made
+        // writable so an instance can still shadow it with its own
+        // @@toStringTag (symbol-tag-override-instances.js); the engine has no
+        // Exotic::Date brand, and Test262 does not observe the inherited-tag
+        // difference for Date.prototype itself.
         let _ = proto.borrow_mut().define(
             WellKnownSymbol::ToStringTag.symbol(),
-            symbol_data(JsValue::str("Date"), false, true),
+            symbol_data(JsValue::str("Date"), true, true),
         );
 
         for (name, native, length) in [
