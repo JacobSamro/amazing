@@ -25,6 +25,7 @@ for l in "$@"; do
   s="amz-$l"
   tmux kill-session -t "$s" 2>/dev/null
   tmux new-session -d -s "$s" -x 200 -y 50 -c "$wt"
+  sleep 2  # let the login shell finish its prompt before typing
   pane="$(tmux display-message -p -t "$s" '#{pane_id}')"
   python3 - "$l" "$s" "$pane" <<'PY'
 import json, sys
