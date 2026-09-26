@@ -1072,7 +1072,8 @@ def cmd_digest(args) -> int:
     problems: list[str] = []
     for lane in reg:
         session = resolve(lane)
-        raw = capture_live(session)
+        # Sub-agent lanes (no tmux session) report through files only.
+        raw = capture_live(session) if session else ""
         tmux_state = state_of(raw)
         ctx = context_pct(raw)
         st = read_status(lane)
