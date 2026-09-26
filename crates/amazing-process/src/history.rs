@@ -28,14 +28,18 @@ pub enum HistoryError {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct HistorySnapshot {
-    pub history_state: Vec<u8>,
+    /// Bounded, versioned structured-clone graph encoded by the browser adapter.
+    pub history_state: Option<Vec<u8>>,
     pub navigation_state: Vec<u8>,
     pub persisted_user_state: Vec<u8>,
     pub scroll: Vec<(u64, i32, i32)>,
 }
 impl HistorySnapshot {
     pub fn validate(&self) -> Result<(), HistoryError> {
-        if self.history_state.len() > MAX_STATE_BYTES
+        if self
+            .history_state
+            .as_ref()
+            .is_some_and(|state| state.len() > MAX_STATE_BYTES)
             || self.navigation_state.len() > MAX_STATE_BYTES
             || self.persisted_user_state.len() > MAX_STATE_BYTES
             || self.scroll.len() > MAX_SCROLL_AREAS
@@ -218,7 +222,10 @@ impl SessionHistory {
             (Some(entry), Some(source))
                 if entry.document == source
                     && self.documents.get(&source).is_some_and(|d| {
-                        d.renderer == renderer && d.status == DocumentStatus::Active
+                        d.renderer == renderer
+                            && (d.status == DocumentStatus::Active
+                                || (d.status == DocumentStatus::Discarded
+                                    && matches!(kind, CommitKind::Navigate | CommitKind::Reload)))
                     }) => {}
             _ => return Err(HistoryError::Stale),
         }
@@ -493,13 +500,40 @@ impl SessionHistory {
         memory_bytes: usize,
         now_ms: u64,
     ) -> Result<HistoryFreeze, HistoryError> {
+        let pending_allows_document = self.pending.as_ref().is_none_or(|pending| {
+            if !matches!(pending.kind, CommitKind::Navigate | CommitKind::Reload) {
+                return false;
+            }
+            if pending.source_document == Some(document) {
+                return true;
+            }
+            let Some(navigable) = self
+                .current
+                .and_then(|current| self.steps.get(current))
+                .and_then(|step| {
+                    step.entries.iter().find_map(|(nav, id)| {
+                        self.entries
+                            .get(id)
+                            .is_some_and(|entry| entry.document == document)
+                            .then_some(*nav)
+                    })
+                })
+            else {
+                return false;
+            };
+            let mut cursor = navigable;
+            while let Some(Some(parent)) = self.parents.get(&cursor) {
+                if *parent == pending.navigable {
+                    return true;
+                }
+                cursor = *parent;
+            }
+            false
+        });
         if !eligibility.eligible()
             || memory_bytes == 0
             || memory_bytes > MAX_FROZEN_BYTES
-            || self.pending.as_ref().is_some_and(|pending| {
-                pending.source_document != Some(document)
-                    || !matches!(pending.kind, CommitKind::Navigate | CommitKind::Reload)
-            })
+            || !pending_allows_document
         {
             return Err(HistoryError::NotEligible);
         }
@@ -686,13 +720,16 @@ impl SessionHistory {
     pub fn root_navigable(&self) -> u64 {
         self.root
     }
+    pub fn parent_navigable(&self, navigable: u64) -> Option<u64> {
+        self.parents.get(&navigable).copied().flatten()
+    }
 }
 
 /// Demo renderer lifecycle endpoint. It enforces document/epoch identity and
 /// acknowledges only after recording the observable event sequence.
 #[derive(Default, Clone)]
 pub struct HistoryRenderer {
-    state: Arc<Mutex<BTreeMap<u64, (u64, DocumentStatus)>>>,
+    state: Arc<Mutex<BTreeMap<u64, (u64, DocumentStatus, Option<Vec<u8>>)>>>,
     activated_once: Arc<AtomicBool>,
 }
 impl HistoryRenderer {
@@ -701,7 +738,7 @@ impl HistoryRenderer {
         self.activated_once.load(Ordering::Acquire)
             && state
                 .values()
-                .all(|(_, status)| *status != DocumentStatus::Active)
+                .all(|(_, status, _)| *status != DocumentStatus::Active)
     }
 }
 impl HistoryLifecycle for HistoryRenderer {
@@ -709,11 +746,25 @@ impl HistoryLifecycle for HistoryRenderer {
         if request.document == 0 || request.epoch == 0 {
             return Err(IpcError::Remote("token".into()));
         }
+        if request
+            .history_state
+            .as_ref()
+            .is_some_and(|state| state.0.len() > MAX_STATE_BYTES)
+        {
+            return Err(IpcError::Remote("history.state limit".into()));
+        }
         let mut state = self.state.lock().unwrap();
         if state.contains_key(&request.document) {
             return Err(IpcError::Remote("duplicate token".into()));
         }
-        state.insert(request.document, (request.epoch, DocumentStatus::Active));
+        state.insert(
+            request.document,
+            (
+                request.epoch,
+                DocumentStatus::Active,
+                request.history_state.map(|state| state.0),
+            ),
+        );
         self.activated_once.store(true, Ordering::Release);
         Ok(true)
     }
@@ -723,7 +774,7 @@ impl HistoryLifecycle for HistoryRenderer {
         }
         let mut state = self.state.lock().unwrap();
         match state.get_mut(&request.document) {
-            Some((epoch, status))
+            Some((epoch, status, _))
                 if *epoch == request.epoch && *status == DocumentStatus::Active =>
             {
                 *status = DocumentStatus::Frozen;
@@ -743,7 +794,7 @@ impl HistoryLifecycle for HistoryRenderer {
     fn restore(&self, request: HistoryRestore) -> Result<HistoryAck, IpcError> {
         let mut state = self.state.lock().unwrap();
         match state.get_mut(&request.document) {
-            Some((epoch, status))
+            Some((epoch, status, _))
                 if *epoch == request.epoch && *status == DocumentStatus::Frozen =>
             {
                 *status = DocumentStatus::Active;
@@ -763,7 +814,7 @@ impl HistoryLifecycle for HistoryRenderer {
     fn discard(&self, request: HistoryDiscard) -> Result<bool, IpcError> {
         let mut state = self.state.lock().unwrap();
         match state.get(&request.document) {
-            Some((epoch, _)) if *epoch == request.epoch => {
+            Some((epoch, _, _)) if *epoch == request.epoch => {
                 Ok(state.remove(&request.document).is_some())
             }
             _ => Err(IpcError::Remote("stale discard".into())),
@@ -772,4 +823,33 @@ impl HistoryLifecycle for HistoryRenderer {
 }
 pub fn serve_history_renderer(connection: &Arc<Connection>, endpoint: HistoryRenderer) {
     connection.bind(14, HistoryReceiver(endpoint));
+}
+
+#[cfg(test)]
+mod opaque_state_tests {
+    use super::*;
+    use crate::protocol::ByteBuf;
+
+    #[test]
+    fn renderer_retains_opaque_history_state_until_discard() {
+        let renderer = HistoryRenderer::default();
+        renderer
+            .activate(HistoryActivate {
+                document: 10,
+                epoch: 3,
+                history_state: Some(ByteBuf(vec![0, 255, 1, 0])),
+            })
+            .unwrap();
+        assert_eq!(
+            renderer.state.lock().unwrap()[&10].2,
+            Some(vec![0, 255, 1, 0])
+        );
+        renderer
+            .discard(HistoryDiscard {
+                document: 10,
+                epoch: 3,
+            })
+            .unwrap();
+        assert!(!renderer.state.lock().unwrap().contains_key(&10));
+    }
 }
