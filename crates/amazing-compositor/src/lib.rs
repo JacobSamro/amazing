@@ -4,6 +4,10 @@
 #![forbid(unsafe_code)]
 mod animation;
 mod effect_animation;
+mod css_effects;
+pub use css_effects::*;
+#[cfg(test)]
+mod css_effect_tests;
 #[cfg(test)]
 mod effect_tests;
 mod effects;
@@ -21,6 +25,8 @@ pub use effects::*;
 mod hit;
 mod paint_delta;
 mod paint_view;
+mod paint_filters;
+pub use paint_filters::*;
 mod property;
 mod property_binding;
 mod quad;

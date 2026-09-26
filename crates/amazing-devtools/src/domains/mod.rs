@@ -6,11 +6,16 @@
 
 pub mod css;
 pub mod dom;
+pub mod emulation;
+pub mod fetch;
 pub mod input;
 pub mod log;
 pub mod network;
+pub mod overlay;
 pub mod page;
+pub mod performance;
 pub mod runtime;
+pub mod security;
 pub mod target;
 
 use crate::host::{
@@ -129,6 +134,15 @@ pub(crate) fn frame_tree(tree: &FrameTree) -> Json {
             Json::Array(tree.child_frames.iter().map(frame_tree).collect()),
         ),
     ])
+}
+
+/// Encodes resource bytes as CDP text or base64, returning whether the body is
+/// base64-encoded.
+pub(crate) fn encode_body(content: crate::host::ResourceContent) -> (String, bool) {
+    match String::from_utf8(content.bytes) {
+        Ok(text) => (text, false),
+        Err(error) => (crate::base64::encode(error.as_bytes()), true),
+    }
 }
 
 /// A CSS style origin string.
