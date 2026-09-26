@@ -332,6 +332,50 @@ pub(crate) fn load_page_media_in_viewport(
     device_pixel_ratio: f32,
 ) -> PageMedia {
 
+    fn collect_image(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        page: &str,
+        media: &mut PageMedia,
+        attempted: &mut HashSet<String>,
+        viewport_width: f32,
+        device_pixel_ratio: f32,
+        detached: bool,
+    ) {
+        let environment = amazing_media::responsive::SourceEnvironment {
+            viewport_width,
+            device_pixel_ratio,
+            slot_width: None,
+            allow_auto_sizes: false,
+        };
+        let selected = crate::runtime_host_replaced_content::select_image_source(
+            dom, node, environment,
+            |query| crate::runtime_host_replaced_content::matches_image_media(query, viewport_width),
+            |mime| crate::runtime_host_replaced_content::supports_image_type(mime, true),
+        );
+        if let Some(selected) = selected {
+            let resolved = resolve_script_url(page, &selected.url);
+            let attrs = dom.attrs_of(node).unwrap_or(&[]);
+            let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str());
+            let loading = if detached {
+                // A detached image is never lazy: it has no viewport to wait for.
+                amazing_media::loading::Loading::Eager
+            } else {
+                amazing_media::loading::Loading::from_attribute(attr("loading"))
+            };
+            let decoding = amazing_media::loading::Decoding::from_attribute(attr("decoding"));
+            let mut request = amazing_media::loading::ImageRequest::default();
+            request.select(Some(&resolved));
+            if loading == amazing_media::loading::Loading::Eager {
+                request.fetch_started = true;
+                load_image(media, &resolved, attempted);
+                request.finish(request.generation, media.decoded.contains_key(&resolved));
+            }
+            media.images.push(PageImage { node, url: resolved, html_image: true, density: selected.density,
+                loading, decoding, request });
+        }
+    }
+
     fn walk(
         dom: &amazing_dom::Dom,
         node: amazing_dom::NodeIdx,
@@ -343,33 +387,7 @@ pub(crate) fn load_page_media_in_viewport(
         device_pixel_ratio: f32,
     ) {
         if dom.name(node) == Some("img") {
-            let environment = amazing_media::responsive::SourceEnvironment {
-                viewport_width,
-                device_pixel_ratio,
-                slot_width: None,
-                allow_auto_sizes: false,
-            };
-            let selected = crate::runtime_host_replaced_content::select_image_source(
-                dom, node, environment,
-                |query| crate::runtime_host_replaced_content::matches_image_media(query, viewport_width),
-                |mime| crate::runtime_host_replaced_content::supports_image_type(mime, true),
-            );
-            if let Some(selected) = selected {
-                let resolved = resolve_script_url(page, &selected.url);
-                let attrs = dom.attrs_of(node).unwrap_or(&[]);
-                let attr = |name: &str| attrs.iter().find(|(key, _)| key.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str());
-                let loading = amazing_media::loading::Loading::from_attribute(attr("loading"));
-                let decoding = amazing_media::loading::Decoding::from_attribute(attr("decoding"));
-                let mut request = amazing_media::loading::ImageRequest::default();
-                request.select(Some(&resolved));
-                if loading == amazing_media::loading::Loading::Eager {
-                    request.fetch_started = true;
-                    load_image(media, &resolved, attempted);
-                    request.finish(request.generation, media.decoded.contains_key(&resolved));
-                }
-                media.images.push(PageImage { node, url: resolved, html_image: true, density: selected.density,
-                    loading, decoding, request });
-            }
+            collect_image(dom, node, page, media, attempted, viewport_width, device_pixel_ratio, false);
         } else if let Some(attribute) = match dom.name(node) {
             Some("embed") => Some("src"),
             Some("object") => Some("data"),
@@ -425,6 +443,18 @@ pub(crate) fn load_page_media_in_viewport(
 
     let mut media = PageMedia::default();
     walk(dom, amazing_dom::NodeIdx(0), page, styled, &mut media, &mut HashSet::new(), viewport_width, device_pixel_ratio);
+    // `new Image()` and other script-detached elements load even though the
+    // document walk cannot reach them, and their decode() promises must settle.
+    // Visit every live arena slot for images the walk did not already collect.
+    let collected = media.images.iter().map(|entry| entry.node).collect::<HashSet<_>>();
+    let mut detached_attempted = media.decoded.keys().cloned().collect::<HashSet<_>>();
+    for index in 0..dom.node_count() {
+        let node = amazing_dom::NodeIdx(index as u32);
+        if dom.name(node) != Some("img") || collected.contains(&node) {
+            continue;
+        }
+        collect_image(dom, node, page, &mut media, &mut detached_attempted, viewport_width, device_pixel_ratio, true);
+    }
     media
 }
 
