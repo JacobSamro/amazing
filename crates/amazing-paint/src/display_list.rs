@@ -509,10 +509,36 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         current_color,
     );
     let border = box_.border_box;
+    // RC-31: `clip-path`'s shape/bare-box keyword can name any of the four
+    // `<geometry-box>` boxes, not just the border box `backdrop_bounds`/
+    // `mask_bounds` already use; derive the other three from data this
+    // layout box already carries (`content_box` directly, margin/border
+    // widths expanding or insetting `border_box`). An unresolved auto
+    // margin defaults to 0, matching a fully resolved layout's usual value.
+    let margin = box_.margin.unwrap_or(0.0);
+    let margin_box = Rect {
+        x: border.x - margin.left,
+        y: border.y - margin.top,
+        w: border.w + margin.left + margin.right,
+        h: border.h + margin.top + margin.bottom,
+    };
+    let content = box_.content_box;
+    let padding_box = Rect {
+        x: border.x + box_.border.left,
+        y: border.y + box_.border.top,
+        w: (border.w - box_.border.left - box_.border.right).max(0.0),
+        h: (border.h - box_.border.top - box_.border.bottom).max(0.0),
+    };
+    let geometry_boxes = crate::clip::GeometryBoxes {
+        margin: (margin_box.x, margin_box.y, margin_box.w, margin_box.h),
+        border: (border.x, border.y, border.w, border.h),
+        padding: (padding_box.x, padding_box.y, padding_box.w, padding_box.h),
+        content: (content.x, content.y, content.w, content.h),
+    };
     let clip = box_
         .style
         .get("clip-path")
-        .and_then(|value| crate::clip::ClipMask::from_css(value, (border.x, border.y, border.w, border.h)));
+        .and_then(|value| crate::clip::ClipMask::from_css(value, geometry_boxes));
     let mask_image = box_.style.get("mask-image").and_then(|value| {
         crate::mask::MaskLayer::from_css(value, box_.style.get("mask-mode").unwrap_or("match-source"))
     });

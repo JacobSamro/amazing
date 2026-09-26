@@ -70,11 +70,13 @@ fn inherited_byte_polyline_stroke_survives_non_scaling_viewbox() {
 }
 #[test]
 fn unsupported_svg_fails_whole_image_without_partial_success() {
+    // These fail because a KNOWN element's own attributes/content are
+    // invalid -- unaffected by RC-30, which only relaxes handling of
+    // elements this decoder does not recognize at all (see the sibling
+    // `unrecognized_elements_are_skipped_not_fatal` test below).
     for body in [
-        r#"<rect width="8" height="8"/><script/>"#,
         r#"<path d="M0 0"/>"#,
         r#"<g opacity="0.5"><rect width="1" height="1"/></g>"#,
-        r#"<image href="https://example.com/image.png"/>"#,
     ] {
         assert_eq!(
             decode(&svg("", body), Default::default()).unwrap_err(),
@@ -90,6 +92,23 @@ fn unsupported_svg_fails_whole_image_without_partial_success() {
         .is_err()
     );
     assert!(decode(b"<svg>", Default::default()).is_err());
+}
+#[test]
+fn unrecognized_elements_are_skipped_not_fatal() {
+    // RC-30: per the SVG 2 error-handling model, an element this decoder
+    // does not implement (here, `<script>` -- scripting stays fully out of
+    // scope per the module doc -- and the byte decoder's `<image>`, which
+    // only the inline-SVG DOM path implements) is skipped along with its
+    // subtree rather than rejecting the whole document. This reverses the
+    // pre-RC-30 expectation that these two specific cases failed closed;
+    // they were never a deliberate security boundary, just the old
+    // catch-all "anything unrecognized is fatal" policy.
+    for body in [
+        r#"<rect width="8" height="8" fill="red"/><script>alert(1)</script>"#,
+        r#"<rect width="8" height="8" fill="red"/><image href="https://example.com/image.png"/>"#,
+    ] {
+        assert_eq!(pixel(&svg("", body), 0, 0), [255, 0, 0, 255]);
+    }
 }
 #[test]
 fn svg_obeys_input_geometry_output_and_work_budgets() {

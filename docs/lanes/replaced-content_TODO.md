@@ -1432,3 +1432,126 @@ shape plus a single-layer `mask-image`. Outstanding for a future ticket, if
 requested: multi-layer masks and `mask-composite`, `mask-size`/
 `mask-position`/`mask-repeat`, and curved `path()` (needs a bezier/arc
 flattener, deliberately out of scope here to keep this ticket bounded).
+
+## RC-30 — SVG coverage for real content (2026-09-26)
+
+integrator-assist counted 121x `UnsupportedSvg` across the 52-page real-pages
+corpus. Two independent fixes, both inside `amazing-svg`.
+
+**Byte-decoder tolerance.** `amazing_svg::svg::parse` (the `<img src="*.svg">`
+byte decoder, distinct from the DOM inline-`<svg>` path) treated any element
+outside a small dispatch table as a fatal parse error, rejecting the whole
+document — not the SVG 2 error-handling model, where an unrecognized element
+(and its subtree) is skipped, not fatal. Fixed with a new `ignored:
+Vec<String>` stack alongside the existing frame stack: an open tag not in
+`is_known_element`'s whitelist (`svg g text rect circle ellipse path line
+polygon polyline`) pushes onto `ignored` instead of `append_element`, and
+everything under it — character data, further unknown children, malformed
+attributes — is silently skipped until its balanced close tag; the existing
+strictness for genuinely malformed *known* elements (duplicate attributes,
+mismatched close tags, depth limits) is unchanged. `tests/real-pages/
+generate.py`'s SVG template now prepends a `<title>` to every generated
+asset, deliberately reintroducing a realistic unknown element as a
+reproducible before/after fixture.
+
+**Real `<text>` rendering.** SVG `<text>` only ever drew pixels when
+`font-family` contained the literal substring `"Ahem"` (the WPT font); any
+real `font-family` hit an early return and drew nothing. Real text now
+routes through the same pipeline HTML text painting uses —
+`amazing_layout::font::FontSource` for advances, `amazing_paint::text`'s
+`OutlineGlyphProvider`/`RectInkProvider` for rasterized coverage bitmaps —
+with `fill`, `stroke` (an 8-compass-direction glyph-run splat at a clamped
+radius, since the glyph rasterizer has coverage bitmaps, not vector outlines,
+to stroke exactly), `text-anchor`, and `x`/`y`/`dx`/`dy`, in both the
+byte-decoder path (`finalize_text`) and the DOM path (`append_dom_text`,
+concatenating direct `Text` children). The Ahem-exact WPT path
+(`append_ahem_text`/`append_ahem_text_path`) is unconditionally unchanged,
+gated on `font-family` containing "Ahem" exactly as before. The rasterized
+run is embedded as a `Shape::Image` item so the existing per-pixel
+compositing loop paints it with no renderer changes. New `amazing-svg` ->
+`amazing-layout`/`amazing-paint` Cargo dependency edges (confirmed acyclic:
+neither, nor their transitive deps, depend back on `amazing-svg`).
+
+18 new/extended tests in `amazing-svg` cover unknown-element tolerance
+(nested, self-closing, mismatched-close-inside-ignored, unbalanced-at-EOF,
+unknown-root-still-rejected) and real-text rendering (fill, stroke widening,
+anchor shift, dx/dy offset, absurd font-size rejected, whitespace-only draws
+nothing). `crates/amazing-image/tests/svg.rs`'s
+`unsupported_svg_fails_whole_image_without_partial_success` had asserted
+`<script>`/`<image>` were fatal — true only because of the old catch-all
+policy this ticket deliberately reverses — so it was split: genuinely
+invalid cases stay in that test, a new
+`unrecognized_elements_are_skipped_not_fatal` asserts the corrected
+tolerant behavior.
+
+**Measured (real-pages corpus, 52 pages):** `UnsupportedSvg` 121 -> 0.
+**Linux gate:** `amazing-svg` 18/18; `amazing-image` 50/50; workspace
+nextest and doctests carried in the combined RC-30+RC-31 gate below.
+
+## RC-31 — `<geometry-box>` resolution and a Linux `css-masking`/`css-images` reftest pass (2026-09-26)
+
+Ran `scripts/linux-render-wpt.sh replaced-content css/css-masking` (also
+tried every `svg/*` pinned-WPT subdir — see `questions.md`, none produced
+any eligible reftest, a harness discovery gap not an engine bug) and fixed
+the largest fixable-in-lane cluster.
+
+**Root cause.** `ClipMask::from_css` (`crates/amazing-paint/src/clip.rs`)
+always resolved a `clip-path` basic shape's percentages/keywords, and a bare
+`<geometry-box>` keyword with no shape, against the border box — regardless
+of which box the CSS actually named. A bare box keyword alone was skipped
+entirely (painting fully unclipped) rather than clipping to that box.
+
+**Fix.** New `GeometryBoxes { margin, border, padding, content }` carries
+all four reference rects (computed from `LayoutBox`'s margin/padding/
+border/border_box/content_box in `display_list.rs`'s `effect_for`, the only
+non-test call site) into `ClipMask::from_css`. A bare box keyword now clips
+to that box's exact rect; `margin-box`/`border-box`/`padding-box`/
+`content-box` each resolve against their own box. Per CSS Masking's used-
+value table for non-SVG content, `fill-box` behaves like `content-box`;
+`stroke-box`/`view-box` behave like `border-box` — confirmed directly
+against the `<meta name="assert">` text of WPT's own
+`clip-path-polygon-010/011/012.html`. (First pass lumped all three SVG-only
+keywords into `content-box`, which is right for `fill-box` but wrong for
+`stroke-box`/`view-box`; caught by re-running the reftest sweep after a
+compile sanity check and diffing the before/after mismatch lists, which
+surfaced `-011`/`-012` as new regressions — fixed by splitting the
+`MaskBox` match arm, no scope change.) No CSS or layout grammar/data was
+missing — everything needed (`amazing_css::effects::MaskBox`,
+`amazing_layout::LayoutBox`'s public box fields) already existed — so this
+stayed entirely inside `amazing-paint`, no cross-lane edit.
+
+**Bonus in-lane fix, same series.** While clustering `css-images`
+mismatches, found `amazing_paint::gradient::raster` rejected any gradient
+with fewer than two color stops outright (three redundant length guards),
+even though CSS Images 3 allows a single color-stop gradient
+(`linear-gradient(green)`), rendering as a solid fill. `sample()`/
+`resolve_stops()` already degenerate correctly for one stop; only the
+early-rejection guards were wrong (loosened `< 2` to `< 1`/`is_empty()`).
+One pre-existing test asserted the old wrong rejection for
+`linear-gradient(to right, red)` and was split into a corrected positive
+test (`single_stop_gradient_paints_a_solid_fill`).
+
+**Measured, Linux numbers (`scripts/linux-render-wpt.sh`):**
+- `css/css-masking`: pass 50 -> 55, mismatch 53 -> 48 (zero regressions,
+  full before/after diff reconciled).
+- `css/css-images`: pass 85 -> 92, mismatch 56 -> 49.
+
+Remaining `css-masking` mismatches are out of lane scope (see `questions.md`
+for the full breakdown): legacy `clip` property and CSS Shapes 2 `rect()`/
+`xywh()`/`shape()`/`circle()` corner keywords/`polygon() round` all need new
+`amazing-css` grammar (~28 tests total); `marginBox-1b/1c/1d` and
+`contentBox-1e` need `outline` painting, which doesn't exist yet for any
+element (4 tests, not a clip bug); multi-layer `mask-composite` is RC-29's
+already-documented deferred scope (4 tests). Four `gradient-single-stop-*`
+variants (hue-interpolation-method specific) remain unresolved in
+`css-images`, unrelated to the single-stop fix.
+
+**Linux gate (combined RC-30 + RC-31):** workspace nextest **3,092 passed /
+0 failed / 13 skipped**; workspace doctests **4 passed / 0 failed**
+(`amazing-a11y`, `amazing-devtools`, `amazing-html`, `amazing-js`);
+`amazing-paint` **172 passed / 0 failed** (up from 168 at RC-29: +2 in
+`clip.rs`'s test module net, +2 in `gradient.rs`, +1 corrected in
+`background_tests.rs`); `amazing-compositor` unaffected — `ClipMask`'s own
+enum shape didn't change, only `from_css`'s parameter type — confirmed with
+a fresh `cargo build -p amazing-compositor --locked` plus its own test
+suite (paint_filters 4/4, paint_view_pages 10/10, parallel_tile_pages 1/1).
