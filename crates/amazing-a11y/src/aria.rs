@@ -7,7 +7,7 @@
 //! `open`) is merged in with ARIA taking precedence, matching HTML-AAM.
 
 use amazing_dom::{Dom, NodeIdx};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::host;
 use crate::role::{self, Role};
@@ -249,10 +249,17 @@ pub fn compute_states(dom: &Dom, node: NodeIdx, role: Role) -> AxStates {
         states.readonly = readonly;
     }
 
+    // A11Y-12: unlike `aria-pressed` (genuinely optional metadata, absent by
+    // default — see `wai-aria/pressed/pressed.tentative.html`'s "missing
+    // aria-pressed" case, which expects `"undefined"`), `aria-checked` has a
+    // real spec default of `false` for a checkable role with no native
+    // checked state either (confirmed by `wai-aria/checked/
+    // checked.tentative.html`'s "missing aria-checked" case, which expects
+    // `"false"`, not `"undefined"`).
     states.checked = match aria_tristate(dom, node, "aria-checked") {
         Tristate::Undefined => host::native_checked(dom, node)
             .map(|checked| if checked { Tristate::True } else { Tristate::False })
-            .unwrap_or(Tristate::Undefined),
+            .unwrap_or(Tristate::False),
         other => other,
     };
     states.pressed = aria_tristate(dom, node, "aria-pressed");
@@ -293,8 +300,15 @@ pub fn compute_states(dom: &Dom, node: NodeIdx, role: Role) -> AxStates {
     states
 }
 
-/// Computes the typed properties for `node`.
-pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties {
+/// Computes the typed properties for `node`. `ids` is the document-wide
+/// id -> node index map, threaded through to `role::role_for` for
+/// `native_set_position`'s sibling role comparison.
+pub fn compute_properties(
+    dom: &Dom,
+    ids: &HashMap<String, NodeIdx>,
+    node: NodeIdx,
+    role: Role,
+) -> AxProperties {
     let mut props = AxProperties {
         level: aria_u32(dom, node, "aria-level"),
         value_now: aria_number(dom, node, "aria-valuenow"),
@@ -360,7 +374,7 @@ pub fn compute_properties(dom: &Dom, node: NodeIdx, role: Role) -> AxProperties 
         .unwrap_or_default();
 
     // Native set position for collection items when ARIA does not provide it.
-    let (native_pos, native_size) = native_set_position(dom, node, role);
+    let (native_pos, native_size) = native_set_position(dom, ids, node, role);
     if props.pos_in_set.is_none() {
         props.pos_in_set = native_pos;
     }
@@ -395,7 +409,12 @@ fn non_empty(value: Option<&str>) -> Option<String> {
 /// Native `posinset`/`setsize` for collection items: the item's 1-based index
 /// among its siblings that resolve to the same role. Only reported when the set
 /// has more than one member and ARIA did not supply the values.
-fn native_set_position(dom: &Dom, node: NodeIdx, role: Role) -> (Option<u32>, Option<u32>) {
+fn native_set_position(
+    dom: &Dom,
+    ids: &HashMap<String, NodeIdx>,
+    node: NodeIdx,
+    role: Role,
+) -> (Option<u32>, Option<u32>) {
     if !matches!(
         role,
         Role::Listitem
@@ -413,7 +432,7 @@ fn native_set_position(dom: &Dom, node: NodeIdx, role: Role) -> (Option<u32>, Op
     let mut position = None;
     let mut size = 0u32;
     for child in dom.children(parent) {
-        if role::role_for(dom, child) == role {
+        if role::role_for(dom, ids, child) == role {
             size += 1;
             if child == node {
                 position = Some(size);

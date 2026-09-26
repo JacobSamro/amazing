@@ -1,0 +1,44 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/final-after/tables/report.json",
+  "after": "/home/user/amazing/out/layout/layout23/candidate1/tables/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 386,
+  "before_counts": {
+    "pass": 309,
+    "mismatch": 77,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 297,
+    "mismatch": 89,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-tables__absolute-tables-016.html"
+  ],
+  "losses": [
+    "CSS2__tables__height-width-inline-table-001.xht",
+    "CSS2__tables__height-width-inline-table-001a.xht",
+    "CSS2__tables__height-width-inline-table-001b.xht",
+    "CSS2__tables__height-width-inline-table-001c.xht",
+    "CSS2__tables__height-width-inline-table-001d.xht",
+    "CSS2__tables__height-width-inline-table-001e.xht",
+    "CSS2__tables__table-anonymous-objects-168.xht",
+    "CSS2__tables__table-anonymous-objects-178.xht",
+    "CSS2__tables__table-anonymous-objects-180.xht",
+    "CSS2__tables__table-anonymous-objects-182.xht",
+    "CSS2__tables__table-anonymous-objects-184.xht",
+    "CSS2__tables__table-anonymous-objects-190.xht",
+    "CSS2__tables__table-anonymous-objects-192.xht"
+  ],
+  "actual_hash_changes": 15,
+  "reference_hash_changes": 3,
+  "before_projection_sha256": "b60cc98f293955bca4234763d339440309e1babbc4576d33ced3076ecf2626f9",
+  "after_projection_sha256": "1d935ea5cab5ef016034d714047a8967e43d10373b913138dd22a7c40b0a1ef4"
+}

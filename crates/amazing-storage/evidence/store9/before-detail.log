@@ -1,0 +1,162 @@
+{"base": "before-widened", "files": 54, "statuses": {"error": 6, "fail": 24, "pass": 22, "timeout": 2, "unsupported": 0}, "totals": {"error": 0, "fail": 123, "notrun": 0, "pass": 258, "timeout": 0}}
+### IndexedDB/idbcursor_delete_objectstore.any.js [fail]
+  - "If the cursor's source or effective object store has been deleted, the implementation MUST throw a DOMException of type InvalidStateError" status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Attempt to remove a record in a read-only transaction' status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Throw InvalidStateError when the cursor is being iterated' status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+### IndexedDB/idbcursor_update_objectstore.any.js [fail]
+  - "Attempt to modify a record after the cursor's source or effective object store has been deleted. The implementation MUST throw a DOMException of type InvalidStateError" status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Attempt to modify a record in a read-only transaction' status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Throw DataCloneError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw [stringifying object threw TypeError: cannot convert object to primitive with type object] that is not a DOMException DataCloneError: property "code" is equal to undefined, expected 25'
+  - 'Throw DataError' status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Throw InvalidStateError when the cursor is being iterated' status=fail message='assert_throws_dom: function "function func() { [native code] }" did not throw'
+  - 'Modify a record in the object store ' status=fail message='assert_equals: expected (string) "New information!" but got (undefined) undefined'
+### IndexedDB/idbindex-multientry.any.js [timeout]
+  - 'Array keyPath with multiEntry' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: Constraint" that is not a DOMException InvalidAccessError: property "code" is equal to undefined, expected 15'
+### IndexedDB/idbindex_get.any.js [fail]
+  - 'get() throws InvalidStateError when the index is deleted' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: NotFound" that is not a DOMException InvalidStateError: property "code" is equal to undefined, expected 11'
+  - 'get() throws InvalidStateError on index deleted by aborted upgrade' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TransactionInactiveError: Transaction is inactive" that is not a DOMException InvalidStateError: property "code" is equal to 0, expected 11'
+### IndexedDB/idbindex_getAll.any.js [fail]
+  - 'Get all values with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbindex_getAllKeys.any.js [fail]
+  - 'Get all keys with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbindex_getKey.any.js [fail]
+  - 'getKey() throws InvalidStateError when the index is deleted' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: NotFound" that is not a DOMException InvalidStateError: property "code" is equal to undefined, expected 11'
+  - 'getKey() throws InvalidStateError on index deleted by aborted upgrade' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TransactionInactiveError: Transaction is inactive" that is not a DOMException InvalidStateError: property "code" is equal to 0, expected 11'
+### IndexedDB/idbindex_openCursor.any.js [fail]
+  - 'If the index is deleted, throw InvalidStateError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: NotFound" that is not a DOMException InvalidStateError: property "code" is equal to undefined, expected 11'
+  - 'If the index is deleted by an aborted upgrade, throw InvalidStateError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TransactionInactiveError: Transaction is inactive" that is not a DOMException InvalidStateError: property "code" is equal to 0, expected 11'
+### IndexedDB/idbindex_openKeyCursor.any.js [fail]
+  - 'Throw InvalidStateError when the index is deleted' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: NotFound" that is not a DOMException InvalidStateError: property "code" is equal to undefined, expected 11'
+  - 'Throw InvalidStateError on index deleted by aborted upgrade' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TransactionInactiveError: Transaction is inactive" that is not a DOMException InvalidStateError: property "code" is equal to 0, expected 11'
+### IndexedDB/idbkeyrange-includes.any.js [error]
+DETAIL: worker exited: signal: 6 (SIGABRT) (core dumped)
+### IndexedDB/idbkeyrange.any.js [fail]
+  - 'IDBKeyRange.lowerBound() - returns an IDBKeyRange and the properties are set correctly' status=fail message='assert_true: keyRange.upperOpen expected true got false'
+  - 'IDBKeyRange.upperBound() - returns an IDBKeyRange and the properties are set correctly' status=fail message='assert_true: keyRange.lowerOpen expected true got false'
+### IndexedDB/idbobjectstore_add.any.js [fail]
+  - 'add() a record where a value being indexed does not meet the constraints of a valid key' status=fail message='DataError'
+  - 'If the object store has been deleted, the implementation must throw a DOMException of type InvalidStateError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "NotFoundError: NotFoundError" that is not a DOMException InvalidStateError: property "code" is equal to 8, expected 11'
+  - 'add() record with same key already exists' status=fail message='value is not callable'
+  - 'add() where an index has unique:true specified' status=fail message='value is not callable'
+### IndexedDB/idbobjectstore_clear.any.js [fail]
+  - 'If the object store has been deleted, the implementation must throw a DOMException of type InvalidStateError ' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "NotFoundError: NotFoundError" that is not a DOMException InvalidStateError: property "code" is equal to 8, expected 11'
+### IndexedDB/idbobjectstore_count.any.js [fail]
+  - 'If the object store has been deleted, the implementation must throw a DOMException of type InvalidStateError ' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "NotFoundError: NotFoundError" that is not a DOMException InvalidStateError: property "code" is equal to 8, expected 11'
+### IndexedDB/idbobjectstore_createIndex.any.js [error]
+DETAIL: TypeError: value is not callable
+  - 'Returns an IDBIndex and the properties are set correctly' status=fail message='assert_equals: objectStore expected object "[object IDBObjectStore]" but got object "[object IDBObjectStore]"'
+  - 'Attempt to create an index that requires unique values on an object store already contains duplicates' status=fail message='Constraint'
+  - 'Event order when unique constraint is triggered' status=fail message='Constraint'
+  - 'If an index with the name name already exists in this object store, the implementation must throw a DOMException of type ConstraintError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: Constraint" that is not a DOMException ConstraintError: property "code" is equal to undefined, expected 0'
+  - 'ConstraintError vs. SyntaxError. Index name check should precede syntax check of the key path' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "SyntaxError: Invalid key path" that is not a DOMException ConstraintError: property "code" is equal to 12, expected 0'
+  - 'Auto-Increment Primary Key - invalid key values elsewhere' status=fail message='DataError'
+### IndexedDB/idbobjectstore_delete.any.js [fail]
+  - 'If the object store has been deleted, the implementation must throw a DOMException of type InvalidStateError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "NotFoundError: NotFoundError" that is not a DOMException InvalidStateError: property "code" is equal to 8, expected 11'
+  - 'delete() removes all of the records in the range' status=fail message='assert_equals: Count after deleting             3-6 from 10 expected 6 but got 10'
+### IndexedDB/idbobjectstore_deleteIndex.any.js [fail]
+  - 'IDBObjectStore.deleteIndex() removes the index' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "TypeError: NotFound" that is not a DOMException NotFoundError: property "code" is equal to undefined, expected 8'
+### IndexedDB/idbobjectstore_getAll-options.any.js [fail]
+  - 'Single item get' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Single item get (generated key)' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'getAll on empty object store' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get all values' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get all with large values' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Test maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get bound range' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get bound range with maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get upper excluded' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get lower excluded' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get bound range (generated) with maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Non existent key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'zero maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Max value count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Query with empty range where  first key < upperBound' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Query with empty range where lowerBound < last key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction: next' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction: prev' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction: nextunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction: prevunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction and query' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Direction, query and count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAll". expected true got false'
+  - 'Get all values with both options and count' status=fail message='Invalid IndexedDB key'
+  - 'Get all values with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbobjectstore_getAll.any.js [fail]
+  - 'Test maxCount' status=fail message='Invalid IndexedDB key'
+  - 'Max value count' status=fail message='Invalid IndexedDB key'
+  - 'Get all values with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbobjectstore_getAllKeys-options.any.js [fail]
+  - 'Single item get' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Single item get (generated key)' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Test maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get bound range' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get bound range with maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get upper excluded' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get lower excluded' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get bound range (generated) with maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Non existent key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'zero maxCount' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Max value count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Query with empty range where  first key < upperBound' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Query with empty range where lowerBound < last key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction: next' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction: prev' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction: nextunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction: prevunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction and query' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Direction, query and count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllKeys". expected true got false'
+  - 'Get all keys with both options and count' status=fail message='Invalid IndexedDB key'
+  - 'Get all keys with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbobjectstore_getAllKeys.any.js [fail]
+  - 'Test maxCount' status=fail message='Invalid IndexedDB key'
+  - 'Max value count' status=fail message='Invalid IndexedDB key'
+  - 'Get all keys with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbobjectstore_getAllRecords.any.js [fail]
+  - 'Single item' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Single item with generated key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Empty object store' status=fail message='value is not callable'
+  - 'Get all records' status=fail message='value is not callable'
+  - 'Get all records with empty options' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Get all records with large values' status=fail message='value is not callable'
+  - 'Count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with bound range' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with bound range and count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with upper excluded bound range' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with lower excluded bound range' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with bound range and count for generated keys' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with nonexistent key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Zero count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Max value count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with empty range where first key < upperBound' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Query with empty range where lowerBound < last key' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction: next' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction: prev' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction: nextunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction: prevunique' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction and query' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Direction, query and count' status=fail message='assert_true: "[object IDBObjectStore]" must support "getAllRecords()" to use an "IDBGetAllOptions" dictionary with "getAllRecords". expected true got false'
+  - 'Get all records with transaction.commit()' status=fail message='value is not callable'
+  - 'Get all records with invalid query keys' status=fail message='unreachable transfer entry'
+### IndexedDB/idbobjectstore_getKey.any.js [timeout]
+### IndexedDB/idbobjectstore_openKeyCursor.any.js [error]
+DETAIL: worker exited: signal: 6 (SIGABRT) (core dumped)
+### IndexedDB/idbobjectstore_put.any.js [fail]
+  - 'put() a record where a value being indexed does not meet the constraints of a valid key' status=fail message='DataError'
+  - 'If the object store has been deleted, the implementation must throw a DOMException of type InvalidStateError' status=fail message='assert_throws_dom: function "function func() { [native code] }" threw object "NotFoundError: NotFoundError" that is not a DOMException InvalidStateError: property "code" is equal to 8, expected 11'
+  - 'put() where an index has unique:true specified' status=fail message='value is not callable'
+### IndexedDB/idbtransaction_abort.any.js [fail]
+  - 'Abort event should fire during transaction' status=fail message='Constraint'
+### IndexedDB/idbtransaction_objectStoreNames.any.js [error]
+DETAIL: TypeError: value is not callable
+  - 'IDBTransaction.objectStoreNames - during upgrade transaction' status=fail message='assert_array_equals: transaction objectStoreNames should have new store lengths differ, expected array ["s1"] length 1, got [] length 0'
+  - 'IDBTransaction.objectStoreNames - unusual names' status=fail message='ConstraintError'
+### IndexedDB/keypath.any.js [fail]
+  - "undefined - array loop -> stringify becomes ['']" status=fail message='maximum call stack size exceeded'
+### IndexedDB/keypath_invalid.any.js [fail]
+  - 'Invalid keyPath - []' status=fail message='assert_throws_dom: createObjectStore with keyPath function "function func() { [native code] }" did not throw'
+### IndexedDB/transaction-scheduling-ordering.any.js [error]
+DETAIL: [object]
+  - 'Verify Indexed DB transactions are ordered per spec' status=fail message='Transaction is inactive'
+### IndexedDB/upgrade-transaction-lifecycle-committed.any.js [fail]
+  - 'in a setTimeout(0) callback after the complete event is fired for a committed transaction' status=fail message='assert_equals: The open request\'s transaction should be reset after oncomplete microtasks expected null but got object "[object IDBTransaction]"'
+### IndexedDB/upgrade-transaction-lifecycle-user-aborted.any.js [error]
+DETAIL: TypeError: value is not callable

@@ -1,0 +1,38 @@
+{
+  "ticket": "JSRT-15 Proxy support",
+  "before_sha": "76af29d4",
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "workspace": {
+    "nextest": "3122 passed, 14 skipped, 53.929s",
+    "doctests": "all ok (amazing-js: 1 passed)"
+  },
+  "crate_amazing_js": {
+    "unit_tests": "384 passed, 1 skipped (383 pre-existing + 1 new proxy_traps_and_invariants_behave_per_spec)",
+    "doctest": "1 passed"
+  },
+  "full_corpus": {
+    "before_classification_sha256": "2d2326e719c8777bb432870ee27f740db6ad952254441a83ceafad93a12bbf1d",
+    "after_classification_sha256": "6cd9c029a5b907cfd3d794318c8a899053977b478d88c7eea59043bc0c3dd21b",
+    "repeat_classification_sha256": "6cd9c029a5b907cfd3d794318c8a899053977b478d88c7eea59043bc0c3dd21b",
+    "repeat_hashes_match": true,
+    "before_summary": {
+      "discovered": 53872,
+      "files": {"pass": 36335, "fail": 16795, "timeout": 13, "unsupported": 435, "skipped": 294},
+      "variant_count": 102918,
+      "variants": {"pass": 70468, "fail": 31817, "timeout": 26, "unsupported": 607, "skipped": 0}
+    },
+    "after_summary": {
+      "discovered": 53872,
+      "files": {"pass": 36821, "fail": 16307, "timeout": 15, "unsupported": 435, "skipped": 294},
+      "variant_count": 102918,
+      "variants": {"pass": 71427, "fail": 30853, "timeout": 31, "unsupported": 607, "skipped": 0}
+    },
+    "gained_variants_count": 959,
+    "gained_distinct_files_count": 486,
+    "lost_variants_count": 0,
+    "lost_distinct_files_count": 0,
+    "lost_variants": [],
+    "note": "An earlier intermediate run (before the two extra bug fixes below were both applied) lost 2 variants (1 file: staging/sm/Proxy/global-receiver.js), diagnosed and fixed before this final gate: legacy_has_property's own prototype-chain walk (interp_legacy.rs) checked window_proxy_has at each step but not the new proxy_has, so a Proxy discovered by walking globalThis's prototype chain (Object.setPrototypeOf(globalThis, proxy)) for an unqualified identifier reference was silently skipped. The final numbers above are zero-loss."
+  },
+  "method": "linux-run.sh js-runtime, fixed base 76af29d4 (uncommitted Proxy edits on top). Baseline Test262 run at --ref 76af29d4 (no Proxy code). After-run against the working tree. Per-(path,variant) diff computed directly from both runs' full `records` arrays (test262.py's --compare only checks classification-hash stability between two runs of the SAME binary, not a semantic before/after diff, so the gained/lost counts here come from a custom flatten+diff over records, not --compare's own output). Repeat run of the identical after-binary against itself confirms classification_sha256 stability (no flakiness)."
+}

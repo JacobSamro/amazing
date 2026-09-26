@@ -713,3 +713,478 @@ actually paint highlights (would need the `compositor` lane); per-line-box
 `getContentQuads` for inline content; per-argument `RemoteObject`s for
 console calls; `ownProperties=false` vs `true`; stylesheet/image
 `Network.*` events; `Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-20 — Debugger domain (enable/scriptParsed/getScriptSource/
+setBreakpointByUrl/pause/resume) + Page.captureScreenshot — done
+
+Coordinator's ticket: `Debugger.enable`, `scriptParsed` for classic and
+module scripts, `getScriptSource`, `setBreakpointByUrl` at line granularity,
+`pause`/`resume`, a minimal engine hook in `amazing-js` (with any further
+interpreter-side need filed to js-runtime), and `Page.captureScreenshot`.
+
+- `Page.captureScreenshot` was already fully real since CDP-17 (`PageOwner::
+  capture_screenshot` through `amazing_canvas::encode_png`); re-verified
+  (still passing, plus a fresh assertion in this ticket's own end-to-end
+  test) rather than reimplemented.
+- The `amazing-devtools` protocol layer for the whole `Debugger` domain
+  (dispatch, JSON serialization, `ScriptInfo`/`ScriptLocation`/`CallFrame`/
+  `PausedEvent`) already existed from an earlier generic-protocol ticket —
+  this ticket's actual delta is entirely the driver
+  (`runtime_host_devtools.rs`) plus one small addition to `amazing-js`.
+- **New `amazing-js` seam** (`crates/amazing-js/src/debug_hook.rs`): a
+  `DebugHook` trait (`on_statement(&mut self, script_id, url, line)`) and
+  `SharedDebugHook = Rc<RefCell<dyn DebugHook>>`, plus
+  `Interpreter::set_debug_hook`/`set_current_script`. Wired into TWO call
+  sites: `exec_stmt`'s own top (the choke-point for everything except a
+  bare top-level expression statement), and the top-level program loop's own
+  fast path for `StmtKind::Expression` — that fast path bypasses
+  `exec_stmt` entirely for performance, and without its own hook call every
+  bare `expr;` statement (which is what most `Runtime.evaluate` calls are)
+  would be invisible to a line breakpoint. Confirmed this the hard way: the
+  first version only hooked `exec_stmt` and the breakpoint-hit test found
+  zero hits until the fast path got its own call too.
+- **Driver-side state** (`PageOwner`): `scripts: Vec<ScriptRecord>` (id,
+  url, source, extent, hash) for `getScriptSource`; `scripts_parsed:
+  VecDeque<ScriptInfo>` only enqueued once `Debugger.enable` has actually
+  been called — an unconditional enqueue at parse time would double-report
+  every script the page loaded before the client ever connected, since
+  `debugger_enabled(true)` backfills every already-known script; breakpoints/
+  pause-flag/paused-queue are `Rc<RefCell<_>>` cells shared directly with a
+  `DriverDebugHook` living inside the interpreter, not called back into
+  `PageOwner` — the hook fires from deep inside a `PageOwner` method that
+  already holds `&mut self`, so a callback that tried to re-enter `PageOwner`
+  would need a second, disallowed `&mut` borrow. Only plain data (URL/line
+  comparisons, a one-shot bool, an event queue) crosses that boundary.
+- `setBreakpointByUrl` matches by URL string (no regex) against every
+  script's own recorded extent, converts CDP's 0-based `lineNumber` to
+  `amazing_js`'s 1-based `Span::start.line` once at set time, and returns
+  real, currently-resolvable `locations` (empty, not an error, if the line
+  is past every known script). `condition` is accepted but never evaluated.
+- Module scripts (`<script type="module">`) are collected (a new
+  `collect_module_scripts`, mirroring `cmd::js::collect_script_text`'s walk)
+  and reported via `scriptParsed`/`getScriptSource` with real source, but
+  never executed — this engine still does not support ES modules
+  (`cmd::js::is_classic_javascript_type`'s own doc comment); CDP-20's delta
+  is reporting them honestly instead of `collect_script_text` silently
+  dropping them.
+- **The real architectural limit, confirmed and filed, not worked around**:
+  this driver cannot suspend JS execution mid-statement (single-threaded
+  tree-walking interpreter, no coroutine mechanism; the driver's one page
+  thread can't service a `Debugger.resume` while blocked inside a script it
+  is currently running). `Debugger.pause` arms a one-shot flag the *next*
+  statement that actually runs reports as `Debugger.paused` (`reason:
+  "other"`) — real, but after the fact. A genuine breakpoint hit is likewise
+  real but post-hoc: the hook detects the match and queues `Debugger.paused`
+  (`reason: "Breakpoint"`, `hitBreakpoints` set) before the statement
+  finishes, not before it starts. `stepInto`/`stepOver`/`stepOut`/
+  `evaluateOnCallFrame` stay `Unsupported` — there is no suspended call
+  stack for any of them to act on. Filed a heads-up (not a blocking request)
+  to `.agents/js-runtime/questions.md`: real synchronous pause/resume/step
+  needs the interpreter to expose a resumable/steppable execution API
+  (continuation state in the bytecode VM, or a fiber the hook can block on
+  while a separate loop services protocol commands) — a genuine
+  interpreter-level change, correctly out of this ticket's/lane's scope.
+- Proof — one end-to-end WebSocket test
+  (`end_to_end_debugger_domain_scripts_breakpoints_and_pause`): `enable`
+  backfills `scriptParsed` for both a classic and a module script parsed
+  during the page's synchronous initial load (before this client ever
+  connected); `getScriptSource` returns each one's real text;
+  `setBreakpointByUrl` resolves a real location for the script whose extent
+  covers the line and an empty array for one that doesn't; a genuine
+  breakpoint hit (set up by exploiting the driver's own documented
+  script-attribution simplification — a later `Runtime.evaluate` still runs
+  "as" the last top-level script the driver tagged) produces a real
+  `Debugger.paused` with the right `hitBreakpoints`/`reason`;
+  `removeBreakpoint` silences it; `Debugger.pause` fires a forced
+  `reason: "other"` pause on the next statement, and `Debugger.resume`
+  clears it before it fires; `stepInto`/`evaluateOnCallFrame` return real
+  CDP errors; `Page.captureScreenshot` still decodes to a real PNG. Also
+  caught, mid-write: every event here is queued synchronously during its
+  triggering command but only flushed by the server's own poll loop *after*
+  that command's reply is sent (`Connection::run`: `dispatch_message` then
+  `pump()`), so it shows up in the *next* command's push events, not the
+  triggering command's own — the same "nudge" pattern CDP-18's network/
+  console tests already used, generalized here into a small
+  `evaluate_and_collect` test helper.
+
+Known limitations, newly documented: no true synchronous pause/resume/step
+(see above); script identity is coarse (every statement is attributed to
+whichever top-level script was tagged most recently — an inline handler,
+timer callback, or `Runtime.evaluate` call all inherit that, not their own
+identity); script line/column extents are relative to the script's own text,
+not its position in the containing HTML (`startLine`/`startColumn` always
+`0`); `hash` is a `DefaultHasher` (SipHash) digest, not V8's algorithm;
+`setBreakpointByUrl`'s `url` is literal-only, `condition` is unevaluated.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3133
+passed, 0 failed, 14 skipped; all workspace doctests passed (amazing-js 1,
+amazing-devtools 1, everything else 0). Committed as `27128c44`. Cross-lane
+seam filed to `.agents/js-runtime/questions.md` (heads-up, not blocking).
+
+Boundary candidates for a future ticket: real synchronous pause/resume/step
+(js-runtime/js-vm, needs a resumable execution API); per-execution-context
+script identity instead of "last top-level script tagged"; conditional
+breakpoints; `urlRegex` support; HTML-relative script source locations.
+
+## CDP-21 — Network.setCacheDisabled/setExtraHTTPHeaders, Emulation.
+setDeviceMetricsOverride, Input.insertText — done
+
+Coordinator's ticket: the four methods above, each with its own end-to-end
+test.
+
+- Unlike CDP-19/20, the `amazing-devtools` protocol layer was NOT already
+  complete for two of these: `Network.setCacheDisabled` existed only as a
+  dispatch arm that never called any host method, and
+  `Network.setExtraHTTPHeaders` did not exist anywhere in the protocol layer.
+  Added both as new `DevToolsSession` trait methods in `host.rs`
+  (`set_cache_disabled(&mut self, disabled: bool)`,
+  `set_extra_http_headers(&mut self, headers: &[(String, String)])`,
+  both `Ok(())`-by-default) and a new/rewired dispatch arm in
+  `domains/network.rs`. `Emulation.setDeviceMetricsOverride`/
+  `clearDeviceMetricsOverride` and `Input.insertText` already had full
+  protocol-layer wiring from an earlier generic-protocol ticket; this ticket's
+  delta there is entirely the driver.
+- **No real HTTP cache to disable** (confirmed via grep: `amazing-net` has no
+  cache subsystem at all), so `Network.setCacheDisabled`'s real, testable
+  effect is adding `Cache-Control: no-cache`/`Pragma: no-cache` request
+  headers to every future fetch — an honest, wire-observable substitute
+  matching what a real browser also does over the wire.
+  `Network.setExtraHTTPHeaders` is a full replace each call, matching CDP.
+- **Both survive a `Page.navigate` reload**, which is a genuine
+  chicken-and-egg problem: a reload replaces the whole `PageOwner`
+  (`navigate()`'s `*self = reloaded`), and the very first document fetch
+  *of that replacement* needs to already carry the headers. Solved by
+  threading `extra_headers`/`cache_disabled` as explicit parameters into
+  `PageOwner::fetch_and_load` itself, with `navigate()` passing its own
+  current state forward, rather than trying to inject them onto the
+  `PageOwner` after construction.
+- **`Emulation.setDeviceMetricsOverride`'s width/height are read through two
+  new helpers, `PageOwner::effective_width()`/`effective_fixed_height()`**
+  (override when set, else the page's own base width / auto height), and
+  every layout/render call site was switched to go through them:
+  `layout_metrics`, `hit_test_node`, `get_box_model`,
+  `media_environment` (feeds `getComputedStyleForNode`'s media query
+  environment), `capture_screenshot`, `full_ax_tree`. Proven with a real
+  `Page.captureScreenshot` PNG decoded to check its `IHDR` width/height
+  matches the override, and `Page.getLayoutMetrics`' `contentSize.width`
+  before/during/after the override and its clear.
+- `height: 0` (a real, documented CDP value) keeps auto-height rather than
+  fixing it at `0` — matches real Chrome's own "don't override height"
+  convention, and maps directly onto this engine's pre-existing
+  `paint_host_surface(..., fixed_height: Option<u32>, ...)` convention where
+  `None` already meant the same thing.
+- The override does NOT ride along with a reload the same way headers do —
+  there's no "base height" field to bake it into (unlike width). `navigate()`
+  instead captures `override_width`/`override_fixed_height`/
+  `device_scale_factor` before fetching and restores them onto the
+  replacement `PageOwner` afterward.
+- `deviceScaleFactor` is stored; `mobile`/`screenWidth`/`screenHeight`/
+  `positionX`/`positionY`/`dontSetVisibleSize`/orientation are accepted but
+  not applied — this driver's raster path has no separate screen size,
+  window position, or orientation concept to honor them against.
+- **`Input.insertText` reuses real JS bindings instead of reimplementing DOM
+  manipulation in the driver**: synthesizes and runs a small JS snippet
+  (`document.activeElement`, its `value` setter, `new Event('input', {bubbles:
+  true})`, `dispatchEvent`) through the existing `scheduler.run_script`. No
+  caret/selection model, so it always appends at the end; returns
+  `HostError::Unsupported` when nothing focused has a `value` property (e.g.
+  a `contenteditable` element — real rich-text insertion is out of scope).
+- Proof — two new end-to-end WebSocket tests:
+  `end_to_end_network_set_cache_disabled_and_extra_headers_reach_the_wire`
+  (real fixture HTTP server records the raw request head of both the initial
+  navigate and a reload; both `Cache-Control`/`Pragma: no-cache` and the
+  extra header are found on both) and
+  `end_to_end_device_metrics_override_and_insert_text` (layout metrics width
+  before/during/after the override and its clear; screenshot PNG dimensions
+  match the override; insertText appends into a real `<input>` and a real
+  `addEventListener('input', ...)` observes it).
+- **Code-health split**: the CDP-21 additions alone would have pushed
+  `runtime_host_devtools.rs` to 4121 lines, over the project's 4000-line
+  policy. Split its `#[cfg(test)] mod tests { ... }` block out into
+  `runtime_host_devtools_tests.rs` (declared with `#[path = "..."] mod
+  tests;`), matching the `amazing-dom` `*_tests.rs` convention already used
+  elsewhere in the workspace (e.g. `tree.rs`/`tree_tests.rs`). Both files are
+  now under the limit (2694 and 1428 lines) and the module path
+  (`runtime_host_devtools::tests::...`) is unchanged.
+
+Known limitations, newly documented: `setCacheDisabled` has no cache to
+actually disable (headers-only substitute); device metrics override's
+`mobile`/screen/position/orientation fields are accepted but unapplied;
+`insertText` is `<input>`/`<textarea>`-only, no caret/selection model, no
+`contenteditable` support.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3135
+passed, 0 failed, 14 skipped (up from CDP-20's 3133/0/14 — two new tests,
+zero losses); all workspace doctests passed. Committed as `6611b6da`.
+
+Boundary candidates for a future ticket: a real per-request/per-origin cache
+subsystem in `amazing-net` (would let `setCacheDisabled` mean something
+closer to real Chrome); applying `mobile`/screen/position/orientation from
+`setDeviceMetricsOverride`; caret/selection-aware `insertText` and
+`contenteditable` support.
+
+## CDP-22 — Debugger.stepOver + real scopeChain, Runtime.callFunctionOn/
+getProperties completeness — done
+
+Coordinator's ticket (base `dev` at `47355c3c`, per the fallback list since
+no CDP-22 ticket was pre-listed in this TODO): "Debugger: setBreakpointByUrl,
+pause/resume/stepOver, and scopeChain on paused frames, using the exec_stmt
+debug hook from CDP-20. Runtime.callFunctionOn / getProperties
+completeness."
+
+- `setBreakpointByUrl`/`pause`/`resume` already shipped in CDP-20; this
+  ticket's actual delta is `stepOver` and `scopeChain`, plus the two Runtime
+  completeness items. No `amazing-js` changes were needed anywhere in this
+  ticket — everything builds on the `exec_stmt` debug hook and object-
+  registry machinery CDP-18/20 already added.
+- **`Debugger.stepOver`**: [`DebugHook::on_statement`] reports only
+  `(script_id, url, line)`, with no call-stack depth, so this driver has no
+  way to distinguish "the next statement in this same frame" from "the next
+  statement anywhere". Rather than fake a distinction it can't make,
+  `stepOver` arms the exact same one-shot flag `debugger_pause` does — an
+  honest simplification, documented as such, not a silently-approximated
+  feature. `stepInto`/`stepOut` are untouched, still `Unsupported` (no
+  suspended call stack for either to act on).
+- **Real `scopeChain`**: added `host::Scope` (`{ scope_type, object:
+  RemoteObject }`) and a `scope_chain: Vec<Scope>` field on `host::CallFrame`
+  (previously hardcoded to an empty array in `domains/debugger.rs`'s
+  `call_frame_json`). `DriverDebugHook::on_statement` still can't build one
+  itself — it only has plain `Rc<RefCell<_>>` cells shared with `PageOwner`,
+  no interpreter/object-registry access (see that struct's own doc comment on
+  why). `PageOwner::drain_debugger_paused` fills it in afterward: a single
+  `"global"` scope, its `object` minted through the exact same
+  `remote_object` registration `Runtime.evaluate` uses, so
+  `Runtime.getProperties` on it reflects genuine live `globalThis` state, not
+  a snapshot frozen at pause time. No per-frame local/closure scope is
+  offered — this engine's tree-walking interpreter has no reified per-call
+  environment record reachable from outside a running call.
+- **`Runtime.evaluate`/`callFunctionOn`'s `returnByValue: true`**: accepted
+  (the field exists on both param structs) but silently ignored before this
+  ticket — every object result got an `objectId` reference regardless. New
+  `PageOwner::remote_object_by_value` serializes a plain object/array
+  structurally instead (own *enumerable* properties through getters,
+  `Array.isArray`-detected element order for arrays via the same
+  `run_script`+`binding_call` idiom `callFunctionOn` already uses to invoke
+  a function against a live value), depth-capped at 5 rather than
+  cycle-tracked (no pointer-identity check for `JsValue::Object`'s `Rc`) —
+  an honest safety net for a self-referential object, not a full
+  structured-clone. `BigInt`/`Symbol` inside a by-value result are nulled,
+  matching the existing "can't carry either verbatim" limitation.
+- **`Runtime.getProperties`'s `ownProperties: false`**: previously behaved
+  exactly like `true` (own-only) regardless of the flag. There is no
+  `[[Prototype]]` accessor in `amazing-js`'s own binding surface for an
+  arbitrary object (`interp_bindings.rs` only has
+  `binding_object_prototype`/`binding_set_global_prototype`, both for the
+  *global* object's own prototype specifically), so `PageOwner::
+  get_properties` reuses real JS (`Object.getPrototypeOf`) through the same
+  idiom, walking up to 20 levels (a safety net against a corrupted/cyclic
+  chain, not a real spec limit) and tagging each inherited property
+  `is_own: false`.
+- Proof — two new end-to-end WebSocket tests:
+  `end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals`
+  (`stepOver` forces a real `Debugger.paused`; its `scopeChain` has one
+  `"global"` scope whose object's real `objectId` resolves through
+  `Runtime.getProperties` to a value set on `globalThis` moments before the
+  pause; `Debugger.resume` clears a still-pending step the same way it
+  clears a pending pause) and
+  `end_to_end_runtime_return_by_value_and_inherited_properties`
+  (`returnByValue` on both `evaluate` and `callFunctionOn` serializes a
+  nested array/object with no `objectId`; `getProperties(ownProperties:
+  false)` on an `Object.create`-based object sees both its own property and
+  the prototype's, tagged `isOwn` correctly, while `ownProperties: true`
+  still sees only its own).
+- Infra note (not this ticket's own work, recorded for the next lane that
+  hits it): `scripts/linux-run.sh` briefly auto-routed lanes to a new
+  `k-test`/`worker-2` host with a ~10 KB/s Mac uplink (an hour to sync a lane
+  tree) before the coordinator restored routing to venus-001/003; the fix
+  needed no lane-side action beyond rerunning the same command.
+
+Linux gate (venus-001, per the coordinator's routing note): workspace
+nextest 3275 passed, 0 failed, 15 skipped (up from CDP-21's 3135 — other
+lanes' merges plus this ticket's two new tests, zero losses); all workspace
+doctests passed. Crate-scoped `amazing` `runtime_host_devtools` tests: 20/20
+(0 failed), up from 18. `amazing-devtools` crate tests (unit + `tests/cdp.rs`
+MockHost suite): 96 + 19 passed, 0 failed. Committed as `6ea92a02`.
+
+Boundary candidates for a future ticket: call-stack depth in the debug hook
+(would let `stepOver`/`stepInto`/`stepOut` actually differ, and let
+`scopeChain` offer real per-frame local/closure scopes instead of only
+`"global"`); a `[[Prototype]]` accessor in `amazing-js`'s own binding surface
+(would let the prototype-chain walk skip the `Object.getPrototypeOf`
+round-trip); cycle detection for `remote_object_by_value` instead of a depth
+cap.
+
+## CDP-23 — real depth-based stepOver/stepInto/stepOut, conditional
+breakpoints, Debugger.evaluateOnCallFrame — done
+
+Coordinator's ticket (base `dev` at `43b30b23`): "Make stepOver real, using
+call-stack depth. Add stepInto and stepOut too: Extend the exec_stmt debug
+hook so it can report frame depth. Keep the change to amazing-js's
+debug_hook.rs minimal. If the interpreter side needs changes outside that
+file, route them to js-runtime. Then add local and closure scopes to
+scopeChain. Then take Debugger.setBreakpointByUrl with conditions, and
+Debugger.evaluateOnCallFrame."
+
+- **The one `amazing-js` change**: [`DebugHook::on_statement`]
+  (`crates/amazing-js/src/debug_hook.rs`) gained a 4th parameter, `depth:
+  u32`, reported from `Interpreter`'s own pre-existing `depth` field (already
+  incremented/decremented around every call for the `MAX_CALL_DEPTH`
+  recursion guard) at its two existing call sites in `interp.rs` — no new
+  interpreter state, just exposing a counter that was already there. Kept to
+  exactly this, per the ticket's own "keep debug_hook.rs minimal" and "route
+  anything more to js-runtime" instructions.
+- **Real depth-based `stepOver`/`stepInto`/`stepOut`**: new `StepMode` enum
+  (`Any`/`Over(u32)`/`Out(u32)`) replaces the CDP-22 one-shot bool
+  `pause_requested` (renamed `step_request: Rc<RefCell<Option<StepMode>>>`).
+  `Any` (stepInto, and `Debugger.pause`, unchanged in spirit) fires on the
+  very next statement regardless of depth; `Over(reference)` (stepOver)
+  fires on the next statement no deeper than `reference`; `Out(reference)`
+  (stepOut) only once actually shallower than `reference`. `reference` is
+  `last_paused_depth`, a new shared cell recording the depth at the most
+  recent pause/breakpoint hit — the best available stand-in for "the
+  current frame's depth" a step command can compare against, since this
+  driver still never truly suspends anything (unchanged limitation from
+  CDP-20/22). One consequence, documented in the new test and the module
+  doc comment: every fresh `Runtime.evaluate` call's own first statement is
+  observed at depth 0, so `Over`/`Out` behave exactly like `Any` once
+  back at depth 0 or shallower — the genuinely distinguishing, testable case
+  is `Out` at a depth-0 reference never firing (there is nothing shallower
+  than the top-level frame), unlike `Any`.
+- **Conditional breakpoints**: `BreakpointRecord` gained a `condition:
+  Option<String>` field, plumbed through `set_breakpoint_by_url`,
+  `PageCommand::SetBreakpointByUrl` and `DriverPageSession`. The hook itself
+  still cannot evaluate JS (only plain `Rc<RefCell<_>>` cells — see
+  `DriverDebugHook`'s doc comment); `PageOwner::drain_debugger_paused`
+  evaluates each hit breakpoint's condition via `scheduler.run_script` +
+  `binding_to_boolean` (same idiom other real-evaluation features in this
+  driver already use), treating an erroring condition as false. A
+  breakpoint whose condition fails is dropped from that event's
+  `hit_breakpoints`; if that empties it and the pause was not *also*
+  independently forced, the whole event is dropped.
+- **`Debugger.evaluateOnCallFrame`**: this driver never truly suspends a
+  call frame, and the only call frame id it ever mints is the literal
+  `"cf0"`, so `PageOwner::evaluate_on_call_frame` validates that (else a
+  real `HostError::NotFound`) and otherwise delegates to the exact same
+  global-realm evaluation `Runtime.evaluate` uses.
+- **Filed to js-runtime, not implemented here**: local/closure scopes for
+  `scopeChain` need a read-only enumeration accessor on `amazing-js`'s
+  `Env`/`EnvHandle` (`vars: HashMap<String, BindingCell>` is private with no
+  accessor) plus a way to reach the *current* frame's `EnvHandle` from the
+  hook or a side channel — both changes go beyond `debug_hook.rs`, so this is
+  a new `.agents/js-runtime/questions.md` entry (separate from CDP-20's
+  existing true-pause request), not a patch. `scopeChain` remains
+  `"global"`-only, unchanged from CDP-22.
+- Proof — new end-to-end WebSocket test
+  `end_to_end_debugger_depth_based_step_out_and_conditional_breakpoints`:
+  `stepOut` with a depth-0 reference never fires across three ordinary
+  statements while `stepInto` in the same setting fires on the very next
+  one; a breakpoint with a `false` condition is fully suppressed; one with a
+  true condition fires with `hitBreakpoints`/`reason: "Breakpoint"` intact;
+  one with an erroring condition (`throw new Error(...)`) is suppressed the
+  same as `false`; a `stepOut` armed with a real depth-1 reference
+  (established by that true-condition hit, inside a real function call)
+  fires once execution returns to depth 0. Also rewrote CDP-20's
+  `end_to_end_debugger_domain_scripts_breakpoints_and_pause`, whose
+  `stepInto`/`evaluateOnCallFrame` assertions expected `Unsupported` errors
+  before this ticket — now asserts `stepInto` produces a real pause and
+  `evaluateOnCallFrame` both evaluates for real (`"cf0"`) and returns
+  `NotFound` for an unknown frame id.
+
+Linux gate (venus, per routing): crate-scoped `amazing`/`amazing-js`/
+`amazing-devtools` nextest 813/813 passed, 7 skipped. Full workspace gate and
+numbers: see `report.md`/`status.json`. KNOWN HOST ISSUE (per the
+coordinator, not this ticket's regression): worker-2/k-test show up to 11
+`amazing-ipc-platform`/`amazing-process` sealed-memory `PermissionDenied`
+failures unrelated to devtools, tracked as IPC-12; excluded from this
+ticket's pass/fail counts when present, with a `--host venus-001` rerun for a
+fully clean number.
+
+Boundary candidates for a future ticket: local/closure `scopeChain` scopes
+(blocked on the filed js-runtime request above); breakpoint conditions and
+step targets that survive a `Page.navigate` reload identically to
+`extra_headers`/`cache_disabled` (currently untested either way, since
+`PageOwner::navigate` replaces the whole struct including `breakpoints`);
+`urlRegex`-style breakpoint matching instead of literal `url` equality.
+
+## CDP-24 — Runtime object previews, releaseObjectGroup, and one fresh
+end-to-end test per named domain — done
+
+Coordinator's ticket (base local `dev` at `f748f4a0`, merged CDP-23): "Next is
+CDP-24, all in bulk: `Runtime.getProperties` with real object previews
+(`RemoteObject.preview` and `objectId` handles); `Runtime.callFunctionOn`;
+`Runtime.releaseObject`/`releaseObjectGroup`; `DOM.getDocument`/
+`querySelector`/`getOuterHTML`/`setAttributeValue`/`removeNode` against the
+live DOM; `Network.enable`, with requestWillBeSent/responseReceived/
+loadingFinished events from the fetch path. Add one end-to-end test per
+domain. Gate once: workspace nextest and doctests, excluding the known
+IPC-12 EPERM tests."
+
+- **Scoped by grepping first**: `DOM.getDocument`/`querySelector`/
+  `getOuterHTML`/`setAttributeValue`/`removeNode`, `Runtime.callFunctionOn`
+  and `Network.enable`'s three events were already implemented (CDP-16/17/18)
+  — confirmed by reading their existing tests rather than assuming. The
+  genuinely new work was `RemoteObject.preview`/`Runtime.ObjectPreview` (did
+  not exist at all) and `Runtime.releaseObjectGroup` (the CDP dispatch arm
+  existed but was a pure no-op that never reached the driver).
+- **`RemoteObject.preview` / `Runtime.ObjectPreview`/`PropertyPreview`**: new
+  protocol types in `amazing-devtools/src/host.rs` plus serializers in
+  `domains/mod.rs`. Matches real CDP's own asymmetry: `Runtime.getProperties`
+  has no `generatePreview` parameter, so an object-typed property value
+  always gets a preview; `Runtime.evaluate` only builds one when
+  `generatePreview: true`; `Runtime.callFunctionOn` never does, since
+  `CallFunctionParams` has no such field at all. `PageOwner::object_preview`/
+  `property_preview` cap at 5 own enumerable properties (`overflow: true`
+  past that) and render one level deep only — no nested `valuePreview` — the
+  same depth-cap-not-cycle-tracked choice `remote_object_by_value`'s existing
+  5-level cap already makes, since `JsValue::Object`'s `Rc` has no
+  pointer-identity/cycle check to lean on for something recursive.
+- **`Runtime.releaseObjectGroup`**: `evaluate()`/`call_function_on()` now tag
+  their own top-level result's `objectId` with the call's `objectGroup`
+  (`""` when omitted, matching real CDP's default bucket) via a new
+  `tag_object_group` helper; `release_object_group` on `PageOwner` drops every
+  `objectId` tagged under a given group from the live object table (and
+  `release_object` also untags its id). Deliberately scoped to *only*
+  top-level `evaluate`/`callFunctionOn` results, not nested `getProperties`
+  property values — real CDP's `getProperties` has no `objectGroup`
+  parameter either.
+- **Driver plumbing**: `object_groups: HashMap<String, String>` field on
+  `PageOwner`; `PageCommand::ReleaseObjectGroup`; a `run_page_thread` match
+  arm; `DriverPageSession::release_object_group`. All call sites needing the
+  new `RemoteObject.preview` field picked it up for free via the existing
+  `..Self::undefined()`/`..RemoteObject::undefined()` struct-update spread —
+  only `RemoteObject::undefined()` itself (which spells out every field) and
+  `own_properties()` (which attaches the preview) needed direct edits.
+- **Proof — one fresh end-to-end WebSocket test per named domain**, even
+  though DOM and Network already had CDP-16/17/18 coverage, per the ticket's
+  explicit "add one end-to-end test per domain":
+  - `end_to_end_runtime_object_previews_and_release_object_group_work_through_the_real_websocket_client`
+    (the genuinely new functionality): no preview without `generatePreview`;
+    a real preview with `generatePreview: true` (type/properties/values);
+    `overflow: true` and a 5-property cap past 5 own properties;
+    `Runtime.getProperties` attaching a preview with no flag involved at all;
+    a named `objectGroup` surviving until `releaseObjectGroup` invalidates it
+    (`Runtime.getProperties` on the released id then returns a CDP error);
+    and the default `""` bucket releasing correctly too.
+  - `end_to_end_dom_get_document_query_select_outer_html_set_attribute_and_remove_node_chain`:
+    the exact 5-method chain the ticket names, fresh for this ticket.
+  - `end_to_end_network_enable_then_live_navigate_fires_the_fetch_path_events`:
+    proves `requestWillBeSent`/`responseReceived`/`loadingFinished` fire from
+    a **live** `Page.navigate` call made after `Network.enable`, not just
+    from the initial page-load fetch CDP-18's own test relies on — tighter
+    proof that the events are wired to the fetch path itself.
+
+Gate (single pass, per the ticket's "gate once"): `cargo nextest run
+--workspace --locked --no-fail-fast` — 3282/3293 passed, 16 skipped, 3 slow,
+11 failed. All 11 failures are the known IPC-12
+`amazing-ipc-platform`/`amazing-process` sealed-memory `PermissionDenied`
+("Operation not permitted") sandbox failures, unrelated to this ticket —
+reconfirmed by a direct rerun of one of them. `cargo test --workspace
+--locked --doc`: all green, including every crate with real doctests
+(`amazing_a11y`, `amazing_devtools`, `amazing_html`, `amazing_js`).
+
+Boundary candidates for a future ticket: a recursive/nested `valuePreview`
+for object-typed preview properties (currently one level deep only, see
+above); `objectGroup` tagging for `Runtime.getProperties`' own returned
+values (out of scope here, matching real CDP); breakpoint/step state and
+now object-group tags both not surviving a `Page.navigate` reload (unchanged
+scope note from CDP-21/23).

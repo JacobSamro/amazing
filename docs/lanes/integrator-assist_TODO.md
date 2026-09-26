@@ -1124,3 +1124,263 @@ Gate (Linux Boat, `dev` head `99df2b68` plus this series): `-p amazing`
 nextest 257 passed/6 skipped; workspace nextest 3021 passed/12 skipped/0
 failed (71.7s); workspace doctests all passed (0 failures, `amazing_js`/
 `amazing_html` included). Zero losses.
+
+## IA-LIVE-3 (2026-09-26)
+
+Took the 17 "missing on 100% of live pages" APIs filed in IA-LIVE-2 and
+checked `.agents/dom-bindings/questions.md`: none of them had been picked up
+there yet (dom-bindings' queue was WebSocket/IPC/event-handler-attribute work,
+no overlap). Implemented the driver-owned subset — window/navigator/
+document-level host APIs whose *value* comes from the driver, as opposed to
+WebIDL interface scaffolding — in a new lane-owned file,
+`crates/amazing/src/runtime_host_integrator_assist.rs` (this ticket's entire
+footprint beyond a handful of one-line hooks in the shared
+`runtime_binding_host.rs`, per the driver-adapter-per-lane rule):
+
+- `navigator.userAgent/language/languages/platform/onLine/cookieEnabled/
+  appVersion/hardwareConcurrency` — real driver/OS values (`std::env::consts::
+  OS` mapped to Win32/MacIntel/Linux x86_64).
+- `performance.now()`/`performance.timeOrigin` — a real per-page
+  `Instant`-based clock (`IaRuntime::created_at`), not a stub.
+- `window.matchMedia(query)` — evaluates the query against the driver's real
+  per-page viewport by reusing `amazing_css::MediaQueryList::parse`/
+  `.evaluate(&MediaEnvironment)` (no new CSS media-query grammar). Wired the
+  real viewport through: `cmd_render_page` (`real_pages.rs`) already has
+  `width`/`fixed_height` in scope, so it now passes `(width, viewport_height)`
+  into `execute_page_scripts_lenient` (`cmd/js.rs`, new 4th parameter) which
+  calls the new `DriverScheduler::set_viewport` (`js_scheduler.rs`, one
+  additive method, same shape as the existing `set_location_url` — did not
+  touch the render-hook/event-loop code storage is working on there) ->
+  `RuntimeBindings::set_viewport` -> `BindingState.integrator_assist`. Falls
+  back to `MediaEnvironment::default()`'s viewport when no `fixed_height` is
+  given. `addListener`/`addEventListener`/`removeListener`/
+  `removeEventListener` on the returned object are defensive no-ops (nothing
+  ever fires a `change` event yet) so page code that defensively registers a
+  listener doesn't throw; a live-updating `MediaQueryList` interface is left
+  to dom-bindings.
+- `window.requestIdleCallback`/`cancelIdleCallback` — reuses the existing
+  `Interpreter::schedule_timer`/`cancel_timer` driver timer queue; the
+  callback receives an `IdleDeadline`-shaped object (`timeRemaining()`
+  always 0, `didTimeout` always `false` — this driver has no real idle
+  detection, so it never claims a timeout it can't back up).
+- Explicitly NOT attempted (left to dom-bindings, per the ticket): a live
+  `MediaQueryList` interface with real `change` events, a real `IdleDeadline`
+  interface/type, `PerformanceObserver`/marks/measures/entries.
+
+**Bug found and fixed while gating:** the first `RequestIdleCallback` cut
+defaulted its timer delay to 1ms when no `timeout` option was given. The
+timer queue backing it (`amazing-js/src/interp.rs`) compares against a real
+`Instant::now()`, not a simulated clock, so a nonzero real delay makes firing
+depend on genuine wall-clock progress between scheduling and the next pump —
+exactly the flake this codebase's own convention avoids elsewhere
+(`AbortSignal.timeout(0)` in `js_scheduler.rs` uses delay 0 for the same
+reason). It passed once on a slower/contended sandbox, then failed
+deterministically (5/5 reruns, isolated) on a fresh, faster one. Changed the
+default to `0` (fire as soon as the loop is next pumped, matching the
+existing convention); reran the specific test 5/5 clean before and after the
+full workspace gate.
+
+Real-pages corpus (52 pages), before -> after this ticket (Linux Boat,
+`cargo test -p amazing --locked --test real_pages -- --nocapture`, code
+before/after compared via `git stash`/`stash pop` on the same sandbox): 4 ->
+3 page-level errors, 3 -> 2 fallback pages. `app-dashboard.html`'s `page
+script: ReferenceError: matchMedia is not defined` is gone entirely (0 errors,
+0 fallbacks on that page now). The remaining 3 errors (`app-chat.html`
+"Invalid document URL", `app-kanban.html`/`app-mail.html` "value is not
+callable") are unrelated to this ticket's APIs.
+
+Live corpus (40 URLs, `cargo test -p amazing --locked --test live_pages --
+--ignored --nocapture`, 2315s): none of `matchMedia`, `navigator.clipboard`,
+`getComputedStyle`, `requestIdleCallback`, `cancelIdleCallback`, or
+`WebSocket` — all part of the originally filed 17-API list — appear in the
+after-run's top-20 missing-API table any more (0/36 missing, down from
+100/100% before this ticket, per the same table this ticket's filing was
+based on). The after-run's top-20 is now entirely interface-level APIs
+(`MediaQueryList`, `IntersectionObserver`, `Element.prototype.animate`,
+`ResizeObserver`, `PerformanceObserver`, `Permissions`, `Notification`,
+`EventSource`, `CSS`, `RTCPeerConnection`, `SharedWorker`, `TextEncoder`/
+`TextDecoder`, `URLPattern`, `WebAssembly`, `WebGLRenderingContext`, `Worker`,
+`XMLSerializer`, `AudioContext`, `OffscreenCanvas`) — all correctly out of
+this driver-owned ticket's scope.
+
+**Infra note:** a background gate run duplicated itself when a "rerun"
+request landed before the first attempt was actually stopped, leaving two
+identical `cargo nextest run --workspace` invocations serialized against
+each other on the same lock (both then reported empty output, which does not
+mean success). Caught by checking `ps` directly against the claimed
+completion before trusting it, rather than committing on an unverified
+"finished" report.
+
+Gate (Linux Boat, Boat sandbox `bx_e3cjmk4g`/pool-ia, this series):
+`-p amazing` nextest: `request_idle_callback_runs_the_callback_with_an_idle_
+deadline_shape` + the other 4 new tests, 5/5 clean reruns after the fix.
+Workspace nextest: 3053 passed/13 skipped/0 failed (64.1s) -- up from
+3052 passed/1 failed before the fix (zero losses, one flake resolved).
+Workspace doctests: all passed (0 failures).
+
+## IA-REAL-2 (2026-09-27)
+
+Re-ran the 52-page real-pages corpus on `dev 855b2ca9` (a lot landed since
+IA-REAL-PAGES/IA-LIVE-3: Proxy, document.write, Observable in flight, IDB,
+websockets, css-grid) and compared against the IA-LIVE-3 baseline.
+
+**Before (dev 855b2ca9, first run):** 52 pages, **52 errors, 0 fallback
+pages** -- every single page failed at scheduler init with `TypeError:
+IndexedDB open: Corrupt`, before any page script even ran. This was new: none
+of IA-REAL-PAGES/IA-LIVE-2/IA-LIVE-3's runs of this same corpus ever saw a
+storage error.
+
+Root-caused as two things stacking, both explained in full (with the exact
+throw site and a byte-level repro) in `.agents/storage/questions.md`:
+1. `install_storage_interfaces()` (storage's own adapter,
+   `crates/amazing/src/runtime_host_storage.rs`) now eagerly allocates
+   `indexedDB`/`caches`/`navigator.storage`/`locks`/`storageBuckets` --
+   `storage_ensure()` runs for every HTML page at scheduler init, regardless
+   of whether the page's script ever touches storage.
+2. `storage_ensure()`'s isolation heuristic only isolates *in-process* tests
+   (`cfg!(test)`/`NEXTEST=1`). `real_pages.rs`/`live_pages.rs` spawn the real
+   `amazing` binary as a child process per page (so a crash attributes to one
+   page), and that child is a plain release/debug bin -- neither condition
+   holds, so it falls through to the ambient, real
+   `$HOME/.local/share/amazing/storage` profile path. On the shared
+   `venus-001` host that path already held a stale directory named `idb`
+   (containing a file called `log`, 4+ days old -- a leftover from an
+   earlier/incompatible on-disk format), and the current `DiskStore::open`
+   reads that as `Corrupt` rather than starting fresh.
+
+**Fixed here (driver-owned, my own test harness, not storage's adapter):**
+`crates/amazing/tests/real_pages.rs` and `tests/live_pages.rs` now set
+`AMAZING_STORAGE_DIR` on each spawned page's `Command` to that run's own
+disposable temp directory, mirroring the isolation `cfg!(test)` already gives
+in-process unit tests. Did not touch `runtime_host_storage.rs` (storage's own
+adapter file) or `amazing-storage` -- filed the design gap (eager
+install-time allocation turning any stale/foreign profile directory into a
+hard failure for every page, rather than degrading gracefully) to storage's
+`questions.md` with the exact repro instead.
+
+**After the fix (same dev 855b2ca9, same corpus):** 52 pages, **3 errors, 2
+fallback pages** -- identical to the IA-LIVE-3 baseline
+(`app-chat.html`: `TypeError: Invalid document URL`;
+`app-kanban.html`/`app-mail.html`: `TypeError: value is not callable`). No
+new driver-owned regressions from Proxy/document.write/Observable/IDB/
+websockets/css-grid landing. The `121x UnsupportedSvg` CSS/parse-warning
+cluster from IA-LIVE-3's run is now gone entirely (0 warnings) -- an
+improvement, not investigated further since it's not a regression.
+
+**Routed the 3 remaining errors** (previously undiagnosed beyond "unrelated
+to IA-LIVE-3's APIs") with root causes and exact repros, since this ticket
+asked for engine problems with repros:
+- `app-chat.html` (`new WebSocket('ws://127.0.0.1:9/')`): net had already
+  confirmed (2026-09-26T19:40:00Z) the constructor should "exist and not
+  throw synchronously," but on `855b2ca9` it *does* throw
+  `TypeError: Invalid document URL`. Traced to `fetch_base()`
+  (`crates/amazing/src/runtime_host_net.rs:1176`), which requires
+  `document_url` to parse as an `HttpUrl` with no fallback for a document
+  loaded from a bare local file path (exactly what this corpus, and any real
+  `file://` browsing, sets via `set_location_url`) -- even though the sibling
+  helper `fetch_local_file()` two functions below it already has that
+  fallback. Filed to net's `questions.md` with the exact line and repro.
+- `app-kanban.html` (`document.body.animate(...)`) and `app-mail.html`
+  (`navigator.clipboard.writeText(...)`): both are dom-bindings' own
+  already-filed, still-open gaps (`Element.prototype.animate`,
+  `navigator.clipboard`) from the original IA-REAL-PAGES triage thread in
+  their `questions.md` -- confirmed still current, not re-filed.
+
+**Infra found while gating:** the `linux-run.sh` lane->host table sends
+`integrator-assist` to `k-test`, whose container is missing a capability
+needed by `amazing-ipc-platform`/`amazing-process`'s sealed-shared-memory and
+crash-reaping tests -- 11 failures, all
+`Io(Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })`.
+Confirmed non-code by forcing `--host venus-001` on the identical commit:
+clean. Filed to my own `questions.md` for the orchestrator (k-test is also
+the assigned host for dom-bindings/html/net/storage/a11y/devtools).
+
+Gate (Linux, `--host venus-001`, dev `855b2ca9` plus this series): workspace
+nextest 3279 passed/0 failed/15 skipped (79.8s); workspace doctests all
+passed (0 failures). Real-pages corpus: 52 pages/3 errors/2 fallback pages
+(measured twice, stable).
+
+## IA-TESTDRIVER: WPT testdriver backend (done, 5e0749cb)
+
+Implemented a WPT testdriver backend in the driver's WPT runner. Of
+`html/semantics/forms`'s 535 subtest failures, 177 came from the missing
+`test_driver_internal`/`testdriver-vendor.js`; `dom/nodes/moveBefore` was
+flagged as also failing on `action_sequence`.
+
+**`crates/amazing/src/cmd/wpt_harness.rs`**: `testdriver-vendor.js` is a
+per-implementation resource that does not exist anywhere in the pinned
+upstream WPT checkout -- every real browser ships its own. Before this
+ticket, a test file that loaded it failed `local_file`'s `canonicalize()`
+and aborted the *entire* file, losing every subtest as `error` rather than
+only the ones that actually call a `test_driver` action. `execute_page`'s
+script-loading loop now intercepts a request for
+`resources/testdriver-vendor.js` and serves an embedded string
+(`TESTDRIVER_VENDOR_JS`) instead of resolving it as a file.
+
+**`crates/amazing/src/runtime_host_integrator_assist.rs`**: the vendor
+script overrides `window.test_driver_internal`'s methods (which
+`testdriver.js` creates unconditionally, unguarded, near its own end) after
+it loads -- `click`, `send_keys`, `action_sequence` (pointer/key/wheel
+sources), `set_permission`, `delete_all_cookies`, `get_computed_label`,
+`get_computed_role`. Each routes to a new `IaNativeEntry::Td*` native call:
+
+- `click`/`send_keys`/`action_sequence` dispatch real trusted events via
+  `amazing_bindings::dispatch_user_agent_event`. `click` additionally invokes
+  the engine's real `Operation::HTMLElementClick`
+  (`input_activation_bindings`) so checkbox/radio toggling runs as a genuine
+  default action -- a hand-dispatched bare `"click"` `Event` does **not**
+  enter the DOM's activation-completion state machine
+  (`begin_html_click`/`finish_input_activation`), only the real click
+  operation does.
+- `get_computed_label`/`get_computed_role` go through `amazing_a11y::build`.
+- `set_permission`/`delete_all_cookies` are honest no-op/best-effort stubs:
+  no Permissions API or cookie store exists anywhere in the engine yet.
+
+**Blocker found and worked around, harness-only**: `testdriver.js`'s own
+`click()`/`send_keys()` client wrappers call `getClientRects`/
+`elementsFromPoint` *before* ever reaching `test_driver_internal` -- and a
+clean grep confirmed no CSSOM View geometry exists anywhere in the engine.
+Added a feature-detected polyfill (only installed if the real property is
+still missing, so a future real implementation from layout/dom-bindings
+automatically takes over), computed via
+`amazing_layout::layout_styled_document` with `FallbackTextSystem`/
+`NoReplacedElements`. Found and fixed a real bug in my own lookup while
+building it: inline-level elements (default `<input>`/`<label>`,
+`display: inline`) are placed via `LayoutBox.lines[].replaced`
+(`ReplacedFrag`), not `Flow::Blocks`/`.positioned` -- the initial version
+(mirroring `gui.rs`'s own hit-test, which has the same latent gap,
+unexercised there) missed this entirely, so every checkbox/label rect and
+hit-test came back empty until fixed.
+
+**Two real amazing-dom/amazing-bindings gaps found, filed to my own
+`questions.md` (out of this lane's owned paths, not fixed here)**:
+1. `input_activation_bindings::invoke`'s `HTMLElementClick` branch always
+   dispatches via `event_bindings::invoke(host, O::DispatchEvent, ...)`
+   (script-dispatch semantics), so the click is never trusted
+   (`amazing-dom/src/events.rs:617`). A driver-generated click should be
+   trusted, like a real browser's WebDriver "Element Click".
+2. `has_html_activation_behavior` already lists `<label>` as
+   activation-bearing and `begin_event_dispatch` finds it fine as the
+   click's activation target (`amazing-dom/src/events.rs:790-794`), but
+   `prepare_input_activation` returns `None` for anything that isn't
+   `<input>`, so label-click-forwards-to-its-control (`Dom::label_control`
+   already exists, `amazing-dom/src/forms.rs:901`) is simply not wired in.
+
+Both are covered by regression tests that assert the *current* behavior with
+a comment explaining exactly what to flip once each lands, so neither can
+silently regress further or get "fixed" by accident without anyone noticing
+the assertion needs updating.
+
+**Measured** (pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`,
+`html/semantics/forms` + `dom/nodes`, 782 testharness files): subtest pass
+count **10546 -> 10680 (+134)**, fail count unchanged at **989 (zero lost)**,
+file-level status counts unchanged (the gained passes are inside files whose
+overall status was already `fail`/`timeout` for unrelated reasons).
+`dom/nodes/moveBefore` itself: 52 files, **0 changed** -- its failures are
+shadow-DOM/CSS-animation/mutation-observer move-semantics issues unrelated
+to testdriver.
+
+Crate tests: 16/16 new unit tests pass; full `amazing` crate suite green
+(k-test). Final gate (Linux, `--host venus-001`, dev `8f2e57ee` plus this
+series): workspace nextest **3297 passed/0 failed/15 skipped** (65.2s), all
+doctests passed. One commit: `5e0749cb`.

@@ -203,6 +203,280 @@ fn chrome(b: &LayoutBox, basis: f32) -> f32 {
     let e = values::resolve_borders(&b.style, b.font_size);
     p.left + p.right + e.left + e.right
 }
+/// Convert a cell's specified size to its outer size. Track sizes already
+/// denote track breadths, so this adjustment applies only to cells.
+fn outer_cell_size(cell: &LayoutBox, size: f32, edges: f32) -> f32 {
+    if cell.style.get("box-sizing") == Some("border-box") {
+        size.max(edges)
+    } else {
+        size + edges
+    }
+}
+
+// CSS2 §17.6.1 distinguishes HTML table widths from CSS table boxes on
+// ordinary elements. Only the latter add content-box padding and borders.
+fn outer_table_width(b: &LayoutBox, size: f32, edges: f32) -> f32 {
+    if b.html_table_width || b.style.get("box-sizing") == Some("border-box") {
+        size
+    } else {
+        size + edges
+    }
+}
+
+fn column_width<'a>(b: &'a LayoutBox, path: &[usize]) -> &'a LayoutBox {
+    let col = at(b, path);
+    if path.len() == 2 && col.style.get("width").is_none_or(|w| w == "auto") {
+        at(b, &path[..1])
+    } else {
+        col
+    }
+}
+
+/// CSS Tables 3 §3.9.3 fixed mode: preserve absolute contributions, reduce
+/// percentages when they overcommit the assignable space, then give remaining
+/// space to auto columns (or proportionally to specified columns).
+fn fixed_widths(
+    b: &LayoutBox,
+    g: &Grid,
+    assignable: f32,
+    sx: f32,
+    borders: Option<&crate::table_decoration::Borders>,
+) -> Vec<f32> {
+    let mut absolute = vec![0.0f32; g.count];
+    let mut percent = absolute.clone();
+    let mut known = vec![false; g.count];
+    for (i, path) in g.columns.iter().enumerate() {
+        let col = column_width(b, path);
+        if let Some(w) =
+            values::style_length_percentage(&col.style, "width", col.font_size, col.font_size * 0.6)
+        {
+            absolute[i] = w.px;
+            percent[i] = w.percentage / 100.0;
+            known[i] = true;
+        }
+    }
+    for c in g.cells.iter().filter(|c| c.row == 0) {
+        let cell = at(b, &c.path);
+        let Some(w) = values::style_length_percentage(
+            &cell.style,
+            "width",
+            cell.font_size,
+            cell.font_size * 0.6,
+        ) else {
+            continue;
+        };
+        let missing = known[c.col..c.col + c.cols].iter().filter(|&&v| !v).count();
+        if missing == 0 {
+            continue;
+        }
+        let edges = if let Some(borders) = borders {
+            let e = borders.widths(c.row, c.col, c.rows, c.cols);
+            let p = values::resolve_padding(&cell.style, cell.font_size, assignable);
+            e.left + e.right + p.left + p.right
+        } else {
+            chrome(cell, assignable)
+        };
+        // Keep offsets in the absolute contribution even for percentages:
+        // CSS2 fixed-table-layout-026 requires a 50% content width plus its
+        // borders to fill the table. Mixed calc terms remain separate so an
+        // overcommitted percentage cannot shrink those offsets away.
+        let required = if w.has_percentage {
+            w.px + if cell.style.get("box-sizing") == Some("border-box") {
+                0.0
+            } else {
+                edges
+            }
+        } else {
+            outer_cell_size(cell, w.px.max(0.0), edges)
+        };
+        let present: f32 = absolute[c.col..c.col + c.cols].iter().sum();
+        let present_percent: f32 = percent[c.col..c.col + c.cols].iter().sum();
+        for i in c.col..c.col + c.cols {
+            if !known[i] {
+                absolute[i] = (required - sx * (c.cols - 1) as f32 - present) / missing as f32;
+                percent[i] = (w.percentage / 100.0 - present_percent) / missing as f32;
+                known[i] = true;
+            }
+        }
+    }
+    let px: f32 = absolute.iter().sum();
+    let pct: f32 = percent.iter().sum();
+    let pct_basis = if pct > 0.0 {
+        assignable.min((assignable - px).max(0.0) / pct)
+    } else {
+        assignable
+    };
+    let mut widths: Vec<f32> = absolute
+        .iter()
+        .zip(&percent)
+        .map(|(a, p)| (a + p * pct_basis).max(0.0))
+        .collect();
+    let extra = (assignable - widths.iter().sum::<f32>()).max(0.0);
+    let missing = known.iter().filter(|&&v| !v).count();
+    let positive_px: f32 = absolute.iter().map(|v| v.max(0.0)).sum();
+    let positive_pct: f32 = percent.iter().map(|v| v.max(0.0)).sum();
+    for i in 0..g.count {
+        widths[i] += if missing > 0 {
+            if known[i] {
+                0.0
+            } else {
+                extra / missing as f32
+            }
+        } else if positive_px > 0.0 {
+            extra * absolute[i].max(0.0) / positive_px
+        } else if positive_pct > 0.0 {
+            extra * percent[i].max(0.0) / positive_pct
+        } else {
+            extra / g.count as f32
+        };
+    }
+    widths
+}
+
+fn percentage_contribution(b: &LayoutBox) -> f32 {
+    let percentage = |name| {
+        values::style_length_percentage(&b.style, name, b.font_size, b.font_size * 0.6)
+            .filter(|v| v.has_percentage && v.px == 0.0)
+            .map(|v| v.percentage.max(0.0) / 100.0)
+    };
+    percentage("width")
+        .unwrap_or(0.0)
+        .min(percentage("max-width").unwrap_or(f32::INFINITY))
+}
+
+fn intrinsic_limit(b: &LayoutBox, name: &str) -> Option<f32> {
+    values::style_length_percentage(&b.style, name, b.font_size, b.font_size * 0.6)
+        .filter(|v| !v.has_percentage)
+        .map(|v| v.px.max(0.0))
+}
+
+/// Keep column kinds separate from intrinsic widths: percentages are targets,
+/// not pixel minima, and unconstrained columns receive excess space first.
+fn auto_widths(b: &LayoutBox, g: &Grid, min: &[f32], max: &[f32], available: f32) -> Vec<f32> {
+    let mut percent = vec![0.0f32; g.count];
+    let mut constrained = vec![false; g.count];
+    let mut originating = vec![false; g.count];
+    let mut record = |i: usize, cell: &LayoutBox, span: usize| {
+        if let Some(w) = values::style_length_percentage(
+            &cell.style,
+            "width",
+            cell.font_size,
+            cell.font_size * 0.6,
+        ) {
+            percent[i] = percent[i].max(percentage_contribution(cell) / span as f32);
+            constrained[i] |= !w.has_percentage;
+        }
+    };
+    for (i, path) in g.columns.iter().enumerate() {
+        record(i, at(b, path), 1);
+        if path.len() == 2 {
+            record(i, at(b, &path[..1]), 1);
+        }
+    }
+    for c in &g.cells {
+        originating[c.col] = true;
+        if c.cols == 1 {
+            record(c.col, at(b, &c.path), 1);
+        }
+    }
+    // Process one colspan size at a time using the previous span's values.
+    // Existing percentage columns keep their share; only zero-percentage
+    // columns accept a spanning cell's remaining contribution.
+    let mut spans: Vec<_> = g.cells.iter().filter(|c| c.cols > 1).collect();
+    spans.sort_by_key(|c| c.cols);
+    let mut start = 0;
+    while start < spans.len() {
+        let count = spans[start].cols;
+        let end = start
+            + spans[start..]
+                .iter()
+                .take_while(|c| c.cols == count)
+                .count();
+        let previous = percent.clone();
+        for c in &spans[start..end] {
+            let cell = at(b, &c.path);
+            if values::style_length_percentage(
+                &cell.style,
+                "width",
+                cell.font_size,
+                cell.font_size * 0.6,
+            )
+            .is_some()
+            {
+                let present: f32 = previous[c.col..c.col + c.cols].iter().sum();
+                let extra = (percentage_contribution(cell) - present).max(0.0);
+                let eligible: Vec<_> = (c.col..c.col + c.cols)
+                    .filter(|&i| previous[i] == 0.0)
+                    .collect();
+                let weight: f32 = eligible.iter().map(|&i| max[i]).sum();
+                for &i in &eligible {
+                    let ratio = if weight > 0.0 {
+                        max[i] / weight
+                    } else {
+                        1.0 / eligible.len() as f32
+                    };
+                    percent[i] = percent[i].max(extra * ratio);
+                }
+            }
+        }
+        start = end;
+    }
+    let mut remaining = 1.0f32;
+    for p in &mut percent {
+        *p = p.min(remaining);
+        remaining -= *p;
+    }
+    let mut widths = min.to_vec();
+    // Interpolate consecutive min-content, percentage, specified, and
+    // max-content guesses. This preserves the priority of percentage columns.
+    for stage in 0..3 {
+        let next: Vec<f32> = (0..g.count)
+            .map(|i| {
+                if percent[i] > 0.0 {
+                    min[i].max(percent[i] * available)
+                } else if stage == 2 || (stage == 1 && constrained[i]) {
+                    max[i]
+                } else {
+                    min[i]
+                }
+            })
+            .collect();
+        let current: f32 = widths.iter().sum();
+        let target: f32 = next.iter().sum();
+        if target > available && target > current {
+            let fraction = ((available - current) / (target - current)).clamp(0.0, 1.0);
+            for i in 0..g.count {
+                widths[i] += (next[i] - widths[i]) * fraction;
+            }
+            return widths;
+        }
+        widths = next;
+    }
+    let extra = (available - widths.iter().sum::<f32>()).max(0.0);
+    let mut weights = vec![0.0f32; g.count];
+    for rule in 0..6 {
+        for i in 0..g.count {
+            weights[i] = match rule {
+                0 if !constrained[i] && percent[i] == 0.0 && originating[i] => max[i],
+                1 if !constrained[i] && percent[i] == 0.0 && originating[i] => 1.0,
+                2 if constrained[i] && percent[i] == 0.0 => max[i],
+                3 => percent[i],
+                4 if originating[i] => 1.0,
+                5 => 1.0,
+                _ => 0.0,
+            };
+        }
+        let total: f32 = weights.iter().sum();
+        if total > 0.0 {
+            for i in 0..g.count {
+                widths[i] += extra * weights[i] / total;
+            }
+            break;
+        }
+    }
+    widths
+}
+
 fn distribute_min(widths: &mut [f32], start: usize, count: usize, required: f32) {
     let current: f32 = widths[start..start + count].iter().sum();
     let extra = (required - current).max(0.0) / count as f32;
@@ -244,10 +518,32 @@ fn constraints(
         } else {
             chrome(cell, basis)
         };
-        let explicit = length(cell, "width", basis).unwrap_or(0.0) + edges;
+        let explicit = length(cell, "width", basis)
+            .map(|w| outer_cell_size(cell, w, edges))
+            .unwrap_or(edges);
         let (inner_min, inner_max) = content_widths(cell, fonts, text);
-        let mn = (inner_min + edges).max(explicit);
-        let mx = (inner_max + edges).max(mn);
+        let minimum = intrinsic_limit(cell, "min-width")
+            .map(|w| outer_cell_size(cell, w, edges))
+            .unwrap_or(edges);
+        let maximum = intrinsic_limit(cell, "max-width")
+            .map(|w| outer_cell_size(cell, w, edges))
+            .unwrap_or(f32::INFINITY);
+        // A scroll container can accommodate content wider than its specified
+        // maximum without enlarging the column. Preserve that maximum in the
+        // intrinsic pass, before materializing the assigned content width.
+        let scrolls = matches!(
+            cell.style
+                .get("overflow-x")
+                .or_else(|| cell.style.get("overflow")),
+            Some("auto" | "scroll" | "hidden")
+        );
+        let content_min = if scrolls {
+            (inner_min + edges).min(maximum)
+        } else {
+            inner_min + edges
+        };
+        let mn = content_min.max(explicit).max(minimum);
+        let mx = (inner_max + edges).min(maximum).max(mn);
         distribute_min(
             &mut min,
             c.col,
@@ -268,8 +564,25 @@ fn constraints(
 }
 
 pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
+    intrinsic_with_text(b, fonts, None)
+}
+
+/// Like [`intrinsic`], but threads real shaped text through when available.
+/// `intrinsic`'s hardcoded `text: None` measures every cell with fallback
+/// glyph-width heuristics; that estimate can diverge sharply from the same
+/// table's own live [`constraints`] call inside [`layout`] (which always
+/// receives real `text`), so a shrink-to-fit box sized from `intrinsic`
+/// alone can resolve narrower than the table actually needs once real
+/// shaping runs, squeezing columns below their true max-content width
+/// (LAYOUT-24). Callers that already have `text` in scope — e.g. an abspos
+/// table wrapper's shrink-to-fit computation — should call this instead.
+pub(crate) fn intrinsic_with_text(
+    b: &LayoutBox,
+    fonts: &FontSource,
+    text: Option<&dyn amazing_text::TextSystem>,
+) -> (f32, f32) {
     let g = Grid::new(b);
-    let (min, max) = constraints(b, &g, fonts, 0.0, None);
+    let (min, max) = constraints(b, &g, fonts, 0.0, text);
     let model_edges = if collapsed(b) {
         let edges =
             crate::table_decoration::Borders::new(b, &g).widths(0, 0, g.rows.len(), g.count);
@@ -283,7 +596,9 @@ pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
         } else {
             0.0
         };
-    let specified = length(b, "width", 0.0).unwrap_or(0.0);
+    let specified = length(b, "width", 0.0)
+        .map(|w| outer_table_width(b, w, model_edges))
+        .unwrap_or(0.0);
     (
         (min.iter().sum::<f32>() + edges).max(specified),
         (max.iter().sum::<f32>() + edges).max(specified),
@@ -320,20 +635,24 @@ pub(crate) fn layout(
     } else {
         0.0
     };
-    let specified = length(b, "width", cbw);
+    let specified = length(b, "width", cbw).map(|w| outer_table_width(b, w, edges));
     let fixed = specified.is_some()
         && b.style
             .get("table-layout")
             .is_some_and(|s| s.eq_ignore_ascii_case("fixed"));
     let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
-    let (min, max) = constraints(b, &g, fonts, specified.unwrap_or(0.0), text);
+    let (min, max) = if fixed {
+        (vec![0.0; g.count], vec![0.0; g.count])
+    } else {
+        constraints(b, &g, fonts, 0.0, text)
+    };
     let capmin = children(b)
         .iter()
         .filter(|c| role(c) == Role::Caption)
         .map(|c| crate::flex::min_content_width(c, fonts))
         .fold(0.0, f32::max);
-    // CSS table width denotes the border box. Intrinsic cell constraints
-    // include cell padding/borders, but exclude inter-cell border spacing.
+    // Intrinsic cell constraints include cell padding/borders, but exclude
+    // table padding, borders and inter-cell border spacing.
     let mn = min.iter().sum::<f32>() + edges + gaps;
     let mx = max.iter().sum::<f32>() + edges + gaps;
     let mut width = if fixed {
@@ -342,59 +661,19 @@ pub(crate) fn layout(
         specified.unwrap_or(available.min(mx)).max(mn)
     }
     .max(capmin)
-    .max(caption_min);
-    let mut widths = if fixed {
-        vec![0.0; g.count]
+    .max(caption_min)
+    .max(
+        length(b, "min-width", cbw)
+            .map(|w| outer_table_width(b, w, edges))
+            .unwrap_or(0.0),
+    );
+    let widths = if fixed {
+        fixed_widths(b, &g, (width - edges - gaps).max(0.0), sx, borders.as_ref())
     } else {
-        min.clone()
+        auto_widths(b, &g, &min, &max, (width - edges - gaps).max(0.0))
     };
     if fixed {
-        let mut known = vec![false; g.count];
-        for (i, path) in g.columns.iter().enumerate() {
-            if let Some(w) = length(at(b, path), "width", width) {
-                widths[i] = w;
-                known[i] = true;
-            }
-        }
-        for c in g.cells.iter().filter(|c| c.row == 0) {
-            let cell = at(b, &c.path);
-            if let Some(w) = length(cell, "width", width) {
-                let required = (w + chrome(cell, width) - sx * (c.cols - 1) as f32).max(0.0);
-                let present: f32 = widths[c.col..c.col + c.cols].iter().sum();
-                let missing = known[c.col..c.col + c.cols].iter().filter(|&&v| !v).count();
-                if missing > 0 {
-                    for i in c.col..c.col + c.cols {
-                        if !known[i] {
-                            widths[i] = (required - present).max(0.0) / missing as f32;
-                            known[i] = true;
-                        }
-                    }
-                }
-            }
-        }
-        let remaining = (width - edges - gaps - widths.iter().sum::<f32>()).max(0.0);
-        let missing = known.iter().filter(|&&v| !v).count();
-        if missing > 0 {
-            for i in 0..g.count {
-                if !known[i] {
-                    widths[i] = remaining / missing as f32;
-                }
-            }
-        }
         width = width.max(widths.iter().sum::<f32>() + edges + gaps);
-    }
-    if g.count > 0 {
-        let extra = (width - edges - gaps - widths.iter().sum::<f32>()).max(0.0);
-        let flexibility: f32 = max.iter().zip(&min).map(|(a, b)| a - b).sum();
-        let towards = if fixed { 0.0 } else { extra.min(flexibility) };
-        for i in 0..g.count {
-            widths[i] += if flexibility > 0.0 {
-                towards * (max[i] - min[i]) / flexibility
-            } else {
-                0.0
-            };
-            widths[i] += (extra - towards) / g.count as f32;
-        }
     }
     let free =
         (cbw - width - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
@@ -471,14 +750,23 @@ pub(crate) fn layout(
             "width",
             &format!("{}px", (w - chrome(cell, width)).max(0.0)),
         );
+        // The column algorithm has already applied outer min/max constraints.
+        // Hand block layout a content size, independent of the author's box
+        // sizing, so a second constraint pass cannot widen the assigned track.
+        cell.style.set("box-sizing", "content-box");
+        cell.style.set("min-width", "0");
+        cell.style.set("max-width", "none");
         for name in ["margin-top", "margin-right", "margin-bottom", "margin-left"] {
             cell.style.set(name, "0");
         }
         crate::block::layout_table_content(cell, cell_x, 0.0, w, fonts, text);
         cell.style = original;
+        // Fixed tracks can be narrower than cell padding/borders. Their
+        // decoration box still occupies the assigned track; block layout's
+        // nonnegative content width must not expand it into the next column.
+        cell.border_box.w = w;
         let h = cell.border_box.h;
-        let baseline = first_baseline(cell).unwrap_or(cell.content_box.y + cell.content_box.h)
-            - cell.border_box.y;
+        let baseline = cell_baseline(cell) - cell.border_box.y;
         let align = cell.style.get("vertical-align").unwrap_or("baseline");
         if !matches!(align, "top" | "middle" | "bottom") {
             baselines[c.row] = baselines[c.row].max(baseline);
@@ -703,6 +991,19 @@ pub(crate) fn layout(
     b.lines.clear();
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
 }
+fn cell_baseline(cell: &LayoutBox) -> f32 {
+    first_baseline(cell).unwrap_or_else(|| {
+        // Without a line box, the cell synthesizes its baseline at the bottom
+        // content edge. Its specified minimum height still participates even
+        // though row-height excess is represented separately as padding.
+        cell.content_box.y
+            + cell
+                .content_box
+                .h
+                .max(length(cell, "height", 0.0).unwrap_or(0.0))
+    })
+}
+
 fn first_baseline(b: &LayoutBox) -> Option<f32> {
     b.lines
         .first()
@@ -828,24 +1129,79 @@ fn content_widths(
     fonts: &FontSource,
     text: Option<&dyn amazing_text::TextSystem>,
 ) -> (f32, f32) {
-    if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
-        let mut items = items.clone();
-        crate::replaced::resolve(&mut items, 0.0, None);
-        let direction = if b.style.get("direction") == Some("rtl") {
-            amazing_text::Direction::RightToLeft
-        } else {
-            amazing_text::Direction::LeftToRight
-        };
-        if let Some(pair) = crate::inline::intrinsic_widths_shaped(&items, direction, text) {
-            return pair;
+    if let Flow::Inlines(items) = &b.flow {
+        let mut minimum_items = items.clone();
+        let mut maximum_items = items.clone();
+        for (minimum, maximum) in minimum_items.iter_mut().zip(&mut maximum_items) {
+            if let (
+                crate::InlineNode::Atomic {
+                    node,
+                    size: min_size,
+                    ..
+                },
+                crate::InlineNode::Atomic { size: max_size, .. },
+            ) = (minimum, maximum)
+                && let Some(atom) = b
+                    .positioned
+                    .iter()
+                    .find(|c| c.inline_atomic && c.node == Some(*node))
+            {
+                let (mn, mx) = if atom.table_wrapper {
+                    content_widths(atom, fonts, text)
+                } else {
+                    (
+                        crate::flex::min_content_width(atom, fonts),
+                        crate::flex::max_content_width(atom, fonts),
+                    )
+                };
+                min_size.width = mn;
+                max_size.width = mx;
+            }
         }
+        crate::replaced::resolve(&mut minimum_items, 0.0, None);
+        crate::replaced::resolve(&mut maximum_items, 0.0, None);
+        if let Some(text) = text {
+            let direction = if b.style.get("direction") == Some("rtl") {
+                amazing_text::Direction::RightToLeft
+            } else {
+                amazing_text::Direction::LeftToRight
+            };
+            if let Some(mn) =
+                crate::inline::intrinsic_widths_shaped(&minimum_items, direction, text)
+            {
+                if !b.positioned.iter().any(|child| child.inline_atomic) {
+                    return mn;
+                }
+                if let Some(mx) =
+                    crate::inline::intrinsic_widths_shaped(&maximum_items, direction, text)
+                {
+                    return (mn.0, mx.1);
+                }
+            }
+        }
+        let mut scratch = LayoutBox::new(
+            None,
+            crate::Display::Block,
+            b.style.clone(),
+            b.font_size,
+            b.line_height,
+        );
+        scratch.flow = Flow::Inlines(maximum_items);
+        let mx = crate::flex::max_content_inner_width(&scratch, fonts);
+        scratch.flow = Flow::Inlines(minimum_items);
+        let mn = if matches!(b.style.get("white-space"), Some("nowrap" | "pre")) {
+            mx
+        } else {
+            crate::flex::min_content_inner_width(&scratch, fonts)
+        };
+        return (mn, mx);
     }
     if let Flow::Blocks(c) = &b.flow {
         let mut mn = 0.0f32;
         let mut mx = 0.0f32;
         for child in c {
             let pair = if role(child) == Role::Table {
-                intrinsic(child, fonts)
+                intrinsic_with_text(child, fonts, text)
             } else {
                 content_widths(child, fonts, text)
             };
@@ -863,4 +1219,32 @@ fn content_widths(
         crate::flex::min_content_inner_width(b, fonts)
     };
     (min, max)
+}
+
+/// The inline-table baseline belongs to its first row, not the caption or the
+/// last line of its last cell. Empty tables synthesize the bottom grid edge.
+pub(crate) fn inline_baseline(wrapper: &LayoutBox) -> f32 {
+    let table = at(wrapper, &[0]);
+    let grid = Grid::new(table);
+    let cells = || {
+        grid.cells
+            .iter()
+            .filter(|c| c.row == 0)
+            .map(|c| at(table, &c.path))
+    };
+    cells()
+        .filter(|cell| {
+            !matches!(
+                cell.style.get("vertical-align"),
+                Some("top" | "middle" | "bottom")
+            )
+        })
+        .map(cell_baseline)
+        .reduce(f32::max)
+        .or_else(|| {
+            cells()
+                .map(|cell| cell.content_box.y + cell.content_box.h)
+                .reduce(f32::max)
+        })
+        .unwrap_or(table.border_box.y + table.border_box.h)
 }

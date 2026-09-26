@@ -164,6 +164,13 @@ struct RetainedPage {
     text: TextProvider,
     styles: amazing_css::StyledDom,
     resources: PageResources,
+    /// A11Y-11: the accessibility tree for this retained page, built once
+    /// from the same `dom`/`styles`/`root` triple used for layout and paint
+    /// (Stage 1 has no incremental invalidation, so a fresh
+    /// `amazing_a11y::build` per navigation/reload is the same rebuild-on-
+    /// change model `amazing-a11y`'s own `event::rebuild_and_diff` already
+    /// uses). `EngineViewport::accessibility_tree()` exposes it read-only.
+    accessibility: amazing_a11y::AxTree,
 }
 
 #[derive(Debug, Clone)]
@@ -890,6 +897,13 @@ impl EngineViewport {
         self.scroll_frame.borrow().as_ref().map(GpuiFrame::element)
     }
 
+    /// A11Y-11: the accessibility tree for this page, if one was retained
+    /// (a plain `Surface`-only render with no compositor scene — e.g. a
+    /// failed paint fallback — has no `RetainedPage` and so no tree either).
+    pub fn accessibility_tree(&self) -> Option<&amazing_a11y::AxTree> {
+        self.page.as_deref().map(|page| &page.accessibility)
+    }
+
     pub fn root_scroll_id(&self) -> Option<amazing_compositor::ScrollId> {
         self.compositor.as_ref()?.borrow_mut().compositor_mut().root_scroll_id()
     }
@@ -1069,8 +1083,9 @@ fn render_dom_with_resources(
     };
     drop(view);
     drop(images);
+    let accessibility = amazing_a11y::build(dom, &styles, &root);
     let scene = compositor.map(|compositor| (
-        RetainedPage { root, text, styles, resources },
+        RetainedPage { root, text, styles, resources, accessibility },
         compositor,
     ));
     (surface, links, controls, scene)
@@ -2428,6 +2443,18 @@ mod tests {
         assert_eq!(viewport.image.frame_count(), 1);
         let size = viewport.image.size(0);
         assert_eq!((u32::from(size.width), u32::from(size.height)), (960, 570));
+    }
+
+    #[test]
+    fn accessibility_tree_is_retained_alongside_the_compositor_scene() {
+        // A11Y-11: the tab's viewport carries a real amazing_a11y::AxTree
+        // built from the same dom/styles/layout as the rendered surface,
+        // not just a compositor scene -- this is what main.rs's tab render
+        // hook mounts via a11y_bridge::ax_tree_element.
+        let viewport = EngineViewport::demo();
+        let tree = viewport.accessibility_tree().expect("demo page retains a page scene");
+        assert!(tree.root().is_some(), "a real page should expose a root AxNode");
+        assert!(!tree.nodes().is_empty(), "a real page should expose more than a bare root");
     }
 
     #[test]

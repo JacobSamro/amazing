@@ -36,6 +36,7 @@
 //! by [`value::Throw`]; no input is allowed to panic the engine.
 
 pub mod ast;
+pub mod debug_hook;
 pub mod env;
 pub mod errors;
 pub mod interp;

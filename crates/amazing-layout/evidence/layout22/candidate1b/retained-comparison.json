@@ -1,0 +1,34 @@
+{
+  "before": "crates/amazing-layout/evidence/layout21/final-repaired/retained/report.json",
+  "after": "/home/user/amazing/out/layout/layout22/candidate1b/retained/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 299,
+    "mismatch": 150,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 301,
+    "mismatch": 148,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-ruby__ruby-align-001.html",
+    "css-ruby__ruby-align-001a.html",
+    "css-writing-modes__text-combine-upright-compression-001.html"
+  ],
+  "losses": [
+    "CSS2__normal-flow__block-in-inline-align-justify-001.html"
+  ],
+  "actual_hash_changes": 43,
+  "reference_hash_changes": 44,
+  "before_projection_sha256": "e480ee86c6fe4c051f23b19970269f9e74fc590247a2f43664e2d12bcc182bea",
+  "after_projection_sha256": "97702869c52996ec2cd7764760ae55a2ceb4c3b6236a5a1a41804bf63a7fbfb2"
+}

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
+    observable_handle_unsubscribe,
     html_element_interface, registry_for_document,
     dom_exception::throw_dom_error,
     host::{
@@ -37,6 +38,10 @@ use runtime_host_storage::StorageRuntime;
 #[path = "runtime_host_net.rs"]
 mod runtime_host_net;
 use runtime_host_net::{NetNativeEntry, NetRuntime};
+
+#[path = "runtime_host_integrator_assist.rs"]
+mod runtime_host_integrator_assist;
+use runtime_host_integrator_assist::{IaNativeEntry, IaRuntime};
 
 #[path = "runtime_host_messaging.rs"]
 pub(crate) mod runtime_host_messaging;
@@ -71,6 +76,7 @@ enum NativeEntry {
     DocumentClose,
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
+    IntegratorAssist(IaNativeEntry),
 }
 
 enum WebObject {
@@ -120,6 +126,15 @@ struct BindingState {
     pending_form_selection_events: Vec<NodeIdx>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
     net: NetRuntime,
+    integrator_assist: IaRuntime,
+    /// HTML-29: per-document `document.write`/`writeln` insertion point.
+    /// A key present means that document's parser is "active" (its own
+    /// top-level scripts are running, or it is inside a `document.open()`/
+    /// `write()` synthetic session): `write()` inserts at `(parent,
+    /// before)`, matching `Dom::pre_insert`'s own signature. No key means
+    /// `write()` implicitly performs `document.open()`'s full-document
+    /// replace first. See `runtime_host_html.rs`.
+    write_insertion_points: HashMap<NodeIdx, (NodeIdx, Option<NodeIdx>)>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -528,6 +543,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
             InterfaceBrand::DOM_PARSER => Interface::DOMParser,
+            InterfaceBrand::OBSERVABLE => Interface::Observable,
+            InterfaceBrand::SUBSCRIBER => Interface::Subscriber,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -607,6 +624,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::DocumentClose => adapter.document_close(this),
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
+            NativeEntry::IntegratorAssist(entry) => adapter.invoke_integrator_assist(entry, this, &args),
         }
     })
 }
@@ -656,6 +674,8 @@ pub(crate) fn install(
         pending_form_selection_events: Vec::new(),
         messaging: None,
         net: NetRuntime::new(),
+        integrator_assist: IaRuntime::new(),
+        write_insertion_points: HashMap::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
@@ -668,6 +688,7 @@ pub(crate) fn install(
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
     adapter.install_messaging()?;
+    adapter.install_integrator_assist_globals()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
     adapter.install_html_form_globals()?;
@@ -1237,6 +1258,19 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         Ok(strings)
     }
+    fn sequence_values(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
+        self.require_object(value)?;
+        let length = self.js.binding_get_property(value, "length")?;
+        let length = self.js.binding_to_number(&length)?;
+        if !length.is_finite() || length < 0.0 || length > u32::MAX as f64 {
+            return Err(Throw::type_error("Invalid sequence length"));
+        }
+        let mut values = Vec::new();
+        for index in 0..length.trunc() as u32 {
+            values.push(self.js.binding_get_property(value, &index.to_string())?);
+        }
+        Ok(values)
+    }
     fn construct_custom_element(&mut self, constructor: &JsValue,
         _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
         // JSRT-7 must make derived `super()` return this element's canonical
@@ -1273,6 +1307,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn dom_exception_value(&mut self, error: DomError) -> Result<JsValue, Throw> {
         Ok(throw_dom_error(self, error).0)
+    }
+    fn range_error_value(&mut self, message: &'static str) -> Result<JsValue, Throw> {
+        Ok(Throw::range_error(message).0)
     }
     fn image_loader_state(&mut self, node: NodeIdx) -> Result<Option<ImageLoaderState>, Throw> {
         let state = self.state.borrow();
@@ -1765,8 +1802,8 @@ impl AbortHost for RuntimeBindingHost<'_> {
         self.state.borrow_mut().abort_timeouts.push((signal, milliseconds));
         Ok(())
     }
-    fn run_abort_algorithm(&mut self, _algorithm: u64, _reason: &JsValue) -> Result<(), Throw> {
-        Err(throw_dom_error(self, DomError::NotSupportedError))
+    fn run_abort_algorithm(&mut self, algorithm: u64, reason: &JsValue) -> Result<(), Throw> {
+        observable_handle_unsubscribe(self, algorithm, reason)
     }
 }
 

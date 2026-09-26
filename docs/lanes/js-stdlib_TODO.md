@@ -481,4 +481,204 @@ internal engine-thrown errors) still installs `"message"` as enumerable,
 unlike the constructor path fixed here; flagged in `questions.md` as a
 deferred parity follow-up for whoever owns `value.rs`.
 
+## JSS-fix: RegExpExec dispatch for @@match/@@replace/String.prototype.match
+
+Fixed base: `93ed3aa8` (dev's merge of JSS-next). Priority regression fix
+requested by the orchestrator ahead of the Temporal ticket below: dev's full
+Test262 run showed +722 gained but 3 RegExp files newly failing relative to
+the pre-merge baseline (`built-ins/RegExp/prototype/Symbol.match/{builtin-
+success-g-set-lastindex-err,g-match-empty-set-lastindex-err}.js`,
+`built-ins/RegExp/prototype/Symbol.replace/result-coerce-groups-err.js`).
+
+Root cause: `RegExp.prototype[@@match]`'s global loop, `RegExp.prototype
+[@@replace]`, and `String.prototype.match` all matched through the internal
+`amazing_regex` matcher directly, bypassing spec `RegExpExec(R, S)`'s
+`Get(R, "exec")` + `Call` dispatch entirely -- so an overridden `exec`, a
+non-writable `lastIndex` set mid-match, or a `groups`/`0` getter with a side
+effect never took effect. Added `regexp_exec_dispatch`/`regexp_exec_call`
+(the spec `RegExpExec` algorithm, `interp_regexp.rs`) and rewired all three
+call sites through it, plus a `groups`-`ToObject` coercion step in
+`@@replace`'s string-substitution branch (the actual fix for
+`result-coerce-groups-err.js`, reusing `std_legacy_to_object` from
+`builtins_std_object_model.rs`, which already throws `TypeError` for
+null/undefined and boxes primitives).
+
+Since `RegExp.prototype.exec` is installed by default and essentially never
+overridden in practice, both hot loops special-case the unmodified-`exec`
+case (`regexp_exec_default`, a `std::ptr::fn_addr_eq` check against the
+known native function) to skip a JS result-object round trip per match --
+added after an initial version of this fix looked like it introduced 6
+`CharacterClassEscapes` timeouts; `git stash`-based comparison against the
+unmodified tree proved those were pre-existing, not a regression, but the
+fast path removes the theoretical per-match overhead risk anyway. A real,
+self-introduced 7-file `String`/`replace` regression (a captures-indexing
+off-by-one: slot 0 must be the whole match per `regexp_substitution`'s and
+`amazing_regex::Match.captures`'s existing convention, not left for capture
+group 1, which caused both a Rust panic and wrong `$1` substitution) was
+caught via before/after `.jsonl` diffing and fixed before landing.
+
+All 3 target regressions now pass. `built-ins/RegExp`: 1,144 -> **1,176 /
+1,962** pass (+32 files, 0 lost). `built-ins/String`: **1,315 / 1,341** pass,
+unaffected (0 lost). `amazing-js` crate nextest 380/380 pass (1 skipped),
+doctest 1/1. Workspace: `cargo nextest run --workspace --locked
+--no-fail-fast` 3,105/3,105 passed (13 skipped); `cargo test --workspace
+--locked --doc` all green. Committed `57dcf24b`.
+
+## JSS-Temporal: Duration.compare relativeTo/options + string-form range checks
+
+Fixed base: `57dcf24b`. Continuing the largest remaining js-stdlib Test262
+cluster (Temporal), in bulk, skipping Proxy-dependent files (js-runtime's),
+with zero lost passes, per the orchestrator's standing instruction.
+
+Fixed three spec gaps in `Temporal.Duration.compare` (`builtins_temporal.rs`,
+`std_temporal_compare`):
+
+- `GetOptionsObject`/`ToRelativeTemporalObject` (spec steps 2-3) only ran on
+  the calendar-units branch, so a non-object `options` argument or a
+  malformed `relativeTo` string/property bag never threw when the two
+  duration arguments happened to be field-wise identical. Restructured so
+  `options`/`relativeTo` are read and parsed unconditionally first (throwing
+  as needed), and the identical-duration equality check (step 4) now only
+  skips the calendar-required `RangeError` and the day-based total
+  computation, not the validation that must precede it.
+- The "calendar units require relativeTo" check compared `left[0..2]`
+  (years/months only), missing weeks at index 2 -- a week-only duration
+  compared with no `relativeTo` should also throw; extended to `left[0..3]`.
+- `std_temporal_parse`'s `Duration` branch returned raw parsed fields
+  without running `std_temporal_validate`, unlike the property-bag path
+  (`std_temporal_bag`, which already validates unconditionally), so a
+  string-form `"P4294967296Y"` or an ISO duration string mixing a positive
+  and negative field skipped the sign/range check entirely. Added the
+  missing validate call.
+
+A first attempt at the first fix introduced a 2-file regression
+(`options-wrong-type.js`, `relativeto-no-fractional-minutes-hours.js`) by
+short-circuiting on `left == right` before `options`/`relativeTo` were read
+at all; caught via a full before/after `.jsonl` fail-path diff against
+`js-stdlib-temporal-baseline2.jsonl` and fixed by hoisting the read+parse
+above the equality check.
+
+`built-ins/Temporal`: 3,815 -> **3,820 / 4,603** pass (+5 files / +10
+variants), zero lost. Fixed: `Duration/compare/{calendar-possibly-required,
+instances-identical, relativeto-propertybag-invalid, relativeto-string-
+invalid, relativeto-undefined-throw-on-calendar-units}.js` (all variants).
+Workspace: `cargo nextest run --workspace --locked --no-fail-fast`
+3,105/3,105 passed (13 skipped, 0 failed); `cargo test --workspace --locked
+--doc` all green, including `amazing_js` (1/1) and `amazing_html` (1/1).
+Committed `20159ad5`.
+
+Did not extend the same weeks-range fix to the analogous checks in
+`builtins_temporal_arithmetic.rs` (`std_temporal_add_values`,
+`std_temporal_duration_total`, `std_temporal_round`): no failing test
+evidenced the same bug there, and weeks in simple arithmetic balancing are a
+fixed 7-day unit needing no calendar, unlike `compare`'s relative-day
+computation.
+
+Remaining non-Proxy Temporal clusters, none started: `Duration.prototype
+.round`'s `relativeTo`/calendar-unit balancing (~38 files -- needs a real
+`RoundDuration`/`BalanceDateDurationRelative` implementation, the largest
+single cluster and the most effort); `ZonedDateTime.prototype.{since,until}`
+with `smallestUnit`/`roundingMode` (~24 files) and `PlainDateTime.prototype
+.{since,until}` with `largestUnit` (~16 files), which likely share the same
+difference/rounding gap as `round()`; "duration field must be an integer" /
+`float64`-representable-integer precision-exact arithmetic (~23 files);
+`PlainDate`/`PlainTime` ISO string validation edge cases ("invalid ISO
+date"/"invalid ISO time", ~38 files combined); and a ~98-variant mixed
+"Expected RangeError but no exception thrown" bucket. The `round()`/
+since/until rounding cluster is flagged as the next ticket -- it is the
+largest lever left in Temporal but is a substantial dedicated piece of work,
+not a quick follow-on to this commit.
+
+## JSS-round: Duration.prototype.round relativeTo/calendar-unit balancing
+
+Implemented a real `RoundDuration`/`BalanceDateDurationRelative` for
+`Duration.prototype.round` (`builtins_temporal_arithmetic.rs`,
+`std_temporal_round_duration`, rewritten from scratch) and folded in the
+`ZonedDateTime.prototype.{since,until}` (`builtins_temporal_epoch.rs`,
+`std_epoch_difference`) and `PlainDateTime.prototype.{since,until}`
+(`builtins_temporal_arithmetic.rs`, `std_temporal_difference`) rounding
+clusters, which shared the same underlying gap.
+
+New machinery in `builtins_temporal_arithmetic.rs`:
+- `std_temporal_unit_rank`/`std_temporal_unit_name`/`std_temporal_larger_unit`/
+  `std_temporal_singular_unit`: a year=0..nanosecond=9 rank matching the
+  Duration field-index convention, used throughout for unit defaulting and
+  coarseness comparisons.
+- `std_temporal_epoch_breakdown(base, target_ns, largest)`: exact
+  calendar+time rebalance of an epoch-ns span from `base` to a Duration at a
+  given largestUnit granularity. Contains a "day borrow" step for when the
+  calendar date-difference and the sub-day time remainder disagree in sign
+  (e.g. base + 2 days - 1 hour must borrow a day from the date part and hand
+  it to the time part so both end up sign-consistent).
+- `std_temporal_calendar_step_ns`/`std_temporal_round_calendar_unit`: a
+  bracket search for rounding to a variable-length calendar unit (year/month
+  have no fixed ns length), computing real calendar arithmetic for candidate
+  integer counts and applying floor/ceil/trunc/expand/half* logic within the
+  bracket that contains the true value.
+- `std_temporal_round_to_calendar_unit(base, target_ns, smallest, largest, ...)`:
+  the hierarchical fix for `largestUnit != smallestUnit` -- rounding "the
+  whole span in smallestUnit's own units from base" is wrong in that case
+  (e.g. a span that's exactly 1 month but not a whole number of weeks must
+  not spuriously pick up a week); it gets the exact breakdown at `largest`
+  granularity first, then rounds only the sub-`largest` remainder to
+  `smallest` granularity.
+
+Also fixed along the way: `std_epoch_difference`'s default largestUnit
+ignored an explicit/coarser `smallestUnit` (a `smallestUnit: "year"` with no
+`largestUnit` must default `largestUnit` to "year" too, not the kind's usual
+"hour"/"second"); `std_epoch_difference`'s calendar branch was missing
+`"week"` and only did an exact `calendar_difference`, never true rounding.
+
+Two intermediate regressions surfaced and were fixed before landing:
+- A first pass at the `relativeTo`-string offset/zone-consistency check (for
+  `relativeto-string-wrong-offset.js` /
+  `throws-on-wrong-offset-for-zoned-date-time-relative-to.js`) was added
+  directly inside the general `std_temporal_parse`, which also validates
+  every plain-type constructor/parsing call -- but a mismatched offset must
+  be *ignored* there (only `ToRelativeTemporalObject`'s string-relativeTo
+  resolution needs the strict check), so it broke ~53 previously-passing
+  files across `PlainDate`/`PlainDateTime`/`PlainMonthDay`/`PlainTime`/
+  `PlainYearMonth`/`ZonedDateTime` parsing (`argument-string-date-with-utc-
+  offset.js`, `argument-string-time-zone-annotation.js`,
+  `PlainDateTime/from/parser.js` and more). Reverted the general check and
+  reimplemented it as a new, narrowly-scoped
+  `std_temporal_validate_relative_to_offset` helper
+  (`builtins_temporal.rs`), called only from `std_temporal_round_duration`
+  when `relativeTo` is itself a string.
+- `std_temporal_add_calendar`/`std_temporal_epoch_breakdown` only ever
+  rejected an i64 day-count overflow, not Temporal's actual (much narrower)
+  ISO date range, so a duration with an enormous time component (e.g.
+  `Number.MIN_SAFE_INTEGER` seconds) rounded to a calendar unit relative to a
+  plain date silently bracket-searched to a wildly out-of-range civil date
+  instead of throwing. Added `std_temporal_validate(PlainDate, ...)` calls at
+  the two points that compute an intermediate civil date from an arbitrary
+  epoch-ns offset (`std_temporal_calendar_step_ns`'s bracket-search candidate,
+  and `std_temporal_epoch_breakdown`'s adjusted target before calendar-
+  difference) -- this is what `Duration/prototype/round/relativeto-
+  {plaindate,zoneddatetime}-large-time-component-out-of-range.js` need.
+
+`built-ins/Temporal`: **7,640 -> 7,820 pass variants (+180), zero lost**,
+diffed by (path, variant) against `js-stdlib-temporal2.jsonl` (the
+post-JSS-Temporal baseline; counts are strict+non-strict variants, not
+files -- 4,603 files discovered, 3,908 pass in strict mode alone in the
+final run). Workspace: `cargo nextest run
+--workspace --locked --no-fail-fast` 3,267/3,267 passed (14 skipped, 0
+failed); `cargo test --workspace --locked --doc` all green, including
+`amazing_js` (1/1) and `amazing_html` (1/1). Base: local `dev` at `4f27b9c4`
+(the merge that landed JSS-Temporal) -- `dev` has since advanced to
+`9e1f1aaf`, but the only lane-owned drift since `4f27b9c4`
+(`builtins_std_object_model.rs`, `builtins_std_reflect.rs`, from JSRT-15)
+does not touch any file this ticket changed, so no rebase was needed per the
+"do not chase dev" rule.
+
+Remaining Temporal clusters, none started this round: "duration field must
+be an integer" / `float64`-precision-exact arithmetic (~23 files);
+`PlainDate`/`PlainTime` ISO string validation edge cases (~38 files
+combined); the mixed "Expected RangeError but no exception thrown" bucket;
+`Duration.prototype.total`'s own `relativeTo`-string offset/zone-consistency
+gap (same class of bug as the round() fix above, but out of this ticket's
+scope -- `Duration/compare` and `Duration/prototype/total`'s
+`relativeto-string-wrong-offset.js`-style tests are still failing, unchanged
+from before this ticket).
+
 

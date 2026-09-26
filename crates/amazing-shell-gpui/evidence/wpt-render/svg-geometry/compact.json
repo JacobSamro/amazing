@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "svg/geometry",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-cecced7cc643a3f2",
+  "generated": "2026-09-26T18:58:24Z",
+  "counts": {
+    "pass": 21,
+    "mismatch": 0,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": {
+    "svg__geometry__reftests__ellipse-006.svg": "pass",
+    "svg__geometry__reftests__percentage-attribute.svg": "pass",
+    "svg__geometry__reftests__ellipse-007.svg": "pass",
+    "svg__geometry__reftests__ellipse-005.svg": "pass",
+    "svg__geometry__reftests__ellipse-001.svg": "pass",
+    "svg__geometry__reftests__circle-001.svg": "pass",
+    "svg__geometry__reftests__ellipse-002.svg": "pass",
+    "svg__geometry__reftests__rect-002.svg": "pass",
+    "svg__geometry__reftests__rect-005.svg": "pass",
+    "svg__geometry__reftests__ellipse-003.svg": "pass",
+    "svg__geometry__reftests__rect-007.svg": "pass",
+    "svg__geometry__reftests__rect-001.svg": "pass",
+    "svg__geometry__reftests__circle-006.svg": "pass",
+    "svg__geometry__reftests__rect-004.svg": "pass",
+    "svg__geometry__reftests__ellipse-004.svg": "pass",
+    "svg__geometry__reftests__circle-002.svg": "pass",
+    "svg__geometry__reftests__rect-003.svg": "pass",
+    "svg__geometry__reftests__percentage.svg": "pass",
+    "svg__geometry__reftests__rect-006.svg": "pass",
+    "svg__geometry__reftests__circle-003.svg": "pass",
+    "svg__geometry__reftests__circle-004.svg": "pass"
+  }
+}

@@ -284,6 +284,7 @@ dependencies = [
  "amazing-image",
  "amazing-ipc",
  "amazing-ipc-platform",
+ "amazing-js",
  "amazing-layout",
  "amazing-media",
  "amazing-net",
@@ -310,7 +311,9 @@ version = "0.0.1"
 dependencies = [
  "amazing-css",
  "amazing-dom",
+ "amazing-layout",
  "amazing-media",
+ "amazing-paint",
 ]
 
 [[package]]

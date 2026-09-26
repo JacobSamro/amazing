@@ -136,6 +136,14 @@ pub struct RemoteObject {
     pub description: Option<String>,
     /// Opaque handle for `Runtime.callFunctionOn` / `Runtime.getProperties`.
     pub object_id: Option<String>,
+    /// A shallow summary of the object's own enumerable properties
+    /// (CDP-24). Real Chrome always attaches one for an object-typed
+    /// `Runtime.getProperties` value; for `Runtime.evaluate`/
+    /// `callFunctionOn` it is present only when that call's own
+    /// `generatePreview` was `true`. `None` for a primitive or an
+    /// unrequested preview — never a stand-in for `objectId`, which is set
+    /// independently.
+    pub preview: Option<ObjectPreview>,
 }
 
 impl Default for RemoteObject {
@@ -155,6 +163,7 @@ impl RemoteObject {
             unserializable_value: None,
             description: None,
             object_id: None,
+            preview: None,
         }
     }
 
@@ -218,6 +227,35 @@ impl RemoteObject {
             ..Self::undefined()
         }
     }
+}
+
+/// CDP `Runtime.ObjectPreview` (CDP-24): a shallow, best-effort summary of
+/// an object's own enumerable properties, attached to a [`RemoteObject`] —
+/// see [`RemoteObject::preview`]'s own doc comment for exactly when.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ObjectPreview {
+    pub object_type: String,
+    pub subtype: Option<String>,
+    pub description: Option<String>,
+    /// `true` when more own enumerable properties exist than `properties`
+    /// lists (a host may cap the list; see the implementing driver for its
+    /// own limit).
+    pub overflow: bool,
+    pub properties: Vec<PropertyPreview>,
+}
+
+/// One entry in an [`ObjectPreview::properties`] list.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PropertyPreview {
+    pub name: String,
+    /// `"object"`/`"function"`/`"undefined"`/`"string"`/`"number"`/
+    /// `"boolean"`/`"symbol"`/`"bigint"`, matching `RemoteObject::object_type`.
+    pub object_type: String,
+    /// A short rendered value, present for a primitive; `None` for a nested
+    /// object/function (real Chrome nests another preview there via
+    /// `valuePreview`; a host may choose not to build one — see the
+    /// implementing driver's own doc comment on why).
+    pub value: Option<String>,
 }
 
 /// CDP `Runtime.CallArgument`.
@@ -760,17 +798,33 @@ pub struct ScriptInfo {
     pub hash: String,
 }
 
+/// One CDP `Debugger.Scope` (`Debugger.CallFrame.scopeChain`'s elements).
+/// `object` is a real, live `RemoteObject` — `Runtime.getProperties`/
+/// `callFunctionOn` resolve its `objectId` back to the actual engine value
+/// the same way any other object reference in this crate does, not a
+/// snapshot or a fake.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Scope {
+    /// `"global"`, `"local"`, `"closure"`, `"block"`, `"catch"`, `"with"`,
+    /// `"eval"`, `"module"`, `"script"`.
+    pub scope_type: String,
+    pub object: RemoteObject,
+}
+
 /// One CDP `Debugger.CallFrame`, simplified to the fields a front end needs
 /// to show a stack and evaluate in a frame's scope. Chrome's full schema also
-/// carries a scope chain and a `this` value; the driver can add those later
-/// without breaking this seam (`evaluateOnCallFrame` already returns a full
-/// `EvaluateResult`).
+/// carries a `this` value and generator/async detail; the driver can add
+/// those later without breaking this seam (`evaluateOnCallFrame` already
+/// returns a full `EvaluateResult`). `scope_chain` was added in CDP-22 (see
+/// the driver's own doc comment for what it actually contains, given this
+/// engine's single-threaded, non-suspending debug model).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CallFrame {
     pub call_frame_id: String,
     pub function_name: String,
     pub location: ScriptLocation,
     pub url: String,
+    pub scope_chain: Vec<Scope>,
 }
 
 /// `Debugger.paused` data.
@@ -1084,6 +1138,14 @@ pub trait DevToolsSession: Send {
     fn release_object(&mut self, _object_id: &str) -> Result<(), HostError> {
         Ok(())
     }
+    /// Drops every remote object handle minted under `object_group`
+    /// (`Runtime.releaseObjectGroup`) — the group an `evaluate`/
+    /// `callFunctionOn` call's own `objectGroup` parameter tagged them with,
+    /// or `""` (CDP's default/ungrouped bucket) when that parameter was
+    /// absent.
+    fn release_object_group(&mut self, _object_group: &str) -> Result<(), HostError> {
+        Ok(())
+    }
     /// Compiles a script and returns its `scriptId` (`Runtime.compileScript`).
     fn compile_script(
         &mut self,
@@ -1282,6 +1344,19 @@ pub trait DevToolsSession: Send {
     /// The posted body of a request (`Network.getRequestPostData`).
     fn get_request_post_data(&mut self, _request_id: &str) -> Result<Option<String>, HostError> {
         Err(HostError::Unsupported)
+    }
+    /// Disables/re-enables the HTTP cache for future requests
+    /// (`Network.setCacheDisabled`). Advisory, like the `Emulation` hints
+    /// below: a driver with no cache of its own still succeeds, since the
+    /// *absence* of caching already satisfies "disabled".
+    fn set_cache_disabled(&mut self, _disabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Replaces the extra headers sent on every future request
+    /// (`Network.setExtraHTTPHeaders`) — a full replace each call, not a
+    /// merge, matching CDP.
+    fn set_extra_http_headers(&mut self, _headers: &[(String, String)]) -> Result<(), HostError> {
+        Ok(())
     }
 
     // --- Fetch ------------------------------------------------------------

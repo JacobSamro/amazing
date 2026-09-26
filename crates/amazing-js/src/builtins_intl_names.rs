@@ -8,7 +8,11 @@ const INTL_DISPLAY_DATA: &[(&str, &[IntlDisplayEntry])] = &[
     ("fr", INTL_DISPLAY_FR),
     ("es", INTL_DISPLAY_ES),
     ("ja", INTL_DISPLAY_JA),
+    ("zh", INTL_DISPLAY_ZH),
     ("zh-Hans", INTL_DISPLAY_ZH_HANS),
+    ("zh-Hant", INTL_DISPLAY_ZH_HANT),
+    ("ko", INTL_DISPLAY_KO),
+    ("sr", INTL_DISPLAY_SR),
     ("ar", INTL_DISPLAY_AR),
     ("hi", INTL_DISPLAY_HI),
     ("ru", INTL_DISPLAY_RU),
@@ -19,7 +23,11 @@ include!("builtins_intl_names_de.rs");
 include!("builtins_intl_names_fr.rs");
 include!("builtins_intl_names_es.rs");
 include!("builtins_intl_names_ja.rs");
+include!("builtins_intl_names_zh.rs");
 include!("builtins_intl_names_zh_hans.rs");
+include!("builtins_intl_names_zh_hant.rs");
+include!("builtins_intl_names_ko.rs");
+include!("builtins_intl_names_sr.rs");
 include!("builtins_intl_names_ar.rs");
 include!("builtins_intl_names_hi.rs");
 include!("builtins_intl_names_ru.rs");

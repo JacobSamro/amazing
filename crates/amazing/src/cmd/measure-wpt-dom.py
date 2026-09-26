@@ -35,6 +35,18 @@ def git(root, *args):
     return subprocess.check_output(['git', '-C', str(root), *args])
 
 
+def checkout_is_marker_pinned(root):
+    # The venus build hosts have no git; scripts/ensure-wpt.sh extracts the
+    # pinned revision from a GitHub tarball there instead and marks it with an
+    # empty .pinned-<rev7> file (see that script's own convention -- the same
+    # one wpt_harness.rs's checkout_is_marker_pinned() checks). On such a
+    # checkout every git() call below fails ("not a git repository") even
+    # though the tree is correctly pinned, so callers fall back to reading the
+    # tarball's on-disk state directly, which IS the pinned revision's content
+    # byte for byte.
+    return (Path(root) / ('.pinned-' + REVISION[:7])).exists()
+
+
 class Page(html.parser.HTMLParser):
     def __init__(self, text):
         super().__init__()
@@ -67,9 +79,27 @@ class Page(html.parser.HTMLParser):
             self.expected += data
 
 
+def list_tree(root, suite, marker_pinned):
+    if marker_pinned:
+        # The tarball checkout's on-disk state under suite/ is definitionally
+        # the pinned revision's tree (that's what extracted it), so a plain
+        # filesystem walk stands in for `git ls-tree -r --name-only`. Emit
+        # posix-style relative paths to match git's own output format.
+        base = Path(root) / suite
+        if not base.is_dir():
+            return []
+        return sorted(
+            str(p.relative_to(root).as_posix())
+            for p in base.rglob('*')
+            if p.is_file()
+        )
+    return git(root, 'ls-tree', '-r', '--name-only', REVISION, '--', suite + '/').decode().splitlines()
+
+
 def inventory(root, suite='dom'):
+    marker_pinned = checkout_is_marker_pinned(root)
     selected, excluded = [], []
-    for name in git(root, 'ls-tree', '-r', '--name-only', REVISION, '--', suite + '/').decode().splitlines():
+    for name in list_tree(root, suite, marker_pinned):
         if suite == 'url' and not (name in ('url/url-constructor.any.js', 'url/url-setters.any.js',
                 'url/url-setters-stripping.any.js') or re.fullmatch(r'url/urlsearchparams-[^/]+\.any\.js', name)):
             continue
@@ -83,9 +113,10 @@ def inventory(root, suite='dom'):
             excluded.append({'test': name, 'reason': 'not a testharness test source'})
             continue
         data = (root / name).read_bytes()
-        original = git(root, 'show', REVISION + ':' + name)
-        if data != original:
-            raise RuntimeError('Modified upstream source: ' + name)
+        if not marker_pinned:
+            original = git(root, 'show', REVISION + ':' + name)
+            if data != original:
+                raise RuntimeError('Modified upstream source: ' + name)
         page = Page(data.decode('utf-8-sig', errors='replace'))
         if not generated and not page.harness:
             excluded.append({'test': name, 'reason': 'no external testharness script (e.g. crash/reference/support)'})
@@ -157,10 +188,11 @@ def save_round(output, label, records):
 
 
 def prove(exe, root, output, timeout):
+    marker_pinned = checkout_is_marker_pinned(root)
     expected = {}
     for name in PROOF:
         data = (root / name).read_bytes()
-        if data != git(root, 'show', REVISION + ':' + name):
+        if not marker_pinned and data != git(root, 'show', REVISION + ':' + name):
             raise RuntimeError('Modified proof test: ' + name)
         e = json.loads(Page(data.decode()).expected)
         assert e['summarized_status']['status_string'] == 'OK'
@@ -205,10 +237,11 @@ def main():
         ap.error('--timeout-multiplier yields a deadline below 1 ms')
     root, exe, output = args.wpt_root.resolve(), args.executable.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    if git(root, 'rev-parse', 'HEAD').decode().strip() != REVISION:
+    marker_pinned = checkout_is_marker_pinned(root)
+    if not marker_pinned and git(root, 'rev-parse', 'HEAD').decode().strip() != REVISION:
         raise RuntimeError('Wrong WPT revision')
     harness = (root / 'resources/testharness.js').read_bytes()
-    if harness != git(root, 'show', REVISION + ':resources/testharness.js'):
+    if not marker_pinned and harness != git(root, 'show', REVISION + ':resources/testharness.js'):
         raise RuntimeError('Modified upstream harness')
     summary = {'wpt_revision': REVISION, 'harness_sha256': digest(harness),
                'executable_sha256': digest(exe.read_bytes()), 'viewport': [800, 600],

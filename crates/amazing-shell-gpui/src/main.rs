@@ -28,7 +28,7 @@ use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate};
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use session_state::BrowserSession;
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
-use amazing_compositor::{ScrollAxis, ScrollInput, ScrollKey};
+use amazing_compositor::{ScrollAxis, ScrollBehavior, ScrollInput, ScrollKey};
 
 const STRIP: u32 = 0xd5dae2;
 const STRIP_HOVER: u32 = 0xc6ccd6;
@@ -54,7 +54,8 @@ actions!(
         NavigateForward,
         ToggleBookmark,
         ShowDownloads,
-        DismissChrome
+        DismissChrome,
+        FindInPage
     ]
 );
 
@@ -167,11 +168,16 @@ struct BrowserShell {
     site_info_open: bool,
     profile_open: bool,
     page_input: Option<PageInputState>,
+    find_focus: Option<FocusHandle>,
+    find_open: bool,
+    find_query: String,
+    find_matches: Vec<amazing_a11y::AxRect>,
+    find_active: usize,
     session: Rc<RefCell<BrowserSession>>,
 }
 
 impl BrowserShell {
-    fn new(address_focus: Option<FocusHandle>) -> Self {
+    fn new(address_focus: Option<FocusHandle>, find_focus: Option<FocusHandle>) -> Self {
         let session = if address_focus.is_some() {
             BrowserSession::load_default()
         } else {
@@ -287,6 +293,11 @@ impl BrowserShell {
             site_info_open: false,
             profile_open: false,
             page_input: None,
+            find_focus,
+            find_open: false,
+            find_query: String::new(),
+            find_matches: Vec::new(),
+            find_active: 0,
             session,
         };
         for tab in &mut shell.tabs {
@@ -306,6 +317,18 @@ impl BrowserShell {
             self.site_info_open = false;
             self.profile_open = false;
             self.page_input = None;
+            // Find-in-page is per-tab, not shell-global: without this a find
+            // session opened on one tab (query, matches, the open find bar)
+            // would still show once a later tab switch (including the
+            // fallback switch `close_tab` makes when the active tab closes)
+            // lands on a different tab -- confusing at best, and outright
+            // invisible-but-still-`find_open` on a tab with no viewport (see
+            // `find_is_available`), which is what SHELL-L9's product smoke
+            // first surfaced as an apparent input freeze.
+            self.find_open = false;
+            self.find_query.clear();
+            self.find_matches.clear();
+            self.find_active = 0;
         }
     }
 
@@ -432,6 +455,160 @@ impl BrowserShell {
         cx.notify();
     }
 
+    /// Find-in-page has nothing to search and nowhere to draw a match
+    /// highlight without a rendered page: its bar and overlays live inside
+    /// `page()`'s `.when_some(tab.viewport.as_ref(), ...)` branch, so a tab
+    /// with no `EngineViewport` (media tabs, the pinned reference/"Specs"
+    /// tabs) never shows them. Gate the action on the same condition so
+    /// `find_open` can't get stuck true with no UI to ever show or close it.
+    fn find_is_available(&self) -> bool {
+        self.tabs
+            .get(self.active)
+            .is_some_and(|tab| tab.viewport.is_some())
+    }
+
+    fn open_find(&mut self, _: &FindInPage, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.find_is_available() {
+            return;
+        }
+        self.find_open = true;
+        self.find_query.clear();
+        self.find_matches.clear();
+        self.find_active = 0;
+        self.downloads_open = false;
+        self.menu_open = false;
+        self.site_info_open = false;
+        self.profile_open = false;
+        if let Some(focus) = self.find_focus.as_ref() {
+            focus.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn close_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.find_open = false;
+        self.find_query.clear();
+        self.find_matches.clear();
+        self.find_active = 0;
+        self.focus_shell(window, cx);
+        cx.notify();
+    }
+
+    /// Substring (case-insensitive) matches of `query` among the accessibility
+    /// tree's rendered text nodes, in reading order. A pure function of
+    /// `AxTree` so find-in-page's matching logic is unit-testable without a
+    /// GPUI window/`Context`.
+    fn find_matches_in_tree(tree: &amazing_a11y::AxTree, query: &str) -> Vec<amazing_a11y::AxRect> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Vec::new();
+        }
+        let query_lower = query.to_lowercase();
+        let mut matches: Vec<amazing_a11y::AxRect> = tree
+            .nodes()
+            .iter()
+            .filter(|node| {
+                matches!(
+                    node.role,
+                    amazing_a11y::Role::StaticText | amazing_a11y::Role::InlineTextBox
+                )
+            })
+            .filter(|node| node.name.to_lowercase().contains(&query_lower))
+            .filter_map(|node| node.bounds)
+            .filter(|rect| !rect.is_empty())
+            .collect();
+        matches.sort_by(|a, b| {
+            a.y.partial_cmp(&b.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        matches
+    }
+
+    /// The cycled index `delta` steps from `active` among `len` matches
+    /// (wrapping both directions); `0` when there are no matches. A pure
+    /// function so next/prev cycling is unit-testable without `Context`.
+    fn find_step(active: usize, len: usize, delta: isize) -> usize {
+        if len == 0 {
+            return 0;
+        }
+        (active as isize + delta).rem_euclid(len as isize) as usize
+    }
+
+    fn run_find_search(&mut self, cx: &mut Context<Self>) {
+        self.find_active = 0;
+        self.find_matches = self
+            .tabs
+            .get(self.active)
+            .and_then(|tab| tab.viewport.as_ref())
+            .and_then(EngineViewport::accessibility_tree)
+            .map(|tree| Self::find_matches_in_tree(tree, &self.find_query))
+            .unwrap_or_default();
+        self.scroll_to_find_active(cx);
+        cx.notify();
+    }
+
+    fn find_go(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.find_matches.is_empty() {
+            return;
+        }
+        self.find_active = Self::find_step(self.find_active, self.find_matches.len(), delta);
+        self.scroll_to_find_active(cx);
+        cx.notify();
+    }
+
+    /// Scrolls the active tab's viewport so the current match is roughly
+    /// centered, jumping directly (no animation) so a capture taken right
+    /// after next/prev shows the settled frame.
+    fn scroll_to_find_active(&mut self, cx: &mut Context<Self>) {
+        let Some(rect) = self.find_matches.get(self.find_active).copied() else {
+            return;
+        };
+        let Some(viewport) = self.tabs[self.active].viewport.as_ref() else {
+            return;
+        };
+        let Some(node) = viewport.root_scroll_id() else {
+            return;
+        };
+        let target_y = (rect.y - ((viewport.height as f32 - rect.height) / 2.0).max(0.0)).max(0.0);
+        self.scroll_active_viewport(
+            ScrollInput::ScrollTo {
+                node,
+                target: (0.0, target_y),
+                behavior: ScrollBehavior::Instant,
+            },
+            cx,
+        );
+    }
+
+    fn on_find_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        cx.stop_propagation();
+        match event.keystroke.key.as_str() {
+            "enter" => {
+                if event.keystroke.modifiers.shift {
+                    self.find_go(-1, cx);
+                } else {
+                    self.find_go(1, cx);
+                }
+            }
+            "escape" => self.close_find(window, cx),
+            "backspace" | "delete" => {
+                self.find_query.pop();
+                self.run_find_search(cx);
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_ref()
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.platform
+                {
+                    self.find_query.push_str(text);
+                    self.run_find_search(cx);
+                }
+            }
+        }
+        cx.notify();
+    }
+
     fn show_downloads(&mut self, _: &ShowDownloads, _: &mut Window, cx: &mut Context<Self>) {
         self.downloads_open = true;
         self.menu_open = false;
@@ -445,6 +622,10 @@ impl BrowserShell {
         self.menu_open = false;
         self.site_info_open = false;
         self.profile_open = false;
+        if self.find_open {
+            self.close_find(window, cx);
+            return;
+        }
         self.focus_shell(window, cx);
         cx.notify();
     }
@@ -1935,6 +2116,14 @@ impl BrowserShell {
                                                 .h(px(viewport.height as f32))
                                                 .into_any_element(),
                                         })
+                                        // A11Y-11: the live page's accessibility tree, as an
+                                        // invisible off-screen sibling (see `a11y_bridge`'s
+                                        // `build_element` — it never paints or occupies layout
+                                        // space) so GPUI's own AccessKit walk exposes it over
+                                        // AT-SPI2 on Linux, matching A11Y-9's proof.
+                                        .when_some(viewport.accessibility_tree(), |el, tree| {
+                                            el.child(a11y_bridge::ax_tree_element(tree))
+                                        })
                                         .child(
                                             canvas(
                                                 |bounds, _, _| bounds,
@@ -2088,25 +2277,115 @@ impl BrowserShell {
                                                         format!("{}│", input.value)
                                                     }),
                                             )
+                                        })
+                                        .children({
+                                            let (scroll_x, scroll_y) = viewport.root_scroll_offset();
+                                            self.find_matches.iter().enumerate().map(move |(index, rect)| {
+                                                let active = index == self.find_active;
+                                                div()
+                                                    .id(SharedString::from(format!("find-match-{index}")))
+                                                    .absolute()
+                                                    .left(gpui::relative((rect.x - scroll_x) / viewport.width as f32))
+                                                    .top(gpui::relative((rect.y - scroll_y) / viewport.height as f32))
+                                                    .w(gpui::relative(rect.width / viewport.width as f32))
+                                                    .h(gpui::relative(rect.height / viewport.height as f32))
+                                                    .when(active, |el| {
+                                                        el.bg(gpui::rgba(0xff8c0088))
+                                                            .border_2()
+                                                            .border_color(rgb(0xff8c00))
+                                                    })
+                                                    .when(!active, |el| el.bg(gpui::rgba(0xffe06655)))
+                                                    .into_any_element()
+                                            })
                                         }),
                                 ),
                         )
-                        .child(
-                            div()
-                                .absolute()
-                                .top_4()
-                                .right_4()
-                                .px_2()
-                                .py_1()
-                                .rounded_md()
-                                .bg(rgb(TEXT))
-                                .text_color(rgb(SURFACE))
-                                .text_size(px(10.5))
-                                .child(format!(
-                                    "AMAZING ENGINE  ·  {} × {}",
-                                    viewport.width, viewport.height
-                                )),
-                        ),
+                        .when(!self.find_open, |surface| {
+                            surface.child(
+                                div()
+                                    .absolute()
+                                    .top_4()
+                                    .right_4()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(TEXT))
+                                    .text_color(rgb(SURFACE))
+                                    .text_size(px(10.5))
+                                    .child(format!(
+                                        "AMAZING ENGINE  ·  {} × {}",
+                                        viewport.width, viewport.height
+                                    )),
+                            )
+                        })
+                        .when(self.find_open, |surface| {
+                            let total = self.find_matches.len();
+                            let position_label = if total == 0 {
+                                "0/0".to_string()
+                            } else {
+                                format!("{}/{}", self.find_active + 1, total)
+                            };
+                            surface.child(
+                                div()
+                                    .id("find-in-page-bar")
+                                    .absolute()
+                                    .top_4()
+                                    .right_4()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .h(px(32.0))
+                                    .px_2()
+                                    .rounded_md()
+                                    .bg(rgb(SURFACE))
+                                    .border_1()
+                                    .border_color(rgb(BORDER))
+                                    .shadow_md()
+                                    .text_size(px(12.0))
+                                    .text_color(rgb(TEXT))
+                                    .when_some(self.find_focus.as_ref(), |bar, focus| bar.track_focus(focus))
+                                    .on_key_down(cx.listener(Self::on_find_key_down))
+                                    .child(
+                                        div()
+                                            .id("find-in-page-input")
+                                            .min_w(px(90.0))
+                                            .child(format!("{}│", self.find_query)),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("find-in-page-count")
+                                            .text_color(rgb(DIM))
+                                            .child(position_label),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("find-in-page-prev")
+                                            .cursor_pointer()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.find_go(-1, cx);
+                                            }))
+                                            .child("↑"),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("find-in-page-next")
+                                            .cursor_pointer()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.find_go(1, cx);
+                                            }))
+                                            .child("↓"),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("find-in-page-close")
+                                            .cursor_pointer()
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.close_find(window, cx);
+                                            }))
+                                            .child("✕"),
+                                    ),
+                            )
+                        }),
                 )
             })
             .when(tab.kind == TabKind::Video, |page| {
@@ -2255,6 +2534,7 @@ impl Render for BrowserShell {
             .on_action(cx.listener(Self::navigate_forward))
             .on_action(cx.listener(Self::toggle_bookmark_action))
             .on_action(cx.listener(Self::show_downloads))
+            .on_action(cx.listener(Self::open_find))
             .on_action(cx.listener(Self::dismiss_chrome))
             .on_key_down(cx.listener(Self::on_shell_key_down))
             .flex()
@@ -2581,6 +2861,7 @@ fn main() {
             KeyBinding::new("alt-right", NavigateForward, None),
             KeyBinding::new("ctrl-d", ToggleBookmark, None),
             KeyBinding::new("ctrl-j", ShowDownloads, None),
+            KeyBinding::new("ctrl-f", FindInPage, None),
             KeyBinding::new("escape", DismissChrome, None),
         ]);
         let (window_width, window_height) = start_size.unwrap_or((1080.0, 760.0));
@@ -2595,7 +2876,10 @@ fn main() {
                 cx.new(move |cx| {
                     let shell_focus = cx.focus_handle();
                     shell_focus.focus(window, cx);
-                    let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
+                    let mut shell = BrowserShell::new(
+                        Some(cx.focus_handle().tab_stop(true)),
+                        Some(cx.focus_handle().tab_stop(true)),
+                    );
                     shell.shell_focus = Some(shell_focus);
                     cx.spawn(async move |this, cx| {
                         let started = Instant::now();
@@ -2845,7 +3129,7 @@ mod tests {
 
     #[test]
     fn reference_shell_state_starts_on_status_with_specs_collapsed() {
-        let shell = BrowserShell::new(None);
+        let shell = BrowserShell::new(None, None);
         assert_eq!(shell.tabs.len(), 6);
         assert_eq!(shell.active, 0);
         assert!(!shell.engine_collapsed);
@@ -2856,7 +3140,7 @@ mod tests {
 
     #[test]
     fn reference_groups_keep_engine_and_spec_tabs_distinct() {
-        let shell = BrowserShell::new(None);
+        let shell = BrowserShell::new(None, None);
         assert_eq!(
             &shell.tabs[0..3]
                 .iter()
@@ -2875,7 +3159,7 @@ mod tests {
 
     #[test]
     fn shell_model_transitions_cover_tabs_groups_and_sidebar() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.select_tab(4);
         shell.toggle_engine_group();
         shell.toggle_specs_group();
@@ -2890,7 +3174,7 @@ mod tests {
 
     #[test]
     fn chrome_popovers_are_exclusive_and_bookmarks_toggle() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.toggle_downloads();
         assert!(shell.downloads_open);
         shell.toggle_menu();
@@ -2924,7 +3208,7 @@ mod tests {
             Some("http://localhost:8080/status".to_string())
         );
 
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.address = "example.test/docs".to_string();
         shell.commit_navigation();
         assert_eq!(shell.active, 0);
@@ -2934,7 +3218,7 @@ mod tests {
 
     #[test]
     fn decoded_video_frames_cycle_without_changing_tab_state() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.select_tab(1);
         assert_eq!(shell.video_frames.len(), 6);
         shell.update_video_clock(3_000);
@@ -2953,7 +3237,7 @@ mod tests {
 
     #[test]
     fn history_back_forward_and_branching_follow_browser_rules() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.address = "first.test".to_string();
         shell.commit_navigation();
         shell.address = "second.test".to_string();
@@ -2984,7 +3268,7 @@ mod tests {
 
     #[test]
     fn script_history_directives_update_tab_without_reloading() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.committed_address = "https://example.test/root".into();
         shell.address = shell.committed_address.clone();
         shell.tabs[0].url = shell.committed_address.clone();
@@ -3009,7 +3293,7 @@ mod tests {
 
     #[test]
     fn new_and_closed_tabs_keep_independent_browser_state() {
-        let mut shell = BrowserShell::new(None);
+        let mut shell = BrowserShell::new(None, None);
         shell.add_tab();
         let new_tab = shell.active;
         assert_eq!(shell.tabs[new_tab].url, "amazing://newtab");
@@ -3025,5 +3309,89 @@ mod tests {
         shell.open_bookmark(0);
         assert_eq!(shell.active, 0);
         assert!(shell.tabs[0].open);
+    }
+
+    #[test]
+    fn find_matches_in_tree_locates_static_text_case_insensitively_in_reading_order() {
+        let tree = amazing_a11y::build_from_parsed_html(
+            "<body><p>Hello Amazing World</p><p>Second Amazing paragraph</p></body>",
+            "",
+            800.0,
+            Some(600.0),
+        );
+        let matches = BrowserShell::find_matches_in_tree(&tree, "amazing");
+        assert_eq!(matches.len(), 2, "one match per paragraph containing the query");
+        for rect in &matches {
+            assert!(rect.width > 0.0 && rect.height > 0.0);
+        }
+        assert!(matches[0].y <= matches[1].y, "matches are in reading (top-to-bottom) order");
+
+        assert_eq!(
+            BrowserShell::find_matches_in_tree(&tree, "AMAZING"),
+            matches,
+            "matching is case-insensitive"
+        );
+        assert!(BrowserShell::find_matches_in_tree(&tree, "").is_empty());
+        assert!(BrowserShell::find_matches_in_tree(&tree, "no-such-text").is_empty());
+    }
+
+    #[test]
+    fn find_step_wraps_forward_and_backward_and_is_stable_with_no_matches() {
+        assert_eq!(BrowserShell::find_step(0, 3, 1), 1);
+        assert_eq!(BrowserShell::find_step(2, 3, 1), 0, "wraps forward past the last match");
+        assert_eq!(BrowserShell::find_step(0, 3, -1), 2, "wraps backward past the first match");
+        assert_eq!(BrowserShell::find_step(0, 0, 1), 0, "no matches: stays at 0");
+    }
+
+    #[test]
+    fn find_state_defaults_to_closed_and_empty_on_a_fresh_shell() {
+        let shell = BrowserShell::new(None, None);
+        assert!(!shell.find_open);
+        assert!(shell.find_query.is_empty());
+        assert!(shell.find_matches.is_empty());
+        assert_eq!(shell.find_active, 0);
+    }
+
+    #[test]
+    fn find_is_available_requires_the_active_tab_to_have_a_viewport() {
+        // SHELL-L9's product smoke surfaced this the hard way: closing a tab
+        // can fall back to a pinned reference tab (Document kind, no
+        // `EngineViewport`, e.g. "ECMA-262" below) or a media tab (Video
+        // kind), and `open_find`'s bar/overlays only render inside `page()`'s
+        // `.when_some(tab.viewport.as_ref(), ...)` branch. Without this guard
+        // ctrl-f flips `find_open` to true with no UI anywhere to show or
+        // close it -- indistinguishable, on screen, from the shell simply no
+        // longer responding to input.
+        let mut shell = BrowserShell::new(None, None);
+        assert!(shell.find_is_available(), "tab 0 is the Engine demo tab");
+        shell.select_tab(1); // Secure video (TabKind::Video, no viewport)
+        assert!(!shell.find_is_available());
+        shell.select_tab(2); // html5lib tree-construction (TabKind::Document)
+        assert!(!shell.find_is_available());
+        shell.select_tab(0);
+        assert!(shell.find_is_available());
+    }
+
+    #[test]
+    fn switching_tabs_closes_any_open_find_session() {
+        // Find-in-page is per-tab state in every real browser; keeping it on
+        // `BrowserShell` (there is no per-`Tab` field for it) means a find
+        // session left open on one tab would otherwise still show -- with
+        // its old query and matches -- after switching to an unrelated tab.
+        let mut shell = BrowserShell::new(None, None);
+        shell.find_open = true;
+        shell.find_query = "engine".to_string();
+        shell.find_matches = vec![amazing_a11y::AxRect {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+        }];
+        shell.find_active = 0;
+        shell.select_tab(1);
+        assert!(!shell.find_open);
+        assert!(shell.find_query.is_empty());
+        assert!(shell.find_matches.is_empty());
+        assert_eq!(shell.find_active, 0);
     }
 }

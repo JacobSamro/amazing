@@ -1,7 +1,7 @@
 //! Tree construction fixtures: pruning (display/visibility/hidden/aria-hidden),
 //! presentational promotion, generic-container flattening, and the snapshot API.
 
-use crate::Role;
+use crate::{Role, build_document};
 use crate::test_support::{
     ax_of_tag, count_role, document, document_with_css, dom_of_tag, first_named_role, first_role,
     shape,
@@ -168,4 +168,64 @@ fn shape_lists_role_and_name_pairs() {
     let doc = document("<button>Go</button>");
     let shape = shape(&doc);
     assert!(shape.iter().any(|(role, name)| *role == "button" && name == "Go"));
+}
+
+/// A11Y-13: the tree the shell (`a11y_bridge`) and devtools (a future CDP
+/// `Accessibility.getFullAXTree`) lanes consume is a rebuild-from-scratch on
+/// every call (Stage 1 has no incremental style/layout invalidation — see
+/// `event`'s module doc), so its `SchemaSnapshot` must serialize identically
+/// every time for the same input, or every consumer downstream of it
+/// (`a11y_bridge`'s AccessKit-identity-by-`dom_node` diffing, a devtools
+/// CDP snapshot cache) would see spurious churn on a page that never
+/// changed. Builds `tests/real-pages/pages/app-analytics.html` — a real,
+/// non-trivial fixture (nav landmark, heading, an 8-row data table, footer;
+/// every asset it references is local) — twice from the same bytes and
+/// checks the two `SchemaSnapshot`s are `==` (structural equality, covering
+/// every node's id/role/name/states/properties/bounds/children/parent/
+/// relations) and that their `dump()` strings match too (the human-readable
+/// form a driver or a debugging session would actually diff).
+#[test]
+fn real_page_fixture_ax_tree_snapshot_is_idempotent_across_rebuilds() {
+    let fixture_dir =
+        format!("{}/../../tests/real-pages/pages", env!("CARGO_MANIFEST_DIR"));
+    let html = std::fs::read_to_string(format!("{fixture_dir}/app-analytics.html"))
+        .expect("read app-analytics.html fixture");
+    // `build_document` takes author CSS as one string, separate from the
+    // HTML, and never fetches `<link>`s itself (see A11Y-7's
+    // `wpt_conformance.rs::inline_style_css` for the same constraint against
+    // WPT fixtures) — the fixture's one external stylesheet is read
+    // directly, the same way a real driver's `collect_author_css`
+    // (`crates/amazing/src/page.rs`, out of this crate's dependency graph)
+    // would resolve a relative `<link href>`.
+    let css = std::fs::read_to_string(format!("{fixture_dir}/../assets/base.css"))
+        .expect("read app-analytics.html's linked base.css");
+
+    let first = build_document(&html, &css, 1024.0, None);
+    let second = build_document(&html, &css, 1024.0, None);
+
+    let first_snapshot = first.tree.snapshot();
+    let second_snapshot = second.tree.snapshot();
+    assert!(!first_snapshot.dump().is_empty(), "snapshot dump was empty");
+    assert_eq!(
+        first_snapshot, second_snapshot,
+        "rebuilding the same document produced a structurally different \
+         accessibility tree snapshot"
+    );
+    assert_eq!(
+        first_snapshot.dump(),
+        second_snapshot.dump(),
+        "rebuilding the same document produced a different dump() string"
+    );
+
+    // Sanity: this is the same real, populated tree A11Y-6's
+    // `runtime_host_a11y::tests::real_page_fixture_produces_a_populated_
+    // accessibility_tree` checks via the full driver pipeline — a nav
+    // landmark and the 8-row data table, confirming the fixture load above
+    // (raw HTML + one concatenated stylesheet, no driver) built the same
+    // shape rather than an empty or degenerate tree that would trivially
+    // satisfy the equality checks above.
+    let nav_count = first_snapshot.nodes.iter().filter(|node| node.role == Role::Navigation).count();
+    assert_eq!(nav_count, 1, "expected exactly one nav landmark\n{}", first_snapshot.dump());
+    let row_count = first_snapshot.nodes.iter().filter(|node| node.role == Role::Row).count();
+    assert_eq!(row_count, 9, "expected 9 table rows (1 header + 8 data)\n{}", first_snapshot.dump());
 }

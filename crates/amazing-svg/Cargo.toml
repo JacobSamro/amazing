@@ -10,3 +10,9 @@ rust-version.workspace = true
 amazing-css = { path = "../amazing-css" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-media = { path = "../amazing-media" }
+# Real glyph shaping/rasterizing for `<text>`, sharing the same pipeline HTML
+# text painting uses (RC-30): `amazing_layout::font::FontSource` supplies
+# advances/outlines, `amazing_paint::text` rasterizes them to coverage
+# bitmaps. Safe: neither depends back on amazing-svg.
+amazing-layout = { path = "../amazing-layout" }
+amazing-paint = { path = "../amazing-paint" }

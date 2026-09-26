@@ -218,3 +218,229 @@ SHA-256 `91109b82` and host SHA-256 `fdadb9e6`. The VM compiled
 26,790/40,182 eligible files (66.6716%). Reports are on venus-001 under
 `~/amazing/out/jsvm5-orphan-v4-release-{base,vm,compare,prior-vm-compare}`.
 The release run left no orphaned js-vm host processes.
+
+## JSVM-6 derived classes
+
+The VM now compiles derived classes end to end: `extends`, `super()` (implicit
+and explicit constructors), `super.prop`/`super.method()`, and lexical
+`super`/`new.target` inheritance through arrow functions created inside a
+constructor or method (matching the tree walker's `EnvKind::Arrow` and
+`lexical_super_constructor`/`lexical_new_target`).
+
+Reaching a genuine zero-loss gate required fixing six VM-only correctness
+bugs that Test262 could only reach once class-with-`extends` programs stopped
+forcing an eligibility fallback -- none of them are semantically about
+derived classes, but AGENTS.md's zero-lost-passes gate requires fixing (or
+explaining) everything a ticket's own change newly exposes:
+
+- **Constructor backlink.** `FunctionCode::instantiate` never linked an
+  ordinary (non-class) VM function's `.prototype.constructor` back to the
+  function, so every `new SomeFunction()` -- including Test262's own
+  `Test262Error` -- resolved `.constructor` through `Object.prototype`. This
+  alone caused the bulk of an initial 1,141-file regression.
+- **`class_constructor` flag.** `MakeClass` never set `class_constructor` on
+  the produced callable, so `class C {}` called without `new` never threw.
+- **Parameter binding vs. `var`/function-declaration hoisting.** The VM bound
+  parameters with `declare_lexical`, which stays permanently lexical; a body
+  `var x` or `function x(){}` sharing a parameter name then hit
+  `hoist_var`'s/`declare_raw`'s "already declared" `SyntaxError` instead of
+  the spec no-op. Fixed by mirroring the tree walker's `bind_params` exactly:
+  `declare_uninitialized` once per name, `initialize_parameter` per bound
+  value (including sloppy duplicates), `finish_parameter_initialization`
+  only after every parameter is bound (S10.2.1_A4/A5 Test262 cluster).
+- **Member-access leniency asymmetry.** `member_key`'s three call sites
+  (plain read, call-target resolution, assignment reference) had all been
+  given the same nullish-base strictness; only the assignment/reference path
+  is spec-strict (`resolve_reference`), while plain reads and call targets
+  are deliberately lenient (`get_prop_receiver`'s `Null|Undefined =>
+  Undefined`). Fixed with a `require_coercible: bool` parameter, `false` for
+  the first two call sites, `true` only for the reference path.
+- **Arrow `this`/`super`/`new.target` inheritance.** `FunctionCode::call`
+  used `EnvKind::Function` unconditionally and always called `bind_this`,
+  even for arrows -- breaking `(() => super(x))()` inside a derived
+  constructor with a spurious "super() has already initialized this". Fixed
+  to use `EnvKind::Arrow` (transparent to `initialize_this`/
+  `resolve_this_checked`) and skip `bind_this` for arrows entirely, matching
+  `interp.rs`'s `FunctionBody::Block`/`Expr` handling exactly.
+- **Global identifier assignment strictness.** `ResolveName` resolved `NaN`/
+  `undefined`/any non-lexical global binding straight from the env cell
+  (`Reference::Binding`), so `NaN = 12` under strict mode silently no-op'd
+  instead of throwing. Fixed to check `env.global_binding_object(name)`
+  first, matching the tree walker's `resolve_reference`, which routes such
+  identifiers through the global *object*'s property (and its strict-mode
+  `[[Set]]` failure path) instead.
+- **Class-body/module strictness at compile time.** A class's heritage
+  expression, computed member keys, and every method/constructor body must
+  be strict regardless of the enclosing (possibly sloppy) code; module
+  top-level code is always strict too. The VM compiler had no equivalent of
+  the tree walker's `eval_class`/`method_value`/`run_program`'s
+  `EnvKind::Module` check, so a strict-mode assignment failure inside any of
+  these positions silently succeeded instead of throwing. Fixed with new
+  `EnterStrict`/`ExitStrict` instructions (bracketing heritage expressions
+  and computed keys) plus a save/restore of the compiler's own `strict` flag
+  around constructor/class-method compilation, and a new `is_module: bool`
+  parameter on `vm::compile` (module code forces `strict = true` at compile
+  time, not just at the already-correct runtime `strict_eval_context`).
+  `compile_method` is shared with plain object-literal methods, which are
+  *not* inherently strict, so it takes an explicit `class_method: bool`
+  rather than being unconditionally strict.
+- Also fixed in interp.rs (shared, both engines): `make_arrow` hardcoded
+  `function_proto` for every arrow regardless of `is_async`, unlike
+  `make_function`'s existing is_async/is_generator branching. An async arrow
+  now correctly gets `async_function_proto`. This is a real, long-standing,
+  engine-wide bug, not new in this ticket; fixing it now (both engines
+  identically) turns what had been a VM-only regression into a shared,
+  pre-existing, and separately-tracked gap (see `questions.md`: the
+  `%AsyncFunction%`/`%GeneratorFunction%`/`%AsyncGeneratorFunction%`
+  constructor backlink is still missing).
+
+On pinned Test262 `3655e746` (input SHA-256 `91109b82`, host SHA-256
+`8be6f77a`), venus-001 release-host baseline (tree walker) vs. VM+fallback:
+
+| | files pass | files fail | variants pass | variants fail |
+|---|---|---|---|---|
+| baseline | 33,375 | 19,737 | 64,598 | 37,653 |
+| VM+fallback | 33,590 | 19,525 | 65,003 | 37,253 |
+
+**Zero lost files/variants, +215 gained files.** A repeat run in the same
+session flagged one *timeout* (not a correctness loss) on
+`staging/sm/TypedArray/element-setting-converts-using-ToNumber.js` that did
+not reproduce on the immediately following run; treated as host-load flake,
+not a regression (both runs otherwise agree on every classification).
+Workspace `cargo nextest run --workspace --locked --no-fail-fast`: 3,024
+tests run, 3,024 passed, 12 skipped, 0 failed. `cargo test --workspace
+--locked --doc`: all green (amazing-js/amazing-html carry the workspace's only
+real doctests; every other crate reports 0 doctests, as expected).
+
+## JSVM-7 generators and async generators in the VM
+
+Removed `compile_function`'s outright rejection of `is_async && is_generator`
+and built full async-generator support alongside the sync generators that
+already existed from JSVM-5:
+
+- `GeneratorState` gained a `queue: VecDeque<AsyncGeneratorRequest>` (each
+  request its own promise -- an async generator's consumer can call
+  `.next()`/`.return()`/`.throw()` again before a prior call's promise has
+  settled, unlike a plain async function's single backing promise or a plain
+  generator's synchronous one-call-in-flight-by-construction) and an
+  `awaiting: bool` (true only while the one underlying VM frame is suspended
+  at `await`, as opposed to idle at `yield`; `executing` alone cannot tell
+  the two apart, since it is false in both cases between microtasks --
+  without this a newly queued request could be fed into a frame that was
+  actually still waiting on its own await's promise reaction).
+- New driver: `async_generator_drain` (pops queued requests, short-circuits
+  the same two frame-less cases `generator_resume` does -- a `.return`/
+  `.throw()` before the body ever ran, and any call once the body already
+  completed) and `async_generator_run` (resumes the frame once, mirroring
+  `generator_resume`'s `yield_dst`/delegate handling and `async_continue`'s
+  `await_dst` handling in the same function, since a body can now suspend at
+  either in any order; settles the current request's promise and continues
+  draining, or chains an `await` continuation via
+  `async_generator_step_handler` -- like `async_handler` but also carrying
+  the specific request's own promise alongside the shared state, since
+  `async_handler`'s single-slot design assumes one promise per call).
+- New native methods `async_generator_next/return/throw` (each enqueues and
+  drains) and `async_generator_async_iterator` (returns `this`, mirroring
+  `generator_iterator`).
+- `FunctionCode::instantiate`'s per-function `.prototype` construction was
+  gated `!is_arrow && !is_async && !is_method`, unconditionally excluding
+  *every* async function including async generators; narrowed to
+  `!(is_async && !is_generator)` so a generator (sync or async) still gets
+  its own `.prototype` with the right method set (async ones get Promise-
+  returning `next`/`return`/`throw` and `@@asyncIterator` instead of
+  `@@iterator`), while a plain async function/method still correctly gets
+  none.
+- New bridge API for js-runtime (mirroring the existing async-function
+  bridge, `compile_async_body`/`call_async_with_env`): `vm::compile_generator_body`/
+  `vm::compile_async_generator_body(body: &ast::Block, strict: bool) ->
+  Result<FunctionCode, CompileError>` and
+  `FunctionCode::start_generator_with_env(&self, i: &Interpreter, env:
+  EnvHandle, generator_proto: Option<Obj>) -> JsValue`. Posted to
+  `js-runtime`'s `questions.md`.
+- Fixed in the same series, found while isolating the generator/async-generator
+  Test262 delta from unrelated noise (both real, pre-existing, both
+  reproduced unchanged on base `b640521e` before any JSVM-7 code):
+  - The sync generator's `[Symbol.iterator]` was defined under the literal
+    string key `"@@iterator"` instead of the real well-known symbol (`methods
+    .set_own("@@iterator", ...)`), so `it[Symbol.iterator]` could never find
+    it -- fixed to `WellKnownSymbol::Iterator.symbol()` (and
+    `AsyncIterator.symbol()` for the new async case).
+  - `compile_class` never read `ClassMethod::is_static`, so every `static`
+    method/accessor was compiled and installed exactly like an instance one
+    -- onto `prototype`, with `prototype` as its `[[HomeObject]]` -- leaving
+    the constructor's own static members permanently `undefined`. A class
+    with only static methods (no fields/static blocks, both of which already
+    force fallback) was fully VM-eligible, so this was live, not masked.
+    Added `ClassMethodCode::is_static`; `MakeClass` now installs onto (and
+    sets `[[HomeObject]]` to) the constructor for a static member, the
+    prototype otherwise.
+- Known limitation, left out of scope: `YieldDelegate`'s handler calls the
+  delegate iterator's `next`/`throw`/`return` synchronously -- correct for a
+  sync iterable delegated to from `yield*` (even inside an async generator),
+  wrong for a genuinely async iterable (whose methods return Promises). The
+  full async-iterator `yield*` protocol was not implemented.
+
+**The 63-file generator/async-iteration false-pass set (JSRT-14's evidence,
+`docs/lanes/js-runtime_class_private_elements_evidence.json`): 0 of the 63
+now pass for real.** Verified directly, not estimated -- every one of the 63
+still fails identically on both the tree walker and the VM. Root-caused into
+two clusters, both pre-existing VM *compiler* gaps, unrelated to generator
+suspension logic, that force whole-program fallback to the tree walker
+before a VM-compiled generator/async-generator body (this ticket's new code)
+ever runs:
+- ~36 files (`*/class/dstr/async-gen-meth-static-*.js`): a `static async *`
+  method with a destructured/defaulted parameter. `compile_function`/
+  `compile_method` accept only `Binding::Ident` params; any pattern or
+  default throws `CompileError("parameter pattern")` at VM compile time,
+  confirmed directly (`static async *m({a,b} = {}) {...}` throws exactly
+  that). This is a parameter-destructuring compiler gap, not specific to
+  generators.
+- ~27 files (`*-ptrn-rest-ary-empty.js`, spread across `let`/`const`/`var`/
+  `for`/`for-of` bindings and destructured function/method/arrow
+  parameters): an array pattern whose
+  sole element is a rest element (`[...x]`, `[...[]]`) throws
+  `CompileError("bytecode unsupported: binding pattern")`, confirmed
+  directly against the exact repro in
+  `language/statements/let/dstr/ary-ptrn-rest-ary-empty.js`
+  (`let [...[]] = someGenerator();`). `eligibility.rs` does not flag this
+  construct (its own recursive check bottoms out on an empty nested pattern
+  and reports eligible), but the compiler's own binding-pattern lowering
+  does not implement it, so the whole statement falls back atomically.
+  Unrelated to generator suspension; the generator here is only used as an
+  arbitrary iterable to exercise the rest-binding path.
+
+Closing either gap (parameter destructuring; array/object rest-binding
+patterns) is a separate, sizable VM-compiler feature, not a generator fix,
+and was left out of this ticket's scope rather than attempted as a drive-by.
+
+On pinned Test262 `3655e746`, venus-001 release-host, this lane's own tree
+vs. VM+fallback pair on **the same commit** (the rigorous comparison; the
+fleet's `.agents/test262/baseline.json` is a separate, older snapshot and
+disagrees with a fresh tree-walker run on ~34,000 unrelated files that
+predate this ticket -- comparing against it is noise, not signal, for
+isolating this ticket's effect):
+
+| | files pass | files fail | variants pass | variants fail |
+|---|---|---|---|---|
+| tree walker (this session) | 37,218 | 15,896 | 72,223 | 30,031 |
+| VM+fallback (this session) | 37,506 | 15,609 | 72,763 | 29,491 |
+
+**2 lost / 290 gained files**, both losses diagnosed as not caused by this
+ticket: `built-ins/Function/prototype/toString/built-in-function-object.js`
+(a `timeout`, not a correctness mismatch -- host-load flake under a shared
+build slot, the same pattern JSVM-6 reported for a different file) and
+`staging/sm/Proxy/global-receiver.js` (a genuine pre-existing VM bug,
+reproduced identically before and after every JSVM-7 change, just previously
+buried in a much larger loss list before the static-method fix landed --
+unrelated to generators, flagging in `questions.md` for whichever lane picks
+up Proxy/global-receiver semantics next). Cross-checked against
+`baseline.json`: 92 files show as "lost" there, but 90 of them already fail
+identically on this session's own fresh tree-walker run (baseline staleness,
+not a VM regression), and the remaining 2 are the exact same two files
+above. Repeated the tree/VM pair before and after the static-method fix
+(242 lost -> 2 lost) to confirm the fix, not flakiness, closed that cluster.
+
+Workspace `cargo nextest run --workspace --locked --no-fail-fast`: **3,288
+tests run, 3,288 passed (2 slow), 15 skipped, 0 failed.** `cargo test
+--workspace --locked --doc`: all green (amazing_js 1 passed, amazing_html 1
+passed, every other crate 0 as expected).

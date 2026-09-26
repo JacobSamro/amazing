@@ -1,0 +1,77 @@
+# SHELL-L9: Linux GPUI shell product smoke.
+#
+# Read by scripts/linux-shell-capture.sh --actions <this file>. One step per
+# line; blank lines and `#` comments are skipped. Verbs:
+#   key <xdotool keystroke>   e.g. `key ctrl+t`, `key alt+Left`
+#   type <text>               xdotool type (one line = one step, no newlines)
+#   wait <seconds>            settle time after an action, before the next
+#                             step or a `shot`
+#   shot <name>               capture the window to
+#                             <--name>-<name>.png
+#
+# Covers, in one launched shell session: omnibox navigation, back/forward,
+# find-in-page, and tab open/close. Deliberately stays on internal
+# `amazing://` pages (no real network fetch): the omnibox step navigates to
+# `amazing://newtab`, whose demo HTML (engine_viewport.rs's NEW_TAB_HTML) has
+# a `.proof` paragraph reading "AMAZING · FROM-SCRATCH BROWSER ENGINE" --
+# the deterministic, always-available match the find-in-page step searches
+# for. The tab-0 demo page (`amazing://status`, DEMO_HTML) that back/forward
+# revisits also contains "AMAZING BROWSER ENGINE" for the same reason. The
+# shell starts on tab 0; ctrl-l focuses the address bar (bound in main.rs's
+# cx.bind_keys) without needing a prior click.
+#
+# Find-in-page runs BEFORE the tab open/close section, not after: closing a
+# tab falls back to whichever tab was previously active (`close_tab`'s
+# forward-then-backward search over open tabs), which on this shell's seeded
+# tab strip is a pinned reference tab (TabKind::Document, e.g. "ECMA-262" --
+# no `EngineViewport`, so nothing to search and nowhere to draw the find bar;
+# see `find_is_available` in main.rs). Testing find while still on the
+# `amazing://newtab` page it was just navigated to keeps this smoke on a tab
+# that is guaranteed to have a viewport.
+
+wait 1
+shot 00-launch
+
+# Omnibox navigation: focus the address bar, type an internal URL, commit
+# with Enter -- exercises the same focus/type/commit_navigation path a real
+# https:// address would, without depending on outbound network access.
+key ctrl+l
+wait 1
+shot 01-address-bar-focused
+type amazing://newtab
+wait 1
+key Return
+wait 1
+shot 02-omnibox-navigated
+
+# Back / forward: undo that navigation (back to the tab-0 demo page), then
+# redo it (back to the new-tab page).
+key alt+Left
+wait 1
+shot 03-navigated-back
+key alt+Right
+wait 1
+shot 04-navigated-forward
+
+# Find in page: open the find bar (ctrl-f) while still on the new-tab page
+# from the forward-navigation step above, type a query that matches its
+# "AMAZING · FROM-SCRATCH BROWSER ENGINE" text, then close it (Escape).
+key ctrl+f
+wait 1
+shot 05-find-in-page-opened
+type Amazing
+wait 1
+shot 06-find-in-page-query-typed
+key Escape
+wait 1
+shot 07-find-in-page-closed
+
+# Tabs: open a new tab, then close it -- falls back to whatever tab was
+# active before (see the note above; not necessarily tab 0 or the new-tab
+# page), proving open/close without depending on where that lands.
+key ctrl+t
+wait 1
+shot 08-new-tab-opened
+key ctrl+w
+wait 1
+shot 09-tab-closed

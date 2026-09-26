@@ -1,0 +1,55 @@
+{
+  "before": "crates/amazing-layout/evidence/layout18/flex-grid-before.json",
+  "after": "crates/amazing-layout/evidence/layout18/linux-flex-grid-before.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 1446,
+  "before_counts": {
+    "pass": 614,
+    "mismatch": 832,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 631,
+    "mismatch": 815,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-flexbox__fieldset-baseline-alignment.html",
+    "css-flexbox__flex-flow-003.html",
+    "css-flexbox__flex-flow-006.html",
+    "css-flexbox__flex-flow-009.html",
+    "css-flexbox__flex-flow-011.html",
+    "css-flexbox__flex-flow-012.html",
+    "css-flexbox__flexbox-anonymous-items-001.html",
+    "css-flexbox__flexbox-flex-flow-001.html",
+    "css-flexbox__flexbox-flex-wrap-wrap-reverse.htm",
+    "css-flexbox__flexbox-items-as-stacking-contexts-002.html",
+    "css-flexbox__flexbox_columns-flexitems.html",
+    "css-flexbox__table-as-item-percent-width-cell-001.html",
+    "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-001.html",
+    "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-002.html",
+    "css-grid__grid-lanes__alignment__column-fill-reverse-align-content-safe-001.html",
+    "css-grid__grid-lanes__alignment__column-fill-reverse-stacking-alignment-indefinite-size-001.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-001.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-002.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-001.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-indefinite-size-002.html",
+    "css-grid__grid-lanes__alignment__row-fill-reverse-justify-content-safe-001.html"
+  ],
+  "losses": [
+    "css-flexbox__flex-direction-column-reverse.html",
+    "css-flexbox__flex-direction-column.html",
+    "css-flexbox__flexbox_direction-column-reverse.html",
+    "css-flexbox__flexbox_order-abspos-space-around.html"
+  ],
+  "actual_hash_changes": 1167,
+  "reference_hash_changes": 1163,
+  "before_projection_sha256": "70f4ef800791a3816454d90e80b0181e768c143eeca72a17258e7038fc0cf2ab",
+  "after_projection_sha256": "c9a90e4317e97bdb2aaeeda7a8c91ce90ff92fb6183d03477ffad0942f75388a"
+}

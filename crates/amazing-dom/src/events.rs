@@ -45,7 +45,14 @@ pub enum DispatchOrigin {
     UserAgent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventClass { Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message, HashChange, PopState, PageTransition, BeforeUnload, Error, PromiseRejection }
+pub enum EventClass {
+    Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message, HashChange, PopState,
+    PageTransition, BeforeUnload, Error, PromiseRejection,
+    // Legacy `document.createEvent()` aliases (dom.spec.whatwg.org's create() legacy factory
+    // table) that are otherwise-unimplemented interfaces: distinct classes so the wrapped
+    // object gets that interface's own prototype rather than falling back to plain Event's.
+    DeviceMotion, DeviceOrientation, Drag, Storage, Text,
+}
 
 #[derive(Clone, Debug)]
 pub enum EventExtra { Boolean(bool), Number(f64), String(Vec<u16>), Root(Option<CallbackId>) }

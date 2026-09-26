@@ -1,0 +1,10 @@
+source=97d79da4-layout21-candidate3
+target=/home/user/amazing/target
+585d14b55b3aeeead6ca51bb69d1602afd5693da78814efb88dfd2e00cee5749  crates/amazing-layout/src/block.rs
+d0213e6db1912474fa3c43cd6aa1364d61b62ca9b3d42abfe2ee377995f1167f  crates/amazing-layout/src/box_tree.rs
+08035cfe101e85b42781beffcab7efd28a4311c955c83c3c59b8bcf6814e793c  crates/amazing-layout/src/box_tree_ruby.rs
+90f8a67b849a455d873b6b4c2c1b5c458853098f594df098efaee28a126208b0  crates/amazing-layout/src/inline.rs
+02c8efae54d6d4105749b327de0179210e00fc516468b479691dc33aff06e6ac  crates/amazing-layout/src/inline_ruby.rs
+fb32af5f3d19d2a054002e992a84077a6e18816df6963d91902b4e824779347e  crates/amazing-layout/src/lib.rs
+2d744e7536ac86f6a97cdfbf27375c9e9acf14cd074793713f53bd881741a0c7  crates/amazing-layout/src/ruby_tests.rs
+82c44f388fb12c452e9eff4cf23b0466b2382c32545c86d3883cbf743b9ed8df  Cargo.lock

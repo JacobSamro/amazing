@@ -412,6 +412,50 @@ pub trait ImageProvider {
     fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
         ImagePresentation::default()
     }
+    /// RC-33: resolved `text-emphasis-style`/`-color`/`-position` for this
+    /// node's text, if a mark should be drawn over/under each of its
+    /// glyphs. Paint has no DOM/style access, exactly like `presentation()`
+    /// above -- the embedding caller resolves the cascade (including
+    /// running the resolved `text-emphasis-style` keyword pair through
+    /// `amazing_text_provider::text_emphasis_mark` to decide filled vs.
+    /// open and dot/circle/triangle/etc., and `currentcolor` against the
+    /// node's own computed color) and hands back the already-decided
+    /// shape. `None` means no mark: the property's own `none` value, or
+    /// the node has no `text-emphasis-style` at all (its initial value).
+    fn text_emphasis(&self, _node: amazing_dom::NodeIdx) -> Option<TextEmphasis> {
+        None
+    }
+}
+
+/// A resolved mark to paint over/under each glyph of one node's text (CSS
+/// Text Decoration 3 `text-emphasis`). See `ImageProvider::text_emphasis`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextEmphasis {
+    pub shape: EmphasisShape,
+    pub filled: bool,
+    pub color: [u8; 4],
+    /// `true` draws the mark above the text (`text-emphasis-position`'s
+    /// initial `over`); `false` draws it below (`under`). Vertical
+    /// writing modes additionally choose a `right`/`left` inline-axis side
+    /// instead of over/under; this painter always treats the mark as
+    /// above/below in line-relative space regardless of writing mode, a
+    /// documented simplification (see `paint_emphasis_mark`).
+    pub over: bool,
+}
+
+/// The rendered mark shape. CSS Text Decoration 3's suggested mark glyphs
+/// (`dot`, `circle`, `double-circle`, `sesame`) are all visually round and,
+/// absent real vector glyph shaping for arbitrary Unicode marks, are all
+/// approximated here as a plain circle; only `triangle` gets a distinct
+/// shape. The `<string>` form (an author-supplied single character) has no
+/// entry here at all -- `ImageProvider::text_emphasis` returning `None` for
+/// it is the documented limitation, since painting an arbitrary character
+/// needs the same real glyph shaping RC-30 already routes SVG `<text>`
+/// through, not this geometric approximation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmphasisShape {
+    Circle,
+    Triangle,
 }
 
 /// Adapter used by callers that have no decoded images.
@@ -580,7 +624,7 @@ pub fn paint_document_with_text_resources_and_controls(
                 let rect = control.geometry.content_box;
                 let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
                 for line in content.lines {
-                    paint_line_glyphs(&mut state.surface, line, text, text_clip);
+                    paint_line_glyphs(&mut state.surface, line, text, images, text_clip);
                 }
             }
             PaintCommand::PaintContent(box_) => {
@@ -659,7 +703,7 @@ pub(crate) fn raster_command_range(
                 let rect = control.geometry.content_box;
                 let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
                 for line in content.lines {
-                    paint_line_glyphs(&mut state.surface, line, text, text_clip);
+                    paint_line_glyphs(&mut state.surface, line, text, images, text_clip);
                 }
             }
             PaintCommand::PaintContent(box_) if draw => {
@@ -795,7 +839,7 @@ pub(crate) fn raster_raw_item(
             // inline flow of its own.
             for (line, local_line) in box_.lines.iter().zip(local.lines.iter()) {
                 paint_replaced_fragments(target, box_, line, images, clip, (ox, oy));
-                paint_line_glyphs(target, local_line, text, clip);
+                paint_line_glyphs(target, local_line, text, images, clip);
             }
             true
         }
@@ -821,6 +865,7 @@ fn paint_decorations(
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
+    paint_outline(surface, box_, text_color, clip);
     if let Some(node) = box_.svg_root {
         if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {
             paint_image(
@@ -1164,7 +1209,7 @@ fn paint_shaped_lines(
 ) {
     for line in &box_.lines {
         paint_replaced_fragments(surface, box_, line, images, clip, (0.0, 0.0));
-        paint_line_glyphs(surface, line, text, clip);
+        paint_line_glyphs(surface, line, text, images, clip);
     }
 }
 
@@ -1263,6 +1308,7 @@ fn paint_line_glyphs(
     surface: &mut Surface,
     line: &amazing_layout::LineBox,
     text: &dyn TextSystem,
+    images: &dyn ImageProvider,
     clip: ClipRect,
 ) {
     for decoration in &line.decorations {
@@ -1320,6 +1366,111 @@ fn paint_line_glyphs(
             clip,
         );
     }
+    // RC-33: emphasis marks paint after every glyph on the line, on top of
+    // the text they annotate (CSS Text Decoration 3's own painting order).
+    // A separate pass, not interleaved with the blit loop above, so a
+    // mark never gets drawn under a later glyph's ink.
+    for glyph in &line.glyphs {
+        if glyph.writing_mode.is_vertical_flow() {
+            // `text-emphasis-position`'s `right`/`left` inline-axis choice
+            // for vertical writing modes is not modeled -- documented on
+            // `TextEmphasis::over`.
+            continue;
+        }
+        if let Some(mark) = images.text_emphasis(glyph.node) {
+            paint_emphasis_mark(surface, line, glyph, mark, clip);
+        }
+    }
+}
+
+/// One mark, centered horizontally over `glyph`'s own advance box and
+/// placed `over`/`under` the line per `mark.over`, sized and gapped as a
+/// fraction of the glyph's own font size (documented approximations, since
+/// this painter has no real vector glyph shaping to reproduce CSS Text
+/// Decoration 3's suggested mark glyphs exactly -- see `EmphasisShape`).
+fn paint_emphasis_mark(
+    surface: &mut Surface,
+    line: &amazing_layout::LineBox,
+    glyph: &amazing_layout::GlyphFrag,
+    mark: TextEmphasis,
+    clip: ClipRect,
+) {
+    let font_size = glyph.font_size;
+    if !(font_size > 0.0) {
+        return;
+    }
+    let radius = font_size * 0.25;
+    let gap = font_size * 0.1;
+    let cx = glyph.x + glyph.advance_x * 0.5;
+    let baseline = line.baseline + glyph.y - glyph.offset_y;
+    let cy = if mark.over {
+        // Approximate ascent at 0.85em above the baseline.
+        baseline - font_size * 0.85 - radius - gap
+    } else {
+        // Approximate descent at 0.25em below the baseline.
+        baseline + font_size * 0.25 + radius + gap
+    };
+    fill_mark_shape(surface, mark.shape, mark.filled, cx, cy, radius, mark.color, clip);
+}
+
+/// Fills (or, for `filled: false`, strokes a ring/outline of) one mark
+/// shape's bounding circle of `radius` centered at `(cx, cy)`. The "open"
+/// variants subtract a smaller same-shape test at `radius - stroke`,
+/// mirroring the inset-ring technique `control_raster.rs` already uses for
+/// checkbox/radio chrome.
+fn fill_mark_shape(
+    surface: &mut Surface,
+    shape: EmphasisShape,
+    filled: bool,
+    cx: f32,
+    cy: f32,
+    radius: f32,
+    color: [u8; 4],
+    clip: ClipRect,
+) {
+    if !(radius > 0.0) || color[3] == 0 {
+        return;
+    }
+    let stroke = (radius * 0.35).max(1.0);
+    let [x0, y0, x1, y1] = clip.intersect(cx - radius, cy - radius, radius * 2.0, radius * 2.0).pixels();
+    for y in y0.max(0)..y1.min(surface.height as i64) {
+        for x in x0.max(0)..x1.min(surface.width as i64) {
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            if !mark_shape_contains(shape, px, py, cx, cy, radius) {
+                continue;
+            }
+            if !filled && mark_shape_contains(shape, px, py, cx, cy, (radius - stroke).max(0.0)) {
+                continue;
+            }
+            let destination = surface.get_pixel(x as u32, y as u32).unwrap_or([0, 0, 0, 0]);
+            surface.set_pixel(x as u32, y as u32, source_over(color, destination, 1.0));
+        }
+    }
+}
+
+fn mark_shape_contains(shape: EmphasisShape, px: f32, py: f32, cx: f32, cy: f32, radius: f32) -> bool {
+    if radius <= 0.0 {
+        return false;
+    }
+    match shape {
+        EmphasisShape::Circle => {
+            let dx = (px - cx) / radius;
+            let dy = (py - cy) / radius;
+            dx * dx + dy * dy <= 1.0
+        }
+        EmphasisShape::Triangle => {
+            crate::clip::point_in_polygon(&triangle_vertices(cx, cy, radius), px, py, false)
+        }
+    }
+}
+
+/// An upward-pointing equilateral triangle inscribed in the circle of
+/// `radius` around `(cx, cy)`.
+fn triangle_vertices(cx: f32, cy: f32, radius: f32) -> [(f32, f32); 3] {
+    use std::f32::consts::PI;
+    let angles = [-PI / 2.0, -PI / 2.0 + 2.0 * PI / 3.0, -PI / 2.0 + 4.0 * PI / 3.0];
+    angles.map(|angle| (cx + radius * angle.cos(), cy + radius * angle.sin()))
 }
 
 struct GlyphBlit {
@@ -1722,6 +1873,79 @@ fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip
             false,
             clip,
         );
+    }
+}
+
+/// RC-32: `outline` frames the border box from the *outside*, offset by
+/// `outline-offset` (which may be negative, pulling the ring inward, even
+/// on top of the border) and `outline-width` thick. Unlike `border` it has
+/// no per-side properties and never affects layout -- it is read straight
+/// from the raw style map like `border`/`box-shadow` already are, and
+/// reuses `paint_border_strip` for the four uniform-color strips (including
+/// its `double` handling). `outline-style: auto` (the UA-defined focus
+/// ring) is painted the same as `solid`, a documented simplification -- this
+/// painter has no concept of a platform focus-ring appearance. Not clipped
+/// to any rounded shape of its own (a plain rectangular frame): where a
+/// test needs a rounded *result*, that comes from `clip-path`'s own mask
+/// (e.g. `clip-path: margin-box` with `border-radius`), not from the
+/// outline rounding its own corners to match `border-radius` (CSS UI 4
+/// allows, but does not require, an outline that follows the border
+/// radius).
+fn paint_outline(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
+    let style = b.style.get("outline-style").unwrap_or("none");
+    if style.eq_ignore_ascii_case("none") {
+        return;
+    }
+    let width = b
+        .style
+        .get("outline-width")
+        .and_then(|value| resolve_outline_width(value))
+        .unwrap_or(3.0); // "medium", matching border-width's own default.
+    if width <= 0.0 {
+        return;
+    }
+    let offset = b
+        .style
+        .get("outline-offset")
+        .and_then(|value| resolve_shadow_length(value))
+        .unwrap_or(0.0);
+    let color = match b.style.get("outline-color") {
+        None => text_color,
+        // `invert` (also legal per CSS UI 4, XOR-inverting the pixels
+        // underneath) has no meaning for this painter's flat compositing;
+        // `currentcolor` and an absent/invalid color both fall back to the
+        // computed text color, the same policy `border-color` already uses.
+        Some(value) if value.eq_ignore_ascii_case("currentcolor") || value.eq_ignore_ascii_case("invert") => {
+            text_color
+        }
+        Some(value) => parse_css_color(value).unwrap_or(text_color),
+    };
+    let double = style.eq_ignore_ascii_case("double");
+    let bb = &b.border_box;
+    let inflate = offset + width;
+    let x = bb.x - inflate;
+    let y = bb.y - inflate;
+    let w = bb.w + 2.0 * inflate;
+    let h = bb.h + 2.0 * inflate;
+    if !(w > 0.0 && h > 0.0) {
+        return;
+    }
+    paint_border_strip(surface, [x, y, w, width], color, double, true, clip);
+    paint_border_strip(surface, [x, y + h - width, w, width], color, double, true, clip);
+    let middle = (h - 2.0 * width).max(0.0);
+    paint_border_strip(surface, [x, y + width, width, middle], color, double, false, clip);
+    paint_border_strip(surface, [x + w - width, y + width, width, middle], color, double, false, clip);
+}
+
+/// `outline-width` accepts the same `thin`/`medium`/`thick` keywords as
+/// `border-width` (same px mapping); otherwise it is a plain length, like
+/// `resolve_shadow_length` already handles for `box-shadow`.
+fn resolve_outline_width(value: &str) -> Option<f32> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "thin" => Some(1.0),
+        "medium" => Some(3.0),
+        "thick" => Some(5.0),
+        other => resolve_shadow_length(other),
     }
 }
 
@@ -2181,6 +2405,158 @@ mod tests {
         let surface = paint_document_with_text_resources(&root, 20, 20, &text, &NoImages);
 
         assert_eq!(surface.get_pixel(3, 5), Some([0, 0, 0, 255]));
+    }
+
+    /// RC-33: an `ImageProvider` mock that hands back a fixed `TextEmphasis`
+    /// for every node, standing in for the embedding caller's real
+    /// cascade-driven `amazing_text_provider::text_emphasis_mark` lookup.
+    struct EmphasisImages(TextEmphasis);
+    impl ImageProvider for EmphasisImages {
+        fn image(&self, _node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+            None
+        }
+        fn text_emphasis(&self, _node: amazing_dom::NodeIdx) -> Option<TextEmphasis> {
+            Some(self.0)
+        }
+    }
+
+    /// A single-glyph line, 20px font, glyph at x=10 with a 10px advance
+    /// (so its own advance box spans x in [10, 20)), baseline at y=40, on a
+    /// tall enough root to leave room for a mark on either side.
+    fn emphasis_glyph_root() -> LayoutBox {
+        let mut root = block(&[], 0.0, 0.0, 40.0, 60.0);
+        root.lines.push(amazing_layout::LineBox {
+            y_top: 30.0,
+            height: 24.0,
+            baseline: 40.0,
+            words: Vec::new(),
+            glyphs: vec![amazing_layout::GlyphFrag {
+                node: amazing_dom::NodeIdx(1),
+                font: amazing_text::FontKey(0),
+                glyph: amazing_text::GlyphId('A' as u32),
+                cluster: 0..1,
+                source_range: 0..1,
+                source_mappings: Vec::new(),
+                x: 10.0,
+                y: 0.0,
+                advance_x: 10.0,
+                advance_y: 0.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                font_size: 20.0,
+                writing_mode: amazing_text::WritingMode::HorizontalTb,
+                orientation: amazing_text::GlyphOrientation::Upright,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                variations: Vec::new(),
+                synthesis: amazing_text::FontSynthesis::default(),
+                color: "black".into(),
+            }],
+            decorations: Vec::new(),
+            replaced: Vec::new(),
+        });
+        root
+    }
+
+    #[test]
+    fn emphasis_mark_paints_a_filled_circle_above_the_glyph_by_default() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = emphasis_glyph_root();
+        let images = EmphasisImages(TextEmphasis {
+            shape: EmphasisShape::Circle,
+            filled: true,
+            color: [255, 0, 0, 255],
+            over: true,
+        });
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &images);
+        // Center of the glyph's advance box (x=10..20 -> 15), above the
+        // baseline (40) by roughly font_size*0.85 + gap + radius.
+        assert_eq!(surface.get_pixel(15, 15), Some([255, 0, 0, 255]), "mark center, above the text");
+        assert_eq!(surface.get_pixel(15, 45), Some(WHITE), "below the baseline, untouched");
+    }
+
+    #[test]
+    fn emphasis_mark_under_position_paints_below_the_baseline_instead() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = emphasis_glyph_root();
+        let images = EmphasisImages(TextEmphasis {
+            shape: EmphasisShape::Circle,
+            filled: true,
+            color: [0, 128, 0, 255],
+            over: false,
+        });
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &images);
+        assert_eq!(surface.get_pixel(15, 15), Some(WHITE), "over position untouched now");
+        assert_eq!(surface.get_pixel(15, 50), Some([0, 128, 0, 255]), "mark center, under the text");
+    }
+
+    #[test]
+    fn emphasis_mark_open_style_leaves_its_own_center_unpainted() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = emphasis_glyph_root();
+        let images = EmphasisImages(TextEmphasis {
+            shape: EmphasisShape::Circle,
+            filled: false,
+            color: [255, 0, 0, 255],
+            over: true,
+        });
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &images);
+        assert_eq!(surface.get_pixel(15, 15), Some(WHITE), "open mark's own hollow center");
+        // The ring itself: a couple of pixels above and left of center.
+        let radius = 20.0 * 0.25;
+        let ring_x = (15.0 - radius + 0.5) as u32;
+        assert_eq!(surface.get_pixel(ring_x, 15), Some([255, 0, 0, 255]), "on the ring");
+    }
+
+    #[test]
+    fn emphasis_mark_triangle_shape_differs_from_a_circle() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = emphasis_glyph_root();
+        let images = EmphasisImages(TextEmphasis {
+            shape: EmphasisShape::Triangle,
+            filled: true,
+            color: [255, 0, 0, 255],
+            over: true,
+        });
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &images);
+        // The triangle points up: its own top vertex sits at the mark's
+        // center y minus its radius, directly ink at the center column.
+        let radius = 20.0 * 0.25;
+        let cy = 40.0 - 20.0 * 0.85 - radius - 20.0 * 0.1;
+        let top_y = (cy - radius + 1.0) as u32;
+        assert_eq!(surface.get_pixel(15, top_y), Some([255, 0, 0, 255]), "near the triangle's apex");
+        // A circle's bounding box would also ink its own left/right
+        // extremes at the vertical center; an upward triangle does not.
+        let mid_y = cy as u32;
+        let left_x = (15.0 - radius + 0.5) as u32;
+        assert_eq!(surface.get_pixel(left_x, mid_y), Some(WHITE), "outside the triangle's base corner");
+    }
+
+    #[test]
+    fn no_emphasis_provider_result_paints_no_mark() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = emphasis_glyph_root();
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &NoImages);
+        for y in 0..26 {
+            assert_eq!(surface.get_pixel(15, y), Some(WHITE), "row {y}, no provider means no mark");
+        }
+    }
+
+    #[test]
+    fn vertical_writing_mode_glyphs_get_no_emphasis_mark() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let mut root = emphasis_glyph_root();
+        root.lines[0].glyphs[0].writing_mode = amazing_text::WritingMode::VerticalRl;
+        let images = EmphasisImages(TextEmphasis {
+            shape: EmphasisShape::Circle,
+            filled: true,
+            color: [255, 0, 0, 255],
+            over: true,
+        });
+        let surface = paint_document_with_text_resources(&root, 40, 60, &text, &images);
+        for y in 0..26 {
+            assert_eq!(surface.get_pixel(15, y), Some(WHITE), "row {y}, vertical writing mode is skipped");
+        }
     }
 
     #[test]
@@ -2768,6 +3144,90 @@ mod tests {
         ]);
         let surf = paint_document(&b, 8, 8, &FontSource::fallback());
         assert_eq!(surf.get_pixel(2, 0), Some([128, 0, 128, 255]));
+    }
+
+    #[test]
+    fn outline_draws_outside_the_border_box_at_its_own_offset() {
+        // A 4x4 border box at (5,5), outline 2px solid red, offset 1px:
+        // the ring sits between (5-1-2=2) and (5-1=4) on each side.
+        let mut b = block(&[], 5.0, 5.0, 4.0, 4.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "red"),
+            ("outline-width", "2px"),
+            ("outline-offset", "1px"),
+        ]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(3, 3), Some([255, 0, 0, 255]), "outer ring pixel");
+        assert_eq!(surf.get_pixel(2, 2), Some([255, 0, 0, 255]), "corner of the ring");
+        assert_eq!(surf.get_pixel(4, 4), Some(WHITE), "gap between border box and ring (the offset)");
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE), "outside the ring entirely");
+        assert_eq!(surf.get_pixel(6, 6), Some(WHITE), "inside the border box, untouched");
+    }
+
+    #[test]
+    fn outline_none_or_zero_width_paints_nothing() {
+        let mut b = block(&[], 2.0, 2.0, 4.0, 4.0);
+        b.style = style(&[("outline-style", "none"), ("outline-color", "red"), ("outline-width", "9px")]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+
+        b.style = style(&[("outline-style", "solid"), ("outline-color", "red"), ("outline-width", "0px")]);
+        let surf = paint_document(&b, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+
+        // No outline-style at all defaults to `none`, same as the initial value.
+        let plain = block(&[("outline-color", "red"), ("outline-width", "9px")], 2.0, 2.0, 4.0, 4.0);
+        let surf = paint_document(&plain, 12, 12, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(1, 1), Some(WHITE));
+    }
+
+    #[test]
+    fn outline_negative_offset_pulls_the_ring_inward_over_the_border() {
+        let mut b = block(&[], 4.0, 4.0, 8.0, 8.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "lime"),
+            ("outline-width", "2px"),
+            ("outline-offset", "-2px"),
+        ]);
+        let surf = paint_document(&b, 16, 16, &FontSource::fallback());
+        // offset -2, width 2: the ring's outer edge coincides with the
+        // border box's own edge (offset + width == 0), so it paints right
+        // on top of the box's own perimeter, leaving only the inner core
+        // (well past the 2px ring thickness on every side) untouched.
+        assert_eq!(surf.get_pixel(4, 4), Some([0, 255, 0, 255]), "top-left corner of the box");
+        assert_eq!(surf.get_pixel(11, 11), Some([0, 255, 0, 255]), "bottom-right corner of the box");
+        assert_eq!(surf.get_pixel(8, 8), Some(WHITE), "well inside the ring, untouched");
+    }
+
+    #[test]
+    fn outline_currentcolor_and_medium_keyword_resolve_like_border() {
+        let mut b = block(&[], 3.0, 3.0, 4.0, 4.0);
+        b.style = style(&[
+            ("outline-style", "solid"),
+            ("outline-color", "currentcolor"),
+            ("outline-width", "medium"), // 3px, same mapping as border-width.
+            ("color", "blue"),
+        ]);
+        let surf = paint_document(&b, 16, 16, &FontSource::fallback());
+        assert_eq!(surf.get_pixel(0, 0), Some([0, 0, 255, 255]));
+    }
+
+    #[test]
+    fn outline_double_style_paints_two_strips_like_double_border() {
+        let mut b = block(&[], 5.0, 5.0, 6.0, 6.0);
+        b.style = style(&[
+            ("outline-style", "double"),
+            ("outline-color", "black"),
+            ("outline-width", "3px"),
+        ]);
+        let surf = paint_document(&b, 20, 20, &FontSource::fallback());
+        // The 3px-thick top ring splits into two 1px strips with a 1px gap;
+        // outer edge at y=2 (5 - 3), so rows 2 and 4 are ink, row 3 is not.
+        assert_eq!(surf.get_pixel(6, 2), Some([0, 0, 0, 255]));
+        assert_eq!(surf.get_pixel(6, 3), Some(WHITE));
+        assert_eq!(surf.get_pixel(6, 4), Some([0, 0, 0, 255]));
     }
 
     #[test]

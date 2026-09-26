@@ -303,6 +303,7 @@ impl Interpreter {
     pub fn binding_get_own_property(&mut self, object: &JsValue, name: &str) -> Result<Option<Property>, Throw> {
         let owner = Self::binding_owner(object)?;
         if let Some(result) = self.window_proxy_own_property(&owner, &name.into()) { return result; }
+        if let Some(result) = self.proxy_get_own_property(&owner, &name.into()) { return result; }
         self.legacy_own_property(&owner, name, false)
     }
 
@@ -319,6 +320,7 @@ impl Interpreter {
     pub fn binding_delete_property(&mut self, object: &JsValue, name: &str) -> Result<bool, Throw> {
         let owner = Self::binding_owner(object)?;
         if let Some(result) = self.window_proxy_delete(&owner, &name.into()) { return result; }
+        if let Some(result) = self.proxy_delete(&owner, &name.into()) { return result; }
         match self.legacy_delete(&owner, name)? {
             Some(deleted) => Ok(deleted),
             None => {
@@ -353,7 +355,13 @@ impl Interpreter {
                         }
                         break;
                     }
-                    cursor = prototype.borrow().proto.clone();
+                    // A Proxy mid-chain must have its getPrototypeOf trap
+                    // observed when walking further up for an inherited setter.
+                    cursor = if let Some(result) = self.window_proxy_prototype(&prototype) {
+                        match result? { JsValue::Object(p) => Some(p), _ => None }
+                    } else if let Some(result) = self.proxy_get_prototype(&prototype) {
+                        match result? { JsValue::Object(p) => Some(p), _ => None }
+                    } else { prototype.borrow().proto.clone() };
                 }
             }
         }

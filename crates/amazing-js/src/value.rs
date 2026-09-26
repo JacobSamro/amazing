@@ -227,6 +227,7 @@ impl fmt::Debug for Obj {
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
+            (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -762,6 +763,7 @@ pub enum Exotic {
     SymbolObject(JsSymbol),
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
     ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
+    Proxy(Rc<crate::interp::ProxyState>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -905,6 +907,10 @@ pub struct PendingReaction {
 #[derive(Debug, Clone)]
 pub struct JsObject {
     props: Vec<(PropertyKey, Property)>,
+    /// Changes when the indexed layout or a property's descriptor changes.
+    pub(crate) shape_version: u64,
+    /// Object literals constructed by the VM can use ordinary-own-property caches.
+    pub(crate) vm_cacheable: bool,
     /// Creation realm for callable dispatch and intrinsic allocation.
     pub(crate) realm: Option<u64>,
     pub proto: Option<Obj>,
@@ -939,6 +945,10 @@ pub struct JsObject {
     pub(crate) async_body_code: Option<Result<crate::interp::vm::FunctionCode, crate::interp::vm::CompileError>>,
     /// Promise capability captured by a native resolve or reject function.
     pub(crate) promise_target: Option<Obj>,
+    /// State a `Proxy.revocable` revoke function closes over. Orthogonal to
+    /// `exotic`: the revoke function is an ordinary callable, not itself a
+    /// Proxy exotic object, so it must not be caught by the Proxy trap hooks.
+    pub(crate) proxy_revoke: Option<Rc<crate::interp::ProxyState>>,
 }
 
 impl Default for JsObject {
@@ -951,6 +961,8 @@ impl JsObject {
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),
+            shape_version: 0,
+            vm_cacheable: false,
             realm: None,
             proto: None,
             exotic: Exotic::Ordinary,
@@ -969,6 +981,7 @@ impl JsObject {
             strict_function: false,
             async_body_code: None,
             promise_target: None,
+            proxy_revoke: None,
         }
     }
 
@@ -1066,11 +1079,37 @@ impl JsObject {
     pub fn define(&mut self, key: impl Into<PropertyKey>, prop: Property) -> Result<(), ()> {
         let key = key.into();
         if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == &key) {
+            if slot.1.writable != prop.writable || slot.1.enumerable != prop.enumerable
+                || slot.1.configurable != prop.configurable
+                || slot.1.getter.is_some() != prop.getter.is_some()
+                || slot.1.setter.is_some() != prop.setter.is_some() {
+                self.shape_version = self.shape_version.wrapping_add(1);
+            }
             slot.1 = prop;
         } else {
             self.props.push((key, prop));
+            self.shape_version = self.shape_version.wrapping_add(1);
         }
         Ok(())
+    }
+
+    /// Slot access for VM inline caches. The key check also protects against
+    /// a stale cache if a version ever wraps.
+    pub(crate) fn own_data_slot(&self, key: &PropertyKey, slot: usize) -> Option<&Property> {
+        let (actual, property) = self.props.get(slot)?;
+        (actual == key && property.getter.is_none() && property.setter.is_none())
+            .then_some(property)
+    }
+
+    pub(crate) fn own_slot_index(&self, key: &PropertyKey) -> Option<usize> {
+        self.props.iter().position(|(actual, _)| actual == key)
+    }
+
+    pub(crate) fn set_own_data_slot(&mut self, key: &PropertyKey, slot: usize, value: JsValue) -> bool {
+        let Some(property) = self.own_data_slot(key, slot) else { return false };
+        if !property.writable { return false; }
+        self.props[slot].1.value = value;
+        true
     }
 
     /// Shorthand for a full-rights data property.
@@ -1098,6 +1137,7 @@ impl JsObject {
                 return false;
             }
             self.props.remove(pos);
+            self.shape_version = self.shape_version.wrapping_add(1);
             true
         } else {
             true

@@ -61,11 +61,11 @@ struct WsObject {
     ready_state: u16,
     protocol: String,
     binary_type_arraybuffer: bool,
-    /// Bytes handed to `send()` that the transport has not accepted yet
-    /// (CLOSING/CLOSED sends, or a transport-level rejection). A successful
-    /// `send_websocket` call is treated as immediately flushed: the
-    /// dispatcher has no "frame written" callback, so this is an
-    /// approximation, not a byte-exact `bufferedAmount`.
+    /// Bytes handed to `send()` that have not yet actually been written to
+    /// the transport (WHATWG `bufferedAmount`): increased synchronously by
+    /// every `send()` call, decreased as `WebSocketEvent::Sent` reports the
+    /// dispatcher's write progress, and never decreased for a CLOSING/
+    /// CLOSED socket since nothing is ever transmitted.
     buffered_amount: u64,
     listeners: Vec<WsListener>,
     handlers: HashMap<&'static str, JsValue>,
@@ -515,7 +515,13 @@ impl RuntimeBindingHost<'_> {
 
         let base = self.fetch_base()?;
         let origin = base.origin();
-        let client = WebSocketClient { origin: origin.clone(), context: ClientContext::default() };
+        // WPT `websockets/mixed-content.https.any.js`: a secure top-level
+        // document must not be able to open an insecure `ws://` connection,
+        // the same "client restricts mixed content" gate `fetch()` and
+        // subresource requests already go through.
+        let mut context = ClientContext::default();
+        context.security.client_restricts_mixed_content = base.as_parsed().scheme() == "https";
+        let client = WebSocketClient { origin: origin.clone(), context };
         let started = self
             .state
             .borrow_mut()
@@ -562,18 +568,20 @@ impl RuntimeBindingHost<'_> {
             let len = text.len() as u64;
             (WsEvent::Text(text), len)
         };
+        // WHATWG "send a WebSocket message": bufferedAmount increases by the
+        // message length synchronously, before any of the data is actually
+        // written to the network. If the connection is CLOSING/CLOSED (or
+        // the queue attempt is rejected outright), nothing is ever
+        // transmitted and this increase is permanent; otherwise it comes
+        // back down as `WebSocketEvent::Sent` reports bytes actually
+        // flushed to the transport (see `websocket_event`).
+        self.state.borrow_mut().net.websockets[slot].buffered_amount += len;
         if ready_state >= 2 {
-            // CLOSING or CLOSED: WHATWG "send a WebSocket message" increases
-            // bufferedAmount without transmitting.
-            self.state.borrow_mut().net.websockets[slot].buffered_amount += len;
             return Ok(JsValue::Undefined);
         }
         let service_id = self.state.borrow().net.websockets[slot].service_id;
         if let Some(id) = service_id {
-            let sent = self.state.borrow_mut().net.fetch_network.send_websocket(id, message);
-            if sent.is_err() {
-                self.state.borrow_mut().net.websockets[slot].buffered_amount += len;
-            }
+            let _ = self.state.borrow_mut().net.fetch_network.send_websocket(id, message);
         }
         Ok(JsValue::Undefined)
     }
@@ -869,6 +877,15 @@ impl RuntimeBindingHost<'_> {
                 self.websocket_fire_simple(slot, "error")?;
                 self.websocket_fire_close(slot, 1006, String::new(), false)
             }
+            WebSocketEvent::Sent { bytes, .. } => {
+                // WHATWG: `bufferedAmount` decreases as previously-queued
+                // `send()` payload bytes are actually transmitted; it never
+                // fires a script-observable event by itself.
+                let mut state = self.state.borrow_mut();
+                let buffered = &mut state.net.websockets[slot].buffered_amount;
+                *buffered = buffered.saturating_sub(bytes);
+                Ok(())
+            }
         }
     }
 
@@ -1150,12 +1167,21 @@ impl FetchHost for RuntimeBindingHost<'_> {
         self.js.binding_own_property_keys(value)
     }
     fn fetch_base(&self) -> Result<HttpUrl, Throw> {
-        let url = self
-            .state
-            .borrow()
-            .document_url
-            .clone()
-            .unwrap_or_else(|| "http://localhost/".into());
+        let url = self.state.borrow().document_url.clone().unwrap_or_default();
+        // IA-REAL-2 (app-chat.html): a document opened from a local file has a
+        // `document_url` of `file:...` or a bare filesystem path, neither of
+        // which `HttpUrl` (http(s)/data/about only) can represent. `HttpUrl`
+        // only backs the WHATWG "API base URL" here for origin/mixed-content
+        // purposes -- not actual navigation -- so fall back to the same
+        // placeholder already used when there is no document URL at all,
+        // rather than throwing. This mirrors `fetch_local_file`'s own
+        // file-document detection. A `http:` base correctly yields
+        // `client_restricts_mixed_content == false`: a local file is not an
+        // `https:` document, so it should not gate mixed-content ws:// opens.
+        if url.is_empty() || url.starts_with("file:") || std::path::Path::new(&url).is_file() {
+            return HttpUrl::parse("http://localhost/")
+                .map_err(|_| Throw::type_error("Invalid document URL"));
+        }
         HttpUrl::parse(&url).map_err(|_| Throw::type_error("Invalid document URL"))
     }
     fn fetch_local_file(&mut self, args: &[JsValue]) -> Result<Option<JsValue>, Throw> {
@@ -1704,6 +1730,53 @@ mod tests {
         port
     }
 
+    /// A loopback server requiring `Authorization: Basic Zm9vOmJhcg==`
+    /// (`foo:bar`) before completing the opening handshake, matching WPT's
+    /// `websockets/basic_auth` shim handler -- for NET-39's URL-userinfo
+    /// (`ws://foo:bar@host/...`) -> `Authorization` header fix.
+    fn spawn_ws_basic_auth_server() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else { return; };
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            loop {
+                let n = stream.read(&mut tmp).unwrap_or(0);
+                if n == 0 {
+                    return;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let text = String::from_utf8_lossy(&buf);
+            let authorized = text
+                .lines()
+                .any(|line| line.trim() == "Authorization: Basic Zm9vOmJhcg==");
+            if !authorized {
+                let _ = stream.write_all(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nWWW-Authenticate: Basic realm=\"x\"\r\n\r\n",
+                );
+                return;
+            }
+            let key = text
+                .lines()
+                .find_map(|line| line.strip_prefix("Sec-WebSocket-Key:"))
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string();
+            let accept_input = format!("{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            let accept = base64_encode(&sha1(accept_input.as_bytes()));
+            let response = format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        port
+    }
+
     /// Full round trip against a real local server: constructor connects,
     /// `onopen` sends a text message, the echo server bounces it back through
     /// `onmessage`, and a client-initiated `close(1000, ...)` completes with a
@@ -1743,6 +1816,133 @@ mod tests {
         assert_eq!(scheduler.run_script("received === 'hello'").unwrap(), JsValue::Bool(true));
         assert_eq!(scheduler.run_script("closeCode === 1000").unwrap(), JsValue::Bool(true));
         assert_eq!(scheduler.run_script("closeClean === true").unwrap(), JsValue::Bool(true));
+    }
+
+    /// A large (65000-byte) single-frame text message round-trips the same
+    /// way `hello` does: `bufferedAmount` reflects the queued length right
+    /// after `send()` (WHATWG "send a WebSocket message"), the echo server's
+    /// reply still arrives, and `bufferedAmount` decreases via
+    /// `WebSocketEvent::Sent` once the frame is actually flushed.
+    #[test]
+    fn websocket_large_message_round_trip_tracks_buffered_amount() {
+        let port = spawn_ws_echo_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, received=null, closed=false, bufAfterSend=null; \
+                 var ws = new WebSocket('ws://127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ \
+                     opened = true; \
+                     var data = ''; for (var i = 0; i < 65000; i++) {{ data += 'c'; }} \
+                     ws.send(data); \
+                     bufAfterSend = ws.bufferedAmount; \
+                 }}; \
+                 ws.onmessage = function(e) {{ received = e.data.length; ws.close(1000, 'bye'); }}; \
+                 ws.onclose = function(e) {{ closed = true; }};"
+            ))
+            .unwrap();
+        let mut closed = false;
+        for _ in 0..2000 {
+            if scheduler.run_script("closed").unwrap() == JsValue::Bool(true) {
+                closed = true;
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(closed, "large message round-trip did not complete");
+        assert_eq!(scheduler.run_script("opened").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("bufAfterSend === 65000").unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("received === 65000").unwrap(), JsValue::Bool(true));
+    }
+
+    /// NET-40: same round trip, but pumped the way `wpt_harness.rs::execute_page`
+    /// does -- a virtual 60Hz frame clock (`pump_at(frame * 16667us, true)` in a
+    /// tight loop, no real sleep) instead of `pump_now` on a real wall clock.
+    /// Written to isolate whether the Send-65K-data.any.js /
+    /// Send-binary-65K-arraybuffer.any.js corpus timeout (zero recorded
+    /// subtests) is caused by virtual-frame pumping racing testharness.js's
+    /// own internal timeout. It is not: this completes in 330 frames (~1.15s
+    /// wall clock), well inside budget, so the corpus gap is specific to the
+    /// installed wpt-harness/`wpt_server.rs` path, not this pumping pattern in
+    /// general -- kept as permanent coverage for the virtual-frame pump case.
+    #[test]
+    fn websocket_large_message_round_trip_under_virtual_frame_pump() {
+        let port = spawn_ws_echo_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, received=null, closed=false; \
+                 var ws = new WebSocket('ws://127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ \
+                     opened = true; \
+                     var data = ''; for (var i = 0; i < 65000; i++) {{ data += 'c'; }} \
+                     ws.send(data); \
+                 }}; \
+                 ws.onmessage = function(e) {{ received = e.data.length; ws.close(1000, 'bye'); }}; \
+                 ws.onclose = function(e) {{ closed = true; }};"
+            ))
+            .unwrap();
+        let mut closed = false;
+        let mut frame: u64 = 0;
+        for _ in 0..2000 {
+            if scheduler.run_script("closed").unwrap() == JsValue::Bool(true) {
+                closed = true;
+                break;
+            }
+            scheduler
+                .pump_at(Duration::from_micros(frame.saturating_mul(16_667)), true)
+                .unwrap();
+            frame = frame.saturating_add(1);
+        }
+        eprintln!(
+            "frame={frame} opened={:?} received={:?} closed={closed}",
+            scheduler.run_script("opened"),
+            scheduler.run_script("received"),
+        );
+        assert!(closed, "large message round-trip did not complete under virtual-frame pumping");
+    }
+
+    /// NET-39 (WPT `websockets/basic-auth.any.js`): a `ws://user:pass@host/`
+    /// URL authenticates via an `Authorization: Basic` header derived from
+    /// the userinfo, the same as `fetch()`/XHR, rather than being rejected.
+    #[test]
+    fn websocket_url_userinfo_sends_basic_auth_header() {
+        let port = spawn_ws_basic_auth_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, errored=false; \
+                 var ws = new WebSocket('ws://foo:bar@127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ opened = true; ws.close(); }}; \
+                 ws.onerror = function() {{ errored = true; }};"
+            ))
+            .unwrap();
+        let mut opened = false;
+        for _ in 0..400 {
+            if scheduler.run_script("opened || errored").unwrap() == JsValue::Bool(true) {
+                opened = scheduler.run_script("opened").unwrap() == JsValue::Bool(true);
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(opened, "WebSocket with URL userinfo should authenticate and open");
     }
 
     /// Constructor-time URL validation: relative-to-base resolution, scheme
@@ -1786,6 +1986,28 @@ mod tests {
             .run_script("var w2 = new WebSocket('http://example.test/socket'); w2.url === 'ws://example.test/socket'")
             .unwrap();
         assert_eq!(rewritten, JsValue::Bool(true), "http scheme should rewrite to ws");
+    }
+
+    /// IA-REAL-2 (NET-40 fold-in): `app-chat.html`, opened as a local file,
+    /// has a `document_url` of `file:///...`, which `fetch_base()` used to
+    /// reject (`HttpUrl` only understands http(s)/data/about), throwing out
+    /// of the WebSocket constructor before it ever reached the network. A
+    /// local-file document must be able to open an absolute `ws://` URL.
+    #[test]
+    fn websocket_constructs_from_a_local_file_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("file:///Users/example/app-chat.html");
+        let result = scheduler
+            .run_script(
+                "var w = new WebSocket('ws://example.test/socket'); \
+                 w.readyState === 0 && w.url === 'ws://example.test/socket'",
+            )
+            .unwrap_or_else(|error| panic!("WebSocket from a file: document: {}", error.describe()));
+        assert_eq!(result, JsValue::Bool(true));
     }
 
     #[test]

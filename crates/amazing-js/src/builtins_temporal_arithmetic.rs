@@ -304,6 +304,15 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             }
             let default = if data.kind == StdTemporalKind::PlainTime { "hour" } else { "day" };
             let largest = std_temporal_largest_unit(i, &options, default)?;
+            if data.kind == StdTemporalKind::PlainDateTime
+                && matches!(largest.as_str(), "year" | "month" | "week") {
+                // Full precision (smallestUnit defaulted to nanosecond, the only
+                // case reaching here): an exact calendar+time rebalance to the
+                // requested largestUnit, no rounding involved.
+                let mut fields = std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&other), &largest)?;
+                if since { for field in &mut fields { *field = -*field; } }
+                return std_temporal_make(i, StdTemporalKind::Duration, fields);
+            }
             let index = match largest.as_str() {
                 "day" if data.kind == StdTemporalKind::PlainDateTime => 3,
                 "hour" => 4, "minute" => 5, "second" => 6,
@@ -476,21 +485,312 @@ fn std_temporal_round_integer(value: i128, increment: i128, mode: &str) -> Resul
     Ok(rounded)
 }
 
+// Unit "rank": 0 = year (coarsest) .. 9 = nanosecond (finest), matching the
+// Duration field-array convention directly.
+fn std_temporal_unit_rank(unit: &str) -> Option<usize> {
+    Some(match unit {
+        "year" => 0, "month" => 1, "week" => 2, "day" => 3, "hour" => 4,
+        "minute" => 5, "second" => 6, "millisecond" => 7, "microsecond" => 8,
+        "nanosecond" => 9, _ => return None,
+    })
+}
+
+fn std_temporal_unit_name(rank: usize) -> &'static str {
+    ["year", "month", "week", "day", "hour", "minute", "second",
+        "millisecond", "microsecond", "nanosecond"][rank]
+}
+
+fn std_temporal_larger_unit(a: &str, b: &str) -> String {
+    let (ra, rb) = (std_temporal_unit_rank(a).unwrap_or(9), std_temporal_unit_rank(b).unwrap_or(9));
+    std_temporal_unit_name(ra.min(rb)).to_string()
+}
+
+fn std_temporal_singular_unit(unit: &str) -> String {
+    unit.strip_suffix('s').unwrap_or(unit).to_string()
+}
+
+// Sum of a Duration record's hour..nanosecond fields (indices 4..10) as
+// nanoseconds -- the sub-day remainder that is calendar-independent even when
+// years/months/weeks/days above it are not.
+fn std_temporal_duration_subday_ns(fields: &[i64; 10]) -> i128 {
+    fields[4] as i128 * 3_600 * STD_TEMPORAL_NS_SECOND + fields[5] as i128 * 60 * STD_TEMPORAL_NS_SECOND
+        + fields[6] as i128 * STD_TEMPORAL_NS_SECOND + fields[7] as i128 * 1_000_000
+        + fields[8] as i128 * 1_000 + fields[9] as i128
+}
+
+// Epoch nanoseconds of `base` (calendar-layout date, time assumed 0 unless
+// `base` itself carries a time-of-day) with an entire Duration record applied:
+// years/months/weeks/days through calendar arithmetic, the rest as an exact
+// nanosecond offset.
+fn std_temporal_duration_apply(base: &[i64; 10], duration: &[i64; 10]) -> Result<i128, Throw> {
+    let after_date = std_temporal_add_calendar(base, duration, 1, false)?;
+    Ok(std_temporal_epoch_ns(&after_date) + std_temporal_duration_subday_ns(duration))
+}
+
+// Express the span from `base` (calendar-layout, its own time-of-day
+// included) to an absolute `target_epoch_ns` as a Duration record with the
+// given largest unit -- the DifferenceISODateTime "day borrow" trick, so a
+// negative sub-day time remainder that disagrees in sign with the date
+// difference borrows one day from the date part instead of leaving a
+// mixed-sign result.
+fn std_temporal_epoch_breakdown(base: &[i64; 10], target_epoch_ns: i128, largest: &str) -> Result<[i64; 10], Throw> {
+    if matches!(largest, "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
+        let delta = target_epoch_ns - std_temporal_epoch_ns(base);
+        let index = match largest { "hour" => 4, "minute" => 5, "second" => 6,
+            "millisecond" => 7, "microsecond" => 8, _ => 9 };
+        return Ok(std_temporal_split_duration_ns(delta, index));
+    }
+    let base_time_ns = std_temporal_time_ns(base);
+    let mut target_fields = *base;
+    std_temporal_set_epoch_ns(&mut target_fields, target_epoch_ns)?;
+    let target_time_ns = std_temporal_time_ns(&target_fields);
+    let mut time_delta = target_time_ns - base_time_ns;
+    let time_sign = time_delta.signum();
+    let base_day = std_temporal_epoch_day(base[0], base[1], base[2]);
+    let target_day = std_temporal_epoch_day(target_fields[0], target_fields[1], target_fields[2]);
+    let date_sign = (target_day - base_day).signum() as i128;
+    let mut adjusted_day = target_day;
+    if time_sign != 0 && time_sign == -date_sign {
+        // Borrow one day in the direction the DATE part is heading (not the
+        // time part): shrink the date difference by one day and hand that
+        // day's worth of nanoseconds to the time remainder, in the same
+        // direction, so both parts end up with matching (date_sign) signs.
+        adjusted_day -= date_sign as i64;
+        time_delta += date_sign as i128 * STD_TEMPORAL_NS_DAY;
+    }
+    let (ay, am, ad) = std_temporal_civil_from_epoch_day(adjusted_day);
+    let mut adjusted_target = [0i64; 10];
+    adjusted_target[0] = ay; adjusted_target[1] = am; adjusted_target[2] = ad;
+    let mut base_date_only = [0i64; 10];
+    base_date_only[0] = base[0]; base_date_only[1] = base[1]; base_date_only[2] = base[2];
+    // `target_epoch_ns` can be arbitrarily large (e.g. balancing a duration
+    // with a Number.MAX_SAFE_INTEGER-scale time component), landing the
+    // civil date computed above far outside the ISO date range Temporal
+    // actually supports; `std_temporal_set_epoch_ns` above only rejects an
+    // i64 day-count overflow, not that narrower range, so check it here.
+    std_temporal_validate(StdTemporalKind::PlainDate, &adjusted_target)?;
+    let mut result = std_temporal_calendar_difference(&base_date_only, &adjusted_target, largest)?;
+    let time_fields = std_temporal_split_duration_ns(time_delta, 4);
+    result[4..10].copy_from_slice(&time_fields[4..10]);
+    Ok(result)
+}
+
+// Epoch-nanosecond offset of `base` plus exactly `k` of a calendar unit
+// (year/month/week, by Duration field index `unit_index`).
+fn std_temporal_calendar_step_ns(base: &[i64; 10], unit_index: usize, k: i64) -> Result<i128, Throw> {
+    let mut single = [0i64; 10];
+    single[unit_index] = k;
+    let target = std_temporal_add_calendar(base, &single, 1, false)?;
+    // `std_temporal_add_calendar` itself only rejects an i64 day-count
+    // overflow, not the narrower ISO date range Temporal actually supports --
+    // an enormous candidate count (e.g. rounding Number.MIN_SAFE_INTEGER
+    // seconds to whole years relative to a plain date) lands on a date far
+    // outside that range and must be rejected here, at the source, rather
+    // than silently bracket-searching to a bogus but in-magnitude Duration.
+    std_temporal_validate(StdTemporalKind::PlainDate, &target)?;
+    Ok(std_temporal_epoch_ns(&target) - std_temporal_epoch_ns(base))
+}
+
+// Round `total_ns` (an exact epoch-nanosecond offset from `base`) to the
+// nearest multiple of `increment` calendar units, per `mode`. Calendar units
+// are variable-length (a year or month has no fixed nanosecond size), so
+// unlike `std_temporal_round_integer` this brackets the true value between
+// two adjacent candidate unit-counts (computed via actual calendar
+// arithmetic from `base`) and rounds within that bracket.
+fn std_temporal_round_calendar_unit(base: &[i64; 10], total_ns: i128, unit: &str, increment: i64, mode: &str) -> Result<i64, Throw> {
+    let unit_index = std_temporal_unit_rank(unit).filter(|r| *r <= 2)
+        .ok_or_else(|| Throw::range_error("invalid unit for calendar rounding"))?;
+    if total_ns == 0 { return Ok(0); }
+    let single = std_temporal_calendar_step_ns(base, unit_index, 1)?.max(1);
+    let mut lo = ((total_ns as f64 / single as f64) / increment as f64).floor() as i64 * increment;
+    let neg = total_ns < 0;
+    for _ in 0..1_000_000 {
+        let lo_ns = std_temporal_calendar_step_ns(base, unit_index, lo)?;
+        if lo_ns > total_ns { lo -= increment; continue; }
+        let hi_ns = std_temporal_calendar_step_ns(base, unit_index, lo + increment)?;
+        if hi_ns <= total_ns { lo += increment; continue; }
+        let numerator = total_ns - lo_ns;
+        let denom = hi_ns - lo_ns;
+        if numerator == 0 { return Ok(lo); }
+        return Ok(match mode {
+            "floor" => lo,
+            "ceil" => lo + increment,
+            "trunc" => if neg { lo + increment } else { lo },
+            "expand" => if neg { lo } else { lo + increment },
+            "halfExpand" | "halfEven" | "halfCeil" | "halfFloor" | "halfTrunc" => {
+                let twice = numerator * 2;
+                if twice < denom { lo } else if twice > denom { lo + increment }
+                else { match mode {
+                    "halfExpand" => if neg { lo } else { lo + increment },
+                    "halfEven" => if (lo / increment) % 2 == 0 { lo } else { lo + increment },
+                    "halfCeil" => lo + increment,
+                    "halfFloor" => lo,
+                    _ => if neg { lo + increment } else { lo },
+                }}
+            }
+            _ => return Err(Throw::range_error("invalid roundingMode")),
+        });
+    }
+    Err(Throw::range_error("Temporal calendar rounding did not converge"))
+}
+
+// Express the span from `base` to the exact `target_ns` as a Duration record
+// with the given `largest` unit, rounded at `smallest` unit granularity.
+// `smallest` and `largest` are both in {year, month, week}. When they're
+// equal, rounding "the total in smallestUnit's own units from base" and then
+// splitting that into largestUnit's breakdown is exactly RoundDuration for
+// this case. When they differ, that shortcut is wrong: e.g. smallestUnit
+// "weeks" with largestUnit "months" must round only the *day remainder left
+// over after the exact whole-month breakdown* to week granularity, not
+// re-round the whole span in weeks from `base` -- 31 days is exactly one
+// month with zero remainder, but is not a whole number of weeks, so rounding
+// the raw week-count from `base` would spuriously add a week where none of
+// the smallestUnit (weeks) actually remains.
+fn std_temporal_round_to_calendar_unit(base: &[i64; 10], target_ns: i128, smallest: &str, largest: &str,
+    increment: i64, mode: &str) -> Result<[i64; 10], Throw> {
+    let total_ns = target_ns - std_temporal_epoch_ns(base);
+    if largest == smallest {
+        let unit_index = std_temporal_unit_rank(smallest).unwrap();
+        let k = std_temporal_round_calendar_unit(base, total_ns, smallest, increment, mode)?;
+        let mut single = [0i64; 10];
+        single[unit_index] = k;
+        let rounded_target_date = std_temporal_add_calendar(base, &single, 1, false)?;
+        return std_temporal_calendar_difference(base, &rounded_target_date, largest);
+    }
+    if smallest == "week" {
+        // largest is "year" or "month": round the exact breakdown's day (+
+        // any sub-day time) remainder to a whole number of weeks -- a fixed
+        // 7-day ratio, no further calendar arithmetic needed.
+        let mut exact = std_temporal_epoch_breakdown(base, target_ns, largest)?;
+        let remainder_ns = exact[3] as i128 * STD_TEMPORAL_NS_DAY + std_temporal_duration_subday_ns(&exact);
+        let step = 7 * STD_TEMPORAL_NS_DAY * increment as i128;
+        let rounded = std_temporal_round_integer(remainder_ns, step, mode)?;
+        exact[2] += (rounded / (7 * STD_TEMPORAL_NS_DAY)) as i64;
+        exact[3..10].fill(0);
+        return Ok(exact);
+    }
+    // smallest == "month", largest == "year": bracket-search the remainder
+    // in months, anchored at the cursor after the exact whole-year part (a
+    // month's length depends on where it starts, so this cannot use `base`
+    // directly once a nonzero year count has already been consumed).
+    let years = std_temporal_epoch_breakdown(base, target_ns, "year")?[0];
+    let mut years_only = [0i64; 10];
+    years_only[0] = years;
+    let cursor = std_temporal_add_calendar(base, &years_only, 1, false)?;
+    let remainder_ns = target_ns - std_temporal_epoch_ns(&cursor);
+    let k = std_temporal_round_calendar_unit(&cursor, remainder_ns, "month", increment, mode)?;
+    let mut single = [0i64; 10];
+    single[1] = k;
+    let rounded_target_date = std_temporal_add_calendar(&cursor, &single, 1, false)?;
+    std_temporal_calendar_difference(base, &rounded_target_date, "year")
+}
+
+// Temporal.Duration.prototype.round: a real RoundDuration + calendar-relative
+// balancing, replacing the old stub that unconditionally threw whenever
+// years/months were present. `smallestUnit`/`largestUnit` follow the spec's
+// GetDifferenceSettings-style defaulting (each falls back to the other, or to
+// the duration's own largest nonzero field), and any duration touching a
+// calendar unit (or being re-expressed through one) resolves through
+// `relativeTo` and real calendar arithmetic instead of a flat nanosecond
+// count.
+fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &JsValue) -> Result<JsValue, Throw> {
+    let (smallest_raw, largest_raw) = if let JsValue::Str(value) = option {
+        (Some(std_temporal_singular_unit(&value.to_utf8_lossy())), None)
+    } else {
+        (std_temporal_option_string(i, option, "smallestUnit")?.map(|u| std_temporal_singular_unit(&u)),
+            std_temporal_option_string(i, option, "largestUnit")?.map(|u| std_temporal_singular_unit(&u)))
+    };
+    // The "at least one of largestUnit/smallestUnit is required" check is on
+    // whether the option was given at all, not on its resolved value -- an
+    // explicit largestUnit: "auto" still counts as present, unlike an absent
+    // largestUnit that defaults to "auto" internally.
+    if smallest_raw.is_none() && largest_raw.is_none() {
+        return Err(Throw::range_error("one of largestUnit or smallestUnit is required"));
+    }
+    let largest_opt = largest_raw.filter(|u| u != "auto");
+    for unit in smallest_raw.iter().chain(largest_opt.iter()) {
+        if std_temporal_unit_rank(unit).is_none() { return Err(Throw::range_error("invalid Temporal unit")); }
+    }
+    let smallest = smallest_raw.unwrap_or_else(|| "nanosecond".to_string());
+    let existing_largest = std_temporal_unit_name(fields.iter().position(|v| *v != 0).unwrap_or(9));
+    let largest = largest_opt.unwrap_or_else(|| std_temporal_larger_unit(existing_largest, &smallest));
+    let (smallest_index, largest_index) = (std_temporal_unit_rank(&smallest).unwrap(), std_temporal_unit_rank(&largest).unwrap());
+    if largest_index > smallest_index {
+        return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
+    }
+    let (increment, mode) = if option.is_object() {
+        let increment = std_temporal_property(i, option, "roundingIncrement")?.unwrap_or(1);
+        let mode = std_temporal_option_string(i, option, "roundingMode")?.unwrap_or_else(|| "halfExpand".to_string());
+        (increment, mode)
+    } else { (1, "halfExpand".to_string()) };
+    if !std_temporal_round_mode_valid(&mode) { return Err(Throw::range_error("invalid roundingMode")); }
+    // Time units additionally cannot exceed (or fail to evenly divide) the
+    // next-largest unit, matching std_temporal_rounding_options.
+    let maximum = match smallest.as_str() {
+        "hour" => 24, "minute" | "second" => 60,
+        "millisecond" | "microsecond" | "nanosecond" => 1_000,
+        _ => i64::MAX,
+    };
+    if increment < 1 || increment > 1_000_000_000 || increment >= maximum
+        || (maximum != i64::MAX && maximum % increment != 0) {
+        return Err(Throw::range_error("invalid roundingIncrement"));
+    }
+
+    let needs_calendar = smallest_index <= 2 || largest_index <= 2 || fields[0] != 0 || fields[1] != 0;
+    if !needs_calendar {
+        let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
+            * increment as i128;
+        let rounded = std_temporal_round_integer(std_temporal_duration_time_ns(&fields), step, &mode)?;
+        return std_temporal_make(i, StdTemporalKind::Duration, std_temporal_split_duration_ns(rounded, largest_index));
+    }
+    let relative = if option.is_object() { std_temporal_option_value(i, option, "relativeTo")? } else { JsValue::Undefined };
+    if relative.is_undefined() {
+        return Err(Throw::range_error("calendar units require relativeTo"));
+    }
+    if relative.is_object() {
+        // A relativeTo property bag naming a `timeZone` is conceptually a
+        // ZonedDateTime-relative computation; this implementation only ever
+        // keeps the local date, but the timeZone value must still be
+        // resolved (and can still throw, e.g. a malformed date-time string
+        // used as a time zone identifier) even though its result goes
+        // unused below.
+        let time_zone = i.get_prop(&relative, "timeZone")?;
+        if !time_zone.is_undefined() { std_epoch_zone_value(i, &time_zone)?; }
+    }
+    if let JsValue::Str(text) = &relative {
+        std_temporal_validate_relative_to_offset(&text.to_utf8_lossy())?;
+    }
+    let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?;
+    let target_ns = std_temporal_duration_apply(&base, &fields)?;
+    let result = if smallest_index <= 2 {
+        std_temporal_round_to_calendar_unit(&base, target_ns, &smallest, &largest, increment, &mode)?
+    } else {
+        let total_ns = target_ns - std_temporal_epoch_ns(&base);
+        let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
+            * increment as i128;
+        let rounded_ns = std_temporal_round_integer(total_ns, step, &mode)?;
+        std_temporal_epoch_breakdown(&base, std_temporal_epoch_ns(&base) + rounded_ns, &largest)?
+    };
+    // A duration whose time component is enormous relative to relativeTo
+    // (e.g. Number.MAX_SAFE_INTEGER seconds) can balance out to a field
+    // magnitude past what a Duration record may legally hold.
+    std_temporal_validate(StdTemporalKind::Duration, &result)?;
+    std_temporal_make(i, StdTemporalKind::Duration, result)
+}
+
 fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_temporal_record(&this, None)?;
     let option = std_reflect_arg(&args, 0);
     if option.is_undefined() { return Err(Throw::type_error("round options are required")); }
+    if data.kind == StdTemporalKind::Duration {
+        return std_temporal_round_duration(i, data.fields, &option);
+    }
+    // Duration is fully handled by std_temporal_round_duration above; only
+    // PlainTime/PlainDateTime (day and finer, no calendar units) reach here.
     let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
-        else { std_temporal_option_string(i, &option, "smallestUnit")?
-            .unwrap_or_else(|| if data.kind == StdTemporalKind::Duration { "nanosecond".to_string() }
-                else { String::new() }) };
+        else { std_temporal_option_string(i, &option, "smallestUnit")?.unwrap_or_default() };
     let unit = unit.strip_suffix('s').unwrap_or(&unit);
     if matches!(unit, "year" | "month") {
-        // Calendar-unit rounding is only exact for a blank duration without a
-        // relativeTo; anything else needs calendar arithmetic we do not model.
-        if data.kind == StdTemporalKind::Duration && data.fields.iter().all(|value| *value == 0) {
-            return std_temporal_make(i, StdTemporalKind::Duration, [0; 10]);
-        }
         return Err(Throw::range_error("calendar units require relativeTo"));
     }
     let unit_ns = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
@@ -516,22 +816,6 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
         StdTemporalKind::PlainDateTime => {
             let rounded = std_temporal_round_integer(std_temporal_epoch_ns(&fields), step, &mode)?;
             std_temporal_set_epoch_ns(&mut fields, rounded)?;
-        }
-        StdTemporalKind::Duration => {
-            if fields[0] != 0 || fields[1] != 0 {
-                return Err(Throw::range_error("calendar units require relativeTo"));
-            }
-            let rounded = std_temporal_round_integer(std_temporal_duration_time_ns(&fields), step, &mode)?;
-            let default_largest = fields.iter().position(|value| *value != 0).unwrap_or(9).max(2);
-            let largest = if option.is_object() {
-                let name = std_temporal_largest_unit(i, &option, "auto")?;
-                if name == "auto" { default_largest }
-                else { match name.as_str() { "week" => 2, "day" => 3, "hour" => 4,
-                    "minute" => 5, "second" => 6, "millisecond" => 7,
-                    "microsecond" => 8, "nanosecond" => 9,
-                    _ => return Err(Throw::range_error("invalid largestUnit")) } }
-            } else { default_largest };
-            fields = std_temporal_split_duration_ns(rounded, largest);
         }
         _ => return Err(Throw::type_error("incompatible Temporal receiver")),
     }

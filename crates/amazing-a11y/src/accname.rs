@@ -22,13 +22,19 @@ use crate::host;
 use crate::role::{self, Role};
 
 /// Shared context for name computation: the arena, the computed styles (for
-/// hidden state and CSS generated content), an id → node index, and the labels
-/// targeting each id (`<label for=…>`).
+/// hidden state and CSS generated content), an id → node index, the labels
+/// targeting each id (`<label for=…>`), and (A11Y-13) `aria-owns` target →
+/// owner, "first owner wins" in document order (mirroring
+/// `tree::Builder::apply_owns`'s own precedence, but computed ahead of it —
+/// see `collect_content`/`collect_child`'s A11Y-13 notes for why
+/// name-from-content needs its own copy of this rather than waiting for
+/// `apply_owns`'s AX-tree reparenting to run first).
 pub struct NameContext<'a> {
     pub dom: &'a Dom,
     pub styled: &'a StyledDom,
     pub ids: &'a HashMap<String, NodeIdx>,
     pub labels_by_target: &'a HashMap<String, Vec<NodeIdx>>,
+    pub owned_by: &'a HashMap<NodeIdx, NodeIdx>,
 }
 
 impl<'a> NameContext<'a> {
@@ -37,8 +43,9 @@ impl<'a> NameContext<'a> {
         styled: &'a StyledDom,
         ids: &'a HashMap<String, NodeIdx>,
         labels_by_target: &'a HashMap<String, Vec<NodeIdx>>,
+        owned_by: &'a HashMap<NodeIdx, NodeIdx>,
     ) -> Self {
-        Self { dom, styled, ids, labels_by_target }
+        Self { dom, styled, ids, labels_by_target, owned_by }
     }
 }
 
@@ -127,7 +134,7 @@ fn compute_name(
         }
     }
 
-    let element_role = role::role_for(ctx.dom, node);
+    let element_role = role::role_for(ctx.dom, ctx.ids, node);
 
     // Step 2D: aria-label.
     if let Some(label) = non_empty(ctx.dom.get_attribute_ns(node, None, "aria-label")) {
@@ -194,7 +201,7 @@ fn self_text_alternative(ctx: &NameContext<'_>, node: NodeIdx) -> String {
     if let Some(alt) = host_language_name(ctx, node) {
         return flatten(&alt);
     }
-    if role::role_for(ctx.dom, node).name_from_content() {
+    if role::role_for(ctx.dom, ctx.ids, node).name_from_content() {
         let mut visited = vec![node];
         let mut parts = Vec::new();
         let flags = ContentFlags { embed_control_values: false, exclude: None, force_include: false };
@@ -216,7 +223,7 @@ fn name_from_first_heading(
     visited: &mut Vec<NodeIdx>,
 ) -> Option<String> {
     for descendant in ctx.dom.tree_order(node) {
-        if descendant == node || role::role_for(ctx.dom, descendant) != Role::Heading {
+        if descendant == node || role::role_for(ctx.dom, ctx.ids, descendant) != Role::Heading {
             continue;
         }
         let mut branch = visited.clone();
@@ -235,9 +242,12 @@ fn host_language_name(ctx: &NameContext<'_>, node: NodeIdx) -> Option<String> {
     match tag {
         "img" | "area" => match dom.get_attribute_ns(node, None, "alt") {
             // An `alt` attribute present (even empty) is the name; otherwise
-            // fall back to `title`.
+            // fall back to `title`, then (A11Y-10) to an ancestor `<figure>`'s
+            // `<figcaption>` when this element is its sole non-whitespace
+            // content besides that caption.
             Some(alt) => Some(alt.to_owned()),
-            None => non_empty(dom.get_attribute_ns(node, None, "title")),
+            None => non_empty(dom.get_attribute_ns(node, None, "title"))
+                .or_else(|| figure_figcaption_fallback(dom, node)),
         },
         "input" => {
             let ty = dom
@@ -286,7 +296,11 @@ fn host_language_name(ctx: &NameContext<'_>, node: NodeIdx) -> Option<String> {
         }
         "table" => child_text_by_tag(dom, node, "caption"),
         "fieldset" => child_text_by_tag(dom, node, "legend"),
-        "figure" => child_text_by_tag(dom, node, "figcaption"),
+        // A11Y-10: unlike `table`/`caption` and `fieldset`/`legend`, a
+        // `<figure>`'s OWN name is not derived from its `<figcaption>` at
+        // all (only `aria-label`/`aria-labelledby`/`title`, i.e. no
+        // host-language mapping here — the figcaption text is instead an
+        // `<img>`-only fallback, see `figure_figcaption_fallback` below).
         "svg" => descendant_text_by_tag(dom, node, "title"),
         "abbr" => non_empty(dom.get_attribute_ns(node, None, "title")),
         "progress" | "meter" | "output" => associated_label_text(ctx, node),
@@ -342,6 +356,25 @@ fn collect_content(
     for child in ctx.dom.children(node) {
         collect_child(ctx, node, child, visited, parts, flags);
     }
+    // A11Y-13 (w3c/aria PR #1839, `accname/aria-owns.html`): `aria-owns`
+    // targets are appended after `node`'s real DOM children, matching
+    // `tree::Builder::apply_owns`'s own tree shape — an owned target is a
+    // *relocated* AX child, not a second copy of a real one, so a target
+    // that's already a genuine DOM child of `node` (already visited by the
+    // loop above) or claimed by a different owner (`ctx.owned_by`, first-
+    // owner-wins) is skipped here.
+    if let Some(references) = ctx.dom.get_attribute_ns(node, None, "aria-owns") {
+        for id in references.split_ascii_whitespace() {
+            let Some(&target) = ctx.ids.get(id) else { continue };
+            if target == node || ctx.dom.get(target).parent == Some(node) {
+                continue;
+            }
+            if ctx.owned_by.get(&target) != Some(&node) {
+                continue;
+            }
+            collect_child(ctx, node, target, visited, parts, flags);
+        }
+    }
     if let Some(after) = ctx.styled.generated_content(node, PseudoElement::After) {
         push_generated(parts, after);
     }
@@ -366,6 +399,19 @@ fn collect_content(
 ///   skipped, contributing nothing.
 /// - Otherwise, an element with its own overriding name (`own_name`) uses
 ///   that name atomically; anything else recurses.
+/// True when `child` is one of `parent`'s own `aria-actions` IDREF targets
+/// (A11Y-12). `parent` here is always `child`'s immediate DOM parent at
+/// whichever recursion level `collect_child` is currently at — `aria-actions`
+/// only excludes a host's *direct* AX children, not arbitrarily nested
+/// descendants, so re-checking `parent`'s own attribute at each level (rather
+/// than carrying a fixed target set from the root) is exactly the right
+/// scope, and cheap: the common case has no `aria-actions` attribute at all.
+fn is_aria_action_target(ctx: &NameContext<'_>, parent: NodeIdx, child: NodeIdx) -> bool {
+    ctx.dom.get_attribute_ns(parent, None, "aria-actions").is_some_and(|ids| {
+        ids.split_ascii_whitespace().any(|id| ctx.ids.get(id) == Some(&child))
+    })
+}
+
 fn collect_child(
     ctx: &NameContext<'_>,
     parent: NodeIdx,
@@ -382,6 +428,29 @@ fn collect_child(
             }
         }
         NodeKind::Element { .. } => {
+            // A11Y-12 (aria-actions, w3c/aria#2208 / #1805): a direct AX
+            // child that `parent` itself lists in `aria-actions` names its
+            // own action, not the host — excluded before any other check
+            // (own_name/aria-label included, not just plain recursion; see
+            // `aria-actions-target-accname-from-aria-label.tentative.html`,
+            // whose target carries an `aria-label` that must still not
+            // bleed into the host's name).
+            if is_aria_action_target(ctx, parent, child) {
+                return;
+            }
+            // A11Y-13: `child` has been relocated elsewhere by some other
+            // element's `aria-owns` (`ctx.owned_by`, first-owner-wins) — it
+            // no longer lives here in the AX tree, so it must not
+            // contribute to `parent`'s name-from-content from its old DOM
+            // position (`accname/aria-owns.html`'s "excludes content
+            // relocated by aria-owns" case). When `child` is instead being
+            // visited *as* one of `parent`'s own owned targets (the
+            // pseudo-child loop `collect_content` added after this file's
+            // real DOM children), `ctx.owned_by.get(&child) == Some(parent)`
+            // and this check does not fire.
+            if ctx.owned_by.get(&child).is_some_and(|&owner| owner != parent) {
+                return;
+            }
             let already_visited = visited.contains(&child);
             if !flags.force_include && !already_visited && is_hard_hidden(ctx, child) {
                 return;
@@ -417,7 +486,7 @@ fn collect_child(
             // focus.
             if flags.embed_control_values
                 && Some(child) != flags.exclude
-                && let Some(value) = control_value(ctx.dom, child)
+                && let Some(value) = control_value(ctx.dom, ctx.ids, child)
             {
                 parts.push(value);
             } else if let Some(own) = own_name(ctx, child, visited) {
@@ -554,8 +623,8 @@ fn is_form_control(dom: &Dom, node: NodeIdx) -> bool {
     matches!(dom.name(node), Some("input" | "select" | "textarea"))
 }
 
-fn control_value(dom: &Dom, node: NodeIdx) -> Option<String> {
-    let role = role::role_for(dom, node);
+fn control_value(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Option<String> {
+    let role = role::role_for(dom, ids, node);
     if matches!(role, Role::Checkbox | Role::Radio | Role::Switch) {
         return None;
     }
@@ -577,7 +646,7 @@ fn control_value(dom: &Dom, node: NodeIdx) -> Option<String> {
     // descendant's text (`aria-selected="true"`), not an attribute of the
     // listbox itself.
     if role == Role::Listbox {
-        return selected_listbox_option_text(dom, node);
+        return selected_listbox_option_text(dom, ids, node);
     }
     // An ARIA `combobox` with no `value`/`aria-valuetext` of its own (e.g. a
     // plain `<span role="combobox">3</span>`) exposes its rendered text as
@@ -605,10 +674,10 @@ fn selected_native_option_text(dom: &Dom, select: NodeIdx) -> Option<String> {
 }
 
 /// The text of an ARIA `listbox`'s selected `option` descendant.
-fn selected_listbox_option_text(dom: &Dom, listbox: NodeIdx) -> Option<String> {
+fn selected_listbox_option_text(dom: &Dom, ids: &HashMap<String, NodeIdx>, listbox: NodeIdx) -> Option<String> {
     for id in dom.tree_order(listbox) {
         if id != listbox
-            && role::role_for(dom, id) == Role::Option
+            && role::role_for(dom, ids, id) == Role::Option
             && dom
                 .get_attribute_ns(id, None, "aria-selected")
                 .is_some_and(|v| v.eq_ignore_ascii_case("true"))
@@ -680,6 +749,39 @@ fn descendant_text_by_tag(dom: &Dom, node: NodeIdx, tag: &str) -> Option<String>
     None
 }
 
+/// A11Y-10: an `<img>`/`<area>` with no `alt`/`title` of its own inherits its
+/// ancestor `<figure>`'s `<figcaption>` text, but only when it is that
+/// figure's sole non-whitespace content besides the figcaption itself — if
+/// any other flow content sits alongside it, the figcaption is understood to
+/// caption the whole figure rather than standing in for this element's name
+/// (html-aam's `figure-name-no-figcaption.tentative.html`, whose own comment
+/// states the rule verbatim).
+fn figure_figcaption_fallback(dom: &Dom, node: NodeIdx) -> Option<String> {
+    let figure = dom.get(node).parent.filter(|&parent| dom.name(parent) == Some("figure"))?;
+    let mut other_content = false;
+    let mut figcaption_text = None;
+    for child in dom.children(figure) {
+        if child == node {
+            continue;
+        }
+        match &dom.get(child).kind {
+            NodeKind::Element { name, .. } if name.as_str() == "figcaption" => {
+                figcaption_text = Some(host::child_text(dom, child));
+            }
+            NodeKind::Text { data } | NodeKind::CDATASection { data } => {
+                if !data.trim().is_empty() {
+                    other_content = true;
+                }
+            }
+            _ => other_content = true,
+        }
+    }
+    if other_content {
+        return None;
+    }
+    figcaption_text.filter(|text| !text.trim().is_empty())
+}
+
 /// A node is hidden when it has `hidden`/`aria-hidden="true"`, or its computed
 /// style is `display:none` / `visibility:hidden|collapse`.
 pub fn is_hidden(ctx: &NameContext<'_>, node: NodeIdx) -> bool {
@@ -701,17 +803,26 @@ fn element_or_parent(ctx: &NameContext<'_>, node: NodeIdx) -> Option<NodeIdx> {
 /// `display:none`, `[hidden]` and `aria-hidden="true"` hide the whole subtree
 /// unconditionally — no descendant can override them.
 fn is_hard_hidden(ctx: &NameContext<'_>, node: NodeIdx) -> bool {
-    if ctx.dom.get_attribute_ns(node, None, "hidden").is_some() {
+    is_hard_hidden_raw(ctx.dom, ctx.styled, node)
+}
+
+/// [`is_hard_hidden`] without a [`NameContext`] — A11Y-13's
+/// `tree::collect_owned_by` needs the same "is this element itself
+/// unconditionally hidden" check (w3c/aria PR #1839, rule 1: `aria-owns` set
+/// on an element excluded from the accessibility tree must not resolve) at a
+/// point before a `NameContext` exists at all (it is one of the pieces that
+/// eventually builds one).
+pub(crate) fn is_hard_hidden_raw(dom: &Dom, styled: &StyledDom, node: NodeIdx) -> bool {
+    if dom.get_attribute_ns(node, None, "hidden").is_some() {
         return true;
     }
-    if ctx
-        .dom
+    if dom
         .get_attribute_ns(node, None, "aria-hidden")
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
     {
         return true;
     }
-    ctx.styled
+    styled
         .get(node)
         .and_then(|style| style.get("display"))
         .is_some_and(|v| v.eq_ignore_ascii_case("none"))

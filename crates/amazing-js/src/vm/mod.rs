@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod compiler;
+mod fast_path;
 #[cfg(test)]
 mod tests;
 
@@ -10,13 +11,30 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
+use crate::value::{DerivedConstructor, Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
+
+thread_local! {
+    /// Reuse frame register storage across calls; values are cleared at return.
+    static REGISTER_POOL: RefCell<Vec<Vec<JsValue>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn take_registers(count: usize) -> Vec<JsValue> {
+    let mut registers = REGISTER_POOL.with(|pool| {
+        let mut pool = pool.borrow_mut();
+        pool.iter().position(|registers| registers.capacity() >= count)
+            .map(|index| pool.swap_remove(index))
+            .unwrap_or_default()
+    });
+    registers.resize(count, JsValue::Undefined);
+    registers
+}
 
 pub use compiler::compile;
 #[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
-pub(crate) use compiler::compile_async_body;
+pub(crate) use compiler::{compile_async_body, compile_async_generator_body, compile_generator_body};
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
@@ -63,12 +81,28 @@ struct ClassMethodCode {
     key: KeyOperand,
     kind: crate::ast::MethodKind,
     code: FunctionCode,
+    // A `static` method/accessor installs on the constructor itself (with
+    // the constructor as its [[HomeObject]], for `super` inside it), not on
+    // `prototype` -- this was never read before JSVM-7 found it (every
+    // method compiled as if it were an instance member; `class C { static
+    // m(){} }`'s `C.m` was `undefined` under the VM). See `MakeClass`.
+    is_static: bool,
+}
+
+/// A compiled class's super-class expression, plus whether the constructor
+/// was synthesized (no explicit `constructor` member): an implicit derived
+/// constructor forwards its own arguments to the super call.
+#[derive(Debug)]
+struct ClassSuper {
+    register: Register,
+    implicit: bool,
 }
 
 #[derive(Debug)]
 struct ClassCode {
     constructor: FunctionCode,
     methods: Vec<ClassMethodCode>,
+    super_class: Option<ClassSuper>,
 }
 
 fn expand_arguments(
@@ -115,6 +149,20 @@ enum Instruction {
     StoreReference(usize, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
+    /// A non-computed literal `__proto__: value` property definition sets
+    /// [[Prototype]] instead of creating an own property (`B.3.1`).
+    SetPrototype(Register, Register),
+    /// Throws TypeError if the register holds null/undefined. Emitted before
+    /// a member access's key conversion so a nullish base is rejected before
+    /// `ToPropertyKey` gets a chance to run user code, matching the tree
+    /// walker's `resolve_reference` ordering.
+    RequireObjectCoercible(Register),
+    /// Brackets a class's heritage expression and each computed member key:
+    /// both are always evaluated in strict mode, per spec, even when the
+    /// surrounding code is sloppy (matching the tree walker's `eval_class`,
+    /// which saves/restores `strict_eval_context` around the whole class).
+    EnterStrict,
+    ExitStrict,
     SetObjectMethod(Register, KeyOperand, FunctionCode, crate::ast::MethodKind),
     SpreadObject(Register, Register),
     NewArray(Register),
@@ -152,6 +200,14 @@ enum Instruction {
     YieldDelegate(Register, Register),
     Await(Register, Register),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
+    /// `new.target`: the active call's constructor target, or `undefined`
+    /// for an ordinary call.
+    LoadNewTarget(Register),
+    /// `super` as the object of a member expression: the active method's
+    /// `[[HomeObject]].[[GetPrototypeOf]]()`.
+    LoadSuperHome(Register),
+    /// `super(...)` in a derived constructor.
+    SuperCall(Register, Vec<CallArgument>),
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +248,7 @@ pub struct Program {
 /// survive an instruction-boundary suspension with the other VM state.
 struct VmFrame {
     registers: Vec<JsValue>,
+    caches: Vec<Option<fast_path::InlineCache>>,
     references: Vec<Option<Reference>>,
     spreads: Vec<Option<Vec<JsValue>>>,
     scopes: Vec<EnvHandle>,
@@ -205,6 +262,18 @@ struct VmFrame {
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
     await_dst: Option<Register>,
+}
+
+impl Drop for VmFrame {
+    fn drop(&mut self) {
+        if self.registers.capacity() > 4096 { return; }
+        let mut registers = std::mem::take(&mut self.registers);
+        registers.clear();
+        let _ = REGISTER_POOL.try_with(|pool| {
+            let mut pool = pool.borrow_mut();
+            if pool.len() < 16 { pool.push(registers); }
+        });
+    }
 }
 
 struct DelegateState {
@@ -227,6 +296,33 @@ pub struct GeneratorState {
     executing: bool,
     completion: JsValue,
     async_promise: Option<Obj>,
+    // Async generators only: a FIFO of outstanding `.next()`/`.return()`/
+    // `.throw()` calls. Unlike a plain async function (one call, one backing
+    // promise) or a plain generator (synchronous, one call in flight by
+    // construction), a consumer may call an async generator's methods again
+    // before a prior call's promise has settled -- e.g. while the body is
+    // mid-`await`. Each request carries its own promise (`target`); requests
+    // are drained one at a time as the previous one's step completes.
+    queue: VecDeque<AsyncGeneratorRequest>,
+    // Async generators only: true while `frame` is suspended at an `await`
+    // (as opposed to idle, suspended at a `yield` and ready for the next
+    // queued request). `executing` alone cannot tell the two apart: it is
+    // false in both cases between microtasks. Without this, `drain` would
+    // wrongly feed a newly queued request's resume value into a frame that
+    // is actually still waiting on the awaited promise's own reaction --
+    // that reaction (`async_generator_step_fulfilled`/`_rejected`) is the
+    // only thing allowed to resume the frame while this is true, and it
+    // clears it before doing so.
+    awaiting: bool,
+}
+
+/// One queued `.next(value)`/`.return(value)`/`.throw(value)` call on an async
+/// generator. `kind` matches `generator_resume`'s convention: 0=next,
+/// 1=return, 2=throw. `target` is that call's own promise.
+struct AsyncGeneratorRequest {
+    kind: u8,
+    value: JsValue,
+    target: Obj,
 }
 
 impl std::fmt::Debug for GeneratorState {
@@ -234,6 +330,7 @@ impl std::fmt::Debug for GeneratorState {
         f.debug_struct("GeneratorState")
             .field("started", &self.started)
             .field("executing", &self.executing)
+            .field("queued", &self.queue.len())
             .finish()
     }
 }
@@ -296,7 +393,8 @@ impl Program {
         fuel: usize,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
-            registers: vec![JsValue::Undefined; self.registers],
+            registers: take_registers(self.registers),
+            caches: (0..self.code.len()).map(|_| None).collect(),
             references: (0..self.references).map(|_| None).collect(),
             spreads: (0..self.spread_slots).map(|_| None).collect(),
             scopes: Vec::new(),
@@ -343,6 +441,7 @@ impl Program {
         }
         let VmFrame {
             registers,
+            caches,
             references,
             spreads,
             scopes,
@@ -370,6 +469,19 @@ impl Program {
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
                     Instruction::RegExp(dst, regex) => registers[*dst] = i.make_regexp(regex.clone())?,
+                    Instruction::RequireObjectCoercible(register) => {
+                        if registers[*register].is_null() || registers[*register].is_undefined() {
+                            return Err(Throw::type_error("cannot access a property on nullish value"));
+                        }
+                    }
+                    Instruction::EnterStrict => {
+                        i.vm_strict_stack.push(i.strict_eval_context);
+                        i.strict_eval_context = true;
+                    }
+                    Instruction::ExitStrict => {
+                        i.strict_eval_context = i.vm_strict_stack.pop()
+                            .unwrap_or(i.strict_eval_context);
+                    }
                     Instruction::ToKey(register) => {
                         registers[*register] = match i.to_property_key(&registers[*register])? {
                             PropertyKey::String(key) => JsValue::Str(key),
@@ -387,9 +499,51 @@ impl Program {
                             }
                         };
                     }
-                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this(),
+                    // Checked, matching the tree walker's `ExprKind::This`:
+                    // `this` is a ReferenceError before a derived
+                    // constructor's `super()` call has run.
+                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this_checked()?,
+                    Instruction::LoadNewTarget(dst) => {
+                        registers[*dst] = i.current_new_target().unwrap_or(JsValue::Undefined);
+                    }
+                    Instruction::LoadSuperHome(dst) => {
+                        // `[[HomeObject]]` of the active frame; not exposed as
+                        // a shared accessor (only `current_new_target` is),
+                        // so vm/mod.rs -- a child module of interp.rs -- reads
+                        // the private `frames` field directly.
+                        let home = i.frames.last().and_then(|frame| frame.home.clone())
+                            .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
+                        let prototype = home.borrow().proto.clone()
+                            .ok_or_else(|| Throw::type_error("super prototype is null"))?;
+                        registers[*dst] = JsValue::Object(prototype);
+                    }
+                    Instruction::SuperCall(dst, arguments) => {
+                        let super_constructor = i.frames.last().and_then(|frame| frame.super_constructor.clone())
+                            .ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
+                        let new_target = i.current_new_target()
+                            .ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+                        let args = expand_arguments(&registers, spreads, arguments)?;
+                        let result = i.construct_with_new_target(&super_constructor, args, new_target)?;
+                        env.initialize_this(result.clone())?;
+                        if let Some(frame) = i.frames.last_mut() {
+                            frame.this = result.clone();
+                        }
+                        registers[*dst] = result;
+                    }
                     Instruction::ResolveName(slot, dst, name) => {
-                        let (reference, value) = if let Some(value) = env.resolve(name) {
+                        // Matches the tree walker's `resolve_reference`: a
+                        // non-lexical global binding (e.g. `NaN`, `undefined`,
+                        // a `var`-declared global) is fetched and stored back
+                        // through the global *object*'s property, not the env
+                        // binding cell directly, so a non-writable property
+                        // throws in strict mode (`set_with_receiver`/
+                        // `put_reference`'s `Reference::Property` arm) instead
+                        // of silently no-oping through `env.assign`.
+                        let (reference, value) = if let Some(global) = env.global_binding_object(name) {
+                            let global = JsValue::Object(global);
+                            let value = i.get_prop(&global, name)?;
+                            (Reference::Property(global, name.clone().into()), value)
+                        } else if let Some(value) = env.resolve(name) {
                             (Reference::Binding(name.clone()), value)
                         } else if i.global_obj.borrow().has_property(name) {
                             let global = JsValue::Object(i.global_obj.clone());
@@ -412,12 +566,12 @@ impl Program {
                     },
                     Instruction::GetMember(dst, object, key) => {
                         let key = key.resolve(&registers)?;
-                        registers[*dst] = i.get_prop(&registers[*object], key)?;
+                        registers[*dst] = fast_path::get(i, &registers[*object], key, &mut caches[*pc - 1])?;
                     }
                     Instruction::ResolveMember(slot, dst, object, key) => {
                         let key = key.resolve(&registers)?;
                         let receiver = registers[*object].clone();
-                        registers[*dst] = i.get_prop(&receiver, key.clone())?;
+                        registers[*dst] = fast_path::get(i, &receiver, key.clone(), &mut caches[*pc - 1])?;
                         references[*slot] = Some(Reference::Property(receiver, key));
                     }
                     Instruction::StoreReference(slot, src) => {
@@ -428,7 +582,12 @@ impl Program {
                         if let Some(name) = reference_name(&reference) {
                             i.infer_function_name(&mut value, &name);
                         }
-                        i.put_reference(reference, value, &env)?;
+                        match reference {
+                            Reference::Property(receiver, key) => {
+                                fast_path::set(i, &receiver, key, value, &env, &mut caches[*pc - 1])?;
+                            }
+                            other => i.put_reference(other, value, &env)?,
+                        }
                     }
                     Instruction::Update(dst, slot, old, op, prefix) => {
                         let reference = references[*slot]
@@ -439,12 +598,25 @@ impl Program {
                         i.put_reference(reference, next.clone(), &env)?;
                         registers[*dst] = if *prefix { next } else { previous };
                     }
-                    Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
+                    Instruction::NewObject(dst) => {
+                        registers[*dst] = i.object_value();
+                        if let JsValue::Object(object) = &registers[*dst] {
+                            object.borrow_mut().vm_cacheable = true;
+                        }
+                    }
                     Instruction::SetObjectProperty(object, key, src) => {
                         let key = key.resolve(&registers)?;
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
                         target.borrow_mut().define(&key, Property::data(registers[*src].clone()))
                             .map_err(|_| Throw::type_error("could not define object property"))?;
+                    }
+                    Instruction::SetPrototype(object, src) => {
+                        let JsValue::Object(target) = &registers[*object] else { unreachable!() };
+                        match &registers[*src] {
+                            JsValue::Object(prototype) => target.borrow_mut().proto = Some(prototype.clone()),
+                            JsValue::Null => target.borrow_mut().proto = None,
+                            _ => {}
+                        }
                     }
                     Instruction::SetObjectMethod(object, key, code, kind) => {
                         let key = key.resolve(&registers)?;
@@ -545,8 +717,10 @@ impl Program {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
                     Instruction::Binary(dst, op, left, right) => {
-                        registers[*dst] =
-                            i.binary(*op, registers[*left].clone(), registers[*right].clone())?;
+                        registers[*dst] = match fast_path::binary(*op, &registers[*left], &registers[*right]) {
+                            Some(value) => value,
+                            None => i.binary(*op, registers[*left].clone(), registers[*right].clone())?,
+                        };
                     }
                     Instruction::Move(dst, src) => registers[*dst] = registers[*src].clone(),
                     Instruction::Jump(target) => *pc = *target,
@@ -637,15 +811,77 @@ impl Program {
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };
-                        prototype.borrow_mut().set_own("constructor", constructor.clone());
+                        // A class constructor throws TypeError when called
+                        // without `new` (matching the tree walker, which sets
+                        // this in its own class evaluation); this had never
+                        // been set for a VM-compiled class of any kind.
+                        callable.borrow_mut().class_constructor = true;
+                        if let Some(super_class) = &class.super_class {
+                            let super_value = registers[super_class.register].clone();
+                            // Matches the tree walker's ClassDefinitionEvaluation: a
+                            // non-object super class (including `extends null`)
+                            // is rejected rather than given full null-prototype
+                            // semantics, which the runtime does not model yet.
+                            let super_prototype = match &super_value {
+                                JsValue::Object(super_constructor) => match super_constructor.borrow().get_own("prototype") {
+                                    Some(JsValue::Object(prototype)) => prototype,
+                                    _ => return Err(Throw::type_error("super constructor has no prototype")),
+                                },
+                                _ => return Err(Throw::type_error("super class is not a constructor")),
+                            };
+                            // ClassDefinitionEvaluation: the constructor's own
+                            // [[Prototype]] is the super constructor (static
+                            // inheritance); the class prototype's is the super
+                            // constructor's `prototype` (instance inheritance).
+                            prototype.borrow_mut().proto = Some(super_prototype);
+                            callable.borrow_mut().proto = match &super_value {
+                                JsValue::Object(parent) => Some(parent.clone()),
+                                _ => unreachable!(),
+                            };
+                            callable.borrow_mut().derived_constructor = Some(DerivedConstructor {
+                                parent: super_value,
+                                implicit: super_class.implicit,
+                            });
+                        }
+                        // MakeConstructor(F, false, proto): a class constructor's
+                        // `prototype` is non-writable/non-enumerable/non-configurable.
+                        callable.borrow_mut().define("prototype", Property {
+                            value: JsValue::Object(prototype.clone()),
+                            writable: false,
+                            enumerable: false,
+                            configurable: false,
+                            getter: None,
+                            setter: None,
+                        }).ok();
+                        prototype.borrow_mut().define("constructor", Property {
+                            value: constructor.clone(),
+                            writable: true,
+                            enumerable: false,
+                            configurable: true,
+                            getter: None,
+                            setter: None,
+                        }).map_err(|_| Throw::type_error("could not define class constructor"))?;
                         callable.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
                         for method in &class.methods {
                             let key = method.key.resolve(&registers)?;
                             let value = method.code.instantiate(i, &env);
                             let JsValue::Object(function) = &value else { unreachable!() };
-                            function.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
+                            // A `static` method/accessor is a property of the
+                            // constructor itself, with the constructor (not
+                            // the prototype) as its [[HomeObject]] -- matching
+                            // the tree walker's `eval_class_inner`. Getting
+                            // this wrong left every VM-compiled static method
+                            // undefined on the constructor (JSVM-7 found it
+                            // while isolating the generator/async-generator
+                            // Test262 delta: this pre-existing gap was masked
+                            // whenever a static method's own class also hit
+                            // some other, unrelated fallback trigger, but a
+                            // class with only a static method compiled clean
+                            // and silently dropped it).
+                            let target = if method.is_static { callable } else { &prototype };
+                            function.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
                             if matches!(method.kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
-                                let mut property = prototype.borrow().own_prop(&key).cloned()
+                                let mut property = target.borrow().own_prop(&key).cloned()
                                     .unwrap_or(Property {
                                         value: JsValue::Undefined, writable: false,
                                         enumerable: false, configurable: true,
@@ -656,10 +892,17 @@ impl Program {
                                 } else {
                                     property.setter = Some(value.clone());
                                 }
-                                prototype.borrow_mut().define(&key, property)
+                                target.borrow_mut().define(&key, property)
                                     .map_err(|_| Throw::type_error("could not define class accessor"))?;
                             } else {
-                                i.set_prop(&JsValue::Object(prototype.clone()), &key, value)?;
+                                target.borrow_mut().define(&key, Property {
+                                    value,
+                                    writable: true,
+                                    enumerable: false,
+                                    configurable: true,
+                                    getter: None,
+                                    setter: None,
+                                }).map_err(|_| Throw::type_error("could not define class method"))?;
                             }
                         }
                         registers[*dst] = constructor;
@@ -826,12 +1069,33 @@ fn route_abrupt(
     }
 }
 
+/// Reconstruct the AST parameter list for a compiled function. The compiler
+/// only accepts simple identifier parameters (defaults, rest and patterns are
+/// rejected), so names are enough to give the function object the correct
+/// `length` and `Function.prototype.toString` shape.
+fn bytecode_params(names: &[String]) -> Vec<crate::ast::Param> {
+    let span = Span::new(
+        crate::tokens::SourceLocation::new(1, 1),
+        crate::tokens::SourceLocation::new(1, 1),
+    );
+    names
+        .iter()
+        .map(|name| crate::ast::Param {
+            binding: crate::ast::Binding::Ident(crate::ast::Ident { name: name.clone(), span }),
+            default: None,
+            rest: false,
+            span,
+        })
+        .collect()
+}
+
 impl FunctionCode {
     fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
         let name = self.0.name.clone();
+        let params = bytecode_params(&self.0.params);
         let mut object = JsObject::function(JsFunction {
-            name: name.clone(),
-            params: vec![],
+            name,
+            params,
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
             is_generator: self.0.is_generator,
@@ -854,25 +1118,82 @@ impl FunctionCode {
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
-        handle
-            .borrow_mut()
-            .set_own("name", JsValue::str(name.as_str()));
-        if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
+        if self.0.is_arrow {
+            // An arrow inherits `new.target` and the super constructor
+            // lexically from the frame that creates it, matching the tree
+            // walker's `make_arrow` (interp.rs). Without this, a VM-compiled
+            // arrow's own `new.target`/`super()` resolve to nothing instead
+            // of the enclosing (derived) constructor's.
+            if let Some(frame) = i.frames.last() {
+                let mut arrow = handle.borrow_mut();
+                arrow.lexical_super_constructor = frame.super_constructor.clone();
+                arrow.lexical_new_target = frame.new_target.clone();
+            }
+        }
+        // `JsObject::function` already defines `name` and `length` with the
+        // spec descriptors; do not overwrite them here.
+        // A plain (non-generator) async function/method has no `.prototype`
+        // at all, matching the tree walker -- but a generator does, sync or
+        // async, since `new.target`-less `.next()`/`.return()`/`.throw()`
+        // live there. Narrow the original `!self.0.is_async` exclusion so it
+        // only drops the async-non-generator case.
+        if !self.0.is_arrow && !self.0.is_method && !(self.0.is_async && !self.0.is_generator) {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
                 let mut methods = JsObject::ordinary();
                 methods.proto = Some(i.object_proto.clone());
-                methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
-                methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
-                methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
-                methods.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+                if self.0.is_async {
+                    methods.set_own("next", Interpreter::native("next", async_generator_next, &i.function_proto));
+                    methods.set_own("return", Interpreter::native("return", async_generator_return, &i.function_proto));
+                    methods.set_own("throw", Interpreter::native("throw", async_generator_throw, &i.function_proto));
+                    methods.set_own(
+                        WellKnownSymbol::AsyncIterator.symbol(),
+                        Interpreter::native("[Symbol.asyncIterator]", async_generator_async_iterator, &i.function_proto),
+                    );
+                } else {
+                    methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
+                    methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
+                    methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
+                    methods.set_own(
+                        WellKnownSymbol::Iterator.symbol(),
+                        Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto),
+                    );
+                }
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
+            if !self.0.is_generator {
+                // MakeConstructor(F, false, prototype): an ordinary function's
+                // own `prototype.constructor` links back to F, matching the
+                // tree walker's `make_function`. Without this, `new F()`
+                // instances resolve `.constructor` through Object.prototype
+                // instead of F, breaking every consumer that identifies a
+                // thrown/constructed value by its constructor (Test262Error
+                // included) -- this had been silently missing for every
+                // VM-compiled ordinary function, not just classes.
+                prototype.borrow_mut().define("constructor", Property {
+                    value: JsValue::Object(handle.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).ok();
+            }
+            // Function `prototype` is a non-enumerable data property
+            // (`{writable:true, enumerable:false, configurable:false}`).
             handle
                 .borrow_mut()
-                .set_own("prototype", JsValue::Object(prototype.clone()));
+                .define("prototype", Property {
+                    value: JsValue::Object(prototype.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: false,
+                    getter: None,
+                    setter: None,
+                })
+                .ok();
             handle.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
         }
         JsValue::Object(handle)
@@ -886,45 +1207,116 @@ impl FunctionCode {
         this: JsValue,
         args: Vec<JsValue>,
         generator_proto: Option<Obj>,
+        derived: Option<DerivedConstructor>,
+        new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
-        let bound_this = if is_arrow {
-            parent.resolve_this()
-        } else {
-            this
-        };
-        let env = EnvHandle::new(EnvKind::Function, Some(parent));
-        env.bind_this(bound_this);
-        for (index, name) in self.0.params.iter().enumerate() {
-            env.declare_lexical(
-                name,
-                args.get(index).cloned().unwrap_or(JsValue::Undefined),
-                true,
-            )?;
+        // An arrow's own environment owns no `this`/`super`/TDZ state of its
+        // own: it is `EnvKind::Arrow`, transparent to `resolve_this_checked`,
+        // `initialize_this` and `mark_this_uninitialized`, which all walk
+        // through it to the enclosing (possibly still-uninitialized, in a
+        // derived constructor) frame -- matching the tree walker's
+        // `FunctionBody::Block`/`Expr`. `bind_this` must never run for an
+        // arrow: on a Function-kind env it would wrongly look "already
+        // initialized" to `initialize_this`, and even harmlessly it would
+        // freeze a `this` read before the enclosing `super()` runs.
+        let env = EnvHandle::new(if is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(parent));
+        // A derived constructor's `this` starts uninitialized (TDZ until
+        // `super()` runs); an implicit one (no explicit `constructor` member)
+        // forwards its own arguments to the super call itself, matching the
+        // tree walker's `FunctionBody::Block` derived-constructor handling.
+        if !is_arrow && derived.is_some() {
+            if new_target.is_none() {
+                return Err(Throw::type_error("derived constructor requires new"));
+            }
+            env.mark_this_uninitialized();
+            if let Some(meta) = derived.as_ref().filter(|meta| meta.implicit) {
+                let bound = i.construct_with_new_target(
+                    &meta.parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
+                )?;
+                env.initialize_this(bound.clone())?;
+                if let Some(frame) = i.frames.last_mut() {
+                    frame.this = bound;
+                }
+            }
+        } else if !is_arrow {
+            env.bind_this(this);
         }
-        if !is_arrow {
-            let arguments = JsValue::object(JsObject::array());
+        // Sloppy-mode duplicate simple parameter names are legal (the last
+        // one wins); only strict functions reject them, at parse time,
+        // before the compiler ever sees them. Parameters are mutable function
+        // bindings, not lexical declarations: body `var` declarations reuse
+        // them (and must not throw as a redeclaration) and sloppy duplicate
+        // names overwrite -- matching the tree walker's `bind_params`. Each
+        // name is allocated once via `declare_uninitialized` (kept lexical
+        // just long enough that nothing else can race a binding into this
+        // frame), given its value with `initialize_parameter` (also used for
+        // repeats), and only after every parameter is bound does
+        // `finish_parameter_initialization` flip each to non-lexical so a
+        // later `var`/function-declaration hoist of the same name is a no-op
+        // instead of a "already declared" syntax error.
+        let mut declared_params = std::collections::HashSet::new();
+        for (index, name) in self.0.params.iter().enumerate() {
+            let value = args.get(index).cloned().unwrap_or(JsValue::Undefined);
+            if declared_params.insert(name.clone()) {
+                env.declare_uninitialized(name, true)?;
+            }
+            env.initialize_parameter(name, value)?;
+        }
+        for name in &declared_params {
+            env.finish_parameter_initialization(name);
+        }
+        // Per spec, no `arguments` object is created when a parameter is
+        // already named `arguments` (matching the tree walker's `bind_params`,
+        // which returns early in that case); otherwise `declare_var` below
+        // would also throw on redeclaring the lexical parameter binding.
+        if !is_arrow && !declared_params.contains("arguments") {
+            // An arguments object is an ordinary object, not an Array exotic
+            // (matching the tree walker): indexed data properties, a
+            // non-enumerable writable `length`, and Symbol.iterator.
+            let arguments = i.object_value();
             for (index, value) in args.iter().enumerate() {
                 i.set_prop(&arguments, &index.to_string(), value.clone())?;
             }
-            i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
+            if let JsValue::Object(object) = &arguments {
+                object.borrow_mut().define("length", Property {
+                    value: JsValue::num(args.len() as f64),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).map_err(|_| Throw::type_error("could not define arguments length"))?;
+                if let Some(values) = i.array_proto.borrow().get_own("values") {
+                    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
+                        value: values,
+                        writable: true,
+                        enumerable: false,
+                        configurable: true,
+                        getter: None,
+                        setter: None,
+                    }).map_err(|_| Throw::type_error("could not define arguments iterator"))?;
+                }
+            }
             env.declare_var("arguments", arguments)?;
         }
         if self.0.is_generator {
-            let mut object = JsObject::ordinary();
-            object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
-            object.exotic = crate::value::Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
-                code: self.clone(),
-                env,
-                frame: None,
-                started: false,
-                executing: false,
-                completion: JsValue::Undefined,
-                async_promise: None,
-            })));
-            return Ok(JsValue::object(object));
+            return Ok(self.start_generator_with_env(i, env, generator_proto));
         }
         if self.0.is_async {
             return self.call_async(i, env);
+        }
+        if derived.is_some() {
+            // A derived constructor's completion, per spec: an object return
+            // value wins outright, a non-undefined non-object return value is
+            // a TypeError, and otherwise the (by now super()-initialized)
+            // `this` is the result -- a ReferenceError if `super()` never ran.
+            return match self.0.program.execute(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+                Ok(value) if value.is_object() => Ok(value),
+                Ok(value) if !value.is_undefined() =>
+                    Err(Throw::type_error("derived constructor returned a non-object")),
+                Ok(_) => env.resolve_this_checked(),
+                Err(error) => Err(error),
+            };
         }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
     }
@@ -933,6 +1325,42 @@ impl FunctionCode {
     #[allow(dead_code)] // Consumed by the runtime async bridge in interp.rs.
     pub(crate) fn call_async_with_env(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
         self.call_async(i, env)
+    }
+
+    /// Start a resumable generator/async-generator body in the environment
+    /// prepared by AST parameter binding -- the generator/async-generator
+    /// half of the runtime bridge (mirrors `call_async_with_env`). `self`
+    /// must be code compiled with `is_generator: true` (via
+    /// `compile_generator_body`/`compile_async_generator_body`); whether the
+    /// returned object drives synchronously (`.next()` returning a result
+    /// directly) or asynchronously (`.next()` returning a Promise) follows
+    /// `self`'s own `is_async` flag, exactly as it does for a VM-instantiated
+    /// generator function. `generator_proto` is typically the enclosing
+    /// function object's own `.prototype` (as built by `instantiate`, whose
+    /// `methods` sub-object supplies `next`/`return`/`throw`/the iterator
+    /// symbol); `None` falls back to `Object.prototype`, matching `call()`'s
+    /// own default when no such prototype exists.
+    #[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+    pub(crate) fn start_generator_with_env(
+        &self,
+        i: &Interpreter,
+        env: EnvHandle,
+        generator_proto: Option<Obj>,
+    ) -> JsValue {
+        let mut object = JsObject::ordinary();
+        object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
+        object.exotic = Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
+            code: self.clone(),
+            env,
+            frame: None,
+            started: false,
+            executing: false,
+            completion: JsValue::Undefined,
+            async_promise: None,
+            queue: VecDeque::new(),
+            awaiting: false,
+        })));
+        JsValue::object(object)
     }
 
     fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
@@ -953,6 +1381,8 @@ impl FunctionCode {
             executing: false,
             completion: JsValue::Undefined,
             async_promise: Some(target.clone()),
+            queue: VecDeque::new(),
+            awaiting: false,
         }));
         async_continue(i, state, 0, JsValue::Undefined)?;
         Ok(promise)
@@ -1233,6 +1663,241 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         Ok(FrameOutcome::Awaited(_)) => unreachable!("generator awaited"),
         Err(error) => Err(error),
     }
+}
+
+// --- Async generators ---------------------------------------------------
+//
+// An async generator combines a generator's suspend points (`yield`/`yield*`)
+// with an async function's (`await`), and unlike either alone, its methods
+// must never run its body synchronously to completion nor reject the caller
+// for calling `.next()` again before a previous call's promise settled --
+// each call gets its own promise, queued and drained in order. The driver
+// below is `generator_resume` (synchronous yield-only) and `async_continue`
+// (promise-settling await-only) fused: `async_generator_run` resumes the one
+// underlying VM frame exactly like each of those does, then, on the frame's
+// outcome, either settles the current request's promise and drains the next
+// queued one (`Yielded`/`Completed`/`Err`) or chains an await continuation
+// that re-enters this same function when the awaited value settles
+// (`Awaited`) -- so a body can suspend at `await` and `yield` in any order.
+
+fn async_generator_enqueue(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
+    let state = generator_state(this)?;
+    let promise = new_promise(i, PromiseFate::Pending);
+    let JsValue::Object(target) = &promise else { unreachable!() };
+    state.borrow_mut().queue.push_back(AsyncGeneratorRequest { kind, value, target: target.clone() });
+    async_generator_drain(i, state)?;
+    Ok(promise)
+}
+
+fn async_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
+}
+
+fn async_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
+}
+
+fn async_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
+}
+
+fn async_generator_async_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_state(this.clone())?;
+    Ok(this)
+}
+
+/// Settle a queued request's promise without ever touching a VM frame --
+/// mirrors `generator_resume`'s two frame-less early exits: a `.return()`/
+/// `.throw()` before the body has ever run, and any call once the body has
+/// already run to completion.
+fn async_generator_settle_without_frame(
+    i: &mut Interpreter,
+    request: AsyncGeneratorRequest,
+) -> Result<(), Throw> {
+    match request.kind {
+        2 => settle_promise(&request.target, PromiseFate::Rejected(request.value), i),
+        _ => {
+            let done = request.kind == 1;
+            let value = if done { request.value } else { JsValue::Undefined };
+            settle_promise(&request.target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)
+        }
+    }
+}
+
+/// Pop and process queued requests one at a time until the queue empties or
+/// the generator is already mid-step (a later call to this same function,
+/// from that step's own continuation, will resume draining).
+fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>) -> Result<(), Throw> {
+    loop {
+        // Busy mid-step (actively running bytecode) or mid-`await` (frame
+        // suspended, waiting on a promise reaction to resume it): either
+        // way, nothing queued can run yet. The reaction/step that clears
+        // this drains again itself once it settles.
+        if state.borrow().executing || state.borrow().awaiting {
+            return Ok(());
+        }
+        let Some(request) = ({ state.borrow_mut().queue.pop_front() }) else {
+            return Ok(());
+        };
+        // A return/throw before the body has ever run, per spec, completes
+        // the generator directly without running any of its code.
+        if !state.borrow().started && request.kind != 0 {
+            state.borrow_mut().started = true;
+            async_generator_settle_without_frame(i, request)?;
+            continue;
+        }
+        // The body already ran to completion on an earlier request.
+        if state.borrow().started && state.borrow().frame.is_none() {
+            async_generator_settle_without_frame(i, request)?;
+            continue;
+        }
+        if !state.borrow().started {
+            let (code, env) = {
+                let s = state.borrow();
+                (s.code.clone(), s.env.clone())
+            };
+            state.borrow_mut().started = true;
+            match code.0.program.start_frame(i, env, DEFAULT_INSTRUCTION_LIMIT) {
+                Ok(frame) => state.borrow_mut().frame = Some(frame),
+                Err(Throw(error)) => {
+                    settle_promise(&request.target, PromiseFate::Rejected(error), i)?;
+                    continue;
+                }
+            }
+        }
+        let target = request.target.clone();
+        let kind = request.kind;
+        let value = request.value;
+        return async_generator_run(i, state, target, kind, value);
+    }
+}
+
+/// Feed one resume value into the generator's single suspended VM frame and
+/// run it until its next suspension or completion, settling `target`
+/// (the current request's promise) and continuing to drain the queue.
+fn async_generator_run(
+    i: &mut Interpreter,
+    state: Rc<RefCell<GeneratorState>>,
+    target: Obj,
+    kind: u8,
+    value: JsValue,
+) -> Result<(), Throw> {
+    let (code, mut frame, completion) = {
+        let mut s = state.borrow_mut();
+        let frame = s.frame.take().expect("async generator frame missing at resume");
+        s.executing = true;
+        s.awaiting = false;
+        (s.code.clone(), frame, s.completion.clone())
+    };
+    if let Some(dst) = frame.yield_dst.take() {
+        if frame.delegate.is_some() {
+            frame.delegate_input = Some((kind, value));
+        } else {
+            match kind {
+                0 => frame.registers[dst] = value,
+                1 => frame.pending_resume = Some(Abrupt::Return(value)),
+                _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+            }
+        }
+    } else if let Some(dst) = frame.await_dst.take() {
+        match kind {
+            0 => frame.registers[dst] = value,
+            _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+        }
+    }
+    let previous_completion = std::mem::replace(&mut i.completion, completion);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
+    let completion = std::mem::replace(&mut i.completion, previous_completion);
+    {
+        let mut s = state.borrow_mut();
+        s.executing = false;
+        s.completion = completion;
+        s.awaiting = matches!(&outcome, Ok(FrameOutcome::Awaited(_)));
+        if matches!(&outcome, Ok(FrameOutcome::Awaited(_)) | Ok(FrameOutcome::Yielded(_))) {
+            s.frame = Some(frame);
+        }
+    }
+    match outcome {
+        Ok(FrameOutcome::Yielded(value)) => {
+            settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, false)), i)?;
+            async_generator_drain(i, state)
+        }
+        Ok(FrameOutcome::Completed(value)) => {
+            settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)?;
+            async_generator_drain(i, state)
+        }
+        Ok(FrameOutcome::Awaited(value)) => {
+            let awaited = async_resolve_value(i, value);
+            let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
+            let rejected = async_generator_step_handler(i, state, target, true);
+            let then = i.get_prop(&awaited, "then")?;
+            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            Ok(())
+        }
+        Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
+        Err(Throw(error)) => {
+            settle_promise(&target, PromiseFate::Rejected(error), i)?;
+            async_generator_drain(i, state)
+        }
+    }
+}
+
+/// Build the fulfilled/rejected reaction callback for an async generator's
+/// in-flight `await`, mirroring `async_handler` -- but an async generator's
+/// continuation must resume with both the shared `state` (as `async_handler`
+/// carries) and the *specific request's* promise (`target`), since each
+/// queued call has its own, unlike a plain async function's single backing
+/// promise. Both are stashed as env-declared internal slots on the callback's
+/// own closure, read back by `async_generator_step_state`.
+fn async_generator_step_handler(i: &Interpreter, state: Rc<RefCell<GeneratorState>>, target: Obj, reject: bool) -> JsValue {
+    let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
+    let mut holder = JsObject::ordinary();
+    holder.exotic = Exotic::Generator(state);
+    let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
+    let _ = env.declare_var("[[VmAsyncGeneratorTarget]]", JsValue::Object(target));
+    let mut function = JsObject::function(JsFunction {
+        name: if reject { "asyncGeneratorStepRejected" } else { "asyncGeneratorStepFulfilled" }.into(),
+        params: vec![],
+        body: FunctionBody::Native(if reject { async_generator_step_rejected } else { async_generator_step_fulfilled }),
+        is_arrow: false,
+        is_async: false,
+        is_generator: false,
+        env,
+        home: None,
+        proto_for_new: None,
+    });
+    function.proto = Some(i.function_proto.clone());
+    JsValue::object(function)
+}
+
+fn async_generator_step_state(i: &Interpreter) -> Result<(Rc<RefCell<GeneratorState>>, Obj), Throw> {
+    let native = i.native_stack.last().ok_or_else(|| Throw::type_error("missing async generator callback"))?;
+    let env = native.borrow().func.as_ref().unwrap().env.clone();
+    let JsValue::Object(holder) = env.resolve("[[VmAsyncState]]")
+        .ok_or_else(|| Throw::type_error("missing async generator frame"))? else {
+        return Err(Throw::type_error("invalid async generator frame"));
+    };
+    let state = match &holder.borrow().exotic {
+        Exotic::Generator(state) => state.clone(),
+        _ => return Err(Throw::type_error("invalid async generator frame")),
+    };
+    let JsValue::Object(target) = env.resolve("[[VmAsyncGeneratorTarget]]")
+        .ok_or_else(|| Throw::type_error("missing async generator target"))? else {
+        return Err(Throw::type_error("invalid async generator target"));
+    };
+    Ok((state, target))
+}
+
+fn async_generator_step_fulfilled(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    async_generator_run(i, state, target, 0, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_generator_step_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    async_generator_run(i, state, target, 2, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
 }
 
 fn consume(fuel: &mut usize) -> Result<(), Throw> {

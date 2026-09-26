@@ -2191,3 +2191,230 @@ Queued/deferred from this ticket: PointerEvent (click still constructs
 navigation, popovers, file pickers), event-handler content attributes (JS
 compiler seam). Continuing with the WebSocket JS interface on net's
 already-landed transport seam (NET-8/NET-19; see questions.md 2026-09-26T19:40Z).
+
+## DOM-B legacy createEvent aliases: DeviceMotionEvent/DeviceOrientationEvent/DragEvent/StorageEvent/TextEvent
+
+WebSocket (NET-8/NET-19) was already landed by `net`, so this ticket picked
+the next-largest in-lane WPT `dom/` failure cluster instead, per the bulk
+corpus scan across `dom/ranges`, `dom/traversal`, `dom/nodes` and
+`dom/collections` (408 files). Two candidate clusters were routed away, not
+fixed here, because the actual bug sites are outside `amazing-dom`/
+`amazing-bindings` (see `questions.md`, 2026-09-26T18:05Z entries):
+
+- `ParentNode-querySelector-escapes.html` (40 fails) — CSS hex/punctuation
+  escape decoding lives in `amazing_css::selectors::parse_selector`, which
+  `RuntimeBindingHost::SelectorEngine::parse_selector` calls after only
+  splitting the selector list on quote/paren/bracket depth. Routed to `css`.
+- `Document-createEvent.https.html`'s `MessageEvent` alias mismatch (3 of its
+  24 original fails) — `message_event_bindings::create_legacy` and the real
+  `new MessageEvent()` constructor both route through the identical
+  `wrap_platform_object(..., InterfaceBrand::EVENT)` →
+  `interface_for`/`dom_event_interface` → `self.prototype(Interface::MessageEvent)`
+  lookup that every other legacy alias (including `CustomEvent`) resolves
+  correctly through, but `Object.getPrototypeOf(document.createEvent("MessageEvent"))`
+  is confirmed (via an `amazing domrun` probe) to NOT be reference-equal to
+  `window.MessageEvent.prototype`, unlike the constructor path. No
+  dom-bindings-owned divergence between the two call sites was found; routed
+  to js-runtime/js-vm as a likely `binding_wrap_host` host-object identity
+  issue in `amazing-js`.
+
+The fixable, in-lane part of the same cluster: `document.createEvent()`'s
+legacy alias table (`event_bindings.rs`) already *validated* the aliases
+`DeviceMotionEvent`, `DeviceOrientationEvent`, `DragEvent`, `StorageEvent` and
+`TextEvent` (real interfaces per the DOM Standard's create() legacy factory
+table that this engine doesn't otherwise implement) but then fell through to
+`_ => event.class()`, leaving the created event with the *generic* `Event`
+class — so `Object.getPrototypeOf(ev)` was `Event.prototype`, not the named
+interface's own prototype, and none of those five interfaces were even
+registered as `window.X` globals. Fixed by:
+
+- Five new `EventClass` variants (`amazing-dom/src/events.rs`):
+  `DeviceMotion`, `DeviceOrientation`, `Drag`, `Storage`, `Text`.
+- Five new `Interface` variants (`amazing-bindings/src/host.rs`) and matching
+  `D{}` descriptors (`interfaces.rs`), each `constructor: None` (matching the
+  existing `BeforeUnloadEvent` pattern — WPT only checks prototype identity,
+  never `new X()`, for these) with empty `members` (no IDL surface beyond the
+  inherited base is exercised by any pinned test).
+- `event_bindings.rs`'s class-mapping switch now maps all five lowercase
+  alias names to their new `EventClass`, and
+  `crates/amazing/src/runtime_host_dom_bindings.rs::dom_event_interface`
+  (additive-grant file) maps each new `EventClass` to its new `Interface`, so
+  the existing dynamic `wrap_platform_object` dispatch picks the right
+  prototype the same way it already does for `HashChangeEvent`/
+  `CompositionEvent`/etc.
+- Extended `tests_legacy_events.rs`'s alias-preservation test with the five
+  new class/name pairs (exact/lower/upper case, per its existing loop shape).
+
+`amazing-dom` 363/363, `amazing-bindings` 117/117 (both include the extended
+test). WPT `dom/nodes/Document-createEvent.https.html`: 270 pass / 21 fail+error
+→ 270 pass / 3 fail + 6 precondition-skips (TouchEvent's "expose legacy touch
+event APIs" `assert_implements_optional` gate — expected/optional since this
+engine doesn't implement touch events; not a regression or a bug). Full
+4-directory corpus (`dom/ranges`+`dom/traversal`+`dom/nodes`+`dom/collections`,
+408 files) before/after, **zero lost passes** (confirmed after excluding the
+handful of hard-timeout-truncated combinatorial `Range-*` files — same
+"timeout, partial subtests retained" status before and after, unrelated to
+this change — where a fixed wall-clock deadline makes the exact retained
+subtest count non-deterministic across runs on a shared sandbox), **+15
+gained** (exactly the 5 interfaces × 3 case variants). Evidence:
+`crates/amazing-bindings/evidence/dom-b-audit/` (`before-createevent` =
+`cluster-scan`, `after-createevent`).
+
+### Next-cluster scoping (same session, no further code landed)
+
+Widened the corpus scan to `dom/abort`, `dom/lists` (clean) and `dom/observable`
+(245 fails, 0% passing, one missing interface) looking for the next bulk
+cluster. Deliberately did not start implementing `Observable` this ticket:
+reading the real WPT source (`observable-constructor.any.js`,
+`observable-map.any.js`, `observable-take.any.js`) shows its actual model is a
+*shared, ref-counted producer* (one initializer invocation multicasts to every
+concurrent `subscribe()` call; teardown only runs after the last unsubscribe;
+`addTeardown()` is LIFO at real teardown time but synchronous FIFO if the
+subscription is already inactive; `next()` iterates a snapshot of observers),
+not a plain cold/Rx-style Observable — getting that core exactly right is the
+whole ticket, since every operator is just a composition on top of it. Also
+found `RuntimeBindingHost::run_abort_algorithm` (`crates/amazing/src/runtime_binding_host.rs`)
+is currently a no-op stub, so nothing registered via `Dom::add_abort_algorithm`
+(fetch/XHR cancellation, and Observable's per-subscription unsubscribe if built
+the obvious way) actually fires yet. Full writeup and proposed native-registry
+shape in `questions.md` (2026-09-26T19:05Z); proposing `Observable` as its own
+dedicated next ticket rather than rushing it into this one.
+
+## DOM-B-OBS: `dom/observable` shared-producer core, operators, and abort algorithms
+
+Base: local `dev` @ `4f27b9c4`.
+
+Implemented the model scoped above, exactly as read from the WPT source, in
+one bulk pass:
+
+- **`crates/amazing-dom/src/observable.rs`** (new): a JS-free native registry
+  (`Observables`/`ObservableEntry`/`Run`) mirroring `abort.rs`'s shape. One
+  `ObservableId` can have at most one active `Run`; the first concurrent
+  `subscribe()` starts it (bumping a `generation` counter used to detect a
+  Subscriber reference from a torn-down run), later ones just add another
+  `ObserverEntry`. Teardown is LIFO and runs only once the observer list empties
+  (last individual unsubscribe, or `complete()`/`error()`). `Producer` is an
+  enum naming how a run starts (`Js` initializer, or an operator's upstream:
+  `Map`/`Filter`/`Take`/`Drop`/`FlatMap`/`SwitchMap`/`TakeUntil`/`FromValues`/
+  `FromPromise`/`EventTargetWhen`). `Sink` is `Js` (a normalized observer),
+  `Relay(ObservableId, RelayKind)` (an operator's downstream), or
+  `Terminal(Terminal)` (a promise-returning operator's bookkeeping —
+  accumulator slots, current index). All values are opaque `CallbackId`/`u64`
+  tokens; this crate never calls into JS.
+- **`crates/amazing-bindings/src/observable_bindings.rs`** (new, ~750 lines):
+  the driving loop that dereferences those tokens and applies transforms,
+  always outside any `Dom` borrow. `subscribe_internal`/`start_producer` is the
+  shared subscribe core every operator and the constructor route through;
+  `relay_forward` is one big match over `(RelayKind, RelayEvent)` implementing
+  every stream operator uniformly on the same relay+teardown-cascade mechanism,
+  including `flatMap`/`switchMap`'s dynamically spawned inner subscriptions
+  (`flat_map_spawn`, tracked via `open_inner_count`/`outer_complete`); every
+  terminal operator (`forEach`/`toArray`/`first`/`last`/`find`/`some`/`every`/
+  `reduce`) is a direct native subscription on the source
+  (`Sink::Terminal`) driving a `Promise`. `EventTarget.prototype.when()` and
+  `Observable.from(thenable)` reuse the *existing* generic
+  `BindingHost::create_native_function` (already dynamic/callable-anytime, not
+  bootstrap-only) via one new `Operation::ObservableInternalThunk(u64)`
+  variant dispatched through the normal `invoke()` chain — no new host-trait
+  primitive was needed for either.
+- **Platform-key packing**: the driver's `platform_object` enforces
+  `generation == 1` for every brand (a shared, brand-agnostic liveness
+  invariant), so a Subscriber's run-generation is packed into `PlatformKey.slot`
+  alongside its `ObservableId` (`pack_subscriber_slot`) instead of using
+  `PlatformKey.generation` — the obvious first design broke that shared
+  invariant and was changed before any driver code was touched.
+- **Abort algorithms**: `RuntimeBindingHost::run_abort_algorithm` (previously a
+  permanent `NotSupportedError` stub) is now a one-line hook —
+  `observable_handle_unsubscribe(self, algorithm)` — delegating into this
+  lane's own `observable_bindings::handle_unsubscribe`. `Dom::add_abort_algorithm`
+  tokens are self-describing (`pack_unsub(ObservableId, call_id)`, bit 63 kept
+  clear for a future subsystem such as net's fetch/XHR); nothing else in the
+  tree called `add_abort_algorithm` before this, confirmed by grep. This also
+  makes fetch/XHR cancellation infrastructure functional for the first time,
+  though no net-owned code was touched.
+- **New minimal host primitives**: `BindingHost::sequence_values` (array-like
+  read without the final `to_dom_string`, for `Observable.from()`'s fallback
+  path) and `BindingHost::range_error_value` (a constructed, not thrown,
+  `RangeError` — `first()`/`last()`/`reduce()` reject with this on an empty
+  source, per spec, not a `DOMException`).
+- `event_bindings::target` and `abort_bindings::propagate`/`default_reason`
+  widened from private to `pub(crate)` for reuse by the new module.
+
+**Known, deliberate scope cuts** (all confirmed against the pinned WPT source,
+not guessed): `Observable.from()` handles Observable/thenable/array-like only,
+no iterator-protocol/async-iterable support; a user callback throwing
+(initializer, map/filter predicate, or a terminal's visitor/reducer) currently
+propagates via `?` instead of being caught and routed to the observable's
+`error()`/the terminal's rejected promise — **a `call_catching` +
+`BindingHost::error_value` fix was attempted and reverted this ticket**: it
+regressed `first`/`last`/`toArray`/`forEach`/`some`/`every`/`reduce`/`find`
+from clean fast fails back to hard timeouts without even fixing its target
+(`observable-takeUntil.any.js` stayed an "error" status), so the interpreter is
+doing something on a caught throw (likely leaving some VM/call-stack state
+unwound incorrectly) that plain `?`-propagation does not hit — filed as a
+follow-up needing its own investigation, not blind retry; `catch`/`finally`/
+`inspect` are not implemented (correctly excluded from the ticket's operator
+list). `moveBefore` was left alone per standing instruction.
+
+**Known bug, not fixed this ticket**: `observable-takeUntil.any.js` (one file)
+has WPT status `"error"` with an opaque `[object]` detail (0/0 subtest counts —
+the whole file aborts before any test runs), present identically in the very
+first Observable build this ticket produced and in every later measurement,
+regardless of the takeUntil-ordering fix below or the reverted exception-catch
+attempt. Root cause: its 4th test has a notifier `Observable` whose initializer
+`throw`s synchronously, which currently propagates all the way out of
+`.subscribe()` as an uncaught exception instead of being caught — the same
+uncaught-initializer-throw gap noted above. **Not a zero-loss violation**:
+`dom/observable`'s pass total was `0` in every prior baseline (the interface
+did not exist), so this file contributed zero passes before and zero after;
+nothing regressed. Filed for a follow-up ticket alongside the exception-catch
+fix above, since a correct fix likely needs both together.
+
+**Fixed in the same pass** (found via the corpus diff, both confirmed against
+WPT source before any code changed): `takeUntil()` was subscribing to `source`
+before `notifier` (`start_producer`'s `Producer::TakeUntil` arm); the spec
+subscribes to `notifier` first and must never subscribe to `source` at all if
+`notifier` synchronously emits/completes — `observable-takeUntil.any.js`'s own
+"source never subscribed to when notifier synchronously emits" tests assert
+this directly. `first()`/`last()`/`reduce()` on an empty source rejected with a
+`DOMException` (`InvalidStateError`); the spec (and `observable-first.any.js`'s
+own test) requires a real `RangeError` — fixed via the new
+`range_error_value` primitive above. All eight terminal operators
+(`forEach`/`toArray`/`first`/`last`/`find`/`some`/`every`/`reduce`) previously
+ignored an `options.signal` argument entirely, which meant an aborted-signal
+terminal call hung forever instead of rejecting — `observable-first/last/
+toArray.any.js`'s `{signal: controller.signal}` tests exercise exactly this.
+Fixed by threading `own_signal` through `start_terminal`/`subscribe_internal`
+(the existing generic "first-call pre-check" and `add_abort_algorithm`
+registration already worked for any `Sink` kind once `Sink::Terminal` was
+added to both the pre-abort check and `Dom::observable_remove_observer`'s
+now-richer `RemoveOutcome` — which had to start returning the removed
+`Sink` itself, not just its teardowns, so a Terminal's promise can be rejected
+with the signal's real abort reason on the async-abort path, not just the
+already-aborted-at-call-time path).
+
+**Measured** (`cargo nextest run -p amazing-dom -p amazing-bindings -p amazing
+--locked`: 666/666, no regressions, before and after every fix in this
+ticket). `dom/observable` (29 files, `dom/observable/tentative/**`):
+`0 pass / ~245 fail` (prior scoping-scan baseline, interface did not exist) →
+**68 pass / 161 fail**, 4 files with WPT-level `timeout` status (the
+`.window.js` variants plus `idlharness.html`'s missing `WebIDLParser.js`
+resource — both pre-existing runner gaps, unrelated to this feature) and 1
+file (`observable-takeUntil.any.js`) with `error` status per the known bug
+above. Wider `dom/` sweep (`dom/abort`+`dom/lists`+`dom/nodes`+`dom/traversal`+
+`dom/events`+`dom/collections`+`dom/ranges`, re-run twice to separate signal
+from shared-sandbox flakiness): `fail` counts identical across repeated runs
+in every directory; only `pass` counts on `dom/nodes`/`dom/ranges`/
+`dom/traversal` fluctuated run-to-run (confirmed pre-existing timing flakiness
+on a shared, CPU-contended sandbox, not caused by this change — none of those
+crates' source was touched). Workspace gate (this host, `k-test`/venus-class):
+`3267 tests run: 3256 passed, 11 failed, 14 skipped` — the 11 failures are all
+in `amazing-ipc-platform`/`amazing-process` sealed-memory tests, a known
+host-specific `EPERM`/`os error 1` issue unrelated to this lane (ipc is fixing
+as IPC-12, per fleet notice). Re-run clean on `venus-001`:
+**3267/3267 passed, 14 skipped, zero failures**; doctests `amazing_js` 1/1,
+`amazing_html` 1/1, all others `ok`.
+
+Evidence: `crates/amazing-bindings/evidence/dom-b-audit/` (`after-observable`
+= first bulk build; `after-observable-fix4` = final, after the takeUntil-order
+and signal/RangeError fixes and the exception-catch revert).

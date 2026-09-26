@@ -120,12 +120,23 @@ enum StorageObject {
     Area { session: bool },
     Factory { bucket: String },
     Request { result: JsValue, error: JsValue, ready: bool, source: JsValue, transaction: JsValue, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
-    Database { connection: u64, name: String, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
+    // `key` is cached at connection-open time (STORE-6 regression fix): deriving it by
+    // looking up the live `idb::Connection` on every member access throws once the
+    // connection is closed, even for read-only getters (name/objectStoreNames) and for
+    // the idempotent second `close()` call that the spec and WPT cleanup helpers rely
+    // on. See the regression test below for the hang this caused.
+    Database { connection: u64, name: String, key: BucketKey, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Transaction { connection: u64, id: u64, value: Option<IdbTransaction>, mode: Mode, scope: Vec<String>, queued: bool, active_for_requests: bool, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Store { transaction: usize, name: String, key_path_value: Option<JsValue> },
     Index { transaction: usize, store: String, name: String, key_path_value: Option<JsValue>, object_store_value: Option<JsValue> },
     Cursor { cursor: IdbCursor, transaction: usize, source: usize, request: usize, with_value: bool },
     Range(KeyRange),
+    // getAllRecords()'s IDBRecord result: a plain readonly-attribute holder, but WPT's
+    // assert_idl_attribute requires key/primaryKey/value to be inherited getters on the
+    // interface prototype, not own data properties -- so this goes through the same
+    // storage_allocate/storage_slot handle machinery as every other IDB wrapper instead
+    // of a bare object with own properties.
+    Record { key: JsValue, primary_key: JsValue, value: JsValue },
     CacheStorage { bucket: String },
     Cache { name: String },
     Manager,
@@ -140,7 +151,7 @@ enum StorageJob {
     RequestSuccess { request: usize, result: JsValue },
     RequestError { request: usize, error: JsValue },
     DeleteSuccess { request: usize, old: u64 },
-    OpenUpgrade { request: usize, connection: u64, name: String, old: u64, new: u64 },
+    OpenUpgrade { request: usize, connection: u64, name: String, key: BucketKey, old: u64, new: u64 },
     OpenBlocked { request: usize, old: u64, new: Option<u64> },
     DatabaseVersionChange { connection: u64, old: u64, new: Option<u64> },
     DispatchListener { slot: usize, event: JsValue, callbacks: VecDeque<JsValue> },
@@ -167,9 +178,7 @@ enum StoreResult {
     Count(usize),
     Key(Key),
     OptionalKey(Option<Key>),
-    Keys(Vec<Key>),
     Value(Option<StructuredValue>),
-    Values(Vec<StructuredValue>),
 }
 
 impl RuntimeBindings {
@@ -287,12 +296,20 @@ impl RuntimeBindingHost<'_> {
             let getter=self.native(name,0,NativeEntry::Storage(SI::Storage,name,SM::Getter),HostCallPolicy::CallOnly);
             self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
-        for (name,interface,object) in [
-            ("indexedDB",SI::IDBFactory,StorageObject::Factory{bucket:"default".into()}),
-            ("caches",SI::CacheStorage,StorageObject::CacheStorage{bucket:"default".into()}),
+        // IA-REAL-2: `indexedDB`/`caches`/`navigator.storage`/`.locks`/`.storageBuckets` used
+        // to be allocated eagerly here, and `storage_allocate` unconditionally opens the
+        // on-disk store as its first step. That made every single page load pay disk I/O
+        // for storage before any script ran, and made a stale/corrupt on-disk store fail
+        // page load entirely rather than just the storage APIs a page happens to touch.
+        // These five singletons are installed as getters instead (mirroring the existing
+        // localStorage/sessionStorage lazy pattern below) so the store opens lazily, on
+        // first actual use.
+        for (name,interface) in [
+            ("indexedDB",SI::IDBFactory),
+            ("caches",SI::CacheStorage),
         ] {
-            let wrapper=self.storage_allocate(interface,object)?;
-            self.define_data_property(&global,name,wrapper,true,true,true)?;
+            let getter=self.native(name,0,NativeEntry::Storage(interface,"!singleton",SM::Getter),HostCallPolicy::CallOnly);
+            self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
         let navigator=self.js.binding_get_property(&global,"navigator")?;
         let navigator=if matches!(navigator,JsValue::Object(_)){navigator}else{
@@ -300,14 +317,35 @@ impl RuntimeBindingHost<'_> {
             self.define_data_property(&global,"navigator",value.clone(),true,false,true)?;
             value
         };
-        let manager=self.storage_allocate(SI::StorageManager,StorageObject::Manager)?;
-        self.define_data_property(&navigator,"storage",manager,true,true,true)?;
-        let locks=self.storage_allocate(SI::LockManager,StorageObject::LockManager)?;
-        self.define_data_property(&navigator,"locks",locks,true,true,true)?;
-        let buckets=self.storage_allocate(SI::StorageBucketManager,StorageObject::BucketManager)?;
-        self.define_data_property(&navigator,"storageBuckets",buckets,true,true,true)?;
+        for (name,interface) in [
+            ("storage",SI::StorageManager),
+            ("locks",SI::LockManager),
+            ("storageBuckets",SI::StorageBucketManager),
+        ] {
+            let getter=self.native(name,0,NativeEntry::Storage(interface,"!singleton",SM::Getter),HostCallPolicy::CallOnly);
+            self.define_accessor_property(&navigator,name,Some(getter),None,true,true)?;
+        }
         self.install_storage_legacy();
         Ok(())
+    }
+    /// Lazily open storage and allocate (or reuse) the one wrapper object for a
+    /// per-realm storage singleton (IDBFactory/CacheStorage/StorageManager/
+    /// LockManager/StorageBucketManager), on first access rather than at
+    /// realm/document init (IA-REAL-2).
+    fn storage_singleton(&mut self,interface:SI)->Result<JsValue,Throw>{
+        self.storage_ensure()?;
+        let object=match interface {
+            SI::IDBFactory=>StorageObject::Factory{bucket:"default".into()},
+            SI::CacheStorage=>StorageObject::CacheStorage{bucket:"default".into()},
+            SI::StorageManager=>StorageObject::Manager,
+            SI::LockManager=>StorageObject::LockManager,
+            SI::StorageBucketManager=>StorageObject::BucketManager,
+            _=>return Err(Throw::type_error("Not a storage singleton")),
+        };
+        let existing={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
+            storage.objects.iter().position(|o|std::mem::discriminant(o)==std::mem::discriminant(&object))};
+        if let Some(slot)=existing{return self.storage_wrapper(slot)}
+        self.storage_allocate(interface,object)
     }
     fn storage_profile_path() -> std::path::PathBuf {
         if let Some(path)=std::env::var_os("AMAZING_STORAGE_DIR") {return path.into()}
@@ -414,7 +452,10 @@ impl RuntimeBindingHost<'_> {
         let arena=self.state.borrow().arena;
         let value=self.js.binding_wrap_host(HostHandle {arena,slot:slot as u64,generation:1,brand:STORAGE_BRAND_BASE+kind as u64},&prototype)?;
         self.state.borrow_mut().storage.as_mut().expect("storage initialized").wrappers.insert(slot,value.clone());
-        self.materialize_accessors(&value);
+        // IDBRecord's key/primaryKey/value must stay inherited (WPT's assert_idl_attribute
+        // requires them NOT to be own properties); every other storage wrapper still needs
+        // materialize_accessors for its host-object property lookup to see prototype getters.
+        if kind!=SI::IDBRecord {self.materialize_accessors(&value);}
         Ok(value)
     }
     fn storage_slot(&self,value:&JsValue,kind:SI)->Result<usize,Throw>{
@@ -580,6 +621,9 @@ impl RuntimeBindingHost<'_> {
         });
     }
     pub(super) fn storage_invoke(&mut self,interface:SI,member:&'static str,kind:SM,this:JsValue,args:&[JsValue])->Result<JsValue,Throw>{
+        if member=="!singleton" {
+            return self.storage_singleton(interface);
+        }
         match interface {
             SI::Storage=>self.storage_area_invoke(member,kind,this,args),
             SI::IDBFactory=>self.storage_factory_invoke(member,this,args),
@@ -882,6 +926,20 @@ impl RuntimeBindingHost<'_> {
         };
         self.storage_dom_error(name, name)
     }
+    // For a lookup keyed off a handle the caller already holds (an
+    // IDBObjectStore/IDBIndex JS object created earlier against a name that
+    // existed then): a `NotFound` from the engine now means the underlying
+    // store/index was removed since -- e.g. by `deleteObjectStore`/
+    // `deleteIndex` in the same upgrade transaction -- which per spec throws
+    // InvalidStateError, not NotFoundError (that's reserved for a fresh
+    // by-name lookup, like `objectStore.index("name-that-was-never-there")`,
+    // which should keep using `storage_idb_error` unchanged).
+    fn storage_idb_error_for_handle(&mut self, error: idb::Error) -> Throw {
+        match error {
+            idb::Error::NotFound => self.storage_dom_error("InvalidStateError", "InvalidStateError"),
+            other => self.storage_idb_error(other),
+        }
+    }
     fn storage_request(&mut self, open: bool, source: JsValue, transaction: JsValue) -> Result<(usize, JsValue), Throw> {
         let kind=if open {SI::IDBOpenDBRequest}else{SI::IDBRequest};
         let value=self.storage_allocate(kind,StorageObject::Request {result:JsValue::Undefined,error:JsValue::Null,
@@ -928,17 +986,17 @@ impl RuntimeBindingHost<'_> {
                 let result=self.state.borrow().storage.as_ref().unwrap().idb.borrow_mut().open(key.clone(),name.clone(),version);
                 match result {
                     Ok(open)=>{
-                        if open.blocked {self.state.borrow_mut().storage.as_mut().unwrap().blocked_opens.push_back((key,name.clone(),request));}
+                        if open.blocked {self.state.borrow_mut().storage.as_mut().unwrap().blocked_opens.push_back((key.clone(),name.clone(),request));}
                         for event in open.events {
                             match event {
                                 idb::OpenEvent::UpgradeNeeded{old,new}=>{
-                                    self.storage_schedule(StorageJob::OpenUpgrade{request,connection:open.connection.unwrap(),name:name.clone(),old,new})?;
+                                    self.storage_schedule(StorageJob::OpenUpgrade{request,connection:open.connection.unwrap(),name:name.clone(),key:key.clone(),old,new})?;
                                 },
                                 idb::OpenEvent::Blocked{old,new}=>{
                                     self.storage_schedule(StorageJob::OpenBlocked{request,old,new})?;
                                 },
                                 idb::OpenEvent::Success{connection,..}=>{
-                                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name:name.clone(),handlers:HashMap::new(),listeners:Vec::new()})?;
+                                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name:name.clone(),key:key.clone(),handlers:HashMap::new(),listeners:Vec::new()})?;
                                     self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
                                 },
                                 idb::OpenEvent::VersionChange{connection,old,new}=>self.storage_schedule(StorageJob::DatabaseVersionChange{connection,old,new})?,
@@ -982,7 +1040,7 @@ impl RuntimeBindingHost<'_> {
             if let Some(request)=request {
                 for event in open.events {
                     if let idb::OpenEvent::UpgradeNeeded{old,new}=event {
-                        self.storage_schedule(StorageJob::OpenUpgrade{request,connection,name:name.clone(),old,new})?;
+                        self.storage_schedule(StorageJob::OpenUpgrade{request,connection,name:name.clone(),key:key.clone(),old,new})?;
                     }
                 }
             }
@@ -1002,8 +1060,12 @@ impl RuntimeBindingHost<'_> {
             let a=self.storage_to_key(self.storage_arg(args,0)?)?;
             let range=match member {
                 "only"=>KeyRange::only(a),
-                "lowerBound"=>KeyRange{lower:Some(a),upper:None,lower_open:args.get(1).is_some_and(|v|self.js.binding_to_boolean(v)),upper_open:false},
-                "upperBound"=>KeyRange{lower:None,upper:Some(a),lower_open:false,upper_open:args.get(1).is_some_and(|v|self.js.binding_to_boolean(v))},
+                // A one-sided range's open end is unbounded, which counts as
+                // open per the IDBKeyRange.lowerBound()/upperBound() spec steps
+                // (idbkeyrange.any.js asserts upperOpen/lowerOpen are true on
+                // the unbounded side, not left at their struct default).
+                "lowerBound"=>KeyRange{lower:Some(a),upper:None,lower_open:args.get(1).is_some_and(|v|self.js.binding_to_boolean(v)),upper_open:true},
+                "upperBound"=>KeyRange{lower:None,upper:Some(a),lower_open:true,upper_open:args.get(1).is_some_and(|v|self.js.binding_to_boolean(v))},
                 "bound"=>{let b=self.storage_to_key(self.storage_arg(args,1)?)?;
                     KeyRange::bound(a,b,args.get(2).is_some_and(|v|self.js.binding_to_boolean(v)),
                         args.get(3).is_some_and(|v|self.js.binding_to_boolean(v))).map_err(|e|self.storage_idb_error(e))?},
@@ -1066,10 +1128,13 @@ impl RuntimeBindingHost<'_> {
                         return Ok(JsValue::Undefined)}
                     let state=self.state.borrow();if let StorageObject::Database{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
                 }
-                let (connection,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Database{connection,name,..}=>(*connection,name.clone()),_=>unreachable!()}};
-                let key=self.state.borrow().storage.as_ref().unwrap().idb.borrow()
-                    .connection(connection).map(|connection|connection.key.clone())
-                    .ok_or_else(||Throw::type_error("IDBDatabase is closed"))?;
+                // `key` comes from the cached field on StorageObject::Database (set when the
+                // connection was opened), not from a live `idb::Connection` lookup: the latter
+                // throws once the connection is closed, which broke every member access
+                // (including the spec-idempotent second `close()` call) after a database's
+                // first close. See `indexeddb_database_members_survive_close` below.
+                let (connection,name,key)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+                    StorageObject::Database{connection,name,key,..}=>(*connection,name.clone(),key.clone()),_=>unreachable!()}};
                 match member {
                     "name"=>Ok(JsValue::str(name)),
                     "version"=>{let state=self.state.borrow();let version=state.storage.as_ref().unwrap().idb.borrow().connection(connection).map_or(0,|connection|connection.version);
@@ -1114,6 +1179,16 @@ impl RuntimeBindingHost<'_> {
             SI::IDBObjectStore=>self.storage_store_invoke(member,this,args),
             SI::IDBIndex=>self.storage_index_invoke(member,this,args),
             SI::IDBCursor|SI::IDBCursorWithValue=>self.storage_cursor_invoke(interface,member,this,args),
+            SI::IDBRecord=>{
+                let slot=self.storage_slot(&this,interface)?;
+                let (key,primary_key,value)={let state=self.state.borrow();
+                    match &state.storage.as_ref().unwrap().objects[slot] {
+                        StorageObject::Record{key,primary_key,value}=>(key.clone(),primary_key.clone(),value.clone()),
+                        _=>unreachable!(),
+                    }};
+                match member {"key"=>Ok(key),"primaryKey"=>Ok(primary_key),"value"=>Ok(value),
+                    _=>Err(Throw::type_error("Unknown IDBRecord member"))}
+            },
             _=>Err(Throw::type_error("IndexedDB interface method unavailable")),
         }
     }
@@ -1188,9 +1263,13 @@ impl RuntimeBindingHost<'_> {
         match member {
             "name"=>return Ok(JsValue::str(name)),"transaction"=>return self.storage_wrapper(transaction),
             "keyPath"|"autoIncrement"|"indexNames"=>{
-                let (key_path,auto,names)={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
-                    let store=tx.store(&name).map_err(|error|Throw::type_error(format!("{error:?}")))?;
-                    (store.key_path.clone(),store.auto_increment,store.index_names().into_iter().map(str::to_owned).collect::<Vec<_>>())};
+                let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
+                    tx.store(&name).map(|store|(store.key_path.clone(),store.auto_increment,
+                        store.index_names().into_iter().map(str::to_owned).collect::<Vec<_>>()))};
+                // Reached only through a handle that named an existing store
+                // when it was created, so a NotFound here means the store was
+                // deleted since -- InvalidStateError, not NotFoundError.
+                let (key_path,auto,names)=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
                 return match member {"keyPath"=>key_path.as_ref().map_or(Ok(JsValue::Null),|path|self.storage_cached_key_path_value(slot,path)),
                     "autoIncrement"=>Ok(JsValue::Bool(auto)),_=>self.js.binding_create_array(names.into_iter().map(JsValue::str).collect())};
             },
@@ -1200,8 +1279,14 @@ impl RuntimeBindingHost<'_> {
             if member!="index" {self.storage_transaction_accepts_request(transaction)?;}
             let index_name=self.storage_string(self.storage_arg(args,0)?)?;
             if member=="index" {
-                {let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
-                    tx.store(&name).and_then(|store|store.index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
+                // `tx.store(&name)` failing means this IDBObjectStore handle's
+                // own store was deleted (InvalidStateError); `store.index(...)`
+                // failing is a fresh by-name lookup with no such index
+                // (NotFoundError) -- tag which stage produced the error so each
+                // gets the right DOMException.
+                let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
+                    tx.store(&name).map_err(|error|(true,error)).and_then(|store|store.index(&index_name).map(|_|()).map_err(|error|(false,error)))};
+                if let Err((own_store,error))=outcome{return Err(if own_store{self.storage_idb_error_for_handle(error)}else{self.storage_idb_error(error)})}
                 return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name,key_path_value:None,object_store_value:None});
             }
             if member=="createIndex" {
@@ -1210,21 +1295,39 @@ impl RuntimeBindingHost<'_> {
                 let options=args.get(2).cloned().unwrap_or(JsValue::Undefined);
                 let unique=if matches!(options,JsValue::Object(_)){let value=self.js.binding_get_property(&options,"unique")?;self.js.binding_to_boolean(&value)}else{false};
                 let multi=if matches!(options,JsValue::Object(_)){let value=self.js.binding_get_property(&options,"multiEntry")?;self.js.binding_to_boolean(&value)}else{false};
-                {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
-                    tx.store_mut(&name).and_then(|store|store.create_index(index_name.clone(),path,unique,multi)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
+                let outcome={let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
+                    tx.store_mut(&name).map_err(|error|(true,error)).and_then(|store|store.create_index(index_name.clone(),path,unique,multi).map_err(|error|(false,error)))};
+                if let Err((own_store,error))=outcome{return Err(if own_store{self.storage_idb_error_for_handle(error)}else{self.storage_idb_error(error)})}
                 return self.storage_allocate(SI::IDBIndex,StorageObject::Index{transaction,store:name,name:index_name,key_path_value:None,object_store_value:None});
             }
-            {let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
-                tx.store_mut(&name).and_then(|store|store.delete_index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;}
+            let outcome={let mut state=self.state.borrow_mut();let StorageObject::Transaction{value:Some(tx),mode:Mode::VersionChange,..}=&mut state.storage.as_mut().unwrap().objects[transaction] else{return Err(Throw::type_error("No active upgrade transaction"))};
+                tx.store_mut(&name).map_err(|error|(true,error)).and_then(|store|store.delete_index(&index_name).map_err(|error|(false,error)))};
+            if let Err((own_store,error))=outcome{return Err(if own_store{self.storage_idb_error_for_handle(error)}else{self.storage_idb_error(error)})}
             return Ok(JsValue::Undefined);
         }
         if member=="openCursor"||member=="openKeyCursor" {
             self.storage_transaction_accepts_request(transaction)?;
             let range=self.storage_query_range(args.first())?;
             let direction=self.storage_direction(args.get(1))?;
-            let cursor={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
-                tx.store(&name).map_err(|error|Throw::type_error(format!("{error:?}")))?.cursor(range.as_ref(),direction)};
+            let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
+                tx.store(&name).map(|store|store.cursor(range.as_ref(),direction))};
+            let cursor=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
             return self.storage_open_cursor(cursor,transaction,slot,this,member=="openCursor");
+        }
+        if matches!(member,"getAll"|"getAllKeys"|"getAllRecords") {
+            self.storage_transaction_accepts_request(transaction)?;
+            let (range,count,direction)=self.storage_get_all_args(args)?;
+            let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction] else{return Err(Throw::type_error("Inactive transaction"))};
+                tx.store(&name).map(|store|store.cursor(range.as_ref(),direction).all(count).to_vec())};
+            let records=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
+            let (request,wrapper)=self.storage_request(false,this,self.storage_wrapper(transaction)?)?;
+            let result=match member {
+                "getAll"=>{let mut items=Vec::new();for record in &records{items.push(self.storage_from_value(&record.value)?)}self.js.binding_create_array(items)?},
+                "getAllKeys"=>{let mut items=Vec::new();for record in &records{items.push(self.storage_from_key(&record.primary_key)?)}self.js.binding_create_array(items)?},
+                _=>{let mut items=Vec::new();for record in &records{items.push(self.storage_create_record(&record.key,&record.primary_key,&record.value)?)}self.js.binding_create_array(items)?},
+            };
+            self.storage_schedule(StorageJob::RequestSuccess{request,result})?;
+            return Ok(wrapper);
         }
         self.storage_transaction_accepts_request(transaction)?;
         let (key,range)=if matches!(member,"add"|"put") {
@@ -1235,27 +1338,37 @@ impl RuntimeBindingHost<'_> {
             }else{let key=self.storage_to_key(value)?;(Some(key.clone()),Some(KeyRange::only(key)))}
         }else{(None,None)};
         let value=if matches!(member,"add"|"put"){Some(self.storage_clone_for_idb(self.storage_arg(args,0)?)?)}else{None};
-        let limit=if matches!(member,"getAll"|"getAllKeys") {args.get(1).filter(|v|!matches!(v,JsValue::Undefined)).map(|v|self.js.binding_to_number(v).map(|n|n.max(0.0) as usize)).transpose()?}else{None};
         let outcome={let mut state=self.state.borrow_mut();let storage=state.storage.as_mut().unwrap();
             let StorageObject::Transaction{value:Some(tx),..}=&mut storage.objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
             match member {
                 "add"|"put"=>tx.store_mut(&name).and_then(|store|store.put(value.unwrap(),key,member=="put")).map(StoreResult::Key),
-                "get"|"getKey"|"getAll"|"getAllKeys"|"count"=>tx.store(&name).map(|store|{
-                    let records=store.records(range.as_ref(),limit);
+                "get"|"getKey"|"count"=>tx.store(&name).map(|store|{
+                    let records=store.records(range.as_ref(),None);
                     match member {"get"=>StoreResult::Value(records.first().map(|(_,value)|value.clone())),
                         "getKey"=>StoreResult::OptionalKey(records.first().map(|(key,_)|key.clone())),
-                        "getAll"=>StoreResult::Values(records.into_iter().map(|(_,value)|value).collect()),
-                        "getAllKeys"=>StoreResult::Keys(records.into_iter().map(|(key,_)|key).collect()),
                         _=>StoreResult::Count(store.count(range.as_ref()))}
                 }),
-                "delete"=>tx.store_mut(&name).map(|store|{if let Some(key)=key.as_ref(){store.delete(key);}StoreResult::None}),
+                // A key range deletes every record it matches, not just a
+                // single key -- store.delete() only takes one key, so a
+                // range-form delete() (no `key`, only `range`) must walk the
+                // matching keys itself.
+                "delete"=>tx.store_mut(&name).map(|store|{
+                    if let Some(key)=key.as_ref(){store.delete(key);}
+                    else if let Some(range)=range.as_ref(){
+                        for existing in store.records(Some(range),None).into_iter().map(|(key,_)|key).collect::<Vec<_>>(){store.delete(&existing);}
+                    }
+                    StoreResult::None
+                }),
                 "clear"=>tx.store_mut(&name).map(|store|{store.clear();StoreResult::None}),
                 _=>Err(idb::Error::InvalidState),
             }
         };
         if let Err(error)=&outcome {
-            if matches!(error,idb::Error::Data|idb::Error::ReadOnly|idb::Error::TransactionInactive|idb::Error::InvalidState|idb::Error::NotFound) {
+            if matches!(error,idb::Error::Data|idb::Error::ReadOnly|idb::Error::TransactionInactive|idb::Error::InvalidState) {
                 return Err(self.storage_idb_error(error.clone()))
+            }
+            if matches!(error,idb::Error::NotFound) {
+                return Err(self.storage_idb_error_for_handle(error.clone()))
             }
         }
         let (request,wrapper)=self.storage_request(false,this,self.storage_wrapper(transaction)?)?;
@@ -1263,9 +1376,7 @@ impl RuntimeBindingHost<'_> {
             Ok(StoreResult::None)=>JsValue::Undefined,Ok(StoreResult::Count(count))=>JsValue::num(count as f64),
             Ok(StoreResult::Key(key))=>self.storage_from_key(&key)?,
             Ok(StoreResult::OptionalKey(key))=>key.as_ref().map_or(Ok(JsValue::Undefined),|key|self.storage_from_key(key))?,
-            Ok(StoreResult::Keys(keys))=>{let mut items=Vec::new();for key in keys{items.push(self.storage_from_key(&key)?)}self.js.binding_create_array(items)?},
             Ok(StoreResult::Value(value))=>value.as_ref().map_or(Ok(JsValue::Undefined),|value|self.storage_from_value(value))?,
-            Ok(StoreResult::Values(values))=>{let mut items=Vec::new();for value in values{items.push(self.storage_from_value(&value)?)}self.js.binding_create_array(items)?},
             Err(error)=>{let error=self.storage_idb_error(error).0;self.storage_schedule(StorageJob::RequestError{request,error})?;return Ok(wrapper)},
         };
         self.storage_schedule(StorageJob::RequestSuccess{request,result})?;
@@ -1278,6 +1389,46 @@ impl RuntimeBindingHost<'_> {
             let state=self.state.borrow();return match &state.storage.as_ref().unwrap().objects[handle.slot as usize]{StorageObject::Range(range)=>Ok(Some(range.clone())),_=>Err(Throw::type_error("Invalid key range"))}
         }
         Ok(Some(KeyRange::only(self.storage_to_key(value)?)))
+    }
+    // getAll()/getAllKeys()/getAllRecords() share one argument shape: the
+    // first argument is either the classic query (a key, an IDBKeyRange, or
+    // omitted) or -- since getAllRecords() shipped alongside an IDBGetAllOptions
+    // overload for all three methods -- a plain {query, count, direction}
+    // dictionary. A bare key was never valid as that dictionary (an IDB key is
+    // never a plain, non-Array/Date/binary object), so any plain object here is
+    // unambiguously the options form; the legacy second `count` argument still
+    // applies when the dictionary itself has no `count`.
+    fn storage_get_all_args(&mut self,args:&[JsValue])->Result<(Option<KeyRange>,Option<usize>,Direction),Throw>{
+        let mut range=None;let mut count=None;let mut direction=Direction::Next;
+        if let Some(first)=args.first().filter(|v|!matches!(v,JsValue::Undefined|JsValue::Null)) {
+            let treat_as_query=!matches!(first,JsValue::Object(_))
+                ||self.js.binding_host_handle(first,STORAGE_BRAND_BASE+SI::IDBKeyRange as u64).is_some()
+                ||matches!(first,JsValue::Object(object) if matches!(object.borrow().exotic,Exotic::Array))
+                ||matches!(first,JsValue::Object(object) if matches!(object.borrow().get_own("[[DateValue]]"),Some(JsValue::Num(_))))
+                ||self.storage_binary_bytes(first)?.is_some();
+            if treat_as_query {
+                range=self.storage_query_range(Some(first))?;
+            } else {
+                let query=self.js.binding_get_property(first,"query")?;
+                range=self.storage_query_range(Some(&query))?;
+                let count_value=self.js.binding_get_property(first,"count")?;
+                if !matches!(count_value,JsValue::Undefined){count=Some(self.js.binding_to_number(&count_value)?.max(0.0) as usize)}
+                let direction_value=self.js.binding_get_property(first,"direction")?;
+                if !matches!(direction_value,JsValue::Undefined){direction=self.storage_direction(Some(&direction_value))?;}
+            }
+        }
+        if count.is_none() {
+            count=args.get(1).filter(|v|!matches!(v,JsValue::Undefined)).map(|v|self.js.binding_to_number(v).map(|n|n.max(0.0) as usize)).transpose()?;
+        }
+        // Per spec, a count of 0 (explicit or omitted) means "no limit", not "zero results".
+        if count==Some(0) {count=None}
+        Ok((range,count,direction))
+    }
+    fn storage_create_record(&mut self,key:&Key,primary_key:&Key,value:&StructuredValue)->Result<JsValue,Throw>{
+        let key_value=self.storage_from_key(key)?;
+        let primary_key_value=self.storage_from_key(primary_key)?;
+        let value_value=self.storage_from_value(value)?;
+        self.storage_allocate(SI::IDBRecord,StorageObject::Record{key:key_value,primary_key:primary_key_value,value:value_value})
     }
     fn storage_parse_key_path(&mut self,value:&JsValue)->Result<Option<idb::KeyPath>,Throw>{
         if matches!(value,JsValue::Undefined|JsValue::Null){return Ok(None)}
@@ -1348,38 +1499,54 @@ impl RuntimeBindingHost<'_> {
             return Ok(value)
         }
         if matches!(member,"keyPath"|"unique"|"multiEntry") {
-            let (path,unique,multi)={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
-                let index=tx.store(&store_name).and_then(|store|store.index(&index_name)).map_err(|error|Throw::type_error(format!("{error:?}")))?;
-                (index.key_path.clone(),index.unique,index.multi_entry)};
+            // This handle already named an existing store+index when it was
+            // created, so any NotFound now -- from either lookup -- means
+            // one of them was deleted since: InvalidStateError throughout.
+            let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
+                tx.store(&store_name).and_then(|store|store.index(&index_name))
+                    .map(|index|(index.key_path.clone(),index.unique,index.multi_entry))};
+            let (path,unique,multi)=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
             return match member {"keyPath"=>self.storage_cached_key_path_value(slot,&path),
                 "unique"=>Ok(JsValue::Bool(unique)),_=>Ok(JsValue::Bool(multi))}
         }
-        let range=self.storage_query_range(args.first())?;
-        self.storage_transaction_accepts_request(transaction)?;
-        let limit=if matches!(member,"getAll"|"getAllKeys") {args.get(1).filter(|v|!matches!(v,JsValue::Undefined)).map(|v|self.js.binding_to_number(v).map(|n|n.max(0.0) as usize)).transpose()?}else{None};
         if member=="openCursor"||member=="openKeyCursor" {
+            let range=self.storage_query_range(args.first())?;
+            self.storage_transaction_accepts_request(transaction)?;
             let direction=self.storage_direction(args.get(1))?;
-            let cursor={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
-                let store=tx.store(&store_name).map_err(|error|Throw::type_error(format!("{error:?}")))?;
-                store.index(&index_name).map_err(|error|Throw::type_error(format!("{error:?}")))?.cursor(store,range.as_ref(),direction)};
+            let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
+                tx.store(&store_name).and_then(|store|store.index(&index_name).map(|index|index.cursor(store,range.as_ref(),direction)))};
+            let cursor=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
             return self.storage_open_cursor(cursor,transaction,slot,this,member=="openCursor");
         }
+        if matches!(member,"getAll"|"getAllKeys"|"getAllRecords") {
+            let (range,count,direction)=self.storage_get_all_args(args)?;
+            self.storage_transaction_accepts_request(transaction)?;
+            let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
+                tx.store(&store_name).and_then(|store|store.index(&index_name).map(|index|index.cursor(store,range.as_ref(),direction).all(count).to_vec()))};
+            let records=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
+            let (request,wrapper)=self.storage_request(false,this,self.storage_wrapper(transaction)?)?;
+            let result=match member {
+                "getAll"=>{let mut items=Vec::new();for record in &records{items.push(self.storage_from_value(&record.value)?)}self.js.binding_create_array(items)?},
+                "getAllKeys"=>{let mut items=Vec::new();for record in &records{items.push(self.storage_from_key(&record.primary_key)?)}self.js.binding_create_array(items)?},
+                _=>{let mut items=Vec::new();for record in &records{items.push(self.storage_create_record(&record.key,&record.primary_key,&record.value)?)}self.js.binding_create_array(items)?},
+            };
+            self.storage_schedule(StorageJob::RequestSuccess{request,result})?;
+            return Ok(wrapper);
+        }
+        if !matches!(member,"get"|"getKey"|"count"){return Err(Throw::type_error("Unknown IDBIndex member"))}
+        let range=self.storage_query_range(args.first())?;
+        self.storage_transaction_accepts_request(transaction)?;
         let outcome={let state=self.state.borrow();let StorageObject::Transaction{value:Some(tx),..}=&state.storage.as_ref().unwrap().objects[transaction]else{return Err(Throw::type_error("Inactive transaction"))};
-            let store=tx.store(&store_name).map_err(|error|Throw::type_error(format!("{error:?}")))?;
-            let index=store.index(&index_name).map_err(|error|Throw::type_error(format!("{error:?}")))?;
-            let records=index.records(store,range.as_ref(),limit);
-            match member {"get"=>StoreResult::Value(records.first().map(|(_,_,value)|value.clone())),
-                "getKey"=>StoreResult::OptionalKey(records.first().map(|(_,key,_)|key.clone())),
-                "getAll"=>StoreResult::Values(records.into_iter().map(|(_,_,value)|value).collect()),
-                "getAllKeys"=>StoreResult::Keys(records.into_iter().map(|(_,key,_)|key).collect()),
-                "count"=>StoreResult::Count(index.count(range.as_ref())),
-                _=>return Err(Throw::type_error("Unknown IDBIndex member")),
-            }};
+            tx.store(&store_name).and_then(|store|store.index(&index_name).map(|index|{
+                let records=index.records(store,range.as_ref(),None);
+                match member {"get"=>StoreResult::Value(records.first().map(|(_,_,value)|value.clone())),
+                    "getKey"=>StoreResult::OptionalKey(records.first().map(|(_,key,_)|key.clone())),
+                    _=>StoreResult::Count(index.count(range.as_ref()))}
+            }))};
+        let outcome=outcome.map_err(|error|self.storage_idb_error_for_handle(error))?;
         let (request,wrapper)=self.storage_request(false,this,self.storage_wrapper(transaction)?)?;
         let result=match outcome {StoreResult::Value(value)=>value.as_ref().map_or(Ok(JsValue::Undefined),|value|self.storage_from_value(value))?,
             StoreResult::OptionalKey(key)=>key.as_ref().map_or(Ok(JsValue::Undefined),|key|self.storage_from_key(key))?,
-            StoreResult::Keys(keys)=>{let mut items=Vec::new();for key in keys{items.push(self.storage_from_key(&key)?)}self.js.binding_create_array(items)?},
-            StoreResult::Values(values)=>{let mut items=Vec::new();for value in values{items.push(self.storage_from_value(&value)?)}self.js.binding_create_array(items)?},
             StoreResult::Count(count)=>JsValue::num(count as f64),_=>JsValue::Undefined};
         self.storage_schedule(StorageJob::RequestSuccess{request,result})?;Ok(wrapper)
     }
@@ -1470,8 +1637,8 @@ impl RuntimeBindingHost<'_> {
                     if !callbacks.is_empty(){self.state.borrow_mut().storage.as_mut().unwrap().pending.push_front(
                         StorageJob::DispatchListener{slot,event,callbacks});}
                 },
-                StorageJob::OpenUpgrade{request,connection,name,old,new}=>{
-                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name,handlers:HashMap::new(),listeners:Vec::new()})?;
+                StorageJob::OpenUpgrade{request,connection,name,key,old,new}=>{
+                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name,key,handlers:HashMap::new(),listeners:Vec::new()})?;
                     let (txid,tx)={let state=self.state.borrow();state.storage.as_ref().unwrap().idb.borrow_mut().begin(connection,Vec::<String>::new(),Mode::VersionChange,Durability::Default)}
                         .map_err(|error|self.storage_idb_error(error))?;
                     let transaction=self.storage_allocate(SI::IDBTransaction,StorageObject::Transaction{connection,id:txid,value:Some(tx),mode:Mode::VersionChange,scope:Vec::new(),queued:false,active_for_requests:true,handlers:HashMap::new(),listeners:Vec::new()})?;
@@ -1481,7 +1648,17 @@ impl RuntimeBindingHost<'_> {
                     }
                     self.storage_dispatch(request,"upgradeneeded",Some(old),Some(new))?;
                     self.storage_schedule(StorageJob::TransactionComplete{transaction:transaction_slot})?;
-                    self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
+                    // Do NOT eagerly schedule the open request's "success" here: per spec,
+                    // it must not fire until this versionchange transaction has actually
+                    // auto-committed. TransactionComplete defers itself (see `waiting`
+                    // below) whenever a request placed against the transaction (e.g. an
+                    // `add()` inside `onupgradeneeded`) hasn't been delivered yet, which
+                    // reschedules it to the *back* of the queue -- behind an already-queued
+                    // RequestSuccess for this same open request, so "success" fired before
+                    // the store the upgrade created was actually committed to the database,
+                    // and every later `db.transaction(...)` in that success handler saw a
+                    // pre-upgrade schema ("Object store not found"). TransactionComplete's
+                    // commit branch schedules RequestSuccess itself once it truly commits.
                 },
                 StorageJob::TransactionComplete{transaction}=>{
                     let queued={let state=self.state.borrow();match state.storage.as_ref().unwrap().objects.get(transaction){
@@ -1503,23 +1680,37 @@ impl RuntimeBindingHost<'_> {
                     let (connection,id,value)={let mut state=self.state.borrow_mut();
                         match state.storage.as_mut().unwrap().objects.get_mut(transaction){Some(StorageObject::Transaction{connection,id,value,..})=>(*connection,*id,value.take()),_=>return Ok(JsValue::Undefined)}};
                     if let Some(value)=value {
+                        // The open request (if any) whose `.transaction` is this versionchange
+                        // transaction: its "success"/"error" event must fire only now, after
+                        // the transaction has actually committed or aborted -- not eagerly when
+                        // the upgrade started (see OpenUpgrade above).
+                        let open_request={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
+                            let wrapper=storage.wrappers.get(&transaction);
+                            storage.objects.iter().enumerate().find_map(|(index,object)|match object{
+                                StorageObject::Request{source:JsValue::Null,transaction:value,..}
+                                    if wrapper.is_some_and(|wrapper|self.js.binding_same_value(wrapper,value))=>Some(index),
+                                _=>None,
+                            })};
                         let result=self.state.borrow().storage.as_ref().unwrap().idb.borrow_mut().finish(connection,id,value,true);
-                        match result {Ok(())=>self.storage_dispatch(transaction,"complete",None,None)?,Err(error)=>{
-                            self.storage_dispatch(transaction,"abort",None,None)?;
-                            let open_request={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
-                                let wrapper=storage.wrappers.get(&transaction);
-                                storage.objects.iter().enumerate().find_map(|(index,object)|match object{
-                                    StorageObject::Request{source:JsValue::Null,transaction:value,..}
-                                        if wrapper.is_some_and(|wrapper|self.js.binding_same_value(wrapper,value))=>Some(index),
-                                    _=>None,
-                                })};
-                            if let Some(request)=open_request {
-                                self.state.borrow_mut().storage.as_mut().unwrap().pending.retain(|job|
-                                    !matches!(job,StorageJob::RequestSuccess{request:slot,..} if *slot==request));
-                                let error=self.storage_idb_error(error).0;
-                                self.storage_schedule(StorageJob::RequestError{request,error})?;
-                            }
-                        }}
+                        match result {
+                            Ok(())=>{
+                                self.storage_dispatch(transaction,"complete",None,None)?;
+                                if let Some(request)=open_request {
+                                    let database={let state=self.state.borrow();match state.storage.as_ref().unwrap().objects.get(request){
+                                        Some(StorageObject::Request{result,..})=>result.clone(),_=>JsValue::Undefined}};
+                                    self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
+                                }
+                            },
+                            Err(error)=>{
+                                self.storage_dispatch(transaction,"abort",None,None)?;
+                                if let Some(request)=open_request {
+                                    self.state.borrow_mut().storage.as_mut().unwrap().pending.retain(|job|
+                                        !matches!(job,StorageJob::RequestSuccess{request:slot,..} if *slot==request));
+                                    let error=self.storage_idb_error(error).0;
+                                    self.storage_schedule(StorageJob::RequestError{request,error})?;
+                                }
+                            },
+                        }
                     }
                 },
                 StorageJob::StorageEvent(delivery)=>self.dispatch_storage_event(delivery)?,
@@ -1572,6 +1763,19 @@ impl RuntimeBindingHost<'_> {
         Ok(event)
     }
     fn storage_to_key(&mut self,value:&JsValue)->Result<Key,Throw>{
+        let mut seen=Vec::new();
+        self.storage_to_key_seen(value,&mut seen)
+    }
+    // `seen` tracks the array objects currently being converted (the ancestor
+    // chain, not every array ever visited), so a self-referential array (`let
+    // a=[];a.push(a)`, as IndexedDB/idbkeyrange-includes.any.js and
+    // idbobjectstore_openKeyCursor.any.js construct) throws a DataError per the
+    // "convert a value to a key" algorithm's cycle check, instead of recursing
+    // until the native stack overflows and the process aborts (SIGABRT, not a
+    // catchable Throw). Sibling/shared references at the same nesting level
+    // (not an actual cycle) are unaffected: the entry is popped once this
+    // array's own conversion finishes.
+    fn storage_to_key_seen(&mut self,value:&JsValue,seen:&mut Vec<JsValue>)->Result<Key,Throw>{
         match value {
             JsValue::Num(number)=>Key::number(*number).map_err(|error|self.storage_idb_error(error)),
             JsValue::Str(string)=>Ok(Key::String(string.to_utf8_lossy())),
@@ -1580,16 +1784,24 @@ impl RuntimeBindingHost<'_> {
                 Key::date(value).map_err(|error|self.storage_idb_error(error))
             },
             JsValue::Object(object) if matches!(object.borrow().exotic,Exotic::Array)=>{
+                if seen.iter().any(|ancestor|ancestor==value){
+                    return Err(self.storage_dom_error("DataError","Invalid IndexedDB key: cyclic array"));
+                }
+                seen.push(value.clone());
                 let length=self.js.binding_get_property(value,"length")?;
                 let count=self.js.binding_to_number(&length)? as usize;
-                if count>100_000{return Err(self.storage_dom_error("DataError","Key is too long"))}
+                if count>100_000{seen.pop();return Err(self.storage_dom_error("DataError","Key is too long"))}
                 // Key conversion reads own elements only: a hole contributes no
                 // key, and an inherited accessor at that index must not run.
-                let mut items=Vec::new();for index in 0..count {
+                let mut items=Vec::new();
+                for index in 0..count {
                     let name=index.to_string();
-                    if self.js.binding_get_own_property(value,&name)?.is_none(){continue}
-                    let item=self.js.binding_get_property(value,&name)?;items.push(self.storage_to_key(&item)?)
+                    let has=match self.js.binding_get_own_property(value,&name){Ok(has)=>has,Err(error)=>{seen.pop();return Err(error)}};
+                    if has.is_none(){continue}
+                    let item=match self.js.binding_get_property(value,&name){Ok(item)=>item,Err(error)=>{seen.pop();return Err(error)}};
+                    match self.storage_to_key_seen(&item,seen){Ok(key)=>items.push(key),Err(error)=>{seen.pop();return Err(error)}}
                 }
+                seen.pop();
                 Ok(Key::Array(items))
             },
             JsValue::Object(_) if self.storage_binary_bytes(value)?.is_some()=>Ok(Key::Binary(self.storage_binary_bytes(value)?.unwrap())),
@@ -1764,6 +1976,38 @@ mod storage_binding_tests {
     }
 
     #[test]
+    fn page_load_and_first_storage_use_survive_a_corrupt_on_disk_store() {
+        // IA-REAL-2: install_storage_interfaces() used to eagerly open every
+        // on-disk store (web/idb/cache/manager/buckets) during realm init, so
+        // a corrupt or unrecognized-format store on disk made every page fail
+        // before any script ran ("TypeError: IndexedDB open: Corrupt"), even
+        // for a page that never touches storage. Storage now opens lazily on
+        // first indexedDB/caches/navigator.storage use, and a corrupt or
+        // unknown-version store is quarantined instead of failing.
+        let shared=SharedTestStorage::new();
+        let idb_dir=shared._root.path.join("idb");
+        std::fs::create_dir_all(&idb_dir).unwrap();
+        // A checkpoint file that exists but fails to parse: `saw_checkpoint`
+        // true and `generation` stuck at 0, the exact condition that used to
+        // make `DiskStore::open` return `Error::Corrupt`.
+        std::fs::write(idb_dir.join("checkpoint.0"),b"not a real checkpoint").unwrap();
+        // Page (realm) init must succeed even though the on-disk IndexedDB
+        // store next to it is corrupt: init no longer touches storage at all.
+        let mut scheduler=scheduler();
+        // First actual use of indexedDB must still work, against a fresh store.
+        scheduler.run_script("var result='pending'; var request=indexedDB.open('after-quarantine',1); request.onupgradeneeded=function(){request.result.createObjectStore('items')}; request.onsuccess=function(){result='ok'}; request.onerror=function(){result='error: '+request.error.name};").unwrap();
+        for step in 1..15 {
+            scheduler.pump_at(Duration::from_millis(step*10),false).unwrap_or_else(|error|panic!("pump: {}",error.describe()));
+            if scheduler.run_script("result").unwrap()!=JsValue::str("pending") {break}
+        }
+        assert_eq!(scheduler.run_script("result").unwrap(),JsValue::str("ok"));
+        let quarantined=std::fs::read_dir(&shared._root.path).unwrap()
+            .filter_map(|entry|entry.ok())
+            .any(|entry|entry.file_name().to_string_lossy().starts_with("idb.corrupt-"));
+        assert!(quarantined,"expected the corrupt idb store to be quarantined aside, not left in place or deleted");
+    }
+
+    #[test]
     fn indexeddb_upgrade_request_commits_then_reads_record() {
         let mut scheduler=scheduler();
         scheduler.run_script("var result='pending'; var phase='start'; var request=indexedDB.open('integration',1); request.onupgradeneeded=function(){ phase='upgrade'; var db=request.result; db.createObjectStore('items'); }; request.onsuccess=function(){ phase='success'; try { var tx=request.result.transaction('items','readwrite'); phase='transaction'; var store=tx.objectStore('items'); phase='store'; var put=store.put({label:'stored'},7); phase='put-request'; put.onsuccess=function(){ result='put'; }; tx.oncomplete=function(){ phase='complete'; var read=request.result.transaction('items'); var get=read.objectStore('items').get(7); get.onsuccess=function(){ result=get.result.label; }; }; } catch(e) {result=e.name+':'+e.message;} }; request.onerror=function(){result='error';};").unwrap();
@@ -1907,5 +2151,172 @@ mod storage_binding_tests {
         for step in 1..15 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
         assert_eq!(scheduler.run_script("rejected.join(',')").unwrap(),
             JsValue::str("TypeError,TypeError,TypeError,TypeError,TypeError"));
+    }
+
+    // Regression for the STORE-6 bucket-scoping bisection: c1e29741 replaced the cached
+    // BucketKey on StorageObject::Database with a lookup through the live idb::Connection,
+    // so *every* IDBDatabase member access (including the spec-idempotent second
+    // `close()` call, and read-only getters like `name`/`objectStoreNames` that must keep
+    // working after close) threw an uncaught "IDBDatabase is closed" TypeError once the
+    // connection was closed. WPT's IndexedDB support helpers routinely call `db.close()`
+    // defensively during per-subtest cleanup and read `db.name` for diagnostics; the
+    // uncaught throw from that cleanup step left the harness with no completion signal, so
+    // the first subtest in a file passed and every later subtest in that file timed out.
+    // This exercises the same sequence directly against the driver, with no harness
+    // involved, so it fails fast (as an Err/panic) instead of hanging.
+    #[test]
+    fn indexeddb_database_members_survive_close() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            var open=indexedDB.open('members-survive-close',1); \
+            open.onupgradeneeded=function(){open.result.createObjectStore('items')}; \
+            open.onsuccess=function(){ \
+                var db=open.result; \
+                db.close(); \
+                log.push(db.name); \
+                log.push(db.objectStoreNames.length+':'+db.objectStoreNames[0]); \
+                db.close(); \
+                log.push('ok'); \
+            };").unwrap();
+        for step in 1..20 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap(),
+            JsValue::str("members-survive-close|1:items|ok"));
+    }
+
+    // STORE-7 triage: IndexedDB/idbcursor-direction.any.js opens five independent,
+    // uniquely-named databases synchronously (one per `cursor_direction(...)` call) before
+    // any task runs, each with its own upgradeneeded/success/cursor flow. All five report
+    // "Object store not found" against the current dev tree. Reproduces the minimal shape
+    // (two concurrent independent opens) directly against the driver to see whether the
+    // failure is a real concurrent-open bug or specific to the harness/support.js plumbing.
+    #[test]
+    fn indexeddb_concurrent_independent_opens_each_see_their_own_store() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            function openone(name,tag){ \
+                var open=indexedDB.open(name,1); \
+                open.onupgradeneeded=function(){ \
+                    var os=open.result.createObjectStore('test'); \
+                    os.add('data','key'); \
+                }; \
+                open.onerror=function(){log.push(tag+':open-error:'+open.error.name)}; \
+                open.onsuccess=function(){ \
+                    var db=open.result; \
+                    try { \
+                        var rq=db.transaction('test','readonly').objectStore('test').openCursor(); \
+                        rq.onsuccess=function(e){ \
+                            var cursor=e.target.result; \
+                            log.push(tag+':'+(cursor?cursor.value:'no-cursor')); \
+                        }; \
+                        rq.onerror=function(){log.push(tag+':cursor-error:'+rq.error.name)}; \
+                    } catch (e) { log.push(tag+':throw:'+e.name); } \
+                }; \
+            } \
+            openone('concurrent-a','a'); \
+            openone('concurrent-b','b');").unwrap();
+        for step in 1..30 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        let mut log=scheduler.run_script("log.slice().sort().join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe()));
+        if log==JsValue::Undefined { log=JsValue::str(""); }
+        assert_eq!(log,JsValue::str("a:data|b:data"));
+    }
+
+    // STORE-7 triage: WPT's IndexedDB/resources/support.js `createdb_for_multiple_tests`
+    // helper installs a *custom* accessor for "onupgradeneeded"/"onsuccess"/etc. on each
+    // IDBOpenDBRequest via `__defineSetter__`, wrapping every assignment in an
+    // addEventListener call and flipping a `manually_handled` flag that a separately
+    // pre-registered "fail if nothing handled this event" listener checks. This only works
+    // if our engine's property SET for "on"+event on a native IDBOpenDBRequest first
+    // consults the *object's own* JS-defined accessor (installed via defineProperty/
+    // __defineSetter__) instead of going straight to storage_idb_invoke's native
+    // `handlers` map. Several pinned WPT files fail with "assert_unreached: unexpected
+    // open.<event> event", which is exactly the symptom of the manually_handled flag never
+    // getting set -- i.e. the custom setter never running.
+    #[test]
+    fn indexeddb_open_request_on_event_setter_honors_own_defined_accessor() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            var open=indexedDB.open('on-event-setter-override',1); \
+            var seen=false; \
+            Object.defineProperty(open,'onupgradeneeded',{set:function(h){ \
+                seen=true; \
+                open.addEventListener('upgradeneeded',h); \
+            }}); \
+            open.onupgradeneeded=function(){log.push('own-accessor-ran:'+seen);open.result.createObjectStore('s');};").unwrap();
+        for step in 1..20 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe())),
+            JsValue::str("own-accessor-ran:true"));
+    }
+
+    // STORE-7 regression: root cause of the "Object store not found" cluster
+    // (idbcursor-direction.any.js, idbcursor_{update,delete}_objectstore.any.js,
+    // idbindex_get(Key).any.js). `OpenUpgrade` used to schedule the open
+    // request's "success" job unconditionally, right after scheduling its
+    // versionchange transaction's `TransactionComplete`. `TransactionComplete`
+    // defers itself (reschedules to the *back* of the queue) whenever a request
+    // placed against the transaction -- like the `add()` a real upgradeneeded
+    // handler makes -- hasn't been delivered yet. That reschedule landed behind
+    // the open request's already-queued RequestSuccess job, so "success" fired
+    // -- and ran the test's `db.transaction(...)` -- before the transaction that
+    // created the store had actually committed. Fixed by having
+    // `TransactionComplete`'s commit branch schedule RequestSuccess itself, the
+    // same way its abort branch already schedules RequestError. Reproduces two
+    // independent `createdb`-shaped opens wired the way WPT's
+    // resources/support.js wires them (`auto_fail` + `addEventListener` +
+    // Object.defineProperty on "on<event>"), each running the same
+    // two-openCursor-then-done shape as `cursor_direction()`.
+    #[test]
+    fn indexeddb_two_independent_auto_fail_wired_cursor_tests_both_complete() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            function auto_fail(rq,evt){ \
+                rq.__handled=rq.__handled||{}; \
+                rq.addEventListener(evt,function(e){ \
+                    if(!rq.__handled[evt]) log.push('UNREACHED:'+evt); \
+                }); \
+                Object.defineProperty(rq,'on'+evt,{configurable:true,set:function(h){ \
+                    rq.__handled[evt]=true; \
+                    if(h) rq.addEventListener(evt,h); \
+                }}); \
+            } \
+            function createdb(name){ \
+                var rq=indexedDB.open(name,1); \
+                ['upgradeneeded','success','blocked','error'].forEach(function(evt){auto_fail(rq,evt)}); \
+                return rq; \
+            } \
+            function cursor_direction(name,tag){ \
+                var db; \
+                var rq=createdb(name); \
+                rq.onupgradeneeded=function(e){ \
+                    db=e.target.result; \
+                    var os=db.createObjectStore('test'); \
+                    os.add('data','key'); \
+                }; \
+                rq.onsuccess=function(e){ \
+                    var count=0; \
+                    var os=db.transaction('test','readonly').objectStore('test'); \
+                    var rq1=os.openCursor(); \
+                    rq1.onsuccess=function(e){ \
+                        var cursor=e.target.result; \
+                        log.push(tag+':1:'+(cursor?cursor.value:'null')); \
+                        count++; if(count>=2) log.push(tag+':done'); \
+                    }; \
+                    var rq2=db.transaction('test','readonly').objectStore('test').openCursor(); \
+                    rq2.onsuccess=function(e){ \
+                        var cursor=e.target.result; \
+                        log.push(tag+':2:'+(cursor?cursor.value:'null')); \
+                        count++; if(count>=2) log.push(tag+':done'); \
+                    }; \
+                }; \
+            } \
+            cursor_direction('cd-a','a'); \
+            cursor_direction('cd-b','b');").unwrap();
+        for step in 1..40 {
+            scheduler.pump_at(Duration::from_millis(step*10),false).unwrap_or_else(|error|{
+                let log=scheduler.run_script("log.join('|')").unwrap_or_else(|_|JsValue::str("<unreadable>"));
+                panic!("pump step {step} threw {}; log so far: {log:?}",error.describe());
+            });
+        }
+        let log=scheduler.run_script("log.slice().sort().join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe()));
+        assert_eq!(log,JsValue::str("a:1:data|a:2:data|a:done|b:1:data|b:2:data|b:done"));
     }
 }

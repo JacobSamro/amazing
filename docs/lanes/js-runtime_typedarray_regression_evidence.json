@@ -1,0 +1,59 @@
+{
+  "ticket": "TypedArray regression fix (blocking origin/dev push, ahead of JSRT-16)",
+  "reported_by": "coordinator, cross-lane (JSB-6/7/8 interaction)",
+  "base_before_fix": "4be46094c5d03b3d8a6e5fa359c2c8e974d12a30",
+  "implementation_commit": "38d4c949ec1b957dca8c7f5f0f7edb820a337816",
+  "rebased_onto_dev": "7627448b9130084d2b83c0ba547c07c7fef343f4",
+  "merge_commit": "9767ca917032a46457b3cffa9708243a32d601b7",
+  "files_fixed": [
+    "built-ins/TypedArray/prototype/entries/iter-prototype.js",
+    "built-ins/TypedArray/prototype/entries/BigInt/iter-prototype.js",
+    "built-ins/TypedArray/prototype/keys/iter-prototype.js",
+    "built-ins/TypedArray/prototype/keys/BigInt/iter-prototype.js",
+    "built-ins/TypedArray/prototype/values/iter-prototype.js",
+    "built-ins/TypedArray/prototype/values/BigInt/iter-prototype.js",
+    "built-ins/TypedArray/prototype/indexOf/coerced-searchelement-fromindex-grow.js",
+    "built-ins/TypedArray/prototype/with/ignores-species.js",
+    "built-ins/TypedArray/prototype/with/negative-index-resize-to-in-bounds.js",
+    "built-ins/TypedArrayConstructors/from/custom-ctor-returns-smaller-instance-throws.js",
+    "built-ins/TypedArrayConstructors/from/BigInt/custom-ctor-returns-smaller-instance-throws.js"
+  ],
+  "root_causes": {
+    "iter-prototype (6 files)": "binary_typed_iterator in builtins_binary.rs set the TypedArray iterator's [[Prototype]] to Object.prototype instead of the shared %ArrayIteratorPrototype% that CreateArrayIterator uses for both Array and TypedArray iterators. Fixed by reusing std_sequence_iterator_proto(SequenceIteratorKind::ArrayValues), the same prototype Array.prototype.values/keys/entries already share.",
+    "from/custom-ctor-returns-smaller-instance-throws (2 files)": "binary_construct_typed_object (shared by %TypedArray%.from and .of) never checked that a constructor returned an instance at least as long as requested; %TypedArray%.of already had its own redundant check after the call, but .from had none and silently dropped tail elements. Moved the length check into binary_construct_typed_object itself so every caller gets it.",
+    "indexOf/coerced-searchelement-fromindex-grow (1 file)": "includes/indexOf/lastIndexOf re-read values/length from the view AFTER coercing fromIndex, so a fromIndex valueOf that grows a resizable ArrayBuffer let the search see the newly grown region. The spec reads TypedArrayLength once, before fromIndex coercion, and searches that fixed window regardless of a later resize. Fixed by using the values/length already captured at the top of binary_typed_method (pre-coercion) instead of re-reading post-coercion.",
+    "with/ignores-species and with/negative-index-resize-to-in-bounds (2 files)": "with() resolved a negative index against the CURRENT (post-value-coercion) length instead of the length captured before any coercion, and used @@species for the result contrary to the current spec text (which always uses the intrinsic constructor for the TypedArray's own kind, ignoring species). Fixed the negative-index base and replaced binary_typed_species_from_values with binary_typed_from_values."
+  },
+  "verification": {
+    "method": "Full unsharded Test262 run (not sharded/Boat) directly via scripts/linux-run.sh js-runtime --ref <sha>, to avoid a shard-reuse staleness bug observed in scripts/test262-boat.sh (a Boat sandbox served a stale shard.json from a prior run after its own remote command exited nonzero; the merge step did not detect this because it only checks the file is non-empty). Diffed the resulting records array against .agents/test262/baseline.json directly.",
+    "ref_verified": "9767ca917032a46457b3cffa9708243a32d601b7",
+    "classification_sha256": "78e3d003e502ed41721d3c8604962910e24025a99ffdfe1adeeb890f8bf8d120",
+    "totals": {"variants_pass": 72249, "variants_fail": 30013, "variants_timeout": 49, "variants_unsupported": 607},
+    "vs_baseline": {"lost_total": 150, "gained_total": 8367},
+    "typedarray_subtree_vs_baseline": {
+      "lost": 2,
+      "lost_detail": [
+        ["staging/sm/TypedArray/sort_modifications.js", "non-strict", "pass->timeout"],
+        ["staging/sm/TypedArray/sort_modifications.js", "strict", "pass->timeout"]
+      ],
+      "note": "The only TypedArray-tree loss is a timeout on a pre-existing SpiderMonkey stress test unrelated to this diff (no TypedArray/Proxy exotic-object code was touched that this test exercises); timeouts are an explicitly allowed loss category per the coordinator's instruction. All 11 originally-reported regressions plus their pairs now pass, confirmed individually and as part of this full run.",
+      "all_11_target_files_status": "pass (non-strict and strict, all 11)"
+    },
+    "non_typedarray_losses": {
+      "count": 148,
+      "sample": [
+        "intl402/supportedLocalesOf-consistent-with-resolvedOptions.js",
+        "language/expressions/arrow-function/dstr/ary-ptrn-rest-ary-empty.js",
+        "language/expressions/async-arrow-function/prototype.js",
+        "language/expressions/class/dstr/async-gen-meth-static-*.js (many)"
+      ],
+      "assessment": "None touch amazing-js code this fix or JSRT-15 changed (destructuring rest patterns, async-arrow-function, intl402, async generator methods). Very likely pre-existing drift between the Sep-26 19:44 baseline.json and the current dev tip (which has absorbed many unrelated lane merges since), not something this commit introduced. Not fixed here: out of this ticket's TypedArray scope; flagged in questions.md for the integrator to consider refreshing baseline.json."
+    }
+  },
+  "workspace_gate": {
+    "ref": "9767ca917032a46457b3cffa9708243a32d601b7",
+    "nextest_workspace": "3285 passed, 0 failed, 15 skipped, 118.3s",
+    "doctests_workspace": "all crates 0 failed (amazing-js and amazing-html doctests included)",
+    "crate_amazing_js": "387 passed, 1 skipped (unchanged from JSRT-15)"
+  }
+}

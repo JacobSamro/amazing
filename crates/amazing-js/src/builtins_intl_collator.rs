@@ -38,16 +38,21 @@ fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
         }
     };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let mut locale = intl_lookup(&requested);
+    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
+    if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Collator options")); }
+    let usage = intl_string_option(i, &options, "usage", &["sort", "search"], "sort")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    // intl_lookup and the extension reads below have no observable side
+    // effects (pure string ops over the already-canonicalized `requested`),
+    // so moving them after the option reads above -- needed so `matcher` is
+    // known before locale resolution -- does not change getter-call order
+    // relative to any other option (constructor-options-order.js et al.).
+    let mut locale = intl_lookup(&requested, matcher == "best fit");
     let extension = requested.iter().find(|tag| {
         tag.split("-u-").next().unwrap_or(tag).starts_with(&locale)
     });
     let ext_numeric = extension.and_then(|tag| intl_unicode_keyword(tag, "kn"));
     let ext_case_first = extension.and_then(|tag| intl_unicode_keyword(tag, "kf"));
-    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
-    if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Collator options")); }
-    let usage = intl_string_option(i, &options, "usage", &["sort", "search"], "sort")?;
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let sensitivity = intl_string_option(i, &options, "sensitivity", &["base", "accent", "case", "variant"], "variant")?;
     let collation = intl_string_option(i, &options, "collation", &[], "default")?;
     if !collation.bytes().all(|b| b.is_ascii_alphanumeric()) || !(3..=8).contains(&collation.len()) && collation != "default" {

@@ -141,15 +141,12 @@ exit \$BATCH_FAILED
 "
 REMOTE_STATUS=$?
 
-read -r H P _ < <("$REPO/scripts/boat-lane.py" ensure "$LANE")
 for subdir in "${SUBDIRS[@]}"; do
   slug="${subdir//\//-}"
   DEST="$MAIN/.agents/$LANE/wpt-render/$slug"; mkdir -p "$DEST"
-  for f in "$ARTIFACT" clusters.json; do
-    scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-      -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:amazing/out/$LANE/wpt-render/$slug/$f" "$DEST/" 2>/dev/null \
-      || echo "linux-render-wpt: could not copy $slug/$f back (venus host? copy manually with scp -o ControlPath=none)" >&2
-  done
+  "$MAIN/scripts/lane-fetch.sh" "$LANE" "$DEST" "amazing/out/$LANE/wpt-render/$slug/$ARTIFACT" \
+    "amazing/out/$LANE/wpt-render/$slug/clusters.json" \
+    || echo "linux-render-wpt: could not copy $slug results back" >&2
   echo "linux-render-wpt: $DEST/$ARTIFACT"
   python3 - "$DEST/$ARTIFACT" <<'PYEOF'
 import json, sys

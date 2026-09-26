@@ -61,6 +61,14 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "mask" |
         "object-fit" |
         "object-position" |
+        // RC-32: unlike border, outline never affects box geometry at all
+        // (drawn outside the border box, offset by outline-offset, with
+        // no effect on any ancestor/sibling layout) -- every outline
+        // longhand is PaintOnly, including outline-width/-offset.
+        "outline-color" |
+        "outline-style" |
+        "outline-width" |
+        "outline-offset" |
         "stroke" |
         "stroke-dasharray" |
         "stroke-dashoffset" |
@@ -258,7 +266,8 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [16, 40, 125, 31]);
+        // RC-32 added outline-color/-style/-width/-offset, all PaintOnly.
+        assert_eq!(counts, [16, 44, 125, 31]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

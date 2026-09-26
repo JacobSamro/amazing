@@ -1432,3 +1432,345 @@ shape plus a single-layer `mask-image`. Outstanding for a future ticket, if
 requested: multi-layer masks and `mask-composite`, `mask-size`/
 `mask-position`/`mask-repeat`, and curved `path()` (needs a bezier/arc
 flattener, deliberately out of scope here to keep this ticket bounded).
+
+## RC-30 — SVG coverage for real content (2026-09-26)
+
+integrator-assist counted 121x `UnsupportedSvg` across the 52-page real-pages
+corpus. Two independent fixes, both inside `amazing-svg`.
+
+**Byte-decoder tolerance.** `amazing_svg::svg::parse` (the `<img src="*.svg">`
+byte decoder, distinct from the DOM inline-`<svg>` path) treated any element
+outside a small dispatch table as a fatal parse error, rejecting the whole
+document — not the SVG 2 error-handling model, where an unrecognized element
+(and its subtree) is skipped, not fatal. Fixed with a new `ignored:
+Vec<String>` stack alongside the existing frame stack: an open tag not in
+`is_known_element`'s whitelist (`svg g text rect circle ellipse path line
+polygon polyline`) pushes onto `ignored` instead of `append_element`, and
+everything under it — character data, further unknown children, malformed
+attributes — is silently skipped until its balanced close tag; the existing
+strictness for genuinely malformed *known* elements (duplicate attributes,
+mismatched close tags, depth limits) is unchanged. `tests/real-pages/
+generate.py`'s SVG template now prepends a `<title>` to every generated
+asset, deliberately reintroducing a realistic unknown element as a
+reproducible before/after fixture.
+
+**Real `<text>` rendering.** SVG `<text>` only ever drew pixels when
+`font-family` contained the literal substring `"Ahem"` (the WPT font); any
+real `font-family` hit an early return and drew nothing. Real text now
+routes through the same pipeline HTML text painting uses —
+`amazing_layout::font::FontSource` for advances, `amazing_paint::text`'s
+`OutlineGlyphProvider`/`RectInkProvider` for rasterized coverage bitmaps —
+with `fill`, `stroke` (an 8-compass-direction glyph-run splat at a clamped
+radius, since the glyph rasterizer has coverage bitmaps, not vector outlines,
+to stroke exactly), `text-anchor`, and `x`/`y`/`dx`/`dy`, in both the
+byte-decoder path (`finalize_text`) and the DOM path (`append_dom_text`,
+concatenating direct `Text` children). The Ahem-exact WPT path
+(`append_ahem_text`/`append_ahem_text_path`) is unconditionally unchanged,
+gated on `font-family` containing "Ahem" exactly as before. The rasterized
+run is embedded as a `Shape::Image` item so the existing per-pixel
+compositing loop paints it with no renderer changes. New `amazing-svg` ->
+`amazing-layout`/`amazing-paint` Cargo dependency edges (confirmed acyclic:
+neither, nor their transitive deps, depend back on `amazing-svg`).
+
+18 new/extended tests in `amazing-svg` cover unknown-element tolerance
+(nested, self-closing, mismatched-close-inside-ignored, unbalanced-at-EOF,
+unknown-root-still-rejected) and real-text rendering (fill, stroke widening,
+anchor shift, dx/dy offset, absurd font-size rejected, whitespace-only draws
+nothing). `crates/amazing-image/tests/svg.rs`'s
+`unsupported_svg_fails_whole_image_without_partial_success` had asserted
+`<script>`/`<image>` were fatal — true only because of the old catch-all
+policy this ticket deliberately reverses — so it was split: genuinely
+invalid cases stay in that test, a new
+`unrecognized_elements_are_skipped_not_fatal` asserts the corrected
+tolerant behavior.
+
+**Measured (real-pages corpus, 52 pages):** `UnsupportedSvg` 121 -> 0.
+**Linux gate:** `amazing-svg` 18/18; `amazing-image` 50/50; workspace
+nextest and doctests carried in the combined RC-30+RC-31 gate below.
+
+## RC-31 — `<geometry-box>` resolution and a Linux `css-masking`/`css-images` reftest pass (2026-09-26)
+
+Ran `scripts/linux-render-wpt.sh replaced-content css/css-masking` (also
+tried every `svg/*` pinned-WPT subdir — see `questions.md`, none produced
+any eligible reftest, a harness discovery gap not an engine bug) and fixed
+the largest fixable-in-lane cluster.
+
+**Root cause.** `ClipMask::from_css` (`crates/amazing-paint/src/clip.rs`)
+always resolved a `clip-path` basic shape's percentages/keywords, and a bare
+`<geometry-box>` keyword with no shape, against the border box — regardless
+of which box the CSS actually named. A bare box keyword alone was skipped
+entirely (painting fully unclipped) rather than clipping to that box.
+
+**Fix.** New `GeometryBoxes { margin, border, padding, content }` carries
+all four reference rects (computed from `LayoutBox`'s margin/padding/
+border/border_box/content_box in `display_list.rs`'s `effect_for`, the only
+non-test call site) into `ClipMask::from_css`. A bare box keyword now clips
+to that box's exact rect; `margin-box`/`border-box`/`padding-box`/
+`content-box` each resolve against their own box. Per CSS Masking's used-
+value table for non-SVG content, `fill-box` behaves like `content-box`;
+`stroke-box`/`view-box` behave like `border-box` — confirmed directly
+against the `<meta name="assert">` text of WPT's own
+`clip-path-polygon-010/011/012.html`. (First pass lumped all three SVG-only
+keywords into `content-box`, which is right for `fill-box` but wrong for
+`stroke-box`/`view-box`; caught by re-running the reftest sweep after a
+compile sanity check and diffing the before/after mismatch lists, which
+surfaced `-011`/`-012` as new regressions — fixed by splitting the
+`MaskBox` match arm, no scope change.) No CSS or layout grammar/data was
+missing — everything needed (`amazing_css::effects::MaskBox`,
+`amazing_layout::LayoutBox`'s public box fields) already existed — so this
+stayed entirely inside `amazing-paint`, no cross-lane edit.
+
+**Bonus in-lane fix, same series.** While clustering `css-images`
+mismatches, found `amazing_paint::gradient::raster` rejected any gradient
+with fewer than two color stops outright (three redundant length guards),
+even though CSS Images 3 allows a single color-stop gradient
+(`linear-gradient(green)`), rendering as a solid fill. `sample()`/
+`resolve_stops()` already degenerate correctly for one stop; only the
+early-rejection guards were wrong (loosened `< 2` to `< 1`/`is_empty()`).
+One pre-existing test asserted the old wrong rejection for
+`linear-gradient(to right, red)` and was split into a corrected positive
+test (`single_stop_gradient_paints_a_solid_fill`).
+
+**Measured, Linux numbers (`scripts/linux-render-wpt.sh`):**
+- `css/css-masking`: pass 50 -> 55, mismatch 53 -> 48 (zero regressions,
+  full before/after diff reconciled).
+- `css/css-images`: pass 85 -> 92, mismatch 56 -> 49.
+
+Remaining `css-masking` mismatches are out of lane scope (see `questions.md`
+for the full breakdown): legacy `clip` property and CSS Shapes 2 `rect()`/
+`xywh()`/`shape()`/`circle()` corner keywords/`polygon() round` all need new
+`amazing-css` grammar (~28 tests total); `marginBox-1b/1c/1d` and
+`contentBox-1e` need `outline` painting, which doesn't exist yet for any
+element (4 tests, not a clip bug); multi-layer `mask-composite` is RC-29's
+already-documented deferred scope (4 tests). Four `gradient-single-stop-*`
+variants (hue-interpolation-method specific) remain unresolved in
+`css-images`, unrelated to the single-stop fix.
+
+**Linux gate (combined RC-30 + RC-31):** workspace nextest **3,092 passed /
+0 failed / 13 skipped**; workspace doctests **4 passed / 0 failed**
+(`amazing-a11y`, `amazing-devtools`, `amazing-html`, `amazing-js`);
+`amazing-paint` **172 passed / 0 failed** (up from 168 at RC-29: +2 in
+`clip.rs`'s test module net, +2 in `gradient.rs`, +1 corrected in
+`background_tests.rs`); `amazing-compositor` unaffected — `ClipMask`'s own
+enum shape didn't change, only `from_css`'s parameter type — confirmed with
+a fresh `cargo build -p amazing-compositor --locked` plus its own test
+suite (paint_filters 4/4, paint_view_pages 10/10, parallel_tile_pages 1/1).
+
+## RC-32 — `outline` painting (2026-09-26)
+
+`outline` did not exist anywhere in the engine: no CSS registration, no
+paint consumption. Since `outline-*` was completely unregistered, any
+`outline: ...` declaration was silently dropped by cascade before ever
+reaching a `LayoutBox`'s style map — there was nothing for paint to be
+"assigned" without first closing that gap, so this ticket also carries a
+small, mechanical `amazing-css` addition (flagged to the css lane in
+`questions.md`, not a silent cross-lane edit): `outline-color`/
+`-style`/`-width`/`-offset` registered in `computed.rs`'s `PROPERTIES`
+table (initials `invert`/`none`/`medium`/`0`, none inherited, mirroring
+`border-*`'s own entries) plus an `outline` shorthand expansion
+(width/style/color, order-independent keywords, exactly `border`'s
+three-part grammar minus per-side replication — `outline` has no per-side
+longhands) and a `change_classification.rs` entry (`PaintOnly` for all
+four — unlike `border-*-style`/`-width`, outline never affects box
+geometry at all, so nothing here is ever `Layout`).
+
+**Painting** (`crates/amazing-paint/src/paint.rs`, new `paint_outline`,
+called from `paint_decorations` right after `paint_borders`): reads the
+same raw string style map `border`/`box-shadow` already read (`outline`
+has nothing resolved into `LayoutBox` fields — it never participates in
+box layout). The outline is a plain rectangular frame around the border
+box, inflated by `outline-offset` (can be negative, pulling the ring
+inward, even on top of the border) plus `outline-width` thick, reusing
+`paint_border_strip` for the four uniform-color strips (including its
+`double`-style handling for free). `outline-width` accepts `thin`/
+`medium`/`thick` (1/3/5px, same mapping as `border-width`) or a plain px
+length (`resolve_shadow_length`, already shared with `box-shadow`).
+`outline-color: currentcolor` resolves against the computed text color,
+same policy as `border-color`; `invert` (CSS UI 4's real initial value, for
+UAs that implement pixel inversion) also falls back to the computed color,
+since this painter has no XOR-invert compositing mode. `outline-style:
+auto` (the UA-defined focus ring) paints as `solid` — a documented
+simplification, no platform focus-ring appearance exists here. The ring
+never rounds its own corners to a `border-radius` (CSS UI 4 permits but
+does not require this); where a WPT test needs a rounded *visible* result
+it comes from `clip-path`'s own box-shaped mask (exactly RC-31's
+`marginBox`/`contentBox` cases), not from outline self-rounding.
+
+6 new focused tests (outward offset placement, none/zero-width no-op,
+negative offset pulling the ring onto the border, currentcolor +
+`medium` keyword, `double` style's two-strip split) plus the two
+pre-existing `amazing-css` coverage tests (`known_properties` /
+`change_classification`'s exhaustive-match tripwire, both updated for the
+four new longhands).
+
+Measured, Linux (`scripts/linux-render-wpt.sh replaced-content
+css/css-masking --baseline auto`): pass 55 -> 57, gained 19 (mostly
+`clip-path-marginBox-1b/1c/1d` and `clip-path-contentBox-1e`, RC-31's own
+flagged "needs outline" cluster, plus other outline-adjacent cases the
+baseline already carried as failing for the same reason). The baseline
+diff also reports 2 "lost" (`clip-path-path-interpolation-with-zoom`/
+`clip-path-shape-interpolation-with-zoom`, both animation-interpolation
+tests) -- verified via `git stash` (removing every RC-32 change and
+re-running against the exact same pre-RC-32 tree) that both were *already*
+mismatching before this ticket, so this is pre-existing checked-in-baseline
+drift unrelated to `outline`, not a regression RC-32 introduced. Neither
+test file contains the string "outline" anywhere.
+
+Linux gate: workspace nextest **3,191 passed / 0 failed / 14 skipped**;
+workspace doctests all `ok` (no failures); `amazing-css` **160 passed**
+(up from 154); `amazing-paint` **177 passed** (up from 172, +5 net: 6 new
+outline tests, no removals); `amazing-layout` **303 passed / 1 ignored**
+(untouched by this ticket, re-run for the `LayoutBox` field read).
+
+## RC-33 — emphasis-mark painting half of `text-emphasis` (2026-09-27)
+
+Unlike RC-32's `outline` (where nothing else was in flight and self-serving
+the missing CSS registration was the pragmatic call), the coordinator asked
+this ticket be coordinated with the css and layout lanes rather than
+self-served, since `text-emphasis-style`/`-color`/`-position` are entirely
+unregistered in `amazing-css` and there is no placement logic in
+`amazing-layout` (confirmed via `grep` -- zero src-level hits in either
+crate). This ticket delivers only the paint-side consumer, against a new
+seam, and files the exact contract the other two halves need to
+`questions.md`.
+
+**The seam.** `ImageProvider` gains `fn text_emphasis(&self, node: NodeIdx)
+-> Option<TextEmphasis>`, a default-`None` method following exactly the
+precedent `presentation()` already set on the same trait ("paint has no
+DOM/style access; the embedding caller supplies it"). `TextEmphasis {
+shape: EmphasisShape::{Circle, Triangle}, filled: bool, color: [u8; 4],
+over: bool }`. Critically, **no new layout data was needed for the
+geometry** -- `amazing_layout::GlyphFrag` already carries `node`, `x`,
+`advance_x`, and `font_size` per glyph (the same fields `color: String`
+already relies on to resolve per-glyph styling today), which is everything
+paint needs to center a mark over each glyph's own advance box.
+
+**Painting** (`paint_line_glyphs`, now taking `images: &dyn ImageProvider`
+like its sibling glyph-painting entry points already do): a second pass
+after every glyph on the line blits, so a mark always paints on top of the
+text it annotates (CSS Text Decoration 3's own order), skipping vertical
+writing modes entirely (a documented simplification -- `text-emphasis-
+position`'s `right`/`left` inline-axis choice for vertical text is not
+modeled). `paint_emphasis_mark` centers the mark horizontally over
+`glyph.x + glyph.advance_x * 0.5`, and vertically at an approximated
+ascent (`0.85em` above baseline) or descent (`0.25em` below), `0.1em` gap,
+`0.25em` radius -- all fixed ratios, since there is no real vector glyph
+shaping here to place a mark against actual font metrics or draw CSS Text
+Decoration 3's suggested mark glyphs exactly. `fill_mark_shape` fills (or,
+for `filled: false`, rings) a circle or an upward equilateral triangle
+(`crate::clip::point_in_polygon`, reused from `clip-path`'s own polygon
+test), the "open" variant reusing the inset-ring subtraction technique
+`control_raster.rs` already uses for checkbox/radio chrome. `EmphasisShape`
+folds `dot`/`circle`/`double-circle`/`sesame` all onto `Circle` (all
+visually round, and this painter has no vector shaping to reproduce their
+exact suggested outlines) and leaves the `<string>` form entirely
+unrepresented (an author-supplied character needs the same real glyph
+shaping RC-30 already routes SVG `<text>` through, out of scope here).
+
+6 new focused tests (filled circle above by default, `under` position,
+open style's own hollow center, triangle vs. circle shape, no provider
+result is a no-op, vertical writing mode is skipped) using a mock
+`ImageProvider` that hands back a fixed `TextEmphasis`, since there is no
+real cascade path to test against yet.
+
+Filed to `questions.md`: css needs the four longhands registered (mirroring
+`outline`'s own pattern from RC-32, which the note offers as a template)
+and their computed values normalized to what `text_emphasis_mark` expects;
+whoever implements the real `ImageProvider` needs to map the resolved mark
+character to `EmphasisShape`/`filled`, resolve `text-emphasis-color`
+(`currentcolor` falling back to the node's own color, `outline-color`'s
+own policy) and `text-emphasis-position`'s `over`/`under` half; layout is
+asked to confirm `GlyphFrag.node` threads correctly through inline
+splitting for this case (believed already fine, since `color` depends on
+the same threading, but unverified against a real cascade since the
+property doesn't parse yet).
+
+No end-to-end WPT measurement is possible yet -- there is nothing in any
+real page for the new `ImageProvider::text_emphasis` seam to be called
+with until css registers the property. Gate: `amazing-paint` **183
+passed** (up from 177, all 6 new); workspace/doctests carried in the same
+combined gate as RC-32 above (no regressions from re-running after this
+change -- `ImageProvider`'s new method is default-`None`, so every
+existing caller is source- and behavior-compatible unchanged).
+
+**RC-33 final gate** (`765c4d91`, merged into `lane/replaced-content-rc21`
+at `07a6635f` then `d983c455` after two rounds of `dev` drift, including a
+"Fix dev build" commit for HTML-29's `PageScript.node` field that had
+landed in `dev` after my first merge and briefly broke the workspace build
+until re-merged). Linux, venus pool (this run landed on `worker-2`):
+workspace `cargo nextest run --workspace --locked`: **3,316 passed, 0
+failed, 17 skipped** (up from 3,092 pre-RC-32/33, reflecting the two large
+`dev` merges, not a regression); `cargo test --workspace --locked --doc`:
+**4 passed, 0 failed** (`amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js`, one each). No known-EPERM sealed-memory failures observed on
+this run despite landing on `worker-2` (IPC-12's host-specific issue did
+not manifest this time).
+
+`css/css-masking --baseline auto`: pass=72/mismatch=69 (gained=19,
+**lost=2**, unchanged=82, new=38 -- the corpus itself grew substantially
+since the checked-in baseline was recorded). Investigated both losses
+(`clip-path-path-interpolation-with-zoom.html`,
+`clip-path-shape-interpolation-with-zoom.html`) by reading the WPT source:
+both test CSS Animations' interpolation of an animated `clip-path: path()`
+value under `zoom`, a computation owned by the animation/cascade engine
+(css/js-runtime), not by paint -- `amazing-paint` has no `zoom`-specific
+code at all (layout resolves zoom into the box geometry paint receives).
+Not touched by RC-32/RC-33 or either merge; filed as informational only,
+not a paint regression.
+
+`css/css-borders --baseline auto` (third mandate item, see below): 2 of
+its losses are the same class of finding, detailed there.
+
+## css-backgrounds / css-borders mismatch clusters (3rd item of the RC-32/33
+## mandate)
+
+Fresh Linux `--baseline auto` numbers on `d983c455` (checked-in evidence
+was stale -- from before RC-30/31/32/33 and two large `dev` merges):
+
+- `css/css-backgrounds`: pass=74/mismatch=60, **gained=1, lost=0**,
+  unchanged=132, new=1. Clean -- no regressions, small net gain. Did not
+  investigate the +1 gain (single test, not worth the sandbox time); no
+  further action needed here this ticket.
+- `css/css-borders`: pass=15/mismatch=54, gained=0, **lost=2**, unchanged=52,
+  new=15. Top clusters (`clusters.json`): 27 medium-region/darker (e.g.
+  `border-shape-outline-with-border.html`, `corner-shape-backdrop-
+  filter.html`), 6 medium-region/lighter (e.g. `border-shape-outline.html`,
+  `corner-shape-square.html`), 6 medium-region/less-green (superellipse
+  variants).
+
+Root-caused the whole `corner-shape`/`border-shape` cluster (accounts for
+essentially all 54 mismatches plus the 2 losses) by reading representative
+WPT source pairs (`corner-shape-fill.html`/`-ref.html`,
+`corner-shape-bevel-overflow.html`/`-ref.html`): every one sets
+`corner-shape: bevel|scoop|squircle|...` and/or `border-shape: <shape()>`,
+CSS Borders and Box Decorations 4 properties that do not exist anywhere in
+`amazing-css` (confirmed via grep, same as RC-31's earlier finding) --
+unsupported declarations are dropped by the cascade before paint ever sees
+them, so every one of these test pages paints as a plain `border-radius`
+box. Their *references*, however, render the intended shape via ordinary
+`clip-path: polygon(...)`/`ellipse(...)`, which RC-31 fixed to resolve
+against the correct geometry box this same session. The **2 losses**
+(`corner-shape-bevel-overflow.html`, `corner-shape-fill.html`) are exactly
+this: before RC-31's fix, their `clip-path` reference likely rendered
+against the wrong box and coincidentally matched the test's unclipped
+rounded rect; now that the reference clips correctly, the test's
+unsupported `corner-shape` genuinely mismatches it. This is expected
+fallout of RC-31's own correctness fix, not a new bug, and not fixable from
+`amazing-paint`'s side: `corner-shape`/`border-shape` need real CSS Borders
+4 grammar, cascade registration, and a superellipse/bevel/scoop rasterizer
+(a non-trivial paint-side addition once css defines the computed-value
+shape) -- **out of this lane's `amazing-css` scope to self-serve** (unlike
+RC-32's outline, this is a whole new shape grammar, not a small mechanical
+mirror of an existing property). The `outline`/`backdrop-filter` sub-names
+in the top cluster (`border-shape-outline-with-border.html`,
+`corner-shape-backdrop-filter.html`) are the same root cause plus a second
+missing property each -- not something RC-32's now-shipped outline support
+alone unlocks, since `corner-shape`/`border-shape` still gate the whole
+page.
+
+Filed to `questions.md` for css: register `corner-shape` (`superellipse()`
+including `bevel`/`scoop`/`squircle`/`round`/`square`/`notch` keyword
+shorthands, per-corner longhands) and `border-shape` grammar; this is the
+single largest remaining css-borders cluster (54 of 69 mismatches) and
+blocks essentially the entire subdirectory. No further paint-side action
+taken this ticket -- nothing to fix until the property exists to consume.

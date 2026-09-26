@@ -14,6 +14,7 @@ impl Interpreter {
                 let (realm, global) = target?;
                 return self.binding_with_realm(realm, |i| i.get_prop_receiver(&JsValue::Object(global), key, receiver));
             }
+            if let Some(result) = self.proxy_get(object, key, receiver.clone()) { return result; }
         }
         let text = key.as_string().map(|name| name.to_utf8_lossy());
         let k = text.as_deref().unwrap_or("");
@@ -116,6 +117,11 @@ impl Interpreter {
         if let Some(result) = self.window_proxy_set(&o, &key, x.clone(), v.clone()) {
             return if result? { Ok(()) } else { Err(Throw::type_error("cannot set WindowProxy property")) };
         }
+        if let Some(result) = self.proxy_set(&o, &key, x.clone(), v.clone()) {
+            return if result? { Ok(()) } else if self.strict_eval_context {
+                Err(Throw::type_error("cannot set proxy property"))
+            } else { Ok(()) };
+        }
         if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Err(Throw::type_error("module namespace properties cannot be assigned"));
         }
@@ -162,7 +168,13 @@ impl Interpreter {
                     }
                     break;
                 }
-                cursor = prototype.borrow().proto.clone();
+                // A Proxy mid-chain must have its getPrototypeOf trap observed
+                // when walking further up looking for an inherited setter.
+                cursor = if let Some(result) = self.window_proxy_prototype(&prototype) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else if let Some(result) = self.proxy_get_prototype(&prototype) {
+                    match result? { JsValue::Object(p) => Some(p), _ => None }
+                } else { prototype.borrow().proto.clone() };
             }
         }
         if let Some(property) = o.borrow().own_prop(&key).cloned() {
@@ -220,6 +232,17 @@ impl Interpreter {
                 }
                 return Ok(keys);
             }
+            if self.proxy_parts(object).is_some() {
+                let mut keys = Vec::new();
+                for key in self.own_property_keys(v)? {
+                    if let PropertyKey::String(name) = &key {
+                        if self.default_get_own_property(object, &key)?.is_some_and(|p| p.enumerable) {
+                            keys.push(name.clone());
+                        }
+                    }
+                }
+                return Ok(keys);
+            }
         }
         match v {
             JsValue::Object(o) if binary_own_keys(o).is_some() => Ok(binary_own_keys(o).unwrap().into_iter().filter_map(|key| match key {
@@ -243,7 +266,9 @@ impl Interpreter {
             }
             while let Some(key) = state.remaining_keys.pop_front() {
                 if state.visited_keys.contains(&key) { continue; }
-                let property = if let Some(result) = self.window_proxy_own_property(&object, &PropertyKey::String(key.clone())) { result? } else { match binary_index_descriptor(&object, &PropertyKey::String(key.clone())) {
+                let property = if let Some(result) = self.window_proxy_own_property(&object, &PropertyKey::String(key.clone())) { result? }
+                    else if let Some(result) = self.proxy_get_own_property(&object, &PropertyKey::String(key.clone())) { result? }
+                    else { match binary_index_descriptor(&object, &PropertyKey::String(key.clone())) {
                     Some(descriptor) => descriptor,
                     None => self.legacy_own_property(&object, key.clone(), false)?,
                 }};
@@ -253,6 +278,8 @@ impl Interpreter {
                 }
             }
             state.object = if let Some(result) = self.window_proxy_prototype(&object) {
+                match result? { JsValue::Object(proto) => Some(proto), _ => None }
+            } else if let Some(result) = self.proxy_get_prototype(&object) {
                 match result? { JsValue::Object(proto) => Some(proto), _ => None }
             } else { object.borrow().proto.clone() };
             state.object_was_visited = false;
@@ -265,6 +292,7 @@ impl Interpreter {
                 let (realm, global) = target?;
                 return self.binding_with_realm(realm, |i| i.own_property_keys(&JsValue::Object(global)));
             }
+            if let Some(result) = self.proxy_own_keys(object) { return result; }
         }
         match v {
             JsValue::Object(object) if binary_own_keys(object).is_some() => Ok(binary_own_keys(object).unwrap()),
@@ -290,6 +318,15 @@ impl Interpreter {
                 let mut keys = Vec::new();
                 for key in self.own_property_keys(v)? {
                     if self.window_proxy_own_property(object, &key).unwrap()?.is_some_and(|p| p.enumerable) {
+                        keys.push(key);
+                    }
+                }
+                return Ok(keys);
+            }
+            if self.proxy_parts(object).is_some() {
+                let mut keys = Vec::new();
+                for key in self.own_property_keys(v)? {
+                    if self.default_get_own_property(object, &key)?.is_some_and(|p| p.enumerable) {
                         keys.push(key);
                     }
                 }

@@ -143,6 +143,11 @@ impl RuntimeBindingHost<'_> {
             EventClass::BeforeUnload => Interface::BeforeUnloadEvent,
             EventClass::Error => Interface::ErrorEvent,
             EventClass::PromiseRejection => Interface::PromiseRejectionEvent,
+            EventClass::DeviceMotion => Interface::DeviceMotionEvent,
+            EventClass::DeviceOrientation => Interface::DeviceOrientationEvent,
+            EventClass::Drag => Interface::DragEvent,
+            EventClass::Storage => Interface::StorageEvent,
+            EventClass::Text => Interface::TextEvent,
 
         })
     }

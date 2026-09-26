@@ -1,0 +1,6 @@
+source=ae28b840-layout23-candidate1
+target=/home/user/amazing/target
+125a8c7c65c0a91bb963b995d87dd386e7a452c23c5d59b9a1184155748df869  crates/amazing-layout/src/position.rs
+b900cdd3c4fe8ba2ca00595120f954852ee548700b11b28b0a2b8ff3c2f52d16  crates/amazing-layout/src/position_constraints.rs
+e00619c3571b0eb4793e449464cc3fed7f537370bf2b2503111c8537dc248817  crates/amazing-layout/src/lib.rs
+82c44f388fb12c452e9eff4cf23b0466b2382c32545c86d3883cbf743b9ed8df  Cargo.lock

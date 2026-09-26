@@ -1,6 +1,6 @@
 use super::{
-    CallArgument, ClassCode, ClassMethodCode, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction,
-    KeyOperand, Program, Register,
+    CallArgument, ClassCode, ClassMethodCode, ClassSuper, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction,
+    Instruction, KeyOperand, Program, Register,
 };
 use crate::ast::{
     self, AssignOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
@@ -22,9 +22,13 @@ fn has_use_strict_directive(statements: &[Stmt]) -> bool {
 }
 
 /// Compile the entire AST before any binding mutation or JavaScript execution.
-pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
+/// `is_module` forces strict mode even without a directive: module code is
+/// always strict, per spec (matching `run_program`'s own runtime check of
+/// `self.global_env.kind() == EnvKind::Module`, which this mirrors at compile
+/// time since the compiler has no `Interpreter` to ask).
+pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileError> {
     let mut c = Compiler::new(false);
-    c.strict = has_use_strict_directive(&ast.body);
+    c.strict = is_module || has_use_strict_directive(&ast.body);
     c.hoist_functions(&ast.body)?;
     for statement in &ast.body {
         c.statement(statement)?;
@@ -50,6 +54,46 @@ pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<Func
         body: body.clone(),
         is_async: true,
         is_generator: false,
+    }, body.span)
+}
+
+/// Compile a generator AST body whose parameters have already been bound by
+/// the interpreter. The generator/sync half of the runtime bridge, alongside
+/// `compile_async_body`: `interp.rs` binds the full AST parameter list, then
+/// calls this and `FunctionCode::start_generator_with_env`.
+#[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+pub(crate) fn compile_generator_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: vec![],
+        body: body.clone(),
+        is_async: false,
+        is_generator: true,
+    }, body.span)
+}
+
+/// Compile an async generator AST body whose parameters have already been
+/// bound by the interpreter -- the async-generator half of the runtime
+/// bridge: `interp.rs` binds the full AST parameter list, then calls this
+/// and `FunctionCode::start_generator_with_env`. The returned `FunctionCode`
+/// has both `is_generator` and `is_async` set, so its VM frame suspends at
+/// both `yield`/`yield*` and `await`, and `start_generator_with_env` routes
+/// its `.next()`/`.return()`/`.throw()` to the async (Promise-returning,
+/// request-queued) driver rather than the synchronous one -- see
+/// `FunctionCode::instantiate`'s prototype-methods branch for the same
+/// is_async/is_generator switch on a VM-compiled async generator function.
+#[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+pub(crate) fn compile_async_generator_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: vec![],
+        body: body.clone(),
+        is_async: true,
+        is_generator: true,
     }, body.span)
 }
 
@@ -85,9 +129,6 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if function.is_async && function.is_generator {
-            return Err(self.error(span, "async generator function"));
-        }
         let mut params = Vec::new();
         for param in &function.params {
             if param.default.is_some() || param.rest {
@@ -171,8 +212,9 @@ impl Compiler {
     }
 
     fn compile_method(
-        &self,
+        &mut self,
         method: &ast::ClassMethod,
+        class_method: bool,
     ) -> Result<FunctionCode, CompileError> {
         let function = ast::FunctionItem {
             name: None,
@@ -181,19 +223,43 @@ impl Compiler {
             is_async: method.is_async,
             is_generator: method.is_generator,
         };
-        let mut code = self.compile_function(&function, method.span)?;
+        // A *class* method's body is always strict, per spec, regardless of
+        // the enclosing (possibly sloppy) code -- matching the tree
+        // walker's `method_value` (`class_method || ...`). This function is
+        // also reused for plain object-literal methods (`{ f() {} }`), which
+        // carry no such rule and must keep the enclosing scope's strictness.
+        let previous_strict = self.strict;
+        if class_method { self.strict = true; }
+        let result = self.compile_function(&function, method.span);
+        self.strict = previous_strict;
+        let mut code = result?;
         Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
         Ok(code)
     }
 
     fn compile_class(&mut self, class: &ast::ClassItem, span: Span) -> Result<ClassCode, CompileError> {
-        if class.super_class.is_some() {
-            return Err(self.error(span, "derived class"));
+        if class.members.iter().any(|member| matches!(
+            member,
+            ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)
+        )) {
+            return Err(self.error(span, "class field or static block"));
         }
+        // The super-class expression is compiled in the enclosing scope,
+        // before the constructor: base and derived classes otherwise share
+        // this compiler, and `super()`/`super.prop` inside the constructor
+        // and methods are resolved at execution time from [[HomeObject]]
+        // and the constructor's derived-constructor metadata (see MakeClass).
+        // The heritage expression and every computed member key are always
+        // evaluated in strict mode, per spec, even when the class sits
+        // inside sloppy code (matching the tree walker's `eval_class`).
+        self.emit(Instruction::EnterStrict);
+        let super_class = class.super_class.as_ref().map(|expr| self.expression(expr)).transpose()?;
+        self.emit(Instruction::ExitStrict);
         let constructor = class.members.iter().find_map(|member| match member {
             ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
             _ => None,
         });
+        let implicit_derived_ctor = super_class.is_some() && constructor.is_none();
         let function = ast::FunctionItem {
             name: class.name.clone(),
             params: constructor.map_or_else(Vec::new, |method| method.params.clone()),
@@ -204,17 +270,27 @@ impl Compiler {
             is_async: false,
             is_generator: false,
         };
-        let constructor = self.compile_function(&function, span)?;
+        // A class constructor's body is always strict too (it is never
+        // reached through `compile_method`, since it is not a `ClassMember`
+        // method compiled by the loop below).
+        let previous_strict = self.strict;
+        self.strict = true;
+        let constructor = self.compile_function(&function, span);
+        self.strict = previous_strict;
+        let constructor = constructor?;
         let mut methods = Vec::new();
         for member in &class.members {
             if let ast::ClassMember::Method(method) = member {
                 if method.kind == ast::MethodKind::Constructor { continue; }
+                self.emit(Instruction::EnterStrict);
                 let key = self.object_key(&method.key, method.key_utf16.as_deref(), method.span)?;
-                let code = self.compile_method(method)?;
-                methods.push(ClassMethodCode { key, kind: method.kind, code });
+                self.emit(Instruction::ExitStrict);
+                let code = self.compile_method(method, true)?;
+                methods.push(ClassMethodCode { key, kind: method.kind, code, is_static: method.is_static });
             }
         }
-        Ok(ClassCode { constructor, methods })
+        let super_class = super_class.map(|register| ClassSuper { register, implicit: implicit_derived_ctor });
+        Ok(ClassCode { constructor, methods, super_class })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -563,6 +639,18 @@ impl Compiler {
                         self.emit(Instruction::SpreadObject(dst, source));
                         continue;
                     };
+                    // A non-computed literal `__proto__: value` sets
+                    // [[Prototype]] instead of creating an own property,
+                    // matching the tree walker's `ExprKind::Object` evaluation.
+                    let key_is_proto = matches!(&property.key, ast::PropKey::Ident(name) if name.name == "__proto__")
+                        || matches!(&property.key, ast::PropKey::Str(s) if s == "__proto__");
+                    let is_proto_literal = key_is_proto && matches!(&property.value, ast::PropValue::Init(_));
+                    if is_proto_literal {
+                        let ast::PropValue::Init(value) = &property.value else { unreachable!() };
+                        let value = self.expression(value)?;
+                        self.emit(Instruction::SetPrototype(dst, value));
+                        continue;
+                    }
                     let key = self.object_key(
                         &property.key,
                         property.key_utf16.as_deref(),
@@ -579,7 +667,7 @@ impl Compiler {
                             return Err(self.error(property.span, "cover initialized name"));
                         }
                         ast::PropValue::Method(method) => {
-                            let code = self.compile_method(method)?;
+                            let code = self.compile_method(method, false)?;
                             self.emit(Instruction::SetObjectMethod(dst, key, code, method.kind));
                             continue;
                         }
@@ -589,6 +677,17 @@ impl Compiler {
             }
             ExprKind::This => {
                 self.emit(Instruction::LoadThis(dst));
+            }
+            ExprKind::NewTarget => {
+                self.emit(Instruction::LoadNewTarget(dst));
+            }
+            ExprKind::Super => {
+                // Bare `super` only appears as the object of a member
+                // expression (`super.x`, `super[x]`); `super(...)` calls are
+                // handled directly in the `Call` arm below. Resolve to
+                // [[HomeObject]].[[GetPrototypeOf]](), matching the tree
+                // walker's `ExprKind::Super` evaluation.
+                self.emit(Instruction::LoadSuperHome(dst));
             }
             ExprKind::Template(template) => {
                 self.emit(Instruction::Constant(dst, JsValue::str("")));
@@ -624,7 +723,7 @@ impl Compiler {
                 optional: false,
             } => {
                 let object = self.expression(obj)?;
-                let key = self.member_key(prop)?;
+                let key = self.member_key(object, prop, false)?;
                 self.emit(Instruction::GetMember(dst, object, key));
             }
             ExprKind::Paren(inner) => return self.expression(inner),
@@ -663,6 +762,17 @@ impl Compiler {
                 callee,
                 args,
                 optional: false,
+            } if matches!(&callee.kind, ExprKind::Super) => {
+                // `super(...)` in a derived constructor: construct the
+                // super-constructor recorded on the active frame and use its
+                // result to initialize `this`.
+                let arguments = self.call_arguments(args)?;
+                self.emit(Instruction::SuperCall(dst, arguments));
+            }
+            ExprKind::Call {
+                callee,
+                args,
+                optional: false,
             } => {
                 let (callee, this) = match &callee.kind {
                     ExprKind::Member {
@@ -671,26 +781,25 @@ impl Compiler {
                         optional: false,
                     } => {
                         let object = self.expression(obj)?;
-                        let key = self.member_key(prop)?;
+                        let key = self.member_key(object, prop, false)?;
                         let function = self.register(callee.span)?;
                         self.emit(Instruction::GetMember(function, object, key));
-                        (function, object)
+                        let this = if matches!(&obj.kind, ExprKind::Super) {
+                            // `super.method(...)`: the property lookup starts
+                            // at [[HomeObject]].[[GetPrototypeOf]]() (already
+                            // in `object`), but the call receiver is the
+                            // actual `this`, matching the tree walker.
+                            let this = self.register(callee.span)?;
+                            self.emit(Instruction::LoadThis(this));
+                            this
+                        } else {
+                            object
+                        };
+                        (function, this)
                     }
                     _ => (self.expression(callee)?, 0),
                 };
-                let mut arguments = Vec::new();
-                for argument in args {
-                    match &argument.kind {
-                        ExprKind::Spread(source) => {
-                            let source = self.expression(source)?;
-                            let slot = self.program.spread_slots;
-                            self.program.spread_slots += 1;
-                            self.emit(Instruction::CaptureSpread(slot, source));
-                            arguments.push(CallArgument::Spread(slot));
-                        }
-                        _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
-                    }
-                }
+                let arguments = self.call_arguments(args)?;
                 self.emit(Instruction::Call(dst, callee, this, arguments));
             }
             ExprKind::New { callee, args } => {
@@ -798,6 +907,23 @@ impl Compiler {
         Ok(dst)
     }
 
+    fn call_arguments(&mut self, args: &[Expr]) -> Result<Vec<CallArgument>, CompileError> {
+        let mut arguments = Vec::new();
+        for argument in args {
+            match &argument.kind {
+                ExprKind::Spread(source) => {
+                    let source = self.expression(source)?;
+                    let slot = self.program.spread_slots;
+                    self.program.spread_slots += 1;
+                    self.emit(Instruction::CaptureSpread(slot, source));
+                    arguments.push(CallArgument::Spread(slot));
+                }
+                _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
+            }
+        }
+        Ok(arguments)
+    }
+
     fn reference(&mut self, expression: &Expr) -> Result<(usize, Register), CompileError> {
         let mut target = expression;
         while let ExprKind::Paren(inner) = &target.kind {
@@ -816,7 +942,7 @@ impl Compiler {
                 optional: false,
             } => {
                 let object = self.expression(obj)?;
-                let key = self.member_key(prop)?;
+                let key = self.member_key(object, prop, true)?;
                 self.emit(Instruction::ResolveMember(slot, old, object, key));
             }
             _ => return Err(self.error(target.span, "assignment target")),
@@ -824,11 +950,36 @@ impl Compiler {
         Ok((slot, old))
     }
 
-    fn member_key(&mut self, prop: &ast::MemberProp) -> Result<KeyOperand, CompileError> {
+    /// `object` is the already-evaluated base of the member access.
+    /// `require_coercible` matches an asymmetry that already exists in the
+    /// tree walker: a plain read or a call target's property lookup
+    /// (`eval_expr`'s `ExprKind::Member`, and the call-target arm of
+    /// `call_expr`) calls `get_prop` directly, which is lenient -- a
+    /// null/undefined base yields `undefined` rather than throwing -- while
+    /// an assignment target (`resolve_reference`) throws TypeError instead.
+    /// When strict, the check runs _after_ a computed key expression is
+    /// evaluated for its own side effects (e.g. a call) but _before_ the raw
+    /// value is converted with `ToPropertyKey` (which can itself run user
+    /// code via `toString`/`valueOf`) -- the part the VM previously got
+    /// backwards for compound assignment.
+    fn member_key(
+        &mut self,
+        object: Register,
+        prop: &ast::MemberProp,
+        require_coercible: bool,
+    ) -> Result<KeyOperand, CompileError> {
         match prop {
-            ast::MemberProp::Ident(name) => Ok(KeyOperand::Static(name.name.as_str().into())),
+            ast::MemberProp::Ident(name) => {
+                if require_coercible {
+                    self.emit(Instruction::RequireObjectCoercible(object));
+                }
+                Ok(KeyOperand::Static(name.name.as_str().into()))
+            }
             ast::MemberProp::Computed(expression) => {
                 let register = self.expression(expression)?;
+                if require_coercible {
+                    self.emit(Instruction::RequireObjectCoercible(object));
+                }
                 self.emit(Instruction::ToKey(register));
                 Ok(KeyOperand::Dynamic(register))
             }

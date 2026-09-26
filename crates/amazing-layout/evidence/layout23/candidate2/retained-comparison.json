@@ -1,0 +1,30 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/final-after/retained/report.json",
+  "after": "/home/user/amazing/out/layout/layout23/candidate2/retained/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 303,
+    "mismatch": 146,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 304,
+    "mismatch": 145,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-flexbox__flexbox_margin-left-ex.html"
+  ],
+  "losses": [],
+  "actual_hash_changes": 5,
+  "reference_hash_changes": 4,
+  "before_projection_sha256": "73f319afa67665506223bc44f42e707ad9c642561c6b8e016dad1b30caf61419",
+  "after_projection_sha256": "2efa98bff799258e580f92b108e4c02e6dd656ac6a2ae63b210588cf62872753"
+}

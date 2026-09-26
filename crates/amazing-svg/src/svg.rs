@@ -70,7 +70,38 @@ struct Frame {
     matrix: Matrix,
     viewport: [f64; 2],
     clips: Vec<ViewportClip>,
+    /// Set only for a `<text>` frame (RC-30): position/size/anchor parsed at
+    /// the open tag, with `content` accumulated from character data seen
+    /// while this frame is on top of the stack, then rasterized once the
+    /// close tag is reached (see `finalize_text`).
+    text: Option<TextLayout>,
 }
+/// SVG's three legal `text-anchor` keywords. Anything else (including
+/// `inherit`, or simply omitted) resolves to `Start`, matching the
+/// property's own initial value rather than failing the document.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TextAnchor {
+    Start,
+    Middle,
+    End,
+}
+struct TextLayout {
+    x: f64,
+    y: f64,
+    dx: f64,
+    dy: f64,
+    font_size: f64,
+    anchor: TextAnchor,
+    content: String,
+}
+/// Hard cap on accumulated `<text>` character data, mirroring the existing
+/// per-attribute-value length caps in this decoder.
+const MAX_TEXT_CONTENT: usize = 4096;
+/// Defensive cap on the scratch RGBA bitmap a single `<text>` element may
+/// rasterize into, independent of `MAX_TEXT_CONTENT`: a run of very wide
+/// characters at a large `font-size` could otherwise request an enormous
+/// buffer well before the character-count cap is reached.
+const MAX_TEXT_BITMAP_BYTES: u64 = 4 * 1024 * 1024;
 /// A bounded SVG scene shared by byte resources and inline DOM subtrees.
 pub struct SvgDocument {
     width: u32,
@@ -345,10 +376,18 @@ fn visit_dom(
         return Ok(());
     }
     if name == "text" && !root {
+        // The Ahem test font renders as exact pixel squares for pinned WPT
+        // reftests and keeps that dedicated heuristic; any other font goes
+        // through RC-30's real (approximate) glyph pipeline instead of
+        // drawing nothing, which was the pre-RC-30 behavior for real content.
+        let is_ahem = styles.get(node).and_then(|style| style.get("font-family"))
+            .is_some_and(|family| family.contains("Ahem"));
         if dom.children(node).any(|child| dom.name(child) == Some("textPath")) {
             append_ahem_text_path(dom, node, styles.get(node), scene, stack);
-        } else {
+        } else if is_ahem {
             append_ahem_text(dom, node, &attrs, styles.get(node), scene, stack);
+        } else {
+            append_dom_text(dom, node, &attrs, styles.get(node), scene, stack);
         }
         return Ok(());
     }
@@ -735,6 +774,333 @@ fn stroke_length(value: &str, basis: f64) -> Result<f64, DecodeError> {
     } else { number(value) }
 }
 
+// ---------------------------------------------------------------------------
+// RC-30: real `<text>` rendering, shared by the byte decoder (`finalize_text`,
+// called once a `<text>` element's close tag is reached) and the inline-SVG
+// DOM path (`append_dom_text`, called instead of the Ahem-only heuristic
+// whenever `font-family` does not name the Ahem test font). Both funnel into
+// `push_text_item`, which rasterizes the run through the SAME glyph pipeline
+// HTML text painting uses (`amazing_layout::font::FontSource` for advances,
+// `amazing_paint::text::OutlineGlyphProvider` for coverage bitmaps -- which,
+// absent a real loaded font file, itself falls back to ink-bar glyphs,
+// exactly like ordinary HTML text does today) and embeds the result as a
+// `Shape::Image`, reusing the renderer's existing bitmap-sampling path.
+// ---------------------------------------------------------------------------
+
+/// Collapses every run of XML whitespace to one space and trims the ends,
+/// approximating `xml:space="default"` for a single text element (no
+/// cross-element trimming, no `<tspan>` support -- nested elements inside
+/// `<text>` are unrecognized here and their content is dropped, see
+/// `is_known_element`).
+fn collapse_whitespace(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut last_was_space = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            if !last_was_space && !out.is_empty() {
+                out.push(' ');
+            }
+            last_was_space = true;
+        } else {
+            out.push(ch);
+            last_was_space = false;
+        }
+    }
+    if out.ends_with(' ') {
+        out.pop();
+    }
+    out
+}
+
+/// One direction of an 8-point "poor man's outline": the fill run is
+/// splatted again at each offset (scaled by the stroke radius) before the
+/// real fill pass, approximating a stroke as a halo around the glyph
+/// coverage. This rasterizer only has coverage bitmaps for glyphs, not
+/// vector outlines, so a geometrically exact centered stroke is not
+/// available; the halo is a documented, bounded-cost approximation rather
+/// than a spec claim.
+const STROKE_HALO_DIRECTIONS: [(f64, f64); 8] = [
+    (1.0, 0.0),
+    (-1.0, 0.0),
+    (0.0, 1.0),
+    (0.0, -1.0),
+    (0.707_106_8, 0.707_106_8),
+    (0.707_106_8, -0.707_106_8),
+    (-0.707_106_8, 0.707_106_8),
+    (-0.707_106_8, -0.707_106_8),
+];
+
+/// Splats one left-to-right run of `content` into `pixels` (a `buf_w` x
+/// `buf_h` RGBA8 scratch bitmap), once per `offsets` entry, tinting glyph
+/// coverage with `color` and alpha-compositing with the existing shared
+/// `blend`. `pen_x0`/`baseline_row` are buffer-pixel coordinates of the
+/// run's start column and its baseline row respectively.
+#[allow(clippy::too_many_arguments)]
+fn splat_text_run(
+    pixels: &mut [u8],
+    buf_w: usize,
+    buf_h: usize,
+    pen_x0: f64,
+    baseline_row: f64,
+    content: &str,
+    font_size: f32,
+    fonts: &amazing_layout::font::FontSource,
+    provider: &amazing_paint::text::OutlineGlyphProvider<'_>,
+    color: [u8; 4],
+    offsets: &[(f64, f64)],
+) {
+    use amazing_paint::text::GlyphProvider;
+    for &(ox, oy) in offsets {
+        let mut pen_x = pen_x0 + ox;
+        for ch in content.chars() {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            let adv = f64::from(fonts.measure(s, font_size));
+            if let Some(gb) = provider.rasterize(ch, font_size) {
+                let gx0 = (pen_x + f64::from(gb.bearing_x)).round() as i64;
+                let gy0 = (baseline_row + oy - f64::from(gb.bearing_y)).round() as i64;
+                for row in 0..gb.height {
+                    let dy = gy0 + row as i64;
+                    if dy < 0 || dy as usize >= buf_h {
+                        continue;
+                    }
+                    for col in 0..gb.width {
+                        let dx = gx0 + col as i64;
+                        if dx < 0 || dx as usize >= buf_w {
+                            continue;
+                        }
+                        let cov = gb.pixels[(row * gb.width + col) * 4 + 3];
+                        if cov == 0 {
+                            continue;
+                        }
+                        let source = [
+                            color[0],
+                            color[1],
+                            color[2],
+                            ((u32::from(color[3]) * u32::from(cov)) / 255) as u8,
+                        ];
+                        let at = (dy as usize * buf_w + dx as usize) * 4;
+                        blend(&mut pixels[at..at + 4], source);
+                    }
+                }
+            }
+            pen_x += adv;
+        }
+    }
+}
+
+/// Rasterizes one text run into a standalone RGBA8 bitmap, sized to just
+/// bound its ink (plus a defensive stroke-halo margin). Returns the bitmap
+/// together with the LOCAL offset from the element's anchor point --
+/// `(x + dx, y + dy)` -- to the bitmap's top-left pixel, so the caller only
+/// has to add its own `x`/`y`/`dx`/`dy`. `Ok(None)` means nothing would be
+/// visible (empty content, transparent fill and stroke, or a degenerate
+/// size) -- not an error, so callers simply skip pushing an item.
+fn rasterize_text_run(
+    content: &str,
+    font_size: f64,
+    anchor: TextAnchor,
+    fill: Option<[u8; 4]>,
+    stroke: Option<([u8; 4], f64)>,
+) -> Result<Option<(Image, f64, f64)>, DecodeError> {
+    if content.is_empty() {
+        return Ok(None);
+    }
+    let fill = fill.filter(|c| c[3] > 0);
+    let stroke = stroke.filter(|(c, w)| c[3] > 0 && *w > 0.0);
+    if fill.is_none() && stroke.is_none() {
+        return Ok(None);
+    }
+    if !font_size.is_finite() || font_size <= 0.0 {
+        return Ok(None);
+    }
+    let fonts = amazing_layout::font::FontSource::fallback();
+    let total_width = f64::from(fonts.measure(content, font_size as f32));
+    if !total_width.is_finite() || total_width <= 0.0 {
+        return Ok(None);
+    }
+    // Stroke radius is clamped to a small bounded halo regardless of the
+    // author's `stroke-width`: the 8-direction splat's cost and visual
+    // plausibility both degrade for a large radius, and this rasterizer has
+    // no vector glyph outline to stroke exactly (see `STROKE_HALO_DIRECTIONS`).
+    let radius = stroke.map_or(0.0, |(_, w)| (w / 2.0).clamp(0.0, 6.0));
+    let margin = radius.max(1.0).ceil();
+    let ascent = font_size * 1.1;
+    let descent = font_size * 0.3;
+    let buf_w = (total_width.ceil() + margin * 2.0).max(1.0);
+    let buf_h = (ascent + descent + margin * 2.0).ceil().max(1.0);
+    if !buf_w.is_finite() || !buf_h.is_finite() {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let bytes = buf_w * buf_h * 4.0;
+    if bytes > MAX_TEXT_BITMAP_BYTES as f64 {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let (buf_w_px, buf_h_px) = (buf_w as usize, buf_h as usize);
+    let baseline_row = ascent + margin;
+    let pen_x0 = margin;
+    let mut pixels = vec![0u8; buf_w_px * buf_h_px * 4];
+    let provider = amazing_paint::text::OutlineGlyphProvider::new(&fonts);
+    if let Some((color, _)) = stroke {
+        let offsets: Vec<(f64, f64)> = STROKE_HALO_DIRECTIONS
+            .iter()
+            .map(|&(dx, dy)| (dx * radius, dy * radius))
+            .collect();
+        splat_text_run(
+            &mut pixels, buf_w_px, buf_h_px, pen_x0, baseline_row, content,
+            font_size as f32, &fonts, &provider, color, &offsets,
+        );
+    }
+    if let Some(color) = fill {
+        splat_text_run(
+            &mut pixels, buf_w_px, buf_h_px, pen_x0, baseline_row, content,
+            font_size as f32, &fonts, &provider, color, &[(0.0, 0.0)],
+        );
+    }
+    if pixels.chunks_exact(4).all(|p| p[3] == 0) {
+        return Ok(None);
+    }
+    let anchor_shift = match anchor {
+        TextAnchor::Start => 0.0,
+        TextAnchor::Middle => total_width / 2.0,
+        TextAnchor::End => total_width,
+    };
+    Ok(Some((
+        Image { width: buf_w_px as u32, height: buf_h_px as u32, pixels },
+        -anchor_shift - margin,
+        -baseline_row,
+    )))
+}
+
+/// Resolves a CSS `stroke` (color + `currentColor`, `stroke-width`,
+/// `stroke-opacity`, folded with `opacity`) the same way `append_shape_stroke`
+/// does for real shapes, for use by text. Kept as its own small copy rather
+/// than sharing `append_shape_stroke` directly: that function is geometry-
+/// shaped (it emits its own `Shape::Stroke` item per element type) and
+/// threading text through it would complicate it more than this duplication
+/// costs.
+fn resolve_text_stroke(computed: &ComputedStyle, viewport: [f64; 2], group_opacity: f64) -> Option<([u8; 4], f64)> {
+    let stroke = computed.get("stroke").filter(|value| *value != "none")?;
+    let color_value = if stroke.eq_ignore_ascii_case("currentcolor") { computed.get("color").unwrap_or("black") } else { stroke };
+    let mut color = amazing_css::color::parse_css_color(color_value)?;
+    let basis = viewport[0].hypot(viewport[1]) / 2_f64.sqrt();
+    let width = stroke_length(computed.get("stroke-width").unwrap_or("1"), basis).ok()?;
+    if width <= 0.0 {
+        return None;
+    }
+    let opacity = computed.get("stroke-opacity").and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
+    color[3] = (color[3] as f64 * opacity * group_opacity).round() as u8;
+    Some((color, width))
+}
+
+/// Builds and pushes the rasterized `Shape::Image` item for one text run, if
+/// anything would actually be visible. Shared by both the byte decoder and
+/// the inline-SVG DOM path.
+#[allow(clippy::too_many_arguments)]
+fn push_text_item(
+    scene: &mut Option<SvgDocument>,
+    matrix: Matrix,
+    clips: &[ViewportClip],
+    x: f64, y: f64, dx: f64, dy: f64,
+    font_size: f64,
+    anchor: TextAnchor,
+    fill: Option<[u8; 4]>,
+    stroke: Option<([u8; 4], f64)>,
+    content: &str,
+) -> Result<(), DecodeError> {
+    let collapsed = collapse_whitespace(content);
+    if collapsed.trim().is_empty() {
+        return Ok(());
+    }
+    let Some((image, left, top)) = rasterize_text_run(&collapsed, font_size, anchor, fill, stroke)? else {
+        return Ok(());
+    };
+    let Some(scene) = scene.as_mut() else { return Ok(()); };
+    if scene.items.len() >= MAX_SHAPES {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let rect = [x + dx + left, y + dy + top, f64::from(image.width), f64::from(image.height)];
+    scene.items.push(Item {
+        inverse: matrix.inverse()?,
+        shape: Shape::Image { pixels: image, rect },
+        clip: None,
+        color: [0; 4],
+        clips: clips.to_vec(),
+    });
+    Ok(())
+}
+
+/// Byte-decoder finalizer: called when a `<text>` frame's close tag is
+/// reached, with its accumulated content and the style/geometry captured at
+/// its open tag. A no-op for any other element (`frame.text` is `None`).
+fn finalize_text(scene: &mut Option<SvgDocument>, frame: &Frame) -> Result<(), DecodeError> {
+    let Some(layout) = &frame.text else { return Ok(()); };
+    let mut fill = frame.style.fill;
+    fill[3] = (fill[3] as f64 * frame.style.fill_opacity * frame.style.opacity).round() as u8;
+    let stroke = resolve_text_stroke(&frame.style.computed, frame.viewport, frame.style.opacity);
+    push_text_item(
+        scene, frame.matrix, &frame.clips,
+        layout.x, layout.y, layout.dx, layout.dy, layout.font_size, layout.anchor,
+        Some(fill), stroke, &layout.content,
+    )
+}
+
+/// Inline-SVG DOM-path text renderer, used whenever `font-family` does not
+/// name the Ahem test font (`append_ahem_text` keeps that exact-pixel path
+/// for pinned WPT reftests). Concatenates the element's direct text-node
+/// children -- `<tspan>` and other nested markup are not walked, matching
+/// the byte decoder's "unknown content is dropped" policy for `<text>`.
+fn append_dom_text(
+    dom: &Dom,
+    node: NodeIdx,
+    attrs: &Attrs,
+    computed: Option<&ComputedStyle>,
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+) {
+    let (Some(computed), Some(parent)) = (computed, stack.last()) else { return; };
+    let mut content = String::new();
+    for child in dom.children(node) {
+        if let NodeKind::Text { data } = &dom.get(child).kind {
+            if content.len() + data.len() > MAX_TEXT_CONTENT {
+                return;
+            }
+            content.push_str(data);
+        }
+    }
+    let group_opacity = computed.get("opacity").and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
+    let fill = match computed.get("fill").unwrap_or("black") {
+        "none" => Some([0u8; 4]),
+        value => {
+            let color_value = if value.eq_ignore_ascii_case("currentcolor") { computed.get("color").unwrap_or("black") } else { value };
+            amazing_css::color::parse_css_color(color_value).map(|mut color| {
+                let fill_opacity = computed.get("fill-opacity").and_then(|value| value.parse::<f64>().ok())
+                    .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
+                color[3] = (color[3] as f64 * fill_opacity * group_opacity).round() as u8;
+                color
+            })
+        }
+    };
+    let stroke = resolve_text_stroke(computed, parent.viewport, group_opacity);
+    let get = |key: &str, basis: f64| length_value(attrs, key, 0.0, basis).unwrap_or(0.0);
+    let x = get("x", parent.viewport[0]);
+    let y = get("y", parent.viewport[1]);
+    let dx = get("dx", parent.viewport[0]);
+    let dy = get("dy", parent.viewport[1]);
+    let font_size = attrs.get("font-size").and_then(|v| number(v).ok())
+        .or_else(|| computed.get("font-size").and_then(|v| number(v).ok()))
+        .filter(|value| *value > 0.0 && *value <= 512.0)
+        .unwrap_or(16.0);
+    let anchor = match attrs.get("text-anchor").map(String::as_str).or_else(|| computed.get("text-anchor")) {
+        Some("middle") => TextAnchor::Middle,
+        Some("end") => TextAnchor::End,
+        _ => TextAnchor::Start,
+    };
+    let _ = push_text_item(scene, parent.matrix, &parent.clips, x, y, dx, dy, font_size, anchor, fill, stroke, &content);
+}
+
 fn mask_regions(dom: &Dom, style: &str, bounds: [f64; 4]) -> Vec<[f64; 4]> {
     let Some(value) = parse_declarations(style).into_iter().find(|d| d.property == "mask").map(|d| d.value) else { return vec![bounds]; };
     let Some(id) = value.trim().strip_prefix("url(").and_then(|v| v.strip_suffix(')'))
@@ -811,9 +1177,28 @@ fn append_embedded_image(
     Ok(())
 }
 
+/// Elements this static subset gives rendering meaning to. Anything else is
+/// unrecognized and, per SVG 2's error-handling model (an unknown element
+/// does not invalidate the document), is skipped along with its whole
+/// subtree rather than rejecting the image -- `<defs>`, `<title>`, `<desc>`,
+/// `<style>`, `<use>`, `<lineargradient>` and similar real-world SVG content
+/// no longer abort decode just for being present next to supported shapes.
+/// `<a>` (a transparent SVG hyperlink wrapper) is treated the same as any
+/// other unrecognized element here -- its content is skipped, not passed
+/// through -- a documented simplification, not a spec claim.
+fn is_known_element(name: &str) -> bool {
+    matches!(
+        name,
+        "svg" | "g" | "text" | "rect" | "circle" | "ellipse" | "path" | "line" | "polygon" | "polyline"
+    )
+}
+
 fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
     let mut scene = None;
     let mut stack: Vec<Frame> = Vec::new();
+    // Open unrecognized elements, by name, for close-tag balance checking
+    // while their subtree is being skipped.
+    let mut ignored: Vec<String> = Vec::new();
     let mut elements = 0;
     while !text.trim().is_empty() {
         text = text.trim_start();
@@ -828,11 +1213,22 @@ fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
             continue;
         }
         if !text.starts_with('<') {
-            // Character data is only meaningful inside a `<text>` element (the
-            // static subset never shapes glyphs), so skip it there instead of
-            // rejecting the whole document; elsewhere it stays unsupported.
-            if stack.last().is_some_and(|frame| frame.name == "text") {
+            // Character data is meaningful only inside a `<text>` element
+            // (RC-30: accumulated for real rasterization at its close tag)
+            // or an already-skipped unrecognized subtree; elsewhere it
+            // stays unsupported.
+            if !ignored.is_empty() {
                 let end = text.find('<').ok_or(DecodeError::InvalidImage)?;
+                text = &text[end..];
+                continue;
+            }
+            if let Some(layout) = stack.last_mut().and_then(|frame| frame.text.as_mut()) {
+                let end = text.find('<').ok_or(DecodeError::InvalidImage)?;
+                let chunk = entities(&text[..end])?;
+                if layout.content.len() + chunk.len() > MAX_TEXT_CONTENT {
+                    return Err(DecodeError::AllocationLimit);
+                }
+                layout.content.push_str(&chunk);
                 text = &text[end..];
                 continue;
             }
@@ -842,8 +1238,19 @@ fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
         let tag = &text[1..end];
         text = &text[end + 1..];
         if let Some(close) = tag.strip_prefix('/') {
-            if stack.pop().is_none_or(|frame| frame.name != close.trim()) {
-                return Err(DecodeError::InvalidImage);
+            let close = close.trim();
+            if let Some(top) = ignored.last() {
+                if top != close {
+                    return Err(DecodeError::InvalidImage);
+                }
+                ignored.pop();
+                continue;
+            }
+            match stack.pop() {
+                Some(frame) if frame.name == close => {
+                    finalize_text(&mut scene, &frame)?;
+                }
+                _ => return Err(DecodeError::InvalidImage),
             }
             continue;
         }
@@ -851,15 +1258,24 @@ fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
         let tag = tag.strip_suffix('/').unwrap_or(tag).trim_end();
         let (name, attrs) = attributes(tag)?;
         elements += 1;
-        if elements > MAX_SHAPES || stack.len() >= 32 {
+        if elements > MAX_SHAPES || stack.len() + ignored.len() >= 32 {
             return Err(DecodeError::AllocationLimit);
+        }
+        if !ignored.is_empty() || (scene.is_some() && !is_known_element(&name)) {
+            // Inside (or starting) an unrecognized element's subtree: every
+            // descendant is opaque content here, regardless of whether its
+            // own name would otherwise be recognized.
+            if !self_closed {
+                ignored.push(name);
+            }
+            continue;
         }
         let frame = append_element(&mut scene, &stack, &name, &attrs, None)?;
         if !self_closed {
             stack.push(frame);
         }
     }
-    if !stack.is_empty() {
+    if !stack.is_empty() || !ignored.is_empty() {
         return Err(DecodeError::InvalidImage);
     }
     scene.ok_or(DecodeError::InvalidImage)
@@ -880,6 +1296,7 @@ fn append_element(
     let mut matrix = parent_matrix.then(local_matrix)?;
     let mut viewport = stack.last().map(|frame| frame.viewport).unwrap_or([0.0, 0.0]);
     let mut clips = stack.last().map(|frame| frame.clips.clone()).unwrap_or_default();
+    let mut text_layout: Option<TextLayout> = None;
     if scene.is_none() {
         if attrs.contains_key("transform") {
             return Err(DecodeError::UnsupportedSvg);
@@ -958,16 +1375,35 @@ fn append_element(
                 }
                 None
             }
-            // Glyph shaping is out of scope for this static subset (see the
-            // module doc); recognize `text` structurally, like `g`, so a
-            // label next to supported shapes (e.g. a rect background) does
-            // not reject the whole image. Its content renders as nothing,
-            // matching the inline-SVG DOM path's non-Ahem fallback.
+            // RC-30: real (approximate) glyph rendering, routed through the
+            // same rasterizer HTML text paints with (`amazing_paint::text`),
+            // rather than shaping true letterforms from `font-family`. The
+            // element itself contributes no immediate shape; its content is
+            // accumulated by the tokenizer above and rasterized once at its
+            // close tag (`finalize_text`), once the full text is known.
             "text" => {
                 check_attrs(
                     &attrs,
                     &["x", "y", "dx", "dy", "font-family", "font-size", "font-weight", "text-anchor"],
                 )?;
+                let font_size = value(&attrs, "font-size", 16.0)?;
+                if font_size <= 0.0 || font_size > 512.0 {
+                    return Err(DecodeError::GeometryLimit);
+                }
+                let anchor = match attrs.get("text-anchor").map(String::as_str) {
+                    Some("middle") => TextAnchor::Middle,
+                    Some("end") => TextAnchor::End,
+                    _ => TextAnchor::Start,
+                };
+                text_layout = Some(TextLayout {
+                    x: length_value(&attrs, "x", 0.0, viewport[0])?,
+                    y: length_value(&attrs, "y", 0.0, viewport[1])?,
+                    dx: length_value(&attrs, "dx", 0.0, viewport[0])?,
+                    dy: length_value(&attrs, "dy", 0.0, viewport[1])?,
+                    font_size,
+                    anchor,
+                    content: String::new(),
+                });
                 None
             }
             "rect" => {
@@ -1047,7 +1483,7 @@ fn append_element(
             });
         }
     }
-    let frame = Frame { name: name.to_owned(), style, matrix, viewport, clips };
+    let frame = Frame { name: name.to_owned(), style, matrix, viewport, clips, text: text_layout };
     if computed.is_none() && matches!(name, "rect" | "circle" | "ellipse" | "path" | "line" | "polygon" | "polyline") {
         if let Some(scene) = scene.as_mut() {
             append_shape_stroke(scene, name, &attrs, &frame.style.computed, &frame,
@@ -1430,5 +1866,166 @@ mod text_element_tests {
     fn unknown_attribute_on_text_is_still_rejected() {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="0" y="10" onclick="evil()">label</text><rect width="40" height="40" fill="#112233"/></svg>"##;
         assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod rc30_tests {
+    use super::decode;
+    use crate::DecodeLimits;
+    use amazing_media::Image;
+
+    fn leftmost_ink_column(image: &Image) -> Option<u32> {
+        for x in 0..image.width {
+            for y in 0..image.height {
+                let at = (y as usize * image.width as usize + x as usize) * 4;
+                if image.pixels[at + 3] > 0 {
+                    return Some(x);
+                }
+            }
+        }
+        None
+    }
+
+    /// Inclusive bounding box of every non-transparent pixel, or `None` if
+    /// the canvas is entirely transparent.
+    fn ink_bbox(image: &Image) -> Option<(u32, u32, u32, u32)> {
+        let mut bbox: Option<(u32, u32, u32, u32)> = None;
+        for y in 0..image.height {
+            for x in 0..image.width {
+                let at = (y as usize * image.width as usize + x as usize) * 4;
+                if image.pixels[at + 3] == 0 {
+                    continue;
+                }
+                bbox = Some(match bbox {
+                    None => (x, y, x, y),
+                    Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+                });
+            }
+        }
+        bbox
+    }
+
+    // --- unknown-element tolerance (the SVG 2 error-handling model) -------
+
+    #[test]
+    fn unknown_element_and_its_subtree_are_skipped_not_fatal() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><title>hello</title><defs><linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient></defs><rect width="40" height="40" fill="#112233"/></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("unknown elements must not reject the document");
+        let at = (20usize * image.width as usize + 20) * 4;
+        assert_eq!(&image.pixels[at..at + 4], &[0x11, 0x22, 0x33, 0xff]);
+    }
+
+    #[test]
+    fn self_closing_unknown_element_is_skipped() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><use href="#x"/><rect width="10" height="10" fill="#010203"/></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_ok());
+    }
+
+    #[test]
+    fn nested_unknown_elements_are_all_skipped() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><a href="#"><g><outer><inner/></outer></g></a><rect width="10" height="10" fill="#0a0b0c"/></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("nested unknown content must not reject the document");
+        let at = (5usize * image.width as usize + 5) * 4;
+        assert_eq!(&image.pixels[at..at + 4], &[0x0a, 0x0b, 0x0c, 0xff]);
+    }
+
+    #[test]
+    fn mismatched_close_tag_inside_ignored_subtree_is_still_rejected() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><foo></bar></defs></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    #[test]
+    fn unbalanced_ignored_subtree_at_end_of_document_is_rejected() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><foo></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    #[test]
+    fn unknown_root_element_is_rejected_not_skipped() {
+        // Tolerance only applies to descendants; the document root must
+        // still be a real `<svg>` element.
+        let svg = br##"<notsvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    // --- real `<text>` rendering -------------------------------------------
+
+    #[test]
+    fn text_fill_actually_paints_pixels() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="60" height="30"><text x="4" y="20" font-size="16" fill="#ff0000">AAA</text></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("decode");
+        let any_red_ink = image.pixels.chunks_exact(4)
+            .any(|p| p[3] > 0 && p[0] == 0xff && p[1] == 0 && p[2] == 0);
+        assert!(any_red_ink, "expected red ink somewhere on the canvas");
+    }
+
+    #[test]
+    fn text_none_fill_with_no_stroke_paints_nothing() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><text x="4" y="16" font-size="16" fill="none">AAA</text></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("decode");
+        assert!(image.pixels.chunks_exact(4).all(|p| p[3] == 0), "fill:none with no stroke should paint nothing");
+    }
+
+    #[test]
+    fn text_anchor_shifts_the_run_horizontally() {
+        let start = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="30"><text x="10" y="20" font-size="16" fill="#ff0000" text-anchor="start">AAA</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let end = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="30"><text x="70" y="20" font-size="16" fill="#ff0000" text-anchor="end">AAA</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let start_left = leftmost_ink_column(&start).expect("start-anchored text should paint something");
+        let end_left = leftmost_ink_column(&end).expect("end-anchored text should paint something");
+        assert!(start_left <= 12, "start anchor should begin near x=10, got {start_left}");
+        assert!(end_left > start_left + 10, "end anchor should sit well to the right of start anchor, got {end_left} vs {start_left}");
+    }
+
+    #[test]
+    fn stroke_widens_the_painted_region() {
+        let fill_only = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><text x="20" y="40" font-size="24" fill="#000000">W</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let with_stroke = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><text x="20" y="40" font-size="24" fill="#000000" stroke="#ff00ff" stroke-width="6">W</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let (x0, y0, x1, y1) = ink_bbox(&fill_only).expect("fill-only text should paint something");
+        let (sx0, sy0, sx1, sy1) = ink_bbox(&with_stroke).expect("stroked text should paint something");
+        assert!(sx0 <= x0 && sy0 <= y0 && sx1 >= x1 && sy1 >= y1, "stroke halo should not shrink the fill's bbox");
+        assert!((sx1 - sx0) > (x1 - x0) || (sy1 - sy0) > (y1 - y0), "stroke halo should widen the ink bbox");
+    }
+
+    #[test]
+    fn absurd_font_size_is_rejected_not_silently_clamped() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text x="0" y="0" font-size="99999">A</text></svg>"##;
+        assert!(decode(svg, DecodeLimits::default()).is_err());
+    }
+
+    #[test]
+    fn whitespace_only_text_content_draws_nothing_but_does_not_fail() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><text x="0" y="0">   </text><rect width="20" height="20" fill="#445566"/></svg>"##;
+        let image = decode(svg, DecodeLimits::default()).expect("decode");
+        let at = (10usize * image.width as usize + 10) * 4;
+        assert_eq!(&image.pixels[at..at + 4], &[0x44, 0x55, 0x66, 0xff]);
+    }
+
+    #[test]
+    fn dx_dy_offset_the_run() {
+        let base = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="4" y="20" font-size="16" fill="#ff0000">A</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let offset = decode(
+            br##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="4" y="20" dx="10" dy="5" font-size="16" fill="#ff0000">A</text></svg>"##,
+            DecodeLimits::default(),
+        ).expect("decode");
+        let base_left = leftmost_ink_column(&base).expect("base text should paint something");
+        let offset_left = leftmost_ink_column(&offset).expect("dx/dy-offset text should paint something");
+        assert!(offset_left > base_left, "dx should shift the run to the right: {offset_left} vs {base_left}");
     }
 }
