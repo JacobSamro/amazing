@@ -106,6 +106,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-a11y"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-bindings"
 version = "0.0.1"
 dependencies = [
@@ -147,6 +151,10 @@ dependencies = [
  "amazing-common",
  "amazing-dom",
 ]
+
+[[package]]
+name = "amazing-devtools"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-dom"
@@ -283,6 +291,9 @@ version = "0.0.1"
 [[package]]
 name = "amazing-storage"
 version = "0.0.1"
+dependencies = [
+ "amazing-js",
+]
 
 [[package]]
 name = "amazing-svg"
@@ -311,6 +322,10 @@ dependencies = [
  "unicode-vo",
  "wuff",
 ]
+
+[[package]]
+name = "amazing-wasm"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-webrtc"

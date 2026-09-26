@@ -576,7 +576,13 @@ mod windows {
                 sheet.base_url = Some(url.clone());
                 sheet
             }).collect::<Vec<_>>();
-            let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, runtime.animations.animated());
+            let environment = amazing_css::MediaEnvironment {
+                viewport_width_px: width.max(1) as f32,
+                viewport_height_px: viewport_height,
+                ..amazing_css::MediaEnvironment::default()
+            };
+            let styled = amazing_css::compute_with_animations_and_environment(
+                &host_ref.dom, &sheets, runtime.animations.animated(), &environment);
             let media = load_page_media(&host_ref.dom, &page, &styled);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
@@ -687,48 +693,62 @@ mod windows {
 
         fn pump_timers(&mut self) {
             let page = self.tab().current_url().unwrap_or("").to_owned();
-            let mut fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                match runtime.js.pump_now(true) {
-                    Ok(fired) => fired,
-                    Err(error) => {
-                        eprintln!("amazing gui: timer callback failed: {}", error.describe());
-                        false
+            let mut fired = false;
+            let mut render_output: Option<amazing_compositor::AnimationFrameOutput> = None;
+            let mut render_error: Option<String> = None;
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                let now_ms = runtime.animation_started.elapsed().as_secs_f64() * 1000.;
+                {
+                    let host = runtime.host.clone();
+                    let js = &mut runtime.js;
+                    let animations = &mut runtime.animations;
+                    let page = page.as_str();
+                    let output_slot = &mut render_output;
+                    let error_slot = &mut render_error;
+                    let pumped = js.pump_now_with_render(true, |phase, _timestamp| {
+                        // The frame's animation sample runs at the loop's post-rAF
+                        // render step, after any rAF callbacks have mutated the DOM.
+                        if phase != amazing_dom::event_loop::RenderPhase::AfterAnimationFrames {
+                            return;
+                        }
+                        let dom = host.borrow();
+                        let mut sources = Vec::new();
+                        if collect_author_css(&dom.dom, NodeIdx(0), page, &mut sources).is_err() {
+                            return;
+                        }
+                        let sheets = sources.into_iter().map(|(source, url)| {
+                            let mut sheet = amazing_css::parse_stylesheet(&source);
+                            sheet.base_url = Some(url);
+                            sheet
+                        }).collect::<Vec<_>>();
+                        match animations.frame(&dom.dom, &sheets, now_ms) {
+                            Ok(output) => *output_slot = Some(output),
+                            Err(error) => *error_slot = Some(error),
+                        }
+                    });
+                    match pumped {
+                        Ok(worked) => fired = worked,
+                        Err(error) => eprintln!("amazing gui: timer callback failed: {}", error.describe()),
                     }
                 }
-            } else {
-                false
-            };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                let sampled = (|| -> Result<_, String> {
-                    let host = runtime.host.borrow();
-                    let mut sources = Vec::new();
-                    collect_author_css(&host.dom, NodeIdx(0), &page, &mut sources)?;
-                    let sheets = sources.into_iter().map(|(source, url)| {
-                        let mut sheet = amazing_css::parse_stylesheet(&source);
-                        sheet.base_url = Some(url);
-                        sheet
-                    }).collect::<Vec<_>>();
-                    runtime.animations.frame(&host.dom, &sheets,
-                        runtime.animation_started.elapsed().as_secs_f64() * 1000.)
-                })();
-                match sampled {
-                    Ok(output) => {
-                        if !output.events.is_empty() {
-                            // An event listener can mutate the page without changing
-                            // this frame's sampled animation values.
-                            fired = true;
-                        }
-                        for event in &output.events {
-                            if let Err(error) = runtime.js.dispatch_animation_event(event) {
-                                eprintln!("amazing gui: animation listener failed: {}", error.describe());
-                            }
-                        }
-                        if runtime.animation_updates != output.main_thread_updates {
-                            runtime.animation_updates = output.main_thread_updates;
-                            fired = true;
+                if let Some(error) = render_error {
+                    eprintln!("amazing gui: animation frame failed: {error}");
+                }
+                if let Some(output) = render_output {
+                    if !output.events.is_empty() {
+                        // An event listener can mutate the page without changing
+                        // this frame's sampled animation values.
+                        fired = true;
+                    }
+                    for event in &output.events {
+                        if let Err(error) = runtime.js.dispatch_animation_event(event) {
+                            eprintln!("amazing gui: animation listener failed: {}", error.describe());
                         }
                     }
-                    Err(error) => eprintln!("amazing gui: animation frame failed: {error}"),
+                    if runtime.animation_updates != output.main_thread_updates {
+                        runtime.animation_updates = output.main_thread_updates;
+                        fired = true;
+                    }
                 }
             }
             if let Some(delta) = self
@@ -1122,17 +1142,23 @@ mod windows {
             sheet.base_url = Some(url.clone());
             sheet
         }).collect::<Vec<_>>();
+        let environment = amazing_css::MediaEnvironment {
+            viewport_width_px: width.max(1) as f32,
+            viewport_height_px: 700.0,
+            ..amazing_css::MediaEnvironment::default()
+        };
         let mut animations = AnimationScene::new();
         let animation_started = Instant::now();
         let initial_animation = {
             let host_ref = host.borrow();
-            animations.frame(&host_ref.dom, &sheets, 0.)?
+            animations.frame_with_environment(&host_ref.dom, &sheets, &environment, 0.)?
         };
         for event in &initial_animation.events {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, animations.animated());
+        let styled = amazing_css::compute_with_animations_and_environment(
+            &host_ref.dom, &sheets, animations.animated(), &environment);
         let media = load_page_media(&host_ref.dom, input, &styled);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");

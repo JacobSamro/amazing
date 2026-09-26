@@ -290,6 +290,8 @@ impl fmt::Display for TreeError {
 impl std::error::Error for TreeError {}
 #[derive(Debug, Clone)]
 pub struct PropertyTrees {
+    pub(crate) effect_operations: std::collections::HashMap<EffectId, super::EffectOperations>,
+    pub(crate) effect_revision: u64,
     pub(crate) transforms: Vec<TransformNode>,
     pub(crate) clips: Vec<ClipNode>,
     pub(crate) effects: Vec<EffectNode>,
@@ -317,6 +319,8 @@ impl PropertyTrees {
     }
     pub fn new() -> Self {
         Self {
+            effect_operations: std::collections::HashMap::new(),
+            effect_revision: 0,
             transforms: vec![TransformNode {
                 parent: TransformId(0),
                 matrix: Matrix4::IDENTITY,
