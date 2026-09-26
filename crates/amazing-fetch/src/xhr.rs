@@ -664,29 +664,35 @@ impl Xhr {
         Ok(events)
     }
     pub fn abort(&mut self) -> Vec<XhrEvent> {
-        match self.state {
-            XhrState::Opened if self.send_flag => {
-                let events = self.fail(XhrError::Abort).unwrap_or_default();
-                self.state = XhrState::Unsent;
-                events
-            }
-            XhrState::HeadersReceived | XhrState::Loading => {
-                let events = self.fail(XhrError::Abort).unwrap_or_default();
-                self.state = XhrState::Unsent;
-                events
-            }
-            XhrState::Opened => {
-                self.state = XhrState::Unsent;
-                Vec::new()
-            }
-            XhrState::Done => {
-                self.state = XhrState::Unsent;
-                self.response = None;
-                self.received.clear();
-                self.pending_body = None;
-                Vec::new()
-            }
-            _ => Vec::new(),
+        // XHR spec abort(): an OPENED request with no send() flag and an UNSENT
+        // request are no-ops; an active request runs the request error steps
+        // (state DONE, readystatechange + abort + loadend) and is then left
+        // UNSENT; a DONE request is reset to UNSENT without any event.
+        let active = match self.state {
+            XhrState::Opened => self.send_flag,
+            XhrState::HeadersReceived | XhrState::Loading => true,
+            _ => false,
+        };
+        if active {
+            // Events already queued for the previous generation must not fire
+            // after the abort re-enters from a readystatechange handler.
+            self.generation = self.generation.wrapping_add(1);
+            let events = self.fail(XhrError::Abort).unwrap_or_default();
+            self.state = XhrState::Unsent;
+            self.send_flag = false;
+            events
+        } else if self.state == XhrState::Done {
+            self.generation = self.generation.wrapping_add(1);
+            self.state = XhrState::Unsent;
+            self.send_flag = false;
+            self.response = None;
+            self.received.clear();
+            self.pending_body = None;
+            self.pending_offset = 0;
+            self.request = None;
+            Vec::new()
+        } else {
+            Vec::new()
         }
     }
     pub fn response_url(&self) -> &str {

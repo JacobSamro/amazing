@@ -31,17 +31,19 @@
 pub mod accname;
 pub mod aria;
 pub mod bounds;
+pub mod event;
 pub mod host;
 pub mod role;
 pub mod tree;
 
 pub use accname::NameContext;
-pub use aria::{AxProperties, AxStates, InvalidState, Orientation, Sort, Tristate};
+pub use aria::{AxProperties, AxStates, InvalidState, Orientation, Relevant, Sort, Tristate};
 pub use bounds::{AxRect, BoundsMap};
+pub use event::{AxEvent, AxEventKind, Live, LiveRegionInfo, diff, live_region};
 pub use role::Role;
 pub use tree::{
-    AxDocument, AxNode, AxNodeId, AxTree, SchemaNode, SchemaSnapshot, build, build_document,
-    build_from_html, build_from_html_in_viewport, build_from_parsed_html,
+    AxDocument, AxNode, AxNodeId, AxRelations, AxTree, SchemaNode, SchemaSnapshot, build,
+    build_document, build_from_html, build_from_html_in_viewport, build_from_parsed_html,
 };
 
 #[cfg(test)]
@@ -51,7 +53,13 @@ mod aria_tests;
 #[cfg(test)]
 mod bounds_tests;
 #[cfg(test)]
+mod event_tests;
+#[cfg(test)]
+mod relationships_tests;
+#[cfg(test)]
 mod role_tests;
+#[cfg(test)]
+mod text_tests;
 #[cfg(test)]
 mod tree_tests;
 #[cfg(test)]

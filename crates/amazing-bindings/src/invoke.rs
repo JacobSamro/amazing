@@ -110,7 +110,8 @@ pub fn supported_index_count<H: BindingHost>(
     host: &mut H, operation: O, receiver: &H::Value,
 ) -> Result<u32, H::Error> {
     match operation {
-        O::FormCollectionSupportedIndexCount | O::OptionsSupportedIndexCount | O::RadioNodeListSupportedIndexCount =>
+        O::FormCollectionSupportedIndexCount | O::OptionsSupportedIndexCount | O::RadioNodeListSupportedIndexCount
+        | O::SelectedOptionsSupportedIndexCount =>
             crate::form_bindings::supported_index_count(host, operation, receiver),
         O::HTMLCollectionSupportedIndexCount | O::NodeListSupportedIndexCount =>
             crate::collections::supported_index_count(host, operation, receiver),

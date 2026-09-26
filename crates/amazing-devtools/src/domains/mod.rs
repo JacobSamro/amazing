@@ -4,6 +4,7 @@
 //! rather than on a single attached page; the page-bound domains are dispatched
 //! from [`crate::session`].
 
+pub mod accessibility;
 pub mod css;
 pub mod dom;
 pub mod emulation;

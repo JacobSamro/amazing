@@ -10,15 +10,16 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
+    AxNode, BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
     EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
-    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, InterceptedRequest,
-    KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery,
-    MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
-    PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
-    ScreenshotParams, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent,
-    Viewport,
+    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
+    InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule,
+    MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
+    NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad, Rect, RemoteObject,
+    ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, SecurityState, TargetEvent,
+    TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
+use std::collections::HashMap;
 use crate::json::Json;
 
 /// Mutable script shared by a [`MockHost`] and every session it hands out.
@@ -117,6 +118,34 @@ pub struct MockScript {
     pub ignore_certificate_errors: Option<bool>,
     /// `Security.handleCertificateError` calls: (event_id, action).
     pub certificate_errors: Vec<(i64, i32)>,
+    /// `scriptId` returned by `Runtime.compileScript`.
+    pub compile_script_id: String,
+    /// Sources passed to `Runtime.compileScript`.
+    pub compiled_sources: Vec<String>,
+    /// Result returned by `Runtime.runScript`.
+    pub run_script_value: EvaluateResult,
+    /// `Runtime.getIsolateId` value.
+    pub isolate_id: Option<String>,
+    /// `Runtime.getHeapUsage` value.
+    pub heap_usage: HeapUsage,
+    /// `Runtime.globalLexicalScopeNames` value.
+    pub lexical_scope_names: Vec<String>,
+    /// `Runtime.queryObjects` object handle.
+    pub query_objects_result: Option<String>,
+    /// Last `Runtime.setAsyncCallStackDepth` value.
+    pub async_call_stack_depth: Option<u32>,
+    /// Count of `Runtime.discardConsoleEntries` calls.
+    pub discard_console_count: u32,
+    /// Last `Accessibility.enable`/`disable` call.
+    pub accessibility_enabled: Option<bool>,
+    /// Full tree returned by `Accessibility.getFullAXTree` and matched by
+    /// `Accessibility.getPartialAXTree` (filtering by `node`).
+    pub ax_tree: Vec<AxNode>,
+    /// Children returned by `Accessibility.getChildAXNodes`, keyed by
+    /// `AXNodeId`.
+    pub ax_children: HashMap<String, Vec<AxNode>>,
+    /// Result returned by `Accessibility.queryAXTree`.
+    pub ax_query_result: Vec<AxNode>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -201,6 +230,82 @@ impl Default for MockScript {
             security_states: VecDeque::new(),
             ignore_certificate_errors: None,
             certificate_errors: Vec::new(),
+            compile_script_id: "script-1".into(),
+            compiled_sources: Vec::new(),
+            run_script_value: EvaluateResult::value(RemoteObject::number(1.0)),
+            isolate_id: Some("isolate-1".into()),
+            heap_usage: HeapUsage {
+                used_heap_size: 1000.0,
+                total_heap_size: 2000.0,
+            },
+            lexical_scope_names: vec!["a".into(), "b".into()],
+            query_objects_result: Some("objects-1".into()),
+            async_call_stack_depth: None,
+            discard_console_count: 0,
+            accessibility_enabled: None,
+            ax_tree: vec![
+                AxNode {
+                    ax_node_id: "ax-1".into(),
+                    ignored: false,
+                    role: Some("WebArea".into()),
+                    name: Some(String::new()),
+                    description: None,
+                    value: None,
+                    node: Some(EngineNodeId(1)),
+                    child_ids: vec!["ax-2".into()],
+                },
+                AxNode {
+                    ax_node_id: "ax-2".into(),
+                    ignored: false,
+                    role: Some("generic".into()),
+                    name: Some(String::new()),
+                    description: None,
+                    value: None,
+                    node: Some(EngineNodeId(4)),
+                    child_ids: vec!["ax-3".into()],
+                },
+                AxNode {
+                    ax_node_id: "ax-3".into(),
+                    ignored: false,
+                    role: Some("StaticText".into()),
+                    name: Some("Hello".into()),
+                    description: None,
+                    value: None,
+                    node: Some(EngineNodeId(6)),
+                    child_ids: Vec::new(),
+                },
+            ],
+            ax_children: {
+                let mut children = HashMap::new();
+                children.insert(
+                    "ax-1".to_string(),
+                    vec![AxNode {
+                        ax_node_id: "ax-2".into(),
+                        role: Some("generic".into()),
+                        node: Some(EngineNodeId(4)),
+                        child_ids: vec!["ax-3".into()],
+                        ..AxNode::default()
+                    }],
+                );
+                children.insert(
+                    "ax-2".to_string(),
+                    vec![AxNode {
+                        ax_node_id: "ax-3".into(),
+                        role: Some("StaticText".into()),
+                        name: Some("Hello".into()),
+                        node: Some(EngineNodeId(6)),
+                        ..AxNode::default()
+                    }],
+                );
+                children
+            },
+            ax_query_result: vec![AxNode {
+                ax_node_id: "ax-3".into(),
+                role: Some("StaticText".into()),
+                name: Some("Hello".into()),
+                node: Some(EngineNodeId(6)),
+                ..AxNode::default()
+            }],
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -948,6 +1053,92 @@ impl DevToolsSession for MockSession {
             .certificate_errors
             .push((event_id, action));
         Ok(())
+    }
+
+    fn compile_script(
+        &mut self,
+        source: &str,
+        _url: Option<&str>,
+        _persist: bool,
+    ) -> Result<String, HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.compiled_sources.push(source.to_string());
+        Ok(script.compile_script_id.clone())
+    }
+
+    fn run_script(&mut self, _script_id: &str) -> Result<EvaluateResult, HostError> {
+        Ok(self.script.lock().unwrap().run_script_value.clone())
+    }
+
+    fn get_isolate_id(&mut self) -> Result<Option<String>, HostError> {
+        Ok(self.script.lock().unwrap().isolate_id.clone())
+    }
+
+    fn get_heap_usage(&mut self) -> Result<HeapUsage, HostError> {
+        Ok(self.script.lock().unwrap().heap_usage)
+    }
+
+    fn global_lexical_scope_names(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(self.script.lock().unwrap().lexical_scope_names.clone())
+    }
+
+    fn query_objects(&mut self, _prototype_object_id: &str) -> Result<Option<String>, HostError> {
+        Ok(self.script.lock().unwrap().query_objects_result.clone())
+    }
+
+    fn set_async_call_stack_depth(&mut self, depth: u32) -> Result<(), HostError> {
+        self.script.lock().unwrap().async_call_stack_depth = Some(depth);
+        Ok(())
+    }
+
+    fn discard_console_entries(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().discard_console_count += 1;
+        Ok(())
+    }
+
+    fn accessibility_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().accessibility_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn get_full_ax_tree(&mut self, _depth: Option<u32>) -> Result<Vec<AxNode>, HostError> {
+        Ok(self.script.lock().unwrap().ax_tree.clone())
+    }
+
+    fn get_partial_ax_tree(
+        &mut self,
+        node: EngineNodeId,
+        _fetch_relatives: bool,
+    ) -> Result<Vec<AxNode>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .ax_tree
+            .iter()
+            .filter(|entry| entry.node == Some(node))
+            .cloned()
+            .collect())
+    }
+
+    fn get_child_ax_nodes(&mut self, ax_node_id: &str) -> Result<Vec<AxNode>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .ax_children
+            .get(ax_node_id)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn query_ax_tree(
+        &mut self,
+        _node: Option<EngineNodeId>,
+        _accessible_name: Option<&str>,
+        _role: Option<&str>,
+    ) -> Result<Vec<AxNode>, HostError> {
+        Ok(self.script.lock().unwrap().ax_query_result.clone())
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {
