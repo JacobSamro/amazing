@@ -91,6 +91,9 @@ fn run_page(binary: &str, url: &str, probe: &Path, out_dir: &Path, timeout: Dura
         .arg(&out)
         .arg("1024")
         .env("AMAZING_PAGE_PROBE", probe)
+        // IA-REAL-2: isolate this run's storage profile from the pooled
+        // host's ambient one; see the matching comment in real_pages.rs.
+        .env("AMAZING_STORAGE_DIR", out_dir.join("storage"))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
