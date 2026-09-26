@@ -293,6 +293,95 @@ fn number(css: &str) -> Option<f64> {
         _ => None,
     }
 }
+
+/// `<alpha-value> = <number> | <percentage>` (CSS Color 4 SS4.5), with its
+/// `calc()`/`min()`/`max()`/`clamp()` math (CSS Values 4 SS10). The
+/// percentage basis is always exactly 1 (100% = 1), a fixed basis unlike a
+/// length's containing-block-dependent one, so -- unlike `crate::math`,
+/// which only validates grammar and leaves resolution to a later consumer --
+/// this evaluates to a concrete `f64` immediately. Used by `opacity` and
+/// `fill-opacity`; the caller still clamps the final result to `[0, 1]`.
+fn alpha_value(css: &str) -> Option<f64> {
+    let tokens = significant(&tokenize(css));
+    let mut pos = 0;
+    let value = alpha_sum(&tokens, &mut pos)?;
+    (pos == tokens.len()).then_some(value)
+}
+/// This tokenizer lexes a standalone `-` or `+` as a one-character
+/// `Token::Ident`, not a `Token::Delim` (a bare `-` is a valid identifier
+/// under CSS Syntax 3's "would start an identifier" rule) -- so `calc(1 -
+/// 1)`'s middle token is `Ident("-")`. Match both forms.
+fn is_op(token: Option<&Token>, op: char) -> bool {
+    matches!(token, Some(Token::Delim(c)) if *c == op)
+        || matches!(token, Some(Token::Ident(s)) if s.len() == 1 && s.starts_with(op))
+}
+fn alpha_sum(tokens: &[Token], pos: &mut usize) -> Option<f64> {
+    let mut value = alpha_product(tokens, pos)?;
+    loop {
+        if is_op(tokens.get(*pos), '+') { *pos += 1; value += alpha_product(tokens, pos)?; }
+        else if is_op(tokens.get(*pos), '-') { *pos += 1; value -= alpha_product(tokens, pos)?; }
+        else { return Some(value); }
+    }
+}
+fn alpha_product(tokens: &[Token], pos: &mut usize) -> Option<f64> {
+    let mut value = alpha_atom(tokens, pos)?;
+    loop {
+        match tokens.get(*pos) {
+            Some(Token::Delim('*')) => { *pos += 1; value *= alpha_atom(tokens, pos)?; }
+            Some(Token::Delim('/')) => {
+                *pos += 1;
+                let divisor = alpha_atom(tokens, pos)?;
+                if divisor == 0.0 { return None; }
+                value /= divisor;
+            }
+            _ => return Some(value),
+        }
+    }
+}
+fn alpha_comma_args(tokens: &[Token], pos: &mut usize) -> Option<Vec<f64>> {
+    let mut values = vec![alpha_sum(tokens, pos)?];
+    while matches!(tokens.get(*pos), Some(Token::Comma)) {
+        *pos += 1;
+        values.push(alpha_sum(tokens, pos)?);
+    }
+    matches!(tokens.get(*pos), Some(Token::CloseParen)).then(|| { *pos += 1; values })
+}
+fn alpha_atom(tokens: &[Token], pos: &mut usize) -> Option<f64> {
+    match tokens.get(*pos)?.clone() {
+        Token::Number(n) => { *pos += 1; Some(n) }
+        Token::Percentage(n) => { *pos += 1; Some(n / 100.0) }
+        Token::Delim('-') => { *pos += 1; Some(-alpha_atom(tokens, pos)?) }
+        Token::Delim('+') => { *pos += 1; alpha_atom(tokens, pos) }
+        Token::OpenParen => {
+            *pos += 1;
+            let value = alpha_sum(tokens, pos)?;
+            matches!(tokens.get(*pos), Some(Token::CloseParen)).then(|| { *pos += 1; value })
+        }
+        Token::Function(name) => {
+            let lower = name.to_ascii_lowercase();
+            *pos += 1;
+            if !matches!(tokens.get(*pos), Some(Token::OpenParen)) { return None; }
+            *pos += 1;
+            match lower.as_str() {
+                "calc" => {
+                    let value = alpha_sum(tokens, pos)?;
+                    matches!(tokens.get(*pos), Some(Token::CloseParen)).then(|| { *pos += 1; value })
+                }
+                "min" => alpha_comma_args(tokens, pos)?.into_iter().reduce(f64::min),
+                "max" => alpha_comma_args(tokens, pos)?.into_iter().reduce(f64::max),
+                "clamp" => match alpha_comma_args(tokens, pos)?.as_slice() {
+                    // CSS Values 4 SS10.6: `max(MIN, min(VAL, MAX))`, not
+                    // `VAL` clamped naively -- when MIN > MAX the result is
+                    // MIN, and Rust's own `f64::clamp` panics on that input.
+                    [min_v, val, max_v] => Some(min_v.max(val.min(*max_v))),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
 fn integer(css: &str) -> Option<i32> {
     // Token::Number does not retain the integer flag; check lexical syntax too.
     let css = css.trim();
@@ -357,6 +446,17 @@ pub(crate) fn ruby_canonical(property: &str, css: &str) -> Option<&'static str> 
         ("ruby-merge", ["auto"]) => Some("auto"),
         _ => None,
     }
+}
+
+/// Whether `value` is a valid value for `property`, per this crate's
+/// per-property grammars. Exposed read-only for the WPT parsing-conformance
+/// runner (CSS-25, `examples/wpt_conformance.rs`); cascade code keeps using
+/// the crate-internal `parse` directly. Properties this crate does not model
+/// a grammar for fall through to `ComputedValue::Unparsed` (see `parse`'s own
+/// doc comment) and so always report valid here -- an accurate reflection of
+/// what this crate can and cannot reject, not a false pass.
+pub fn parses(property: &str, value: &str) -> bool {
+    parse(property, value).is_some()
 }
 
 /// None means invalid in a grammar owned here; Unparsed means outside our scope.
@@ -518,7 +618,11 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             };
             return valid.then_some(V::Unparsed);
         }
-        "opacity" => return number(css).map(|n| V::Number(n.clamp(0.0, 1.0))),
+        // <alpha-value> = <number> | <percentage>, with the usual calc()
+        // math (CSS Color 4 SS4.5, CSS Values 4 SS10) -- not just a bare
+        // number as before, which silently dropped every calc()/percentage/
+        // min()/max()/clamp() opacity to the initial value 1.
+        "opacity" | "fill-opacity" => return alpha_value(css).map(|n| V::Number(n.clamp(0.0, 1.0))),
         "flex-grow" | "flex-shrink" => {
             // The existing layout solver supports these math constants. Keep
             // their policy there until calc() has a typed grammar here.
@@ -575,6 +679,29 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         }
         "line-height" if number(css).is_some() => {
             return number(css).filter(|n| *n >= 0.0).map(V::Number);
+        }
+        // CSS Cascade 3 SS7.4: `all`'s grammar is the CSS-wide keywords only
+        // (it resets every longhand to that keyword); it is not itself a
+        // longhand with a real value space, so it needs its own arm rather
+        // than falling into the generic accept-anything `Unparsed` case
+        // below for any property this crate does not otherwise model.
+        "all" => {
+            return matches!(s, "initial" | "inherit" | "unset" | "revert" | "revert-layer")
+                .then_some(V::Unparsed);
+        }
+        // CSS Contain 3 SS container-name/-type/shorthand. Not evaluated
+        // (no layout size dependency here), but validated and canonically
+        // serialized so cascade/computed-value plumbing is honest about
+        // acceptance instead of the generic accept-anything fallback.
+        "container-name" => {
+            return (s == "none" || custom_idents(css).is_some_and(|idents| !idents.is_empty()))
+                .then_some(V::Unparsed);
+        }
+        "container-type" => {
+            return valid_container_type(s).then_some(V::Unparsed);
+        }
+        "container" => {
+            return parse_container_shorthand(css).is_some().then_some(V::Unparsed);
         }
         _ => {}
     }
@@ -683,6 +810,53 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return None;
     }
     Some(V::LengthPercentage(length))
+}
+
+/// CSS Contain 3 `<custom-ident>+`: one or more identifiers, none of them a
+/// CSS-wide keyword or `none`/`default` (reserved everywhere a custom-ident
+/// grammar appears). Returns `None` for anything that isn't a plain
+/// whitespace-separated identifier list (so a `var()` or other substitution
+/// doesn't get rejected here -- callers gate on that separately).
+fn custom_idents(css: &str) -> Option<Vec<String>> {
+    let all_tokens = tokenize(css);
+    let tokens: Vec<&Token> = all_tokens.iter()
+        .filter(|t| !matches!(t, Token::Whitespace)).collect();
+    if tokens.is_empty() { return None; }
+    tokens.into_iter().map(|token| match token {
+        Token::Ident(name) if !matches!(
+            name.to_ascii_lowercase().as_str(),
+            "none" | "default" | "initial" | "inherit" | "unset" | "revert" | "revert-layer"
+        ) => Some(name.clone()),
+        _ => None,
+    }).collect()
+}
+
+/// CSS Contain 3 `container-type`: `normal | [ [ size | inline-size ] ||
+/// scroll-state ]`.
+fn valid_container_type(lower: &str) -> bool {
+    if lower == "normal" { return true; }
+    let mut words: Vec<&str> = lower.split_ascii_whitespace().collect();
+    words.sort_unstable();
+    matches!(words.as_slice(),
+        ["scroll-state"] | ["size"] | ["inline-size"]
+            | ["scroll-state", "size"] | ["inline-size", "scroll-state"])
+}
+
+/// CSS Contain 3 `container`: `<'container-name'> [ / <'container-type'> ]?`.
+fn parse_container_shorthand(css: &str) -> Option<()> {
+    let (name_part, type_part) = match css.split_once('/') {
+        Some((name, container_type)) => (name.trim(), Some(container_type.trim())),
+        None => (css.trim(), None),
+    };
+    if !(name_part.eq_ignore_ascii_case("none") || custom_idents(name_part).is_some_and(|i| !i.is_empty())) {
+        return None;
+    }
+    if let Some(container_type) = type_part {
+        if !valid_container_type(&container_type.to_ascii_lowercase()) {
+            return None;
+        }
+    }
+    Some(())
 }
 
 fn transforms(css: &str) -> Option<Vec<Transform>> {

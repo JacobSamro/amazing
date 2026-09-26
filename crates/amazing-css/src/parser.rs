@@ -1063,7 +1063,7 @@ mod tests {
         let d = decls("p{ background: rgba(255, 0, 0, 0.5) }");
         assert_eq!(
             d,
-            vec![("background".into(), "rgba(255,0,0,.5)".into(), false)]
+            vec![("background".into(), "rgba(255, 0, 0, .5)".into(), false)]
         );
     }
 
@@ -1101,7 +1101,7 @@ mod tests {
             vec![
                 ("--a".into(), "green".into(), false),
                 ("--b".into(), "blue".into(), false),
-                ("color".into(), "var(--a,(;))".into(), false),
+                ("color".into(), "var(--a, (;))".into(), false),
             ]
         );
     }

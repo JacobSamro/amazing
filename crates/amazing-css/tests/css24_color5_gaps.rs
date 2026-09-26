@@ -173,10 +173,8 @@ fn calc_size_nests_inside_min_max_clamp_through_the_cascade() {
             "div { width: min(calc-size(auto, size + 20px), 300px) }",
         )],
     );
-    // The declared value is retained verbatim except for the tokenizer's
-    // canonical (no-space-after-comma) serialization at the top level.
     assert_eq!(
         styles.get(root).unwrap().get("width"),
-        Some("min(calc-size(auto,size + 20px),300px)")
+        Some("min(calc-size(auto, size + 20px), 300px)")
     );
 }

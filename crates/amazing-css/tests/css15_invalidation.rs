@@ -217,7 +217,7 @@ fn compositor_values_need_stable_inline_winner_and_no_selector_dependency() {
     assert_eq!(values.transform_matrix.as_ref().map(|matrix| (matrix[0][3], matrix[1][3])), Some((4.0, 3.0)));
     assert!(values.apply_to_styles(&mut old));
     assert_eq!(old.get(first).unwrap().get("opacity"), Some("0.6"));
-    assert_eq!(old.get(first).unwrap().get("transform"), Some("translate(4px,3px)"));
+    assert_eq!(old.get(first).unwrap().get("transform"), Some("translate(4px, 3px)"));
     let next_style = "opacity:.7; transform:translate(6px, 3px)";
     dom.set_attribute(first, "style", next_style).unwrap();
     let update = invalidator.update_attribute(&dom, &old, first, "style", Some(new_style), Some(next_style), 1);
