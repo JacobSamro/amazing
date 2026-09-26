@@ -842,6 +842,8 @@ pub struct JsObject {
     pub(crate) is_html_dda: bool,
     /// Strictness captured when an ECMAScript function is created.
     pub(crate) strict_function: bool,
+    /// Cached compilation of an AST async body; parameters stay runtime-bound.
+    pub(crate) async_body_code: Option<Result<crate::interp::vm::FunctionCode, crate::interp::vm::CompileError>>,
     /// Promise capability captured by a native resolve or reject function.
     pub(crate) promise_target: Option<Obj>,
 }
@@ -871,8 +873,29 @@ impl JsObject {
             host_identity: None,
             is_html_dda: false,
             strict_function: false,
+            async_body_code: None,
             promise_target: None,
         }
+    }
+
+    /// Initialize a fresh String wrapper in linear time. Its code-unit indices
+    /// use ordinary immutable descriptors, shared by every property operation.
+    pub(crate) fn initialize_string_data(&mut self, string: JsString) {
+        debug_assert!(self.props.is_empty());
+        self.props.extend(string.units().iter().enumerate().map(|(index, unit)| {
+            (PropertyKey::from(index.to_string()), Property {
+                value: JsValue::str_units(vec![*unit]), writable: false,
+                enumerable: true, configurable: false, getter: None, setter: None,
+            })
+        }));
+        self.props.push((PropertyKey::from("length"), Property {
+            value: JsValue::num(string.units().len() as f64), writable: false,
+            enumerable: false, configurable: false, getter: None, setter: None,
+        }));
+        self.props.push((PropertyKey::from("[[StringData]]"), Property {
+            value: JsValue::Str(string), writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }));
     }
 
     pub fn array() -> JsObject {

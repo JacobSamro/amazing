@@ -57,6 +57,24 @@ pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, st
     compiler.compile_function(function, span)
 }
 
+/// Compile an async AST body whose parameters have already been bound by the
+/// interpreter. Compilation is atomic and does not execute JavaScript.
+///
+/// This is the VM half of the runtime async bridge: `interp.rs` binds the full
+/// AST parameter list, then calls this and `FunctionCode::call_async_with_env`.
+#[allow(dead_code)] // Consumed by the runtime async bridge in interp.rs.
+pub(crate) fn compile_async_body(body: &ast::Block, strict: bool) -> Result<FunctionCode, CompileError> {
+    let mut compiler = Compiler::new(false);
+    compiler.strict = strict;
+    compiler.compile_function(&ast::FunctionItem {
+        name: None,
+        params: vec![],
+        body: body.clone(),
+        is_async: true,
+        is_generator: false,
+    }, body.span)
+}
+
 struct Compiler {
     program: Program,
     depth: usize,

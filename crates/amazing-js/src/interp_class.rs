@@ -224,6 +224,16 @@ impl Interpreter {
     pub(super) fn eval_class(&mut self, class: &ast::ClassItem, outer: &EnvHandle)
         -> Result<JsValue, Throw>
     {
+        let previous_strict = self.strict_eval_context;
+        self.strict_eval_context = true;
+        let result = self.eval_class_inner(class, outer);
+        self.strict_eval_context = previous_strict;
+        result
+    }
+
+    fn eval_class_inner(&mut self, class: &ast::ClassItem, outer: &EnvHandle)
+        -> Result<JsValue, Throw>
+    {
         let class_env = EnvHandle::new(EnvKind::Block, Some(outer.clone()));
         let mut private_names = Vec::<String>::new();
         for member in &class.members {

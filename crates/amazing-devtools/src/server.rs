@@ -19,7 +19,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::domains::target;
-use crate::host::{DevToolsHost, TargetInfo};
+use crate::host::{DevToolsHost, TargetEventKind, TargetInfo};
 use crate::http::{self, HttpRequest, HttpResponse};
 use crate::json::Json;
 use crate::protocol::{self, CdpError, CdpRequest};
@@ -333,6 +333,10 @@ struct Connection {
     order: Vec<String>,
     default_session: Option<String>,
     next_session: u64,
+    /// `Target.setDiscoverTargets` state.
+    discover_targets: bool,
+    /// `Target.setAutoAttach` state: attach a flattened session per new target.
+    auto_attach: bool,
 }
 
 impl Connection {
@@ -344,6 +348,8 @@ impl Connection {
             order: Vec::new(),
             default_session: None,
             next_session: 0,
+            discover_targets: false,
+            auto_attach: false,
         }
     }
 
@@ -360,13 +366,13 @@ impl Connection {
             match self.ws.poll() {
                 Ok(Some(Message::Text(text))) => {
                     self.dispatch_message(&text);
-                    self.emit_events();
+                    self.pump();
                 }
                 Ok(Some(Message::Binary(_))) => {
                     // CDP is text-only; ignore binary payloads.
-                    self.emit_events();
+                    self.pump();
                 }
-                Ok(None) => self.emit_events(),
+                Ok(None) => self.pump(),
                 Err(WsError::Closed { .. }) | Err(WsError::Eof) => break,
                 Err(_) => {
                     let _ = self.ws.write_close(1002, "protocol error");
@@ -374,6 +380,12 @@ impl Connection {
                 }
             }
         }
+    }
+
+    /// Emits pending target-lifecycle and engine events.
+    fn pump(&mut self) {
+        self.emit_target_events();
+        self.emit_events();
     }
 
     fn dispatch_message(&mut self, text: &str) {
@@ -490,14 +502,26 @@ impl Connection {
                 Json::Bool(false),
             )]))),
             "Target.setDiscoverTargets" => {
-                request.optional_bool("discover", false)?;
-                Ok(DispatchOutcome::empty())
+                let discover = request.optional_bool("discover", false)?;
+                self.discover_targets = discover;
+                let mut events = Vec::new();
+                if discover {
+                    for target in self.host.list_targets() {
+                        events.push(target::created_event(&target));
+                    }
+                }
+                Ok(DispatchOutcome::empty().with_events(events))
             }
             "Target.getBrowserContexts" => Ok(DispatchOutcome::result(crate::domains::object(vec![(
                 "browserContextIds",
                 Json::Array(Vec::new()),
             )]))),
-            "Target.setAutoAttach" => Ok(DispatchOutcome::empty()),
+            "Target.setAutoAttach" => {
+                let auto_attach = request.optional_bool("autoAttach", false)?;
+                let _wait = request.optional_bool("waitForDebuggerOnStart", false)?;
+                self.auto_attach = auto_attach;
+                Ok(DispatchOutcome::empty())
+            }
             "Browser.getVersion" => Ok(DispatchOutcome::result(target::browser_version(
                 &self.host.info(),
             ))),
@@ -526,6 +550,83 @@ impl Connection {
             .into_iter()
             .find(|target| target.target_type == "page")
             .ok_or_else(|| CdpError::server("No page target available"))
+    }
+
+    /// Emits `Target.*` lifecycle events from the host and auto-attaches
+    /// flattened sessions when `Target.setAutoAttach(true)` is active.
+    fn emit_target_events(&mut self) {
+        let events = self.host.drain_target_events();
+        for event in events {
+            match event.kind {
+                TargetEventKind::Created => {
+                    if self.discover_targets {
+                        self.write_json(&target::created_event(&event.target));
+                    }
+                    if self.auto_attach && self.session_for_target(&event.target.id).is_none() {
+                        if let Ok(dev) = self.host.attach(&event.target.id) {
+                            self.next_session += 1;
+                            let session_id = format!("S{:x}", self.next_session);
+                            let session =
+                                SessionState::new(session_id.clone(), event.target.clone(), dev);
+                            self.insert_session(session, false);
+                            self.write_json(&target::attached_event(
+                                &session_id,
+                                &event.target,
+                                false,
+                            ));
+                        }
+                    }
+                }
+                TargetEventKind::InfoChanged => {
+                    if self.discover_targets {
+                        self.write_json(&target::info_changed_event(&event.target));
+                    }
+                }
+                TargetEventKind::Destroyed => {
+                    let removed = self.remove_target_sessions(&event.target.id);
+                    if self.discover_targets {
+                        self.write_json(&target::destroyed_event(&event.target));
+                    }
+                    for session_id in removed {
+                        self.write_json(&target::detached_event(&session_id));
+                    }
+                }
+                TargetEventKind::Attached => {
+                    let session_id = event.session_id.clone().unwrap_or_default();
+                    self.write_json(&target::attached_event(&session_id, &event.target, false));
+                }
+                TargetEventKind::Detached => {
+                    let session_id = event.session_id.clone().unwrap_or_default();
+                    self.write_json(&target::detached_event(&session_id));
+                }
+            }
+        }
+    }
+
+    fn session_for_target(&self, target_id: &str) -> Option<String> {
+        self.sessions
+            .iter()
+            .find(|(_, session)| session.target.id == target_id)
+            .map(|(id, _)| id.clone())
+    }
+
+    fn remove_target_sessions(&mut self, target_id: &str) -> Vec<String> {
+        let ids: Vec<String> = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.target.id == target_id)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in &ids {
+            self.sessions.remove(id);
+        }
+        self.order.retain(|id| !ids.contains(id));
+        if let Some(default) = self.default_session.clone() {
+            if ids.contains(&default) {
+                self.default_session = None;
+            }
+        }
+        ids
     }
 
     fn emit_events(&mut self) {

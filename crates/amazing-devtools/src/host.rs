@@ -454,6 +454,128 @@ pub struct Screenshot {
     pub format: ScreenshotFormat,
 }
 
+/// A four-corner quadrilateral, in the order CDP uses: top-left, top-right,
+/// bottom-right, bottom-left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Quad {
+    pub points: [(f64, f64); 4],
+}
+
+impl Quad {
+    /// An axis-aligned rectangle.
+    pub fn rect(x: f64, y: f64, width: f64, height: f64) -> Self {
+        Self {
+            points: [
+                (x, y),
+                (x + width, y),
+                (x + width, y + height),
+                (x, y + height),
+            ],
+        }
+    }
+}
+
+/// CDP `DOM.BoxModel`: the content, padding, border and margin quads.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BoxModel {
+    pub content: Quad,
+    pub padding: Quad,
+    pub border: Quad,
+    pub margin: Quad,
+    pub width: i64,
+    pub height: i64,
+}
+
+impl BoxModel {
+    /// A box whose four quads are one rectangle, as a simple element produces.
+    pub fn from_rect(x: f64, y: f64, width: f64, height: f64) -> Self {
+        let quad = Quad::rect(x, y, width, height);
+        Self {
+            content: quad,
+            padding: quad,
+            border: quad,
+            margin: quad,
+            width: width.round() as i64,
+            height: height.round() as i64,
+        }
+    }
+}
+
+/// CDP `Page.Viewport`, used for the layout and visual viewports.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Viewport {
+    pub page_x: f64,
+    pub page_y: f64,
+    pub client_width: f64,
+    pub client_height: f64,
+}
+
+/// CDP `Page.LayoutMetrics`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayoutMetrics {
+    pub layout_viewport: Viewport,
+    pub visual_viewport: Viewport,
+    pub content_width: f64,
+    pub content_height: f64,
+}
+
+/// CDP `Page.ResourceType`. Stored as a string so the driver can report any
+/// resource kind without this crate enumerating them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResourceInfo {
+    pub url: String,
+    pub mime_type: String,
+    pub resource_type: String,
+    pub content_size: Option<u64>,
+    /// Seconds since the Unix epoch, if known.
+    pub last_modified: Option<f64>,
+    pub cached: bool,
+}
+
+/// CDP `Page.FrameResourceTree`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameResourceTree {
+    pub frame: FrameInfo,
+    pub resources: Vec<ResourceInfo>,
+    pub child_frames: Vec<FrameResourceTree>,
+}
+
+/// The body of one `Page.getResourceContent` response.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResourceContent {
+    pub mime_type: String,
+    pub bytes: Vec<u8>,
+}
+
+/// CDP `CSS.MediaQuery`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaQuery {
+    pub text: String,
+    /// `"mediaRule"`, `"importRule"`, `"linkedSheet"` or `"inlineSheet"`.
+    pub source: String,
+    pub source_url: Option<String>,
+}
+
+/// Why the target list changed, polled by the browser endpoint and emitted as
+/// the `Target.*` lifecycle events.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetEventKind {
+    Created,
+    InfoChanged,
+    Destroyed,
+    Attached,
+    Detached,
+}
+
+/// One target-list change. `session_id` is set for [`TargetEventKind::Attached`]
+/// and [`TargetEventKind::Detached`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetEvent {
+    pub kind: TargetEventKind,
+    pub target: TargetInfo,
+    pub session_id: Option<String>,
+}
+
 /// `Page.frameNavigated` / `Page.lifecycleEvent` data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LifecycleEvent {
@@ -565,6 +687,22 @@ pub trait DevToolsSession: Send {
     fn capture_screenshot(&mut self, _params: &ScreenshotParams) -> Result<Screenshot, HostError> {
         Err(HostError::Unsupported)
     }
+    /// Layout and visual viewport geometry for `Page.getLayoutMetrics`.
+    fn get_layout_metrics(&mut self) -> Result<LayoutMetrics, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The frame tree annotated with each frame's resources.
+    fn get_resource_tree(&mut self) -> Result<FrameResourceTree, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The body of one resource, by frame id and URL.
+    fn get_resource_content(
+        &mut self,
+        _frame_id: &str,
+        _url: &str,
+    ) -> Result<ResourceContent, HostError> {
+        Err(HostError::Unsupported)
+    }
 
     // --- Runtime ----------------------------------------------------------
     /// Evaluates a JS expression in the page's main execution context.
@@ -637,6 +775,27 @@ pub trait DevToolsSession: Send {
     fn resolve_node(&mut self, _backend_node_id: u64) -> Result<EngineNodeId, HostError> {
         Err(HostError::Unsupported)
     }
+    /// The border-box quads for `node` (`DOM.getBoxModel`).
+    fn get_box_model(&mut self, _node: EngineNodeId) -> Result<BoxModel, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Every content box overlapping `node` (`DOM.getContentQuads`).
+    fn get_content_quads(&mut self, _node: EngineNodeId) -> Result<Vec<BoxModel>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Replaces the value of a text node or attribute-less node.
+    fn set_node_value(&mut self, _node: EngineNodeId, _value: &str) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Finds nodes whose text or attributes contain `query`
+    /// (`DOM.performSearch`). The driver owns any result cache.
+    fn perform_search(&mut self, _query: &str) -> Result<Vec<EngineNodeId>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Resolves several `backendNodeId`s at once.
+    fn push_nodes(&mut self, _backend_node_ids: &[u64]) -> Result<Vec<EngineNodeId>, HostError> {
+        Err(HostError::Unsupported)
+    }
 
     // --- CSS --------------------------------------------------------------
     /// Computed longhands for `node`, in declaration order.
@@ -651,6 +810,32 @@ pub trait DevToolsSession: Send {
         &mut self,
         _node: EngineNodeId,
     ) -> Result<Vec<MatchedRule>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The text of one stylesheet, by CDP style-sheet id.
+    fn get_style_sheet_text(
+        &mut self,
+        _style_sheet_id: &str,
+    ) -> Result<Option<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Replaces the text of one stylesheet (`CSS.setStyleSheetText`).
+    fn set_style_sheet_text(
+        &mut self,
+        _style_sheet_id: &str,
+        _text: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Media queries in the document, in source order.
+    fn get_media_queries(&mut self) -> Result<Vec<MediaQuery>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Background colors for `node`, cascade-resolved (`CSS.getBackgroundColors`).
+    fn get_background_colors(
+        &mut self,
+        _node: EngineNodeId,
+    ) -> Result<Vec<Option<String>>, HostError> {
         Err(HostError::Unsupported)
     }
 
@@ -694,6 +879,11 @@ pub trait DevToolsHost: Send + Sync + 'static {
     /// Attaches to `target_id`, returning a session for the connection.
     fn attach(&self, _target_id: &str) -> Result<Box<dyn DevToolsSession>, HostError> {
         Err(HostError::Unsupported)
+    }
+    /// Target-list changes since the previous call, for the browser endpoint's
+    /// `Target.*` lifecycle events. Must not block; default is no events.
+    fn drain_target_events(&self) -> Vec<TargetEvent> {
+        Vec::new()
     }
 }
 

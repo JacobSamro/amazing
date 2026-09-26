@@ -1042,15 +1042,22 @@ impl Interpreter {
     pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
         (match backend {
             ExecutionBackend::TreeWalk => self.run_program(p),
-            ExecutionBackend::Bytecode => vm::compile(p)
-                .map_err(|error| Throw::type_error(error.to_string()))?
-                .run(self, vm::DEFAULT_INSTRUCTION_LIMIT),
+            ExecutionBackend::Bytecode => {
+                let code = vm::compile(p).map_err(|error| Throw::type_error(error.to_string()))?;
+                let previous_strict = self.strict_eval_context;
+                self.strict_eval_context |= has_use_strict_directive(&p.body)
+                    || (!self.in_eval && self.global_env.kind() == EnvKind::Module);
+                let result = code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                self.strict_eval_context = previous_strict;
+                result
+            },
         }).map_err(|th| self.normalize_throw(th))
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         let previous_strict = self.strict_eval_context;
-        if has_use_strict_directive(&p.body) {
+        if has_use_strict_directive(&p.body)
+            || (!self.in_eval && self.global_env.kind() == EnvKind::Module) {
             self.strict_eval_context = true;
         }
         let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
@@ -1099,7 +1106,12 @@ impl Interpreter {
     /// evaluation. The module linker owns the environment and import cells.
     pub fn prepare_module(&mut self, program: &ast::Program) -> Result<(), Throw> {
         let env = self.global_env.clone();
-        self.hoist(&program.body, &env)
+        env.0.borrow_mut().kind = EnvKind::Module;
+        let previous_strict = self.strict_eval_context;
+        self.strict_eval_context = true;
+        let result = self.hoist(&program.body, &env);
+        self.strict_eval_context = previous_strict;
+        result
     }
 
 
@@ -1197,119 +1209,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn bind_pattern(
-        &mut self,
-        binding: &Binding,
-        value: JsValue,
-        kind: ast::VarKind,
-        env: &EnvHandle,
-    ) -> Result<(), Throw> {
-        match binding {
-            Binding::Ident(identifier) => match kind {
-                ast::VarKind::Var => {
-                    if !env.assign(&identifier.name, value.clone())? {
-                        self.global_env.declare_var(&identifier.name, value)?;
-                    }
-                }
-                ast::VarKind::Let => env.declare_lexical(&identifier.name, value, true)?,
-                ast::VarKind::Const => env.declare_lexical(&identifier.name, value, false)?,
-            },
-            Binding::Default(inner, expression) => {
-                let value = if value.is_undefined() {
-                    let mut value = self.eval_expr(expression, env)?;
-                    if let Binding::Ident(name) = inner.as_ref() {
-                        self.infer_function_name(&mut value, &name.name);
-                    }
-                    value
-                } else {
-                    value
-                };
-                self.bind_pattern(inner, value, kind, env)?;
-            }
-            Binding::Rest(inner) => self.bind_pattern(inner, value, kind, env)?,
-            Binding::Array(elements) => {
-                let method = self.get_prop(&value, WellKnownSymbol::Iterator.symbol())?;
-                if callable_function(&method).is_none() {
-                    return Err(Throw::type_error("value is not iterable"));
-                }
-                let iterator = self.call_value(&method, value, Vec::new())?;
-                if !iterator.is_object() {
-                    return Err(Throw::type_error("iterator is not an object"));
-                }
-                let next = self.get_prop(&iterator, "next")?;
-                if callable_function(&next).is_none() {
-                    return Err(Throw::type_error("iterator next is not callable"));
-                }
-                let mut exhausted = false;
-                for element in elements {
-                    if let Some(Binding::Rest(rest)) = element.as_deref() {
-                        let mut values = Vec::new();
-                        if !exhausted {
-                            for _ in 0..100_000 {
-                                match self.binding_iterator_step(&iterator, &next) {
-                                    Ok(Some(value)) => values.push(value),
-                                    Ok(None) => { exhausted = true; break; }
-                                    Err(error) => { self.close_iterator(&iterator); return Err(error); }
-                                }
-                            }
-                        }
-                        if !exhausted {
-                            self.close_iterator(&iterator);
-                            return Err(Throw::range_error("iterator exceeded the iteration limit"));
-                        }
-                        let rest_value = array_values(self, values)?;
-                        self.bind_pattern(rest, rest_value, kind, env)?;
-                    } else {
-                        let item = if exhausted { JsValue::Undefined } else {
-                            match self.binding_iterator_step(&iterator, &next) {
-                                Ok(Some(value)) => value,
-                                Ok(None) => { exhausted = true; JsValue::Undefined }
-                                Err(error) => { self.close_iterator(&iterator); return Err(error); }
-                            }
-                        };
-                        if let Some(element) = element {
-                            if let Err(error) = self.bind_pattern(element, item, kind, env) {
-                                if !exhausted { self.close_iterator(&iterator); }
-                                return Err(error);
-                            }
-                        }
-                    }
-                }
-                if !exhausted { self.close_iterator(&iterator); }
-            }
-            Binding::Object(properties) => {
-                let source = match value {
-                    JsValue::Object(_) | JsValue::Str(_) => value,
-                    JsValue::Null | JsValue::Undefined => {
-                        return Err(Throw::type_error("cannot destructure nullish value"))
-                    }
-                    other => other,
-                };
-                let mut used = Vec::new();
-                for (key, property) in properties {
-                    match key {
-                        ast::BindingKey::Static(name) if name == "..." => {
-                            let rest = self.object_rest(&source, &used)?;
-                            self.bind_pattern(property, rest, kind, env)?;
-                        }
-                        ast::BindingKey::Static(name) => {
-                            used.push(name.clone().into());
-                            let item = self.get_prop(&source, name)?;
-                            self.bind_pattern(property, item, kind, env)?;
-                        }
-                        ast::BindingKey::Computed(expression) => {
-                            let computed_value = self.eval_expr(expression, env)?;
-                            let computed = self.to_property_key(&computed_value)?;
-                            used.push(computed.clone());
-                            let item = self.get_prop(&source, &computed)?;
-                            self.bind_pattern(property, item, kind, env)?;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
+
 
     fn object_rest(&mut self, source: &JsValue, used: &[PropertyKey]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
@@ -2401,12 +2301,8 @@ impl Interpreter {
                 };
                 if self.set_with_receiver(object, &key, value, base.clone())? {
                     Ok(())
-                } else if matches!(object.borrow().exotic, Exotic::Array)
-                    && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length")
-                    && object.borrow().own_prop("length").is_some_and(|property| property.writable)
-                {
-                    // A failed shrink leaves the first undeletable element in place.
-                    // Sloppy assignment ignores the unsuccessful [[Set]].
+                } else if !self.strict_eval_context {
+                    // PutValue ignores an unsuccessful [[Set]] for sloppy references.
                     Ok(())
                 } else {
                     Err(Throw::type_error("cannot assign to property"))
@@ -2647,8 +2543,9 @@ impl Interpreter {
         }
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
+        let async_body = self.async_body_code(&o, &fun, strict_function);
         let bytecode_async = fun.is_async && !fun.is_generator
-            && matches!(&fun.body, FunctionBody::Bytecode(_));
+            && (async_body.is_some() || matches!(&fun.body, FunctionBody::Bytecode(_)));
         let async_generator = fun.is_async && fun.is_generator;
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
@@ -2702,6 +2599,7 @@ impl Interpreter {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.eval_expr(&x, &e)
                 }
                 FunctionBody::Block(b) => {
@@ -2725,6 +2623,7 @@ impl Interpreter {
                         if !fun.is_arrow { e.bind_this(this); }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.hoist(&b.body, &e)?;
                     let completion = self.exec_stmts(&b.body, &e)?;
                     if derived {
@@ -2772,26 +2671,37 @@ impl Interpreter {
         args: Vec<JsValue>,
         is_arrow: bool,
     ) -> Result<(), Throw> {
+        // Parameters are mutable function bindings, not lexical declarations:
+        // body var declarations reuse them and sloppy duplicate names overwrite.
+        // Allocate locally before binding patterns so assignment cannot escape
+        // into a same-named binding in the enclosing environment.
+        let mut names = std::collections::HashSet::new();
+        for p in ps {
+            for name in binding_names(&p.binding) {
+                if names.insert(name.clone()) {
+                    e.declare_uninitialized(&name, true)?;
+                }
+            }
+        }
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
                 array_values(self, args.iter().skip(i).cloned().collect())?
-            } else if args.get(i).is_none_or(JsValue::is_undefined) {
-                match &p.default {
-                    Some(default) => {
-                        let mut value = self.eval_expr(default, e)?;
-                        if let Binding::Ident(name) = &p.binding {
-                            self.infer_function_name(&mut value, &name.name);
-                        }
-                        value
-                    }
-                    None => JsValue::Undefined,
-                }
             } else {
                 args.get(i).cloned().unwrap_or(JsValue::Undefined)
             };
-            self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
+            let v = if v.is_undefined() {
+                if let Some(default) = &p.default {
+                    let mut value = self.eval_expr(default, e)?;
+                    if let Binding::Ident(name) = &p.binding {
+                        self.infer_function_name(&mut value, &name.name);
+                    }
+                    value
+                } else { v }
+            } else { v };
+            self.bind_pattern_mode(&p.binding, v, None, e)?;
         }
-        if is_arrow { return Ok(()); }
+        for name in &names { e.finish_parameter_initialization(name); }
+        if is_arrow || names.contains("arguments") { return Ok(()); }
         let argument_count = args.len();
         let a = self.object_value();
         for (i, v) in args.into_iter().enumerate() {
@@ -3951,6 +3861,7 @@ impl Interpreter {
 }
 
 include!("interp_helpers.rs");
+include!("interp_async.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
