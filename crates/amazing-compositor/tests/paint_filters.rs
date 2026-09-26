@@ -6,6 +6,7 @@ fn input(effect: EffectId) -> PaintFilterInput {
     PaintFilterInput {
         effect, space: PaintFilterSpace::Raster, filters: vec![],
         backdrop_filters: vec![], backdrop_bounds: None, clip_path: None,
+        local_transform: None,
     }
 }
 
