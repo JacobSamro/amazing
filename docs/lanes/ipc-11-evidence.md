@@ -29,6 +29,7 @@ hook next to storage). The shared-file footprint is one `NativeEntry` variant
 
 | Command | Result |
 | --- | --- |
+| `cargo nextest run -p amazing -p amazing-process` (merged head `cad48c43`) | 257/257, 7 skipped |
 | `cargo nextest run -p amazing -p amazing-process` (merged head `f330dcf8`) | 256/256, 7 skipped |
 | `cargo nextest run -p amazing -p amazing-process` (messaging `9744fd00`) | 249/249, 7 skipped |
 | `cargo nextest run -p amazing` | 191/191, 3 skipped |
@@ -97,8 +98,13 @@ steal/if-available/abort/signal families remain engine and binding work.
 ## Windows gate
 
 `scripts/win-run.sh ipc -- 'cargo nextest run --workspace --locked --no-fail-fast; cargo test --workspace --locked --doc'`
-on win-001 (win-002 offline) did not complete: extraction failed with
-`No space left on device` and cargo then loaded a partial tree. No Windows
-numbers are claimed. The exact-source workspace gate on `9744fd00` is queued
-once the host has space or win-002 returns; the failure and the stale-archive
-gap in `win-run.sh` are filed in `questions.md`.
+on win-001 (win-002 offline), gate source `2ae31e97` (code `f330dcf8`), base
+`838361c5`:
+
+- workspace nextest: **2503/2503 passed**, 9 skipped, **0 failures**, exit 0.
+- workspace doctests: **2/2 passed** (`amazing-html`, `amazing-js`).
+
+An earlier attempt failed during extraction with `No space left on device`;
+after the orchestrator purged caches the same gate passed. The final Windows
+run predates the last dev merge to `cad48c43` (siblings only; the lane's own
+crates are unchanged), whose Linux crate gate is 257/257.
