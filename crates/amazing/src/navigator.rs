@@ -4,7 +4,7 @@ use crate::runtime_host_ipc::{self, Driver};
 use amazing_js::SerializedValue;
 use amazing_process::history::{Eligibility, HistorySnapshot};
 
-mod state_wire {
+pub(crate) mod state_wire {
     use amazing_ipc::codec::{self, ByteBuf, Decoder, Encoder, Error, Wire};
     use amazing_js::{
         SerializedAtom as Atom, SerializedBoxKind as BoxKind, SerializedHostValue,

@@ -2,8 +2,8 @@
 //! source; results are installed in priority order after every worker joins.
 use super::*;
 use crate::quad::clip_rect;
-use std::sync::{mpsc, Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileRasterMode {
@@ -52,7 +52,13 @@ impl Compositor {
         &mut self,
         request: TileRasterRequest,
     ) -> Result<(Vec<TileJob>, HashSet<TileKey>), SceneError> {
-        let viewport = Rect::new(0., 0., request.width as f32, request.height as f32);
+        let halo = self.effect_raster_halo();
+        let viewport = Rect::new(
+            -halo,
+            -halo,
+            request.width as f32 + 2. * halo,
+            request.height as f32 + 2. * halo,
+        );
         let direction = request.scroll_direction;
         let ahead = Rect::new(
             viewport.x
@@ -75,7 +81,11 @@ impl Compositor {
         let mut pinned = HashSet::new();
         for (li, layer) in self.layers.iter().enumerate() {
             let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
-            let scissor = clip_rect(&self.trees, layer.state, viewport);
+            let scissor = if self.trees.has_composited_effects() || self.reserved_effect_halo > 0. {
+                viewport
+            } else {
+                clip_rect(&self.trees, layer.state, viewport)
+            };
             for key in tile_keys(li, layer.bounds) {
                 let local = tile_rect(key);
                 let Some(device) = matrix.map_bounds(local) else {
@@ -260,7 +270,9 @@ impl TileRasterPool {
             let cancelled = Arc::clone(&cancelled);
             handles.push(std::thread::spawn(move || loop {
                 let message = receive.lock().unwrap().recv();
-                if cancelled.load(Ordering::Relaxed) { break }
+                if cancelled.load(Ordering::Relaxed) {
+                    break;
+                }
                 let Ok(PoolMessage::Raster(mut work)) = message else {
                     break;
                 };
