@@ -1076,4 +1076,71 @@ Gate: crate nextest `amazing-text-provider` (+`amazing-text`+`amazing`)
 427/427 passed (8 skipped). Workspace nextest 3290/3290 passed (15 skipped,
 1 slow), doctests clean (4 doctests across amazing_a11y/devtools/html/js, all
 passed) -- run on venus-001 (clean host, none of the known worker-2/k-test
-EPERM sealed-memory failures). Commit `<TEXT-26 sha>`.
+EPERM sealed-memory failures). Commit `655b8e08`.
+
+## TEXT-27: lib.rs module split (code health), css-fonts re-triage
+
+Coordinator ask: `crates/amazing-text-provider/src/lib.rs` was 5038 lines
+(over the 4000-line limit, was 4871 before TEXT-26). Split into cohesive
+modules with no behavior change, then take the next css-fonts failure
+cluster in text's scope.
+
+**Split (zero behavior change):** `lib.rs` 5038 -> 1266 lines, plus five new
+files, all under the limit: `font_selection.rs` (297 -- matching/fallback:
+`matching_font`, `matching_font_with_space_policy`, `matching_font_impl`,
+`itemize_font_spans`, `font_covers*`, family-name helpers),
+`emoji_presentation.rs` (54 -- TEXT-26's `EmojiPresentation`,
+`emoji_presentation_intent`, `font_matches_presentation`,
+`has_color_glyph_tables`), `font_decode.rs` (273 -- untrusted web-font
+decode/sniff/validate: `decode_web_font_to_sfnt` (kept re-exported at the
+crate root; `amazing-process` calls it directly), `sniff_font_format`,
+`validate_font_structure`, `sfnt_checksum`, `BoundedWriter`),
+`shaping.rs` (551 -- the HarfRust shaping glue: `shape_range`,
+`font_metrics`, `rasterize_font_glyph`, `fallback_grapheme_run`,
+`cluster_orientation`), `tests.rs` (2698 -- the crate's `#[cfg(test)] mod
+tests`, unwrapped into its own file; `web_font_decode_tests.rs`'s
+`include!` keeps resolving since both files stay siblings in `src/`). A
+handful of names exist at the crate root only as
+`#[allow(unused_imports)]` re-exports so `tests.rs`'s `use super::*` still
+finds them by bare name under `cargo test` (a plain `cargo build` never
+activates `#[cfg(test)] mod tests`, so the warning is otherwise real on
+that target and spurious on the test target).
+
+**css-fonts re-triage:** re-ran the pinned selection on worker-2 --
+unchanged 21 pass / 11 mismatch from TEXT-26's own measurement, confirming
+the split changed no behavior. All 11 remaining mismatches are already
+accounted for by TEXT-26: `font-size-adjust-order-001/-zero-1/-zero-2` and
+`rlh-in-monospace` are routed to layout (unwired call sites, not a
+text-provider gap); `standard-font-family-{2,3,5,11,17}` and
+`matching__font-unicode-PUA-primary-font` are host/environment (unchanged
+code since TEXT-21). Went one step further on `font-variant-emoji-1`: the
+test itself says "this test assumes the system has both text and emoji
+glyphs available for U+263A" and declares no `@font-face` at all, so it
+depends entirely on a real installed system emoji font. Direct filesystem
+check on worker-2 (`find / -iname '*emoji*' -type f`, `fc-list | grep
+emoji`) found **zero** installed emoji fonts anywhere on that host --
+only WPT's own `@font-face`-loaded test fixtures under
+`~/corpora/wpt/css/css-fonts/resources/vs/*.ttf`, which this particular
+test doesn't reference. venus-001, by contrast, has
+`/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf` installed. This test
+therefore cannot pass on worker-2 regardless of code correctness --
+TEXT-26's fix (unit-tested with a synthetic COLR font standing in for
+exactly this scenario) is confirmed correct; the mismatch here is purely a
+host font-package gap, same category as `standard-font-family-*`. No new
+in-lane, host-independent cluster remained to fix in this selection.
+
+Refreshed the stale evidence baseline (`crates/amazing-shell-gpui/evidence/
+wpt-render/css-css-fonts/`, last updated by TEXT-21/SHELL-L4 at a different
+sandbox's font set: 25 pass/7 mismatch) to the current worker-2 measurement
+(21 pass/11 mismatch, `compact.json` + `clusters.json`, dropping the stale
+`report.json`) so future gates compare against this host's actual state
+instead of drifting against a different machine's font inventory.
+
+Gate: crate nextest `amazing-text-provider` 112/112 passed (2 skipped,
+unchanged from before the split). Workspace nextest 3302/3302 passed (16
+skipped, 1 slow, `--locked --no-fail-fast`), doctests clean (4 doctests
+across amazing_a11y/devtools/html/js, all passed) -- venus-001. css-fonts
+pinned selection: 21 pass/11 mismatch of 32, zero classification change
+from TEXT-26's own measurement (verified against the refreshed baseline
+above) -- worker-2. Commit `e55d3a2b` (module split); evidence-baseline
+refresh and this note land in the same commit series.
