@@ -37,8 +37,10 @@
 //!
 //! Usage (on a Linux sandbox, after `bash scripts/ensure-wpt.sh`):
 //!   WPT_ROOT=~/corpora/wpt cargo run -p amazing-css --example wpt_conformance [selection...]
-//! With no arguments, runs the four selections with matching files:
-//! css-color, css-values, css-cascade, css-conditional. (`css/mediaqueries`
+//! With no arguments, runs the ten selections with matching files: css-color,
+//! css-values, css-cascade, css-conditional, css-fonts, css-text,
+//! css-backgrounds, css-transforms, css-flexbox, css-grid (widened in
+//! CSS-27; see the lane docs for the measured breakdown). (`css/mediaqueries`
 //! has no files in this exact shape -- its parsing tests use a per-file
 //! `test_parsing(query, expected)` pattern against `matchMedia(...).media`
 //! canonical serialization, which this crate does not implement; see the
@@ -79,7 +81,11 @@ fn main() {
     let css_root = PathBuf::from(root).join("css");
     let requested: Vec<String> = std::env::args().skip(1).collect();
     let selections: Vec<String> = if requested.is_empty() {
-        ["css-color", "css-values", "css-cascade", "css-conditional"]
+        [
+            "css-color", "css-values", "css-cascade", "css-conditional",
+            "css-fonts", "css-text", "css-backgrounds", "css-transforms",
+            "css-flexbox", "css-grid",
+        ]
             .iter()
             .map(|s| s.to_string())
             .collect()

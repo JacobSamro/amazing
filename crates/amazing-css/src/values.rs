@@ -301,7 +301,7 @@ fn number(css: &str) -> Option<f64> {
 /// which only validates grammar and leaves resolution to a later consumer --
 /// this evaluates to a concrete `f64` immediately. Used by `opacity` and
 /// `fill-opacity`; the caller still clamps the final result to `[0, 1]`.
-fn alpha_value(css: &str) -> Option<f64> {
+pub(crate) fn alpha_value(css: &str) -> Option<f64> {
     let tokens = significant(&tokenize(css));
     let mut pos = 0;
     let value = alpha_sum(&tokens, &mut pos)?;
@@ -568,6 +568,21 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                 match significant(&tokenize(css)).as_slice() {
                     [Token::Function(name), ..] if name.eq_ignore_ascii_case("light-dark") => {
                         crate::computed::valid_light_dark(css).then_some(V::Unparsed)
+                    }
+                    // CSS-27: `alpha()` gets its own dedicated grammar check
+                    // rather than the generic "unrecognized function ->
+                    // preserved as Unparsed" fallback just below, which
+                    // otherwise makes a genuinely malformed `alpha(...)`
+                    // (e.g. missing its mandatory `/ <alpha>` clause) parse
+                    // as valid-but-unresolved instead of being rejected.
+                    [Token::Function(name), ..] if name.eq_ignore_ascii_case("alpha") => {
+                        match crate::color::classify_alpha_function(css) {
+                            crate::color::AlphaClassification::Invalid => None,
+                            crate::color::AlphaClassification::Deferred => Some(V::Unparsed),
+                            crate::color::AlphaClassification::Resolved(rgba) => {
+                                Some(V::Color(Color::Rgba(rgba)))
+                            }
+                        }
                     }
                     [Token::Function(name), ..]
                         if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") =>
