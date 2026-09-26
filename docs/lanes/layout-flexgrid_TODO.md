@@ -161,4 +161,124 @@ timing test), doctests 0/0. Workspace gate:
 `cargo nextest run --workspace --locked` 2,752/2,752 (10 skipped), workspace
 doctests 4/4. Both green on the lane's Linux sandbox (Linux-first, AGENTS.md).
 
+## LFG-3 — css-grid/abspos remainder, round 2 (2026-09-26)
+
+Merged dev at `a38fe2f0` (brings LFG-1/LFG-2 back in as `c78edbfc`) before
+starting; base for this series is `93540eb0` (merge commit on
+`lane/layout-flexgrid`).
+
+Root-caused and fixed four more bugs, all in files this lane already owns or
+was granted (`flex.rs`, `grid.rs`, `position.rs`):
+
+1. **`GridTracks` positions go stale after any later shift of the grid
+   container.** `GridTracks::col_positions`/`row_positions` are absolute
+   physical pixel positions computed once during the grid container's own
+   layout, but neither `flex::translate` (used for float placement, among
+   other things) nor `position::shift_box` (used for `position: relative`
+   offsets) updated them when the box itself moved afterward — every other
+   sibling in a run of `float: left` grid containers (the WPT static-position
+   test family's standard "put N variants in a row" layout) kept its *first*
+   provisional position's tracks, desyncing every abspos child's grid-area
+   containing block/static position from where the container actually ended
+   up. Root-caused with a temporary debug print comparing `parent.content_box`
+   against `tracks.col_positions` for two sibling floated `.container`s in
+   the same test file — the second one's tracks matched the *first*
+   container's origin, not its own. Fixed by shifting both position arrays
+   alongside `content_box`/`border_box` in both functions. This is the
+   highest-leverage fix in this series — most WPT static-position tests in
+   this family float multiple `.container`s in a row.
+2. **Box Alignment axis mapping for `align-self`/`justify-self` didn't
+   account for the grid container's own writing mode.** `align-*` always
+   targets the block axis and `justify-*` the inline axis (css-align-3 §5);
+   `grid_child_static_anchor` hard-coded `justify→X`/`align→Y`, correct only
+   for `horizontal-tb`. For a `vertical-rl`/`vertical-lr` container the block
+   axis is physical X and the inline axis physical Y, so `align-self`
+   controls X and `justify-self` controls Y, with `vertical-lr`'s block-start
+   at physical left vs. `vertical-rl`'s at physical right. Rewrote
+   `grid_child_static_anchor`/`static_align` (`position.rs`) to resolve which
+   property drives which physical axis, and its Start/End polarity, from the
+   container's `writing-mode` (and `direction` for whichever axis is inline).
+   `left`/`right` also needed splitting three ways: invalid for `align-*`
+   (not in its grammar — both keywords fall back to the unset default, never
+   distinct Start vs. End, confirmed against the WPT reference), literal
+   physical for `justify-*` on a physically-horizontal inline axis, and
+   start/end-equivalent for `justify-*` on a non-horizontal one
+   (css-align-3 §8.3). This alone does **not** fully fix the `vertWM`/
+   `orthogonal` family — see "Known gap" below.
+3. **`last baseline` synthesized to the wrong edge.** `static_align` read
+   only the last word of the value (`"baseline"`), so `last baseline` was
+   indistinguishable from plain `baseline` and both fell back to the
+   start-edge default. Neither engine computes a real baseline for these
+   fixed-size/empty boxes, so per css-align-3 §9's fallback alignment,
+   `baseline`/`first baseline` should synthesize to the start edge and
+   `last baseline` to the end edge — confirmed against the WPT reference,
+   which literally names its CSS classes `alignStart`/`alignEnd`. Fixed by
+   checking for a leading `last` before the `baseline` keyword.
+4. **`prepare_stretch`'s width shrink-to-fit only covered "both insets
+   auto."** CSS2.1 §10.3.7 cases 2 and 4 (exactly one of `left`/`right` set,
+   `width` auto) also shrink-to-fit the width, solving the *other* inset from
+   it — only case where both are set stretches. Widened the condition from
+   `left.is_none() && right.is_none()` to just `width_auto` (the stretch
+   branch above it already `else if`s past the both-known case).
+5. **`parse_item_align` (grid.rs, normal in-flow item alignment, also reused
+   for the abspos `-self` override lookup) never matched `self-start`/
+   `self-end`**, silently falling back to `Stretch` — verified via a WPT
+   reference file using an ordinary (non-abspos) grid item with
+   `align-items: self-end` that stayed at the top instead of the bottom.
+   Mapped both to `Start`/`End`; a fully orthogonal-aware resolution would
+   need the item's own writing mode threaded through, which nothing calling
+   this function currently carries, so this is the common-case default, not
+   a complete fix.
+
+**Known gap, not attempted:** the `vertWM`/`orthogonal` abspos family (30 of
+the original 81) needs more than alignment-keyword polarity. Grid's own axis
+convention is that **rows run along the row axis (parallel to the inline
+axis) and columns along the column axis (parallel to the block axis)** —
+for `vertical-rl`/`vertical-lr` those are physically swapped from the
+`horizontal-tb` assumption baked into `layout_grid`'s row/column-to-physical
+mapping throughout `grid.rs` (track sizing, positions, gaps, line names,
+`justify-content`/`align-content`), not just into the abspos static-position
+code in `position.rs`. Confirmed by hand-computing a `vertical-rl` test
+case's expected grid-area rect two ways (physical-column-from-row-template
+vs. the reverse) and finding our renderer's *internal* math self-consistent
+under the current (wrong) row↔Y/column↔X assumption, while the correct
+physical rect requires the swap. Retrofitting this into `grid.rs` touches
+enough of the track-layout algorithm that it deserves its own ticket rather
+than a rushed change late in this one; see `questions.md`.
+
+**Also found but not fixed** (see `questions.md` for the exact repro): a
+grid container with *zero* in-flow items (every child out-of-flow) computes
+its own auto width from something far smaller than the containing block,
+instead of filling it like an ordinary block-level box — affects
+`descendant-static-position-*` (a positioned descendant nested one level
+below the grid item wrapper) and some `positioned-grid-descendant-
+containing-block-*` cases.
+
+Measured on Linux, release binary, `run-render-sweep-linux.py`, same base:
+
+| Selection | Before this series | After |
+| --- | --- | --- |
+| flex/grid (1,446) | 698 pass / 748 mismatch | **714 pass / 732 mismatch** (+16) |
+| `css-grid/abspos` (113) | 32 pass / 81 mismatch | **48 pass / 65 mismatch** (+16) |
+| LFG-1 loss-repair set (6) | 5 pass / 1 mismatch | **5 pass / 1 mismatch** (unchanged, still CSS-owned) |
+| collapsed-tracks group (24) | 24 exact | **24 exact** (unchanged) |
+
+Remaining `css-grid/abspos` mismatches (65): vertWM/orthogonal 30 (the known
+gap above), last-baseline 6 (all `-vertWM-last-baseline-`/RTL-last-baseline
+combinations that also need the axis-swap gap closed), rtl 4, other 27 (the
+`descendant-static-position`/`positioned-grid-descendant-containing-block`
+zero-in-flow-item width bug above accounts for 8 of these; the rest are
+`positioned-grid-items-*` cases still blocked on the css lane's `place-items`
+shorthand gap, filed previously).
+
+Crate gate: `cargo nextest run -p amazing-layout --locked` 303/303 (1
+skipped). Workspace gate: `cargo nextest run --workspace --locked`
+2,949/2,949 (11 skipped, 1 slow), workspace doctests 4/4. Both green on the
+lane's Linux sandbox.
+
+Also updated `evidence/layout-flexgrid/run-render-sweep-linux.py` to render
+into a scratch tempdir and only persist mismatch images under `--output`
+(pass-case PPMs used to accumulate gigabytes per full-selection run on the
+shared `pool-layout` sandbox, per the 2026-09-26 disk-pressure incident).
+
 
