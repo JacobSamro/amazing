@@ -3,6 +3,53 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_install_dataset_hooks(&mut self) -> Result<(), Throw> {
+        let state = self.state.clone();
+        let names = Rc::new(move |handle: HostHandle| {
+            let state = state.borrow();
+            let mut host = state.host.borrow_mut();
+            if handle.arena != state.arena || handle.generation != 1
+                || handle.brand != InterfaceBrand::DOM_STRING_MAP.0
+                || handle.slot >= host.dom.node_count() as u64 {
+                return Err(Throw::type_error("Invalid DOMStringMap"));
+            }
+            host.dom.dataset_names(NodeIdx(handle.slot as u32))
+                .map_err(|_| Throw::type_error("Invalid DOMStringMap element"))
+        });
+        let get_state = self.state.clone();
+        let named_getter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16]| {
+            let mut adapter = RuntimeBindingHost { js, state: get_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetGet, receiver, &[name])
+        });
+        let set_state = self.state.clone();
+        let named_setter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16], value: JsValue| {
+            let mut adapter = RuntimeBindingHost { js, state: set_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetSet, receiver, &[name, value])?;
+            Ok(())
+        });
+        let delete_state = self.state.clone();
+        let named_deleter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16]| {
+            let mut adapter = RuntimeBindingHost { js, state: delete_state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            let name = adapter.string(name)?;
+            invoke(&mut adapter, Operation::DatasetDelete, receiver, &[name])?;
+            Ok(true)
+        });
+        self.js.binding_define_legacy_platform_object(InterfaceBrand::DOM_STRING_MAP.0, RuntimeLegacyHooks {
+            supported_index_count: Rc::new(|_| Ok(0)), supported_names: Some(names),
+            indexed_getter: Rc::new(|_, _, _| Ok(JsValue::Undefined)),
+            named_getter: Some(named_getter), indexed_setter: None,
+            named_setter: Some(named_setter), named_deleter: Some(named_deleter),
+            unenumerable_names: false, override_builtins: true,
+        });
+        Ok(())
+    }
+
+
     pub(super) fn dom_frozen_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
         let array = self.js.binding_create_array(values)?;
         let JsValue::Object(object) = &array else { unreachable!() };
@@ -81,6 +128,47 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dataset_is_live_same_object_with_named_property_descriptors() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('dataset conformance'); }
+            check(document.createElementNS('urn:random', 'element').dataset === undefined);
+            check(document.createElementNS(null, 'element').dataset === undefined);
+            for (const element of [document.createElement('div'),
+                document.createElementNS('http://www.w3.org/2000/svg', 'g'),
+                document.createElementNS('http://www.w3.org/1998/Math/MathML', 'math')]) {
+                const map = element.dataset;
+                check(map === element.dataset && map instanceof DOMStringMap);
+                element.setAttribute('data-first-name', 'Ada');
+                check(map.firstName === 'Ada');
+                map.firstName = null;
+                check(element.getAttribute('data-first-name') === 'null');
+                const desc = Object.getOwnPropertyDescriptor(map, 'firstName');
+                check(desc.value === 'null' && desc.writable && desc.enumerable && desc.configurable);
+                check(Object.keys(map).join(',') === 'firstName');
+                element.setAttribute('data-to-string', 'override');
+                check(map.toString === 'override');
+                check(delete map.firstName && !element.hasAttribute('data-first-name'));
+                map[''] = 'empty';
+                check(element.getAttribute('data-') === 'empty');
+                let rejected = false;
+                try { map['bad-name'] = 'x'; }
+                catch (error) { rejected = error instanceof DOMException && error.name === 'SyntaxError'; }
+                check(rejected);
+                Object.defineProperty(map, 'defined', {value: 42, configurable: true});
+                check(element.getAttribute('data-defined') === '42');
+                element.removeAttribute('data-defined');
+                check(map.defined === undefined);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn dom_exception_uses_inherited_accessors_and_native_error_identity() {

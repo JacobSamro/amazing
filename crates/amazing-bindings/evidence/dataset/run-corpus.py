@@ -1,4 +1,4 @@
-"""Run the entire pinned WebIDL exception directory on Linux, with lane-local outputs."""
+"""Run the pinned collection and global-attribute testharness directories on Linux, with lane-local outputs."""
 import argparse
 import hashlib
 import json
