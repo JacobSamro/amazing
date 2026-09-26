@@ -1,0 +1,17 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR responseXML uses the inert document parser");
+var xhr = new XMLHttpRequest();
+xhr.onload = function () {
+  assert_equals(xhr.status, 200);
+  assert_equals(xhr.responseXML.documentElement.localName, "root");
+  assert_equals(xhr.response.documentElement.localName, "root");
+  t.done();
+  done();
+};
+xhr.onerror = function () { throw new Error("XHR document network error"); };
+xhr.open("GET", "data:application/xml,%3Croot%3Eok%3C/root%3E");
+xhr.responseType = "document";
+xhr.send();
+</script>

@@ -1,0 +1,43 @@
+{
+ "schema": 1,
+ "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+ "selection": {
+  "kind": "parsing-declarations",
+  "note": "COMP-15 gates on these WPT parsing selections. The DOM CSSOM/getComputedStyle path is not implemented, so the JS testharness files are not run directly; their valid/invalid declaration sets are encoded in crates/amazing-css/src/effects.rs (unit tests) and crates/amazing-css/tests/css19_effects.rs (public compute)."
+ },
+ "properties": [
+  "filter",
+  "backdrop-filter",
+  "mix-blend-mode",
+  "isolation",
+  "clip-path",
+  "mask-image",
+  "mask-mode",
+  "mask-repeat",
+  "mask-position",
+  "mask-clip",
+  "mask-origin",
+  "mask-size",
+  "mask-composite",
+  "mask-type"
+ ],
+ "tests": [
+  "css/filter-effects/parsing/filter-parsing-valid.html",
+  "css/filter-effects/parsing/filter-parsing-invalid.html",
+  "css/filter-effects/parsing/backdrop-filter-parsing-valid.html",
+  "css/filter-effects/parsing/backdrop-filter-parsing-invalid.html",
+  "css/filter-effects/parsing/filter-computed.html",
+  "css/compositing/parsing/mix-blend-mode-valid.html",
+  "css/compositing/parsing/mix-blend-mode-invalid.html",
+  "css/css-masking/parsing/clip-path-valid.html",
+  "css/css-masking/parsing/clip-path-invalid.html",
+  "css/css-masking/parsing/clip-path-computed.html",
+  "css/css-masking/parsing/mask-image-computed.html",
+  "css/css-masking/parsing/mask-repeat-valid.html",
+  "css/css-masking/parsing/mask-position-valid.html",
+  "css/css-masking/parsing/mask-size-valid.html",
+  "css/css-masking/parsing/mask-composite-valid.html",
+  "css/css-masking/parsing/mask-type-valid.html",
+  "css/css-masking/parsing/clip-rule-valid.html"
+ ]
+}

@@ -1,0 +1,15 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR blob response wraps bytes and content type");
+var xhr = new XMLHttpRequest();
+xhr.open("GET", "data:text/plain,hello");
+xhr.responseType = "blob";
+xhr.addEventListener("load", function() {
+  assert_equals(xhr.response.size, 5);
+  assert_equals(xhr.response.type, "text/plain");
+  t.done();
+  done();
+});
+xhr.send();
+</script>

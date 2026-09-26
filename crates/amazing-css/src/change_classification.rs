@@ -16,7 +16,21 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
     Some(match name {
         // CompositorOnly
         "opacity" |
-        "transform" => CompositorOnly,
+        "transform" |
+        "filter" |
+        "backdrop-filter" |
+        "mix-blend-mode" |
+        "isolation" |
+        "clip-path" |
+        "mask-image" |
+        "mask-mode" |
+        "mask-repeat" |
+        "mask-position" |
+        "mask-clip" |
+        "mask-origin" |
+        "mask-size" |
+        "mask-composite" |
+        "mask-type" => CompositorOnly,
         // PaintOnly
         "background-attachment" |
         "background-clip" |
@@ -35,7 +49,6 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "border-top-left-radius" |
         "border-top-right-radius" |
         "box-shadow" |
-        "clip-path" |
         "clip-rule" |
         "color" |
         "cursor" |
@@ -239,7 +252,7 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [2, 40, 125, 29]);
+        assert_eq!(counts, [16, 39, 125, 29]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }
