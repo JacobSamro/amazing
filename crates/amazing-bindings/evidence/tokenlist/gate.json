@@ -1,0 +1,24 @@
+{
+  "source": "d6613150234f2394d037afe425509da6aadce099",
+  "base": "54e681e4",
+  "platform": "Linux Boat pool-dom isolated lane target",
+  "workspace_pass": 2747,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "corpus_files": 324,
+  "before_pass": 7864,
+  "after_pass": 8004,
+  "before_fail": 1007,
+  "after_fail": 867,
+  "gained_subtests": 140,
+  "lost_subtests": 0,
+  "baseline": "../dom-b-audit/after.json filtered to dom/nodes and dom/collections",
+  "measured_at": "2026-09-26T12:54:43Z",
+  "tested_source_sha256": {
+    "crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py": "d470fa008b44856ba294275bb6e1a4797096cfabcf065b08b5b9d4c9cc7f68ed",
+    "crates/amazing-bindings/src/tests.rs": "797e8232d698e32d1b84d8378e1a753b2bda51d45584c7739d066f109f72fb37",
+    "crates/amazing-bindings/src/tokenlist.rs": "750656bccfb6e44c3a556646b792aa979cbc06aaf14dee75dc66a93ebb259bcb",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "8e4a30e68c1ac323b704485c16de546fb17c242d7dabd2f90ab276377f7a8003",
+    "crates/amazing-bindings/src/tests_tokenlist_semantics.rs": "1b02a9568535e0f77df571ded50abf4dd31ba7b878da083f1ba688c635bf1fb0"
+  }
+}

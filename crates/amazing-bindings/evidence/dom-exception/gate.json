@@ -1,0 +1,19 @@
+{
+  "source": "82bb38682d3b72aa669a096d49c47e0f34a55a26",
+  "base": "129cde718506762d15ef8924c1a2c5c3ab74d291",
+  "platform": "Linux Boat pool-dom",
+  "workspace_pass": 2709,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "baseline_owned_pass": 533,
+  "baseline_owned_skip": 4,
+  "before_pass": 112,
+  "before_fail": 19,
+  "after_pass": 123,
+  "after_fail": 8,
+  "gained_subtests": 11,
+  "lost_subtests": 0,
+  "timeout_files_before": 1,
+  "timeout_files_after": 1,
+  "measured_at": "2026-09-26T11:53:08Z"
+}

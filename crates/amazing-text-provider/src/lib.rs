@@ -1856,10 +1856,29 @@ fn shape_range(
             // delegating it to the font's vrt2 feature.
             features.push(Feature::new(Tag::new(b"vrt2"), 0, ..));
         }
+        // CSS Fonts 4 §5.2.1: `kern` is the horizontal-axis feature and `vkrn`
+        // the vertical-axis feature. HarfBuzz applies an explicitly requested
+        // tag in either buffer direction, so a `font-kerning:normal` face that
+        // enables both would kern on the wrong axis. Keep only the tag that
+        // matches the shaping direction (verified with the pinned
+        // FontWithFancyFeatures fixture: explicit `vkrn` changes horizontal
+        // shaping and explicit `kern` changes vertical shaping).
+        let vertical_buffer = style.writing_mode.uses_vertical_metrics()
+            && orientation == GlyphOrientation::Upright;
+        let kerning_tag_matches = |tag: &[u8; 4]| {
+            if tag == b"vkrn" {
+                vertical_buffer
+            } else if tag == b"kern" {
+                !vertical_buffer
+            } else {
+                true
+            }
+        };
         if let Some(face) = font.author_face.as_ref() {
             features.extend(
                 face.features
                     .iter()
+                    .filter(|feature| kerning_tag_matches(&feature.tag))
                     .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
             );
         }
@@ -1867,6 +1886,7 @@ fn shape_range(
             style
                 .features
                 .iter()
+                .filter(|feature| kerning_tag_matches(&feature.tag))
                 .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
         );
         let output = shaper.shape(
@@ -2777,6 +2797,123 @@ mod tests {
             assert_eq!(shape(0), 2, "{} disabled", String::from_utf8_lossy(&tag));
             assert_eq!(shape(1), 1, "{} enabled", String::from_utf8_lossy(&tag));
         }
+    }
+
+    #[test]
+    fn kerning_features_are_limited_to_their_shaping_axis() {
+        // layout expresses `font-kerning: normal` as kern=1 plus vkrn=1. Each
+        // tag must only run on its own axis (font-kerning-02 horizontal,
+        // font-kerning-03 vertical), even though HarfBuzz would apply an
+        // explicitly requested tag in either buffer direction.
+        let shape = |tag: [u8; 4], vertical: bool| -> usize {
+            let mut provider = TextProvider::new();
+            provider
+                .register_web_font(WebFont {
+                    family: "Kerning fixture".into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format: FontFormat::OpenType,
+                    bytes: synthetic_font_with_feature('A', Some(tag)),
+                })
+                .unwrap();
+            let style = TextStyle {
+                families: vec!["Kerning fixture".into()],
+                writing_mode: if vertical {
+                    WritingMode::VerticalRl
+                } else {
+                    WritingMode::HorizontalTb
+                },
+                text_orientation: if vertical {
+                    TextOrientation::Upright
+                } else {
+                    TextOrientation::Mixed
+                },
+                features: vec![
+                    amazing_text::FeatureSetting {
+                        tag: *b"kern",
+                        value: 1,
+                    },
+                    amazing_text::FeatureSetting {
+                        tag: *b"vkrn",
+                        value: 1,
+                    },
+                ],
+                ..TextStyle::default()
+            };
+            let spans = [TextSpan {
+                range: 0..2,
+                source: 0,
+                style,
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            provider
+                .shape(Paragraph {
+                    text: "AA",
+                    spans: &spans,
+                    sources: &[],
+                    bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                })
+                .unwrap()
+                .runs
+                .iter()
+                .map(|run| run.glyphs.len())
+                .sum()
+        };
+        assert_eq!(shape(*b"kern", false), 1, "kern runs horizontally");
+        assert_eq!(shape(*b"vkrn", true), 1, "vkrn runs vertically");
+        assert_eq!(shape(*b"kern", true), 2, "kern is dropped vertically");
+        assert_eq!(shape(*b"vkrn", false), 2, "vkrn is dropped horizontally");
+    }
+
+    #[test]
+    fn explicit_kerning_off_still_disables_the_axis_feature() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Kerning fixture".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_feature('A', Some(*b"kern")),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Kerning fixture".into()],
+            features: vec![
+                amazing_text::FeatureSetting {
+                    tag: *b"kern",
+                    value: 0,
+                },
+                amazing_text::FeatureSetting {
+                    tag: *b"vkrn",
+                    value: 1,
+                },
+            ],
+            ..TextStyle::default()
+        };
+        let spans = [TextSpan {
+            range: 0..2,
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let glyphs = provider
+            .shape(Paragraph {
+                text: "AA",
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap()
+            .runs
+            .iter()
+            .map(|run| run.glyphs.len())
+            .sum::<usize>();
+        assert_eq!(glyphs, 2, "kern=off suppresses the horizontal lookup");
     }
 
     #[test]

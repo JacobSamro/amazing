@@ -39,6 +39,8 @@ pub enum EffectBlend {
     Saturation,
     Color,
     Luminosity,
+    /// Add premultiplied color and alpha, saturating each at one.
+    PlusLighter,
 }
 impl From<BlendMode> for EffectBlend {
     fn from(value: BlendMode) -> Self {

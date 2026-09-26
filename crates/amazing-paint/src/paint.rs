@@ -182,6 +182,8 @@ impl RasterState {
                     transform: crate::display_list::Affine::IDENTITY,
                     origin_x: 0.0,
                     origin_y: 0.0,
+                    blend: amazing_css::effects::BlendMode::Normal,
+                    isolate: false,
                 },
                 Some(mask),
             );
@@ -249,7 +251,12 @@ fn composite_group(
             destination.set_pixel(
                 x as u32,
                 y as u32,
-                source_over(source_pixel, destination_pixel, effect.opacity),
+                crate::blend::blend_group(
+                    effect.blend,
+                    source_pixel,
+                    destination_pixel,
+                    crate::quantize_opacity(effect.opacity),
+                ),
             );
         }
     }
@@ -2321,6 +2328,37 @@ mod tests {
         assert_eq!(surface.get_pixel(0, 0), Some([255, 0, 0, 255]));
         assert_eq!(surface.get_pixel(1, 0), Some([0, 255, 0, 255]));
         assert_eq!(surface.get_pixel(2, 0), Some(WHITE));
+    }
+
+    #[test]
+    fn mix_blend_mode_group_blends_child_over_parent_backdrop() {
+        let mut parent = block(&[("background-color", "#808080")], 0.0, 0.0, 4.0, 4.0);
+        let child = block(
+            &[("background-color", "red"), ("mix-blend-mode", "multiply")],
+            0.0,
+            0.0,
+            2.0,
+            2.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 4, 4, &FontSource::fallback());
+        assert_eq!(surface.get_pixel(1, 1), Some([128, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(3, 3), Some([128, 128, 128, 255]));
+    }
+
+    #[test]
+    fn isolation_opens_a_group_without_changing_normal_pixels() {
+        let mut parent = block(&[("background-color", "#808080")], 0.0, 0.0, 4.0, 4.0);
+        let child = block(
+            &[("background-color", "red"), ("isolation", "isolate")],
+            0.0,
+            0.0,
+            2.0,
+            2.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 4, 4, &FontSource::fallback());
+        assert_eq!(surface.get_pixel(1, 1), Some([255, 0, 0, 255]));
     }
 
     #[test]

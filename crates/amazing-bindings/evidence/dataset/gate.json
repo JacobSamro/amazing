@@ -1,0 +1,40 @@
+{
+  "source": "07a885b5368d9d38cb806d74b553a14f4b4f18b7",
+  "base": "c7b0c3c29b5022f1d7a9e6bd17d6329490cd247b",
+  "platform": "Linux Boat pool-dom, isolated target",
+  "workspace_pass": 2733,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "baseline_owned_pass": 537,
+  "baseline_owned_skip": 4,
+  "before_pass": 140,
+  "before_fail": 135,
+  "after_pass": 168,
+  "after_fail": 107,
+  "gained_subtests": 28,
+  "lost_subtests": 0,
+  "files_before": {
+    "pass": 15,
+    "fail": 39,
+    "error": 1
+  },
+  "files_after": {
+    "pass": 22,
+    "fail": 32,
+    "error": 1
+  },
+  "measured_at": "2026-09-26T12:16:58Z",
+  "source_file_sha256": {
+    "crates/amazing-bindings/src/dataset_bindings.rs": "24d7ceccdd65149048f1170378200f67a631505332a05d7a5d59dc0c4d180019",
+    "crates/amazing-bindings/src/host.rs": "0b1203c0d4668028053576448ba296056f24e89cfc32140048e3c3751a687b60",
+    "crates/amazing-bindings/src/interfaces.rs": "4661ad8e990922487efad398b28dff4c610a28fcc5e41c63dc402b5cb7694912",
+    "crates/amazing-bindings/src/invoke.rs": "02d092c7fb9493f027862e0f4c5a745c1d1680ef9becc7c0ffc824e74d2b9b21",
+    "crates/amazing-bindings/src/lib.rs": "917ec35f5513a350a621cd3be3f0339e4d756b15c0b1dd903c36bf53ad4fd537",
+    "crates/amazing-bindings/src/tests.rs": "3720c1b530583f9f9fdcb9ecfdaf869113553f323a35614b4a07c2afaafe8d9f",
+    "crates/amazing-bindings/src/tests_dataset.rs": "c88bec9b01df1e1dd5bd12f410d57e999441853d0de79a2b8c587852044259ae",
+    "crates/amazing-dom/src/dataset.rs": "828caf5fba064b823bcf0777029a96c8d165afb6969bddd74157af144e17d580",
+    "crates/amazing-dom/src/lib.rs": "69a190dfc1c5b7594dd977a52dda573bd12c418d7d099ef09d783f90da7c889f",
+    "crates/amazing/src/runtime_binding_host.rs": "690614a5ea91f6ca8f01b1b2d133bedd59f427796ddeafbf54ba15bda139e27c",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "ddd66aadcf81da2a0c2b2bf13965c4d0c89b4aff6c10f2d99bc83fffd34bd248"
+  }
+}
