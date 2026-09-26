@@ -155,3 +155,23 @@ regression test exercising the cross-process fd-passing path directly.
 Linux workspace gate on both hosts: worker-3 2902/2902 nextest (10 skipped) +
 doctests; venus-001 2902/2902 nextest (10 skipped) + doctests; both green,
 zero regressions. Evidence in `docs/lanes/ipc-12-evidence.md`.
+
+### IPC-13. Real renderer process, proved over the sealed-frame channel
+
+**Done (commit `9c8248f5`).** `amazing_process::renderer` already ran the
+real engine (parse/style/layout/paint) and already shipped frames over the
+sealed-frame channel before this ticket, with input/navigation flowing
+browser -> renderer and `FrameReady` flowing back -- `split.rs`'s
+`renderer_network_frame_parity_and_input_events` already proved this with
+inline HTML. Added a proof against an actual fixture file
+(`tests/fixtures/ipc13-page.html`, loaded via `include_bytes!`) instead:
+`ipc13_renderer_process.rs` spawns real renderer + network processes,
+compares the cross-process sealed-frame pixels against the in-process
+`render_document` oracle across two separate live navigations on the same
+renderer process, and exercises input events between them. (A viewport that
+was too short for the fixture, not an engine bug, hid the image and
+stylesheet-colored pixels on the first draft -- see the evidence file.)
+Linux workspace gate on both hosts: worker-3 3339/3339 nextest (17 skipped) +
+doctests (250.5s); venus-001 3339/3339 nextest (17 skipped) + doctests
+(65.5s); both green, zero regressions. Evidence in
+`docs/lanes/ipc-13-evidence.md`.
