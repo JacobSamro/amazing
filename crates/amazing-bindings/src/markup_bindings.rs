@@ -3,7 +3,8 @@ use amazing_dom::{DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementOuterHTML
-        | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML | O::ElementInnerText
+        | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML
+        | O::ElementInsertAdjacentElement | O::ElementInsertAdjacentText | O::ElementInnerText
         | O::ElementSetInnerText | O::ParentQuerySelector | O::ParentQuerySelectorAll
         | O::ElementMatches | O::ElementClosest | O::ElementWebkitMatchesSelector)
 }
@@ -108,6 +109,44 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                 dom.replace_all(node, text)
             })?;
             Ok(host.undefined())
+        }
+        O::ElementInsertAdjacentElement | O::ElementInsertAdjacentText => {
+            let position = required_string(host, args.first())?;
+            let position = String::from_utf16(&position).unwrap_or_default().to_ascii_lowercase();
+            if !matches!(position.as_str(), "beforebegin" | "afterbegin" | "beforeend" | "afterend") {
+                return host.with_dom::<H::Value>(|_| Err(DomError::SyntaxError));
+            }
+            let value = args.get(1).ok_or_else(|| host.type_error("Not enough arguments"))?;
+            let element = if op == O::ElementInsertAdjacentElement {
+                Some(host.node_brand(value).ok_or_else(|| host.type_error("Expected an Element"))?)
+            } else { None };
+            let text = if element.is_none() { Some(host.to_dom_string(value)?) } else { None };
+            let inserted = host.with_dom(|dom| {
+                if let Some(element) = element {
+                    if !matches!(dom.get(element).kind, NodeKind::Element { .. }) {
+                        return Err(DomError::TypeError);
+                    }
+                }
+                let parent = dom.get(node).parent;
+                let (parent, reference) = match position.as_str() {
+                    "beforebegin" => (parent, Some(node)),
+                    "afterend" => (parent, dom.get(node).next_sibling),
+                    "afterbegin" => (Some(node), dom.get(node).first_child),
+                    "beforeend" => (Some(node), None),
+                    _ => unreachable!(),
+                };
+                let Some(parent) = parent else { return Ok(None) };
+                let inserted = if let Some(element) = element { element } else {
+                    let document = dom.owner_document(node).unwrap_or(node);
+                    let text_node = dom.create_node_in(document, NodeKind::Text { data: String::new() })?;
+                    dom.replace_character_data(text_node, 0, 0, text.as_deref().unwrap())?;
+                    text_node
+                };
+                dom.pre_insert(inserted, parent, reference)?;
+                Ok(Some(inserted))
+            })?;
+            if op == O::ElementInsertAdjacentText { return Ok(host.undefined()) }
+            match inserted { Some(node) => host.wrap_node(node), None => Ok(host.null()) }
         }
         O::ElementSetInnerHTML | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML => {
             let position = if op == O::ElementInsertAdjacentHTML {

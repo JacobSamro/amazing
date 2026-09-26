@@ -92,6 +92,12 @@ pub(crate) fn dispatch_reset_event<H: BindingHost>(host: &mut H, node: amazing_d
 fn dispatch_native_event<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<(), H::Error> {
     dispatch_native_event_result(host, target, kind, init).map(|_| ())
 }
+/// Dispatch a browser-generated event at a DOM node or the Window event target.
+/// The event is trusted; callers supply its bubbling, cancelability and composed flags.
+pub fn dispatch_user_agent_event<H: BindingHost>(host: &mut H, target: EventTarget,
+    kind: &str, init: EventInit) -> Result<(), H::Error> {
+    dispatch_native_event(host, target, kind, init)
+}
 fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
@@ -104,6 +110,29 @@ fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarge
         if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
     }
     host.with_dom(|dom| dom.events().dispatch_result(event))
+}
+pub(crate) fn dispatch_focus_event<H: BindingHost>(host: &mut H, node: amazing_dom::NodeIdx,
+    kind: &str, related: Option<amazing_dom::NodeIdx>) -> Result<(), H::Error> {
+    let init = EventInit { bubbles: matches!(kind, "focusin" | "focusout"),
+        cancelable: false, composed: true };
+    let related_value = match related { Some(node) => Some(host.wrap_node(node)?), None => None };
+    let related_root = related_value.map(|value| host.retain_value(value));
+    let event = host.with_dom(|dom| {
+        let mut event = Event::new(kind, init, Duration::ZERO);
+        event.set_class(EventClass::Focus);
+        event.set_related_target(related.map(EventTarget::Node));
+        event.set_extra("relatedTarget", EventExtra::Root(related_root));
+        Ok(dom.events_mut().create_event(event))
+    })?;
+    let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(EventTarget::Node(node), event, DispatchOrigin::UserAgent))?;
+    loop {
+        let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
+        let Some(invocation) = invocation else { break };
+        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        if invocation.once { host.release_value(invocation.callback); }
+        if result.is_err() { dispatch.report_exception("Focus event listener threw".into()); }
+    }
+    host.with_dom(|dom| dom.events().dispatch_result(event)).map(|_| ())
 }
 fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) -> Result<bool, H::Error> {
     let Some(value) = value else { return Ok(false) };

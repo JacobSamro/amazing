@@ -54,10 +54,12 @@ pub(crate) fn invoke<H: BindingHost>(
     if matches!(op, O::CreateElement | O::CreateElementNS) {
         let doc = document(host, &receiver)?;
         let html_document = host.is_html_document(doc);
+        let xhtml_document = host.with_dom(|dom| Ok(dom.document_metadata(doc)?
+            .is_some_and(|metadata| metadata.content_type == "application/xhtml+xml")))?;
         let (uri, name) = if op == O::CreateElement {
             let mut name = argument(host, args, 0)?;
             if html_document { name.make_ascii_lowercase(); }
-            (html_document.then(|| "http://www.w3.org/1999/xhtml".to_owned()), name)
+            ((html_document || xhtml_document).then(|| "http://www.w3.org/1999/xhtml".to_owned()), name)
         } else {
             let uri_value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
             let uri = if host.is_nullish(uri_value) { None } else { Some(string(host, uri_value)?) };
