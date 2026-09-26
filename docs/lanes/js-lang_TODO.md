@@ -1340,27 +1340,48 @@ passed.
 
 ## JS-11 — class methods, binding patterns, and async iteration
 
-Fixed base `831bd0757a605cdf690b88c6d3f7c201ece08c87`. The ranked Test262
-targets were `language/statements/class` (3,271 failing files),
-`language/expressions/class` (3,111), and `language/statements/for-await-of`
-(1,140). The implementation adds class private elements and field initialization,
-compiles method and generator bodies through the VM function path, binds default
+Code head `f9a7eba640d45f23eece100347b0ca22a841b898`, frozen JS base
+`59492359e4a267885e8822f0f66941fa60720f9a`. The later scripts-only merge
+`6e01e7b2` does not change engine inputs. Local commits only; no push.
+
+The implementation adds private class elements and field initialization,
+compiles method/generator bodies through the VM function path, binds default
 and destructured parameters, advances array binding iterators lazily, and keeps
-`for await` state in suspended VM frames with iterator closing. The compiler
-falls back atomically for catch binding patterns and generator direct `eval`.
+`for await` state in suspended VM frames with iterator closing. Merge corrections
+preserve class method names/descriptors, inherited strictness and generator
+function name descriptors. Direct eval (including parameter initializers) and
+unsupported class elements retain atomic interpreter fallback.
 
-Pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, 53,872 files,
-identical input and runner hashes, 60-second timeout on venus-001:
+Full pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398` on
+venus-001 Linux: 53,872 sources, 102,918 variants, release hosts, 10 workers,
+60-second deadline, identical input and runner hashes before/after:
 
-| Mode | Passing files before → after | Passing variants before → after | Baseline pass losses |
+| Mode | Passing files before → after | Passing variants before → after | Lost passes |
 | --- | ---: | ---: | ---: |
-| Treewalk | 26,206 → 33,867 | 50,624 → 65,783 | 0 files, 0 variants |
-| `AMAZING_JS_VM=1` | 26,333 → 33,857 | 50,872 → 65,777 | 0 files, 0 variants |
+| Treewalk | 30,379 → 38,065 | 58,728 → 73,918 | 0 files, 0 variants |
+| `AMAZING_JS_VM=1` | 30,344 → 38,047 | 58,687 → 73,885 | 0 files, 0 variants |
 
-Both modes gained 2,518 passing files in `statements/class`, 2,454 in
-`expressions/class`, and 790 in `for-await-of`. Remaining nonpasses are 757,
-671, and 350 respectively; the next clusters include iterator error identity,
-class element edge cases, and async job ordering. Full result files are
-`/tmp/js-lang-js11-{before,after5,vm-before,vm-after}.json`; classification
-hashes, in table order, are `33ea5465` → `63e584cf` and `35939179` →
-`3b466656`. The branch binary hash is identical between the two after runs.
+Treewalk target directories: `statements/class` 1,127 → 3,625 passes;
+`expressions/class` 951 → 3,384; `for-await-of` 94 → 893. The first merged
+sweep exposed 16 file / 19 variant losses in eval scope, strict method execution,
+and function name descriptors; all were fixed and all 16 files / 19 variants
+passed a focused replay before the corrected full zero-loss sweeps.
+
+Final Windows gate on **win-001**, explicitly authorized as the win-002 outage
+fallback: owned nextest **331 passed, 1 skipped** (318 JS, 13 regex); separate
+owned doctests **1 passed**. Full workspace nextest completed with
+**2,447 passed, 2 failed, 7 skipped**. The two failures are the known compositor
+`paint_view_owner_mapping_binds_dom_properties_to_tree_nodes` and
+`retained_real_page_property_trace` base failures, fixed in local dev `fba3b71`
+and explicitly accepted for frozen-base reporting by the user. Separate workspace
+doctests completed **28 suites, 2 passed, 0 failed**. All 574 Rust sources,
+Cargo manifests and lockfiles checked on Windows match the exact gated commit.
+This is not a claim of an all-green workspace.
+
+Machine-readable provenance, full classification and binary hashes, per-directory
+counts and zero-loss comparisons are in [js-lang_JS11-evidence.json](js-lang_JS11-evidence.json).
+Full records remain `/tmp/js11-final-before-{tree,vm}.json` and
+`/tmp/js11-corrected-after-{tree,vm}.json`, mirrored under `~/amazing/out` on
+venus-001. Logs and the 16-file replay are in lane scratch. Remaining target
+nonpasses include iterator error identity, class element edge cases and async
+job ordering; these measurements do not claim complete class or async conformance.
