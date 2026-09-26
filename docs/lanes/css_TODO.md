@@ -1888,11 +1888,206 @@ one-line fix. Doctests **ok** across all 31 doc-tested crates. WPT
 mediaqueries `matchMedia` canonical serialization, and every item under
 "Boundary" above, are candidates for the next CSS-25-style pass.
 
+## CSS-26 — `unicode-range` tokenization (base `dev` at `a1e1f36c`)
+
+Root cause (from integrator-assist's IA-LIVE-PAGES report in
+`.agents/css/questions.md`): `@font-face { unicode-range: U+0131; }` reached
+`FontFaceRule.unicode_range` as `"u131"`. `syntax.rs`'s tokenizer is
+generic/context-free and has no `<urange>` production, so `U+0131` lexed as
+`Ident("u")` followed by a signed numeric token; `Token::Number`/
+`Token::Dimension` don't retain raw lexeme text (unlike `Token::Url`, which
+keeps both a decoded `value` and a `raw` spelling), so the `+` sign and the
+leading zero were lost *at tokenization*, before serialization ever ran — a
+post-hoc string patch on the already-serialized descriptor value could not
+have recovered them.
+
+Fix: implemented CSS Syntax 3 §4.3.9 "consume a unicode-range token" as a
+dedicated tokenizer rule, matching real UAs — unconditional at the tokenizer
+level (not gated on "are we inside a `unicode-range` descriptor"), since `u`/
+`U` immediately followed by `+` and a hex digit or `?` is not otherwise
+meaningful CSS.
+
+- Added `Token::UnicodeRange(String)` (`syntax.rs`), storing the **verbatim**
+  matched source text (case, digit count, wildcards as written) rather than
+  a renormalized form, so `U+0131` stays `U+0131` (not `U+131`) and `U+4??`/
+  `u+41-5a` keep their original spelling. `Lexer::unicode_range()` implements
+  the spec algorithm: up to 6 hex digits, then up to 6 total hex-or-`?`
+  wildcard characters, then an optional `-<hex>` explicit end (only when no
+  wildcards were consumed for the start).
+- `tokenize()` detects the form at the point it would otherwise start
+  consuming `u`/`U` as an identifier: next two code points are `+` then a hex
+  digit or `?`.
+- `serialize()` emits `Token::UnicodeRange`'s stored text as-is.
+- `parser.rs`'s `parse_font_faces` `unicode_range` extraction simplified: the
+  old post-hoc patch (`"U" not followed by "+"` → insert `"+"`) only ever
+  fixed one narrow malformation of the *already-lossy* string and is now
+  dead weight, since `descriptor("unicode-range")`'s re-serialized text is
+  correct by construction. It now just trims and rejoins each comma-
+  separated part with a bare comma (this field's established no-space
+  convention, distinct from `syntax::serialize()`'s canonical `", "`).
+
+Tests: tokenizer-level coverage in `syntax.rs` for the exact bug-report case
+(`U+0131`), lowercase `u`/hex, hyphenated ranges, wildcards up to `U+??????`,
+a comma list, and non-hijacking of unrelated `u`-idents (`um`, `14u`,
+`url(...)`, `u+x`); `parser.rs` gained two `@font-face`-rule tests, one
+reproducing the exact reported shape (`unicode-range: U+0131;`) and one
+covering a single low value, a leading-zero value, an explicit range and a
+wildcard together in one real descriptor list.
+
+Gate: crate 352/352 (+5 from CSS-25's 347), workspace nextest and doctests
+green (see CSS-27's combined gate below — both tickets landed in the same
+session before the final gate). No regressions; the pre-existing
+`unicode-range: U+41-5A, U+4??` test (uppercase, no leading zeros) was
+already correct and needed no change.
+
+## CSS-27 — `alpha()`, opacity math, and widening the WPT corpus (base `dev` at `a1e1f36c`)
+
+Continued the WPT parsing/computed-value corpus from CSS-25's 203/360
+baseline by fixing the two biggest failure clusters, then widened the
+runner's selection.
+
+**`alpha()` (CSS Color 5), previously deferred in CSS-25 as a boundary
+item** — the single biggest cluster (47 of ~86 `css-color` failures:
+`alpha-color-computed.html` + `alpha-color-parsing-invalid.html`):
+
+- `color.rs`/`color_advanced.rs`: `alpha( [from <color>] / [<alpha-value> |
+  none] )`. Unlike `rgb()`/`hsl()`/etc.'s relative form, `alpha()` takes no
+  channel overrides (nothing may sit between the source and `/`), `from
+  <color>` and `/ <alpha>` are both mandatory, and its only substitutable
+  keyword is `alpha` itself (never the source's `r`/`g`/`b`/...).
+- Introduced `color_advanced::AlphaOutcome` (`Invalid` / `Deferred` /
+  `Resolved`) rather than reusing the other relative-color helpers' plain
+  `Option<[u8; 4]>`. Collapsing "invalid" and "deferred" to `None` (as
+  `relative()` does for the numeric-channel functions) would make
+  `alpha(from currentcolor)` (invalid: missing its own `/ <alpha>`)
+  indistinguishable from `alpha(from currentcolor / 0.5)` (valid, deferred
+  to the computed-value seam like every other relative-color function's
+  `currentcolor` handling). `Deferred` also covers a `var()` reference
+  inside the `/ <alpha>` slot, which needs substitution before it can be
+  evaluated.
+  - `classify_source()` gives nested `alpha(...)` sources (e.g. `alpha(from
+    alpha(from currentcolor / 0.5) / alpha)`) the same precise
+    three-way classification recursively, so a genuinely malformed inner
+    call (missing *its own* `/ <alpha>`) still reports invalid instead of
+    both cases collapsing into "deferred, so valid". Other nested relative-
+    color functions don't expose this distinction, so they fall back to
+    the existing shallow `from`-prefix heuristic (values.rs's
+    `tokens.get(2) == Ident("from")` check) other functions already rely
+    on.
+  - The alpha slot's own grammar (number/percentage/`none`/`alpha`/
+    `calc(alpha ...)`) is checked with a placeholder `alpha` keyword value
+    so a `currentcolor` source can still be judged syntactically valid
+    without resolving it.
+- `values.rs`: gave `alpha(...)` its own match arm ahead of the generic
+  "unrecognized color function → preserved as `Unparsed`" fallback, so a
+  genuinely malformed call (e.g. missing `/ <alpha>`, extra tokens, a
+  channel keyword used in the alpha slot) is rejected instead of silently
+  parsing as valid-but-inert. `AlphaClassification::{Invalid, Deferred,
+  Resolved}` maps to `None`/`Some(V::Unparsed)`/`Some(V::Color(...))`.
+- Fixed 23/23 in `alpha-color-parsing-invalid.html` and 5/8 newly-exposed
+  cases in `alpha-color-parsing-valid.html` (the `var()`-reference and
+  nested-`currentcolor` cases above). `alpha-color-computed.html`'s 24
+  failures are unchanged — they need the same computed-value
+  canonicalization gap described below (`color`'s computed serialization
+  doesn't re-derive `color(srgb ...)` text from the resolved RGBA payload;
+  it retains the cascade winner's lightly-canonicalized literal text),
+  which is out of scope here.
+
+**`opacity`/`fill-opacity` `calc()`/`min()`/`max()`/`clamp()` computing to
+the initial value `1`** — the second-biggest cluster (20 of the 86,
+`opacity-computed.html`): CSS-25 already taught `values::alpha_value()` this
+grammar, but two *other*, independent, narrower implementations in
+`computed.rs` never learned it and silently discarded that work:
+
+- `valid_new_paint_property`'s `valid_opacity()` gate (checked *before* the
+  value is even considered for computation) only matched a bare
+  `Token::Number`/`Token::Percentage`, so `min(50%, 0%)` etc. failed this
+  gate and the computed value fell all the way back to `opacity`'s initial
+  `1` — the property's *own* `computed_opacity()` function was never even
+  reached. Now delegates to `values::alpha_value(value).is_some()`.
+- `computed_opacity()` itself (reached once the gate above passes)
+  separately re-implemented a bare number/percentage parse rather than
+  calling `values::alpha_value()`. Now delegates to it directly (made
+  `pub(crate)`), keeping the f32 precision/clamping the original had.
+- Fixed all 20/20 in `opacity-computed.html`.
+
+**Widened `wpt_conformance.rs`'s selection** from the original four
+(css-color, css-values, css-cascade, css-conditional) to ten, adding
+css-fonts, css-text, css-backgrounds, css-transforms, css-flexbox and
+css-grid — all confirmed (via `find -iname '*-valid/-invalid/-computed
+.html'`) to have files in the runner's supported shape before adding them.
+This is a **measured baseline for future tickets**, not fixed here.
+
+Measured (Linux, Boat sandbox `bx_cp5jbn5z`, pool-layout):
+
+| Selection | Before (CSS-25) | After alpha()+opacity | 
+|---|---|---|
+| css-color | 111/197 | 151/197 |
+| css-values | 58/121 | 58/121 |
+| css-cascade | 10/10 | 10/10 |
+| css-conditional | 24/32 | 24/32 |
+| **Original 4 total** | **203/360** | **243/360** |
+
+Widened baseline (new selections, unfixed — candidates for the next
+ticket, biggest clusters first): css-fonts 477/636, css-text 421/674,
+css-backgrounds 385/672, css-transforms 186/362, css-flexbox 117/166,
+css-grid 454/953. **Combined 10-selection total: 2283/3823.**
+
+Boundary (deliberately not fixed here, with the reason):
+
+- **`color`'s computed-value canonicalization** (`color-computed.html`, 15
+  failures, plus `alpha-color-computed.html`'s remaining 24 and a chunk of
+  the widened selections' failures too): this crate's computed-value text
+  for color properties retains the cascade winner's lightly-canonicalized
+  *literal* text (`"red"` stays `"red"`, not `"rgb(255, 0, 0)"`; a resolved
+  `alpha()`/relative-color call stays its own source spelling) rather than
+  re-serializing the resolved `[u8; 4]`/color-space payload to the CSS
+  Color 4/Values 5 canonical computed form. This is CSS-25's already-
+  documented "known serialization-model gap" (see `wpt_conformance.rs`'s
+  own top-of-file doc comment) — fixing it means threading a typed,
+  space-aware color representation through the computed-value seam
+  wherever `color`/`background-color`/etc. resolve, a materially bigger
+  architecture change than a corpus-measurement ticket's scope.
+- **Legacy comma-form `rgb()`/`hsla()` strictness** (`color-invalid.html`,
+  4 failures): mixed number/percentage channels in the same legacy comma
+  call (`rgb(10%, 20, 30%)`), too many comma-separated args
+  (`hsla(1,2,3,4,5)`), etc. are accepted when they should be rejected.
+  Small, contained, but a different area from alpha()/opacity; left for
+  the next ticket.
+- **`sibling-index()`/`sibling-count()`** as an `<alpha-value>` inside
+  `alpha()` (3 residual `alpha-color-parsing-valid.html` failures): CSS
+  Values 5 tree-counting functions need live DOM/layout-order context at
+  compute time, not just string-level grammar validation — a distinct,
+  substantial feature, not part of implementing `alpha()` itself.
+- **The six widened selections' own failures** (1540 of 3823): not
+  triaged into clusters yet beyond the raw counts above; `css-grid`'s
+  `*-invalid.html` files are the single largest visible mass (roughly 300+
+  across `grid-template-shorthand-invalid`, `grid-template-rows/columns-
+  invalid`, `grid-shorthand-invalid`, `grid-row/column/area-invalid` —
+  grid track-list/shorthand grammar is currently permissive, likely via the
+  same "unrecognized-but-preserved" pattern seen elsewhere), with
+  `box-shadow-invalid.html` (40), several `*-computed.html` transform-origin/
+  scale/rotate files, and font-variant/font-synthesis grammar close behind.
+
+Gate (Boat sandbox `bx_cp5jbn5z`, pool-layout, both CSS-26 and CSS-27 on
+this same head): CSS crate **352/352** (0 regressions), workspace nextest
+**3048/3048 passed, 12 skipped, 0 failed**, doctests **ok** across every
+doc-tested crate (`amazing-a11y`, `amazing-devtools`, `amazing-html`,
+`amazing-js` each ran real doctests; the rest ran 0/0 ok). Disk on the
+shared sandbox ran low (`~/amazing/targets/*/debug/incremental` regrows
+fast under six lanes sharing one host); purged per the established
+disk-hygiene precedent (rebuildable, safe).
+
 ## Next
 
-The five deferred items above, roughly in real-page-impact order:
-`calc()` infinity/NaN, relative-color channel keywords inside nested
-`calc()`/`clamp()`, `container` shorthand serialization, then `alpha()` and
-`random-item()` (both genuinely rare on real pages today). Also: `mediaqueries`'
-`matchMedia().media` canonical serialization, a distinct shape of work this
-ticket's runner doesn't cover.
+Biggest clusters first, per the widened baseline above: `css-grid`'s
+`*-invalid.html` shorthand/track-list strictness (~300+), `color`'s
+computed-value canonicalization (unblocks `alpha-color-computed.html` and
+`color-computed.html` together), `box-shadow-invalid.html`, then the
+css-transforms `*-origin`/`scale`/`rotate` computed files and css-fonts'
+`font-variant`/`font-synthesis` grammar. Legacy comma-form `rgb()`/`hsla()`
+strictness and `sibling-index()`/`sibling-count()` remain smaller, later
+items. Also still open from CSS-25: `calc()` infinity/NaN, relative-color
+channel keywords inside nested `calc()`/`clamp()`, `container` shorthand
+serialization, `random-item()`, and `mediaqueries`' `matchMedia().media`
+canonical serialization.
