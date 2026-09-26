@@ -1075,3 +1075,40 @@ so RC-20 claims **zero WPT conformance credit**; the retained RC-18 focused 12,
 SVG 35 and gradient/scroll 4 selections are likewise unclaimed. Reproduction and
 rationale: `tests/wpt-replaced-content/rc20/README.md`. Per-paint gradient
 caching is a performance follow-up, not a correctness gap.
+
+## RC-23 — positioned and shaped radial/conic gradient geometry (2026-09-26)
+
+Follow-up to RC-18/RC-20 in `amazing-paint::gradient`. Any leading geometry part
+other than an exact `circle`/`ellipse` or a bare `from Ndeg` previously made the
+whole gradient paint nothing: the optional-geometry parser could not distinguish
+an unsupported geometry part from a color stop and fell through to treating it
+as a stop, which then failed and rejected the image.
+
+The first gradient part is now classified by whether it begins with a parseable
+color. If it does, it is a stop; if not, it must parse as valid geometry or the
+entire gradient is rejected. Supported geometry:
+
+- radial: `[circle|ellipse]? [closest-side|farthest-side|closest-corner|
+  farthest-corner|<length>]{0,2}? [at <position>]?`, defaulting to
+  farthest-corner. Explicit radii are `px`/`em`/`rem` and share circle/ellipse
+  sampling; corner keywords use a per-axis circle approximation for ellipses.
+- conic: `[from <angle>]? [at <position>]?`, `<angle>` in `deg`/`grad`/`rad`/
+  `turn`.
+- linear angles also accept `grad`/`rad`/`turn` now.
+
+`at <position>` reuses `crate::image::position` (keywords, percentages, px,
+edge-offset syntax). Percent radii, unsupported units, malformed positions and
+unknown keywords reject the gradient rather than guessing. No CSS, layout,
+compositor or driver source changed.
+
+Focused paint tests: positioned/shaped radial, explicit-radius radial, rotated
+conic, and a background-level positioned radial, plus a rejection table for
+percent radii, empty/oversized positions, duplicate size keywords and bad
+angles. Linux gate at `6988c124`: workspace nextest **2,737 passed / 0 failed /
+10 skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**134 passed / 0 skipped**.
+
+The ticket's WPT gradient selection and before/after remain Windows-only and
+deferred under Linux-first, so RC-23 claims **zero WPT conformance credit**;
+ellipse corner-keyword radii and percentage radii remain bounded approximations
+or rejections, recorded here rather than claimed conformant.
