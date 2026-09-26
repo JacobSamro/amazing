@@ -229,3 +229,38 @@ filter fields, filter-only groups or independent reference rendering. Replaced-
 content has the exact metadata contract request. Local-space inputs fail
 explicitly until reference-space handling exists. Clip/mask share that later
 producer dependency; no implementation claim is made for those inputs.
+
+### COMP-15 real painter filter/backdrop/clip import (complete)
+
+RC-25/26/27 landed the missing painter metadata (`EffectNode::{filter,
+backdrop_filter, backdrop_bounds, clip}`). `PainterFilterSource::from_view`
+now imports all of it: filters/backdrop-filter retain the painter's own
+`FilterPlan` (exact pixel kernel), and `import_clip` converts a resolved
+`inset()`/`circle()`/`ellipse()` `ClipMask` into the retained
+`EffectClip::Inset`/`Ellipse`. Any filter or clip alongside a nonidentity
+transform still falls back to `BakedFallback` (no matrix-aware compositing
+for that stage). Fixing this uncovered a real antialiasing mismatch:
+`effect_clip::apply_masks` sampled `EffectClip::coverage`'s 4×4 supersampling
+for `clip_path`, while the painter's mask test is a hard single-sample; it
+now samples `contains()` once per pixel to match exactly.
+
+Also fixed, folded into this ticket from a shell-lane report: `PaintViewSource::new`
+panicked on `RawRasterError::RasterFailed` (a `<table>` with
+`border-collapse:collapse`, on `app-mail.html`/`docs-reference.html`, routes
+through a table-decoration check `raster_raw_item` declines) instead of
+falling back like it already does for `UnseparableItem`. Both are the same
+"not separable this way" outcome and both now fall back to `BakedFallback`.
+
+Measured gate: compositor **91/91**, 0 doctests; workspace **3019 passed**
+(1 slow), **11 skipped**, doctests **4/4**. New filter/backdrop/clip-path
+corpus (32 cases: the existing 24 plus 8 new clip-path cases alone and
+combined with a filter/backdrop-filter) **32/32, 0 losses**. Existing blend
+corpus **83/85** (same 2 known reference differences), CSS value corpus
+**37/14/0**, IA oracle pages **1/4/1 layers, 0 losses** — all unchanged from
+the prior ticket. Zero lost parity cases. Evidence:
+`crates/amazing-compositor/evidence/comp15/real-filter-import.md`.
+
+Still open: `clip-path`/`mask-image` as a live CSS effect *delta* (routed to
+CSS, not just resolved-painter import at scene construction); `mask-image`
+has no painter reference renderer at all; transformed filter/clip groups
+still use `BakedFallback`.

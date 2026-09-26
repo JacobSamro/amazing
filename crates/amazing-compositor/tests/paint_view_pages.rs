@@ -7,6 +7,7 @@ use amazing_paint::controls::NoControls;
 use amazing_paint::display_list_view::DisplayListView;
 use amazing_paint::{paint_document_with_text_resources_and_controls, NoImages};
 use amazing_text::FallbackTextSystem;
+use std::path::Path;
 use std::time::Instant;
 
 const VIEWPORT: u32 = 96;
@@ -260,6 +261,44 @@ fn control_uses_baked_fallback_with_parity() {
         &NoControls,
     );
     assert_eq!(actual.pixels, expected.pixels);
+}
+
+/// Regression for a shell-reported panic: `PaintViewSource::new` treated
+/// `RawRasterError::RasterFailed` (a `PaintDecorations`/`PaintContent` item
+/// that `raster_raw_item` declines) as an unexpected error and panicked,
+/// instead of falling back like `UnseparableItem`. `app-mail.html` and
+/// `docs-reference.html` both have a `<table>` under `base.css`'s
+/// `table{border-collapse:collapse}`, which routes the table's row/cell
+/// backgrounds and borders through the table decoration path that
+/// `raster_raw_item` explicitly declines (`suppress_background`,
+/// `suppress_border`, non-empty `background_holes` or table `borders`).
+#[test]
+fn real_pages_with_border_collapse_tables_use_baked_fallback_without_panicking() {
+    const VIEWPORT: u32 = 1024;
+    let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/real-pages");
+    let base_css = std::fs::read_to_string(root_dir.join("assets/base.css"))
+        .expect("real-pages base.css fixture");
+    for name in ["app-mail", "docs-reference"] {
+        let html = std::fs::read_to_string(root_dir.join("pages").join(format!("{name}.html")))
+            .unwrap_or_else(|e| panic!("read {name}.html: {e}"));
+        let text = FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(&html, &base_css, VIEWPORT as f32, &text);
+        let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+        // The regression is this call not panicking.
+        let source = PaintViewSource::new(&view);
+        assert_eq!(
+            source.mode(),
+            PaintViewRasterMode::BakedFallback,
+            "{name}: a border-collapse table item declines raw-local raster"
+        );
+        let mut compositor = source.compositor(VIEWPORT, VIEWPORT).unwrap();
+        let frame = source.build_frame(&mut compositor, VIEWPORT, VIEWPORT).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls,
+        );
+        assert_eq!(actual.pixels, expected.pixels, "{name} baked-fallback pixel parity");
+    }
 }
 
 #[test]
