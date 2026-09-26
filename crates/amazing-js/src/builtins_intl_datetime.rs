@@ -100,6 +100,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         else { Some(intl_integer_option(i, &options, "fractionalSecondDigits", 1, 3, 1)?) };
     let time_zone_name = intl_optional_string(i, &options, "timeZoneName",
         &["short", "long", "shortOffset", "longOffset", "shortGeneric", "longGeneric"])?;
+    let _format_matcher = intl_string_option(i, &options, "formatMatcher", &["basic", "best fit"], "best fit")?;
     if (date_style.is_some() || time_style.is_some())
         && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
             hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().any(|field| field.is_some())

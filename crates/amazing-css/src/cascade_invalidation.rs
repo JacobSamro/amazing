@@ -65,6 +65,7 @@ struct InvalidationSet {
 #[derive(Default)]
 struct FeatureIndex {
     sets: BTreeMap<Feature, InvalidationSet>,
+    viewport_rules: Vec<(bool, usize)>,
     has_relational: bool,
     has_nth_of: bool,
     has_structural: bool,
@@ -76,6 +77,7 @@ struct InvalidationContext {
     author_rules: Vec<CompiledRule>,
     features: FeatureIndex,
     epoch: u64,
+    environment: MediaEnvironment,
 }
 
 /// A stylesheet-bound selector dependency index. Recreate it when sheets
@@ -93,6 +95,7 @@ pub struct RecalcRoots {
     pub full: bool,
     pub stylesheet_epoch: u64,
     context: Arc<InvalidationContext>,
+    environment: MediaEnvironment,
 }
 
 /// New retained style state and the properties that actually changed.
@@ -506,9 +509,20 @@ impl StyleInvalidator {
     }
 
     pub fn new(author_sheets: &[Stylesheet], stylesheet_epoch: u64) -> Self {
+        Self::new_with_environment(author_sheets, stylesheet_epoch, MediaEnvironment::default())
+    }
+
+    pub fn new_with_environment(author_sheets: &[Stylesheet], stylesheet_epoch: u64, environment: MediaEnvironment) -> Self {
         let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
         let author_rules = compile_sheets(author_sheets, false);
         let mut features = FeatureIndex::default();
+        for (is_ua, rules) in [(true, &ua_rules), (false, &author_rules)] {
+            for (index, rule) in rules.iter().enumerate() {
+                if rule.decls.iter().any(|declaration| crate::viewport_units::uses_viewport(&declaration.value)) {
+                    features.viewport_rules.push((is_ua, index));
+                }
+            }
+        }
         for rule in ua_rules.iter().chain(author_rules.iter()) {
             for (selector, _) in &rule.selectors {
                 for (index, compound) in selector.compounds.iter().enumerate() {
@@ -545,6 +559,7 @@ impl StyleInvalidator {
                 author_rules,
                 features,
                 epoch: stylesheet_epoch,
+                environment,
             }),
         }
     }
@@ -631,12 +646,41 @@ impl StyleInvalidator {
             full,
             stylesheet_epoch,
             context: Arc::clone(&self.context),
+            environment: self.context.environment,
         }
+    }
+
+    /// Recalculate only elements selected by viewport-dependent declarations
+    /// (and their inherited descendants) after a viewport change.
+    pub fn collect_viewport_resize(&self, dom: &Dom, environment: MediaEnvironment, stylesheet_epoch: u64) -> RecalcRoots {
+        let changed = self.context.environment.viewport_width_px != environment.viewport_width_px
+            || self.context.environment.viewport_height_px != environment.viewport_height_px
+            || self.context.environment.small_viewport_px != environment.small_viewport_px
+            || self.context.environment.large_viewport_px != environment.large_viewport_px
+            || self.context.environment.dynamic_viewport_px != environment.dynamic_viewport_px;
+        let mut roots = Vec::new();
+        if changed {
+            for index in 0..dom.node_count() {
+                let node = NodeIdx(index as u32);
+                if dom.name(node).is_none() { continue; }
+                let inline = dom.attrs_of(node).into_iter().flatten().any(|(name, value)|
+                    name.eq_ignore_ascii_case("style") && crate::viewport_units::uses_viewport(value));
+                let matched = self.context.features.viewport_rules.iter().any(|(is_ua, index)| {
+                    let rule = if *is_ua { &self.context.ua_rules[*index] } else { &self.context.author_rules[*index] };
+                    rule.matching(dom, node, None).is_some() || PseudoElement::STYLED.into_iter().any(|pseudo|
+                        rule.targets(pseudo) && rule.matching(dom, node, Some(pseudo)).is_some())
+                });
+                if inline || matched { roots.push(node); }
+            }
+        }
+        RecalcRoots { roots, following_siblings: Vec::new(),
+            full: stylesheet_epoch != self.context.epoch, stylesheet_epoch,
+            context: Arc::clone(&self.context), environment }
     }
 
     /// Diagnostic oracle; returns the first differing node and property.
     pub fn compare_to_full(&self, dom: &Dom, incremental: &StyledDom) -> Result<(), StyleMismatch> {
-        let full = compute(dom, &self.context.author_sheets);
+        let full = compute_with_environment(dom, &self.context.author_sheets, &self.context.environment);
         first_mismatch(incremental, &full).map_or(Ok(()), Err)
     }
 }
@@ -791,7 +835,7 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
         }
     }
     let (styles, recalculated) = if full {
-        let styles = compute(dom, &roots.context.author_sheets);
+        let styles = compute_with_environment(dom, &roots.context.author_sheets, &roots.environment);
         let mut nodes: Vec<_> = styles.styles.keys().copied().map(NodeIdx).collect();
         nodes.sort();
         (styles, nodes)
@@ -846,6 +890,7 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
                 body_link.as_deref(),
                 &pseudo_targets,
                 None,
+                &roots.environment,
                 &mut out,
             );
         }

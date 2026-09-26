@@ -6,7 +6,10 @@
 //! and supported shorthand expansion stay behind this seam.
 
 use crate::syntax::{Token, serialize, tokenize};
+#[path = "attr_values.rs"]
+mod attr_values;
 use crate::values::{self, ComputedValue};
+use crate::media_queries::MediaEnvironment;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -958,6 +961,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     if metadata(&property).is_some()
         && css_wide_keyword(value).is_none()
         && !contains_var_function(value)
+        && !contains_attr_function(value)
         && !matches!(property.as_str(), "opacity" | "fill-opacity" | "overflow")
         && values::parse(&property, value).is_none()
     {
@@ -1376,6 +1380,12 @@ fn contains_var_function(value: &str) -> bool {
     tokenize(value)
         .iter()
         .any(|token| matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("var")))
+}
+
+fn contains_attr_function(value: &str) -> bool {
+    tokenize(value).iter().any(|token| {
+        matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("attr"))
+    })
 }
 
 fn deferred(function: &str, value: &str) -> String {
@@ -2751,13 +2761,25 @@ pub(crate) fn resolve(
     parent: Option<&ComputedStyle>,
     cascaded: BTreeMap<String, String>,
 ) -> ComputedStyle {
-    resolve_with_root(parent, cascaded, 16.0)
+    resolve_with_root_attrs_environment(parent, cascaded, 16.0, None, &MediaEnvironment::default())
 }
 
-pub(crate) fn resolve_with_root(
+#[cfg(test)]
+pub(crate) fn resolve_with_root_and_attrs(
+    parent: Option<&ComputedStyle>,
+    cascaded: BTreeMap<String, String>,
+    root_font_px: f32,
+    attrs: Option<&[(String, String)]>,
+) -> ComputedStyle {
+    resolve_with_root_attrs_environment(parent, cascaded, root_font_px, attrs, &MediaEnvironment::default())
+}
+
+pub(crate) fn resolve_with_root_attrs_environment(
     parent: Option<&ComputedStyle>,
     mut cascaded: BTreeMap<String, String>,
     root_font_px: f32,
+    attrs: Option<&[(String, String)]>,
+    environment: &MediaEnvironment,
 ) -> ComputedStyle {
     let mut inherited_custom = parent.map(|style| style.custom.clone()).unwrap_or_default();
     let custom_names: Vec<String> = cascaded
@@ -2812,6 +2834,8 @@ pub(crate) fn resolve_with_root(
                 parent_value,
                 root_font_px,
                 &mut resolver,
+                attrs,
+                environment,
             ),
         };
         if relative_currentcolor_identity(&value) || color_mix_currentcolor(&value) {
@@ -2964,8 +2988,12 @@ fn compute_normal_value(
     parent: Option<&str>,
     root_font_px: f32,
     resolver: &mut CustomResolver<'_>,
+    attrs: Option<&[(String, String)]>,
+    environment: &MediaEnvironment,
 ) -> (String, bool) {
-    let Some(tokens) = resolver.substitute(&tokenize(specified)) else {
+    let Some(tokens) = resolver.substitute(&tokenize(specified))
+        .and_then(|tokens| attr_values::substitute_attributes(&tokens, attrs))
+        .and_then(|tokens| crate::viewport_units::resolve(&tokens, environment)) else {
         // Invalid at computed-value time behaves as `unset`.
         return (default_value(property, parent), property.inherited);
     };
@@ -3088,7 +3116,7 @@ fn normalized_extended_color(value: &str) -> Option<String> {
     let lower = value.trim().to_ascii_lowercase();
     if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color(", "color-mix(", "contrast-color("].iter()
         .any(|prefix| lower.starts_with(prefix))
-        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "inactiveborder" | "threedlightshadow")
+        && crate::color::parse_system_color(value).is_none()
     {
         return None;
     }
@@ -3275,9 +3303,9 @@ fn computed_font_size(value: &str, parent: Option<&str>, root_font_px: f32) -> O
         }
         _ if lower.ends_with("em") => parent_px * lower[..lower.len() - 2].parse::<f32>().ok()?,
         _ if lower.ends_with("px") => lower[..lower.len() - 2].parse::<f32>().ok()?,
-        _ => match values::LengthPercentage::parse(&lower)? {
-            values::LengthPercentage::Px(px) => px as f32,
-            _ => return None,
+        _ => match values::LengthPercentage::parse(&lower) {
+            Some(values::LengthPercentage::Px(px)) => px as f32,
+            _ => crate::math::font_size_px(&lower, f64::from(parent_px), f64::from(root_font_px))? as f32,
         },
     };
     if !px.is_finite() || !(0.0..=4096.0).contains(&px) {
@@ -3589,6 +3617,43 @@ impl CustomResolver<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_attributes_substitute_after_variables_and_validate_casts() {
+        let attrs = vec![("data-WIDTH".to_owned(), "200px".to_owned()),
+            ("data-bad".to_owned(), "red".to_owned())];
+        let style = resolve_with_root_and_attrs(None, cascaded(&[
+            ("--size", "attr(DATA-width type(<length>))"),
+            ("width", "var(--size)"),
+            ("height", "attr(data-bad type(<length>), 40px)"),
+            ("min-width", "attr(data-bad type(<length>))"),
+        ]), 16.0, Some(&attrs));
+        assert_eq!(style.get("width"), Some("200px"));
+        assert_eq!(style.get("height"), Some("40px"));
+        assert_eq!(style.get("min-width"), Some("auto"));
+    }
+
+    #[test]
+    fn untyped_attribute_fallback_requires_a_string() {
+        let empty = resolve_with_root_and_attrs(None,
+            cascaded(&[("content", "attr(missing, invalid)")]), 16.0, Some(&[]));
+        assert_eq!(empty.get("content"), Some("\"\""));
+        let fallback = resolve_with_root_and_attrs(None,
+            cascaded(&[("content", "attr(missing, 'fallback')")]), 16.0, Some(&[]));
+        assert_eq!(fallback.get("content"), Some("\"fallback\""));
+    }
+
+    #[test]
+    fn deprecated_system_colors_resolve_before_paint_handoff() {
+        let style = resolve(None, cascaded(&[
+            ("background-color", "ButtonShadow"),
+            ("border-top-color", "ThreeDShadow"),
+            ("color", "silver"),
+        ]));
+        assert_eq!(style.get("background-color"), Some("#f0f0f0ff"));
+        assert_eq!(style.get("border-top-color"), Some("#808080ff"));
+        assert_eq!(style.get("color"), Some("silver"));
+    }
 
     fn cascaded(values: &[(&str, &str)]) -> BTreeMap<String, String> {
         values

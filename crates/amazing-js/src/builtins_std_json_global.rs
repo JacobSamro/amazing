@@ -36,18 +36,6 @@ impl Interpreter {
             number.borrow_mut().define("parseInt", symbol_data(parse_int, true, true)).unwrap();
             number.borrow_mut().define("parseFloat", symbol_data(parse_float, true, true)).unwrap();
         }
-        let uri_error = Interpreter::native("URIError", native_error, &self.function_proto);
-        if let JsValue::Object(function) = &uri_error {
-            if let Some(JsValue::Object(prototype)) = function.borrow().get_own("prototype") {
-                prototype.borrow_mut().proto = self.global_env.resolve("Error")
-                    .and_then(|error| if let JsValue::Object(object) = error { object.borrow().get_own("prototype") } else { None })
-                    .and_then(|value| if let JsValue::Object(object) = value { Some(object) } else { None });
-                prototype.borrow_mut().set_own("name", JsValue::str("URIError"));
-                prototype.borrow_mut().set_own("message", JsValue::str(""));
-                prototype.borrow_mut().set_own("constructor", uri_error.clone());
-            }
-        }
-        self.define_global("URIError", uri_error);
     }
 }
 
