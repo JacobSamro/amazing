@@ -1852,11 +1852,15 @@ fn valid_alpha_channel(value: &str) -> bool {
     valid_rgb_channel(value)
 }
 
+// CSS-27: this used to accept only a bare `Token::Number`/`Token::Percentage`,
+// so a `calc()`/`min()`/`max()`/`clamp()` opacity value failed this earlier
+// gate (`valid_new_paint_property`) and the computed value fell all the way
+// back to the property's initial `1` -- never even reaching
+// `computed_opacity`'s (correct, CSS-25/CSS-27) math evaluator below.
+// Delegating to `values::alpha_value` keeps this in sync with the grammar
+// `values::parse("opacity", ..)` already accepts.
 fn valid_opacity(value: &str) -> bool {
-    matches!(
-        trim_tokens(&tokenize(value)),
-        [Token::Number(value)] | [Token::Percentage(value)] if value.is_finite()
-    )
+    values::alpha_value(value).is_some()
 }
 
 fn valid_overflow(value: &str) -> bool {
@@ -3270,15 +3274,15 @@ fn normalized_extended_color(value: &str) -> Option<String> {
     Some(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))
 }
 
+// CSS-27: this used to try only a bare `<number>`/`<percentage>` parse, so
+// any `calc()`/`min()`/`max()`/`clamp()` opacity value failed here and fell
+// back to the property's initial value (`1`) at the call site -- silently
+// discarding CSS-25's `values::alpha_value()` math evaluator, which already
+// handles exactly this grammar for `opacity`/`fill-opacity`. Delegating to
+// it fixes e.g. `opacity: min(50%, 0%)` computing to `1` instead of `0`.
 fn computed_opacity(value: &str) -> Option<String> {
-    let value = value.trim();
-    let number = value
-        .strip_suffix('%')
-        .map(|percent| percent.parse::<f32>().ok().map(|value| value / 100.0))
-        .unwrap_or_else(|| value.parse::<f32>().ok())?;
-    number
-        .is_finite()
-        .then(|| number.clamp(0.0, 1.0).to_string())
+    let number = values::alpha_value(value.trim())? as f32;
+    number.is_finite().then(|| number.clamp(0.0, 1.0).to_string())
 }
 
 fn valid_new_paint_property(property: &str, value: &str) -> bool {

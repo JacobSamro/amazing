@@ -719,6 +719,116 @@ pub(super) fn has_from(inner: &str) -> bool {
     head.eq_ignore_ascii_case("from") && rest[4..].starts_with(char::is_whitespace)
 }
 
+/// CSS-27: outcome of parsing an `alpha()` color function body, distinct
+/// from the plain `Option<[u8; 4]>` the other relative-color helpers use
+/// because the `color` property's grammar check needs to tell a genuine
+/// grammar violation (invalid) apart from a well-formed call that just isn't
+/// resolvable yet -- either its source is `currentcolor` (deferred to the
+/// computed-value seam, like every other relative-color function here) or
+/// its `/ <alpha>` slot references a custom property via `var()` (deferred
+/// to substitution). Collapsing all three to `None` would make
+/// `alpha(from currentcolor)` (invalid: no `/ <alpha>` clause) indistinguishable
+/// from `alpha(from currentcolor / 0.5)` (valid, deferred).
+pub(super) enum AlphaOutcome {
+    Invalid,
+    Deferred,
+    Resolved([u8; 4]),
+}
+
+/// A relative-color `from <color>` source that is itself a function call.
+/// Reuses `alpha_outcome`'s own three-way classification when the nested
+/// call is another `alpha()`, so e.g. `alpha(from alpha(from currentcolor /
+/// 0.5) / alpha)` defers correctly while `alpha(from alpha(from
+/// currentcolor) / 0.5)` (whose *inner* call is missing its own mandatory
+/// `/ <alpha>`) still reports invalid instead of both collapsing to the same
+/// ambiguous failure. Other relative-color functions (`rgb(from ..)`,
+/// `hsl(from ..)`, ...) don't expose this distinction, so a failure there
+/// falls back to their own existing shallow heuristic (values.rs's
+/// `from`-prefix check): ambiguous failures defer rather than invalidate.
+fn classify_source(text: &str, depth: usize) -> AlphaOutcome {
+    let trimmed = text.trim();
+    if trimmed.eq_ignore_ascii_case("currentcolor") {
+        return AlphaOutcome::Deferred;
+    }
+    if let Some((name, nested_inner)) = super::split_function(trimmed) {
+        if name.eq_ignore_ascii_case("alpha") {
+            return alpha_outcome(nested_inner, depth + 1);
+        }
+        if has_from(nested_inner) {
+            return match super::parse_css_color_depth(trimmed, depth + 1) {
+                Some(rgba) => AlphaOutcome::Resolved(rgba),
+                None => AlphaOutcome::Deferred,
+            };
+        }
+    }
+    match super::parse_css_color_depth(trimmed, depth + 1) {
+        Some(rgba) => AlphaOutcome::Resolved(rgba),
+        None => AlphaOutcome::Invalid,
+    }
+}
+
+/// True when `text`'s tokens reference a custom property via `var()`
+/// anywhere -- used to defer (rather than reject) an `/ <alpha>` slot that
+/// can't be evaluated until substitution runs.
+fn references_var(text: &str) -> bool {
+    tokenize(text)
+        .iter()
+        .any(|token| matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("var")))
+}
+
+/// `alpha( [from <color>] / [<alpha-value> | none] )` -- CSS Color 5. Unlike
+/// `rgb()`/`hsl()`/etc.'s relative form, `alpha()` takes no channel overrides
+/// (nothing may sit between the source and the `/`), the `from <color>` and
+/// `/ <alpha>` clauses are both mandatory (not merely "how you opt into
+/// relative syntax"), and its substitutable keyword is only `alpha` itself
+/// -- never the source's own `r`/`g`/`b`/etc.
+pub(super) fn alpha_outcome(inner: &str, depth: usize) -> AlphaOutcome {
+    if depth > 16 || !has_from(inner) {
+        return AlphaOutcome::Invalid;
+    }
+    let Some(rest) = inner.trim_start().get(4..) else { return AlphaOutcome::Invalid };
+    let rest = rest.trim_start();
+    let Some((source_text, after)) = split_source(rest) else { return AlphaOutcome::Invalid };
+    let Some((channels_text, alpha_text)) = split_alpha(after) else { return AlphaOutcome::Invalid };
+    if !channels_text.trim().is_empty() {
+        return AlphaOutcome::Invalid; // no r/g/b-style overrides for alpha()
+    }
+    let Some(alpha_text) = alpha_text else { return AlphaOutcome::Invalid }; // `/ <alpha>` is mandatory
+    if references_var(alpha_text) {
+        return AlphaOutcome::Deferred; // needs custom-property substitution
+    }
+    // Validate the alpha slot's own grammar (number/percentage/`none`/
+    // `alpha`/`calc(alpha ...)` etc.) with a placeholder source alpha: this
+    // is valid whether or not the source can be resolved yet, since `alpha`
+    // substitutes the same way regardless of its actual value.
+    let placeholder = [("alpha", 1.0)];
+    if alpha_channel(alpha_text, &placeholder, 255).is_none() {
+        return AlphaOutcome::Invalid;
+    }
+    let source = match classify_source(source_text, depth) {
+        AlphaOutcome::Resolved(rgba) => rgba,
+        AlphaOutcome::Deferred => return AlphaOutcome::Deferred,
+        AlphaOutcome::Invalid => return AlphaOutcome::Invalid,
+    };
+    let keywords = [("alpha", source[3] as f64 / 255.0)];
+    match alpha_channel(alpha_text, &keywords, source[3]) {
+        Some(new_alpha) => AlphaOutcome::Resolved([source[0], source[1], source[2], new_alpha]),
+        None => AlphaOutcome::Invalid,
+    }
+}
+
+/// `alpha()` collapsed to the same `Option<[u8; 4]>` shape as the other
+/// relative-color helpers, for use as a plain color (e.g. as another
+/// function's relative-color source). Both a genuine grammar violation and
+/// a deferred `currentcolor` source are `None` here; `alpha_outcome` tells
+/// them apart where that distinction matters.
+pub(super) fn alpha_color(inner: &str, depth: usize) -> Option<[u8; 4]> {
+    match alpha_outcome(inner, depth) {
+        AlphaOutcome::Resolved(rgba) => Some(rgba),
+        AlphaOutcome::Invalid | AlphaOutcome::Deferred => None,
+    }
+}
+
 /// `rgb(from <color> r g b / a)` and the equivalent forms for the numeric
 /// channel functions. Returns `None` when the source is `currentcolor`, which
 /// the computed-value seam resolves against the element's own `color`.
