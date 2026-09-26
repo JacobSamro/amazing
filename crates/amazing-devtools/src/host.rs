@@ -519,6 +519,67 @@ pub struct LayoutMetrics {
     pub content_height: f64,
 }
 
+/// CDP `Input.dispatchMouseEvent` data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MouseEvent {
+    /// `"mousePressed"`, `"mouseReleased"`, `"mouseMoved"`, `"mouseWheel"`.
+    pub kind: String,
+    pub x: f64,
+    pub y: f64,
+    /// CDP modifier bitmask: Alt=1, Ctrl=2, Meta=4, Shift=8.
+    pub modifiers: u32,
+    /// `"none"`, `"left"`, `"middle"`, `"right"`, `"back"`, `"forward"`.
+    pub button: String,
+    /// Bitmask of pressed buttons, same values as `button`.
+    pub buttons: u32,
+    pub click_count: u32,
+    pub delta_x: f64,
+    pub delta_y: f64,
+    /// Seconds since the Unix epoch.
+    pub timestamp: f64,
+}
+
+/// CDP `Input.dispatchKeyEvent` data.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct KeyEvent {
+    /// `"keyDown"`, `"keyUp"`, `"rawKeyDown"`, `"char"`.
+    pub kind: String,
+    pub modifiers: u32,
+    pub text: Option<String>,
+    pub unmodified_text: Option<String>,
+    pub key: Option<String>,
+    pub code: Option<String>,
+    pub windows_virtual_key_code: Option<i64>,
+    pub native_virtual_key_code: Option<i64>,
+    pub auto_repeat: bool,
+    pub is_keypad: bool,
+    pub is_system_key: bool,
+    /// `"standard"`, `"left"`, `"right"`, `"numpad"`.
+    pub location: Option<String>,
+}
+
+/// One CDP `Input.TouchPoint`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TouchPoint {
+    pub x: f64,
+    pub y: f64,
+    pub radius_x: f64,
+    pub radius_y: f64,
+    pub rotation_angle: f64,
+    pub force: f64,
+    pub id: f64,
+}
+
+/// CDP `Input.dispatchTouchEvent` data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TouchEvent {
+    /// `"touchStart"`, `"touchEnd"`, `"touchMove"`, `"touchCancel"`.
+    pub kind: String,
+    pub points: Vec<TouchPoint>,
+    pub modifiers: u32,
+    pub timestamp: f64,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -796,6 +857,10 @@ pub trait DevToolsSession: Send {
     fn push_nodes(&mut self, _backend_node_ids: &[u64]) -> Result<Vec<EngineNodeId>, HostError> {
         Err(HostError::Unsupported)
     }
+    /// Hit-tests the document at viewport coordinates (`DOM.getNodeForLocation`).
+    fn node_for_location(&mut self, _x: f64, _y: f64) -> Result<EngineNodeId, HostError> {
+        Err(HostError::Unsupported)
+    }
 
     // --- CSS --------------------------------------------------------------
     /// Computed longhands for `node`, in declaration order.
@@ -836,6 +901,28 @@ pub trait DevToolsSession: Send {
         &mut self,
         _node: EngineNodeId,
     ) -> Result<Vec<Option<String>>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Input ------------------------------------------------------------
+    /// Enables or suppresses engine input handling (`Input.setIgnoreInputEvents`).
+    fn set_ignore_input_events(&mut self, _ignore: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Dispatches a synthesized mouse event.
+    fn dispatch_mouse_event(&mut self, _event: &MouseEvent) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Dispatches a synthesized keyboard event.
+    fn dispatch_key_event(&mut self, _event: &KeyEvent) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Dispatches a synthesized touch event.
+    fn dispatch_touch_event(&mut self, _event: &TouchEvent) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Inserts text as if typed (`Input.insertText`).
+    fn insert_text(&mut self, _text: &str) -> Result<(), HostError> {
         Err(HostError::Unsupported)
     }
 

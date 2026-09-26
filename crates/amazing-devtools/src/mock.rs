@@ -12,10 +12,10 @@ use std::sync::{Arc, Mutex};
 use crate::host::{
     BoxModel, ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams,
     EvaluateResult, ExceptionDetails, FrameInfo, FrameResourceTree, FrameTree, HostError,
-    HostInfo, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaQuery,
-    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
+    HostInfo, LayoutMetrics, KeyEvent, LifecycleEvent, LogEntry, MatchedRule, MediaQuery,
+    MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
     PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
-    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, Viewport,
+    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use crate::json::Json;
 
@@ -45,6 +45,18 @@ pub struct MockScript {
     pub mutations: Vec<(EngineNodeId, String, Option<String>)>,
     /// Text-node writes recorded by `DOM.setNodeValue`.
     pub node_values: Vec<(EngineNodeId, String)>,
+    /// Mouse events recorded by `Input.dispatchMouseEvent`.
+    pub mouse_events: Vec<MouseEvent>,
+    /// Keyboard events recorded by `Input.dispatchKeyEvent`.
+    pub key_events: Vec<KeyEvent>,
+    /// Touch events recorded by `Input.dispatchTouchEvent`.
+    pub touch_events: Vec<TouchEvent>,
+    /// Text inserted by `Input.insertText`.
+    pub inserted_text: Vec<String>,
+    /// Last `Input.setIgnoreInputEvents` value.
+    pub ignore_input: Option<bool>,
+    /// Node returned by `DOM.getNodeForLocation`.
+    pub hit_test: Option<EngineNodeId>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -94,6 +106,12 @@ impl Default for MockScript {
             reloads: Vec::new(),
             mutations: Vec::new(),
             node_values: Vec::new(),
+            mouse_events: Vec::new(),
+            key_events: Vec::new(),
+            touch_events: Vec::new(),
+            inserted_text: Vec::new(),
+            ignore_input: None,
+            hit_test: Some(EngineNodeId(4)),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -574,6 +592,43 @@ impl DevToolsSession for MockSession {
         _node: EngineNodeId,
     ) -> Result<Vec<Option<String>>, HostError> {
         Ok(self.script.lock().unwrap().background_colors.clone())
+    }
+
+    fn node_for_location(&mut self, _x: f64, _y: f64) -> Result<EngineNodeId, HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .hit_test
+            .ok_or(HostError::NotFound)
+    }
+
+    fn set_ignore_input_events(&mut self, ignore: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().ignore_input = Some(ignore);
+        Ok(())
+    }
+
+    fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
+        self.script.lock().unwrap().mouse_events.push(event.clone());
+        Ok(())
+    }
+
+    fn dispatch_key_event(&mut self, event: &KeyEvent) -> Result<(), HostError> {
+        self.script.lock().unwrap().key_events.push(event.clone());
+        Ok(())
+    }
+
+    fn dispatch_touch_event(&mut self, event: &TouchEvent) -> Result<(), HostError> {
+        self.script.lock().unwrap().touch_events.push(event.clone());
+        Ok(())
+    }
+
+    fn insert_text(&mut self, text: &str) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .inserted_text
+            .push(text.to_string());
+        Ok(())
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {
