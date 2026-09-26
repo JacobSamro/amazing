@@ -418,7 +418,7 @@ mod property_scene_tests {
         assert_eq!(scene.compositor().trees().transform(transform).unwrap().matrix,
             Matrix4::translation(2., 0., 0.));
         assert_eq!(styles.get(element).unwrap().get("opacity"), Some("0.6"));
-        assert_eq!(styles.get(element).unwrap().get("transform"), Some("translate(2px,0px)"));
+        assert_eq!(styles.get(element).unwrap().get("transform"), Some("translate(2px, 0px)"));
         let pixels = presenter.present(&frame).unwrap();
         assert_ne!(pixels.get_pixel(2, 2), Some([255; 4]));
     }
