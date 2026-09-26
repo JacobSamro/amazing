@@ -917,7 +917,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         )?;
         if brand == InterfaceBrand::LOCATION {
             self.materialize_location_unforgeables(&value)?;
-        } else if !matches!(brand, InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP) {
+        } else if !Self::dom_uses_inherited_accessors(brand) {
             self.materialize_accessors(&value);
         }
         if brand == InterfaceBrand::NODE && key.slot == 0 {

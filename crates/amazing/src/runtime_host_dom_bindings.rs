@@ -3,6 +3,15 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_uses_inherited_accessors(brand: InterfaceBrand) -> bool {
+        matches!(brand, InterfaceBrand::DOM_EXCEPTION | InterfaceBrand::DOM_STRING_MAP
+            | InterfaceBrand::COLLECTION | InterfaceBrand::FORM_CONTROLS
+            | InterfaceBrand::OPTIONS | InterfaceBrand::RADIO_NODE_LIST
+            | InterfaceBrand::NODE_LIST | InterfaceBrand::STATIC_NODE_LIST
+            | InterfaceBrand::FILTERED_NODE_LIST | InterfaceBrand::NAMED_NODE_MAP
+            | InterfaceBrand::DOM_TOKEN_LIST | InterfaceBrand::DOM_STRING_LIST)
+    }
+
     pub(super) fn dom_install_dataset_hooks(&mut self) -> Result<(), Throw> {
         let state = self.state.clone();
         let names = Rc::new(move |handle: HostHandle| {
@@ -128,6 +137,43 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn collection_members_stay_on_prototypes_and_live_keys_track_mutations() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('collection own properties'); }
+            const root = document.createElement('div');
+            for (const list of [root.children, root.childNodes, root.attributes, root.classList]) {
+                check(Object.getOwnPropertyNames(list).length === 0);
+                check(list.length === 0 && !list.hasOwnProperty('length'));
+            }
+            root.setAttribute('data-name', 'one');
+            const attrs = root.attributes;
+            check(Object.getOwnPropertyNames(attrs).join(',') === '0,data-name');
+            check(Object.keys(attrs).join(',') === '0');
+            root.removeAttribute('data-name');
+            check(attrs.length === 0 && Object.getOwnPropertyNames(attrs).length === 0);
+            const children = root.children;
+            const nodes = root.childNodes;
+            const child = document.createElement('span');
+            child.id = 'named';
+            root.appendChild(child);
+            check(children.length === 1 && nodes.length === 1);
+            check(Object.getOwnPropertyNames(children).join(',') === '0,named');
+            check(Object.getOwnPropertyNames(nodes).join(',') === '0');
+            check(Object.keys(children).join(',') === '0');
+            check(children.named === child && children[0] === child);
+            child.remove();
+            check(children.length === 0 && nodes.length === 0);
+            check(Object.getOwnPropertyNames(children).length === 0);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn dataset_is_live_same_object_with_named_property_descriptors() {
