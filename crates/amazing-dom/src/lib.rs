@@ -16,9 +16,11 @@
 pub mod events;
 pub mod focus;
 pub mod attr;
+pub mod dataset;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
+pub mod legacy_document;
 pub mod render_mutation;
 pub mod markup;
 #[cfg(test)] mod markup_tests;
@@ -30,6 +32,7 @@ pub mod forms;
 mod template;
 #[cfg(test)] mod template_tests;
 mod namespace;
+mod processing_instruction;
 mod namespace_lookup;
 mod node_mixins;
 pub use node_mixins::NodeOrString;
@@ -102,6 +105,7 @@ pub struct Node {
     namespaced_attributes: Vec<namespace::NamespacedAttribute>,
     attribute_order: Vec<namespace::AttributeKey>,
     character_data_units: Option<Vec<u16>>,
+    processing_instruction_attributes: Option<processing_instruction::Attributes>,
     prefix: Option<String>,
     pub kind: NodeKind,
     pub parent: Option<NodeIdx>,
@@ -225,6 +229,7 @@ impl Dom {
             namespaced_attributes: Vec::new(),
             attribute_order: Vec::new(),
             character_data_units: None,
+            processing_instruction_attributes: None,
             prefix: None,
             kind: NodeKind::Document,
             parent: None,
@@ -263,6 +268,7 @@ impl Dom {
             namespaced_attributes: Vec::new(),
             attribute_order,
             character_data_units: None,
+            processing_instruction_attributes: None,
             prefix: None,
             kind,
             parent: None,

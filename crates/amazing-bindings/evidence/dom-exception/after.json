@@ -1,0 +1,874 @@
+{
+  "source": "working-tree-on-129cde71",
+  "platform": "Linux Boat pooled dom-bindings",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directory": "webidl/ecmascript-binding/es-exceptions",
+  "binary_sha256": "cc0896fc960e3fb8a1a943c7ac0f2cfff3888538c87b79b64d786859aef70ce8",
+  "results": [
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 51,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Constant INDEX_SIZE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INDEX_SIZE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant DOMSTRING_SIZE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant DOMSTRING_SIZE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant HIERARCHY_REQUEST_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant HIERARCHY_REQUEST_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant WRONG_DOCUMENT_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant WRONG_DOCUMENT_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_CHARACTER_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_CHARACTER_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NO_DATA_ALLOWED_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NO_DATA_ALLOWED_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NOT_FOUND_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NOT_FOUND_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NOT_SUPPORTED_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NOT_SUPPORTED_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INUSE_ATTRIBUTE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INUSE_ATTRIBUTE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_STATE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_STATE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant SYNTAX_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant SYNTAX_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_MODIFICATION_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_MODIFICATION_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NAMESPACE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NAMESPACE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_ACCESS_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_ACCESS_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant VALIDATION_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant VALIDATION_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant TYPE_MISMATCH_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant TYPE_MISMATCH_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant SECURITY_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant SECURITY_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NETWORK_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant NETWORK_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant ABORT_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant ABORT_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant URL_MISMATCH_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant URL_MISMATCH_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant QUOTA_EXCEEDED_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant QUOTA_EXCEEDED_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant TIMEOUT_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant TIMEOUT_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_NODE_TYPE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant INVALID_NODE_TYPE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant DATA_CLONE_ERR on DOMException constructor object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Constant DATA_CLONE_ERR on DOMException prototype object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "DOMException-constants",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "existence and property descriptor of DOMException",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "existence and property descriptor of DOMException.prototype",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "existence and property descriptor of DOMException.prototype.constructor",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 46,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "new DOMException()",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(): inherited-ness",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(null)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(undefined)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(undefined): inherited-ness",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"foo\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"foo\"): inherited-ness",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"bar\", undefined)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"bar\", \"NotSupportedError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"bar\", \"NotSupportedError\"): inherited-ness",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMException(\"bar\", \"foo\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"IndexSizeError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"HierarchyRequestError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"WrongDocumentError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InvalidCharacterError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NoModificationAllowedError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NotFoundError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NotSupportedError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InUseAttributeError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InvalidStateError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"SyntaxError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InvalidModificationError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NamespaceError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InvalidAccessError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"TypeMismatchError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"SecurityError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NetworkError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"AbortError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"URLMismatchError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"QuotaExceededError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"TimeoutError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"InvalidNodeTypeError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"DataCloneError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"DOMStringSizeError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NoDataAllowedError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"ValidationError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"EncodingError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NotReadableError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"UnknownError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"ConstraintError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"DataError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"TransactionInactiveError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"ReadOnlyError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"VersionError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"OperationError\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "new DOMexception(\"msg\", \"NotAllowedError\")",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 15,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Cannot construct without new",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "inherits from Error: prototype-side",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "does not inherit from Error: class-side",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "message property descriptor",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "message getter performs brand checks (i.e. is not [LegacyLenientThis])",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "name property descriptor",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "name getter performs brand checks (i.e. is not [LegacyLenientThis])",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "code property descriptor",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "code getter performs brand checks (i.e. is not [LegacyLenientThis])",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "code property is not affected by shadowing the name property",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.prototype.toString behavior is like other interfaces",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Inherits its toString() from Error.prototype",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "toString() behavior from Error.prototype applies as expected",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "DOMException.prototype.toString() applied to DOMException.prototype throws because of name/message brand checks",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "If the implementation has a stack property on normal errors, it also does on DOMExceptions",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "DOMException-is-error",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/DOMException-stack-accessor.any.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 7,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "new DOMException() has a stack property that is a string",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "new DOMException() with no arguments has a stack property that is a string",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "thrown DOMException from DOM API has a stack property that is a string",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "DOMException instance does not have an own stack property",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "DOMException.prototype does not have an own stack property",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Error.prototype.stack is an accessor property with correct attributes",
+          "status": 1,
+          "message": "${function_name}: ${description}got disallowed value ${actual}"
+        },
+        {
+          "name": "Error.prototype.stack getter works on DOMException instances",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Error.prototype.stack setter installs own data property on DOMException instances",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Error.prototype.stack setter ignores Error.prototype itself",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "webidl/ecmascript-binding/es-exceptions/exceptions.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "timeout",
+      "harness_status": 2,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 1,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Object.getPrototypeOf(exception) === DOMException.prototype",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "exception.hasOwnProperty(\"name\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "exception.hasOwnProperty(\"message\")",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "exception.name === \"HierarchyRequestError\"",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "exception.code === DOMException.HIERARCHY_REQUEST_ERR",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.prototype.toString.call(exception) === \"[object DOMException]\"",
+          "status": 0,
+          "message": null
+        }
+      ]
+    }
+  ]
+}

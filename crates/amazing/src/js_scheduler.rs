@@ -2,7 +2,7 @@
 //! `enter`, which transfers the complete ordered outbox before another entry.
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
-use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, RenderPhase, TimerId};
+use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, RenderPhase, TaskSource, TimerId};
 use amazing_dom::abort::AbortSignalId;
 use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
@@ -17,6 +17,7 @@ enum Payload {
     Callback(SchedulingToken),
     Mutation,
     AbortTimeout(AbortSignalId, u64),
+    FormSelection(u32),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -37,6 +38,9 @@ pub(crate) struct DriverScheduler {
     started: Instant,
     now: Duration,
     trace: Vec<String>,
+    pending_resize: bool,
+    pending_scroll: Vec<u32>,
+    render_hook: Option<Rc<dyn Fn()>>,
 }
 
 impl DriverScheduler {
@@ -50,6 +54,7 @@ impl DriverScheduler {
             js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
             timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1,
             started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
+            pending_resize: false, pending_scroll: Vec::new(), render_hook: None,
         })
     }
 
@@ -60,6 +65,43 @@ impl DriverScheduler {
         let url = url.into();
         self.js.set_location_url(&url);
         self.bindings.set_document_url(&url);
+        // Top realm origin, so same-origin iframe WindowProxy access (JSRT-9)
+        // compares against a real value rather than the "" default.
+        if let Ok(parsed) = amazing_net::url::ParsedUrl::parse(&url) {
+            let realm = self.js.binding_current_realm();
+            let _ = self.js.binding_set_realm_origin(realm, &parsed.origin().serialize());
+        }
+    }
+    pub(crate) fn set_frame_resource_resolver(&mut self,
+        resolver: Rc<dyn Fn(&str) -> Option<String>>) {
+        self.bindings.set_frame_resource_resolver(resolver);
+    }
+    pub(crate) fn set_child_navigation_hook(&mut self,
+        hook: crate::runtime_binding_host::html::ChildNavigationHook) {
+        self.bindings.set_child_navigation_hook(hook);
+    }
+    pub(crate) fn set_form_navigation_hook(&mut self,
+        hook: crate::runtime_binding_host::html::FormNavigationHook) {
+        self.bindings.set_form_navigation_hook(hook);
+    }
+    pub(crate) fn queue_resize_event(&mut self) { self.pending_resize = true; }
+    pub(crate) fn queue_scroll_event(&mut self, node: u32) {
+        if !self.pending_scroll.contains(&node) { self.pending_scroll.push(node); }
+    }
+    pub(crate) fn set_render_hook(&mut self, hook: Rc<dyn Fn()>) {
+        self.render_hook = Some(hook);
+    }
+    pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
+        for (frame, document) in self.bindings.take_iframe_loads() {
+            if let Some(document) = document {
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.setup_iframe_window(js, frame, document))?;
+                self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
+                self.dispatch_dom_event(document.0, "load")?;
+            }
+            self.dispatch_dom_event(frame.0, "load")?;
+        }
+        Ok(())
     }
     pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
         self.bindings.set_document_metadata(character_set, content_type, referrer);
@@ -139,6 +181,11 @@ impl DriverScheduler {
         }
         for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
             self.register_abort_timeout(signal, delay_ms)?;
+        }
+        for node in self.bindings.take_form_selection_events() {
+            let callback = self.own(Payload::FormSelection(node.0))?;
+            self.loop_.queue_task(TaskSource::UserInteraction, Some(GLOBAL), callback)
+                .map_err(loop_error)?;
         }
         Ok(())
     }
@@ -239,7 +286,29 @@ impl DriverScheduler {
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.fire_abort_timeout(js, signal))
             }
+            Payload::FormSelection(node) => {
+                self.payloads.remove(&callback.0);
+                self.dispatch_dom_event(node, "select")
+            }
         }
+    }
+
+    fn update_rendering(&mut self, phase: RenderPhase) -> Result<(), Throw> {
+        match phase {
+            RenderPhase::BeforeAnimationFrames => {
+                if self.pending_resize {
+                    self.pending_resize = false;
+                    self.dispatch_dom_event(0, "resize")?;
+                }
+                for node in std::mem::take(&mut self.pending_scroll) {
+                    self.dispatch_dom_event(node, "scroll")?;
+                }
+            }
+            RenderPhase::AfterAnimationFrames => {
+                if let Some(hook) = &self.render_hook { hook(); }
+            }
+        }
+        Ok(())
     }
 
     /// Pump one explicit driver clock/render opportunity until the loop is idle.
@@ -261,14 +330,24 @@ impl DriverScheduler {
         mut on_render: impl FnMut(RenderPhase, Duration),
     ) -> Result<bool, Throw> {
         self.drain_outbox()?;
+        self.dispatch_pending_iframe_loads()?;
         self.now = self.now.max(now);
         self.loop_.advance_to(self.now).map_err(loop_error)?;
-        if render { self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?; }
+        // Update rendering follows the task and microtask checkpoint for this
+        // turn. In particular, a timer may register a frame callback before
+        // this opportunity begins.
         let mut did_work = false;
         let mut first_error = None;
+        let mut rendering_queued = !render;
         for _ in 0..10_000 {
-            let Some(step) = self.loop_.step().map_err(loop_error)? else {
-                return first_error.map_or(Ok(did_work), Err);
+            let step = match self.loop_.step().map_err(loop_error)? {
+                Some(step) => step,
+                None if !rendering_queued => {
+                    rendering_queued = true;
+                    self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?;
+                    continue;
+                }
+                None => return first_error.map_or(Ok(did_work), Err),
             };
             let result = match step.action {
                 Action::Task { callback, .. } | Action::Microtask { callback, .. } => {
@@ -280,7 +359,11 @@ impl DriverScheduler {
                     self.invoke(callback, Some(timestamp))
                 }
                 Action::CheckpointCleanup => { self.bindings.storage_deactivate_transactions(); Ok(()) },
-                Action::Render { phase, timestamp, .. } => { on_render(phase, timestamp); Ok(()) },
+                Action::Render { phase, timestamp, .. } => {
+                    let result = self.update_rendering(phase);
+                    on_render(phase, timestamp);
+                    result
+                }
             };
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.
@@ -293,6 +376,12 @@ impl DriverScheduler {
 
     pub(crate) fn pump_now(&mut self, render: bool) -> Result<bool, Throw> {
         self.pump_at(self.started.elapsed(), render)
+    }
+
+    /// Test hook for lane-owned bindings tests (see `runtime_host_messaging`).
+    #[cfg(test)]
+    pub(crate) fn test_bindings(&self) -> &crate::runtime_binding_host::RuntimeBindings {
+        &self.bindings
     }
 
     /// [`Self::pump_now`] variant that ticks a host render hook at the loop's
@@ -341,6 +430,96 @@ mod tests {
         assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(false)));
         driver.pump_at(Duration::ZERO, false).unwrap();
         assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(true)));
+    }
+    #[test]
+    fn nested_animation_frames_then_timeout_settle_a_promise() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.settled = false; new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))).then(() => { settled = true; });").unwrap();
+        for frame in 0..10 {
+            driver.pump_at(Duration::from_millis(frame * 16), true).unwrap();
+        }
+        assert!(matches!(driver.run_script("settled").unwrap(), JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn promise_then_async_await_settles_across_nested_frames() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.done = false; Promise.resolve().then(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))); done = true; });").unwrap();
+        for frame in 0..10 {
+            driver.pump_at(Duration::from_millis(frame * 16), true).unwrap();
+        }
+        assert!(matches!(driver.run_script("done").unwrap(), JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn detached_input_select_queues_select_event() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.hit = 0; var i = document.createElement('input'); i.type = 'text'; i.value = 'foobar'; i.addEventListener('select', () => { hit++; }); i.select();").unwrap();
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("hit").unwrap(), JsValue::Num(n) if n == 1.0));
+    }
+
+    #[test]
+    fn detached_clone_select_queues_select_event() {
+        let (mut driver, _) = adapter(64, false);
+        // The source control's live selection must not be cloned: the clone
+        // starts at the default end selection, so select() changes it and fires.
+        driver.run_script("globalThis.hit = 0; var i = document.createElement('input'); i.type = 'text'; i.value = 'foobar'; i.select(); var c = i.cloneNode(true); c.addEventListener('select', () => { hit++; }); c.select();").unwrap();
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("hit").unwrap(), JsValue::Num(n) if n == 1.0));
+    }
+
+    #[test]
+    #[ignore = "blocked on js-lane: tree-walking `await` on a pending promise returns immediately instead of suspending (interp.rs:1980)"]
+    fn await_suspends_until_timer_fires() {
+        let (mut driver, _) = adapter(64, false);
+        driver.run_script("globalThis.order = ''; (async () => { order += 'A'; await new Promise(resolve => setTimeout(resolve, 1000)); order += 'B'; })(); order += 'C';").unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("AC"));
+        driver.pump_at(Duration::from_millis(1200), false).unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("ACB"));
+    }
+
+    #[test]
+    fn validity_flags_are_computed_for_disabled_and_readonly_controls() {
+        let (mut driver, _) = adapter(64, false);
+        // valueMissing is mutability-gated: a disabled/readonly required empty
+        // control is not missing. Size/pattern/range/steps are independent.
+        driver.run_script("var i = document.createElement('input'); i.required = true; globalThis.cv = i.validity.valueMissing; globalThis.cc = i.validity.valid; var c = i.cloneNode(true); globalThis.kv = c.validity.valueMissing; globalThis.kc = c.validity.valid;").unwrap();
+        assert!(matches!(driver.run_script("cv").unwrap(), JsValue::Bool(true)), "connected valueMissing");
+        assert!(matches!(driver.run_script("cc").unwrap(), JsValue::Bool(false)), "connected valid");
+        assert!(matches!(driver.run_script("kv").unwrap(), JsValue::Bool(true)), "cloned valueMissing");
+        assert!(matches!(driver.run_script("kc").unwrap(), JsValue::Bool(false)), "cloned valid");
+        // A disabled or readonly control with a pattern mismatch is still invalid.
+        driver.run_script("var p = document.createElement('input'); p.pattern = '[A-Z]'; p.value = 'abc'; globalThis.pm = p.validity.patternMismatch; globalThis.pv = p.validity.valid; var d = p.cloneNode(true); d.disabled = true; globalThis.dm = d.validity.patternMismatch; globalThis.dv = d.validity.valid; var r = p.cloneNode(true); r.readOnly = true; globalThis.rv = r.validity.valid; var n = document.createElement('input'); n.type = 'number'; n.max = '5'; n.value = '6'; globalThis.rm = n.validity.rangeOverflow; globalThis.rvm = n.validity.valid; var dn = n.cloneNode(true); dn.disabled = true; globalThis.drm = dn.validity.rangeOverflow; globalThis.drv = dn.validity.valid;").unwrap();
+        for (name, expected) in [("pm", true), ("pv", false), ("dm", true), ("dv", false), ("rv", false), ("rm", true), ("rvm", false), ("drm", true), ("drv", false)] {
+            let value = driver.run_script(name).unwrap();
+            assert!(matches!(value, JsValue::Bool(v) if v == expected), "validity {name}");
+        }
+    }
+
+    #[test]
+    fn input_type_change_preserves_undirtied_default_value() {
+        let (mut driver, _) = adapter(16, false);
+        driver.run_script("var i = document.createElement('input'); i.type = 'color'; globalThis.v1 = i.value; i.type = 'text'; globalThis.v2 = i.value; i.type = 'color'; globalThis.v3 = i.value; i.value = '#ffffff'; globalThis.v4 = i.value; i.type = 'text'; globalThis.v5 = i.value;").unwrap();
+        for (name, expected) in [
+            ("v1", "#000000"), ("v2", ""), ("v3", "#000000"),
+            ("v4", "#ffffff"), ("v5", "#ffffff"),
+        ] {
+            assert_eq!(driver.run_script(name).unwrap(), JsValue::str(expected), "color {name}");
+        }
+    }
+
+    #[test]
+    fn rendering_dispatches_resize_before_frames_and_paints_after() {
+        let (mut driver, _) = adapter(64, false);
+        let painted = Rc::new(RefCell::new(false));
+        let painted_for_hook = painted.clone();
+        driver.set_render_hook(Rc::new(move || *painted_for_hook.borrow_mut() = true));
+        driver.run_script("globalThis.order = ''; window.addEventListener('resize', () => { order += 'R'; }); requestAnimationFrame(() => { order += 'F'; });").unwrap();
+        driver.queue_resize_event();
+        driver.pump_at(Duration::from_micros(16_667), true).unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("RF"));
+        assert!(*painted.borrow());
     }
 
     #[test]

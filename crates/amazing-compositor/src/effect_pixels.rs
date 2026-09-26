@@ -272,6 +272,16 @@ pub(crate) fn blend(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: EffectBlend)
     }
     let sa = f64::from((u32::from(src[3]) * u32::from(op) + 127) / 255) / 255.;
     let da = f64::from(dst[3]) / 255.;
+    if mode == EffectBlend::PlusLighter {
+        // Compositing 2 section 9.1.15: add in premultiplied space, clamp
+        // color and alpha independently, then return straight RGBA.
+        let alpha = (sa + da).min(1.);
+        if alpha == 0. { return [0; 4]; }
+        let channel = |i: usize| byte(
+            (sa * f64::from(src[i]) / 255. + da * f64::from(dst[i]) / 255.)
+                .min(1.) / alpha);
+        return [channel(0), channel(1), channel(2), byte(alpha)];
+    }
     let oa = sa + da * (1. - sa);
     if oa == 0. {
         return [0; 4];

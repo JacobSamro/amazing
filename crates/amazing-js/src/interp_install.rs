@@ -1,5 +1,7 @@
 // Realm builtin installation and native function construction.
 
+include!("builtins_date.rs");
+
 impl Interpreter {
     fn native(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
         let mut o = JsObject::function(JsFunction {
@@ -14,6 +16,7 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(proto.clone());
+        o.realm = proto.borrow().realm;
         let handle = Obj(Rc::new(RefCell::new(o)));
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         handle.borrow_mut().define("prototype", Property {
@@ -90,6 +93,11 @@ impl Interpreter {
             prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
             prototype.set_own("constructor", error_constructor.clone());
         }
+        if let JsValue::Object(error) = &error_constructor {
+            error.borrow_mut().define("isError", symbol_data(
+                Self::native("isError", native_error_is_error, &self.function_proto), true, true)).unwrap();
+            runtime_method_attributes(error, "isError", 1);
+        }
         self.define_global("Error", error_constructor.clone());
         for (name, native) in [
             ("EvalError", native_eval_error as crate::value::NativeFn),
@@ -98,6 +106,8 @@ impl Interpreter {
             ("ReferenceError", native_reference_error as crate::value::NativeFn),
             ("SyntaxError", native_syntax_error as crate::value::NativeFn),
             ("URIError", native_uri_error as crate::value::NativeFn),
+            ("AggregateError", native_aggregate_error as crate::value::NativeFn),
+            ("SuppressedError", native_suppressed_error as crate::value::NativeFn),
         ] {
             let constructor = Self::native(name, native, &self.function_proto);
             if let JsValue::Object(function) = &constructor {
@@ -321,6 +331,7 @@ impl Interpreter {
             "toString",
             Self::native("toString", native_date_to_string, &self.function_proto),
         );
+        self.install_date();
         let object_to_string = symbol_method(self, "toString", native_object_to_string);
         self.object_proto.borrow_mut().define("toString", symbol_data(object_to_string, true, true)).unwrap();
         let object_value_of = symbol_method(self, "valueOf", native_object_value_of);
@@ -506,6 +517,7 @@ impl Interpreter {
         self.install_std_json_global();
         self.install_structured_clone();
         self.install_intl_builtins();
+        self.install_runtime_intrinsic_attributes();
     }
     fn define_global(&self, n: &str, v: JsValue) {
         let constant = matches!(n, "undefined" | "NaN" | "Infinity");

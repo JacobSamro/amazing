@@ -2,7 +2,7 @@
 
 use super::{empty_array, exception_details, object, property_descriptor, remote_object};
 use crate::host::{
-    CallArgument, CallFunctionParams, ConsoleEvent, EvaluateParams, EvaluateResult,
+    CallArgument, CallFunctionParams, ConsoleEvent, EvaluateParams, EvaluateResult, RemoteObject,
 };
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
@@ -64,6 +64,82 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             Ok(DispatchOutcome::empty())
         }
         "Runtime.runIfWaitingForDebugger" => Ok(DispatchOutcome::empty()),
+        "Runtime.compileScript" => {
+            let source = request.string_param("expression")?;
+            let url = request.optional_string("sourceURL")?;
+            let persist = request.optional_bool("persistScript", false)?;
+            let script_id = session
+                .dev
+                .compile_script(source, url, persist)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "scriptId",
+                Json::String(script_id),
+            )])))
+        }
+        "Runtime.runScript" => {
+            let script_id = request.string_param("scriptId")?;
+            let result = session.dev.run_script(script_id).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(evaluate_result(&result)))
+        }
+        "Runtime.getIsolateId" => {
+            let id = session.dev.get_isolate_id().map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "id",
+                Json::String(id.unwrap_or_default()),
+            )])))
+        }
+        "Runtime.getHeapUsage" => {
+            let usage = session.dev.get_heap_usage().map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![
+                ("usedSize", Json::number(usage.used_heap_size)),
+                ("totalSize", Json::number(usage.total_heap_size)),
+            ])))
+        }
+        "Runtime.globalLexicalScopeNames" => {
+            let names = session
+                .dev
+                .global_lexical_scope_names()
+                .map_err(CdpError::from)?;
+            let names: Vec<Json> = names.into_iter().map(Json::String).collect();
+            Ok(DispatchOutcome::result(object(vec![(
+                "names",
+                Json::Array(names),
+            )])))
+        }
+        "Runtime.queryObjects" => {
+            let prototype = request.string_param("prototypeObjectId")?;
+            let object_id = session
+                .dev
+                .query_objects(prototype)
+                .map_err(CdpError::from)?;
+            let objects = match object_id {
+                Some(id) => remote_object(&RemoteObject {
+                    object_type: "object".into(),
+                    subtype: Some("array".into()),
+                    class_name: Some("Array".into()),
+                    object_id: Some(id),
+                    ..RemoteObject::undefined()
+                }),
+                None => Json::Null,
+            };
+            Ok(DispatchOutcome::result(object(vec![("objects", objects)])))
+        }
+        "Runtime.setAsyncCallStackDepth" => {
+            let depth = request.u64_param("maxDepth")?.min(u32::MAX as u64) as u32;
+            session
+                .dev
+                .set_async_call_stack_depth(depth)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "Runtime.discardConsoleEntries" => {
+            session
+                .dev
+                .discard_console_entries()
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
         other => Err(CdpError::method_not_found(other)),
     }
 }
