@@ -710,3 +710,86 @@ numbers, is retained in full at
 Not implemented: Proxy support and Array.fromAsync suspension for pending
 input remain separate areas (Array.fromAsync's synchronous-iterable path was
 already covered by JSRT-8).
+
+## JSRT-14 private and public class elements (completed, 2026-09-26)
+
+Implements §15.7's per-class private environment and instance/static element
+templates: `PrivateName` identity (`value.rs`, `Rc<str>` + `Rc::ptr_eq`, so
+textually identical `#x` in different classes never collide),
+`EnvHandle::class_private`/`resolve_private` (§9.2's NewPrivateEnvironment,
+chained through parents so a nested class's own `#x` shadows an enclosing
+one), and `crates/amazing-js/src/interp_class_private.rs`
+(`define_field`/`initialize_instance_elements`/`run_static_elements`/
+`private_field_get`/`set`/`has`). `eval_class_inner` now builds one
+`ClassElements` template per class (instance fields, private instance
+methods/accessors merged by `PrivateName` identity regardless of getter/setter
+declaration order) and one static-element list (fields, private static
+methods/accessors, static blocks, run once with `this` = the constructor).
+Instance elements replay at all three construction sites: base-class
+allocation, the implicit default derived constructor's `super(...args)`, and
+an explicit `super()` call (`CallFrame` gained `own_function` to find the
+running class's own template from the `super()` call site). Member access
+(`obj.#x` read/write/call, `#x in obj` brand check, `delete obj.#x` early
+SyntaxError) routes through a new `Reference::Private` variant instead of
+`PropertyKey`, since a private name is never a property key. Bonus fix in the
+same area: `new.target` now resolves from `CallFrame.new_target` instead of
+throwing "not implemented" (~85 Test262 occurrences).
+
+While scoping this ticket's failure cluster (5,727 Test262 failures tagged
+"private names are not yet supported"), found and fixed two more bugs
+in-lane, both pre-existing and unrelated to private fields:
+- `eval_class_inner` installed every method — including `static` ones — onto
+  the prototype; only instance methods belong there (static methods belong on
+  the constructor object itself). Public/private instance and static fields
+  were also previously unhandled (`ClassMember::Field` was a no-op, so public
+  fields silently did nothing).
+- `bind_pattern_mode`'s `Binding::Array` arm (`interp_helpers.rs`) swallowed
+  every error from array-pattern destructuring via `.unwrap_or_default()`,
+  masking any `TypeError`/`RangeError` a bad iterable should raise, and
+  collected via `Interpreter::iterate`'s eager collect-everything, which is
+  wrong for a pattern without a trailing rest element (§8.6.3 pulls only as
+  many values as the pattern declares, then performs IteratorClose — an
+  iterator that legitimately never signals `done` must not be drained first).
+  Replaced with `PatternIter`, a lazily-stepped iterator (index fast path for
+  an array whose `[Symbol.iterator]` is still the untouched intrinsic via new
+  `Interpreter::has_original_array_iterator`, also applied to `iterate`'s and
+  `custom_iterator`'s own array fast paths so a deleted/overridden
+  `Array.prototype[Symbol.iterator]` is honored). While fixing this, also
+  found that both `iterate`'s generic protocol loop and `exec_for_of`'s custom
+  iterator loop read a `next()` result's `done`/`value` with `get_own`
+  (raw own-property probe) instead of the full `[[Get]]` — a `value` defined
+  as a throwing getter was silently read as absent instead of propagating,
+  which for an iterator that never sets `done` looped until the 100,000-step
+  guard instead of throwing immediately; fixed to go through `get_prop`
+  (§7.4.6/§7.4.7 IteratorComplete/IteratorValue).
+
+On fixed base 69ea3ea7, Linux workspace: 2,825 tests passed (10 skipped) in
+51.961 seconds, plus doctests all `ok` (including `amazing_js`, `amazing_html`).
+`amazing-js` crate: 363 passed (1 skipped). Full pinned Test262 sweep:
+33,103 → 35,606 passing files (+2,503), 64,052 → 69,011 passing variants
+(+4,959). Repeated with `--compare` against the same after-run: identical
+classification hash, zero flakiness.
+
+126 variants (63 distinct files) lost relative to the raw before/after diff —
+fully diagnosed, not a regression from this ticket's own code. Every one
+requires a real generator or async-generator object (`features` tagged
+`generators` or `async-iteration`: `function*(){...}()` as a custom iterable,
+or an async generator method), which this interpreter does not implement at
+all (`ExprKind::Yield` already throws "generators are not implemented", a
+known, tracked gap — see ARCHITECTURE.md's locked single-threaded/tree-walking
+decisions). These files previously passed only because two of this ticket's
+own bug fixes had been masking that gap: the static-method-placement bug made
+`C.method(...)` throw "not a function" (accidentally matching a test's
+expected `TypeError` for the wrong reason), and the destructuring
+error-swallow bug silently no-op'd a failed generator-backed destructure
+(accidentally matching a test that expected quiet completion). Fixing both
+bugs correctly is what exposed the real, pre-existing "no generators" gap as
+the genuine failure it always was. Evidence, including the full lost-variant
+list with each one's `features` tag and observed error, is retained at
+`docs/lanes/js-runtime_class_private_elements_evidence.json`.
+
+Not implemented: real generators/async-generators (separate, large,
+pre-existing gap — see ADR-locked single-threaded tree-walking decisions),
+Proxy support (still absent, per JSRT-13's note), and the `accessor` keyword
+proposal for class fields (parsed but not given distinct semantics from an
+ordinary field).
