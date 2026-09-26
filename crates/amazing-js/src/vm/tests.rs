@@ -215,7 +215,8 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A extends Object {}",
+        "changed = 1; class A { x = 1; }",
+        "changed = 1; class A { static { 1; } }",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
@@ -694,6 +695,47 @@ fn shared_members_arrays_and_objects_match_tree_walker() {
         "var s = ''; var o = { [(s = s + 'k')]: (s = s + 'v') }; s",
         "var key = 'x'; ({ [key]: 7 }).x",
         "var o = { 2: 9 }; o[2]",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
+fn derived_classes_match_tree_walker() {
+    for source in [
+        // Explicit super() call, own field assignment after it.
+        "class A { constructor(x) { this.x = x; } } \
+         class B extends A { constructor(x) { super(x); this.y = x + 1; } } \
+         var b = new B(1); b.x + b.y",
+        // Implicit constructor forwards its arguments to super().
+        "class A { constructor(x, y) { this.x = x; this.y = y; } } \
+         class B extends A {} \
+         var b = new B(2, 3); b.x + b.y",
+        // super.method() call: property lookup on the prototype chain, `this` receiver.
+        "class A { greet() { return 'A' + this.tag; } } \
+         class B extends A { constructor() { super(); this.tag = '!'; } greet() { return super.greet() + 'B'; } } \
+         (new B()).greet()",
+        // super.prop plain read (not a call).
+        "class A { get value() { return 1; } } \
+         class B extends A { constructor() { super(); } read() { return super.value; } } \
+         (new B()).read()",
+        // instanceof through the prototype chain, and constructor-chain
+        // (static) inheritance from ClassDefinitionEvaluation.
+        "class A {} class A2 extends A {} class B extends A2 {} var b = new B(); \
+         [b instanceof A, b instanceof A2, Object.getPrototypeOf(B) === A2].join(',')",
+        // new.target through an implicit super() call.
+        "class A { constructor() { this.nt = new.target === B; } } \
+         class B extends A {} (new B()).nt",
+        // super() spread arguments.
+        "class A { constructor(x, y) { this.sum = x + y; } } \
+         class B extends A { constructor(xs) { super(...xs); } } \
+         (new B([2, 5])).sum",
+        // Explicit object return from a derived constructor wins over `this`.
+        "class A {} class B extends A { constructor() { super(); return { tag: 'override' }; } } \
+         (new B()).tag",
+        // this used before super() throws a ReferenceError, matching the tree walker.
+        "class A {} class B extends A { constructor() { this.x = 1; super(); } } \
+         (function () { try { new B(); return 'no throw'; } catch (e) { return e instanceof ReferenceError; } })()",
     ] {
         differential(source, &[]);
     }

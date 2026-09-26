@@ -27,6 +27,27 @@ impl Interpreter {
         self.frames.last().and_then(|frame| frame.new_target.clone())
     }
 
+    /// The super constructor available in a derived class constructor through
+    /// a `super()` call. Ordinary functions have no super constructor.
+    pub fn current_super_constructor(&self) -> Option<JsValue> {
+        self.frames.last().and_then(|frame| frame.super_constructor.clone())
+    }
+
+    /// The active method's `[[HomeObject]]`, used to resolve `super` property
+    /// access and `super()` calls. Ordinary functions (and methods installed
+    /// without a home) have none.
+    pub fn current_home(&self) -> Option<Obj> {
+        self.frames.last().and_then(|frame| frame.home.clone())
+    }
+
+    /// Records `this` on the active frame, mirroring the tree walker's
+    /// bookkeeping once `super()` has initialized it.
+    pub(crate) fn set_current_this(&mut self, this: JsValue) {
+        if let Some(frame) = self.frames.last_mut() {
+            frame.this = this;
+        }
+    }
+
     /// Produce the existing DOM facade for an element already allocated by the
     /// binding layer. Its style and dataset objects remain live for that node.
     pub fn binding_make_legacy_dom_element(&self, node: u32) -> JsValue {

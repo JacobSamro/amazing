@@ -1620,7 +1620,7 @@ impl Interpreter {
                 .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => env.resolve_this_checked(),
-            ExprKind::NewTarget => Err(Throw::type_error("new.target is not implemented")),
+            ExprKind::NewTarget => Ok(self.current_new_target().unwrap_or(JsValue::Undefined)),
             ExprKind::DynamicImport(_) => Err(Throw::type_error("dynamic import is not implemented")),
             ExprKind::DynamicImportPhase { .. } => Err(Throw::type_error("dynamic import phase is not implemented")),
             ExprKind::ImportMeta => env.resolve("\0import.meta")
@@ -2501,7 +2501,7 @@ impl Interpreter {
             this: this.clone(),
             home: fun.home.clone(),
             super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
-            new_target: new_target.clone().or(lexical_new_target),
+            new_target: new_target.clone().or(lexical_new_target.clone()),
         });
         let previous_completion = self.completion.clone();
         let previous_strict = self.strict_eval_context;
@@ -2518,7 +2518,10 @@ impl Interpreter {
                     } else {
                         None
                     };
-                    code.call(self, fun.env.clone(), fun.is_arrow, this, args, generator_proto)
+                    code.call(
+                        self, fun.env.clone(), fun.is_arrow, this, args, generator_proto,
+                        derived_constructor.clone(), new_target.clone().or(lexical_new_target.clone()),
+                    )
                 }
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());

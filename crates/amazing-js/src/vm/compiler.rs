@@ -1,6 +1,6 @@
 use super::{
-    CallArgument, ClassCode, ClassMethodCode, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction,
-    KeyOperand, Program, Register,
+    CallArgument, ClassCode, ClassMethodCode, ClassSuper, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction,
+    Instruction, KeyOperand, Program, Register,
 };
 use crate::ast::{
     self, AssignOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
@@ -187,19 +187,23 @@ impl Compiler {
     }
 
     fn compile_class(&mut self, class: &ast::ClassItem, span: Span) -> Result<ClassCode, CompileError> {
-        if class.super_class.is_some() {
-            return Err(self.error(span, "derived class"));
-        }
         if class.members.iter().any(|member| matches!(
             member,
             ast::ClassMember::Field(_) | ast::ClassMember::StaticBlock(_)
         )) {
             return Err(self.error(span, "class field or static block"));
         }
+        // The super-class expression is compiled in the enclosing scope,
+        // before the constructor: base and derived classes otherwise share
+        // this compiler, and `super()`/`super.prop` inside the constructor
+        // and methods are resolved at execution time from [[HomeObject]]
+        // and the constructor's derived-constructor metadata (see MakeClass).
+        let super_class = class.super_class.as_ref().map(|expr| self.expression(expr)).transpose()?;
         let constructor = class.members.iter().find_map(|member| match member {
             ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
             _ => None,
         });
+        let implicit_derived_ctor = super_class.is_some() && constructor.is_none();
         let function = ast::FunctionItem {
             name: class.name.clone(),
             params: constructor.map_or_else(Vec::new, |method| method.params.clone()),
@@ -220,7 +224,8 @@ impl Compiler {
                 methods.push(ClassMethodCode { key, kind: method.kind, code });
             }
         }
-        Ok(ClassCode { constructor, methods })
+        let super_class = super_class.map(|register| ClassSuper { register, implicit: implicit_derived_ctor });
+        Ok(ClassCode { constructor, methods, super_class })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -596,6 +601,17 @@ impl Compiler {
             ExprKind::This => {
                 self.emit(Instruction::LoadThis(dst));
             }
+            ExprKind::NewTarget => {
+                self.emit(Instruction::LoadNewTarget(dst));
+            }
+            ExprKind::Super => {
+                // Bare `super` only appears as the object of a member
+                // expression (`super.x`, `super[x]`); `super(...)` calls are
+                // handled directly in the `Call` arm below. Resolve to
+                // [[HomeObject]].[[GetPrototypeOf]](), matching the tree
+                // walker's `ExprKind::Super` evaluation.
+                self.emit(Instruction::LoadSuperHome(dst));
+            }
             ExprKind::Template(template) => {
                 self.emit(Instruction::Constant(dst, JsValue::str("")));
                 for (index, quasi) in template.quasis.iter().enumerate() {
@@ -669,6 +685,17 @@ impl Compiler {
                 callee,
                 args,
                 optional: false,
+            } if matches!(&callee.kind, ExprKind::Super) => {
+                // `super(...)` in a derived constructor: construct the
+                // super-constructor recorded on the active frame and use its
+                // result to initialize `this`.
+                let arguments = self.call_arguments(args)?;
+                self.emit(Instruction::SuperCall(dst, arguments));
+            }
+            ExprKind::Call {
+                callee,
+                args,
+                optional: false,
             } => {
                 let (callee, this) = match &callee.kind {
                     ExprKind::Member {
@@ -680,23 +707,22 @@ impl Compiler {
                         let key = self.member_key(prop)?;
                         let function = self.register(callee.span)?;
                         self.emit(Instruction::GetMember(function, object, key));
-                        (function, object)
+                        let this = if matches!(&obj.kind, ExprKind::Super) {
+                            // `super.method(...)`: the property lookup starts
+                            // at [[HomeObject]].[[GetPrototypeOf]]() (already
+                            // in `object`), but the call receiver is the
+                            // actual `this`, matching the tree walker.
+                            let this = self.register(callee.span)?;
+                            self.emit(Instruction::LoadThis(this));
+                            this
+                        } else {
+                            object
+                        };
+                        (function, this)
                     }
                     _ => (self.expression(callee)?, 0),
                 };
-                let mut arguments = Vec::new();
-                for argument in args {
-                    match &argument.kind {
-                        ExprKind::Spread(source) => {
-                            let source = self.expression(source)?;
-                            let slot = self.program.spread_slots;
-                            self.program.spread_slots += 1;
-                            self.emit(Instruction::CaptureSpread(slot, source));
-                            arguments.push(CallArgument::Spread(slot));
-                        }
-                        _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
-                    }
-                }
+                let arguments = self.call_arguments(args)?;
                 self.emit(Instruction::Call(dst, callee, this, arguments));
             }
             ExprKind::New { callee, args } => {
@@ -802,6 +828,23 @@ impl Compiler {
             _ => return Err(self.error(expression.span, unsupported_expression(&expression.kind))),
         }
         Ok(dst)
+    }
+
+    fn call_arguments(&mut self, args: &[Expr]) -> Result<Vec<CallArgument>, CompileError> {
+        let mut arguments = Vec::new();
+        for argument in args {
+            match &argument.kind {
+                ExprKind::Spread(source) => {
+                    let source = self.expression(source)?;
+                    let slot = self.program.spread_slots;
+                    self.program.spread_slots += 1;
+                    self.emit(Instruction::CaptureSpread(slot, source));
+                    arguments.push(CallArgument::Spread(slot));
+                }
+                _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
+            }
+        }
+        Ok(arguments)
     }
 
     fn reference(&mut self, expression: &Expr) -> Result<(usize, Register), CompileError> {

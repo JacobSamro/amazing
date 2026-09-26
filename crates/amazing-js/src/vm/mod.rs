@@ -11,7 +11,7 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
+use crate::value::{DerivedConstructor, Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -82,10 +82,20 @@ struct ClassMethodCode {
     code: FunctionCode,
 }
 
+/// A compiled class's super-class expression, plus whether the constructor
+/// was synthesized (no explicit `constructor` member): an implicit derived
+/// constructor forwards its own arguments to the super call.
+#[derive(Debug)]
+struct ClassSuper {
+    register: Register,
+    implicit: bool,
+}
+
 #[derive(Debug)]
 struct ClassCode {
     constructor: FunctionCode,
     methods: Vec<ClassMethodCode>,
+    super_class: Option<ClassSuper>,
 }
 
 fn expand_arguments(
@@ -169,6 +179,14 @@ enum Instruction {
     YieldDelegate(Register, Register),
     Await(Register, Register),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
+    /// `new.target`: the active call's constructor target, or `undefined`
+    /// for an ordinary call.
+    LoadNewTarget(Register),
+    /// `super` as the object of a member expression: the active method's
+    /// `[[HomeObject]].[[GetPrototypeOf]]()`.
+    LoadSuperHome(Register),
+    /// `super(...)` in a derived constructor.
+    SuperCall(Register, Vec<CallArgument>),
 }
 
 #[derive(Debug, Clone)]
@@ -419,7 +437,32 @@ impl Program {
                             }
                         };
                     }
-                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this(),
+                    // Checked, matching the tree walker's `ExprKind::This`:
+                    // `this` is a ReferenceError before a derived
+                    // constructor's `super()` call has run.
+                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this_checked()?,
+                    Instruction::LoadNewTarget(dst) => {
+                        registers[*dst] = i.current_new_target().unwrap_or(JsValue::Undefined);
+                    }
+                    Instruction::LoadSuperHome(dst) => {
+                        let home = i.current_home()
+                            .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
+                        let prototype = home.borrow().proto.clone()
+                            .ok_or_else(|| Throw::type_error("super prototype is null"))?;
+                        registers[*dst] = JsValue::Object(prototype);
+                    }
+                    Instruction::SuperCall(dst, arguments) => {
+                        let super_constructor = i.current_super_constructor().ok_or_else(|| {
+                            Throw::syntax_error("super() used outside a derived constructor")
+                        })?;
+                        let new_target = i.current_new_target()
+                            .ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+                        let args = expand_arguments(&registers, spreads, arguments)?;
+                        let result = i.construct_with_new_target(&super_constructor, args, new_target)?;
+                        env.initialize_this(result.clone())?;
+                        i.set_current_this(result.clone());
+                        registers[*dst] = result;
+                    }
                     Instruction::ResolveName(slot, dst, name) => {
                         let (reference, value) = if let Some(value) = env.resolve(name) {
                             (Reference::Binding(name.clone()), value)
@@ -681,6 +724,33 @@ impl Program {
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };
+                        if let Some(super_class) = &class.super_class {
+                            let super_value = registers[super_class.register].clone();
+                            // Matches the tree walker's ClassDefinitionEvaluation: a
+                            // non-object super class (including `extends null`)
+                            // is rejected rather than given full null-prototype
+                            // semantics, which the runtime does not model yet.
+                            let super_prototype = match &super_value {
+                                JsValue::Object(super_constructor) => match super_constructor.borrow().get_own("prototype") {
+                                    Some(JsValue::Object(prototype)) => prototype,
+                                    _ => return Err(Throw::type_error("super constructor has no prototype")),
+                                },
+                                _ => return Err(Throw::type_error("super class is not a constructor")),
+                            };
+                            // ClassDefinitionEvaluation: the constructor's own
+                            // [[Prototype]] is the super constructor (static
+                            // inheritance); the class prototype's is the super
+                            // constructor's `prototype` (instance inheritance).
+                            prototype.borrow_mut().proto = Some(super_prototype);
+                            callable.borrow_mut().proto = match &super_value {
+                                JsValue::Object(parent) => Some(parent.clone()),
+                                _ => unreachable!(),
+                            };
+                            callable.borrow_mut().derived_constructor = Some(DerivedConstructor {
+                                parent: super_value,
+                                implicit: super_class.implicit,
+                            });
+                        }
                         // MakeConstructor(F, false, proto): a class constructor's
                         // `prototype` is non-writable/non-enumerable/non-configurable.
                         callable.borrow_mut().define("prototype", Property {
@@ -984,6 +1054,8 @@ impl FunctionCode {
         this: JsValue,
         args: Vec<JsValue>,
         generator_proto: Option<Obj>,
+        derived: Option<DerivedConstructor>,
+        new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
         let bound_this = if is_arrow {
             parent.resolve_this()
@@ -991,7 +1063,25 @@ impl FunctionCode {
             this
         };
         let env = EnvHandle::new(EnvKind::Function, Some(parent));
-        env.bind_this(bound_this);
+        // A derived constructor's `this` starts uninitialized (TDZ until
+        // `super()` runs); an implicit one (no explicit `constructor` member)
+        // forwards its own arguments to the super call itself, matching the
+        // tree walker's `FunctionBody::Block` derived-constructor handling.
+        if !is_arrow && derived.is_some() {
+            if new_target.is_none() {
+                return Err(Throw::type_error("derived constructor requires new"));
+            }
+            env.mark_this_uninitialized();
+            if let Some(meta) = derived.as_ref().filter(|meta| meta.implicit) {
+                let bound = i.construct_with_new_target(
+                    &meta.parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
+                )?;
+                env.initialize_this(bound.clone())?;
+                i.set_current_this(bound);
+            }
+        } else {
+            env.bind_this(bound_this);
+        }
         for (index, name) in self.0.params.iter().enumerate() {
             env.declare_lexical(
                 name,
@@ -1045,6 +1135,19 @@ impl FunctionCode {
         }
         if self.0.is_async {
             return self.call_async(i, env);
+        }
+        if derived.is_some() {
+            // A derived constructor's completion, per spec: an object return
+            // value wins outright, a non-undefined non-object return value is
+            // a TypeError, and otherwise the (by now super()-initialized)
+            // `this` is the result -- a ReferenceError if `super()` never ran.
+            return match self.0.program.execute(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+                Ok(value) if value.is_object() => Ok(value),
+                Ok(value) if !value.is_undefined() =>
+                    Err(Throw::type_error("derived constructor returned a non-object")),
+                Ok(_) => env.resolve_this_checked(),
+                Err(error) => Err(error),
+            };
         }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
     }
