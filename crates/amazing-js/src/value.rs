@@ -809,6 +809,8 @@ pub struct JsObject {
     pub(crate) is_html_dda: bool,
     /// Strictness captured when an ECMAScript function is created.
     pub(crate) strict_function: bool,
+    /// Cached compilation of an AST async body; parameters stay runtime-bound.
+    pub(crate) async_body_code: Option<Result<crate::interp::vm::FunctionCode, crate::interp::vm::CompileError>>,
     /// Promise capability captured by a native resolve or reject function.
     pub(crate) promise_target: Option<Obj>,
 }
@@ -835,6 +837,7 @@ impl JsObject {
             host_identity: None,
             is_html_dda: false,
             strict_function: false,
+            async_body_code: None,
             promise_target: None,
         }
     }

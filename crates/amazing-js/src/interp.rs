@@ -2487,7 +2487,9 @@ impl Interpreter {
         let derived_constructor = o.borrow().derived_constructor.clone();
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
-        let bytecode_async = fun.is_async && matches!(&fun.body, FunctionBody::Bytecode(_));
+        let async_body = self.async_body_code(&o, &fun, strict_function);
+        let bytecode_async = async_body.is_some()
+            || (fun.is_async && matches!(&fun.body, FunctionBody::Bytecode(_)));
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -2546,6 +2548,7 @@ impl Interpreter {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.eval_expr(&x, &e)
                 }
                 FunctionBody::Block(b) => {
@@ -2568,6 +2571,7 @@ impl Interpreter {
                         if !fun.is_arrow { e.bind_this(this); }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.hoist(&b.body, &e)?;
                     let completion = self.exec_stmts(&b.body, &e)?;
                     if derived {
@@ -3883,6 +3887,7 @@ impl Interpreter {
 }
 
 include!("interp_helpers.rs");
+include!("interp_async.rs");
 include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");

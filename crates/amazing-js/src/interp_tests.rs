@@ -637,6 +637,135 @@ mod tests {
              "ReferenceError", "ReferenceError"]);
     }
 
+    fn check_pending_await_suspension(backend: ExecutionBackend) {
+        let mut i = external();
+        i.run_script_with_backend(r#"
+            var resolve;
+            var pending = new Promise(function(r) { resolve = r; });
+            async function waitForValue() {
+                console.log('start');
+                var value = await pending;
+                console.log('resume:' + value);
+                return value + 1;
+            }
+            waitForValue().then(function(value) { console.log('done:' + value); });
+            console.log('outside');
+        "#, backend).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["start", "outside"],
+            "pending await must suspend ({backend:?})");
+        assert!(i.take_scheduling_requests().is_empty());
+        i.run_script_with_backend(r#"
+            queueMicrotask(function() { console.log('earlier job'); });
+            resolve(7);
+            console.log('settled');
+        "#, backend).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["start", "outside", "settled"],
+            "settling must queue rather than inline the continuation");
+        let mut pending: VecDeque<_> = i.take_scheduling_requests().into();
+        let mut jobs = 0;
+        while let Some(request) = pending.pop_front() {
+            jobs += 1;
+            assert!(jobs < 16, "continuation did not settle");
+            i.invoke_one_job(job(request)).unwrap();
+            pending.extend(i.take_scheduling_requests());
+        }
+        assert_eq!(i.output.borrow().as_slice(),
+            ["start", "outside", "settled", "earlier job", "resume:7", "done:8"]);
+    }
+
+    #[test]
+    fn tree_pending_await_suspends_until_ordered_microtask() {
+        check_pending_await_suspension(ExecutionBackend::TreeWalk);
+    }
+
+    #[test]
+    fn vm_pending_await_suspends_until_ordered_microtask() {
+        check_pending_await_suspension(ExecutionBackend::Bytecode);
+    }
+
+    #[test]
+    fn pending_await_restores_strictness_this_and_arguments() {
+        let mut i = external();
+        i.run_script(r#"
+            var resolve;
+            var pending = new Promise(r => { resolve = r; });
+            var receiver = {value: 4, async method(input) {
+                'use strict';
+                await pending;
+                console.log(this.value, arguments[0]);
+                try { Object.preventExtensions({}).field = 1; }
+                catch (error) { console.log(error.name); }
+            }};
+            receiver.method(7);
+            resolve();
+        "#).unwrap();
+        assert!(i.output.borrow().is_empty());
+        let mut pending: VecDeque<_> = i.take_scheduling_requests().into();
+        let mut jobs = 0;
+        while let Some(request) = pending.pop_front() {
+            jobs += 1;
+            assert!(jobs < 16);
+            i.invoke_one_job(job(request)).unwrap();
+            pending.extend(i.take_scheduling_requests());
+        }
+        assert_eq!(i.output.borrow().as_slice(), ["4 7", "TypeError"]);
+    }
+
+    fn check_pending_await_rejection(backend: ExecutionBackend) {
+        let mut i = external();
+        let source = r#"
+            var reject;
+            var pending = new Promise(function(_, r) { reject = r; });
+            async function recover({base}, ...rest) {
+                try {
+                    await pending;
+                    console.log('unreachable');
+                } catch (error) {
+                    console.log('caught:' + error);
+                    var value = await Promise.resolve(base + rest[0]);
+                    console.log('second:' + value);
+                    return value;
+                } finally {
+                    console.log('finally');
+                }
+            }
+            recover({base: 3}, 4).then(function(value) { console.log('done:' + value); });
+            console.log('outside');
+        "#;
+        // The VM currently rejects parameter patterns at whole-script compile
+        // time; still cover its continuation with the equivalent simple binding.
+        let source = if backend == ExecutionBackend::Bytecode {
+            source.replace("recover({base}, ...rest)", "recover(base, extra)")
+                .replace("base + rest[0]", "base + extra")
+                .replace("recover({base: 3}, 4)", "recover(3, 4)")
+        } else { source.to_string() };
+        i.run_script_with_backend(&source, backend).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["outside"]);
+        assert!(i.take_scheduling_requests().is_empty());
+        i.run_script_with_backend("reject('reason'); console.log('rejected');", backend).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["outside", "rejected"]);
+        let mut pending: VecDeque<_> = i.take_scheduling_requests().into();
+        let mut jobs = 0;
+        while let Some(request) = pending.pop_front() {
+            jobs += 1;
+            assert!(jobs < 24, "rejected continuation did not settle");
+            i.invoke_one_job(job(request)).unwrap();
+            pending.extend(i.take_scheduling_requests());
+        }
+        assert_eq!(i.output.borrow().as_slice(),
+            ["outside", "rejected", "caught:reason", "second:7", "finally", "done:7"]);
+    }
+
+    #[test]
+    fn tree_pending_await_rejection_preserves_parameters_and_finally() {
+        check_pending_await_rejection(ExecutionBackend::TreeWalk);
+    }
+
+    #[test]
+    fn vm_pending_await_rejection_preserves_parameters_and_finally() {
+        check_pending_await_rejection(ExecutionBackend::Bytecode);
+    }
+
     #[test]
     fn async_function_returns_a_promise() {
         let mut i = Interpreter::new();
