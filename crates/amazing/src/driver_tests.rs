@@ -5,12 +5,33 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn focus_updates_active_element_and_dispatches_ordered_focus_events() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><input id='a'><input id='b' disabled><div id='c' tabindex='-1'></div></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    let result = scheduler.run_script(
+        "let a=document.getElementById('a'), b=document.getElementById('b'), c=document.getElementById('c'); \
+         let events=[]; for (let el of [a,c]) for (let type of ['focus','focusin','blur','focusout']) \
+         el.addEventListener(type, function(e) { events.push(e.type+':'+this.id+':'+(e.relatedTarget&&e.relatedTarget.id)); }); \
+         a.focus(); let first=document.activeElement===a; b.focus(); let disabled=document.activeElement===a; \
+         c.focus({preventScroll:true,focusVisible:true}); let second=document.activeElement===c; \
+         c.blur(); [first,disabled,second,document.activeElement===document.body,events.join(',')].join('|')"
+    ).unwrap();
+    assert_eq!(result, amazing_js::value::JsValue::str(
+        "true|true|true|true|focus:a:null,focusin:a:null,blur:a:c,focusout:a:c,focus:c:a,focusin:c:a,blur:c:null,focusout:c:null"));
+}
+
+#[test]
 fn detached_created_element_has_live_style() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body><div id='content'></div></body>"),
         native_forwarded: false,
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script("document.compatMode").unwrap(),
+        amazing_js::value::JsValue::str("CSS1Compat"));
     assert_eq!(scheduler.run_script(
         "let cell = document.createElement('td'); let style = cell.style; \
          style.cssText = 'font-variant-ligatures: normal'; \
@@ -101,6 +122,10 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
     }));
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
     assert_eq!(scheduler.run_script(
+        "window instanceof EventTarget && Object.getPrototypeOf(window) === EventTarget.prototype && \
+         !window.hasOwnProperty('addEventListener') && !window.hasOwnProperty('removeEventListener')"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+    assert_eq!(scheduler.run_script(
         "let hit = 0; function one() { hit += 1; } function two() { hit += 10; } \
          addEventListener('load', one); addEventListener.call(undefined, 'load', two); \
          addEventListener.call(null, 'load', one); \
@@ -111,6 +136,25 @@ fn bare_window_event_target_calls_coerce_nullish_this() {
     assert_eq!(scheduler.run_script("hit").unwrap(), amazing_js::value::JsValue::num(10.0));
     assert_eq!(scheduler.run_script(
         "let rejected = false; try { addEventListener.call({}, 'load', one); } catch (error) { rejected = true; } rejected"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn dom_mixin_unscopables_are_on_the_declaring_prototype() {
+    let host = std::rc::Rc::new(std::cell::RefCell::new(crate::dom_host::BrowserDomHost {
+        dom: amazing_dom::Dom::new(), native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let u = Element.prototype[Symbol.unscopables]; \
+         Object.getPrototypeOf(u) === null && u.before && u.after && u.replaceWith && \
+         u.remove && u.prepend && u.append && u.replaceChildren && u.slot && \
+         !Object.getOwnPropertyDescriptor(Element.prototype, Symbol.unscopables).writable && \
+         Document.prototype[Symbol.unscopables].prepend && \
+         DocumentFragment.prototype[Symbol.unscopables].append && \
+         CharacterData.prototype[Symbol.unscopables].remove && \
+         DocumentType.prototype[Symbol.unscopables].before"
     ).unwrap(), amazing_js::value::JsValue::Bool(true));
 }
 

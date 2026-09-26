@@ -30,14 +30,26 @@ fn paint_view_owner_mapping_binds_dom_properties_to_tree_nodes() {
     );
     let source = PaintViewSource::new(&view);
     let bindings = source.property_bindings().expect("stable paint owners");
-    assert_eq!(bindings.len(), 3);
-    let owner = bindings[0].0.node;
-    assert!(bindings.iter().all(|(key, _)| key.node == owner && key.generation == 7));
-    assert!(bindings.iter().any(|(key, target)|
+    assert_eq!(bindings.len(), 4, "document scroll plus three outer properties");
+    let document = bindings.iter().find(|(_, target)|
+        *target == BoundPropertyNode::Scroll(ScrollId(1)))
+        .expect("document viewport scroll binding");
+    assert_eq!(document.0.node, root.node.expect("document layout owner").0);
+    assert_eq!(document.0.generation, 7);
+    assert_eq!(document.0.property, BoundProperty::Scroll);
+    assert!(!bindings.iter().any(|(_, target)|
+        *target == BoundPropertyNode::Scroll(ScrollId(0))), "synthetic root has no DOM owner");
+    let owner = bindings.iter().find(|(key, _)| key.property == BoundProperty::Transform)
+        .expect("outer transform binding").0.node;
+    assert_ne!(owner, document.0.node, "nested and document scroll owners stay distinct");
+    let outer = bindings.iter().filter(|(key, _)| key.node == owner).collect::<Vec<_>>();
+    assert_eq!(outer.len(), 3);
+    assert!(outer.iter().all(|(key, _)| key.generation == 7));
+    assert!(outer.iter().any(|(key, target)|
         key.property == BoundProperty::Transform && matches!(target, BoundPropertyNode::Transform(_))));
-    assert!(bindings.iter().any(|(key, target)|
+    assert!(outer.iter().any(|(key, target)|
         key.property == BoundProperty::Opacity && matches!(target, BoundPropertyNode::Opacity(_))));
-    assert!(bindings.iter().any(|(key, target)|
+    assert!(outer.iter().any(|(key, target)|
         key.property == BoundProperty::Scroll && matches!(target, BoundPropertyNode::Scroll(_))));
     let mut compositor = source.compositor(48, 48).unwrap();
     compositor.bind_property_nodes(&bindings).unwrap();
@@ -160,7 +172,7 @@ fn retained_real_page_property_trace() {
     let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
     let source = PaintViewSource::new(&view);
     assert_eq!(source.mode(), PaintViewRasterMode::RawLocal);
-    let scroll = ScrollId(1);
+    let scroll = ScrollId(2); // ScrollId(1) is the document viewport.
     let transform = amazing_compositor::TransformId(1);
     let effect = amazing_compositor::EffectId(2);
     let mut compositor = source.compositor(SIZE, SIZE).unwrap();

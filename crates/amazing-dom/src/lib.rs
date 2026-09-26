@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 pub mod events;
+pub mod focus;
 pub mod attr;
 pub mod collection;
 pub mod abort;
@@ -125,6 +126,7 @@ pub struct Dom {
     ranges: Vec<Option<range::AbstractRange>>,
     static_ranges: Vec<Option<range::StaticRange>>,
     selections: Vec<(NodeIdx, Option<range::Range>)>,
+    focused_elements: Vec<(NodeIdx, NodeIdx, bool)>,
     events: events::EventTargets,
     external_event_targets: u64,
     window_event_target: Option<u64>,
@@ -189,6 +191,7 @@ impl Dom {
             ranges: Vec::new(),
             static_ranges: Vec::new(),
             selections: Vec::new(),
+            focused_elements: Vec::new(),
             events: events::EventTargets::default(),
             external_event_targets: 0,
             window_event_target: None,
