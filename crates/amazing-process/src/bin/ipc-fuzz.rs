@@ -83,6 +83,15 @@ const DECODERS: &[Target] = decoder_targets![
     PortPost,
     PortStart,
     PortClose,
+    LockMode,
+    LockOptions,
+    LockRequest,
+    LockOutcome,
+    LockRelease,
+    LockClient,
+    LockQuery,
+    LockInfo,
+    LockSnapshot,
 ];
 fn snapshot_decode(bytes: &[u8]) -> u64 {
     match amazing_process::gpu_snapshot_wire::decode_snapshot(bytes) {
@@ -162,7 +171,7 @@ fn utility(bytes: &[u8]) -> u64 {
     requests(bytes, UtilityProxy::validate_request, 4)
 }
 fn storage(bytes: &[u8]) -> u64 {
-    requests(bytes, StorageProxy::validate_request, 4)
+    requests(bytes, StorageProxy::validate_request, 8)
 }
 fn history(bytes: &[u8]) -> u64 {
     requests(bytes, HistoryProxy::validate_request, 4)

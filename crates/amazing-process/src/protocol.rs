@@ -116,11 +116,32 @@ interface! {pub interface UtilityDecoder(12) => UtilityProxy, UtilityReceiver {
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePartition {origin:String, top_level_site:String, bucket:String}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StorageEntry {partition:StoragePartition, namespace:String, key:ByteBuf}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePut {entry:StorageEntry, value:ByteBuf}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum LockMode {Shared(())=1, Exclusive(())=2}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockOptions {if_available:bool, steal:bool}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockRequest {
+    partition:StoragePartition, client:u64, name:String, mode:LockMode, options:LockOptions
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockOutcome {
+    id:Option<u64>, granted:Vec<u64>, stolen:Vec<u64>
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockRelease {client:u64, id:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockClient {client:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockQuery {partition:StoragePartition}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockInfo {
+    id:u64, client:u64, name:String, mode:LockMode
+}}
+wire_struct! {#[derive(Debug, Clone, Default, PartialEq, Eq)] pub struct LockSnapshot {
+    held:Vec<LockInfo>, pending:Vec<LockInfo>
+}}
 interface! {pub interface StorageService(13) => StorageProxy, StorageReceiver {
     fn put(request:StoragePut) -> bool = 1;
     fn get(request:StorageEntry) -> Option<ByteBuf> = 2;
     fn delete(request:StorageEntry) -> bool = 3;
     fn checkpoint(request:()) -> bool = 4;
+    fn lock_request(request:LockRequest) -> LockOutcome = 5;
+    fn lock_release(request:LockRelease) -> Vec<u64> = 6;
+    fn lock_release_client(request:LockClient) -> Vec<u64> = 7;
+    fn lock_query(request:LockQuery) -> LockSnapshot = 8;
 }}
 
 // Browser-minted document tokens and epochs gate every lifecycle transition.
