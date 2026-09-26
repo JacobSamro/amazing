@@ -24,11 +24,14 @@ use crate::font::FontSource;
 use crate::values;
 use crate::{
     Display, Flow, InlineNode, LayoutBox, NoReplacedElements, ReplacedElementProvider,
-    RubyColumn, RubyText, TextSourceMapping,
+    RubyText, TextSourceMapping,
 };
 
 #[path = "box_tree_table.rs"]
 mod table_inline;
+#[path = "box_tree_ruby.rs"]
+mod ruby_model;
+use ruby_model::{is_ruby_container, ruby_inline};
 
 const MAX_RUBY_COLUMNS: usize = 65_536;
 const MAX_RUBY_TEXT_BYTES: usize = 8 * 1024 * 1024;
@@ -941,6 +944,16 @@ fn text_style(
     }
 }
 
+fn tab_size(style: &ComputedStyle, font_size: f32) -> crate::TabSize {
+    let Some(source) = style.get("tab-size") else { return crate::TabSize::default(); };
+    if let Ok(number) = source.trim().parse::<f32>() {
+        return crate::TabSize::Spaces(number.max(0.0));
+    }
+    values::used_length_percentage(style, source, font_size, font_size * 0.6)
+        .and_then(|length| length.resolve(None)).map(|px| crate::TabSize::Length(px.max(0.0)))
+        .unwrap_or_default()
+}
+
 fn inline_text(
     dom: &Dom,
     owner: NodeIdx,
@@ -968,6 +981,7 @@ fn inline_text(
         style: Box::new(text_style(dom, owner, style, font_size, inline_box)),
         letter_spacing: values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
             .and_then(|length| length.resolve(None)).unwrap_or(0.0),
+        tab_size: tab_size(style, font_size),
         word_spacing: values::style_length_percentage(style, "word-spacing", font_size, font_size * 0.6)
             .unwrap_or_default(),
         color: style.get("color").unwrap_or("black").to_owned(),
@@ -992,456 +1006,6 @@ fn inline_text(
         boundary_before: ShapingBoundary::Continue,
         boundary_after: ShapingBoundary::Continue,
     }
-}
-
-fn collect_ruby_text(
-    dom: &Dom,
-    styled: &StyledDom,
-    node: NodeIdx,
-    output: &mut Vec<(NodeIdx, String)>,
-    budget: &mut usize,
-    segment_budget: &mut usize,
-) {
-    if *budget == 0 || *segment_budget == 0 {
-        return;
-    }
-    if styled.get(node).is_some_and(is_display_none) {
-        return;
-    }
-    match &dom.get(node).kind {
-        NodeKind::Text { data } => {
-            *segment_budget -= 1;
-            let mut end = data.len().min(*budget);
-            while !data.is_char_boundary(end) {
-                end -= 1;
-            }
-            output.push((node, data[..end].to_owned()));
-            *budget -= end;
-        },
-        NodeKind::CDATASection { data } => {
-            *segment_budget -= 1;
-            let mut end = data.len().min(*budget);
-            while !data.is_char_boundary(end) {
-                end -= 1;
-            }
-            output.push((node, data[..end].to_owned()));
-            *budget -= end;
-        },
-        NodeKind::Element { .. } => {
-            for child in dom.children(node) {
-                collect_ruby_text(dom, styled, child, output, budget, segment_budget);
-                if *budget == 0 || *segment_budget == 0 {
-                    break;
-                }
-            }
-        },
-        NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
-        NodeKind::Attr { .. } => {},
-        NodeKind::Comment { .. }
-        | NodeKind::ProcessingInstruction { .. }
-        | NodeKind::Document => {},
-    }
-}
-
-fn ruby_text(
-    dom: &Dom,
-    styled: &StyledDom,
-    owner: NodeIdx,
-    source_node: NodeIdx,
-    parent_font_size: f32,
-    text_budget: &mut usize,
-    mapping_budget: &mut usize,
-    segment_budget: &mut usize,
-) -> RubyText {
-    let style = styled.get(owner).cloned().unwrap_or_default();
-    let font_size = values::resolve_used_font_size(&style, parent_font_size);
-    let mut segments = Vec::new();
-    collect_ruby_text(
-        dom,
-        styled,
-        source_node,
-        &mut segments,
-        text_budget,
-        segment_budget,
-    );
-    let collapses_spaces = !matches!(
-        style.get("white-space").unwrap_or("normal"),
-        value if value.eq_ignore_ascii_case("pre")
-            || value.eq_ignore_ascii_case("pre-wrap")
-            || value.eq_ignore_ascii_case("break-spaces")
-    );
-    let mut text = String::new();
-    let mut source_mappings = Vec::new();
-    for (source_node, source) in segments {
-        let (part, mappings) = text_for_white_space(
-            &source,
-            &style,
-            source_node,
-            mapping_budget.saturating_sub(source_mappings.len()),
-        );
-        let skip = usize::from(collapses_spaces && text.ends_with(' ') && part.starts_with(' '));
-        let start = text.len();
-        if skip != 0 {
-            source_mappings.extend(
-                mappings
-                    .iter()
-                    .filter(|mapping| mapping.text_range.start < skip)
-                    .map(|mapping| TextSourceMapping {
-                        text_range: start - 1..start,
-                        source: mapping.source,
-                        source_range: mapping.source_range.clone(),
-                    }),
-            );
-        }
-        text.push_str(&part[skip..]);
-        source_mappings.extend(
-            mappings
-                .into_iter()
-                .filter(|mapping| mapping.text_range.end > skip)
-                .map(|mapping| TextSourceMapping {
-                    text_range: start + mapping.text_range.start.saturating_sub(skip)
-                        ..start + mapping.text_range.end - skip,
-                    source: mapping.source,
-                    source_range: mapping.source_range,
-                }),
-        );
-        if source_mappings.len() >= *mapping_budget {
-            break;
-        }
-    }
-    *mapping_budget = mapping_budget.saturating_sub(source_mappings.len());
-    RubyText {
-        node: owner,
-        text,
-        source_mappings,
-        font_size,
-        style: Box::new(text_style(dom, owner, &style, font_size, true)),
-        color: style.get("color").unwrap_or("black").to_owned(),
-    }
-}
-
-fn empty_ruby_text(
-    dom: &Dom,
-    styled: &StyledDom,
-    owner: NodeIdx,
-    parent_font_size: f32,
-) -> RubyText {
-    let style = styled.get(owner).cloned().unwrap_or_default();
-    let font_size = values::resolve_used_font_size(&style, parent_font_size);
-    RubyText {
-        node: owner,
-        text: String::new(),
-        source_mappings: Vec::new(),
-        font_size,
-        style: Box::new(text_style(dom, owner, &style, font_size, true)),
-        color: style.get("color").unwrap_or("black").to_owned(),
-    }
-}
-
-fn ruby_text_sequence(
-    dom: &Dom,
-    styled: &StyledDom,
-    owner: NodeIdx,
-    nodes: &[NodeIdx],
-    parent_font_size: f32,
-    text_budget: &mut usize,
-    mapping_budget: &mut usize,
-    segment_budget: &mut usize,
-) -> RubyText {
-    let mut combined = empty_ruby_text(dom, styled, owner, parent_font_size);
-    for &source_node in nodes {
-        let part = ruby_text(
-            dom,
-            styled,
-            owner,
-            source_node,
-            parent_font_size,
-            text_budget,
-            mapping_budget,
-            segment_budget,
-        );
-        let skip = usize::from(combined.text.ends_with(' ') && part.text.starts_with(' '));
-        let start = combined.text.len();
-        combined.text.push_str(&part.text[skip..]);
-        combined.source_mappings.extend(
-            part.source_mappings
-                .into_iter()
-                .map(|mapping| TextSourceMapping {
-                    text_range: if skip != 0 && mapping.text_range.start < skip {
-                        start - 1..start + mapping.text_range.end.saturating_sub(skip)
-                    } else {
-                        start + mapping.text_range.start.saturating_sub(skip)
-                            ..start + mapping.text_range.end.saturating_sub(skip)
-                    },
-                    source: mapping.source,
-                    source_range: mapping.source_range,
-                }),
-        );
-    }
-    combined
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum RubyRole {
-    Base,
-    Annotation,
-    BaseContainer,
-    AnnotationContainer,
-}
-
-fn ruby_role(_dom: &Dom, styled: &StyledDom, node: NodeIdx) -> Option<RubyRole> {
-    match styled.get(node).and_then(|style| style.get("display")) {
-        Some(value) if value.eq_ignore_ascii_case("ruby-base") => Some(RubyRole::Base),
-        Some(value) if value.eq_ignore_ascii_case("ruby-text") => Some(RubyRole::Annotation),
-        Some(value) if value.eq_ignore_ascii_case("ruby-base-container") => {
-            Some(RubyRole::BaseContainer)
-        },
-        Some(value) if value.eq_ignore_ascii_case("ruby-text-container") => {
-            Some(RubyRole::AnnotationContainer)
-        },
-        _ => None,
-    }
-}
-
-fn is_ruby_container(_dom: &Dom, styled: &StyledDom, node: NodeIdx) -> bool {
-    styled
-        .get(node)
-        .and_then(|style| style.get("display"))
-        .is_some_and(|value| value.eq_ignore_ascii_case("ruby"))
-}
-
-fn ruby_inline(
-    dom: &Dom,
-    styled: &StyledDom,
-    node: NodeIdx,
-    parent_font_size: f32,
-) -> InlineNode {
-    let mut text_budget = MAX_RUBY_TEXT_BYTES;
-    let mut mapping_budget = MAX_RUBY_SOURCE_MAPPINGS;
-    let mut segment_budget = MAX_RUBY_SOURCE_MAPPINGS;
-    let mut bases = Vec::new();
-    let mut annotations = Vec::new();
-    enum Entry {
-        Role(RubyRole, NodeIdx),
-        Anonymous(Vec<NodeIdx>),
-    }
-    let mut entries = Vec::new();
-    for child in dom.children(node).take(MAX_RUBY_COLUMNS) {
-        if styled.get(child).is_some_and(is_display_none) {
-            continue;
-        }
-        if let Some(role) = ruby_role(dom, styled, child) {
-            entries.push(Entry::Role(role, child));
-        } else if let Some(Entry::Anonymous(nodes)) = entries.last_mut() {
-            nodes.push(child);
-        } else {
-            entries.push(Entry::Anonymous(vec![child]));
-        }
-    }
-    for entry in entries {
-        let (role, child) = match entry {
-            Entry::Role(role, child) => (role, child),
-            Entry::Anonymous(nodes) => {
-                let candidate = ruby_text_sequence(
-                    dom,
-                    styled,
-                    node,
-                    &nodes,
-                    parent_font_size,
-                    &mut text_budget,
-                    &mut mapping_budget,
-                    &mut segment_budget,
-                );
-                if bases.len() < MAX_RUBY_COLUMNS && !candidate.text.trim().is_empty() {
-                    bases.push(candidate);
-                }
-                continue;
-            },
-        };
-        match role {
-            RubyRole::Annotation if annotations.len() < MAX_RUBY_COLUMNS => {
-                annotations.push((
-                    ruby_text(dom, styled, child, child, parent_font_size, &mut text_budget, &mut mapping_budget, &mut segment_budget),
-                    1,
-                ));
-            },
-            RubyRole::Annotation => {},
-            RubyRole::AnnotationContainer => {
-                let mut found = false;
-                for annotation in dom
-                    .children(child)
-                    .take(MAX_RUBY_COLUMNS.saturating_sub(annotations.len()))
-                {
-                    if ruby_role(dom, styled, annotation) == Some(RubyRole::Annotation) {
-                        found = true;
-                        annotations.push((
-                            ruby_text(
-                                dom,
-                                styled,
-                                annotation,
-                                annotation,
-                                parent_font_size,
-                                &mut text_budget,
-                                &mut mapping_budget,
-                                &mut segment_budget,
-                            ),
-                            1,
-                        ));
-                    }
-                }
-                if !found {
-                    if annotations.len() < MAX_RUBY_COLUMNS {
-                        annotations.push((
-                            ruby_text(dom, styled, child, child, parent_font_size, &mut text_budget, &mut mapping_budget, &mut segment_budget),
-                            usize::MAX,
-                        ));
-                    }
-                }
-            },
-            RubyRole::BaseContainer => {
-                let mut found = false;
-                for base in dom
-                    .children(child)
-                    .take(MAX_RUBY_COLUMNS.saturating_sub(bases.len()))
-                {
-                    if ruby_role(dom, styled, base) == Some(RubyRole::Base) {
-                        found = true;
-                        bases.push(ruby_text(
-                            dom,
-                            styled,
-                            base,
-                            base,
-                            parent_font_size,
-                            &mut text_budget,
-                            &mut mapping_budget,
-                            &mut segment_budget,
-                        ));
-                    }
-                }
-                if !found {
-                    if bases.len() < MAX_RUBY_COLUMNS {
-                        bases.push(ruby_text(
-                            dom,
-                            styled,
-                            child,
-                            child,
-                            parent_font_size,
-                            &mut text_budget,
-                            &mut mapping_budget,
-                            &mut segment_budget,
-                        ));
-                    }
-                }
-            },
-            RubyRole::Base if bases.len() < MAX_RUBY_COLUMNS => {
-                bases.push(ruby_text(
-                    dom,
-                    styled,
-                    child,
-                    child,
-                    parent_font_size,
-                    &mut text_budget,
-                    &mut mapping_budget,
-                    &mut segment_budget,
-                ));
-            },
-            RubyRole::Base => {},
-        }
-    }
-    // Ruby 1 box fixup: bare text in a ruby-text-container pairs character by
-    // character with a same-length anonymous base sequence. A single rtc
-    // annotation over the whole string would incorrectly fuse both positions.
-    if bases.len() == 1 && annotations.len() == 1 && annotations[0].1 == usize::MAX {
-        let base_count = bases[0].text.chars().count();
-        let annotation_count = annotations[0].0.text.chars().count();
-        if base_count > 1 && base_count == annotation_count
-            && bases[0].text.chars().all(is_ruby_ideograph)
-            && annotations[0].0.text.chars().all(is_ruby_ideograph)
-        {
-            bases = split_ruby_characters(&bases[0]);
-            annotations = split_ruby_characters(&annotations[0].0)
-                .into_iter().map(|annotation| (annotation, 1)).collect();
-        }
-    }
-    // Build the fallback only once. Re-traversing the full ruby subtree for
-    // every missing base makes adversarial annotation-only markup quadratic.
-    let empty_base_template = empty_ruby_text(dom, styled, node, parent_font_size);
-    let column_count = bases.len().max(annotations.len()).min(MAX_RUBY_COLUMNS);
-    let mut columns = Vec::with_capacity(column_count);
-    for index in 0..column_count {
-        let mut base = bases
-            .get(index)
-            .cloned()
-            .unwrap_or_else(|| empty_base_template.clone());
-        if index >= bases.len() {
-            base.text.clear();
-            base.source_mappings.clear();
-        }
-        columns.push(RubyColumn {
-            base,
-            annotation: None,
-            annotation_span: 1,
-            annotation_hidden: false,
-        });
-    }
-    let mut column = 0usize;
-    for (annotation, requested_span) in annotations {
-        if column >= columns.len() {
-            if columns.len() >= MAX_RUBY_COLUMNS {
-                break;
-            }
-            let base = empty_base_template.clone();
-            columns.push(RubyColumn {
-                base,
-                annotation: None,
-                annotation_span: 1,
-                annotation_hidden: false,
-            });
-        }
-        let remaining = columns.len() - column;
-        let span = if requested_span == usize::MAX {
-            remaining
-        } else {
-            requested_span.min(remaining)
-        }
-        .max(1);
-        let hidden = annotation.text
-            == columns[column..column + span]
-                .iter()
-                .map(|column| column.base.text.as_str())
-                .collect::<String>();
-        columns[column].annotation = Some(annotation);
-        columns[column].annotation_span = span;
-        columns[column].annotation_hidden = hidden;
-        column += span;
-    }
-    let overhang_spaces = styled.get(node)
-        .and_then(|style| style.get("ruby-overhang"))
-        .is_some_and(|value| value.eq_ignore_ascii_case("spaces") || value.eq_ignore_ascii_case("none"));
-    InlineNode::Ruby { node, columns, overhang_spaces }
-}
-
-fn is_ruby_ideograph(ch: char) -> bool {
-    matches!(ch as u32, 0x3040..=0x30ff | 0x3400..=0x9fff | 0xf900..=0xfaff)
-}
-
-fn split_ruby_characters(text: &RubyText) -> Vec<RubyText> {
-    text.text.char_indices().map(|(start, ch)| {
-        let end = start + ch.len_utf8();
-        let mut part = text.clone();
-        part.text = ch.to_string();
-        part.source_mappings = text.source_mappings.iter().filter_map(|mapping| {
-            let begin = mapping.text_range.start.max(start);
-            let finish = mapping.text_range.end.min(end);
-            (begin < finish).then(|| TextSourceMapping {
-                text_range: begin - start..finish - start,
-                source: mapping.source,
-                source_range: mapping.source_range.start + begin - mapping.text_range.start
-                    ..mapping.source_range.start + finish - mapping.text_range.start,
-            })
-        }).collect();
-        part
-    }).collect()
 }
 
 fn nonzero_length(value: Option<&str>) -> bool {
@@ -1648,7 +1212,16 @@ fn classify_children(
         }
     }
 
-    for entry in formatting_children(dom, styled, idx, font_size) {
+    let entries = formatting_children(dom, styled, idx, font_size);
+    let mut cursor = 0;
+    while cursor < entries.len() {
+        if let Some((end, ruby)) = ruby_model::orphan_run(dom, styled, &entries, cursor, idx, font_size) {
+            inlines.push(ruby);
+            cursor = end;
+            continue;
+        }
+        let entry = &entries[cursor];
+        cursor += 1;
         let child = entry.node;
         let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
         match &dom.get(child).kind {
@@ -1880,6 +1453,11 @@ fn flatten_inline(
     let entries = formatting_children(dom, styled, idx, font_size);
     let mut cursor = 0;
     while cursor < entries.len() {
+        if let Some((end, ruby)) = ruby_model::orphan_run(dom, styled, &entries, cursor, idx, font_size) {
+            inlines.push(ruby);
+            cursor = end;
+            continue;
+        }
         if let Some((end, table)) = table_inline::orphan_run(
             dom, styled, &entries, cursor, &style, font_size, fonts, replaced,
         ) {
@@ -2459,16 +2037,14 @@ mod tests {
     }
 
     #[test]
-    fn bare_rtc_text_pairs_with_anonymous_ideographic_bases() {
+    fn bare_rtc_text_spans_anonymous_ideographic_base() {
         let (_, root) = tree("<body><p><ruby>でい<rtc>する</rtc></ruby></p></body>");
         let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
         let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
         let [InlineNode::Ruby { columns, .. }] = items.as_slice() else { panic!("want ruby") };
-        assert_eq!(columns.len(), 2);
-        assert_eq!(columns[0].base.text, "で");
-        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "す");
-        assert_eq!(columns[1].base.text, "い");
-        assert_eq!(columns[1].annotation.as_ref().unwrap().text, "る");
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].base.text, "でい");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "する");
     }
 
     #[test]

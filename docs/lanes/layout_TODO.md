@@ -1443,7 +1443,7 @@ Final Linux gate on fixed base `415fa342`: **2,780 workspace pass /10 skipped**
 in58.518s, **four doctests pass**; retained449 **280→280, zero gains/losses**.
 All render failure counters zero. Evidence: `crates/amazing-layout/evidence/layout20`.
 
-## LAYOUT-21 — ruby pairing and placement (in progress)
+## LAYOUT-21 — ruby pairing and placement (done)
 
 The complete static css-ruby directory is now inventoried: **118 reftests**,
 25 script-dependent reftests excluded explicitly. Baseline measured with the
@@ -1451,3 +1451,18 @@ LAYOUT-20 final binary: **33 passed /85 mismatched**, all renderer failures zero
 Next bulk area covers segment/annotation-level pairing, nested ruby, ruby-position,
 ruby-align, and contextual overhang including vertical flow. The previous
 67-case selection and open LAYOUT-14 fixtures remain retained coverage.
+
+Final Linux gate on fixed base6ab9a612: **2798 workspace pass/10 skip** in59.415s,
+**four doctests pass**. Full static ruby **33→68/118 (+35/-0)**; tables
+**310→310/386**; retained449 **280→299 (+19/-0)**. All renderer failure counters0.
+Evidence `crates/amazing-layout/evidence/layout21/final-repaired`; source hashes
+verified. Three first-gate losses from an overly broad width-keyword override
+were repaired by limiting it to shaped ruby contributions; failed evidence kept.
+
+Pairing now preserves segments, nested ruby, levels/spans, generated and orphan
+parts, whitespace and auto-hide. Placement covers alignment, first-line position,
+vertical levels, contextual overhang, nested intrinsic widths and tab stops.
+Parser/shaper resource budgets and18 geometry/model tests cover the new paths.
+Fifty static mismatches remain; font metrics, tab-size inheritance and flex/grid
+intrinsic adoption are routed to their owners. General inline alignment and ruby
+fragmentation/box edges remain follow-up. Windows deferred.

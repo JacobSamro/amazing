@@ -210,6 +210,19 @@ fn layout_block_in_context(
     let pl = b.padding.left;
     let pr = b.padding.right;
 
+    // Token-only intrinsic measurement cannot account for annotations or nested
+    // ruby. Use the same shaped units as line layout whenever this flow has ruby.
+    let ruby_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
+        items.iter().any(|item| matches!(item, crate::InlineNode::Ruby { .. })).then(|| {
+            let direction = if b.style.get("direction") == Some("rtl") {
+                amazing_text::Direction::RightToLeft
+            } else { amazing_text::Direction::LeftToRight };
+            crate::inline::intrinsic_widths_shaped(items, direction, text)
+        }).flatten().map(|(min,max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
+    } else { None };
+    let intrinsic = |b: &LayoutBox, minimum| ruby_intrinsic.map(|pair| if minimum {pair.0} else {pair.1})
+        .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
+            else { crate::flex::max_content_width(b, fonts) });
     // --- §10.3.3 horizontal constraint ---------------------------------
     let mut content_w;
     match values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)) {
@@ -263,8 +276,7 @@ fn layout_block_in_context(
                     (crate::grid::intrinsic_lanes_width(b, fonts, true),
                         crate::grid::intrinsic_lanes_width(b, fonts, false))
                 } else {
-                    (crate::flex::min_content_width(b, fonts),
-                        crate::flex::max_content_width(b, fonts))
+                    (intrinsic(b, true), intrinsic(b, false))
                 };
                 content_w = (min_width
                     .max(available)
@@ -280,6 +292,17 @@ fn layout_block_in_context(
             }
         }
     }
+    let chrome = bl + pl + pr + br_;
+    // Ruby needs shaped keyword widths. Other formatting contexts retain their
+    // own intrinsic sizing path; token-only flex measurements do not model
+    // inline decorations or grid track constraints.
+    match b.style.get("width").filter(|_| ruby_intrinsic.is_some()) {
+        Some("min-content") => content_w = (intrinsic(b, true) - chrome).max(0.0),
+        Some("max-content") => content_w = (intrinsic(b, false) - chrome).max(0.0),
+        Some("fit-content") => content_w = (intrinsic(b, true).max(content_w + chrome)
+            .min(intrinsic(b, false)) - chrome).max(0.0),
+        _ => {},
+    }
     if let Some(source) = b.style.get("width")
         && let Some(keyword) = values::calc_size_basis(source)
     {
@@ -291,8 +314,8 @@ fn layout_block_in_context(
                     .map(|height| height * ratio))
                 .unwrap_or(content_w)),
             "fit-content" => Some(content_w),
-            "min-content" => Some((crate::flex::min_content_width(b, fonts) - chrome).max(0.0)),
-            "max-content" => Some((crate::flex::max_content_width(b, fonts) - chrome).max(0.0)),
+            "min-content" => Some((intrinsic(b, true) - chrome).max(0.0)),
+            "max-content" => Some((intrinsic(b, false) - chrome).max(0.0)),
             _ => None,
         };
         if let Some(basis) = basis
@@ -306,11 +329,7 @@ fn layout_block_in_context(
         let chrome = bl + pl + pr + br_;
         let intrinsic = |minimum| if crate::grid::is_grid_lanes(&b.style) {
             crate::grid::intrinsic_lanes_width(b, fonts, minimum)
-        } else if minimum {
-            crate::flex::min_content_width(b, fonts)
-        } else {
-            crate::flex::max_content_width(b, fonts)
-        };
+        } else { intrinsic(b, minimum) };
         let basis = match values::calc_size_basis(source)? {
             "auto" | "min-content" => (intrinsic(true) - chrome).max(0.0),
             "max-content" => (intrinsic(false) - chrome).max(0.0),

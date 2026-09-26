@@ -286,9 +286,56 @@ pub struct TextSourceMapping {
     pub source_range: Range<usize>,
 }
 
+/// CSS tab stop spacing, resolved independently of the shaping provider.
+#[derive(Debug, Clone, Copy)]
+pub enum TabSize { Spaces(f32), Length(f32) }
+impl Default for TabSize { fn default() -> Self { Self::Spaces(8.0) } }
+impl TabSize {
+    pub(crate) fn advance(self, position: f32, space: f32) -> f32 {
+        let stop = match self { Self::Spaces(n) => n * space, Self::Length(px) => px };
+        if stop <= 0.0 { return 0.0; }
+        (stop - position.max(0.0).rem_euclid(stop)).max(0.0)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyFormat {
+    pub tab_size: TabSize,
+    pub align: String,
+    pub position: String,
+    pub visibility: String,
+    pub merge: bool,
+    pub minimum_advance: f32,
+}
+impl Default for RubyFormat {
+    fn default() -> Self {
+        Self { tab_size: TabSize::default(), align: "space-around".into(), position: "alternate".into(),
+            visibility: "visible".into(), merge: false, minimum_advance: 0.0 }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NestedRuby {
+    pub range: Range<usize>,
+    pub columns: Vec<RubyColumn>,
+    pub overhang_spaces: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyAnnotation {
+    pub text: RubyText,
+    pub span: usize,
+    pub level: usize,
+    pub hidden: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct RubyText {
     pub node: NodeIdx,
+    /// Raw content is retained for auto-hiding before whitespace processing.
+    pub raw_text: String,
+    pub format: RubyFormat,
+    pub nested: Vec<NestedRuby>,
     pub text: String,
     pub source_mappings: Vec<TextSourceMapping>,
     pub font_size: f32,
@@ -302,6 +349,9 @@ pub struct RubyColumn {
     pub annotation: Option<RubyText>,
     pub annotation_span: usize,
     pub annotation_hidden: bool,
+    /// Higher annotation levels; the legacy fields above represent level zero.
+    pub additional_annotations: Vec<RubyAnnotation>,
+    pub intra_level_whitespace: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -319,6 +369,7 @@ pub enum InlineNode {
         letter_spacing: f32,
         /// Used CSS word spacing; the percentage is relative to the current font size.
         word_spacing: values::LengthPercentage,
+        tab_size: TabSize,
         color: String,
         background_color: String,
         inline_padding: values::Sides,
@@ -569,6 +620,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 !layout.style.get("white-space").is_some_and(|value| {
                     value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
                 }),
+                layout.first_line_style.as_ref().and_then(|style| style.get("ruby-position")),
             ) {
                 let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
                 let new_height = if style.writing_mode.is_vertical_flow() {
@@ -1704,3 +1756,6 @@ mod table_tests;
 
 #[cfg(test)]
 mod contents_tests;
+
+#[cfg(test)]
+mod ruby_tests;

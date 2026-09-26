@@ -378,6 +378,7 @@ struct ShapedDecoration {
 
 #[derive(Debug, Clone)]
 struct ShapedRuby {
+    paragraph_offset: usize,
     node: NodeIdx,
     text: String,
     width: f32,
@@ -386,6 +387,7 @@ struct ShapedRuby {
     font_size: f32,
     glyphs: Vec<GlyphFrag>,
     line_over: f32,
+    line_under: f32,
     break_after: bool,
     space_before: f32,
     preserved_space_before: f32,
@@ -404,7 +406,7 @@ struct InlinePaintInfo {
     padding: crate::values::Sides,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ShapedContext {
     text: String,
     spans: Vec<TextSpan>,
@@ -419,6 +421,7 @@ struct ShapedContext {
 
 #[derive(Debug, Clone, Copy)]
 struct SpacingSpan {
+    tab_size: crate::TabSize,
     start: usize,
     end: usize,
     letter: f32,
@@ -430,6 +433,11 @@ fn spacing_at(spans: &[SpacingSpan], offset: usize) -> (f32, crate::values::Leng
     spans.iter().find(|span| span.start <= offset && offset < span.end)
         .map_or((0.0, crate::values::LengthPercentage::default(), 0.0),
             |span| (span.letter, span.word, span.font_size))
+}
+
+fn tab_at(spans: &[SpacingSpan], offset: usize) -> crate::TabSize {
+    spans.iter().find(|span| span.start <= offset && offset < span.end)
+        .map_or_else(crate::TabSize::default, |span| span.tab_size)
 }
 
 fn separator_spacing(text: &str, range: Range<usize>, spans: &[SpacingSpan]) -> f32 {
@@ -517,6 +525,7 @@ pub(crate) fn layout_lines_shaped(
     text_system: &dyn TextSystem,
     floats: &crate::floats::FloatContext,
     soft_wrap: bool,
+    first_line_position: Option<&str>,
 ) -> Option<Vec<LineBox>> {
     let InlineContainingBlock {
         x: content_x,
@@ -553,6 +562,7 @@ pub(crate) fn layout_lines_shaped(
     let mut glyphs = Vec::new();
     let mut ruby_glyphs = Vec::new();
     let mut ruby_line_over = 0.0f32;
+    let ruby_line_under = std::cell::Cell::new(0.0f32);
     let mut decorations = Vec::new();
     let mut replaced = Vec::new();
     let mut placed_text = Vec::new();
@@ -580,7 +590,7 @@ pub(crate) fn layout_lines_shaped(
         let height = if vertical_flow {
             (*cursor - inline_start).max(strut.line_height).max(image_height)
         } else {
-            atomic_height
+            atomic_height + ruby_line_under.get()
         };
         let y_top = if vertical_flow {
             content_y
@@ -649,6 +659,7 @@ pub(crate) fn layout_lines_shaped(
             replaced: std::mem::take(replaced),
         });
         *ruby_line_over = 0.0;
+        ruby_line_under.set(0.0);
         line_y.set(y_top + height);
         *cursor = if vertical_flow { inline_start } else {
             let (left, right) = floats.band(content_x, content_width, line_y.get(), strut.line_height);
@@ -665,6 +676,23 @@ pub(crate) fn layout_lines_shaped(
             line_y.set(y);
         }
     };
+    let mut first_line_ruby = first_line_position.map(|position| {
+        let mut first_items = items.to_vec();
+        fn override_position(columns: &mut [crate::RubyColumn], position: &str) {
+            for column in columns {
+                if let Some(note) = &mut column.annotation { note.format.position = position.to_owned(); }
+                for note in &mut column.additional_annotations { note.text.format.position = position.to_owned(); }
+                for nested in &mut column.base.nested { override_position(&mut nested.columns, position); }
+            }
+        }
+        for item in &mut first_items {
+            if let InlineNode::Ruby { columns, .. } = item { override_position(columns, position); }
+        }
+        let refs: Vec<_> = first_items.iter().collect();
+        shape_inline_items(&refs, base_direction, text_system).unwrap_or_default().into_iter().enumerate()
+            .filter_map(|(index,unit)| if let ShapedUnit::Ruby(ruby) = unit {Some((index,ruby))} else {None})
+            .collect::<HashMap<_,_>>()
+    }).unwrap_or_default();
     let needed = unbreakable_run_widths(&units);
     for (unit_index, unit) in units.into_iter().enumerate() {
         let has_content = !words.is_empty() || !replaced.is_empty();
@@ -813,7 +841,7 @@ pub(crate) fn layout_lines_shaped(
             }
             ShapedUnit::Ruby(mut ruby) => {
                 if !has_content {
-                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over);
+                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over + ruby.line_under);
                 }
                 let mut spacing = if has_content { ruby.space_before } else { ruby.preserved_space_before };
                 if has_content
@@ -834,8 +862,11 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
-                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over);
+                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over + ruby.line_under);
                     spacing = ruby.preserved_space_before;
+                }
+                if lines.is_empty() {
+                    if let Some(first) = first_line_ruby.remove(&unit_index) { ruby = first; }
                 }
                 cursor += spacing;
                 for glyph in &mut ruby.glyphs {
@@ -846,7 +877,11 @@ pub(crate) fn layout_lines_shaped(
                     }
                 }
                 ruby_glyphs.extend(ruby.glyphs);
-                ruby_line_over = ruby_line_over.max(ruby.line_over);
+                let total = ruby.line_over + ruby.line_under;
+                let leading = (strut.line_height - strut.ascent - strut.descent).max(0.0);
+                let extra = if total > 0.0 { (total - leading).max(0.0) / total } else { 0.0 };
+                ruby_line_over = ruby_line_over.max(ruby.line_over * extra);
+                ruby_line_under.set(ruby_line_under.get().max(ruby.line_under * extra));
                 words.push(WordFrag {
                     node: ruby.node,
                     text: ruby.text,
@@ -1103,9 +1138,7 @@ fn reshape_visual_line(
             }
             if character == Some('\t') {
                 let unit = space_advance.unwrap_or(run.font_size * 0.6).max(0.01);
-                let stop = unit * 8.0;
-                let relative = (pen - start_x).max(0.0);
-                pen = start_x + (relative / stop).floor().mul_add(stop, stop);
+                pen += tab_at(&context.spacing, glyph.cluster.start).advance(pen - start_x, unit);
                 continue;
             }
             if character.is_some_and(is_invisible_text_control) {
@@ -1405,6 +1438,9 @@ fn shape_combined_text(
     inner_style.text_combine = amazing_text::TextCombine::None;
     let combined = crate::RubyText {
         node,
+        raw_text: text.to_owned(),
+        format: Default::default(),
+        nested: Vec::new(),
         text: text.to_owned(),
         source_mappings: source_mappings.to_vec(),
         font_size,
@@ -1427,6 +1463,7 @@ fn shape_combined_text(
         glyph.scale_x = scale;
     }
     Some(ShapedRuby {
+        paragraph_offset: 0,
         node,
         text: text.to_owned(),
         width: font_size,
@@ -1435,303 +1472,16 @@ fn shape_combined_text(
         font_size,
         glyphs,
         line_over: 0.0,
+        line_under: 0.0,
         break_after: true,
         space_before: 0.0,
         preserved_space_before: 0.0,
     })
 }
 
-fn shape_ruby_units(
-    node: NodeIdx,
-    columns: &[crate::RubyColumn],
-    overhang_spaces: bool,
-    text_system: &dyn TextSystem,
-) -> Option<Vec<ShapedRuby>> {
-    let mut units = Vec::new();
-    let mut starts = Vec::new();
-    let mut start = 0usize;
-    while start < columns.len() {
-        starts.push(start);
-        let span = columns[start].annotation_span.max(1);
-        let end = start.checked_add(span)?.min(columns.len());
-        units.push(shape_ruby(node, &columns[start..end], overhang_spaces, text_system)?);
-        start = end;
-    }
-    for index in 0..units.len().saturating_sub(1) {
-        let left_group_end = starts[index + 1];
-        let left = &columns[left_group_end - 1].base;
-        let right = &columns[left_group_end].base;
-        units[index].break_after = ruby_base_break_allowed(left, right, text_system);
-    }
-    Some(units)
-}
-
-fn ruby_base_break_allowed(
-    left: &crate::RubyText,
-    right: &crate::RubyText,
-    text_system: &dyn TextSystem,
-) -> bool {
-    let mut text = left.text.clone();
-    let boundary = text.len();
-    text.push_str(&right.text);
-    if boundary == 0 || boundary == text.len() {
-        return false;
-    }
-    let spans = [
-        TextSpan {
-            range: 0..boundary,
-            source: left.node.0,
-            style: left.style.as_ref().clone(),
-            boundary_before: ShapingBoundary::Hard,
-        },
-        TextSpan {
-            range: boundary..text.len(),
-            source: right.node.0,
-            style: right.style.as_ref().clone(),
-            boundary_before: ShapingBoundary::Continue,
-        },
-    ];
-    let provider_break = text_system
-        .shape(Paragraph {
-            text: &text,
-            spans: &spans,
-            sources: &[],
-            bidi_scopes: &[],
-            base_direction: left.style.direction,
-        })
-        .ok()
-        .is_some_and(|paragraph| {
-            paragraph.breaks.iter().any(|opportunity| {
-                opportunity.offset == boundary
-                    && opportunity.kind != amazing_text::BreakKind::Mandatory
-            })
-        });
-    provider_break
-        || (left.style.word_break != amazing_text::WordBreak::KeepAll
-            && right.style.word_break != amazing_text::WordBreak::KeepAll
-            && left.text.chars().next_back().is_some_and(is_ideographic)
-            && right.text.chars().next().is_some_and(is_ideographic))
-}
-
-fn is_ideographic(character: char) -> bool {
-    matches!(
-        character as u32,
-        0x2e80..=0x2fff
-            | 0x3040..=0x30ff
-            | 0x31f0..=0x31ff
-            | 0x3400..=0x4dbf
-            | 0x4e00..=0x9fff
-            | 0xf900..=0xfaff
-            | 0x20000..=0x3ffff
-    )
-}
-
-fn shape_ruby(
-    node: NodeIdx,
-    columns: &[crate::RubyColumn],
-    overhang_spaces: bool,
-    text_system: &dyn TextSystem,
-) -> Option<ShapedRuby> {
-    if columns.len() > MAX_RUBY_COLUMNS {
-        return None;
-    }
-    let text_bytes = columns.iter().try_fold(0usize, |total, column| {
-        let total = total.checked_add(column.base.text.len())?;
-        total.checked_add(
-            column
-                .annotation
-                .as_ref()
-                .map_or(0, |annotation| annotation.text.len()),
-        )
-    })?;
-    if text_bytes > MAX_RUBY_TEXT_BYTES {
-        return None;
-    }
-    let font_size = columns.first()?.base.font_size;
-    let vertical_flow = columns[0].base.style.writing_mode.is_vertical_flow();
-    let mut bases = columns
-        .iter()
-        .map(|column| shape_ruby_text(&column.base, 0.0, text_system))
-        .collect::<Option<Vec<_>>>()?;
-    let base_width = bases.iter().map(|(_, width, _)| *width).sum();
-    let mut widths = bases.iter().map(|(_, width, _)| *width).collect::<Vec<_>>();
-    let mut annotations = Vec::with_capacity(columns.len());
-    for (index, column) in columns.iter().enumerate() {
-        let shaped = if column.annotation_hidden {
-            None
-        } else if let Some(annotation) = &column.annotation {
-            let metrics = text_system.metrics(&annotation.style).ok()?;
-            let base_metrics = bases[index].2;
-            let block_offset = if vertical_flow {
-                match column.base.style.writing_mode {
-                    amazing_text::WritingMode::VerticalRl
-                    | amazing_text::WritingMode::SidewaysRl => {
-                        base_metrics.vertical_ascent + metrics.vertical_descent
-                    },
-                    amazing_text::WritingMode::VerticalLr
-                    | amazing_text::WritingMode::SidewaysLr => {
-                        -(base_metrics.vertical_descent + metrics.vertical_ascent)
-                    },
-                    amazing_text::WritingMode::HorizontalTb => 0.0,
-                }
-            } else {
-                -(base_metrics.ascent + metrics.descent)
-            };
-            Some(shape_ruby_text(annotation, block_offset, text_system)?)
-        } else {
-            None
-        };
-        if let Some((_, annotation_width, _)) = &shaped {
-            let end = (index + column.annotation_span).min(columns.len());
-            let spanned_width = widths[index..end].iter().sum::<f32>();
-            if *annotation_width > spanned_width {
-                let extra = (*annotation_width - spanned_width) / (end - index) as f32;
-                for width in &mut widths[index..end] {
-                    *width += extra;
-                }
-            }
-        }
-        annotations.push(shaped);
-    }
-    let mut positions = Vec::with_capacity(widths.len() + 1);
-    positions.push(0.0);
-    for width in &widths {
-        positions.push(positions.last().copied().unwrap_or(0.0) + width);
-    }
-    let line_over = if vertical_flow {
-        0.0
-    } else {
-        annotations
-            .iter()
-            .filter_map(|annotation| annotation.as_ref().map(|(_, _, metrics)| metrics.line_height()))
-            .fold(0.0, f32::max)
-    };
-    let mut glyphs = Vec::new();
-    let mut text = String::new();
-    for (index, column) in columns.iter().enumerate() {
-        let (base_glyphs, base_width, _) = &mut bases[index];
-        let base_offset = positions[index] + (widths[index] - *base_width) * 0.5;
-        for glyph in base_glyphs.iter_mut() {
-            if vertical_flow {
-                glyph.y += base_offset;
-            } else {
-                glyph.x += base_offset;
-            }
-        }
-        text.push_str(&column.base.text);
-        glyphs.append(base_glyphs);
-        if let Some((mut annotation_glyphs, annotation_width, _)) = annotations[index].take() {
-            let end = (index + column.annotation_span).min(columns.len());
-            let span_width = positions[end] - positions[index];
-            let annotation_offset =
-                positions[index] + (span_width - annotation_width) * 0.5;
-            for glyph in &mut annotation_glyphs {
-                if vertical_flow {
-                    glyph.y += annotation_offset;
-                } else {
-                    glyph.x += annotation_offset;
-                }
-            }
-            glyphs.extend(annotation_glyphs);
-        }
-    }
-    Some(ShapedRuby {
-        node,
-        text,
-        width: positions.last().copied().unwrap_or(0.0),
-        base_width,
-        overhang_spaces,
-        font_size,
-        glyphs,
-        line_over,
-        break_after: true,
-        space_before: 0.0,
-        preserved_space_before: 0.0,
-    })
-}
-
-fn shape_ruby_text(
-    text: &crate::RubyText,
-    block_offset: f32,
-    text_system: &dyn TextSystem,
-) -> Option<(Vec<GlyphFrag>, f32, amazing_text::FontMetrics)> {
-    let metrics = text_system.metrics(&text.style).ok()?;
-    if text.text.is_empty() {
-        return Some((Vec::new(), 0.0, metrics));
-    }
-    let spans = [TextSpan {
-        range: 0..text.text.len(),
-        source: text.node.0,
-        style: text.style.as_ref().clone(),
-        boundary_before: ShapingBoundary::Hard,
-    }];
-    let sources = text
-        .source_mappings
-        .iter()
-        .map(|mapping| SourceMapping {
-            text_range: mapping.text_range.clone(),
-            source: mapping.source.0,
-            source_range: mapping.source_range.clone(),
-        })
-        .collect::<Vec<_>>();
-    let line = text_system
-        .shape_line(LineRequest {
-            paragraph: Paragraph {
-                text: &text.text,
-                spans: &spans,
-                sources: &sources,
-                bidi_scopes: &[],
-                base_direction: text.style.direction,
-            },
-            range: 0..text.text.len(),
-        })
-        .ok()?;
-    let mut fragments = Vec::new();
-    let mut pen = 0.0;
-    for run in line.runs {
-        for glyph in run.glyphs {
-            fragments.push(GlyphFrag {
-                node: text.node,
-                font: run.font,
-                glyph: glyph.id,
-                cluster: glyph.cluster.clone(),
-                source_range: source_range_for_cluster(
-                    &sources,
-                    run.source,
-                    glyph.cluster.clone(),
-                ),
-                source_mappings: source_mappings_for_cluster(
-                    &sources,
-                    glyph.cluster.clone(),
-                ),
-                x: if run.writing_mode.is_vertical_flow() {
-                    block_offset + glyph.offset_x
-                } else {
-                    pen + glyph.offset_x
-                },
-                y: if run.writing_mode.is_vertical_flow() {
-                    pen + glyph.offset_y
-                } else {
-                    block_offset + glyph.offset_y
-                },
-                advance_x: glyph.advance_x,
-                advance_y: glyph.advance_y,
-                offset_x: glyph.offset_x,
-                offset_y: glyph.offset_y,
-                font_size: run.font_size,
-                writing_mode: run.writing_mode,
-                orientation: glyph.orientation,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                variations: run.variations.clone(),
-                synthesis: run.synthesis,
-                color: text.color.clone(),
-            });
-            pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
-        }
-    }
-    Some((fragments, pen, metrics))
-}
+#[path = "inline_ruby.rs"]
+mod ruby_shape;
+use ruby_shape::{shape_ruby_units, shape_ruby_text};
 
 fn shape_chunk(
     items: &[&InlineNode],
@@ -1903,6 +1653,7 @@ fn shape_chunk(
             style,
             letter_spacing,
             word_spacing,
+            tab_size,
             color,
             background_color,
             inline_padding,
@@ -1962,7 +1713,7 @@ fn shape_chunk(
             style: style.as_ref().clone(),
             boundary_before: stronger_boundary(previous_after, *boundary_before),
         });
-        spacing.push(SpacingSpan { start, end, letter: *letter_spacing,
+        spacing.push(SpacingSpan { tab_size: *tab_size, start, end, letter: *letter_spacing,
             word: *word_spacing, font_size: *font_size });
         colors.insert(node.0, color.clone());
         paint_info.insert(
@@ -2014,6 +1765,7 @@ fn shape_chunk(
     });
     let mut units = Vec::new();
     let mut previous_end = 0usize;
+    let mut logical_pen = 0.0f32;
     for text_unit in text_units(&paragraph_text, &spans, &shaped.breaks, &atomics) {
         let (range, break_kind) = match text_unit {
             TextUnit::Word { range, break_kind } => (range, break_kind),
@@ -2028,6 +1780,10 @@ fn shape_chunk(
                                 | amazing_text::WhiteSpace::BreakSpaces)
                 }).map(|span| span.range.start.max(previous_end)).unwrap_or(offset);
                 let preserved_space_before = advance_in_range(&shaped, preserved_start..offset);
+                logical_pen += space_before + match &atomic {
+                    AtomicInline::Replaced(_, size, _) => size.width,
+                    AtomicInline::Combined(shaped) | AtomicInline::Ruby(shaped) => shaped.width,
+                };
                 match atomic {
                     AtomicInline::Replaced(node, size, source_order) => units.push(ShapedUnit::Replaced {
                         node,
@@ -2046,6 +1802,7 @@ fn shape_chunk(
                         context: Rc::clone(&context),
                     }),
                     AtomicInline::Ruby(mut ruby) => {
+                        ruby.paragraph_offset = offset;
                         ruby.space_before = advance_in_range(&shaped, previous_end..offset)
                             + separator_spacing(&paragraph_text, previous_end..offset, &spacing);
                         ruby.preserved_space_before = 0.0;
@@ -2066,6 +1823,7 @@ fn shape_chunk(
             }
             TextUnit::Break(offset) => {
                 units.push(ShapedUnit::Break);
+                logical_pen = 0.0;
                 previous_end = offset;
                 continue;
             }
@@ -2140,6 +1898,10 @@ fn shape_chunk(
                 if let Some(previous) = previous_letter {
                     pen += (previous + letter) * 0.5;
                 }
+                let advance = if paragraph_text[glyph.cluster.clone()].starts_with('\t') {
+                    tab_at(&spacing, glyph.cluster.start).advance(logical_pen + pen,
+                        inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y).max(run.font_size * 0.3))
+                } else { inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y) };
                 glyphs.push(GlyphFrag {
                         node: NodeIdx(run.source),
                         font: run.font,
@@ -2164,8 +1926,8 @@ fn shape_chunk(
                     } else {
                         pen
                     },
-                        advance_x: glyph.advance_x,
-                        advance_y: glyph.advance_y,
+                        advance_x: if run.writing_mode.is_vertical_flow() { glyph.advance_x } else { advance },
+                        advance_y: if run.writing_mode.is_vertical_flow() { advance } else { glyph.advance_y },
                         offset_x: glyph.offset_x,
                         offset_y: glyph.offset_y,
                         font_size: run.font_size,
@@ -2180,7 +1942,6 @@ fn shape_chunk(
                             .cloned()
                             .unwrap_or_else(|| "black".into()),
                 });
-                let advance = inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
                 pen += advance;
                 if matches!(paragraph_text[glyph.cluster.clone()].chars().next(), Some(' ' | '\u{00a0}')) {
                     pen += word_spacing.resolve(Some(font_size)).unwrap_or(0.0);
@@ -2201,6 +1962,8 @@ fn shape_chunk(
         } else {
             0.0
         };
+        logical_pen += pen + advance_in_range(&shaped, previous_end..range.start)
+            + separator_spacing(&paragraph_text, previous_end..range.start, &spacing);
         units.push(ShapedUnit::Word(ShapedWord {
             node: NodeIdx(node),
             text: paragraph_text[range.clone()].to_owned(),
@@ -2221,34 +1984,67 @@ fn shape_chunk(
         previous_end = range.end;
     }
     apply_ruby_overhang(&mut units);
+    if units.iter().any(|unit| matches!(unit, ShapedUnit::Ruby(_))) {
+        let mut updated = context.as_ref().clone();
+        for unit in &units {
+            if let ShapedUnit::Ruby(ruby) = unit {
+                updated.atomics.insert(ruby.paragraph_offset, AtomicInline::Ruby(ruby.clone()));
+            }
+        }
+        let updated = Rc::new(updated);
+        for unit in &mut units {
+            match unit {
+                ShapedUnit::Word(word) => word.context = Rc::clone(&updated),
+                ShapedUnit::Replaced { context, .. } | ShapedUnit::Combined { context, .. } => *context = Rc::clone(&updated),
+                _ => {},
+            }
+        }
+    }
     Some(units)
 }
 
 fn apply_ruby_overhang(units: &mut [ShapedUnit]) {
-    // The annotation can consume the blank advances bordering its container.
-    // Base glyphs keep their original position within the ruby columns.
     for index in 0..units.len() {
-        let right_space = match units.get(index + 1) {
-            Some(ShapedUnit::Word(word)) => word.space_before,
-            Some(ShapedUnit::Ruby(ruby)) => ruby.space_before,
+        let left_space = units.get(index.wrapping_sub(1)).map_or(0.0, |unit| match unit {
+            ShapedUnit::Word(word) => ruby_edge_space(word, false),
             _ => 0.0,
-        };
+        });
+        let right_space = units.get(index + 1).map_or(0.0, |unit| match unit {
+            ShapedUnit::Word(word) => word.space_before + ruby_edge_space(word, true),
+            ShapedUnit::Ruby(ruby) => ruby.space_before,
+            _ => 0.0,
+        });
         let ShapedUnit::Ruby(ruby) = &mut units[index] else { continue };
-        if !ruby.overhang_spaces || ruby.width <= ruby.base_width {
-            continue;
-        }
+        if !ruby.overhang_spaces || ruby.width <= ruby.base_width { continue; }
         let half_excess = (ruby.width - ruby.base_width) * 0.5;
-        let left = half_excess.min(ruby.space_before).max(0.0);
+        let left = half_excess.min(if index == 0 { 0.0 } else { ruby.space_before + left_space }).max(0.0);
         let right = half_excess.min(right_space).max(0.0);
         ruby.width -= left + right;
         for glyph in &mut ruby.glyphs {
-            if glyph.writing_mode.is_vertical_flow() {
-                glyph.y -= left;
-            } else {
-                glyph.x -= left;
-            }
+            if glyph.writing_mode.is_vertical_flow() { glyph.y -= left; }
+            else { glyph.x -= left; }
         }
     }
+}
+
+fn ruby_edge_space(word: &ShapedWord, start: bool) -> f32 {
+    let chars: Vec<_> = word.text.char_indices().collect();
+    let mut total = 0.0;
+    let mut visit = |offset: usize, c: char| {
+        let fraction = if c.is_whitespace() { 1.0 }
+            else if c == '・' { 0.25 }
+            else if (start && "（「『【〖〔〈《〘〚〝［｛｟".contains(c))
+                || (!start && "）」』】〗〕〉》〙〛〞〟］｝｠".contains(c)) { 0.5 }
+            else { 0.0 };
+        if fraction == 0.0 { return false; }
+        let absolute = word.range.end - word.text.len() + offset;
+        total += word.glyphs.iter().filter(|g| g.cluster.start <= absolute && absolute < g.cluster.end)
+            .map(|g| inline_advance(g.writing_mode, g.advance_x, g.advance_y)).sum::<f32>() * fraction;
+        fraction == 1.0
+    };
+    if start { for (offset,c) in chars { if !visit(offset,c) {break;} } }
+    else { for (offset,c) in chars.into_iter().rev() { if !visit(offset,c) {break;} } }
+    total
 }
 
 fn trim_combined_edge_spaces<'a>(text: &'a str,
@@ -2613,6 +2409,7 @@ mod tests {
             style: Box::new(amazing_text::TextStyle::default()),
             letter_spacing: 0.0,
             word_spacing: crate::values::LengthPercentage::default(),
+            tab_size: crate::TabSize::default(),
             color: "black".into(),
             background_color: "transparent".into(),
             inline_padding: crate::values::Sides::default(),
@@ -2669,7 +2466,7 @@ mod tests {
             InlineContainingBlock { x: 0.0, y: 0.0, width: 100.0, height: 32.0 },
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl, &provider,
-            &crate::floats::FloatContext::default(), true,
+            &crate::floats::FloatContext::default(), true, None,
         ).unwrap();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].words.iter().all(|word| !word.text.contains('「')));
@@ -2703,7 +2500,7 @@ mod tests {
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl,
             &amazing_text::FallbackTextSystem::new(),
-            &crate::floats::FloatContext::default(), true,
+            &crate::floats::FloatContext::default(), true, None,
         ).unwrap();
         assert_eq!(lines.len(), 1);
         assert!(lines[0].replaced[0].x > 80.0);
@@ -2837,7 +2634,8 @@ pub(crate) fn intrinsic_widths_shaped(
             }
             ShapedUnit::Combined { shaped, .. } => {minimum = minimum.max(shaped.width); line += shaped.width; ruby_run = 0.0;}
             ShapedUnit::Ruby(ruby) => {
-                ruby_run += ruby.width; minimum = minimum.max(ruby_run); line += ruby.width;
+                let spacing = if line > 0.0 { ruby.space_before } else { ruby.preserved_space_before };
+                ruby_run += ruby.width; minimum = minimum.max(ruby_run); line += ruby.width + spacing;
                 if ruby.break_after {ruby_run = 0.0;}
             }
         }

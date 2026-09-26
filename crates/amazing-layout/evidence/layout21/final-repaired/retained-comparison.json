@@ -1,0 +1,48 @@
+{
+  "before": "crates/amazing-layout/evidence/layout20/final-after/retained/report.json",
+  "after": "/home/user/amazing/out/layout/layout21/final-repaired/retained/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 280,
+    "mismatch": 169,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 299,
+    "mismatch": 150,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-ruby__nested-ruby-pairing-001.html",
+    "css-ruby__ruby-autohide-004.html",
+    "css-ruby__ruby-base-container-float.html",
+    "css-ruby__ruby-inlinize-blocks-002.html",
+    "css-ruby__ruby-inlinize-recursive-simple.html",
+    "css-ruby__ruby-intrinsic-isize-002.html",
+    "css-ruby__ruby-line-break-suppression-004.html",
+    "css-ruby__ruby-overhang-spaces-001.html",
+    "css-ruby__ruby-overhang-spaces-003.html",
+    "css-ruby__ruby-overhang-spaces-004.html",
+    "css-ruby__ruby-overhang-spaces-008.html",
+    "css-ruby__ruby-overhang-spaces-010.html",
+    "css-ruby__ruby-overhang-spaces-align-001.html",
+    "css-ruby__ruby-overhang-spaces-align-002.html",
+    "css-ruby__ruby-overhang-spaces-align-003.html",
+    "css-ruby__ruby-overhang-spaces-align-005.html",
+    "css-ruby__ruby-overhang-spaces-non-bmp-001.html",
+    "css-ruby__ruby-overhang-spaces-vertical-001.html",
+    "css-ruby__ruby-overhang-spaces-vertical-002.html"
+  ],
+  "losses": [],
+  "actual_hash_changes": 68,
+  "reference_hash_changes": 61,
+  "before_projection_sha256": "603d31bda095d0a8c74fb0726e359dedca08facd706f71ff2cedfae740622f51",
+  "after_projection_sha256": "e480ee86c6fe4c051f23b19970269f9e74fc590247a2f43664e2d12bcc182bea"
+}
