@@ -429,3 +429,68 @@ fn indexed_class_folding_preserves_unicode_and_legacy_membership() {
     let expensive = "[\\u0000-\\uFFFF]".repeat(32);
     assert!(matches!(Regex::new(&expensive, "iu"), Err(Error::Limit(_))));
 }
+
+#[test]
+fn annex_b_numeric_escapes_choose_backrefs_before_octal() {
+    for (pattern, text) in [(r"\1", "\x01"), (r"\07", "\x07"), (r"\377", "\u{ff}"),
+        (r"\400", " 0"), (r"\770", "?0"), (r"\0111", "\t1"), (r"\8", "8"), (r"\90", "90"),
+        (r"[\1]", "\x01"), (r"[\8]", "8")] {
+        assert_eq!(captures(pattern, "", text)[0], Some(text.into()), "{pattern}");
+    }
+    assert_eq!(captures(r"(.)\1", "", "aa")[0], Some("aa".into()));
+    assert_eq!(captures(r"\1(a)", "", "a")[0], Some("a".into()));
+    assert_eq!(captures(r"(.)(.)(.)(.)(.)(.)(.)(.)\8", "", "123456788")[0], Some("123456788".into()));
+    assert_eq!(captures(r"\1[(]", "", "\x01(")[0], Some("\x01(".into()));
+    assert_eq!(captures(r"\1\(", "", "\x01(")[0], Some("\x01(".into()));
+    for flags in ["u", "v"] {
+        for pattern in [r"\1", r"\07", r"\8", r"[\1]", r"[\8]"] {
+            assert!(Regex::new(pattern, flags).is_err(), "{pattern}/{flags}");
+        }
+        assert_eq!(captures(r"\1(a)", flags, "a")[0], Some("a".into()));
+    }
+    let long_identity = format!("\\{}", "9".repeat(100));
+    assert!(Regex::new(&long_identity, "").is_ok());
+}
+
+#[test]
+fn annex_b_identity_control_and_class_range_fallbacks() {
+    for (pattern, text) in [(r"\xQ", "xQ"), (r"\u12Q", "u12Q"), (r"\p\P\k", "pPk"),
+        (r"\c0", r"\c0"), (r"\c_", r"\c_"), (r"[\c0]", "\x10"), (r"[\c_]", "\x1f"),
+        (r"[\c!]", "\\"), (r"[\c!]", "c"), (r"[\c!]", "!")] {
+        assert_eq!(captures(pattern, "", text)[0], Some(text.into()), "{pattern}");
+    }
+    for pattern in [r"[\d-%]+", r"[%-\d]+", r"[\s-\d]+", r"[--\d]+"] {
+        assert!(Regex::new(pattern, "").is_ok(), "{pattern}");
+        assert!(Regex::new(pattern, "u").is_err(), "{pattern}");
+    }
+    assert_eq!(captures(r"[\s-\d]+", "", "x \t-012x")[0], Some(" \t-012".into()));
+    for flags in ["", "u", "v"] { assert!(Regex::new("[z-a]", flags).is_err()); }
+    for pattern in [r"\xQ", r"\u12Q", r"\c0", r"[\c0]", r"[\c_]", r"[\c!]"] {
+        assert!(Regex::new(pattern, "u").is_err(), "{pattern}");
+    }
+}
+
+#[test]
+fn annex_b_quantified_assertions_preserve_zero_width_semantics() {
+    for quantifier in ["*", "+", "?", "{2}", "{2,}", "{2,3}", "*?", "+?", "??", "{2}?", "{2,}?", "{2,3}?"] {
+        let optional = quantifier.starts_with('*') || quantifier.starts_with('?');
+        let positive = format!(".(?=Z){quantifier}");
+        let negative = format!("[a-e](?!Z){quantifier}");
+        assert_eq!(captures(&positive, "", "a bZ cZZ")[0], Some(if optional { "a" } else { "b" }.into()));
+        assert_eq!(captures(&negative, "", "aZZ bZ e")[0], Some(if optional { "a" } else { "e" }.into()));
+        assert!(Regex::new(&positive, "u").is_err());
+        assert!(Regex::new(&negative, "v").is_err());
+    }
+    assert_eq!(captures(r"(?=(a))?a", "", "a"), vec![Some("a".into()), None]);
+    assert_eq!(captures(r"(?=(a)){2}a", "", "a"), vec![Some("a".into()), Some("a".into())]);
+    assert_eq!(captures(r"(a)(?=(b))+b", "", "ab"),
+        vec![Some("ab".into()), Some("a".into()), Some("b".into())]);
+    // A noncapturing group is an Atom even when its contents are assertions.
+    for flags in ["", "u", "v"] {
+        assert_eq!(captures(r"(?:(?=(a)))+a", flags, "a"),
+            vec![Some("a".into()), Some("a".into())]);
+        assert_eq!(captures(r"(?:^){2}a", flags, "a")[0], Some("a".into()));
+        assert_eq!(captures(r"(?:\b){2}a", flags, "a")[0], Some("a".into()));
+    }
+    for pattern in ["^*", "$+", r"\b?", r"\B{2}"] { assert!(Regex::new(pattern, "").is_err()); }
+}
