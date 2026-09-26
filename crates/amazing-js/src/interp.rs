@@ -2761,16 +2761,16 @@ impl Interpreter {
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
                 FunctionBody::Bytecode(code) => {
-                    let generator_proto = if fun.is_generator {
-                        match o.borrow().get_own("prototype") {
-                            Some(JsValue::Object(proto)) => Some(proto),
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
+                    // The generator's own object, not a pre-read prototype: a
+                    // parameter default can replace `functionObject.prototype`
+                    // during FunctionDeclarationInstantiation, and per spec
+                    // (OrdinaryCreateFromConstructor) that later value is what
+                    // the created generator's `[[Prototype]]` must observe, not
+                    // whatever "prototype" held before parameters were bound.
+                    // `call` reads it fresh after binding parameters.
                     code.call(
-                        self, fun.env.clone(), fun.is_arrow, this, args, generator_proto,
+                        self, fun.env.clone(), fun.is_arrow, this, args,
+                        fun.is_generator.then(|| o.clone()),
                         derived_constructor.clone(), new_target.clone().or(lexical_new_target.clone()),
                     )
                 }

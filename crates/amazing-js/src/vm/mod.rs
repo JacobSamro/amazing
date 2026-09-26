@@ -1279,7 +1279,7 @@ impl FunctionCode {
         is_arrow: bool,
         this: JsValue,
         args: Vec<JsValue>,
-        generator_proto: Option<Obj>,
+        generator_function: Option<Obj>,
         derived: Option<DerivedConstructor>,
         new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
@@ -1321,6 +1321,16 @@ impl FunctionCode {
         // parameter literally named `arguments`.
         i.bind_params(&env, &self.0.params, args, is_arrow)?;
         if self.0.is_generator {
+            // Read `functionObject.prototype` now, not before parameters were
+            // bound: a parameter default can replace it during
+            // FunctionDeclarationInstantiation (just above), and per spec
+            // (OrdinaryCreateFromConstructor) the generator's `[[Prototype]]`
+            // must observe that later value, matching the tree walker.
+            let generator_proto = generator_function.and_then(|function|
+                match function.borrow().get_own("prototype") {
+                    Some(JsValue::Object(proto)) => Some(proto),
+                    _ => None,
+                });
             let mut object = JsObject::ordinary();
             object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
             object.exotic = crate::value::Exotic::Generator(Rc::new(RefCell::new(GeneratorState {

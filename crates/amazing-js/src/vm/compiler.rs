@@ -41,16 +41,25 @@ pub fn compile(ast: &ast::Program, is_module: bool) -> Result<Program, CompileEr
 
 /// Compile a method body with the same path used for function declarations.
 /// Callers retain the AST body when an instruction is not yet supported.
+/// The sole caller is the tree walker's `method_value`, for both object-literal
+/// methods and (non-VM-compiled-class) class methods; either way the result is
+/// a method, not an ordinary function, so `is_method` must be set here --
+/// `instantiate`'s own `!is_method || is_generator` guard is what actually
+/// keeps a non-generator method from getting an own `prototype`. Relying on
+/// deleting it afterward does not work now that `instantiate` gives that
+/// property the spec-correct `configurable: false` descriptor.
 pub(crate) fn compile_class_method(method: &ast::ClassMethod, strict: bool) -> Result<FunctionCode, CompileError> {
     let mut compiler = Compiler::new(false);
     compiler.strict = strict;
-    compiler.compile_function(&ast::FunctionItem {
+    let mut code = compiler.compile_function(&ast::FunctionItem {
         name: None,
         params: method.params.clone(),
         body: method.body.clone(),
         is_async: method.is_async,
         is_generator: method.is_generator,
-    }, method.span)
+    }, method.span)?;
+    Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
+    Ok(code)
 }
 
 pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span, strict: bool)
