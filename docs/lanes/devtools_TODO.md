@@ -268,3 +268,19 @@ CDP-10's; both domains are advisory-enable with no continuous push events
 (no `EnabledDomains` flag added). `MockHost` scripts a one-node CPU profile,
 a two-chunk heap snapshot and a heap-object round trip. Real profiling and
 heap data need the JS engine (`.agents/js-runtime/questions.md`, CDP-10).
+
+## CDP-12 — DOMSnapshot domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools`
+101/101 nextest (0 skipped) and 1 doctest; workspace 2877 passed, 0 failed,
+10 skipped, doctests 4 passed.
+
+`DOMSnapshot.captureSnapshot`. The `DomSnapshotDocument`/`DomSnapshotNode`
+seam (CDP-10 batch) stays in plain strings and builds `children` top-down,
+the natural order for a tree walk; this domain performs the wire format's
+two CDP-specific transforms when serializing: string interning (a
+deduplicating `StringTable`, referenced by index from `documentURL`/
+`baseURL`/`nodeName`/`nodeValue`/`attributes`) and the parent-index
+inversion (`nodes.parentIndex`, computed by inverting each node's
+`children`). `MockHost` scripts a 4-node document over the same fixed
+`html`/`body`/`div#main`/text fixture other domains use.

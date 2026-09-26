@@ -1226,3 +1226,37 @@ fn page_endpoint_profiles_cpu_and_heap() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_captures_a_dom_snapshot() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let snapshot = client.result(
+        "DOMSnapshot.captureSnapshot",
+        obj! { "computedStyles" => Json::Array(Vec::new()) },
+    );
+    let documents = snapshot.get("documents").unwrap().as_array().unwrap();
+    assert_eq!(documents.len(), 1);
+    let nodes = documents[0].get("nodes").unwrap();
+    let node_type = nodes.get("nodeType").unwrap().as_array().unwrap();
+    assert_eq!(node_type.len(), 4);
+    let parent_index = nodes.get("parentIndex").unwrap().as_array().unwrap();
+    assert_eq!(parent_index[0].as_f64(), Some(-1.0));
+    assert_eq!(parent_index[1].as_f64(), Some(0.0));
+    assert_eq!(parent_index[3].as_f64(), Some(2.0));
+
+    let strings = snapshot.get("strings").unwrap().as_array().unwrap();
+    let node_name = nodes.get("nodeName").unwrap().as_array().unwrap();
+    let text_name_index = node_name[3].as_f64().unwrap() as usize;
+    assert_eq!(strings[text_name_index].as_str(), Some("#text"));
+    let node_value = nodes.get("nodeValue").unwrap().as_array().unwrap();
+    let text_value_index = node_value[3].as_f64().unwrap() as usize;
+    assert_eq!(strings[text_value_index].as_str(), Some("Hello"));
+
+    let backend = nodes.get("backendNodeId").unwrap().as_array().unwrap();
+    assert_eq!(backend[3].as_f64(), Some(6.0));
+
+    shutdown.store(true, Ordering::Relaxed);
+}

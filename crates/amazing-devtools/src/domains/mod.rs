@@ -8,6 +8,7 @@ pub mod accessibility;
 pub mod css;
 pub mod debugger;
 pub mod dom;
+pub mod dom_snapshot;
 pub mod emulation;
 pub mod fetch;
 pub mod heap_profiler;

@@ -202,6 +202,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Debugger" => domains::debugger::dispatch(session, request),
         "Profiler" => domains::profiler::dispatch(session, request),
         "HeapProfiler" => domains::heap_profiler::dispatch(session, request),
+        "DOMSnapshot" => domains::dom_snapshot::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }

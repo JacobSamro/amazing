@@ -11,14 +11,14 @@ use std::sync::{Arc, Mutex};
 
 use crate::host::{
     AxNode, BoxModel, ConsoleEvent, CpuProfile, CpuProfileNode, DeviceMetrics, DevToolsHost,
-    DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
-    FetchDecision, FetchPattern, FrameInfo, FrameResourceTree, FrameTree, HighlightConfig,
-    HostError, HostInfo, HeapUsage, InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent,
-    LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent,
-    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
-    Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams,
-    ScriptInfo, ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo,
-    TouchEvent, Viewport,
+    DevToolsSession, DomSnapshotDocument, DomSnapshotNode, EngineNodeId, EvaluateParams,
+    EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo, FrameResourceTree,
+    FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage, InterceptedRequest, KeyEvent,
+    LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent,
+    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent,
+    PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
+    ScreenshotParams, ScriptInfo, ScriptLocation, SecurityState, TargetEvent, TargetEventKind,
+    TargetInfo, TouchEvent, Viewport,
 };
 use std::collections::HashMap;
 use crate::json::Json;
@@ -188,6 +188,8 @@ pub struct MockScript {
     pub heap_object_id: String,
     /// Value returned by `HeapProfiler.getObjectByHeapObjectId`.
     pub heap_object_lookup: RemoteObject,
+    /// Documents returned by `DOMSnapshot.captureSnapshot`.
+    pub dom_snapshot: Vec<DomSnapshotDocument>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -388,6 +390,44 @@ impl Default for MockScript {
             garbage_collections: 0,
             heap_object_id: "heap-1".into(),
             heap_object_lookup: RemoteObject::number(9.0),
+            dom_snapshot: vec![DomSnapshotDocument {
+                document_url: "about:blank".into(),
+                base_url: "about:blank".into(),
+                nodes: vec![
+                    DomSnapshotNode {
+                        node_type: 9,
+                        node_name: "#document".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(1),
+                        attributes: Vec::new(),
+                        children: vec![1],
+                    },
+                    DomSnapshotNode {
+                        node_type: 1,
+                        node_name: "BODY".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(3),
+                        attributes: Vec::new(),
+                        children: vec![2],
+                    },
+                    DomSnapshotNode {
+                        node_type: 1,
+                        node_name: "DIV".into(),
+                        node_value: String::new(),
+                        backend_node_id: EngineNodeId(4),
+                        attributes: vec![("id".into(), "main".into())],
+                        children: vec![3],
+                    },
+                    DomSnapshotNode {
+                        node_type: 3,
+                        node_name: "#text".into(),
+                        node_value: "Hello".into(),
+                        backend_node_id: EngineNodeId(6),
+                        attributes: Vec::new(),
+                        children: Vec::new(),
+                    },
+                ],
+            }],
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -1354,6 +1394,13 @@ impl DevToolsSession for MockSession {
         _object_group: Option<&str>,
     ) -> Result<RemoteObject, HostError> {
         Ok(self.script.lock().unwrap().heap_object_lookup.clone())
+    }
+
+    fn capture_dom_snapshot(
+        &mut self,
+        _computed_styles: &[String],
+    ) -> Result<Vec<DomSnapshotDocument>, HostError> {
+        Ok(self.script.lock().unwrap().dom_snapshot.clone())
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {
