@@ -2075,3 +2075,11 @@ exact base. Frozen candidate binary and source hashes recorded in gate.json.
 Next: merge local dev for JS realms, then remaining legacy reflected attributes.
 Iframe-dependent Range remains deferred pending HTML-25 part 2. WebSocket is
 owned by net and removed from this lane's queue.
+
+## Remaining obsolete reflection — complete
+
+Completed remaining obsolete HTML reflection: `e78c8e4c`, fixed base `270e9735` (includes JSRT realms). Adds 98 attributes on 32 interfaces, aliases and correct receiver checks, legacy-null/boolean/numeric/URL conversions. Driver regression includes conversion boundaries, UTF16, aliasing and cloning.
+
+Linux workspace **2874 passed /10 skipped**, doctests **4/4**. Whole333-source nodes/collections/obsolete API corpus: **8159→8165 pass**, **752→746 fail**, **six gains /zero lost passes**. Five script event/htmlFor assertions and one moveBefore name-map assertion improve. Files158→160 pass,103→102 fail,38→37 timeout,27 unsupported and7 harness errors unchanged;6 subtest errors unchanged. Node-compareDocumentPosition changed timeout→pass with the same1444 passing assertions on both runs; this is deadline variation, not additional conformance credit.
+
+Evidence: crates/amazing-bindings/evidence/obsolete-reflection/. Next: ErrorEvent and PromiseRejectionEvent payloads. Iframe Range remains deferred for HTML-25 part2; JSRT-9..12 are merged. WebSocket belongs to net.
