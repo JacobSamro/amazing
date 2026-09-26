@@ -9,7 +9,9 @@ use image::{Frame, RgbaImage};
 
 use crate::dom_runtime::ShellDomHost;
 use crate::engine_compositor::EngineCompositor;
+use crate::compositor_presenter::{GpuiFrame, GpuiPresenter};
 use crate::session_state::BrowserSession;
+use amazing_compositor::Presenter;
 
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
@@ -136,6 +138,9 @@ article p { display: block; margin: 10px 0px 0px 0px; color: #5f6368; font-size:
 pub struct EngineViewport {
     pub image: Arc<RenderImage>,
     pub compositor: Option<Rc<RefCell<EngineCompositor>>>,
+    scroll_controller: Rc<RefCell<amazing_compositor::ScrollController>>,
+    scroll_presenter: Rc<RefCell<GpuiPresenter>>,
+    scroll_frame: Rc<RefCell<Option<GpuiFrame>>>,
     page: Option<Rc<RetainedPage>>,
     pub width: u32,
     pub height: u32,
@@ -221,6 +226,17 @@ pub struct PageRuntime {
 }
 
 impl PageRuntime {
+    /// Conservative listener gate until shell hit testing maps a pixel to a
+    /// DOM event target. A non-passive listener anywhere keeps wheel on the
+    /// main-thread path.
+    pub fn has_blocking_scroll_listener(&self) -> bool {
+        let host = self.host.borrow();
+        let types = &["wheel", "mousewheel", "touchstart", "touchmove"];
+        (0..host.dom.node_count()).any(|index| {
+            host.dom.has_blocking_listener(
+                amazing_dom::events::EventTarget::Node(amazing_dom::NodeIdx(index as u32)), types)
+        })
+    }
     fn new(
         dom: amazing_dom::Dom,
         document_url: String,
@@ -303,6 +319,7 @@ impl PageRuntime {
         let prevented = self.interpreter.last_event_default_prevented();
         self.snapshot(prevented)
     }
+
 
     pub fn pump(&mut self) -> Option<RuntimeUpdate> {
         let mut ran = false;
@@ -502,6 +519,9 @@ impl EngineViewport {
             frames.push(Self {
                 image,
                 compositor: None,
+                scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
+                scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
+                scroll_frame: Rc::new(RefCell::new(None)),
                 page: None,
                 width: decoded.width,
                 height: decoded.height,
@@ -523,6 +543,9 @@ impl EngineViewport {
         Ok(Self {
             image: Arc::new(rgba_to_render_image(width, height, rgba)),
             compositor: None,
+            scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
+            scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
+            scroll_frame: Rc::new(RefCell::new(None)),
             page: None,
             width,
             height,
@@ -571,6 +594,9 @@ impl EngineViewport {
         Self {
             image,
             compositor,
+            scroll_controller: Rc::new(RefCell::new(amazing_compositor::ScrollController::default())),
+            scroll_presenter: Rc::new(RefCell::new(GpuiPresenter::default())),
+            scroll_frame: Rc::new(RefCell::new(None)),
             page,
             width,
             height,
@@ -604,6 +630,97 @@ impl EngineViewport {
         let mut scene = scene.borrow_mut();
         change(scene.compositor_mut())?;
         scene.update(&view)
+    }
+
+    /// The root viewport is a compositor scroll node. The shell keeps input
+    /// state here so wheel events and keyboard steps share one event queue.
+    pub fn scroll_input(
+        &self,
+        input: amazing_compositor::ScrollInput,
+        blocking_listener: bool,
+    ) -> Result<bool, String> {
+        static CLOCK: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        let now_ms = CLOCK.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.;
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else { return Ok(false) };
+        let result = {
+            let mut scene = scene.borrow_mut();
+            self.scroll_controller.borrow_mut()
+                .handle_input(scene.compositor_mut(), input, blocking_listener, now_ms)
+                .map_err(|error| error.to_string())?
+        };
+        if !matches!(result, amazing_compositor::ScrollInputResult::Scrolled { .. }) {
+            return Ok(false);
+        }
+        let mut fallback = false;
+        let mut frame = {
+            let mut scene = scene.borrow_mut();
+            match scene.compositor_mut().build_cached_frame(self.width, self.height) {
+                Ok(frame) => frame,
+                Err(amazing_compositor::SceneError::MissingCachedTile) => {
+                    fallback = true;
+                    let images = amazing_paint::image::StyledImages {
+                        images: &page.resources, styles: &page.styles,
+                    };
+                    let view = amazing_paint::display_list_view::DisplayListView::new(
+                        &page.root, self.width, self.height, &page.text, &images,
+                        &amazing_paint::controls::NoControls,
+                    );
+                    scene.update(&view)?;
+                    scene.compositor_mut().build_cached_frame(self.width, self.height)
+                        .map_err(|error| error.to_string())?
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        };
+        let first = self.scroll_frame.borrow().is_none();
+        let mut scene = scene.borrow_mut();
+        amazing_compositor::add_paint_view_canvas_background(scene.mode(), &mut frame);
+        if first || fallback {
+            frame.resources.uploads = scene.compositor_mut().resource_snapshot().uploads;
+            frame.damage.push(amazing_compositor::Rect::new(
+                0., 0., self.width as f32, self.height as f32));
+        }
+        drop(scene);
+        let presented = self.scroll_presenter.borrow_mut().present(&frame)
+            .map_err(|error| error.to_string())?;
+        *self.scroll_frame.borrow_mut() = Some(presented);
+        Ok(true)
+    }
+
+    pub fn scroll_element(&self) -> Option<gpui::AnyElement> {
+        self.scroll_frame.borrow().as_ref().map(GpuiFrame::element)
+    }
+
+    pub fn root_scroll_id(&self) -> Option<amazing_compositor::ScrollId> {
+        self.compositor.as_ref()?.borrow_mut().compositor_mut().root_scroll_id()
+    }
+
+    pub fn root_scroll_offset(&self) -> (f32, f32) {
+        self.compositor.as_ref().map_or((0., 0.), |scene|
+            scene.borrow_mut().compositor_mut().root_scroll_offset())
+    }
+
+    pub fn root_scroll_fraction(&self) -> Option<f32> {
+        let mut scene = self.compositor.as_ref()?.borrow_mut();
+        let compositor = scene.compositor_mut();
+        let root = compositor.root_scroll_id()?;
+        let max = compositor.scroll_range(root)?.1;
+        (max > 0.).then(|| compositor.root_scroll_offset().1 / max)
+    }
+
+    pub fn root_scroll_thumb(&self) -> Option<(f32, f32)> {
+        let mut scene = self.compositor.as_ref()?.borrow_mut();
+        let compositor = scene.compositor_mut();
+        let root = compositor.root_scroll_id()?;
+        let node = compositor.trees().scroll(root)?;
+        let max = (node.contents.h - node.container.h).max(0.);
+        if max == 0. { return None }
+        let size = (node.container.h / node.contents.h).clamp(0.06, 1.);
+        Some((node.offset.1 / max * (1. - size), size))
+    }
+
+    pub fn take_scroll_events(&self) -> Vec<amazing_compositor::AsyncScrollEvent> {
+        self.scroll_controller.borrow_mut().take_scroll_events()
     }
 
     pub fn link_hit_at(&self, x: f32, y: f32) -> Option<(u32, &str)> {
@@ -720,9 +837,6 @@ fn render_dom_with_resources(
         &text,
         &resources,
     );
-    let page_height = amazing_layout::layout_overflow_bottom(&root)
-        .ceil()
-        .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
     let links = document_url
         .map(|url| collect_link_regions(dom, &root, url))
         .unwrap_or_default();
@@ -734,7 +848,7 @@ fn render_dom_with_resources(
     let surface = amazing_paint::paint_document_with_text_resources_and_controls(
         &root,
         VIEWPORT_WIDTH,
-        page_height,
+        VIEWPORT_HEIGHT,
         &text,
         &images,
         &amazing_paint::controls::NoControls,
@@ -742,12 +856,12 @@ fn render_dom_with_resources(
     let view = amazing_paint::display_list_view::DisplayListView::new(
         &root,
         VIEWPORT_WIDTH,
-        page_height,
+        VIEWPORT_HEIGHT,
         &text,
         &images,
         &amazing_paint::controls::NoControls,
     );
-    let compositor = match EngineCompositor::new(&view, VIEWPORT_WIDTH, page_height) {
+    let compositor = match EngineCompositor::new(&view, VIEWPORT_WIDTH, VIEWPORT_HEIGHT) {
         Ok(scene) => Some(scene),
         Err(error) => {
             eprintln!("amazing shell: compositor scene failed: {error}");
@@ -1609,32 +1723,34 @@ fn descriptor_range(
 ) -> Result<FontDescriptorRange, String> {
     let mut parts = value.split_whitespace().map(|part| {
         if part.eq_ignore_ascii_case("normal") {
-            return Ok(default);
+            return Ok(default as f32);
         }
         if part.eq_ignore_ascii_case("bold") && !percentage {
-            return Ok(700);
+            return Ok(700.0);
         }
         let part = if percentage {
             part.strip_suffix('%').ok_or("expected percentage")?
         } else {
             part
         };
-        part.parse::<u16>().map_err(|_| "invalid descriptor range")
+        part.parse::<f32>().ok()
+            .filter(|value| value.is_finite() && *value >= 1.0 && *value <= 1000.0)
+            .ok_or("invalid descriptor range")
     });
     let min = parts
         .next()
         .transpose()
         .map_err(str::to_owned)?
-        .unwrap_or(default);
+        .unwrap_or(default as f32);
     let max = parts
         .next()
         .transpose()
         .map_err(str::to_owned)?
         .unwrap_or(min);
-    if parts.next().is_some() || min < 1 || max < min || max > 1000 {
+    if parts.next().is_some() || min < 1.0 || max < 1.0 || min > 1000.0 || max > 1000.0 {
         return Err("invalid descriptor range".into());
     }
-    Ok(FontDescriptorRange { min, max })
+    Ok(FontDescriptorRange { min: min.min(max), max: min.max(max) })
 }
 
 fn parse_unicode_ranges(value: &str) -> Result<Vec<UnicodeRange>, String> {
@@ -2433,12 +2549,21 @@ mod tests {
 
 
     #[test]
-    fn tall_documents_keep_their_painted_height() {
+    fn tall_documents_keep_a_fixed_viewport_and_scroll_root() {
         let viewport = EngineViewport::from_document(
             "<main><p>top</p><div></div><p>bottom</p></main>",
             "main { padding: 20px; } div { display: block; height: 900px; }",
         );
         assert_eq!(viewport.width, 960);
-        assert!(viewport.height > 900, "height was {}", viewport.height);
+        assert_eq!(viewport.height, VIEWPORT_HEIGHT);
+        let root = viewport.root_scroll_id().expect("document viewport scroll node");
+        let range = viewport.compositor.as_ref().unwrap().borrow_mut()
+            .compositor_mut().scroll_range(root).unwrap();
+        assert!(range.1 > 300., "scrollable range was {range:?}");
+        assert!(viewport.scroll_input(amazing_compositor::ScrollInput::Keyboard {
+            node: root, key: amazing_compositor::ScrollKey::ArrowDown,
+        }, false).unwrap());
+        assert!(viewport.root_scroll_offset().1 > 0.);
+        assert!(viewport.scroll_element().is_some());
     }
 }
