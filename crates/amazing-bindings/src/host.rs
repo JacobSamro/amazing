@@ -72,6 +72,7 @@ impl InterfaceBrand {
     pub const LOCATION: Self = Self(34);
     pub const DOM_STRING_LIST: Self = Self(35);
     pub const SELECTION: Self = Self(36);
+    pub const DOM_STRING_MAP: Self = Self(37);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -82,6 +83,7 @@ pub enum Interface {
     Attr,
     NamedNodeMap,
     DOMTokenList,
+    DOMStringMap,
     Location,
     DOMStringList,
     Document,
@@ -92,6 +94,7 @@ pub enum Interface {
     Element,
     HTMLElement,
     SVGElement,
+    MathMLElement,
     HTMLHtmlElement,
     HTMLHeadElement,
     HTMLTitleElement,
@@ -301,6 +304,7 @@ pub enum Operation {
     DocumentImportNode,
     DocumentForms,
     DocumentImages,
+    DocumentEmbeds, DocumentAnchors, DocumentApplets,
     DocumentLinks,
     DocumentScripts,
     DocumentActiveElement,
@@ -518,6 +522,8 @@ pub enum Operation {
     RangeIsPointInRange,
     RangeComparePoint,
     RangeStringifier,
+    ElementDataset, DatasetGet, DatasetSet, DatasetDelete, DatasetIndexedGet,
+    DatasetIndexCount, DatasetSupportedNames,
     GetSelection, SelectionAnchorNode, SelectionAnchorOffset,
     SelectionFocusNode, SelectionFocusOffset, SelectionIsCollapsed,
     SelectionRangeCount, SelectionGetRangeAt, SelectionAddRange,

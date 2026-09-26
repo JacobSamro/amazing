@@ -170,7 +170,10 @@ impl RetainedPropertyScene {
         let AttributeStyleUpdate::CompositorOnly(delta) = update else {
             return Err(PropertySceneError::NeedsFullRendering);
         };
-        if styles.get(delta.node).is_none() {
+        // CSS may classify resolved effect values as compositor-only before
+        // paint supplies raw effect groups/reference spaces. Never acknowledge
+        // those values while this adapter can apply only opacity/transform.
+        if !delta.effects.is_empty() || styles.get(delta.node).is_none() {
             return Err(PropertySceneError::NeedsFullRendering);
         }
         let generation = dom.node_generation(delta.node).ok_or(PropertySceneError::StaleNode)?;
@@ -260,6 +263,49 @@ mod property_scene_tests {
         AnimationTiming, CompositorAnimation,
     };
     use std::cell::Cell;
+
+    #[test]
+    fn css_effect_delta_requires_full_rendering_without_partial_opacity_or_style_commit() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        dom.set_attribute(element, "class", "base").unwrap();
+        let sheet = amazing_css::parse_stylesheet(
+            ".base { opacity:.4; filter:blur(1px) } .changed { opacity:.6; filter:blur(2px) }");
+        let invalidator = amazing_css::StyleInvalidator::new(&[sheet.clone()], 1);
+        let mut styles = amazing_css::compute(&dom, &[sheet]);
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 0.4, BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1, state: PropertyTreeState { effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.), reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(32, 32);
+        source.clear([0, 128, 0, 255]);
+        let first = compositor.build_frame(&source, 32, 32).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let key = NodePropertyKey { node: element.0, generation, property: BoundProperty::Opacity };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal, 32, 32).unwrap();
+        let before_frame = scene.apply_property_only(&dom, &[]).unwrap();
+        let before = presenter.present(&before_frame).unwrap();
+        let old_opacity = styles.get(element).unwrap().get("opacity").unwrap().to_owned();
+        dom.set_attribute(element, "class", "changed").unwrap();
+        let update = invalidator.update_attribute(&dom, &styles, element, "class",
+            Some("base"), Some("changed"), 1);
+        let AttributeStyleUpdate::CompositorOnly(delta) = &update else {
+            panic!("fixture must exercise a CSS effect delta");
+        };
+        assert!(!delta.effects.is_empty());
+        assert_eq!(delta.opacity, Some(0.6));
+        assert!(matches!(scene.apply_attribute_style_update(&dom, &mut styles, &update),
+            Err(PropertySceneError::NeedsFullRendering)));
+        assert_eq!(styles.get(element).unwrap().get("opacity"), Some(old_opacity.as_str()));
+        assert_eq!(styles.get(element).unwrap().get("filter"), Some("blur(1px)"));
+        let unchanged = scene.apply_property_only(&dom, &[]).unwrap();
+        assert_eq!(presenter.present(&unchanged).unwrap(), before);
+    }
 
     #[test]
     fn css13b_opacity_class_mutation_skips_upstream_and_matches_full_frame() {

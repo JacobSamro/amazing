@@ -1,0 +1,3236 @@
+{
+  "source": "working-tree-on-c7b0c3c2",
+  "platform": "Linux Boat pooled dom-bindings",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "directories": [
+    "dom/collections",
+    "html/dom/elements/global-attributes"
+  ],
+  "excluded_non_testharness": [
+    "dom/collections/childnodes-messagechannel-crash.html",
+    "html/dom/elements/global-attributes/dir-auto-dynamic-simple-dataChange.html",
+    "html/dom/elements/global-attributes/dir-auto-dynamic-simple-ref.html",
+    "html/dom/elements/global-attributes/dir-auto-dynamic-simple-replace.html",
+    "html/dom/elements/global-attributes/dir-auto-dynamic-simple-textContent.html",
+    "html/dom/elements/global-attributes/dir-shadow-01-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-01.html",
+    "html/dom/elements/global-attributes/dir-shadow-02-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-02.html",
+    "html/dom/elements/global-attributes/dir-shadow-03-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-03.html",
+    "html/dom/elements/global-attributes/dir-shadow-04-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-04.html",
+    "html/dom/elements/global-attributes/dir-shadow-05-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-05.html",
+    "html/dom/elements/global-attributes/dir-shadow-06-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-06.html",
+    "html/dom/elements/global-attributes/dir-shadow-07-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-07.html",
+    "html/dom/elements/global-attributes/dir-shadow-08-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-08.html",
+    "html/dom/elements/global-attributes/dir-shadow-09-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-09.html",
+    "html/dom/elements/global-attributes/dir-shadow-10-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-10.html",
+    "html/dom/elements/global-attributes/dir-shadow-11-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-11.html",
+    "html/dom/elements/global-attributes/dir-shadow-12-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-12.html",
+    "html/dom/elements/global-attributes/dir-shadow-13-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-13.html",
+    "html/dom/elements/global-attributes/dir-shadow-14-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-14.html",
+    "html/dom/elements/global-attributes/dir-shadow-15-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-15.html",
+    "html/dom/elements/global-attributes/dir-shadow-16-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-16.html",
+    "html/dom/elements/global-attributes/dir-shadow-17-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-17.html",
+    "html/dom/elements/global-attributes/dir-shadow-18-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-18.html",
+    "html/dom/elements/global-attributes/dir-shadow-19-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-19.html",
+    "html/dom/elements/global-attributes/dir-shadow-20-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-20.html",
+    "html/dom/elements/global-attributes/dir-shadow-21-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-21.html",
+    "html/dom/elements/global-attributes/dir-shadow-22-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-22.html",
+    "html/dom/elements/global-attributes/dir-shadow-23-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-23.html",
+    "html/dom/elements/global-attributes/dir-shadow-24-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-24.html",
+    "html/dom/elements/global-attributes/dir-shadow-25-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-25.html",
+    "html/dom/elements/global-attributes/dir-shadow-26-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-26.html",
+    "html/dom/elements/global-attributes/dir-shadow-27-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-27.html",
+    "html/dom/elements/global-attributes/dir-shadow-28-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-28.html",
+    "html/dom/elements/global-attributes/dir-shadow-29-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-29.html",
+    "html/dom/elements/global-attributes/dir-shadow-30-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-30.html",
+    "html/dom/elements/global-attributes/dir-shadow-31-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-31.html",
+    "html/dom/elements/global-attributes/dir-shadow-32-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-32.html",
+    "html/dom/elements/global-attributes/dir-shadow-33-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-33.html",
+    "html/dom/elements/global-attributes/dir-shadow-34-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-34.html",
+    "html/dom/elements/global-attributes/dir-shadow-35-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-35.html",
+    "html/dom/elements/global-attributes/dir-shadow-36-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-36.html",
+    "html/dom/elements/global-attributes/dir-shadow-37-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-37.html",
+    "html/dom/elements/global-attributes/dir-shadow-38-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-38.html",
+    "html/dom/elements/global-attributes/dir-shadow-39-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-39.html",
+    "html/dom/elements/global-attributes/dir-shadow-40-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-40.html",
+    "html/dom/elements/global-attributes/dir-shadow-41-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-41.html",
+    "html/dom/elements/global-attributes/dir-shadow-42-ref.html",
+    "html/dom/elements/global-attributes/dir-shadow-42.html",
+    "html/dom/elements/global-attributes/dir_auto-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-L.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-N-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-N-L.html",
+    "html/dom/elements/global-attributes/dir_auto-N-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-N-R.html",
+    "html/dom/elements/global-attributes/dir_auto-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-bdi-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-bdi-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-bdi-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-bdi-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir_auto-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir_auto-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir_auto-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-dir_auto-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-script-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-script-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-script-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-script-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-style-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-style-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-style-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-style-R.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-textarea-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-textarea-L.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-textarea-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-contained-textarea-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-N-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-L-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-L.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-N-R.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-R-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-input-script-R.html",
+    "html/dom/elements/global-attributes/dir_auto-isolate-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-isolate.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-N-between-Rs-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-N-between-Rs.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-mixed-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-pre-mixed.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-N-between-Rs-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-N-between-Rs.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-mixed-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-mixed.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-N-EN-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-N-EN.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-N-between-Rs-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-N-between-Rs.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-mixed-ref.html",
+    "html/dom/elements/global-attributes/dir_auto-textarea-script-mixed.html",
+    "html/dom/elements/global-attributes/lang-xmllang-01-ref.html",
+    "html/dom/elements/global-attributes/lang-xmllang-01.html",
+    "html/dom/elements/global-attributes/lang-xyzzy-ref.html",
+    "html/dom/elements/global-attributes/lang-xyzzy.html",
+    "html/dom/elements/global-attributes/style-01-ref.html",
+    "html/dom/elements/global-attributes/style-01.html",
+    "html/dom/elements/global-attributes/title-manual.html"
+  ],
+  "binary_sha256": "890d9ec7877b5017d731dd43227ef9a8fdfce98f162ce5e881cf848dc9d084ba",
+  "results": [
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-as-prototype.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLCollection as a prototype should not allow getting .length on the base object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection as a prototype and setting own properties",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-delete.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 2,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Loose id",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Strict id",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        },
+        {
+          "name": "Loose name",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Strict name",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-empty-name.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Empty string as a name for Document.getElementsByTagName",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Element.getElementsByTagName",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Document.getElementsByTagNameNS",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Element.getElementsByTagNameNS",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Document.getElementsByClassName",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Element.getElementsByClassName",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Empty string as a name for Element.children",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-iterator.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 4,
+        "fail": 2,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLCollection has length method.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection does not have iterable's values method.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection does not have iterable's entries method.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection does not have iterable's forEach method.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection has Symbol.iterator.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "HTMLCollection is iterable via for-of loop.",
+          "status": 1,
+          "message": "value is not iterable"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-live-mutations.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 4,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLCollection live mutations: HTMLCollection.length",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection live mutations: HTMLCollection.item(index)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection live mutations: HTMLCollection[index]",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection live mutations: HTMLCollection.namedItem(index)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection live mutations: HTMLCollection ownPropertyNames",
+          "status": 1,
+          "message": "${function_name}: ${description}unexpected property ${p}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-own-props.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 7,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Setting non-array index while named property exists (loose)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting non-array index while named property exists (strict)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting non-array index while named property doesn't exist (loose)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting non-array index while named property doesn't exist (strict)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting array index while indexed property exists (loose)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting array index while indexed property exists (strict)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting array index while indexed property doesn't exist (loose)",
+          "status": 1,
+          "message": "indexed property has no setter"
+        },
+        {
+          "name": "Setting array index while indexed property doesn't exist (strict)",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-supported-property-indices.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 5,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Handling of property names that look like negative integers",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Handling of property names that look like small nonnegative integers",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Handling of property names that look like integers around 2^31",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (undefined) ${expected} but got (object) ${actual}"
+        },
+        {
+          "name": "Handling of property names that look like integers around 2^32",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (undefined) ${expected} but got (object) ${actual}"
+        },
+        {
+          "name": "Trying to set an expando that would shadow an already-existing indexed property",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        },
+        {
+          "name": "Trying to set an expando with an indexed property name past the end of the list",
+          "status": 1,
+          "message": "indexed property has no setter"
+        },
+        {
+          "name": "Trying to delete an indexed property name should never work",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-supported-property-names.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 5,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Object.getOwnPropertyNames on HTMLCollection",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        },
+        {
+          "name": "Object.getOwnPropertyNames on HTMLCollection with non-HTML namespace",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        },
+        {
+          "name": "Object.getOwnPropertyNames on HTMLCollection with expando object",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        },
+        {
+          "name": "Trying to set an expando that would shadow an already-existing named property",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        },
+        {
+          "name": "Trying to set an expando that shadows a named property that gets added later",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Trying to set a non-configurable expando that shadows a named property that gets added later",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/domstringmap-supported-property-names.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Object.getOwnPropertyNames on DOMStringMap, empty data attribute",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.getOwnPropertyNames on DOMStringMap, data attribute trailing hyphen",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.getOwnPropertyNames on DOMStringMap, multiple data attributes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.getOwnPropertyNames on DOMStringMap, attribute set on dataset in JS",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Object.getOwnPropertyNames on DOMStringMap, attribute set on element in JS",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/namednodemap-supported-property-names.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Object.getOwnPropertyNames on NamedNodeMap",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        },
+        {
+          "name": "Object.getOwnPropertyNames on NamedNodeMap of input",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        },
+        {
+          "name": "Object.getOwnPropertyNames on NamedNodeMap after attribute removal",
+          "status": 1,
+          "message": "${function_name}: ${description}lengths differ, expected array ${expected} length ${expectedLength}, got ${actual} length ${actualLength}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/cdata-dir_auto.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 4,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Content of CDATA is ignored for dir=auto in html document",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "Text in CDATASection is considered when determining auto directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}Unhandled rejection with value: ${value}"
+        },
+        {
+          "name": "Directionality is updated when removing CDATASection",
+          "status": 1,
+          "message": "${function_name}: ${description}Unhandled rejection with value: ${value}"
+        },
+        {
+          "name": "Directionality is updated when changing text of CDATASection",
+          "status": 1,
+          "message": "${function_name}: ${description}Unhandled rejection with value: ${value}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/classlist-nonstring.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "classList: non-string contains 1",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains 2",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains 3",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains 4",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains 5",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains 6",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList: non-string contains",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/custom-attrs.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "error",
+      "harness_status": null,
+      "detail": "resource /dom/nodes/attributes.js: No such file or directory (os error 2)",
+      "file_counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "error": 1,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": []
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/data_unicode_attr.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "dataset - SBCS",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dataset - UNICODE",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-binding.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 2,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Getting property descriptor for key 9",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting property for key 9 with accessor property on prototype",
+          "status": 1,
+          "message": "${function_name}: ${description}Reached unreachable code"
+        },
+        {
+          "name": "Getting property descriptor for key x",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting property for key x with accessor property on prototype",
+          "status": 1,
+          "message": "${function_name}: ${description}Reached unreachable code"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-delete.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 9,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Deleting element.dataset['foo'] should also remove an attribute with name 'data-foo' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['fooBar'] should also remove an attribute with name 'data-foo-bar' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['-'] should also remove an attribute with name 'data--' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['Foo'] should also remove an attribute with name 'data--foo' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['-foo'] should not remove an attribute with name 'data--foo' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['-Foo'] should also remove an attribute with name 'data---foo' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset[''] should also remove an attribute with name 'data-' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['\u00e0'] should also remove an attribute with name 'data-\u00e0' should it exist.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Deleting element.dataset['foo'] should not throw if even if the element does now have an attribute with the name data-foo.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-enumeration.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "A dataset should be enumeratable.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Only attributes who qualify as dataset properties should be enumeratable in the dataset.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-get.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 10,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Getting element.dataset['foo'] should return the value of element.getAttribute('data-foo')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['fooBar'] should return the value of element.getAttribute('data-foo-bar')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['-'] should return the value of element.getAttribute('data--')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['Foo'] should return the value of element.getAttribute('data--foo')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['-Foo'] should return the value of element.getAttribute('data---foo')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['foo'] should return the value of element.getAttribute('data-Foo')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset[''] should return the value of element.getAttribute('data-')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['\u00e0'] should return the value of element.getAttribute('data-\u00e0')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Getting element.dataset['toString'] should return the value of element.getAttribute('data-to-string')'",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Tests that an attribute named dataFoo does not make an entry in the dataset DOMStringMap.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-prototype.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "An elements dataset property is an instance of a DOMStringMap",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Properties on Object.prototype should shine through.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset-set.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 11,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Setting element.dataset['foo'] should also change the value of element.getAttribute('data-foo')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['fooBar'] should also change the value of element.getAttribute('data-foo-bar')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['-'] should also change the value of element.getAttribute('data--')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['Foo'] should also change the value of element.getAttribute('data--foo')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['-Foo'] should also change the value of element.getAttribute('data---foo')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset[''] should also change the value of element.getAttribute('data-')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['\u00e0'] should also change the value of element.getAttribute('data-\u00e0')",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['-foo'] should throw a SYNTAX_ERR",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['foo '] should throw an INVALID_CHARACTER_ERR",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['\u037efoo'] should not throw.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Setting element.dataset['\u0bc6foo'] should also change the value of element.getAttribute('\u0bc6foo')",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dataset.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTML elements should have a .dataset",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Should return 'undefined' before setting an attribute",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Should return 'value' if that's the value",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Should return the empty string if that's the value",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Should return 'undefined' after removing an attribute",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Should not have a .dataset on random elements",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "SVG elements should have a .dataset",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "MathML elements should have a .dataset",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-assorted.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 27,
+        "fail": 14,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Root element has a direction",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Element outside the document tree has a direction",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-HTML element outside the document tree has a direction",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Element without direction has parent element direction",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-HTML element without direction has parent element direction",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dir inheritance is correct after insertion and removal from document",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-HTML element text contents influence dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "style element text contents do not influence dir=auto",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "script element text contents do not influence dir=auto",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "non-html style element text contents influence dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "non-html script element text contents influence dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "non-html input element text contents influence dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "non-html textarea element text contents influence dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "text changes apply to dir=auto on further ancestor after removing dir=auto from closer ancestor",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "text changes apply to dir=auto on further ancestor after removing dir=ltr from closer ancestor",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr with LTR contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr with LTR contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr with RTL contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr with RTL contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr empty in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=ltr empty in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl with LTR contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl with LTR contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl with RTL contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl with RTL contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl empty in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=rtl empty in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto with LTR contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto with LTR contents in rtl parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto with RTL contents in ltr parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto with RTL contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto empty in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto empty in rtl parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto numbers in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: dir=auto numbers in rtl parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute with LTR contents in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute with LTR contents in rtl parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute with RTL contents in ltr parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute with RTL contents in rtl parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute empty in ltr parent",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "directionality of bdi elements: no dir attribute empty in rtl parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-auto-div-append-child.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "dir auto: updates on appendChild",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-auto-dynamic-changes.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 19,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "dynamic insertion of RTL text in a child element",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "dir=auto changes for content insertion and removal, in and out of document",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "dir=auto changes for slot reassignment",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "text changes affecting both slot and ancestor with dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "dynamic changes to subtrees excluded as a result of the dir attribute",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "dynamic changes inside of non-HTML elements",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "slotted non-HTML elements",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "slotted non-HTML elements after dynamically assigning dir=auto, and dir attribute ignored on non-HTML elements",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "dir=auto ancestor considers text in subtree after removing dir=ltr from it",
+          "status": 1,
+          "message": "${function_name}: ${description}expected false got ${actual}"
+        },
+        {
+          "name": "Slotted content affects multiple dir=auto slots",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "Removing slotted content resets direction on dir=auto slot",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "Removing child of slotted content changes direction on dir=auto slot",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "Child directionality gets updated when dir=auto is set on parent",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "dir=auto slot is not affected by text in value of input element children",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "input direction changes if it stops being auto-directionality form-associated",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "Input that becomes auto directionality associated but is dir=ltr stays LTR",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "slot provides updated directionality from host to a dir=auto container",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "text input and textarea value changes should only be reflected in :dir() when dir=auto (value changes)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "slot removal resets parent's dependency on host directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "slot removal can impact multiple dir=auto nodes",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "slot insertion makes parent dependent on host directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-auto-form-associated.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 11,
+        "fail": 11,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "<input dir=auto type=hidden> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=text> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=search> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=tel> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=url> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=email> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=password> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=submit> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=reset> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=button> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "<input dir=auto type=date> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=month> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=week> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=time> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=datetime-local> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=number> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=range> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=color> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=checkbox> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=radio> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<input dir=auto type=image> directionality",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "<textarea dir=auto> directionality",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-bdi-script.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "BDI test: Directionality",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-not-changed-text-input-typing.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "entering LTR text doesn't change directionality of a text input without dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}Unhandled rejection with value: ${value}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/dir-slots-directionality.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 11,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Slots: Directionality: dir=rtl on slot",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "Slots: Directionality: dir=rtl on host",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "Slots: Directionality: dir=auto on host with Arabic shadow tree content",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "Slots: Directionality: dir=auto in shadow tree with Arabic light tree content",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "Slots: Directionality: dir=auto in shadow tree with Arabic shadow tree content",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "Slots: Directionality: dir=auto on slot with Arabic light tree content",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        },
+        {
+          "name": "slot provides its directionality (from host) to a dir=auto container",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "children with dir attribute are skipped by dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "slot with dir attribute is skipped by dir=auto",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "dir=auto slot ignores assigned nodes with dir attribute",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dir=auto slot ignores text in bdi assigned nodes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dir=auto slot ignores text in value of input element children",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "dir=auto slot is not affected by value of auto-directionality form associated elements",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "inner slot is given directionality from slotted content",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "dir=auto slot is not affected by content inside inner slot (version 1)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "dir=auto slot is not affected by content inside inner slot (version 2)",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/document-dir.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Markup attribute",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (string) ${expected} but got (undefined) ${actual}"
+        },
+        {
+          "name": "Setting the idl attribute to a garbage value",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "Setting the idl attribute to the empty string",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/id-attribute.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 11,
+        "fail": 6,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "User agents must associate the element with an id value for purposes of getElementById.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Association is exact and therefore case-sensitive for getElementById.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Spaces are allowed in an id and still make an association for getElementByID.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-ASCII is allowed in an id and still make an association for getElementById.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "User agents must associate the element with an id value for purposes of CSS.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Association for CSS is exact and therefore case-sensitive.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Spaces are allowed in an id and still make an association.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Non-ASCII is allowed in an id and still make an association for CSS.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "The id IDL attribute must reflect the id content attribute, for getting.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "The id IDL attribute must reflect the id content attribute, for setting via IDL attribute.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via id attribute, getElementById find the element by the new id.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via id attribute, getElementById doesn't find the element by the old id.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via id attribute, CSS association is via the new ID.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "The id IDL attribute must reflect the id content attribute, for setting via setAttribute.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via setAttribute attribute, getElementById find the element by the new id.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via setAttribute attribute, getElementById doesn't find the element by the old id.",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "After setting id via setAttribute attribute, CSS association is via the new ID.",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/id-name-specialcase.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "id with digits only",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "id start with digits",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "id start with underscore",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "id with punctuation only",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "id with chinese character",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/id-name.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "id and name attributes and getElementById",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/lang-attribute-document-element-replacement.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Disconnected descendants of a replaced document element should resolve lang from their actual ancestor",
+          "status": 1,
+          "message": "cannot access a property on nullish value"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/lang-attribute-shadow.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 4,
+        "fail": 2,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "lang only on slot",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "lang only on host",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "lang on host and slot",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "lang on host and slotted element",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        },
+        {
+          "name": "lang on host and slot and slotted element",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "lang on slot inherits from parent",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/lang-attribute.window.js",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "unnamespaced lang attribute only works on elements in the HTML namespace",
+          "status": 1,
+          "message": "${function_name}: ${description}expected true got ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/mapped-attribute-adopt-001.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Adoption of an unrelated node shouldn't prevent mapped attributes from applying",
+          "status": 1,
+          "message": "getComputedStyle is not defined"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-001.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The browser will recognize a language declared in a lang attribute on the html tag.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-002.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The browser will NOT recognize a language declared in an xml:lang attribute on the html tag.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-003.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The browser will recognize a language declared in the HTTP header, when there is no internal language declaration.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-004.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "The browser will recognize a language declared in a meta element in the head using http-equiv='Content-Language' content='..' (with a single language tag value), when there is no other language declaration inside the document.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-005.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If there is a conflict between the language declarations in the HTTP header and the html element using lang, the browser will recognize the language declared in the html element.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-006.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If there is a conflict between the language declarations in the HTTP header and the Content-Language meta element, the UA will recognize the language declared in the meta element.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-007.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If there is a conflict between the language declared using lang in the html element and that in the meta element, the UA will recognize the language declared in the html element.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-008.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If an element contains a lang attribute with an empty value, the value of a lang attribute higher up the document tree will no longer be applied to the content of that element.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-009.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the HTTP header contains a language declaration but the html element uses an empty lang value, the UA will not recognize the language declared in the HTTP header.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-lang-attribute-010.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "fail",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the meta Content-Language element contains a language declaration but the html element uses an empty lang value, the UA will not recognize the language declared in the meta Content-Language element.",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (number) ${expected} but got (undefined) ${actual}"
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-007.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "In the default case, ie. with no translate attribute in the page, javascript will detect the translation mode of text as translate-enabled.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-008.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the translate attribute is set to yes, javascript will detect the translation mode of text as translate-enabled.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-009.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the translate attribute is set to no, javascript will detect the translation mode of text as no-translate.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-010.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the translate attribute is set to no, javascript will detect the translation mode of elements inside that element with no translate flag as no-translate.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-011.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the translate attribute is set to yes on an element inside an element with the translate attribute set to no, javascript will detect the translation mode of text in the inner element as translate-enabled.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/the-translate-attribute-012.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "If the translate attribute is set to a null string, javascript will detect the translation mode of text as translate-enabled.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/translate-enumerated-ascii-case-insensitive.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "keyword yes",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/translate-inherit-no-parent-element.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "No parent node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "DocumentFragment parent node",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "ShadowRoot parent node whose shadow host has translate=yes",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "ShadowRoot parent node whose shadow host has translate=no",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Document parent node",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "html/dom/elements/global-attributes/translate-non-html-translation-mode.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 20000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 3,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Non-HTML elements default to translate-enabled",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-HTML elements inherit their parent's translation-enabled state",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Non-HTML elements inherit their parent's no-translation state",
+          "status": 0,
+          "message": null
+        }
+      ]
+    }
+  ]
+}

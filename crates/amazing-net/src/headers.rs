@@ -88,9 +88,34 @@ impl Headers {
     }
 }
 
+/// The Fetch/XHR "normalize method" rule: only the standard methods are
+/// uppercased; every other valid token keeps its spelling. Idempotent, so a
+/// transport caller that already normalized a method is unaffected.
+pub fn normalize_method(method: &str) -> String {
+    let upper = method.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "DELETE" | "GET" | "HEAD" | "OPTIONS" | "POST" | "PUT"
+    ) {
+        upper
+    } else {
+        method.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn method_normalization_only_uppercases_standard_methods() {
+        for m in ["get", "Get", "post", "put", "head", "options", "delete"] {
+            assert_eq!(normalize_method(m), m.to_ascii_uppercase());
+        }
+        for m in ["xUNIcorn", "chiCKEN", "patCH", "copy", "inDEX", "move", "FOO"] {
+            assert_eq!(normalize_method(m), m);
+        }
+    }
 
     #[test]
     fn lookup_is_case_insensitive_in_both_directions() {

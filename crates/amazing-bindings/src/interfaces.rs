@@ -239,6 +239,8 @@ const DOCUMENT: &[Member] = &[
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
     getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
+    getter("embeds", O::DocumentEmbeds), getter("plugins", O::DocumentEmbeds),
+    getter("anchors", O::DocumentAnchors), getter("applets", O::DocumentApplets),
     getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
     getter("activeElement", O::DocumentActiveElement),
     method("hasFocus", O::DocumentHasFocus, 0),
@@ -548,6 +550,7 @@ const TEXT: &[Member] = &[
     method("splitText", O::TextSplit, 1),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),
     method("blur", O::ElementBlur, 0),
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
@@ -858,7 +861,9 @@ pub static INTERFACES: &[D] = &[
     },
     D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
     D { interface: I::SVGElement, name: "SVGElement", parent: Some(I::Element), constructor: None,
-        members: &[method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::MathMLElement, name: "MathMLElement", parent: Some(I::Element), constructor: None,
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -1001,6 +1006,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::RangeConstructor),
         members: RANGE,
     },
+    D { interface: I::DOMStringMap, name: "DOMStringMap", parent: None, constructor: None, members: &[] },
     D { interface: I::Selection, name: "Selection", parent: None, constructor: None, members: SELECTION },
     D {
         interface: I::DOMImplementation,
@@ -1257,6 +1263,12 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,
         named_setter: None, named_deleter: None, override_builtins: false,
         unenumerable_names: false,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::DOM_STRING_MAP, LegacyPlatformHooks {
+        supported_index_count: O::DatasetIndexCount, supported_names: Some(O::DatasetSupportedNames),
+        indexed_getter: O::DatasetIndexedGet, indexed_setter: None,
+        named_getter: Some(O::DatasetGet), named_setter: Some(O::DatasetSet), named_deleter: Some(O::DatasetDelete),
+        override_builtins: true, unenumerable_names: false,
     })?;
     host.define_iterable(I::NodeList, IterableKind::Values)?;
     host.define_iterable(I::DOMTokenList, IterableKind::Values)?;
