@@ -89,6 +89,7 @@ pub mod grid;
 mod grid_algorithm;
 pub mod inline;
 pub mod position;
+mod position_constraints;
 pub mod replaced;
 pub mod retained;
 mod svg;
@@ -158,6 +159,8 @@ pub struct LayoutBox {
     pub node: Option<NodeIdx>,
     /// Source-order key for synthetic boxes.
     pub source_order: Option<u64>,
+    /// Last in-flow source slot, including anonymous inline runs.
+    pub(crate) source_end_order: Option<u64>,
     pub(crate) generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
     /// Computed ::first-line style; applied to the first formatted line.
     pub first_line_style: Option<ComputedStyle>,
@@ -187,10 +190,17 @@ pub struct LayoutBox {
     pub(crate) svg_sizing: Option<svg::SvgSizing>,
     pub(crate) table_decoration: table_decoration::TableDecoration,
     pub(crate) table_wrapper: bool,
+    /// CSS2 HTML tables use the legacy border-edge width convention.
+    pub(crate) html_table_width: bool,
     pub(crate) table_colspan: usize,
     pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
     pub(crate) containing_block_height: Option<f32>,
+    /// Direction of the normal containing block, for physical width constraints.
+    pub(crate) containing_block_rtl: bool,
+    /// Available physical height for orthogonal auto sizing; unlike a definite
+    /// containing-block height, this does not resolve percentage heights.
+    pub(crate) available_height: Option<f32>,
     /// Parent grid tracks inherited by a subgrid in either axis.
     pub(crate) grid_subgrid: Option<grid::SubgridContext>,
     /// Resolved track geometry of this box when it is a grid/grid-lanes
@@ -223,6 +233,7 @@ impl LayoutBox {
         LayoutBox {
             node,
             source_order: None,
+            source_end_order: None,
             generated_pseudo: None,
             first_line_style: None,
             outside_marker: false,
@@ -240,9 +251,12 @@ impl LayoutBox {
             svg_sizing: None,
             table_decoration: Default::default(),
             table_wrapper: false,
+            html_table_width: false,
             table_colspan: 1,
             table_rowspan: 1,
             containing_block_height: None,
+            containing_block_rtl: false,
+            available_height: None,
             grid_subgrid: None,
             grid_tracks: None,
             margin: values::SidesM::default(),
@@ -287,9 +301,56 @@ pub struct TextSourceMapping {
     pub source_range: Range<usize>,
 }
 
+/// CSS tab stop spacing, resolved independently of the shaping provider.
+#[derive(Debug, Clone, Copy)]
+pub enum TabSize { Spaces(f32), Length(f32) }
+impl Default for TabSize { fn default() -> Self { Self::Spaces(8.0) } }
+impl TabSize {
+    pub(crate) fn advance(self, position: f32, space: f32) -> f32 {
+        let stop = match self { Self::Spaces(n) => n * space, Self::Length(px) => px };
+        if stop <= 0.0 { return 0.0; }
+        (stop - position.max(0.0).rem_euclid(stop)).max(0.0)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyFormat {
+    pub tab_size: TabSize,
+    pub align: String,
+    pub position: String,
+    pub visibility: String,
+    pub merge: bool,
+    pub minimum_advance: f32,
+}
+impl Default for RubyFormat {
+    fn default() -> Self {
+        Self { tab_size: TabSize::default(), align: "space-around".into(), position: "alternate".into(),
+            visibility: "visible".into(), merge: false, minimum_advance: 0.0 }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NestedRuby {
+    pub range: Range<usize>,
+    pub columns: Vec<RubyColumn>,
+    pub overhang_spaces: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyAnnotation {
+    pub text: RubyText,
+    pub span: usize,
+    pub level: usize,
+    pub hidden: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct RubyText {
     pub node: NodeIdx,
+    /// Raw content is retained for auto-hiding before whitespace processing.
+    pub raw_text: String,
+    pub format: RubyFormat,
+    pub nested: Vec<NestedRuby>,
     pub text: String,
     pub source_mappings: Vec<TextSourceMapping>,
     pub font_size: f32,
@@ -303,6 +364,9 @@ pub struct RubyColumn {
     pub annotation: Option<RubyText>,
     pub annotation_span: usize,
     pub annotation_hidden: bool,
+    /// Higher annotation levels; the legacy fields above represent level zero.
+    pub additional_annotations: Vec<RubyAnnotation>,
+    pub intra_level_whitespace: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -320,6 +384,7 @@ pub enum InlineNode {
         letter_spacing: f32,
         /// Used CSS word spacing; the percentage is relative to the current font size.
         word_spacing: values::LengthPercentage,
+        tab_size: TabSize,
         color: String,
         background_color: String,
         inline_padding: values::Sides,
@@ -512,7 +577,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     }
     block::refresh_atomic_inline_metrics(layout);
     if let Flow::Inlines(items) = &layout.flow {
-        let first_style = items.iter().find_map(|item| match item {
+        let first_style = layout.font_metric_style.as_ref().or_else(|| items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style.as_ref()),
             InlineNode::Ruby { columns, .. } => columns.first().map(|column| column.base.style.as_ref()),
             InlineNode::BidiStart { .. }
@@ -520,7 +585,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             | InlineNode::Break
             | InlineNode::Replaced { .. }
             | InlineNode::Atomic { .. } => None,
-        }).or(layout.font_metric_style.as_ref());
+        }));
         if let Some(style) = first_style
             && let Ok(metrics) = text.metrics(style)
         {
@@ -570,8 +635,14 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 !layout.style.get("white-space").is_some_and(|value| {
                     value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
                 }),
+                layout.first_line_style.as_ref().and_then(|style| style.get("ruby-position")),
+                layout.style.get("text-align").unwrap_or("start"),
+                layout.style.get("text-align-last").unwrap_or("auto"),
+                layout.style.get("unicode-bidi") == Some("plaintext"),
             ) {
-                let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
+                let old_height = if style.writing_mode.is_vertical_flow() {
+                    layout.lines.iter().map(|line| line.height).fold(0.0, f32::max)
+                } else { layout.lines.iter().map(|line| line.height).sum::<f32>() };
                 let new_height = if style.writing_mode.is_vertical_flow() {
                     lines.iter().map(|line| line.height).fold(0.0, f32::max)
                 } else {
@@ -1705,3 +1776,6 @@ mod table_tests;
 
 #[cfg(test)]
 mod contents_tests;
+
+#[cfg(test)]
+mod ruby_tests;

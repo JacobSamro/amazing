@@ -1,0 +1,33 @@
+{
+  "before": "crates/amazing-layout/evidence/layout16/after-paint-full.json",
+  "after": "crates/amazing-layout/evidence/layout18/retained-after.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 449,
+  "before_counts": {
+    "pass": 276,
+    "mismatch": 173,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 277,
+    "mismatch": 172,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-flexbox__flexbox-writing-mode-003.html",
+    "css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-out-of-flow-definite-size-001.html"
+  ],
+  "losses": [
+    "css-sizing__intrinsic-height-abspos-stretch-percentage-child.html"
+  ],
+  "actual_hash_changes": 21,
+  "reference_hash_changes": 6,
+  "before_projection_sha256": "942032053a2663dde5afbbdab77fbc7dc9a5522148d42f4052b108995e7c3e0b",
+  "after_projection_sha256": "5705aa9b5d6e7a9fd4f1ba288a95f36b01f928f431df685b0d4dc349f4607b2c"
+}

@@ -1,0 +1,31 @@
+[
+  {
+    "image": "candidate2/position/CSS2__positioning__right-113.xht/actual.ppm.gz",
+    "red": 0,
+    "black_below_y40": 9216,
+    "black_bounds_below_y40": [
+      104,
+      199,
+      51,
+      146
+    ]
+  },
+  {
+    "image": "candidate2/position/CSS2__positioning__right-113.xht/reference.ppm.gz",
+    "red": 0,
+    "black_below_y40": 0,
+    "black_bounds_below_y40": null
+  },
+  {
+    "image": "before/CSS2__positioning__right-113.xht/actual.ppm.gz",
+    "red": 0,
+    "black_below_y40": 0,
+    "black_bounds_below_y40": null
+  },
+  {
+    "image": "before/CSS2__positioning__right-113.xht/reference.ppm.gz",
+    "red": 0,
+    "black_below_y40": 0,
+    "black_bounds_below_y40": null
+  }
+]

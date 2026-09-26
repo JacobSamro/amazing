@@ -38,6 +38,10 @@ use runtime_host_storage::StorageRuntime;
 mod runtime_host_net;
 use runtime_host_net::{NetNativeEntry, NetRuntime};
 
+#[path = "runtime_host_integrator_assist.rs"]
+mod runtime_host_integrator_assist;
+use runtime_host_integrator_assist::{IaNativeEntry, IaRuntime};
+
 #[path = "runtime_host_messaging.rs"]
 pub(crate) mod runtime_host_messaging;
 use runtime_host_messaging::MessagingOp;
@@ -71,6 +75,7 @@ enum NativeEntry {
     DocumentClose,
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
+    IntegratorAssist(IaNativeEntry),
 }
 
 enum WebObject {
@@ -120,6 +125,7 @@ struct BindingState {
     pending_form_selection_events: Vec<NodeIdx>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
     net: NetRuntime,
+    integrator_assist: IaRuntime,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -607,6 +613,7 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::DocumentClose => adapter.document_close(this),
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
+            NativeEntry::IntegratorAssist(entry) => adapter.invoke_integrator_assist(entry, this, &args),
         }
     })
 }
@@ -656,6 +663,7 @@ pub(crate) fn install(
         pending_form_selection_events: Vec::new(),
         messaging: None,
         net: NetRuntime::new(),
+        integrator_assist: IaRuntime::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
@@ -668,6 +676,7 @@ pub(crate) fn install(
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
     adapter.install_messaging()?;
+    adapter.install_integrator_assist_globals()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
     adapter.install_html_form_globals()?;

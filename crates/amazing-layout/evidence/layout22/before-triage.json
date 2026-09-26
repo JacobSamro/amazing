@@ -1,0 +1,674 @@
+{
+  "counts": {
+    "pass": 229,
+    "mismatch": 750,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 133,
+    "crash": 0
+  },
+  "groups": {
+    "abs-pos": {
+      "pass": 4,
+      "mismatch": 259
+    },
+    "bidi": {
+      "pass": 80
+    },
+    "float": {
+      "mismatch": 36,
+      "pass": 15
+    },
+    "block-flow": {
+      "unsupported": 46,
+      "mismatch": 4
+    },
+    "text-combine": {
+      "mismatch": 23,
+      "pass": 12
+    },
+    "wm-propagation": {
+      "pass": 7,
+      "mismatch": 19
+    },
+    "available-size": {
+      "mismatch": 22,
+      "pass": 1
+    },
+    "sizing-orthog-vlr-in-htb": {
+      "mismatch": 20
+    },
+    "sizing-orthog-vrl-in-htb": {
+      "mismatch": 20
+    },
+    "sizing-orthog-htb-in-vlr": {
+      "unsupported": 10,
+      "mismatch": 7,
+      "pass": 2
+    },
+    "sizing-orthog-htb-in-vrl": {
+      "unsupported": 9,
+      "mismatch": 9
+    },
+    "text-align": {
+      "mismatch": 18
+    },
+    "text-orientation": {
+      "mismatch": 1,
+      "pass": 12
+    },
+    "margin-collapse-vlr": {
+      "mismatch": 9,
+      "pass": 1
+    },
+    "margin-collapse-vrl": {
+      "mismatch": 10
+    },
+    "line-box-direction-slr": {
+      "unsupported": 9
+    },
+    "line-box-direction-srl": {
+      "unsupported": 9
+    },
+    "line-box-direction-vlr": {
+      "unsupported": 9
+    },
+    "line-box-direction-vrl": {
+      "unsupported": 9
+    },
+    "ch-units-vrl": {
+      "mismatch": 8
+    },
+    "clip-rect-vlr": {
+      "pass": 8
+    },
+    "clip-rect-vrl": {
+      "pass": 8
+    },
+    "line-box-height-vlr": {
+      "pass": 3,
+      "mismatch": 5
+    },
+    "sizing-orthog-prct-htb-in-vlr": {
+      "unsupported": 4,
+      "mismatch": 1,
+      "pass": 3
+    },
+    "sizing-orthog-prct-htb-in-vrl": {
+      "unsupported": 4,
+      "mismatch": 4
+    },
+    "sizing-orthog-prct-vlr-in-htb": {
+      "mismatch": 8
+    },
+    "sizing-orthog-prct-vrl-in-htb": {
+      "mismatch": 8
+    },
+    "sizing-orthogonal-percentage-margin": {
+      "mismatch": 8
+    },
+    "text-indent-vlr": {
+      "mismatch": 8
+    },
+    "text-indent-vrl": {
+      "mismatch": 8
+    },
+    "vertical-alignment": {
+      "mismatch": 8
+    },
+    "border-conflict-element-vlr": {
+      "mismatch": 6
+    },
+    "border-conflict-element-vrl": {
+      "mismatch": 6
+    },
+    "direction": {
+      "mismatch": 6
+    },
+    "inline-block-alignment": {
+      "mismatch": 6
+    },
+    "line-box-height-vrl": {
+      "pass": 3,
+      "mismatch": 3
+    },
+    "table-cell-align": {
+      "mismatch": 6
+    },
+    "block-plaintext": {
+      "pass": 4,
+      "mismatch": 1
+    },
+    "vertical-alignment-slr": {
+      "mismatch": 5
+    },
+    "vertical-alignment-srl": {
+      "mismatch": 5
+    },
+    "background-size-document-root-vrl": {
+      "mismatch": 4
+    },
+    "baseline-inline-non-replaced": {
+      "mismatch": 4
+    },
+    "block-override": {
+      "pass": 4
+    },
+    "block-override-isolate": {
+      "pass": 4
+    },
+    "clearance-calculations-vrl": {
+      "mismatch": 4
+    },
+    "contiguous-floated-table-vlr": {
+      "mismatch": 4
+    },
+    "contiguous-floated-table-vrl": {
+      "mismatch": 4
+    },
+    "inline-table-alignment": {
+      "mismatch": 4
+    },
+    "logical-props": {
+      "mismatch": 4
+    },
+    "ortho-htb-alongside-vrl-floats": {
+      "unsupported": 4
+    },
+    "row-progression-vlr": {
+      "unsupported": 4
+    },
+    "row-progression-vrl": {
+      "unsupported": 4
+    },
+    "table-cell-valign": {
+      "mismatch": 4
+    },
+    "table-column-order": {
+      "unsupported": 4
+    },
+    "table-progression-vlr": {
+      "mismatch": 4
+    },
+    "table-progression-vrl": {
+      "mismatch": 4
+    },
+    "background-position-vrl": {
+      "pass": 3
+    },
+    "block-embed": {
+      "pass": 3
+    },
+    "full-width": {
+      "pass": 2,
+      "mismatch": 1
+    },
+    "percent-margin-vlr": {
+      "mismatch": 3
+    },
+    "percent-margin-vrl": {
+      "mismatch": 3
+    },
+    "percent-padding-vlr": {
+      "mismatch": 3
+    },
+    "percent-padding-vrl": {
+      "mismatch": 3
+    },
+    "tcy-white-space-processing": {
+      "pass": 2,
+      "mismatch": 1
+    },
+    "text-baseline-vlr": {
+      "mismatch": 3
+    },
+    "text-baseline-vrl": {
+      "mismatch": 3
+    },
+    "vertical-alignment-vlr": {
+      "mismatch": 3
+    },
+    "vertical-alignment-vrl": {
+      "mismatch": 3
+    },
+    "baseline-inline-replaced": {
+      "mismatch": 2
+    },
+    "border-spacing-vlr": {
+      "mismatch": 2
+    },
+    "border-spacing-vrl": {
+      "mismatch": 2
+    },
+    "box-offsets-rel-pos-vlr": {
+      "pass": 1,
+      "mismatch": 1
+    },
+    "box-offsets-rel-pos-vrl": {
+      "pass": 1,
+      "mismatch": 1
+    },
+    "caption-side-vlr": {
+      "mismatch": 2
+    },
+    "caption-side-vrl": {
+      "mismatch": 2
+    },
+    "central-baseline-alignment": {
+      "mismatch": 2
+    },
+    "different-block-flow-dir": {
+      "mismatch": 2
+    },
+    "horizontal-rule-vlr": {
+      "pass": 2
+    },
+    "horizontal-rule-vrl": {
+      "pass": 2
+    },
+    "img-intrinsic-size-contribution": {
+      "mismatch": 2
+    },
+    "inline-block-alignment-orthogonal-vlr": {
+      "mismatch": 2
+    },
+    "inline-block-alignment-orthogonal-vrl": {
+      "mismatch": 2
+    },
+    "inline-replaced-vlr": {
+      "pass": 2
+    },
+    "inline-replaced-vrl": {
+      "pass": 2
+    },
+    "mongolian-orientation": {
+      "mismatch": 1,
+      "pass": 1
+    },
+    "normal-flow-overconstrained-vlr": {
+      "mismatch": 2
+    },
+    "normal-flow-overconstrained-vrl": {
+      "mismatch": 2
+    },
+    "row-progression-slr": {
+      "unsupported": 2
+    },
+    "row-progression-srl": {
+      "unsupported": 2
+    },
+    "svg-aliasing": {
+      "pass": 2
+    },
+    "table-cell": {
+      "mismatch": 2
+    },
+    "table-progression-htb": {
+      "pass": 2
+    },
+    "table-progression-slr": {
+      "mismatch": 2
+    },
+    "table-progression-srl": {
+      "mismatch": 2
+    },
+    "writing-mode-horizontal": {
+      "pass": 2
+    },
+    "writing-mode-vertical-rl": {
+      "mismatch": 1,
+      "unsupported": 1
+    },
+    "adlam-anti-ref.html": {
+      "pass": 1
+    },
+    "adlam.html": {
+      "pass": 1
+    },
+    "cypriot-anti-ref.html": {
+      "pass": 1
+    },
+    "cypriot.html": {
+      "pass": 1
+    },
+    "baseline-with-orthogonal-flow": {
+      "pass": 1
+    },
+    "border-slice": {
+      "pass": 1
+    },
+    "border-vlr": {
+      "mismatch": 1
+    },
+    "border-vrl": {
+      "mismatch": 1
+    },
+    "flexbox_align-items-stretch-writing-modes.html": {
+      "mismatch": 1
+    },
+    "button-appearance-native-horizontal.optional.html": {
+      "pass": 1
+    },
+    "button-appearance-native-vertical.optional.html": {
+      "pass": 1
+    },
+    "button-appearance-none-horizontal.optional.html": {
+      "pass": 1
+    },
+    "button-appearance-none-vertical.optional.html": {
+      "pass": 1
+    },
+    "checkbox-appearance-native-vertical-lr-baseline.optional.html": {
+      "mismatch": 1
+    },
+    "checkbox-appearance-native-vertical-rl-baseline.optional.html": {
+      "mismatch": 1
+    },
+    "color-input-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "color-input-appearance-native-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "color-input-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "color-input-appearance-none-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "date-input-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "date-input-appearance-native-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "date-input-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "date-input-appearance-none-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "file-input-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "file-input-vertical-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "file-input-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "input-range-zero-inline-size.html": {
+      "pass": 1
+    },
+    "meter-appearance-native-horizontal-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "meter-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "meter-appearance-native-vertical-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "meter-appearance-native-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "number-input-vertical-overflow.html": {
+      "pass": 1
+    },
+    "progress-appearance-native-horizontal-rtl.optional.html": {
+      "pass": 1
+    },
+    "progress-appearance-native-horizontal.optional.html": {
+      "pass": 1
+    },
+    "progress-appearance-native-vertical-rtl.optional.html": {
+      "pass": 1
+    },
+    "progress-appearance-native-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "progress-appearance-none-horizontal-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "progress-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "progress-appearance-none-vertical-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "progress-appearance-none-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "radio-appearance-native-vertical-lr-baseline.optional.html": {
+      "mismatch": 1
+    },
+    "radio-appearance-native-vertical-rl-baseline.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-native-horizontal-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-native-vertical-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-native-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-none-horizontal-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-none-vertical-rtl.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-appearance-none-vertical.optional.html": {
+      "mismatch": 1
+    },
+    "range-input-vertical-ltr-painting.html": {
+      "pass": 1
+    },
+    "range-input-vertical-rtl-painting.html": {
+      "pass": 1
+    },
+    "select-appearance-native-horizontal.optional.html": {
+      "pass": 1
+    },
+    "select-appearance-native-vertical.optional.html": {
+      "pass": 1
+    },
+    "select-appearance-none-horizontal.optional.html": {
+      "pass": 1
+    },
+    "select-appearance-none-vertical-lr.optional.html": {
+      "pass": 1
+    },
+    "select-appearance-none-vertical-rl.optional.html": {
+      "pass": 1
+    },
+    "select-multiple-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "select-multiple-appearance-native-vlr.optional.html": {
+      "mismatch": 1
+    },
+    "select-multiple-appearance-native-vrl.optional.html": {
+      "mismatch": 1
+    },
+    "select-multiple-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "select-multiple-appearance-none-vlr.optional.html": {
+      "mismatch": 1
+    },
+    "select-multiple-appearance-none-vrl.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-native-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-native-vlr.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-native-vrl.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-none-horizontal.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-none-vlr.optional.html": {
+      "mismatch": 1
+    },
+    "textarea-appearance-none-vrl.optional.html": {
+      "mismatch": 1
+    },
+    "height-width-inline-non-replaced-vlr": {
+      "mismatch": 1
+    },
+    "height-width-inline-non-replaced-vrl": {
+      "mismatch": 1
+    },
+    "inline-block-alignment-slr": {
+      "mismatch": 1
+    },
+    "inline-block-alignment-srl": {
+      "mismatch": 1
+    },
+    "inline-box-border-vlr": {
+      "pass": 1
+    },
+    "inline-box-orthogonal-child-with-margins.html": {
+      "mismatch": 1
+    },
+    "line-box-direction-htb": {
+      "unsupported": 1
+    },
+    "logical-physical-mapping": {
+      "mismatch": 1
+    },
+    "margin-vlr": {
+      "mismatch": 1
+    },
+    "margin-vrl": {
+      "mismatch": 1
+    },
+    "mongolian-span": {
+      "pass": 1
+    },
+    "nested-orthogonal": {
+      "mismatch": 1
+    },
+    "orthogonal": {
+      "pass": 1
+    },
+    "outline-inline-block-vrl": {
+      "mismatch": 1
+    },
+    "outline-inline-vlr": {
+      "mismatch": 1
+    },
+    "outline-inline-vrl": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-ltr-left-right-vlr": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-ltr-left-right-vrl": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-ltr-top-bottom-vlr": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-ltr-top-bottom-vrl": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-rtl-left-right-vlr": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-rtl-left-right-vrl": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-rtl-top-bottom-vlr": {
+      "mismatch": 1
+    },
+    "overconstrained-rel-pos-rtl-top-bottom-vrl": {
+      "mismatch": 1
+    },
+    "padding-vlr": {
+      "mismatch": 1
+    },
+    "padding-vrl": {
+      "mismatch": 1
+    },
+    "percentage-padding-in-shrink-to-fit.html": {
+      "pass": 1
+    },
+    "relpos-inline-overflowing-block-vrl.html": {
+      "mismatch": 1
+    },
+    "replaced-content-image": {
+      "mismatch": 1
+    },
+    "scrollbar-vertical-rl.html": {
+      "mismatch": 1
+    },
+    "sideways-lr-main-axis.html": {
+      "pass": 1
+    },
+    "sizing-percentages-replaced-orthogonal": {
+      "mismatch": 1
+    },
+    "slr-alongside-vlr-floats.html": {
+      "mismatch": 1
+    },
+    "srl-alongside-vrl-floats.html": {
+      "mismatch": 1
+    },
+    "table-column-order-slr": {
+      "unsupported": 1
+    },
+    "table-column-order-srl": {
+      "unsupported": 1
+    },
+    "text-baseline-slr": {
+      "mismatch": 1
+    },
+    "text-baseline-srl": {
+      "mismatch": 1
+    },
+    "text-shadow-orientation-upright": {
+      "mismatch": 1
+    },
+    "text-shadow-sideways": {
+      "mismatch": 1
+    },
+    "three-levels-of-orthogonal-flows.html": {
+      "mismatch": 1
+    },
+    "two-levels-of-orthogonal-flows-fixed.html": {
+      "pass": 1
+    },
+    "two-levels-of-orthogonal-flows-percentage.html": {
+      "mismatch": 1
+    },
+    "two-levels-of-orthogonal-flows.html": {
+      "mismatch": 1
+    },
+    "vlr-text-orientation-sideways-alongside-vlr-floats.html": {
+      "pass": 1
+    },
+    "vrl-text-orientation-sideways-alongside-vrl-floats.html": {
+      "pass": 1
+    },
+    "writing-mode-initial.html": {
+      "pass": 1
+    },
+    "writing-mode-vertical-lr": {
+      "mismatch": 1
+    }
+  }
+}

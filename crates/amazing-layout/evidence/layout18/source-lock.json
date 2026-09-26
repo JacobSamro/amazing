@@ -1,0 +1,16 @@
+{
+  "source_commit": "2287c1bf0f69cc7a50534259999956d74e93c1a6",
+  "verified_utc": "2026-09-26T09:49:04Z",
+  "server": "win-001",
+  "files_sha256": {
+    "Cargo.lock": "ca8c6c2d49124aeeaa9f6fd1f93d46c5b246f2b43b852b2fca4452b542d81ac4",
+    "crates/amazing-layout/src/grid.rs": "0a197c1dacae08bc8622d03a4d99ea5e6e7792c1f117886f9cb8ee1520b9c2a8",
+    "crates/amazing-layout/src/grid_repeat.rs": "c5c7d8332ecc78fae1e94ca5e0e87f5b782366f0b466b1e165acfc20fc1b5135",
+    "crates/amazing-layout/src/flex.rs": "ec3dd02d22db6aa9aea6859317c76baef3f9554df5f2b9bedba2891d940b2a90",
+    "crates/amazing-layout/src/block.rs": "af0318bf38f1d349f252caa382f47b9896911a5b21b95378c76fc4b61f13b152",
+    "crates/amazing-layout/src/values.rs": "e0dfeb09ab6e3fe44ae09f467d804d0b9f0bb83c2bff73e395bf34820141725c",
+    "crates/amazing-layout/src/position.rs": "e716ced73ec7dab5dc47dd5e544a2b9bae53d74160c4829376661ee21938dec2"
+  },
+  "release_sha256": "cca3eb6ffc645b8d62aa456e5f7e10652ebc208742ca207e975992bd677a1b84",
+  "note": "Local source file hashes; remote completed build printed Cargo.lock/grid/grid_repeat/flex hashes. Source commit fixed across fixture restoration."
+}

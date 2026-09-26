@@ -7,8 +7,28 @@
 
 use crate::block::{layout_block, layout_block_with_text};
 use crate::font::FontSource;
+use crate::position_constraints::Axis;
 use crate::values;
 use crate::{Flow, LayoutBox, Rect};
+
+#[derive(Clone, Copy)]
+struct ContainingBlock {
+    rect: Rect,
+    rtl: bool,
+}
+
+fn is_rtl(box_: &LayoutBox) -> bool {
+    box_.style
+        .get("direction")
+        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"))
+}
+
+#[derive(Clone, Copy)]
+struct StaticAnchor {
+    x: f32,
+    y: f32,
+    right: bool,
+}
 use amazing_text::TextSystem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,31 +69,53 @@ pub(crate) fn layout_positioned(
         w: viewport_width.max(0.0),
         h: viewport_height.max(0.0),
     };
+    let viewport = ContainingBlock {
+        rect: viewport,
+        rtl: root
+            .root_font_metric_style
+            .as_ref()
+            .map(|style| style.direction == amazing_text::Direction::RightToLeft)
+            .unwrap_or_else(|| is_rtl(root)),
+    };
     position_subtree(root, viewport, viewport, true, viewport, fonts, text);
 }
 
 fn position_subtree(
     box_: &mut LayoutBox,
-    viewport: Rect,
-    normal_containing_block: Rect,
+    viewport: ContainingBlock,
+    normal_containing_block: ContainingBlock,
     normal_cb_height_definite: bool,
-    inherited_positioned_cb: Rect,
+    inherited_positioned_cb: ContainingBlock,
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
 ) {
     if position_kind(box_) == PositionKind::Relative {
-        let (dx, dy) = relative_offset(box_, normal_containing_block, normal_cb_height_definite, text);
+        let (dx, dy) = relative_offset(
+            box_,
+            normal_containing_block,
+            normal_cb_height_definite,
+            text,
+        );
         shift_box(box_, dx, dy);
     }
 
-    let own_padding_box = padding_box(box_);
+    let own_padding_box = ContainingBlock {
+        rect: padding_box(box_),
+        rtl: is_rtl(box_),
+    };
+    let own_content_box = ContainingBlock {
+        rect: box_.content_box,
+        rtl: is_rtl(box_),
+    };
     let own_height_definite = box_.style.get("height").is_some_and(|height| {
-        !height.eq_ignore_ascii_case("auto")
-            && (!height.contains('%') || normal_cb_height_definite)
+        !height.eq_ignore_ascii_case("auto") && (!height.contains('%') || normal_cb_height_definite)
     });
     let descendant_positioned_cb = match position_kind(box_) {
-        PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed => own_padding_box,
-        PositionKind::Static | PositionKind::Sticky => inherited_positioned_cb,
+        PositionKind::Relative
+        | PositionKind::Absolute
+        | PositionKind::Fixed
+        | PositionKind::Sticky => own_padding_box,
+        PositionKind::Static => inherited_positioned_cb,
     };
     // Grid §10.1: when this grid container generates the abspos containing
     // block, each child's containing block is its grid area (padding box for
@@ -82,28 +124,29 @@ fn position_subtree(
         && matches!(position_kind(box_),
             PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed);
 
+    // Capture normal-flow static slots before relative offsets move siblings.
+    let anchors: Vec<StaticAnchor> = box_
+        .positioned
+        .iter()
+        .map(|child| static_anchor(box_, child))
+        .collect();
     match &mut box_.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for child in children {
                 position_subtree(
                     child,
                     viewport,
-                    own_padding_box,
+                    own_content_box,
                     own_height_definite,
                     descendant_positioned_cb,
                     fonts,
                     text,
                 );
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
 
-    let anchors: Vec<(f32, f32)> = box_
-        .positioned
-        .iter()
-        .map(|child| static_anchor(box_, child))
-        .collect();
     let mut positioned = std::mem::take(&mut box_.positioned);
     for (child, static_anchor) in positioned.iter_mut().zip(anchors) {
         if child.outside_marker {
@@ -129,7 +172,15 @@ fn position_subtree(
             continue;
         }
         if child.inline_atomic {
-            position_subtree(child, viewport, own_padding_box, own_height_definite, descendant_positioned_cb, fonts, text);
+            position_subtree(
+                child,
+                viewport,
+                own_content_box,
+                own_height_definite,
+                descendant_positioned_cb,
+                fonts,
+                text,
+            );
             continue;
         }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
@@ -141,19 +192,27 @@ fn position_subtree(
         };
         let units = font_units(child, text);
         let specified_margins =
-            values::resolve_margins_with_units(&child.style, units, containing_block.w);
-        prepare_stretch(child, containing_block, fonts, text);
+            values::resolve_margins_with_units(&child.style, units, containing_block.rect.w);
+        // Used sizes are temporary inputs to normal layout, not computed style.
+        let computed_style = child.style.clone();
+        prepare_sizes(child, containing_block.rect, static_anchor, fonts, text);
         layout_child(
             child,
-            containing_block.x,
-            containing_block.y,
-            containing_block.w,
+            containing_block.rect.x,
+            containing_block.rect.y,
+            containing_block.rect.w,
             fonts,
             text,
         );
         child.margin = specified_margins;
         let static_anchor = if matches!(box_.display, crate::Display::Grid) {
-            grid_child_static_anchor(box_, child, specified_margins)
+            let (x, y) =
+                grid_child_static_anchor(box_, child, specified_margins, grid_generates_cb);
+            StaticAnchor {
+                x: x - specified_margins.left.unwrap_or(0.0),
+                y: y - specified_margins.top.unwrap_or(0.0),
+                right: false,
+            }
         } else {
             static_anchor
         };
@@ -170,16 +229,26 @@ fn position_subtree(
             viewport,
             containing_block,
             true,
-            padding_box(child),
+            ContainingBlock {
+                rect: padding_box(child),
+                rtl: is_rtl(child),
+            },
             fonts,
             text,
         );
+        child.style = computed_style;
     }
     box_.positioned = positioned;
 }
 
-fn layout_child(child: &mut LayoutBox, x: f32, y: f32, width: f32,
-    fonts: &FontSource, text: Option<&dyn TextSystem>) {
+fn layout_child(
+    child: &mut LayoutBox,
+    x: f32,
+    y: f32,
+    width: f32,
+    fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
+) {
     if let Some(text) = text {
         layout_block_with_text(child, x, y, width, fonts, text);
     } else {
@@ -189,7 +258,10 @@ fn layout_child(child: &mut LayoutBox, x: f32, y: f32, width: f32,
 
 fn font_units(box_: &LayoutBox, text: Option<&dyn TextSystem>) -> values::FontRelativeUnits {
     values::FontRelativeUnits::from_text_system(
-        text, box_.font_metric_style.as_ref(), box_.root_font_metric_style.as_ref(), box_.font_size,
+        text,
+        box_.font_metric_style.as_ref(),
+        box_.root_font_metric_style.as_ref(),
+        box_.font_size,
     )
 }
 
@@ -202,26 +274,38 @@ fn padding_box(box_: &LayoutBox) -> Rect {
     }
 }
 
-fn resolve_inset(box_: &LayoutBox, property: &str, base: f32,
-    text: Option<&dyn TextSystem>) -> Option<f32> {
+fn resolve_inset(
+    box_: &LayoutBox,
+    property: &str,
+    base: f32,
+    text: Option<&dyn TextSystem>,
+) -> Option<f32> {
     values::style_length_percentage_with_units(&box_.style, property, font_units(box_, text))?
         .resolve(Some(base))
 }
 
-fn relative_offset(box_: &LayoutBox, containing_block: Rect, cb_height_definite: bool, text: Option<&dyn TextSystem>) -> (f32, f32) {
-    let left = resolve_inset(box_, "left", containing_block.w, text);
-    let right = resolve_inset(box_, "right", containing_block.w, text);
+fn relative_offset(
+    box_: &LayoutBox,
+    containing_block: ContainingBlock,
+    cb_height_definite: bool,
+    text: Option<&dyn TextSystem>,
+) -> (f32, f32) {
+    let left = resolve_inset(box_, "left", containing_block.rect.w, text);
+    let right = resolve_inset(box_, "right", containing_block.rect.w, text);
     let vertical = |property| {
-        let length = values::style_length_percentage_with_units(&box_.style, property, font_units(box_, text))?;
-        if length.has_percentage && !cb_height_definite { return None; }
-        length.resolve(Some(containing_block.h))
+        let length = values::style_length_percentage_with_units(
+            &box_.style,
+            property,
+            font_units(box_, text),
+        )?;
+        if length.has_percentage && !cb_height_definite {
+            return None;
+        }
+        length.resolve(Some(containing_block.rect.h))
     };
     let top = vertical("top");
     let bottom = vertical("bottom");
-    let rtl = box_
-        .style
-        .get("direction")
-        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
+    let rtl = containing_block.rtl;
     let dx = if rtl {
         right.map(|value| -value).or(left).unwrap_or(0.0)
     } else {
@@ -231,163 +315,236 @@ fn relative_offset(box_: &LayoutBox, containing_block: Rect, cb_height_definite:
     (dx, dy)
 }
 
-fn prepare_stretch(box_: &mut LayoutBox, containing_block: Rect, fonts: &FontSource, text: Option<&dyn TextSystem>) {
-    let left = resolve_inset(box_, "left", containing_block.w, text);
-    let right = resolve_inset(box_, "right", containing_block.w, text);
-    let top = resolve_inset(box_, "top", containing_block.h, text);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
+fn prepare_sizes(
+    box_: &mut LayoutBox,
+    cb: Rect,
+    anchor: StaticAnchor,
+    fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
+) {
     let units = font_units(box_, text);
-    let margins = values::resolve_margins_with_units(&box_.style, units, containing_block.w);
-    let padding = values::resolve_padding_with_units(&box_.style, units, containing_block.w);
+    let margins = values::resolve_margins_with_units(&box_.style, units, cb.w);
+    let padding = values::resolve_padding_with_units(&box_.style, units, cb.w);
     let border = values::resolve_borders(&box_.style, box_.font_size);
+    let horizontal = padding.left + padding.right + border.left + border.right;
+    let vertical = padding.top + padding.bottom + border.top + border.bottom;
+    let left = resolve_inset(box_, "left", cb.w, text);
+    let right = resolve_inset(box_, "right", cb.w, text);
+    let top = resolve_inset(box_, "top", cb.h, text);
+    let bottom = resolve_inset(box_, "bottom", cb.h, text);
+    box_.containing_block_height = Some(cb.h);
+    box_.available_height = Some(cb.h);
+    let replaced = box_.replaced_size.is_some() || box_.svg_sizing.is_some();
+    let border_sizing = box_.style.get("box-sizing") == Some("border-box");
+    if box_.style.get("width").is_none_or(|value| value == "auto")
+        && (left.is_none() || right.is_none())
+        && box_.positioned.iter().any(|child| child.inline_atomic)
+    {
+        crate::block::layout_atomic_inlines(
+            box_,
+            0.0,
+            0.0,
+            (cb.w - left.unwrap_or(0.0) - right.unwrap_or(0.0) - horizontal).max(0.0),
+            fonts,
+            text,
+        );
+    }
 
-    // Stretch sizes the margin box against the definite positioned
-    // containing block, allowing percentages to propagate to descendants.
-    for (property, available, margin, chrome) in [
-        ("width", containing_block.w - left.unwrap_or(0.0) - right.unwrap_or(0.0), margins.left.unwrap_or(0.0) + margins.right.unwrap_or(0.0),
-            padding.left + padding.right + border.left + border.right),
-        ("height", containing_block.h - top.unwrap_or(0.0) - bottom.unwrap_or(0.0), margins.top.unwrap_or(0.0) + margins.bottom.unwrap_or(0.0),
-            padding.top + padding.bottom + border.top + border.bottom),
+    // Normal block layout consumes content-box lengths. Resolve percentages
+    // against the actual containing block before adapting border-box lengths.
+    if border_sizing && !box_.table_wrapper {
+        for (property, extent, chrome) in [
+            ("width", cb.w, horizontal),
+            ("min-width", cb.w, horizontal),
+            ("max-width", cb.w, horizontal),
+            ("height", cb.h, vertical),
+            ("min-height", cb.h, vertical),
+            ("max-height", cb.h, vertical),
+        ] {
+            if let Some(size) = resolve_inset(box_, property, extent, text) {
+                set_used_length(box_, property, (size - chrome).max(0.0));
+            }
+        }
+        box_.style.set("box-sizing", "content-box");
+    }
+    // Replaced auto width follows its natural ratio when height is specified;
+    // opposing insets position it and never stretch its natural dimensions.
+    if box_.style.get("width").is_none_or(|value| value == "auto")
+        && let Some(natural) = box_.replaced_size
+        && natural.height > 0.0
+        && let Some(height) = resolve_inset(box_, "height", cb.h, text)
+    {
+        set_used_length(
+            box_,
+            "width",
+            (height * natural.width / natural.height).max(0.0),
+        );
+    }
+    for (property, extent, mut start, mut end, margin, chrome) in [
+        (
+            "width",
+            cb.w,
+            left,
+            right,
+            margins.left.unwrap_or(0.0) + margins.right.unwrap_or(0.0),
+            horizontal,
+        ),
+        (
+            "height",
+            cb.h,
+            top,
+            bottom,
+            margins.top.unwrap_or(0.0) + margins.bottom.unwrap_or(0.0),
+            vertical,
+        ),
     ] {
-        if box_.style.get(property).is_some_and(|value| matches!(value, "stretch" | "-webkit-fill-available")) {
-            box_.style.set(property, &format!("{}px", (available - margin - chrome).max(0.0)));
+        let value = box_.style.get(property).unwrap_or("auto");
+        let stretch = matches!(value, "stretch" | "-webkit-fill-available");
+        let auto = value == "auto";
+        if !stretch && (!auto || replaced) {
+            continue;
+        }
+        if property == "width" && start.is_none() && end.is_none() {
+            if anchor.right {
+                end = Some(cb.x + cb.w - anchor.x);
+            } else {
+                start = Some(anchor.x - cb.x);
+            }
+        }
+        let available =
+            (extent - start.unwrap_or(0.0) - end.unwrap_or(0.0) - margin - chrome).max(0.0);
+        let size = if stretch || (start.is_some() && end.is_some()) {
+            Some(available)
+        } else if property == "width" {
+            // CSS2.1 §10.3.7 cases 1/2/4 (css-position-3 §3.5.1): whenever
+            // `width` is auto and `left`/`right` are NOT both definite (case
+            // 1: neither set — pure static position; case 2/4: exactly one
+            // set — still shrink-to-fit for the width, only the *position*
+            // differs), the shrink-to-fit basis is the containing block
+            // minus margin/border/padding only — never the single known
+            // inset or the static-position anchor fallback above, which
+            // determine position, not how much the box is allowed to
+            // shrink into. Without this, an abspos child with only one
+            // inset set was clamped too narrow by that inset (or, with no
+            // insets at all, by the anchor fallback) instead of shrinking to
+            // fit its content against the whole containing block.
+            let shrink_to_fit_available = (extent - margin - chrome).max(0.0);
+            let (minimum, preferred) = intrinsic_content_widths(box_, fonts, text);
+            Some(minimum.max(shrink_to_fit_available).min(preferred))
+        } else {
+            None
+        };
+        if let Some(size) = size {
+            set_used_length(box_, property, size.max(0.0));
         }
     }
-    box_.containing_block_height = Some(containing_block.h);
+}
 
-    let width_auto = box_
-        .style
-        .get("width")
-        .is_none_or(|value| value.eq_ignore_ascii_case("auto"));
-    if width_auto
-        && let (Some(left), Some(right)) = (left, right)
-    {
-        let border_width = containing_block.w
-            - left
-            - right
-            - margins.left.unwrap_or(0.0)
-            - margins.right.unwrap_or(0.0);
-        let content_width = border_width
-            - padding.left
-            - padding.right
-            - border.left
-            - border.right;
-        box_.style
-            .set("width", &format!("{}px", content_width.max(0.0)));
-    } else if width_auto {
-        // CSS2.1 §10.3.7 cases 1/2/4 (css-position-3 §3.5.1): whenever
-        // `width` is auto and `left`/`right` are NOT both definite (case 1:
-        // neither set — pure static position; case 2/4: exactly one set —
-        // still shrink-to-fit for the width, only the *position* differs),
-        // the used width is shrink-to-fit
-        // (`min(max(min-content, available), max-content)`), not the whole
-        // containing block. Without this, `layout_child` below (which reads
-        // the given `width` as the containing width for an auto box) filled
-        // the entire grid area/track for every abspos child that had at most
-        // one inset set — this is the CSS2.1 fallback, not the css-align
-        // "stretch" case above, which needs definite insets on both sides.
-        let available_border_box = (containing_block.w
-            - margins.left.unwrap_or(0.0)
-            - margins.right.unwrap_or(0.0)).max(0.0);
-        let min = crate::flex::min_content_width(box_, fonts);
-        let max = crate::flex::max_content_width(box_, fonts).max(min);
-        let border_width = min.max(available_border_box).min(max);
-        let content_width = (border_width - padding.left - padding.right - border.left - border.right).max(0.0);
-        box_.style.set("width", &format!("{content_width}px"));
-    }
+// CSS lengths stored in ComputedStyle are unzoomed; geometry is already in
+// used coordinates. Do not apply the effective zoom a second time on relayout.
+fn set_used_length(box_: &mut LayoutBox, property: &str, value: f32) {
+    let css_px = value / box_.style.effective_zoom() as f32;
+    box_.style.set(property, &format!("{css_px}px"));
+}
 
-    let height_auto = box_
-        .style
-        .get("height")
-        .is_none_or(|value| value.eq_ignore_ascii_case("auto"));
-    if height_auto
-        && let (Some(top), Some(bottom)) = (top, bottom)
+fn intrinsic_content_widths(
+    box_: &LayoutBox,
+    fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
+) -> (f32, f32) {
+    if let (Flow::Inlines(items), Some(text)) = (&box_.flow, text)
+        && let Some(pair) = crate::inline::intrinsic_widths_shaped(
+            items,
+            box_.font_metric_style
+                .as_ref()
+                .map(|style| style.direction)
+                .unwrap_or_default(),
+            text,
+        )
     {
-        let border_height = containing_block.h
-            - top
-            - bottom
-            - margins.top.unwrap_or(0.0)
-            - margins.bottom.unwrap_or(0.0);
-        let content_height = border_height
-            - padding.top
-            - padding.bottom
-            - border.top
-            - border.bottom;
-        box_.style
-            .set("height", &format!("{}px", content_height.max(0.0)));
+        return pair;
     }
+    let padding = values::resolve_padding(&box_.style, box_.font_size, 0.0);
+    let border = values::resolve_borders(&box_.style, box_.font_size);
+    let chrome = padding.left + padding.right + border.left + border.right;
+    (
+        (crate::flex::min_content_width(box_, fonts) - chrome).max(0.0),
+        (crate::flex::max_content_width(box_, fonts) - chrome).max(0.0),
+    )
 }
 
 fn absolute_origin(
-    box_: &LayoutBox,
-    containing_block: Rect,
-    static_anchor: (f32, f32),
+    box_: &mut LayoutBox,
+    containing_block: ContainingBlock,
+    anchor: StaticAnchor,
     margins: values::SidesM,
     text: Option<&dyn TextSystem>,
 ) -> (f32, f32) {
-    let left = resolve_inset(box_, "left", containing_block.w, text);
-    let right = resolve_inset(box_, "right", containing_block.w, text);
-    let top = resolve_inset(box_, "top", containing_block.h, text);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
-    let rtl = box_
-        .style
-        .get("direction")
-        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
-    let x = if rtl {
-        right
-            .map(|right| {
-                containing_block.x + containing_block.w
-                    - right
-                    - box_.border_box.w
-                    - margins.right.unwrap_or(0.0)
-            })
-            .or_else(|| {
-                left.map(|left| containing_block.x + left + margins.left.unwrap_or(0.0))
-            })
-            .unwrap_or(static_anchor.0 + margins.left.unwrap_or(0.0))
-    } else {
-        left.map(|left| containing_block.x + left + margins.left.unwrap_or(0.0))
-            .or_else(|| {
-                right.map(|right| {
-                    containing_block.x + containing_block.w
-                        - right
-                        - box_.border_box.w
-                        - margins.right.unwrap_or(0.0)
-                })
-            })
-            .unwrap_or(static_anchor.0 + margins.left.unwrap_or(0.0))
+    let cb = containing_block.rect;
+    let x = Axis {
+        extent: cb.w,
+        start: resolve_inset(box_, "left", cb.w, text),
+        end: resolve_inset(box_, "right", cb.w, text),
+        margin_start: margins.left,
+        margin_end: margins.right,
+        border_size: box_.border_box.w,
+        static_edge: anchor.x - cb.x,
+        static_end: anchor.right,
+        end_wins: containing_block.rtl,
+        split_negative: false,
+    }
+    .solve();
+    let y = Axis {
+        extent: cb.h,
+        start: resolve_inset(box_, "top", cb.h, text),
+        end: resolve_inset(box_, "bottom", cb.h, text),
+        margin_start: margins.top,
+        margin_end: margins.bottom,
+        border_size: box_.border_box.h,
+        static_edge: anchor.y - cb.y,
+        static_end: false,
+        end_wins: false,
+        split_negative: true,
+    }
+    .solve();
+    box_.margin = values::SidesM {
+        left: Some(x.margin_start),
+        right: Some(x.margin_end),
+        top: Some(y.margin_start),
+        bottom: Some(y.margin_end),
     };
-    let y = top
-        .map(|top| containing_block.y + top + margins.top.unwrap_or(0.0))
-        .or_else(|| {
-            bottom.map(|bottom| {
-                containing_block.y + containing_block.h
-                    - bottom
-                    - box_.border_box.h
-                    - margins.bottom.unwrap_or(0.0)
-            })
-        })
-        .unwrap_or(static_anchor.1 + margins.top.unwrap_or(0.0));
-    (x, y)
+    (cb.x + x.border_start, cb.y + y.border_start)
 }
 
-fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> (f32, f32) {
-    let target = positioned.node.map(|node| node.0).unwrap_or(u32::MAX);
+fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> StaticAnchor {
+    let target = positioned.source_order.unwrap_or(u64::MAX);
     let preceding = match &parent.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
-            .filter(|child| child.node.is_some_and(|node| node.0 < target))
-            .max_by_key(|child| child.node.map(|node| node.0).unwrap_or(0)),
+            .filter(|child| {
+                child
+                    .source_end_order
+                    .or(child.source_order)
+                    .is_some_and(|order| order < target)
+                    && crate::floats::side(&child.style).is_none()
+            })
+            .max_by_key(|child| child.source_order.unwrap_or(0)),
         Flow::Inlines(_) | Flow::Empty => None,
     };
-    preceding.map_or((parent.content_box.x, parent.content_box.y), |sibling| {
-        (
-            parent.content_box.x,
-            sibling.border_box.y
-                + sibling.border_box.h
-                + sibling.margin.bottom.unwrap_or(0.0),
-        )
-    })
+    // Block flow currently exposes horizontal physical block origins. Vertical
+    // static rectangles follow that same origin until block-axis mapping exists.
+    let right = is_rtl(parent)
+        && !parent
+            .font_metric_style
+            .as_ref()
+            .is_some_and(|style| style.writing_mode.is_vertical_flow());
+    StaticAnchor {
+        x: parent.content_box.x + if right { parent.content_box.w } else { 0.0 },
+        y: preceding.map_or(parent.content_box.y, |sibling| {
+            sibling.border_box.y + sibling.border_box.h + sibling.margin.bottom.unwrap_or(0.0)
+        }),
+        right,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -397,14 +554,23 @@ enum StaticAlign {
     End,
 }
 
-fn grid_area_containing_block(parent: &LayoutBox, child: &LayoutBox, fallback: Rect) -> Rect {
-    let Some(tracks) = parent.grid_tracks.as_ref() else { return fallback; };
+fn grid_area_containing_block(
+    parent: &LayoutBox,
+    child: &LayoutBox,
+    fallback: ContainingBlock,
+) -> ContainingBlock {
+    let Some(tracks) = parent.grid_tracks.as_ref() else {
+        return fallback;
+    };
     let (col, row) = tracks.area(&child.style);
-    Rect {
-        x: col.map_or(fallback.x, |(x, _)| x),
-        w: col.map_or(fallback.w, |(_, w)| w),
-        y: row.map_or(fallback.y, |(y, _)| y),
-        h: row.map_or(fallback.h, |(_, h)| h),
+    ContainingBlock {
+        rect: Rect {
+            x: col.map_or(fallback.rect.x, |(x, _)| x),
+            w: col.map_or(fallback.rect.w, |(_, w)| w),
+            y: row.map_or(fallback.rect.y, |(y, _)| y),
+            h: row.map_or(fallback.rect.h, |(_, h)| h),
+        },
+        rtl: fallback.rtl,
     }
 }
 
@@ -426,18 +592,33 @@ fn grid_child_static_anchor(
     parent: &LayoutBox,
     child: &LayoutBox,
     margins: values::SidesM,
+    use_grid_area: bool,
 ) -> (f32, f32) {
     // The static position of an abspos child of a grid container is its grid
-    // area when that axis has a definite `grid-placement`, and the container's
-    // content edges otherwise; justify-self/align-self then positions it in
-    // that rectangle. (Both engines and the pinned WPT reflect the grid area;
-    // the content-edge rule is the Grid 1 fallback for unplaced children.)
+    // area when that axis has a definite `grid-placement` AND the grid
+    // container is the one generating the child's abspos containing block
+    // (i.e. it is itself positioned, like `grid_generates_cb`); the
+    // container's content edges otherwise. A `position: static` grid
+    // container does NOT establish a containing block per CSS2.1 (grid does
+    // not get flexbox's unconditional special case), so its grid-placement
+    // is irrelevant to an abspos descendant's static position/alignment
+    // container in that case — confirmed by the pinned WPT
+    // `grid-abspos-staticpos-justify-self-{002,rtl-003}` references, which
+    // align entirely within the container's content box while grid-area
+    // places the item away from it. (Both engines and the pinned WPT reflect
+    // the grid area when the container IS the containing block; the
+    // content-edge rule is the Grid 1 fallback otherwise/for unplaced
+    // children.)
     let parent_rtl = parent.style.get("direction")
         .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
-    let child_rtl = child.style.get("direction")
+    let child_rtl = child
+        .style
+        .get("direction")
         .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
     let choice = |self_property: &str, items_property: &str| {
-        child.style.get(self_property)
+        child
+            .style
+            .get(self_property)
             .filter(|value| !value.eq_ignore_ascii_case("auto"))
             .or_else(|| parent.style.get(items_property))
             .unwrap_or("normal")
@@ -466,9 +647,13 @@ fn grid_child_static_anchor(
         let y = static_align(choice("align-self", "align-items"), true, true, LeftRight::Invalid);
         (x, y)
     };
-    let (col_area, row_area) = parent.grid_tracks.as_ref()
-        .map(|tracks| tracks.area(&child.style))
-        .unwrap_or((None, None));
+    let (col_area, row_area) = if use_grid_area {
+        parent.grid_tracks.as_ref()
+            .map(|tracks| tracks.area(&child.style))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
     let (cx, cw) = col_area.unwrap_or((parent.content_box.x, parent.content_box.w));
     let (cy, ch) = row_area.unwrap_or((parent.content_box.y, parent.content_box.h));
     let mut x = aligned_border_start(
@@ -485,12 +670,14 @@ fn grid_child_static_anchor(
     // content edge above. Mirror it the same way real items are mirrored
     // after layout (css-grid-3 draft, open issue on the exact rule; this
     // matches the pinned WPT reference renders).
-    if let Some(tracks) = parent.grid_tracks.as_ref() {
-        if col_area.is_none() && tracks.reverse_x {
-            x = cx + cw - (x - cx) - child.border_box.w;
-        }
-        if row_area.is_none() && tracks.reverse_y {
-            y = cy + ch - (y - cy) - child.border_box.h;
+    if use_grid_area {
+        if let Some(tracks) = parent.grid_tracks.as_ref() {
+            if col_area.is_none() && tracks.reverse_x {
+                x = cx + cw - (x - cx) - child.border_box.w;
+            }
+            if row_area.is_none() && tracks.reverse_y {
+                y = cy + ch - (y - cy) - child.border_box.h;
+            }
         }
     }
     (x, y)
@@ -570,19 +757,27 @@ fn aligned_border_start(
     align: StaticAlign,
 ) -> f32 {
     let free = container_size - border_size - margin_start - margin_end;
-    container_start + margin_start + match align {
-        StaticAlign::Start => 0.0,
-        StaticAlign::Center => free / 2.0,
-        StaticAlign::End => free,
-    }
+    container_start
+        + margin_start
+        + match align {
+            StaticAlign::Start => 0.0,
+            StaticAlign::Center => free / 2.0,
+            StaticAlign::End => free,
+        }
 }
 
 fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
     if dx == 0.0 && dy == 0.0 {
         return;
     }
-    for segment in &mut box_.table_decoration.borders {segment.rect.x+=dx;segment.rect.y+=dy;}
-    for hole in &mut box_.table_decoration.background_holes {hole.x+=dx;hole.y+=dy;}
+    for segment in &mut box_.table_decoration.borders {
+        segment.rect.x += dx;
+        segment.rect.y += dy;
+    }
+    for hole in &mut box_.table_decoration.background_holes {
+        hole.x += dx;
+        hole.y += dy;
+    }
     box_.border_box.x += dx;
     box_.border_box.y += dy;
     box_.content_box.x += dx;
@@ -619,8 +814,8 @@ fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
             for child in children {
                 shift_box(child, dx, dy);
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
 }
 
@@ -657,7 +852,7 @@ mod tests {
         let in_flow = match &box_.flow {
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
                 children.iter().find_map(|child| find_id(child, dom, id))
-            },
+            }
             Flow::Inlines(_) | Flow::Empty => None,
         };
         in_flow.or_else(|| {
@@ -668,7 +863,10 @@ mod tests {
     }
 
     fn close(actual: f32, expected: f32) {
-        assert!((actual - expected).abs() < 0.01, "got {actual}, want {expected}");
+        assert!(
+            (actual - expected).abs() < 0.01,
+            "got {actual}, want {expected}"
+        );
     }
 
     #[test]
@@ -749,7 +947,15 @@ mod tests {
     }
 
     #[test]
-    fn grid_abspos_static_position_uses_grid_area() {
+    fn grid_abspos_static_position_uses_grid_area_only_when_positioned() {
+        // A `position: static` grid container does not generate the abspos
+        // containing block (CSS2.1 §10.1; grid does not get flexbox's
+        // unconditional special case), so grid-placement is irrelevant to an
+        // abspos descendant's static position/alignment container in that
+        // case: it aligns within the full content box instead. Confirmed by
+        // the pinned WPT `grid-abspos-staticpos-justify-self-002`/`-rtl-003`
+        // references, which use plain content-box alignment for exactly this
+        // static case. Only `position: relative` (etc.) uses the grid area.
         for position in ["static", "relative"] {
             let (dom, root) = layout(
                 "<body><div id=grid><div id=auto></div><div id=start></div><div id=end></div><div id=self_start></div><div id=safe></div><div id=first></div><div id=unplaced></div></div></body>",
@@ -770,25 +976,47 @@ mod tests {
             let grid = find_id(&root, &dom, "grid").unwrap();
             let x = grid.content_box.x;
             let y = grid.content_box.y;
-            // Grid area 2/2 is x[3,23) y[2,32): center, start, end, self-start.
-            let auto = find_id(&root, &dom, "auto").unwrap();
-            close(auto.border_box.x, x + 9.0);
-            close(auto.border_box.y, y + 14.0);
-            let start = find_id(&root, &dom, "start").unwrap();
-            close(start.border_box.x, x + 3.0);
-            close(start.border_box.y, y + 2.0);
-            let end = find_id(&root, &dom, "end").unwrap();
-            close(end.border_box.x, x + 15.0);
-            close(end.border_box.y, y + 26.0);
-            close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 15.0);
-            let safe = find_id(&root, &dom, "safe").unwrap();
-            close(safe.border_box.x, x + 3.0);
-            close(safe.border_box.y, y + 2.0);
-            // Area 1/1 is x[0,3) y[0,2): start alignment clips to its origin.
-            let first = find_id(&root, &dom, "first").unwrap();
-            close(first.border_box.x, x);
-            close(first.border_box.y, y);
-            // An unplaced abspos child keeps the content-edge static position.
+            if position == "relative" {
+                // Grid area 2/2 is x[3,23) y[2,32): center, start, end, self-start.
+                let auto = find_id(&root, &dom, "auto").unwrap();
+                close(auto.border_box.x, x + 9.0);
+                close(auto.border_box.y, y + 14.0);
+                let start = find_id(&root, &dom, "start").unwrap();
+                close(start.border_box.x, x + 3.0);
+                close(start.border_box.y, y + 2.0);
+                let end = find_id(&root, &dom, "end").unwrap();
+                close(end.border_box.x, x + 15.0);
+                close(end.border_box.y, y + 26.0);
+                close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 15.0);
+                let safe = find_id(&root, &dom, "safe").unwrap();
+                close(safe.border_box.x, x + 3.0);
+                close(safe.border_box.y, y + 2.0);
+                // Area 1/1 is x[0,3) y[0,2): start alignment clips to its origin.
+                let first = find_id(&root, &dom, "first").unwrap();
+                close(first.border_box.x, x);
+                close(first.border_box.y, y);
+            } else {
+                // Full content box is 100x60: center, start, end, self-start
+                // (RTL child -> end).
+                let auto = find_id(&root, &dom, "auto").unwrap();
+                close(auto.border_box.x, x + 46.0);
+                close(auto.border_box.y, y + 27.0);
+                let start = find_id(&root, &dom, "start").unwrap();
+                close(start.border_box.x, x);
+                close(start.border_box.y, y);
+                let end = find_id(&root, &dom, "end").unwrap();
+                close(end.border_box.x, x + 92.0);
+                close(end.border_box.y, y + 54.0);
+                close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 92.0);
+                let safe = find_id(&root, &dom, "safe").unwrap();
+                close(safe.border_box.x, x);
+                close(safe.border_box.y, y);
+                let first = find_id(&root, &dom, "first").unwrap();
+                close(first.border_box.x, x);
+                close(first.border_box.y, y);
+            }
+            // An unplaced abspos child keeps the content-edge static position
+            // regardless of the container's own position value.
             let unplaced = find_id(&root, &dom, "unplaced").unwrap();
             close(unplaced.border_box.x, x + (grid.content_box.w - 8.0) / 2.0);
             close(unplaced.border_box.y, y + (grid.content_box.h - 6.0) / 2.0);
@@ -846,13 +1074,26 @@ mod tests {
         );
         let parent = find_id(&root, &dom, "parent").unwrap();
         let absolute = find_id(&root, &dom, "absolute").unwrap();
-        assert!((parent.border_box.x - parent.content_box.x).abs() < 0.001,
-            "inline-block border x={}, content x={}", parent.border_box.x, parent.content_box.x);
-        assert!((absolute.border_box.x - parent.content_box.x).abs() < 0.001,
-            "absolute x={}, inline-block content x={}", absolute.border_box.x, parent.content_box.x);
+        assert!(
+            (parent.border_box.x - parent.content_box.x).abs() < 0.001,
+            "inline-block border x={}, content x={}",
+            parent.border_box.x,
+            parent.content_box.x
+        );
+        assert!(
+            (absolute.border_box.x - parent.content_box.x).abs() < 0.001,
+            "absolute x={}, inline-block content x={}",
+            absolute.border_box.x,
+            parent.content_box.x
+        );
         let text = amazing_text::FallbackTextSystem::new();
         let shaped = crate::layout_dom_document_with_text_and_replaced_in_viewport(
-            &dom, "", 800.0, Some(600.0), &text, &crate::NoReplacedElements,
+            &dom,
+            "",
+            800.0,
+            Some(600.0),
+            &text,
+            &crate::NoReplacedElements,
         );
         let parent = find_id(&shaped, &dom, "parent").unwrap();
         let absolute = find_id(&shaped, &dom, "absolute").unwrap();
@@ -907,14 +1148,32 @@ mod tests {
     }
 
     #[test]
-    fn rtl_overconstraint_uses_right_inset() {
+    fn containing_block_direction_wins_over_child_direction() {
         let (dom, root) = layout(
             "<body><div id=parent><div id=child></div></div></body>",
             "body{margin:0} #parent{position:relative;width:200px;height:100px} #child{direction:rtl;position:absolute;left:10px;right:20px;top:0;width:50px;height:10px}",
             800.0,
             600.0,
         );
-        close(find_id(&root, &dom, "child").unwrap().border_box.x, 130.0);
+        close(find_id(&root, &dom, "child").unwrap().border_box.x, 10.0);
+        for (position, parent_direction, expected) in [
+            ("absolute", "ltr", 10.0),
+            ("absolute", "rtl", 30.0),
+            ("fixed", "ltr", 130.0),
+        ] {
+            let (dom, root) = layout(
+                "<html dir=rtl><body dir=ltr><div id=parent><div id=child></div></div></body></html>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;direction:{parent_direction};width:100px;height:100px}} #child{{position:{position};direction:ltr;left:10px;right:20px;width:50px;height:10px}}"
+                ),
+                200.0,
+                600.0,
+            );
+            close(
+                find_id(&root, &dom, "child").unwrap().border_box.x,
+                expected,
+            );
+        }
     }
 
     #[test]
@@ -939,5 +1198,268 @@ mod tests {
             600.0,
         );
         close(crate::layout_overflow_bottom(&root), 250.0);
+    }
+    #[test]
+    fn absolute_auto_margins_resolve_both_axes_after_min_max() {
+        for (extra, expected) in [
+            ("width:80px;height:40px", (60.0, 30.0, 80.0, 40.0)),
+            ("max-width:80px;max-height:40px", (60.0, 30.0, 80.0, 40.0)),
+            (
+                "width:10px;min-width:80px;height:10px;min-height:40px",
+                (60.0, 30.0, 80.0, 40.0),
+            ),
+        ] {
+            let (dom, root) = layout(
+                "<div id=parent><div id=child></div></div>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;width:200px;height:100px}} #child{{position:absolute;left:10px;right:10px;top:10px;bottom:10px;margin:auto;{extra}}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let b = find_id(&root, &dom, "child").unwrap();
+            for (actual, expected) in [
+                (b.border_box.x, expected.0),
+                (b.border_box.y, expected.1),
+                (b.border_box.w, expected.2),
+                (b.border_box.h, expected.3),
+            ] {
+                close(actual, expected);
+            }
+            assert_eq!(b.style.get("margin-left"), Some("auto"));
+        }
+    }
+
+    #[test]
+    fn absolute_negative_auto_margins_have_axis_specific_overflow() {
+        for (direction, x) in [("ltr", 10.0), ("rtl", -50.0)] {
+            let (dom, root) = layout(
+                "<div id=parent><div id=child></div></div>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;direction:{direction};width:100px;height:100px}} #child{{position:absolute;left:10px;right:10px;top:10px;bottom:10px;margin:auto;width:140px;height:140px}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let b = find_id(&root, &dom, "child").unwrap();
+            close(b.border_box.x, x);
+            close(b.border_box.y, -20.0);
+            close(b.margin.top.unwrap(), -30.0);
+            close(b.margin.bottom.unwrap(), -30.0);
+        }
+    }
+
+    #[test]
+    fn absolute_single_auto_margin_absorbs_space_only_with_both_insets() {
+        for (extra, x, margin) in [("right:20px", 130.0, 120.0), ("right:auto", 10.0, 0.0)] {
+            let (dom, root) = layout(
+                "<div id=parent><div id=child></div></div>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;width:200px}} #child{{position:absolute;left:10px;width:50px;height:10px;margin-left:auto;{extra}}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let b = find_id(&root, &dom, "child").unwrap();
+            close(b.border_box.x, x);
+            close(b.margin.left.unwrap(), margin);
+        }
+    }
+
+    #[test]
+    fn absolute_auto_width_shrinks_and_static_edge_uses_normal_parent() {
+        for (parent_direction, child_direction, expected) in
+            [("ltr", "rtl", 0.0), ("rtl", "ltr", 120.0)]
+        {
+            let (dom, root) = layout(
+                "<div id=parent><div id=child><div style='width:80px;height:20px'></div></div></div>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;width:200px;direction:{parent_direction}}} #child{{position:absolute;direction:{child_direction}}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let b = find_id(&root, &dom, "child").unwrap();
+            close(b.border_box.w, 80.0);
+            close(b.border_box.x, expected);
+            assert_eq!(b.style.get("width"), Some("auto"));
+        }
+    }
+
+    #[test]
+    fn absolute_empty_auto_width_keeps_padding_and_border() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=child></div></div>",
+            "body{margin:0} #parent{position:relative;width:200px} #child{position:absolute;right:20px;padding:10px;border:5px solid}",
+            800.0,
+            600.0,
+        );
+        let b = find_id(&root, &dom, "child").unwrap();
+        close(b.border_box.w, 30.0);
+        close(b.border_box.x, 150.0);
+    }
+
+    #[test]
+    fn absolute_border_box_constraints_apply_before_margin_solution() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=child><div id=percent></div></div></div>",
+            "body{margin:0} #parent{position:relative;width:200px;height:200px} #child{position:absolute;box-sizing:border-box;left:0;right:0;top:0;bottom:0;width:100px;max-height:100px;margin:auto;padding:10px;border:5px solid} #percent{height:50%}",
+            800.0,
+            600.0,
+        );
+        let b = find_id(&root, &dom, "child").unwrap();
+        close(b.border_box.x, 50.0);
+        close(b.border_box.y, 50.0);
+        close(b.border_box.w, 100.0);
+        close(b.border_box.h, 100.0);
+        close(find_id(&root, &dom, "percent").unwrap().content_box.h, 35.0);
+        assert_eq!(b.style.get("box-sizing"), Some("border-box"));
+    }
+
+    #[test]
+    fn relative_offsets_use_parent_direction_and_content_percentage_basis() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=child></div></div>",
+            "body{margin:0} #parent{direction:rtl;width:200px;height:100px;padding:20px} #child{direction:ltr;position:relative;left:50%;right:10%;top:50%;width:20px;height:10px}",
+            800.0,
+            600.0,
+        );
+        let p = find_id(&root, &dom, "parent").unwrap();
+        let c = find_id(&root, &dom, "child").unwrap();
+        close(c.border_box.x - p.content_box.x, 160.0);
+        close(c.border_box.y - p.content_box.y, 50.0);
+    }
+
+    #[test]
+    fn static_slot_ignores_preceding_relative_offset() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=before></div><div id=child></div></div>",
+            "body{margin:0} #parent{position:relative} #before{position:relative;top:90px;height:20px} #child{position:absolute;width:10px;height:10px}",
+            800.0,
+            600.0,
+        );
+        close(find_id(&root, &dom, "child").unwrap().border_box.y, 20.0);
+    }
+
+    #[test]
+    fn sticky_ancestor_establishes_positioned_padding_box() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=child></div></div>",
+            "body{margin:0} #parent{position:sticky;width:200px;height:100px;padding:10px;border:5px solid} #child{position:absolute;right:0;bottom:0;width:20px;height:20px}",
+            800.0,
+            600.0,
+        );
+        let b = find_id(&root, &dom, "child").unwrap();
+        close(b.border_box.x, 205.0);
+        close(b.border_box.y, 105.0);
+    }
+
+    #[test]
+    fn replaced_opposing_insets_keep_natural_size_and_ratio() {
+        struct Natural;
+        impl crate::ReplacedElementProvider for Natural {
+            fn intrinsic_size(&self, _: amazing_dom::NodeIdx) -> Option<crate::IntrinsicSize> {
+                Some(crate::IntrinsicSize {
+                    width: 80.0,
+                    height: 40.0,
+                })
+            }
+        }
+        for (extra, width, height) in [("", 80.0, 40.0), ("height:20px", 40.0, 20.0)] {
+            let dom = amazing_html::parse("<div id=parent><img id=child></div>");
+            // Supply dimensions only to the image, as a decoder would.
+            struct ImageNatural<'a>(&'a Dom);
+            impl crate::ReplacedElementProvider for ImageNatural<'_> {
+                fn intrinsic_size(
+                    &self,
+                    node: amazing_dom::NodeIdx,
+                ) -> Option<crate::IntrinsicSize> {
+                    (self.0.name(node) == Some("img"))
+                        .then(|| Natural.intrinsic_size(node).unwrap())
+                }
+            }
+            let root = crate::layout_dom_document_with_replaced_in_viewport(
+                &dom,
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;width:200px;height:100px}} img{{position:absolute;left:0;right:0;top:0;bottom:0;margin:auto;{extra}}}"
+                ),
+                800.0,
+                Some(600.0),
+                &FontSource::fallback(),
+                &ImageNatural(&dom),
+            );
+            let b = find_id(&root, &dom, "child").unwrap();
+            close(b.border_box.w, width);
+            close(b.border_box.h, height);
+            close(b.border_box.x, (200.0 - width) / 2.0);
+            close(b.border_box.y, (100.0 - height) / 2.0);
+        }
+    }
+    #[test]
+    fn absolute_static_slot_stays_before_later_anonymous_inline_content() {
+        let (dom, root) = layout(
+            "<p style='height:20px;margin:0'>x</p>\n<div id=child></div>\n<span style='display:inline-table;width:100px;height:100px'></span>",
+            "body{margin:0} #child{position:absolute;width:100px;height:100px}",
+            800.0,
+            600.0,
+        );
+        close(find_id(&root, &dom, "child").unwrap().border_box.y, 20.0);
+        let (dom, root) = layout(
+            "<div><span>text before <div id=child></div><div id=control></div></span></div>",
+            "body{margin:0} #child,#control{width:100px;height:20px} #child{position:absolute}",
+            800.0,
+            600.0,
+        );
+        close(
+            find_id(&root, &dom, "child").unwrap().border_box.y,
+            find_id(&root, &dom, "control").unwrap().border_box.y,
+        );
+    }
+
+    #[test]
+    fn absolute_shrink_width_includes_atomic_table_contributions() {
+        let dom = amazing_html::parse(
+            "<div id=parent><div id=child><span style='display:inline-table;width:80px;height:20px'></span></div></div>",
+        );
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = crate::layout_dom_document_with_text_and_replaced_in_viewport(
+            &dom,
+            "body{margin:0} #parent{position:relative;width:200px} #child{position:absolute;padding:2px}",
+            800.0,
+            Some(600.0),
+            &text,
+            &crate::NoReplacedElements,
+        );
+        close(find_id(&root, &dom, "child").unwrap().content_box.w, 80.0);
+    }
+
+    #[test]
+    fn normal_rtl_and_absolute_static_boxes_share_inline_start() {
+        let (dom, root) = layout(
+            "<div id=parent><div id=abs></div><div id=normal></div></div>",
+            "body{margin:0} #parent{direction:rtl;width:200px} #abs,#normal{direction:ltr;width:50px;height:20px} #abs{position:absolute}",
+            800.0,
+            600.0,
+        );
+        close(find_id(&root, &dom, "abs").unwrap().border_box.x, 150.0);
+        close(find_id(&root, &dom, "normal").unwrap().border_box.x, 150.0);
+    }
+    #[test]
+    fn positioned_used_lengths_apply_zoom_once() {
+        for extra in ["", "width:80px", "max-width:80px"] {
+            let (dom, root) = layout(
+                "<div id=parent><div id=child></div></div>",
+                &format!(
+                    "body{{margin:0}} #parent{{position:relative;width:200px;height:100px}} #child{{position:absolute;zoom:2;left:10px;right:10px;top:0;bottom:0;height:20px;box-sizing:border-box;padding:2px;border:1px solid;margin:auto;{extra}}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let child = find_id(&root, &dom, "child").unwrap();
+            close(child.border_box.w, 160.0);
+            close(child.border_box.h, 40.0);
+            close(child.border_box.x, 20.0);
+            close(child.border_box.y, 30.0);
+        }
     }
 }

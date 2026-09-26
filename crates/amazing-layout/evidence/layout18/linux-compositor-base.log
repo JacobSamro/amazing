@@ -1,0 +1,277 @@
+linux-run[layout]: boat at 35e930e6 (35e930e6342e5f8e1268a3cd864e8e476d4c6d78)
+linux-run[layout]: boat sandbox bx_cp5jbn5z
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/crates/amazing-layout)
+   Compiling amazing-paint v0.0.1 (/home/user/amazing/crates/amazing-paint)
+   Compiling amazing-compositor v0.0.1 (/home/user/amazing/crates/amazing-compositor)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.14s
+────────────
+ Nextest run ID b8a1fb6b-758f-48e8-a9f2-207ef3b62a31 with nextest profile: default
+    Starting 9 tests across 1 binary
+        PASS [   0.016s] (1/9) amazing-compositor::paint_view_pages control_uses_baked_fallback_with_parity
+        FAIL [   0.017s] (2/9) amazing-compositor::paint_view_pages paint_view_owner_mapping_binds_dom_properties_to_tree_nodes
+  stdout ───
+
+    running 1 test
+    test paint_view_owner_mapping_binds_dom_properties_to_tree_nodes ... FAILED
+
+    failures:
+
+    failures:
+        paint_view_owner_mapping_binds_dom_properties_to_tree_nodes
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.02s
+
+  stderr ───
+
+    thread 'paint_view_owner_mapping_binds_dom_properties_to_tree_nodes' (53921) panicked at crates/amazing-compositor/tests/paint_view_pages.rs:33:5:
+    assertion `left == right` failed
+      left: 4
+     right: 3
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.089s] (3/9) amazing-compositor::paint_view_pages pinned_real_pages_match_full_painter
+        PASS [   0.020s] (4/9) amazing-compositor::paint_view_pages real_nested_overflow_fixed_sticky_and_snap_metadata
+        PASS [   0.159s] (5/9) amazing-compositor::paint_view_pages raw_real_pages_match_full_painter
+        PASS [   0.197s] (6/9) amazing-compositor::paint_view_pages nested_opacity_matches_full_painter
+        PASS [   1.017s] (7/9) amazing-compositor::paint_view_pages real_page_style_change_trace_and_parity
+        FAIL [   1.079s] (8/9) amazing-compositor::paint_view_pages retained_real_page_property_trace
+  stdout ───
+
+    running 1 test
+    scenario,frames,full_paint_us,retained_build_us,uploads
+    scroll,20,977270,7261,2
+    test retained_real_page_property_trace ... FAILED
+
+    failures:
+
+    failures:
+        retained_real_page_property_trace
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 1.08s
+
+  stderr ───
+
+    thread 'retained_real_page_property_trace' (53933) panicked at crates/amazing-compositor/tests/paint_view_pages.rs:213:9:
+    assertion `left == right` failed: scroll rerasterized retained tiles
+      left: 2
+     right: 0
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   1.660s] (9/9) amazing-compositor::paint_view_pages effects_scroller_512_matches_full_painter_at_opacity_edge
+────────────
+     Summary [   1.660s] 9 tests run: 7 passed, 2 failed, 0 skipped
+        FAIL [   0.017s] (2/9) amazing-compositor::paint_view_pages paint_view_owner_mapping_binds_dom_properties_to_tree_nodes
+        FAIL [   1.079s] (8/9) amazing-compositor::paint_view_pages retained_real_page_property_trace
+error: test run failed
+   Compiling amazing-canvas v0.0.1 (/home/user/amazing/crates/amazing-canvas)
+   Compiling amazing-process v0.0.1 (/home/user/amazing/crates/amazing-process)
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 5 warnings
+   Compiling amazing-bindings v0.0.1 (/home/user/amazing/crates/amazing-bindings)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.74s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_bindings
+   Doc-tests amazing_canvas
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+   Doc-tests amazing_common
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out   Doc-tests amazing_compositor
+; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_css
+   Doc-tests amazing_dom
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_encoding
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_fetch
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_html
+
+running 1 test
+test crates/amazing-html/src/lib.rs - (line 31) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.10s; merged doctests compilation took 0.10s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_image
+   Doc-tests amazing_ipc
+   Doc-tests amazing_ipc_platform
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_js
+
+running 1 test
+test crates/amazing-js/src/lib.rs - (line 13) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.12s; merged doctests compilation took 0.12s
+   Doc-tests amazing_layout
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_media
+   Doc-tests amazing_net
+   Doc-tests amazing_net_brotli
+   Doc-tests amazing_net_tls
+   Doc-tests amazing_paint
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_process
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_regex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_svg
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text_provider
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_codecs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_crypto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -152,6 +152,72 @@
 //!   `set_inspect_mode`/`hideHighlight` are left at the trait's own `Ok(())`
 //!   defaults for the same reason. Proof is `DOM.getBoxModel`'s real
 //!   geometry, not a rendered overlay.
+//!
+//! CDP-20 implements the `Debugger` domain: `enable`/`disable`,
+//! `scriptParsed` (classic and module scripts), `getScriptSource`,
+//! `setBreakpointByUrl`/`removeBreakpoint` at line granularity, and
+//! `pause`/`resume`, plus a minimal per-statement hook added to
+//! `amazing-js` itself (`amazing_js::debug_hook::DebugHook`,
+//! `Interpreter::set_debug_hook`/`set_current_script`) so this driver can
+//! see which line is about to run without the interpreter knowing what a
+//! breakpoint is.
+//!
+//! * **This driver cannot suspend JS execution mid-statement.** The engine
+//!   is a single-threaded tree-walking interpreter with no coroutine/fiber
+//!   mechanism, and this driver's own page thread processes one
+//!   `PageCommand` at a time (see the module's top doc comment) — nothing
+//!   can service a `Debugger.resume` command while the same thread is stuck
+//!   inside a synchronous `run_script` call. So `Debugger.pause` cannot mean
+//!   "halt execution and wait": it arms a one-shot flag that the *next*
+//!   statement to actually run (the next event-loop tick, timer, or handler
+//!   on an otherwise idle page) reports as a `Debugger.paused` "other" event
+//!   — real, but after the fact, not a live suspend. `Debugger.resume`
+//!   correspondingly just clears that flag if it had not fired yet; nothing
+//!   is ever truly blocked for it to resume. `stepInto`/`stepOver`/`stepOut`
+//!   and `evaluateOnCallFrame` stay at the trait's `Unsupported` default —
+//!   there is no suspended call stack for any of them to act on. Real
+//!   synchronous pause/resume/step needs the interpreter itself to expose a
+//!   resumable/steppable execution API (fibers, or a bytecode VM with
+//!   explicit continuation state); that is a genuine `amazing-js` change,
+//!   not a driver one, and is filed to the js-runtime lane in
+//!   `.agents/js-runtime/questions.md`.
+//! * **A breakpoint hit is still real**, just reported post-hoc: the hook
+//!   fires on every statement (`Interpreter::exec_stmt`'s choke-point, plus
+//!   the top-level program loop's own fast path for a bare `expr;`
+//!   statement, which bypasses `exec_stmt` for performance and needed its
+//!   own hook call), checks the statement's `(url, line)` against every
+//!   `setBreakpointByUrl` breakpoint, and queues a `Debugger.paused` event
+//!   with `hitBreakpoints` set and `reason: "Breakpoint"` the moment one
+//!   matches — it just cannot stop the statement from finishing first.
+//! * **Script identity is coarse.** `Interpreter::set_current_script` tags
+//!   every subsequent statement with whichever script the driver most
+//!   recently told it about; only [`PageOwner::load_scripts_leniently`]'s
+//!   per-top-level-script loop calls it. An inline event handler, a timer
+//!   callback, or a `Runtime.evaluate`/`Runtime.callFunctionOn` call all run
+//!   under whatever the *last top-level script* set, not their own real
+//!   identity — an honest simplification, not real Chrome's per-execution-
+//!   context script attribution.
+//! * **Module scripts are collected, not executed** — this engine does not
+//!   support ES modules yet (`cmd::js::is_classic_javascript_type`'s own doc
+//!   comment). [`collect_module_scripts`] walks the DOM for
+//!   `<script type="module">` the same way `cmd::js::collect_script_text`
+//!   does for classic scripts, fetching a `src` module exactly like a
+//!   classic `<script src>` (a real `Network.*` triple), so `scriptParsed`
+//!   and `getScriptSource` see real source text for a module a DevTools
+//!   frontend could not otherwise learn exists — but its top-level code
+//!   never runs, and it never gets its own JS module namespace/bindings.
+//! * **Script line/column extents are relative to the script's own text**,
+//!   not to its position in the containing HTML document — this driver has
+//!   no HTML-node source-position tracking to add that offset, so
+//!   `startLine`/`startColumn` are always `0`/`0` and `endLine`/`endColumn`
+//!   come from a plain line/character count of the script's own source
+//!   ([`script_extent`]). `hash` is a `std::hash::DefaultHasher` (SipHash)
+//!   digest of the source text ([`script_hash`]) — a real, stable value a
+//!   client can compare across edits, not V8's own script-hash algorithm.
+//! * **`setBreakpointByUrl`'s `url` is matched literally**, never as a
+//!   regex, and its `condition` parameter is accepted (to keep the trait's
+//!   real signature) but never evaluated — every breakpoint this driver
+//!   accepts is unconditional.
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -163,15 +229,16 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use amazing_devtools::host::{
-    AxNode, BoxModel, CallArgument, CallFunctionParams, ConsoleEvent, DevToolsHost,
+    AxNode, BoxModel, CallArgument, CallFrame, CallFunctionParams, ConsoleEvent, DevToolsHost,
     DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
     ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
     LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
-    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad,
-    RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams, StyleOrigin,
-    TargetInfo, Viewport,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
+    Quad, RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams,
+    ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
+use amazing_js::debug_hook::DebugHook;
 use amazing_js::DomHost;
 
 use crate::dom_host::BrowserDomHost;
@@ -218,6 +285,14 @@ enum PageCommand {
     GetBoxModel(EngineNodeId, Reply<BoxModel>),
     GetContentQuads(EngineNodeId, Reply<Vec<BoxModel>>),
     HighlightNode(EngineNodeId, Reply<()>),
+    DebuggerEnabled(bool, Reply<()>),
+    SetBreakpointByUrl(String, u32, Option<u32>, Reply<(String, Vec<ScriptLocation>)>),
+    RemoveBreakpoint(String, Reply<()>),
+    DebuggerPause(Reply<()>),
+    DebuggerResume(Reply<()>),
+    GetScriptSource(String, Reply<String>),
+    DrainScriptsParsed(Reply<Vec<ScriptInfo>>),
+    DrainDebuggerPaused(Reply<Vec<PausedEvent>>),
     Shutdown,
 }
 
@@ -631,6 +706,157 @@ struct PageOwner {
     network_failed: VecDeque<NetworkFailedEvent>,
     exceptions: VecDeque<ExceptionEvent>,
     logs: VecDeque<LogEntry>,
+    /// Every script this page has parsed (classic, executed; or module,
+    /// collected but not executed — see [`Self::load_scripts_leniently`]'s
+    /// doc comment), keyed by the minted `script_id` in [`ScriptRecord`].
+    scripts: Vec<ScriptRecord>,
+    /// `Debugger.scriptParsed` events not yet drained.
+    scripts_parsed: VecDeque<ScriptInfo>,
+    next_script_id: u64,
+    debugger_enabled: bool,
+    /// Breakpoints by URL pattern, shared with `debug_hook` so the
+    /// interpreter's per-statement callback can match against them without
+    /// re-entering `PageOwner` (see [`DriverDebugHook`]'s doc comment).
+    breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
+    next_breakpoint_id: u64,
+    /// One-shot "pause at the next statement" flag, also shared with the
+    /// hook.
+    pause_requested: Rc<RefCell<bool>>,
+    /// `Debugger.paused` events the hook has queued, shared for the same
+    /// reason as `breakpoints`.
+    debugger_paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+}
+
+/// One script this driver has seen, classic or module (see
+/// [`PageOwner::load_scripts_leniently`]).
+struct ScriptRecord {
+    script_id: String,
+    url: String,
+    source: String,
+    start_line: u32,
+    start_column: u32,
+    end_line: u32,
+    end_column: u32,
+    hash: String,
+}
+
+/// A breakpoint set by `Debugger.setBreakpointByUrl`, matched against the
+/// *URL* of whatever script is currently running (not a specific
+/// `script_id`), so it also matches a script loaded after the breakpoint was
+/// set, the same as real Chrome's persistent-by-url breakpoints.
+///
+/// `line` is stored in `amazing_js`'s own 1-based line numbering
+/// (`ast::SourceLocation::line`, what [`DebugHook::on_statement`] reports),
+/// not CDP's 0-based `lineNumber` — converted once at
+/// [`PageOwner::set_breakpoint_by_url`], so the hot per-statement match in
+/// [`DriverDebugHook::on_statement`] is a plain integer comparison.
+struct BreakpointRecord {
+    id: String,
+    url: String,
+    line: u32,
+    column: Option<u32>,
+}
+
+/// CDP-20's driver-side [`DebugHook`] implementation. Lives on the
+/// `amazing-js` `Interpreter` (via `Rc<RefCell<dyn DebugHook>>`) but shares
+/// its actual state with [`PageOwner`] through plain `Rc<RefCell<_>>` cells
+/// rather than by calling back into `PageOwner` methods — the interpreter
+/// calls this hook from deep inside a `PageOwner` method that already holds
+/// `&mut self`, so a callback that tried to re-enter `PageOwner` would need
+/// a second `&mut` borrow the borrow checker (rightly) will not allow. Only
+/// plain data flows through these cells; no engine or `PageOwner` state is
+/// reachable from here.
+struct DriverDebugHook {
+    breakpoints: Rc<RefCell<Vec<BreakpointRecord>>>,
+    pause_requested: Rc<RefCell<bool>>,
+    paused: Rc<RefCell<VecDeque<PausedEvent>>>,
+}
+
+impl DebugHook for DriverDebugHook {
+    fn on_statement(&mut self, script_id: &str, url: &str, line: u32) {
+        let hit_ids: Vec<String> = self
+            .breakpoints
+            .borrow()
+            .iter()
+            .filter(|bp| bp.url == url && bp.line == line)
+            .map(|bp| bp.id.clone())
+            .collect();
+        let forced = {
+            let mut flag = self.pause_requested.borrow_mut();
+            std::mem::take(&mut *flag)
+        };
+        if hit_ids.is_empty() && !forced {
+            return;
+        }
+        let frame = CallFrame {
+            call_frame_id: "cf0".to_owned(),
+            function_name: String::new(),
+            // `line` is `amazing_js`'s 1-based line; CDP's `Location.lineNumber` is 0-based.
+            location: ScriptLocation { script_id: script_id.to_owned(), line_number: line.saturating_sub(1), column_number: None },
+            url: url.to_owned(),
+        };
+        let reason = if hit_ids.is_empty() { "other" } else { "Breakpoint" };
+        self.paused.borrow_mut().push_back(PausedEvent {
+            call_frames: vec![frame],
+            reason: reason.to_owned(),
+            hit_breakpoints: hit_ids,
+        });
+    }
+}
+
+/// A deterministic content hash for `Debugger.scriptParsed`'s `hash` field.
+/// Uses `std`'s own `SipHash` (`DefaultHasher`) rather than a real
+/// cryptographic digest — this workspace's engine crates take zero external
+/// dependencies, and CDP only needs *a* stable value a client can compare
+/// across edits, not V8's own hash algorithm.
+fn script_hash(source: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// `(end_line, end_column)` of `source`, 0-based and relative to the
+/// script's own text (this driver has no HTML-node source-position tracking
+/// to offset it into its containing document — see the module's "Known
+/// limitations").
+fn script_extent(source: &str) -> (u32, u32) {
+    let lines: Vec<&str> = source.split('\n').collect();
+    let end_line = lines.len().saturating_sub(1) as u32;
+    let end_column = lines.last().map(|line| line.chars().count()).unwrap_or(0) as u32;
+    (end_line, end_column)
+}
+
+/// Walks the DOM collecting `<script type="module">` elements' url/inline
+/// source *without* executing them — this engine does not support ES
+/// modules yet (`cmd::js::is_classic_javascript_type`'s own doc comment on
+/// why `collect_script_text` skips them). CDP-20 still reports a
+/// `Debugger.scriptParsed` for each one collected here so a DevTools
+/// frontend can see modules exist and read their source via
+/// `getScriptSource`, rather than silently losing them the way plain script
+/// execution already did before this ticket.
+fn collect_module_scripts(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut Vec<crate::cmd::js::PageScript>) {
+    if dom.name(node) == Some("script") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let is_module = attrs
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("type") && value.eq_ignore_ascii_case("module"));
+        if is_module {
+            let mut source = String::new();
+            for child in dom.children(node) {
+                if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                    source.push_str(data);
+                }
+            }
+            let src = attrs.iter().find(|(name, _)| name == "src").map(|(_, value)| value.clone());
+            if src.is_some() || !source.trim().is_empty() {
+                out.push(crate::cmd::js::PageScript { src, body: source });
+            }
+        }
+    }
+    for child in dom.children(node) {
+        collect_module_scripts(dom, child, out);
+    }
 }
 
 impl PageOwner {
@@ -640,8 +866,17 @@ impl PageOwner {
     /// events (for `fetch_and_load`'s document fetch) before scripts run.
     fn empty(target_id: &str, url: &str, width: f32, dom: amazing_dom::Dom) -> Result<Self, HostError> {
         let dom_host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
-        let scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
+        let mut scheduler = DriverScheduler::new(dom_host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| HostError::Internal(error.describe()))?;
+        let breakpoints = Rc::new(RefCell::new(Vec::new()));
+        let pause_requested = Rc::new(RefCell::new(false));
+        let debugger_paused = Rc::new(RefCell::new(VecDeque::new()));
+        let hook: amazing_js::debug_hook::SharedDebugHook = Rc::new(RefCell::new(DriverDebugHook {
+            breakpoints: breakpoints.clone(),
+            pause_requested: pause_requested.clone(),
+            paused: debugger_paused.clone(),
+        }));
+        scheduler.js.set_debug_hook(Some(hook));
         Ok(Self {
             dom_host,
             scheduler,
@@ -659,6 +894,14 @@ impl PageOwner {
             network_failed: VecDeque::new(),
             exceptions: VecDeque::new(),
             logs: VecDeque::new(),
+            scripts: Vec::new(),
+            scripts_parsed: VecDeque::new(),
+            next_script_id: 0,
+            debugger_enabled: false,
+            breakpoints,
+            next_breakpoint_id: 0,
+            pause_requested,
+            debugger_paused,
         })
     }
 
@@ -780,13 +1023,15 @@ impl PageOwner {
     /// own persistent `scheduler` rather than building (and dropping) its
     /// own, since CDP needs the realm to survive past page load.
     fn load_scripts_leniently(&mut self) {
-        let (scripts, handlers) = {
+        let (scripts, modules, handlers) = {
             let host = self.dom_host.borrow();
             let mut scripts = Vec::new();
             crate::cmd::js::collect_script_text(&host.dom, amazing_dom::NodeIdx(0), &mut scripts);
+            let mut modules = Vec::new();
+            collect_module_scripts(&host.dom, amazing_dom::NodeIdx(0), &mut modules);
             let mut handlers = Vec::new();
             crate::cmd::js::collect_inline_handlers(&host.dom, amazing_dom::NodeIdx(0), &mut handlers);
-            (scripts, handlers)
+            (scripts, modules, handlers)
         };
         for (node, event, body) in handlers {
             if let Err(thrown) = self.scheduler.install_inline_handler(node, &event, &body) {
@@ -794,19 +1039,40 @@ impl PageOwner {
             }
         }
         for script in scripts {
-            let source = match script.src {
+            let (source, url) = match script.src {
                 Some(src) => {
                     let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
                     match self.fetch_and_record(&script_url, "Script") {
-                        Ok(text) => text,
+                        Ok(text) => (text, script_url),
                         Err(()) => continue, // already recorded as a network failure
                     }
                 }
-                None => script.body,
+                None => (script.body, self.url.clone()),
             };
+            let script_id = self.register_script(&url, &source);
+            self.scheduler.js.set_current_script(script_id, url);
             if let Err(thrown) = self.scheduler.run_script(&source) {
                 self.record_load_error(format!("page script: {}", thrown.describe()));
             }
+        }
+        // Module scripts are collected and reported as `Debugger.scriptParsed`
+        // (real source, real url) but never executed — this engine does not
+        // support ES modules yet (`cmd::js::is_classic_javascript_type`'s own
+        // doc comment). Reporting them honestly, rather than silently
+        // dropping them as `collect_script_text` does, is CDP-20's own delta
+        // here; see the module's "Known limitations".
+        for module in modules {
+            let (source, url) = match module.src {
+                Some(src) => {
+                    let script_url = crate::cmd::js::resolve_script_url(&self.url, &src);
+                    match self.fetch_and_record(&script_url, "Script") {
+                        Ok(text) => (text, script_url),
+                        Err(()) => continue,
+                    }
+                }
+                None => (module.body, self.url.clone()),
+            };
+            self.register_script(&url, &source);
         }
         if let Err(thrown) = self.scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
             self.record_load_error(format!("DOMContentLoaded listener: {}", thrown.describe()));
@@ -1430,6 +1696,123 @@ impl PageOwner {
         self.get_box_model(node).map(|_| ())
     }
 
+    /// Mints a `script_id` and records a [`ScriptRecord`] (source kept for
+    /// `get_script_source`). Only queues a live `Debugger.scriptParsed` if
+    /// the domain is *already* enabled — a script parsed before the client
+    /// ever calls `Debugger.enable` (i.e. every script on this driver's
+    /// synchronous initial page load) is reported once, by that enable
+    /// call's own backfill, not twice.
+    fn register_script(&mut self, url: &str, source: &str) -> String {
+        self.next_script_id += 1;
+        let script_id = format!("script-{}", self.next_script_id);
+        let (end_line, end_column) = script_extent(source);
+        let hash = script_hash(source);
+        self.scripts.push(ScriptRecord {
+            script_id: script_id.clone(),
+            url: url.to_owned(),
+            source: source.to_owned(),
+            start_line: 0,
+            start_column: 0,
+            end_line,
+            end_column,
+            hash: hash.clone(),
+        });
+        if self.debugger_enabled {
+            self.scripts_parsed.push_back(ScriptInfo {
+                script_id: script_id.clone(),
+                url: url.to_owned(),
+                start_line: 0,
+                start_column: 0,
+                end_line,
+                end_column,
+                hash,
+            });
+        }
+        script_id
+    }
+
+    /// `Debugger.enable`: backfills a `scriptParsed` for every script parsed
+    /// before the client enabled the domain, matching real Chrome (a client
+    /// that enables `Debugger` after `Page.navigate` still sees every
+    /// script). Re-enabling is a no-op; disabling just stops the flag —
+    /// breakpoints and their bookkeeping are left in place, since real
+    /// Chrome only deactivates them for the *session*, and this driver has
+    /// only one session per page anyway.
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        if enabled && !self.debugger_enabled {
+            for script in &self.scripts {
+                self.scripts_parsed.push_back(ScriptInfo {
+                    script_id: script.script_id.clone(),
+                    url: script.url.clone(),
+                    start_line: script.start_line,
+                    start_column: script.start_column,
+                    end_line: script.end_line,
+                    end_column: script.end_column,
+                    hash: script.hash.clone(),
+                });
+            }
+        }
+        self.debugger_enabled = enabled;
+        Ok(())
+    }
+
+    /// `Debugger.setBreakpointByUrl` at line granularity. `url` is matched
+    /// literally (no `urlRegex` support) against every script's own
+    /// `ScriptRecord::url`; a script that has not loaded yet can still match
+    /// once it does, since the debug hook re-checks `breakpoints` by URL on
+    /// every statement rather than resolving once at set time. `locations`
+    /// only reports scripts that exist *right now* and whose source actually
+    /// has that many lines — matching real Chrome, which can return an empty
+    /// `locations` array for an unresolved breakpoint without that being an
+    /// error. `line_number` arrives 0-based (CDP convention); stored as
+    /// `amazing_js`'s 1-based line so [`DriverDebugHook::on_statement`] can
+    /// compare it directly against `ast::SourceLocation::line`.
+    fn set_breakpoint_by_url(&mut self, url: &str, line_number: u32, column_number: Option<u32>) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        self.next_breakpoint_id += 1;
+        let id = format!("bp-{}", self.next_breakpoint_id);
+        self.breakpoints.borrow_mut().push(BreakpointRecord { id: id.clone(), url: url.to_owned(), line: line_number + 1, column: column_number });
+        let locations = self
+            .scripts
+            .iter()
+            .filter(|script| script.url == url && line_number <= script.end_line)
+            .map(|script| ScriptLocation { script_id: script.script_id.clone(), line_number, column_number })
+            .collect();
+        Ok((id, locations))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) {
+        self.breakpoints.borrow_mut().retain(|bp| bp.id != breakpoint_id);
+    }
+
+    /// `Debugger.pause`: see `DriverPageSession::debugger_pause`'s doc
+    /// comment for why this is "pause at the next statement that actually
+    /// runs" rather than a true synchronous halt.
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        *self.pause_requested.borrow_mut() = true;
+        Ok(())
+    }
+
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        *self.pause_requested.borrow_mut() = false;
+        Ok(())
+    }
+
+    fn get_script_source(&self, script_id: &str) -> Result<String, HostError> {
+        self.scripts
+            .iter()
+            .find(|script| script.script_id == script_id)
+            .map(|script| script.source.clone())
+            .ok_or(HostError::NotFound)
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        self.scripts_parsed.drain(..).collect()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        self.debugger_paused.borrow_mut().drain(..).collect()
+    }
+
     fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
         let dom_event = match event.kind.as_str() {
             "mousePressed" => "mousedown",
@@ -1640,6 +2023,31 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::HighlightNode(node, reply) => {
                 let _ = reply.send(page.highlight_node(node));
+            }
+            PageCommand::DebuggerEnabled(enabled, reply) => {
+                let _ = reply.send(page.debugger_enabled(enabled));
+            }
+            PageCommand::SetBreakpointByUrl(url, line, column, reply) => {
+                let _ = reply.send(page.set_breakpoint_by_url(&url, line, column));
+            }
+            PageCommand::RemoveBreakpoint(id, reply) => {
+                page.remove_breakpoint(&id);
+                let _ = reply.send(Ok(()));
+            }
+            PageCommand::DebuggerPause(reply) => {
+                let _ = reply.send(page.debugger_pause());
+            }
+            PageCommand::DebuggerResume(reply) => {
+                let _ = reply.send(page.debugger_resume());
+            }
+            PageCommand::GetScriptSource(script_id, reply) => {
+                let _ = reply.send(page.get_script_source(&script_id));
+            }
+            PageCommand::DrainScriptsParsed(reply) => {
+                let _ = reply.send(Ok(page.drain_scripts_parsed()));
+            }
+            PageCommand::DrainDebuggerPaused(reply) => {
+                let _ = reply.send(Ok(page.drain_debugger_paused()));
             }
             PageCommand::Shutdown => break,
         }
@@ -1852,6 +2260,62 @@ impl DevToolsSession for DriverPageSession {
 
     fn highlight_quad(&mut self, _quad: Quad, _config: &HighlightConfig) -> Result<(), HostError> {
         Ok(())
+    }
+
+    /// CDP-20: `Debugger.enable` backfills `scriptParsed` for every script
+    /// already parsed (`PageOwner::debugger_enabled`), matching real Chrome.
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::DebuggerEnabled(enabled, reply))
+    }
+
+    /// `condition` is accepted (to match the trait's real Chrome-shaped
+    /// signature) but never evaluated — see the module's "Known
+    /// limitations": a conditional breakpoint here behaves as
+    /// unconditional.
+    fn set_breakpoint_by_url(
+        &mut self,
+        url: &str,
+        line_number: u32,
+        column_number: Option<u32>,
+        _condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        let url = url.to_owned();
+        request(&self.sender, |reply| PageCommand::SetBreakpointByUrl(url, line_number, column_number, reply))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) -> Result<(), HostError> {
+        let breakpoint_id = breakpoint_id.to_owned();
+        request(&self.sender, |reply| PageCommand::RemoveBreakpoint(breakpoint_id, reply))
+    }
+
+    /// `Debugger.pause`: since nothing can be blocked mid-statement on this
+    /// driver's single page thread (see the module's "Known limitations"),
+    /// this arms a one-shot flag the debug hook consumes on the *next*
+    /// statement that actually runs (the next event-loop tick, timer, or
+    /// handler for an otherwise idle page) rather than halting anything
+    /// already executing.
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerPause)
+    }
+
+    /// `Debugger.resume`: clears that same flag if it had not fired yet.
+    /// Nothing is ever truly suspended by this driver, so there is no
+    /// execution to actually resume — see "Known limitations".
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        request(&self.sender, PageCommand::DebuggerResume)
+    }
+
+    fn get_script_source(&mut self, script_id: &str) -> Result<String, HostError> {
+        let script_id = script_id.to_owned();
+        request(&self.sender, |reply| PageCommand::GetScriptSource(script_id, reply))
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        request(&self.sender, PageCommand::DrainScriptsParsed).unwrap_or_default()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        request(&self.sender, PageCommand::DrainDebuggerPaused).unwrap_or_default()
     }
 }
 
@@ -2934,6 +3398,224 @@ mod tests {
             bogus.get("error").is_some(),
             "highlighting a display:none node (no box) should fail: {bogus}"
         );
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-20: `Debugger.enable`/`scriptParsed` (classic + module)/
+    /// `getScriptSource`/`setBreakpointByUrl`/`pause`/`resume`, plus
+    /// `Page.captureScreenshot` (already real since CDP-17; exercised here
+    /// too since CDP-20's own ticket names it alongside the Debugger work).
+    #[test]
+    fn end_to_end_debugger_domain_scripts_breakpoints_and_pause() {
+        let host = spawn_test_host(
+            "http://example.test/debug.html",
+            "<title>Debug</title><body style=\"background:white\">\
+             <script>var a = 1;\nvar b = 2;\nvar sum = a + b;</script>\
+             <script type=\"module\">export const z = 1;</script>\
+             </body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let mut events = Vec::new();
+
+        // Debugger.enable backfills scriptParsed for both scripts the page
+        // already ran/collected during its synchronous initial load, before
+        // this client ever connected.
+        let (enabled, more) = client.result_and_events("Debugger.enable", Json::Object(Vec::new()));
+        events.extend(more);
+        assert!(enabled.get("debuggerId").and_then(Json::as_str).is_some(), "{enabled}");
+        // Nudge another poll cycle so the backfill (queued synchronously
+        // inside the enable call, delivered on the server's own poll loop)
+        // is flushed before asserting.
+        let (_, more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("1".into()))]),
+        );
+        events.extend(more);
+
+        let scripts_parsed: Vec<Json> = events
+            .iter()
+            .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.scriptParsed"))
+            .cloned()
+            .collect();
+        assert_eq!(scripts_parsed.len(), 2, "classic + module: {events:?}");
+
+        let mut classic_id = None;
+        let mut module_id = None;
+        for parsed in &scripts_parsed {
+            let params = parsed.get("params").expect("params");
+            let script_id = params.get("scriptId").and_then(Json::as_str).expect("scriptId").to_owned();
+            let source = client.result(
+                "Debugger.getScriptSource",
+                Json::Object(vec![("scriptId".into(), Json::String(script_id.clone()))]),
+            );
+            let text = source.get("scriptSource").and_then(Json::as_str).unwrap_or_default();
+            if text.contains("var sum") {
+                classic_id = Some(script_id);
+                // 3 lines, 0-based endLine == 2.
+                assert_eq!(params.get("endLine").and_then(Json::as_f64), Some(2.0), "{params}");
+            } else if text.contains("export const z") {
+                module_id = Some(script_id);
+                assert_eq!(params.get("endLine").and_then(Json::as_f64), Some(0.0), "{params}");
+            } else {
+                panic!("unexpected script source: {text}");
+            }
+        }
+        let classic_id = classic_id.expect("classic script reported and readable");
+        module_id.expect("module script reported and readable even though it never ran");
+
+        // setBreakpointByUrl resolves a real location for the script whose
+        // source actually reaches that line, and an empty (not erroring)
+        // `locations` for a line past every known script's end — both
+        // scripts share this page's URL (both inline, no `src`), so this
+        // also proves the match is genuinely per-script-extent, not just
+        // "any script with this url".
+        let resolved = client.result(
+            "Debugger.setBreakpointByUrl",
+            Json::Object(vec![
+                ("url".into(), Json::String("http://example.test/debug.html".into())),
+                ("lineNumber".into(), Json::Number(2.0)),
+            ]),
+        );
+        let locations = resolved.get("locations").and_then(Json::as_array).expect("locations array");
+        assert_eq!(locations.len(), 1, "{resolved}");
+        assert_eq!(locations[0].get("scriptId").and_then(Json::as_str), Some(classic_id.as_str()), "{resolved}");
+        // Removed immediately: it shares line 2 (0-based) with statements
+        // the later breakpoint-hit check below runs, and this assertion is
+        // already done with it.
+        let resolved_id = resolved.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+        client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(resolved_id))]));
+
+        let unresolved = client.result(
+            "Debugger.setBreakpointByUrl",
+            Json::Object(vec![
+                ("url".into(), Json::String("http://example.test/debug.html".into())),
+                ("lineNumber".into(), Json::Number(50.0)),
+            ]),
+        );
+        let unresolved_locations = unresolved.get("locations").and_then(Json::as_array).expect("locations array");
+        assert!(unresolved_locations.is_empty(), "{unresolved}");
+
+        // A real breakpoint hit: this driver attributes every statement to
+        // whichever script the host most recently told the interpreter it
+        // was running (see `Interpreter::set_current_script`'s doc comment),
+        // and `Runtime.evaluate` never changes that — so a breakpoint set on
+        // the page's own URL/line is still live for a later `evaluate` whose
+        // *own* second statement happens to fall on that same line, because
+        // the hook matches by (url, line) alone, not by which text is
+        // actually running. That is an honest reflection of the real
+        // limitation, not a workaround for this test.
+        let hit_line = client.result(
+            "Debugger.setBreakpointByUrl",
+            Json::Object(vec![
+                ("url".into(), Json::String("http://example.test/debug.html".into())),
+                ("lineNumber".into(), Json::Number(1.0)),
+            ]),
+        );
+        let hit_breakpoint_id = hit_line.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+        // Every event here is queued synchronously while `dispatch_message`
+        // runs the triggering command, but the server's own poll loop
+        // (`Connection::pump`) only flushes it *after* that command's reply
+        // is already written (`Connection::run`'s `dispatch_message` then
+        // `pump()`) — so it shows up as a push ahead of the *next* command's
+        // reply, not the triggering command's own `more`. One extra no-op
+        // round trip is the same "nudge" the CDP-18 network/console tests
+        // already use for exactly this reason.
+        let mut evaluate_and_collect = |client: &mut Client, expression: &str| -> Vec<Json> {
+            let (_, mut more) = client.result_and_events(
+                "Runtime.evaluate",
+                Json::Object(vec![("expression".into(), Json::String(expression.into()))]),
+            );
+            let (_, nudge) = client.result_and_events(
+                "Runtime.evaluate",
+                Json::Object(vec![("expression".into(), Json::String("0;".into()))]),
+            );
+            more.extend(nudge);
+            more
+        };
+        let more = evaluate_and_collect(&mut client, "100;\n200;\n300;");
+        let paused: Vec<Json> = more
+            .iter()
+            .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+            .cloned()
+            .collect();
+        assert_eq!(paused.len(), 1, "{more:?}");
+        let paused_params = paused[0].get("params").expect("params");
+        assert_eq!(
+            paused_params.get("hitBreakpoints").and_then(Json::as_array).map(<[Json]>::len),
+            Some(1),
+            "{paused_params}"
+        );
+        assert_eq!(
+            paused_params.get("hitBreakpoints").and_then(|hits| hits.as_array()).and_then(|hits| hits.first()).and_then(Json::as_str),
+            Some(hit_breakpoint_id.as_str()),
+            "{paused_params}"
+        );
+        assert_eq!(paused_params.get("reason").and_then(Json::as_str), Some("Breakpoint"), "{paused_params}");
+
+        client.result(
+            "Debugger.removeBreakpoint",
+            Json::Object(vec![("breakpointId".into(), Json::String(hit_breakpoint_id))]),
+        );
+        let more = evaluate_and_collect(&mut client, "1;\n2;\n3;");
+        assert!(
+            !more.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")),
+            "removed breakpoint should not fire again: {more:?}"
+        );
+
+        // Debugger.pause: an unconditional one-shot "stop at the next
+        // statement that actually runs" (see `debugger_pause`'s doc comment
+        // for why this driver cannot halt anything already executing), and
+        // Debugger.resume clears it again if unfired.
+        client.result("Debugger.pause", Json::Object(Vec::new()));
+        let more = evaluate_and_collect(&mut client, "42;");
+        let forced: Vec<Json> = more
+            .iter()
+            .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+            .cloned()
+            .collect();
+        assert_eq!(forced.len(), 1, "{more:?}");
+        assert_eq!(
+            forced[0].get("params").and_then(|params| params.get("reason")).and_then(Json::as_str),
+            Some("other"),
+            "{forced:?}"
+        );
+
+        client.result("Debugger.pause", Json::Object(Vec::new()));
+        client.result("Debugger.resume", Json::Object(Vec::new()));
+        let more = evaluate_and_collect(&mut client, "7;");
+        assert!(
+            !more.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")),
+            "resume should have cleared the pending pause: {more:?}"
+        );
+
+        // stepInto/evaluateOnCallFrame genuinely have no suspended state to
+        // act on with this driver (nothing is ever truly blocked — see the
+        // module's "Known limitations") and stay `Unsupported`.
+        let step = client.raw("Debugger.stepInto", Json::Object(Vec::new()));
+        assert!(step.get("error").is_some(), "{step}");
+        let eval_on_frame = client.raw(
+            "Debugger.evaluateOnCallFrame",
+            Json::Object(vec![
+                ("callFrameId".into(), Json::String("cf0".into())),
+                ("expression".into(), Json::String("1".into())),
+            ]),
+        );
+        assert!(eval_on_frame.get("error").is_some(), "{eval_on_frame}");
+
+        // Page.captureScreenshot (CDP-17, exercised here as CDP-20's ticket
+        // names it alongside the Debugger domain).
+        let shot = client.result("Page.captureScreenshot", Json::Object(vec![("format".into(), Json::String("png".into()))]));
+        let data = shot.get("data").and_then(Json::as_str).expect("data field");
+        let bytes = amazing_devtools::base64::decode(data).expect("valid base64");
+        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "not a PNG signature: {bytes:?}");
 
         shutdown.store(true, Ordering::Relaxed);
         let _ = join.join();

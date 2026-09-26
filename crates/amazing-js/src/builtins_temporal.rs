@@ -728,7 +728,17 @@ fn std_temporal_parse_duration(text: &str) -> Result<[i64; 10], Throw> {
 }
 
 fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Throw> {
-    if kind == StdTemporalKind::Duration { return std_temporal_parse_duration(text); }
+    if kind == StdTemporalKind::Duration {
+        // Unlike every other kind (validated below, after the match), a
+        // Duration string returns early here and must run the same sign/range
+        // check itself -- the property-bag path (std_temporal_bag) already
+        // validates unconditionally, so a string-form "P4294967296Y" or a
+        // ISO duration string mixing a positive and negative field skipped it
+        // entirely before this.
+        let values = std_temporal_parse_duration(text)?;
+        std_temporal_validate(StdTemporalKind::Duration, &values)?;
+        return Ok(values);
+    }
     let invalid = || Throw::range_error("invalid Temporal string");
     let (text, _calendar, _zone) = std_temporal_parse_annotations(text)?;
     if text.ends_with('Z') || text.ends_with('z') { return Err(invalid()); }
@@ -828,24 +838,41 @@ fn std_temporal_compare(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTempor
     let left = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 0))?;
     let right = std_temporal_from_fields(i, kind, std_reflect_arg(&args, 1))?;
     let ordering = if kind == StdTemporalKind::Duration {
+        // GetOptionsObject + ToRelativeTemporalObject (spec steps 3-4) run
+        // unconditionally -- a wrong options type or a malformed relativeTo
+        // string throws even when the two durations turn out identical and
+        // the parsed relativeTo would otherwise go unused.
         let options = std_reflect_arg(&args, 2);
         let relative = std_temporal_option_value(i, &options, "relativeTo")?;
-        let calendar = left[0..2].iter().chain(right[0..2].iter()).any(|v| *v != 0);
-        if calendar && relative.is_undefined() {
-            return Err(Throw::range_error("calendar units require relativeTo"));
+        let relative_base = if relative.is_undefined() { None } else {
+            Some(std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?)
+        };
+        if left == right {
+            // Identical Duration Records (spec step 5): equal even when a
+            // calendar unit is non-zero and relativeTo was never resolved.
+            std::cmp::Ordering::Equal
+        } else {
+            // Years, months, AND weeks all need relativeTo (index 2 is
+            // weeks, not part of a [0..2) years/months-only slice) -- days
+            // (index 3) alone never does, since a day is always exactly
+            // 86,400 seconds in ISO.
+            let calendar = left[0..3].iter().chain(right[0..3].iter()).any(|v| *v != 0);
+            match (calendar, relative_base) {
+                (true, None) => return Err(Throw::range_error("calendar units require relativeTo")),
+                (true, Some(base)) => {
+                    let total = |duration: &[i64; 10]| -> Result<i128, Throw> {
+                        let target = std_temporal_add_calendar(&base, duration, 1, false)?;
+                        let days = std_temporal_epoch_day(target[0], target[1], target[2])
+                            - std_temporal_epoch_day(base[0], base[1], base[2]);
+                        Ok(days as i128 * STD_TEMPORAL_NS_DAY
+                            + std_temporal_duration_time_ns(duration)
+                            - (duration[2] as i128 * 7 + duration[3] as i128) * STD_TEMPORAL_NS_DAY)
+                    };
+                    total(&left)?.cmp(&total(&right)?)
+                }
+                (false, _) => std_temporal_duration_time_ns(&left).cmp(&std_temporal_duration_time_ns(&right)),
+            }
         }
-        if calendar {
-            let base = std_temporal_from_fields(i, StdTemporalKind::PlainDate, relative)?;
-            let total = |duration: &[i64; 10]| -> Result<i128, Throw> {
-                let target = std_temporal_add_calendar(&base, duration, 1, false)?;
-                let days = std_temporal_epoch_day(target[0], target[1], target[2])
-                    - std_temporal_epoch_day(base[0], base[1], base[2]);
-                Ok(days as i128 * STD_TEMPORAL_NS_DAY
-                    + std_temporal_duration_time_ns(duration)
-                    - (duration[2] as i128 * 7 + duration[3] as i128) * STD_TEMPORAL_NS_DAY)
-            };
-            total(&left)?.cmp(&total(&right)?)
-        } else { std_temporal_duration_time_ns(&left).cmp(&std_temporal_duration_time_ns(&right)) }
     } else if kind == StdTemporalKind::PlainMonthDay {
         (left[9], left[1], left[2]).cmp(&(right[9], right[1], right[2]))
     } else { left.cmp(&right) };
