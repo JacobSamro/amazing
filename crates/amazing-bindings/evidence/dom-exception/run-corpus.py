@@ -13,16 +13,22 @@ DIRECTORY = 'webidl/ecmascript-binding/es-exceptions'
 parser = argparse.ArgumentParser()
 parser.add_argument('label')
 parser.add_argument('source')
+parser.add_argument('--reuse-binary', action='store_true', help='Use the frozen executable from an interrupted corpus run')
 args = parser.parse_args()
 output = Path(os.environ['OUT']) / ('dom-exception-' + args.label)
 output.mkdir(parents=True, exist_ok=True)
 # Freeze the executable before other pooled lanes build into the shared target.
 binary = output / 'amazing'
-shutil.copy2(Path(os.environ['CARGO_TARGET_DIR']) / 'debug/amazing', binary)
+if not args.reuse_binary:
+    shutil.copy2(Path(os.environ['CARGO_TARGET_DIR']) / 'debug/amazing', binary)
+assert binary.is_file(), 'missing frozen executable'
 root = Path(os.environ['OUT']) / 'dom-exception-wpt'
 if not (root / '.git').exists():
-    subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(Path.home() / 'corpora/wpt'), str(root)], check=True)
+    subprocess.run(['git', 'init', str(root)], check=True)
+    subprocess.run(['git', '-C', str(root), 'remote', 'add', 'origin', 'https://github.com/web-platform-tests/wpt.git'], check=True)
     subprocess.run(['git', '-C', str(root), 'sparse-checkout', 'set', 'resources', DIRECTORY], check=True)
+if not (root / DIRECTORY).exists():
+    subprocess.run(['git', '-C', str(root), 'fetch', '--depth=1', '--filter=blob:none', 'origin', REVISION], check=True)
     subprocess.run(['git', '-C', str(root), 'checkout', '--detach', REVISION], check=True)
 assert subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() == REVISION
 selection = sorted(p.relative_to(root).as_posix() for p in (root / DIRECTORY).rglob('*')

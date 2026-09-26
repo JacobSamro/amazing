@@ -2520,3 +2520,6 @@ mod event_dictionaries;
 
 #[path = "tests_legacy_events.rs"]
 mod legacy_events;
+
+#[path = "tests_dom_exception.rs"]
+mod dom_exception;
