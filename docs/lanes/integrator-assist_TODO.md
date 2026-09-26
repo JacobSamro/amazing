@@ -1027,3 +1027,100 @@ Gate (Linux Boat, head `134ccaf6` plus this series): `-p amazing` nextest 224
 passed/5 skipped (no lib doctests — `amazing` is bin-only); workspace nextest
 2747 passed/11 skipped/0 failed (85.5s); workspace doctests 4 passed/0
 failed. Zero losses.
+
+## IA-LIVE-2 — real-pages cluster table, docs.rs/vuejs.org timeout root cause (2026-09-26)
+
+Merged `dev` (4bab124d: IA-LIVE-PAGES + a11y/devtools merged; brought in the
+orchestrator's own main.rs conflict resolution). Two follow-ups from that
+merge, then the ticket itself.
+
+**Ownership fold.** a11y had already resolved A11Y-6 itself
+(`runtime_host_a11y.rs`, `amazing a11y-tree`) rather than waiting on this
+lane's earlier duplicate `amazing axtree` (`cmd/axtree.rs`). Per the
+orchestrator: deleted `cmd/axtree.rs`, removed its `mod`/dispatch lines from
+`main.rs`/`cmd/mod.rs`, and folded its one real addition — accepting an
+`http(s)://` URL, not just a local file — into `runtime_host_a11y.rs::
+ax_tree_for_page`/`cmd_a11y_tree` (plus the `DocumentKind::Xml` "unsupported"
+guard `axtree.rs` had that the a11y version didn't). `runtime_host_devtools.rs`
+ownership also moved to the devtools lane (CDP-16 continues it); this lane
+made no further edits there.
+
+**Cluster table.** Extended `crates/amazing/tests/real_pages.rs` (the local
+52-fixture IA-REAL-PAGES corpus, no network) to capture renderer warnings —
+it only captured script errors before — and print the four IA-LIVE-2 buckets:
+JS exceptions by message, missing-API fallbacks, a CSS/parse (renderer)
+warning histogram, and explicit panic/timeout counters, mirroring
+`live_pages.rs`'s existing collapsing (`warning_kind`). Current numbers: 52
+pages, 4 errors, 4 fallback pages, **0 crashes, 0 panics, 0 timeouts**; new
+signal: **121x `UnsupportedSvg`** across the corpus (7 per page on every page
+using the shared thumbnail/logo SVG fixtures) — routed to replaced-content
+with an exact repro, plus a confirmed side-finding while reading
+`amazing-svg`: `<text>` elements only ever render when `font-family` contains
+the literal string `"Ahem"` (the WPT test font), so real-world SVG text is
+silently a no-op today, independent of the `UnsupportedSvg` cause.
+
+**docs.rs/serde and vuejs.org timeouts, root-caused.** IA-LIVE-PAGES's live
+40-URL run had 2 timeouts (150s child-process ceiling each); the storage
+event-loop regression that prompted holding off on a full live-corpus rerun
+had *not* landed on `dev` yet (`git log dev -- crates/amazing/src/
+js_scheduler.rs` showed nothing since the report), so this ticket worked the
+two known timeouts directly instead of re-running the full live corpus.
+
+- **docs.rs/serde (fixed, driver-owned):** `PageFontLoader` (`font_loader.rs`)
+  had no per-page fetch cache, and a `PageFontLoader` is constructed fresh
+  once *per `@font-face` rule* in `page.rs::load_page_text_from_sheets`. This
+  page declares "Font Awesome 5 Free/Brands", "Font Awesome 6 Free/Brands"
+  and a plain "FontAwesome" alias, all pointing at the same 4 URLs — 12
+  redundant fetch attempts of those 4 URLs, plus 5 unique webfont URLs, each
+  paying its own 20s `fetch_cors` deadline against an unreachable host (17
+  sequential attempts, ~279s observed). Added a per-page `HashMap<resolved
+  URL, Result<Vec<u8>, String>>` cache threaded through `PageFontLoader`
+  (`cache` field) from a single map owned by `load_page_text_from_sheets`, so
+  a repeated URL reuses the first result instead of re-fetching; still warns
+  once per `@font-face` rule for triage parity. New regression test:
+  `font_loader::tests::http_font_source_is_only_fetched_once_per_page_even_
+  when_reused_by_multiple_font_face_rules` (counts real server connections).
+  Measured: 279s -> 190s (32% faster) on the same Boat sandbox. Still exceeds
+  the live corpus's 150s child-process ceiling — 9 *distinct* font URLs on
+  this page are genuinely unreachable/slow from this network, each still
+  paying its own 20s deadline (9 x ~20s ~= 180s); that residual is a
+  legitimate "many distinct broken font sources on one page" cost, not a bug,
+  and is noted as a follow-up (shorter default per-font-fetch deadline, or a
+  larger live-corpus per-page ceiling) rather than fixed here.
+- **vuejs.org (root-caused, not fixed — outside this lane's owned crates):**
+  isolated with a minimal repro (a local page with nothing but `<link
+  rel="stylesheet" href="https://vuejs.org/assets/style.BMnqHME7.css">` — no
+  scripts, no other resources) that still hangs 60s+ with *zero* output.
+  Ruled out reachability/DNS/TLS directly (every one of the 14 distinct
+  same-origin font URLs that stylesheet's 28 `@font-face` rules resolve to,
+  after the same dedup fix above, fetches in well under 1s via plain `amazing
+  fetch`/`curl` from the same sandbox). Zero warnings during the hang means
+  every fetch eventually *succeeds*, just far slower in aggregate than the
+  plain blocking fetch path used everywhere else in the driver — the one
+  difference is `font_loader.rs::fetch_cors`'s use of `amazing_fetch::
+  service::NetworkService`/`FontRequest` (a 2ms-interval poll loop) instead of
+  a single blocking call. Routed to net (`amazing-fetch`/`amazing-net` are
+  net-owned) with the exact repro; not attempted here since the dispatcher
+  internals are outside `crates/amazing`.
+- Also added an overall wall-clock budget guard around the whole script phase
+  in `execute_page_scripts_lenient` (`cmd/js.rs`) — handlers, scripts, the
+  DOMContentLoaded/load dispatch and the 16-step event-loop pump now share one
+  deadline (`AMAZING_SCRIPT_PHASE_BUDGET_SECS`, default 45s) instead of only
+  having each individual sub-operation bounded; remaining work is skipped and
+  reported (not silently eaten) once the budget is spent. This is a general
+  defense for any future page whose *script* phase chains many blocking
+  network primitives (each already capped at 10-15s in `runtime_host_net.rs`)
+  faster than one could reasonably notice; it does not change behavior for
+  any page that finishes within budget, and it did not end up being the
+  vuejs.org fix (that hang is in the paint-phase font stylesheet, not script
+  execution) but is kept as a real, tested safety net either way.
+
+**Infra note:** the shared Boat sandbox (`bx_pvqc5usm`, pool `pool-dom`) went
+from 3 GB to 0 GB free across this ticket's `linux-run.sh` calls; flagged to
+the orchestrator in `.agents/integrator-assist/questions.md` since this lane
+has no `boat` command access to investigate.
+
+Gate (Linux Boat, `dev` head `99df2b68` plus this series): `-p amazing`
+nextest 257 passed/6 skipped; workspace nextest 3021 passed/12 skipped/0
+failed (71.7s); workspace doctests all passed (0 failures, `amazing_js`/
+`amazing_html` included). Zero losses.

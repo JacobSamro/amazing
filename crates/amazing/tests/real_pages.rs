@@ -41,6 +41,15 @@ fn looks_like_missing_feature(error: &str) -> bool {
     MARKERS.iter().any(|marker| lower.contains(marker))
 }
 
+/// Collapse a renderer warning like `image "URL": UnsupportedSvg` to its error
+/// kind so per-page messages cluster (same collapsing `live_pages.rs` uses).
+fn warning_kind(warning: &str) -> String {
+    match warning.rsplit_once("\": ") {
+        Some((_, kind)) => kind.to_owned(),
+        None => warning.to_owned(),
+    }
+}
+
 fn sanitize(page: &Path) -> String {
     page.file_stem()
         .map(|stem| stem.to_string_lossy().replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "_"))
@@ -51,12 +60,16 @@ struct Row {
     page: String,
     status: String,
     errors: Vec<String>,
+    warnings: Vec<String>,
     render_ms: u64,
     total_ms: u64,
     exit: i32,
     timed_out: bool,
     wrote_image: bool,
     nonwhite: usize,
+    /// `stderr` contained `panicked at` — a layout/render panic, distinct
+    /// from a page-script error or a lost/killed process.
+    panicked: bool,
 }
 
 fn run_page(binary: &str, page: &Path, out_dir: &Path, timeout: Duration) -> Row {
@@ -111,6 +124,15 @@ fn run_page(binary: &str, page: &Path, out_dir: &Path, timeout: Duration) -> Row
             errors.push(error.to_owned());
         }
     }
+    // Media/resource warnings are printed by the renderer even on a successful
+    // page (same convention `live_pages.rs` clusters on).
+    let mut warnings = Vec::new();
+    for line in stderr.lines() {
+        if let Some(warning) = line.strip_prefix("amazing render: ") {
+            warnings.push(warning.to_owned());
+        }
+    }
+    let panicked = stderr.contains("panicked at");
     if (exit != 0 || status == "no_report") && !stderr.trim().is_empty() {
         for line in stderr.lines().take(4) {
             if !line.trim().is_empty() {
@@ -125,12 +147,14 @@ fn run_page(binary: &str, page: &Path, out_dir: &Path, timeout: Duration) -> Row
         page: page.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
         status,
         errors,
+        warnings,
         render_ms,
         total_ms,
         exit,
         timed_out,
         wrote_image,
         nonwhite,
+        panicked,
     }
 }
 
@@ -176,8 +200,19 @@ fn real_pages_corpus_renders_without_crashes() {
     let mut fallback_pages = 0;
     let mut errored_pages = 0;
     let mut crashes = 0;
+    let mut panics = 0;
+    let mut timeouts = 0;
     let mut slowest = (0u64, String::new());
-    let mut table = String::from("page\tstatus\terrors\tfallbacks\trender_ms\ttotal_ms\tnonwhite\texit\tfirst_error\n");
+    let mut table = String::from(
+        "page\tstatus\terrors\twarnings\tfallbacks\trender_ms\ttotal_ms\tnonwhite\texit\tfirst_error\n",
+    );
+    // IA-LIVE-2 cluster table: JS exceptions by message, missing-API
+    // fallbacks, CSS/parse (renderer) warnings, layout panics and timeouts,
+    // one histogram bucket each, so the biggest cluster is obvious at a
+    // glance instead of scanning per-page rows.
+    let mut js_exceptions: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    let mut missing_apis: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    let mut css_parse_warnings: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for row in &rows {
         let fallbacks = row.errors.iter().filter(|error| looks_like_missing_feature(error)).count();
         if fallbacks > 0 {
@@ -189,14 +224,31 @@ fn real_pages_corpus_renders_without_crashes() {
         if row.exit != 0 || row.timed_out || row.status == "no_report" {
             crashes += 1;
         }
+        if row.panicked {
+            panics += 1;
+        }
+        if row.timed_out {
+            timeouts += 1;
+        }
         if row.total_ms > slowest.0 {
             slowest = (row.total_ms, row.page.clone());
         }
+        for error in &row.errors {
+            if looks_like_missing_feature(error) {
+                *missing_apis.entry(error.as_str()).or_default() += 1;
+            } else {
+                *js_exceptions.entry(error.as_str()).or_default() += 1;
+            }
+        }
+        for warning in &row.warnings {
+            *css_parse_warnings.entry(warning_kind(warning)).or_default() += 1;
+        }
         table.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             row.page,
             row.status,
             row.errors.len(),
+            row.warnings.len(),
             fallbacks,
             row.render_ms,
             row.total_ms,
@@ -207,18 +259,20 @@ fn real_pages_corpus_renders_without_crashes() {
     }
     println!("{table}");
     println!(
-        "real-pages: {} pages, {} errors, {} fallback pages, {} crashes, slowest {} ({} ms)",
-        rows.len(), errored_pages, fallback_pages, crashes, slowest.1, slowest.0
+        "real-pages: {} pages, {} errors, {} fallback pages, {} crashes, {} panics, {} timeouts, slowest {} ({} ms)",
+        rows.len(), errored_pages, fallback_pages, crashes, panics, timeouts, slowest.1, slowest.0
     );
-    let mut distinct: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-    for row in &rows {
-        for error in &row.errors {
-            *distinct.entry(error.as_str()).or_default() += 1;
-        }
-    }
-    println!("distinct errors:");
-    for (error, count) in &distinct {
+    println!("cluster: JS exceptions by message:");
+    for (error, count) in &js_exceptions {
         println!("  {count}x {error}");
+    }
+    println!("cluster: missing APIs (fallback errors):");
+    for (error, count) in &missing_apis {
+        println!("  {count}x {error}");
+    }
+    println!("cluster: CSS/parse (renderer) warnings:");
+    for (warning, count) in &css_parse_warnings {
+        println!("  {count}x {warning}");
     }
 
     if let Ok(path) = std::env::var("AMAZING_REAL_PAGES_EVIDENCE") {
@@ -227,6 +281,10 @@ fn real_pages_corpus_renders_without_crashes() {
         }
         let mut evidence = format!("# IA-REAL-PAGES run — {} pages\n\n", rows.len());
         evidence.push_str(&table);
+        evidence.push_str(&format!(
+            "\n{} panics, {} timeouts, {} crashes\n",
+            panics, timeouts, crashes
+        ));
         let _ = std::fs::write(path, evidence);
     }
     let _ = std::fs::remove_dir_all(&out_dir);

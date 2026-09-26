@@ -1,15 +1,22 @@
 //! Element-specific reflected attributes, using the shared DOM-8 converters.
-use crate::{host::{InterfaceBrand, Operation as O, UrlReflection}, html_reflection};
+use crate::{host::{Interface, InterfaceBrand, LegacyReflectionKind as L, Operation as O, UrlReflection}, html_reflection};
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
+enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
 #[derive(Clone, Copy)]
-struct Spec { attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
+struct Spec { interface: Option<Interface>, attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
 const REL: &[&str] = &["a", "area", "link"];
 fn spec(op: O) -> Option<Spec> {
     use Kind as K;
+    if let O::LegacyReflectGet(interface, attribute, kind) | O::LegacyReflectSet(interface, attribute, kind) = op {
+        let kind = match kind { L::String => K::String, L::LegacyString => K::LegacyString,
+            L::Url => K::Url, L::UsvUrl => K::UsvUrl, L::Boolean => K::Boolean,
+            L::Unsigned => K::ReflectedUnsigned, L::Signed => K::Signed(0) };
+        return Some(Spec { interface: Some(interface), attribute, tags: &[], kind,
+            setter: matches!(op, O::LegacyReflectSet(..)) });
+    }
     let (attribute, tags, kind): (&'static str, &'static [&'static str], Kind) = match op {
         O::ElementHref | O::ElementSetHref => ("href", REL, K::Url),
         O::ElementTarget | O::ElementSetTarget => ("target", HYPERLINK, K::String),
@@ -76,7 +83,7 @@ fn spec(op: O) -> Option<Spec> {
         | O::MetaSetHttpEquiv | O::MetaSetCharset | O::CellSetColSpan
         | O::CellSetRowSpan | O::OListSetStart | O::OListSetReversed | O::LISetValue
         | O::ElementSetRelList | O::OutputSetHtmlFor | O::IFrameSetSandbox | O::LinkSetSizes);
-    Some(Spec { attribute, tags, kind, setter })
+    Some(Spec { interface: None, attribute, tags, kind, setter })
 }
 pub(crate) fn handles(op: O) -> bool { spec(op).is_some() }
 fn unsigned(number: f64) -> u32 {
@@ -94,7 +101,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected an Element"))?;
     host.with_dom(|dom| match &dom.get(node).kind {
         NodeKind::Element { namespace: Namespace::Html, .. }
-            if spec.tags.contains(&dom.local_name(node).unwrap()) => Ok(()),
+            if spec.interface.map_or_else(|| spec.tags.contains(&dom.local_name(node).unwrap()),
+                |interface| crate::html_element_interface(dom.local_name(node).unwrap()) == interface) => Ok(()),
         _ => Err(DomError::TypeError),
     })?;
     if matches!(spec.kind, Kind::TokenList) {
@@ -115,10 +123,11 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             } else { dom.remove_attribute(node, spec.attribute) })?;
         } else {
             let units = match spec.kind {
-                Kind::Unsigned | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
+                Kind::Unsigned | Kind::ReflectedUnsigned | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
                     let number = host.to_number(value)?;
                     let unsigned = unsigned(number);
                     let value = match spec.kind {
+                        Kind::ReflectedUnsigned => (if unsigned <= i32::MAX as u32 { unsigned } else { 0 }).to_string(),
                         Kind::ColSpan => unsigned.clamp(1, 1000).to_string(),
                         Kind::RowSpan => unsigned.min(65534).to_string(),
                         Kind::Signed(_) => (unsigned as i32).to_string(),
@@ -137,6 +146,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     let value = host.with_dom(|dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
     match spec.kind {
         Kind::Boolean => Ok(host.boolean(value.is_some())),
+        Kind::ReflectedUnsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
+            .filter(|value| *value <= i32::MAX as u32).unwrap_or(0) as f64)),
         Kind::Unsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long).unwrap_or(0) as f64)),
         Kind::ColSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .unwrap_or(1).clamp(1, 1000) as f64)),

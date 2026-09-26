@@ -238,7 +238,10 @@ impl PainterFilterSource {
 /// `(rx, ry)` pair is always equal; a mismatch there is defensive and falls
 /// back rather than guessing.
 pub(crate) fn import_clip(mask: amazing_paint::clip::ClipMask) -> Option<EffectClip> {
-    let amazing_paint::clip::ClipMask { x, y, width, height, radii } = mask;
+    // A polygon mask has no effect-clip counterpart yet; the caller repaints it.
+    let amazing_paint::clip::ClipMask::Rect { x, y, width, height, radii } = mask else {
+        return None;
+    };
     let (rx, ry) = radii[0];
     if radii.iter().all(|r| *r == (rx, ry)) && rx > 0. && ry > 0.
         && width == rx * 2. && height == ry * 2.

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "subdir": "css/css-view-transitions",
+  "mismatch_count": 1,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-view-transitions__animation-name-ua-prefix.html"
+      ]
+    }
+  ]
+}

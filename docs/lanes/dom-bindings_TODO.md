@@ -2014,3 +2014,180 @@ Initial gate exposed a test setup omission (no document URL for URL resolution);
 corrected fixture and full rerun passed. Frame child navigables and frameset
 Window handler forwarding remain deferred with their existing dependencies.
 Continuing ProcessingInstruction constructor and attribute APIs.
+
+# DOM-B ProcessingInstruction ready
+
+Implementation `ab38fc57`, fixed base `ca5e01fe`. Added the constructor and
+complete attribute API, with ordered UTF-16 values, XML pseudo-attribute parsing,
+reference decoding, serialization and reparsing after character-data changes.
+Attribute mutations use existing character-data observer/range machinery;
+no-op toggles preserve data. Target validation now permits xml per current DOM.
+
+Linux workspace **2763 passed /10 skipped**, doctests **4/4**. Complete
+**314-source dom/nodes** corpus: **8077→8082 passing assertions**, **741→736
+failing**, **five gains /zero lost passes**. Files unchanged:148 pass,95 fail,
+37 timeouts,27 unsupported,7 harness errors;6 subtest errors unchanged.
+Baseline is legacy-elements/after.json restricted to dom/nodes.
+
+The attribute fixture's first five assertions now pass. Its pre-existing
+`ReferenceError: source is not defined` still prevents later registrations;
+that JS lexical-scope issue is routed to js-runtime. Native and installed-driver
+regressions independently cover parsing, mutation records, ordering, UTF-16,
+conversion order and branding. Continuing navigation event payload interfaces.
+
+# DOM-B navigation event payloads ready
+
+Implementation `9d13ddc7`, fixed base `d50cd1bf`. HashChangeEvent,
+PopStateEvent, PageTransitionEvent and BeforeUnloadEvent now have native payloads
+and interface brands. Constructors convert inherited dictionaries first, keep
+state-object identity and convert URL fields to USVString. BeforeUnloadEvent's
+string returnValue remains independent of Event's boolean cancellation flag;
+legacy factory aliases select the correct interfaces.
+
+Linux workspace **2767 passed /10 skipped**, doctests **4/4**. Fresh complete
+**482-source dom/nodes + dom/events** corpus: **8442→8448 passing assertions**,
+**1019→1013 failing**, **six gains /zero lost passes**. Files unchanged:199 pass,
+131 fail,99 timeouts,27 unsupported,26 harness errors;6 subtest errors unchanged.
+Document-createEvent improves **249→255 passes**.
+
+Navigation scheduling and checking unload cancellation remain embedding work.
+Compared with the older events corpus, the fresh baseline registers43 additional
+body/frameset handler failures after HTMLFrameSetElement became available;
+no passes were lost, and inline handler compilation remains deferred. Continuing
+lossless UTF-16 event types across constructors, initializers and listener keys.
+
+## Lossless UTF-16 event names — complete
+
+Lossless UTF-16 event types complete: `268c5a4e`, fixed base `ac89b733`.
+
+Constructors, legacy initializers and listener registration/removal preserve lone
+surrogates without conflating them with replacement characters. Normal Unicode
+names retain the existing native String representation. Abort/once listener
+identity uses the same exact keys. Four new native/binding/driver regressions pass.
+
+Linux workspace **2771 passed /10 skipped**, doctests **4/4**. Complete
+482-source dom/nodes + dom/events corpus remains **8448 pass /1013 fail**,
+**zero gained or lost passes**. File classifications unchanged (199 pass,131 fail,
+99 timeout,27 unsupported,26 error); six subtest errors unchanged.
+Baseline reuses the immediately preceding navigation-events after corpus on the
+exact base. Frozen candidate binary and source hashes recorded in gate.json.
+
+Next: merge local dev for JS realms, then remaining legacy reflected attributes.
+Iframe-dependent Range remains deferred pending HTML-25 part 2. WebSocket is
+owned by net and removed from this lane's queue.
+
+## Remaining obsolete reflection — complete
+
+Completed remaining obsolete HTML reflection: `e78c8e4c`, fixed base `270e9735` (includes JSRT realms). Adds 98 attributes on 32 interfaces, aliases and correct receiver checks, legacy-null/boolean/numeric/URL conversions. Driver regression includes conversion boundaries, UTF16, aliasing and cloning.
+
+Linux workspace **2874 passed /10 skipped**, doctests **4/4**. Whole333-source nodes/collections/obsolete API corpus: **8159→8165 pass**, **752→746 fail**, **six gains /zero lost passes**. Five script event/htmlFor assertions and one moveBefore name-map assertion improve. Files158→160 pass,103→102 fail,38→37 timeout,27 unsupported and7 harness errors unchanged;6 subtest errors unchanged. Node-compareDocumentPosition changed timeout→pass with the same1444 passing assertions on both runs; this is deadline variation, not additional conformance credit.
+
+Evidence: crates/amazing-bindings/evidence/obsolete-reflection/. Next: ErrorEvent and PromiseRejectionEvent payloads. Iframe Range remains deferred for HTML-25 part2; JSRT-9..12 are merged. WebSocket belongs to net.
+
+## Error and promise-rejection event payloads — complete
+
+ErrorEvent and PromiseRejectionEvent complete: `8c0efe84`, fixed base `131fe706`.
+
+Native payloads preserve object identity and arbitrary error/reason values,
+including undefined versus null. Dictionary conversion order, required object
+validation, numeric wrapping, UTF16/USV strings and interface checks follow HTML.
+Value roots are retained only after all conversions succeed. Constructor lengths
+and native dispatch use the installed interfaces; three new regression tests pass.
+
+Linux workspace **2877 passed /10 skipped**, doctests **4/4**. Whole228-source
+dom/events, HTML scripting/events and unhandled-promise-rejections corpus:
+**399→410 pass**, **345→334 fail**, **11 gains /zero lost passes**.
+Files59→61 pass,56→54 fail,78 timeouts and35 harness errors unchanged.
+Ten ErrorEvent payload/handler assertions and one PromiseRejectionEvent
+constructor assertion improve. Runtime error and rejection scheduling remain
+embedding/JS event-loop work; no automatic-reporting claim is made.
+
+Spec: https://html.spec.whatwg.org/multipage/webappapis.html#the-errorevent-interface
+Next: checkbox/radio activation. Iframe Range remains deferred for HTML-25 part2;
+JSRT realms are merged. WebSocket belongs to net.
+
+# DOM-B ticket-2 pivot: WebSocket already landed by net; diagnosed the next dom/ cluster instead
+
+Merged `origin/dev` onto `lane/dom-bindings` (175 commits behind; two real conflicts,
+both resolved by combining both sides: `interfaces.rs`'s iframe/embed/object/param
+D{} entries now use the legacy-attribute wrappers (`LEGACY_IFRAME`/`LEGACY_EMBED`/
+`LEGACY_OBJECT`/`LEGACY_PARAM`) built on top of the upstream HTML-25/26 member sets
+(`IFRAME`, `OBJ`) instead of either side's version alone — `LEGACY_OBJECT` now
+builds on `OBJ` (which gained a `form` getter upstream) rather than the empty base
+it used before, so neither ticket's members were lost; `forms.rs`'s
+`clone_form_state` keeps both this lane's `click_in_progress` reset and upstream's
+selection/custom-error/user-edited/last-type/submission-guard resets). Post-merge
+gate on Linux Boat (`9cabc736`): workspace nextest 3074 passed / 13 skipped / 0
+failed, `cargo test --workspace --locked --doc` exit 0.
+
+Checked `git log dev -- crates/amazing/src/runtime_host_net.rs` per the brief:
+net already landed the WebSocket JS interface (`7a657d9d`, "NET-34: install the
+WebSocket JS interface via net's own driver adapter") — full `WebSocketOp` surface
+(constructor, url/protocol/extensions/readyState/bufferedAmount/binaryType,
+send/close, event handlers, add/removeEventListener/dispatchEvent). Nothing to do
+here; not re-verified beyond confirming the merged workspace still builds/gates
+clean with it in place.
+
+Per the brief's fallback ("otherwise the largest WPT dom/ failure cluster"),
+triaged `dom/nodes/Document-createElement.html` / `-createElementNS.html`, which
+html's questions.md thread flagged as needing a fresh per-subtest look now that
+contentWindow exists. Finding: 100% of the remaining 98+390 failing subtests in
+these two files are the "in XML document"/"in XHTML document" parametrizations
+(every "in HTML document" case passes); the common WPT idiom of
+`iframe.contentWindow.document.createElement(...)` then checking `.localName`
+returns `undefined` instead of the correct string, while `instanceof win.Node`/
+`win.Element` both pass and the identical call on the top window works. Read
+through the dom-bindings-owned dispatch path (`invoke.rs`'s `ElementLocalName`,
+`runtime_binding_host.rs`'s `prototype()`/`materialize_accessors`) and found
+nothing there that can produce this — DOM interface prototypes are process-global,
+not per-realm, and the native getter body has no undefined-producing path short of
+throwing (and nothing throws). This is very likely a js-runtime/js-vm cross-realm
+property/getter dispatch bug, filed to `questions.md` with full evidence rather
+than guessed at blindly across a lane boundary. Also filed a smaller, non-blocking
+note: WPT's own `testharness.js` assertion-message template substitution
+(`${expected}`/`${actual}`) silently no-ops in this engine, so every failing
+assertion corpus-wide reports its raw un-substituted template — likely
+`String.prototype.split` with a capturing-group regex, `amazing-js`-owned.
+
+No dom-bindings source changed for this second item (diagnosis only, per AGENTS.md
+"blocked item goes to questions.md and you move on" — the fix crosses into
+another lane's files). Commit is the merge plus the sparse-checkout hygiene fix
+below.
+
+# DOM-B checkbox/radio native activation and onclick ready
+
+Implementation `4993b82c`, evidence `d502fcd1`, fixed base `47bcf7f0`. Finished
+and landed the previous agent's checkbox/radio activation + onclick WIP after
+two correctness fixes found while gating:
+
+1. `onclick`'s setter threw `TypeError` on non-callable objects, and dispatch
+   fell back to reading `handleEvent` when a stored handler was not callable.
+   `EventHandler` is WebIDL `EventHandlerNonNull?` where `EventHandlerNonNull`
+   carries `[LegacyTreatNonObjectAsNull]`: any object (callable or not) is
+   stored without throwing; a non-object primitive (or null/undefined) clears
+   the handler; invoking a non-callable handler is a silent no-op that must
+   never read `handleEvent` (unlike `EventListener`'s callback-interface
+   fallback used by `addEventListener`). Fixed in `event_bindings.rs`
+   (`callback_call` branches on a new `handler` flag before the `handleEvent`
+   fallback) and `input_activation_bindings.rs` (onclick setter no longer
+   checks callability).
+2. Canceled radio activation re-derived the clicked node's *live* type/name to
+   decide whether to recheck the previously-checked peer, which regressed
+   `dom/events/Event-dispatch-click.tentative.html`'s "radio morphed into
+   another type" case (a handler that changes `type` then calls
+   `preventDefault()`). Fixed by snapshotting the peer's own identity
+   (name/form owner/root) at prepare time and validating against that
+   snapshot at completion, never against the clicked node's current state;
+   the clicked node's own checkedness is now explicitly reverted first,
+   independent of whether it still classifies as a radio.
+
+Linux workspace **2883 passed /10 skipped**, doctests all green. WPT
+`dom/events` + `html/semantics/forms` + `uievents` (whole directories):
+**2472→2597 passing subtests (+125), zero lost passes**. Evidence in
+`crates/amazing-bindings/evidence/input-activation/`.
+
+Queued/deferred from this ticket: PointerEvent (click still constructs
+`MouseEvent`), non-input activation targets (submit/reset, `a`/`area`
+navigation, popovers, file pickers), event-handler content attributes (JS
+compiler seam). Continuing with the WebSocket JS interface on net's
+already-landed transport seam (NET-8/NET-19; see questions.md 2026-09-26T19:40Z).

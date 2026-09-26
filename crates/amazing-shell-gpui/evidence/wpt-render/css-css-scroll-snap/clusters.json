@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "subdir": "css/css-scroll-snap",
+  "mismatch_count": 6,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-scroll-snap__snap-after-initial-layout__writing-mode-vertical-lr.html",
+        "css__css-scroll-snap__snap-after-initial-layout__writing-mode-vertical-rl.html",
+        "css__css-scroll-snap__snap-after-initial-layout__writing-mode-horizontal-tb.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-scroll-snap__snap-after-initial-layout__scroll-snap-writing-mode-000.html",
+        "css__css-scroll-snap__snap-after-initial-layout__direction-rtl.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-scroll-snap__snap-after-initial-layout__scroll-snap-initial-layout-000.html"
+      ]
+    }
+  ]
+}

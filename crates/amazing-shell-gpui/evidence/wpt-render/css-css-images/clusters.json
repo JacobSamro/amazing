@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "subdir": "css/css-images",
+  "mismatch_count": 56,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 37,
+      "examples": [
+        "css__css-images__conic-gradient-line-height-relative-units-001.html",
+        "css__css-images__radial-gradient-container-relative-units-004.html",
+        "css__css-images__css-image-fallbacks-and-annotations003.html",
+        "css__css-images__conic-gradient-line-height-relative-units-002.html",
+        "css__css-images__gradient__gradient-single-stop-008.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-images__normalization-linear-degenerate.html",
+        "css__css-images__normalization-conic-degenerate.html",
+        "css__css-images__normalization-radial-degenerate.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-images__gradient__gradient-infinity-002.html",
+        "css__css-images__gradient__gradient-infinity-001.html",
+        "css__css-images__image-color-background-size.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-images__conic-gradient-calc-angle-percentage.html",
+        "css__css-images__multiple-position-color-stop-conic-2.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-images__image-color-background-position.html",
+        "css__css-images__normalization-radial-4.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-images__gradient__gradient-single-stop-longer-hue-oklch.html",
+        "css__css-images__gradient__gradient-single-stop-longer-hue-hsl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-images__tiled-conic-gradients.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__multiple-position-color-stop-radial.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__gradient__conic-gradient-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__gradient__gradient-none-interpolation.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__image-color-background-combined.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__image-color-background-repeat.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-images__infinite-radial-gradient-refcrash.html"
+      ]
+    }
+  ]
+}

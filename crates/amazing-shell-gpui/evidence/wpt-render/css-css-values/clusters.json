@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "subdir": "css/css-values",
+  "mismatch_count": 45,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 11,
+      "examples": [
+        "css__css-values__max-unitless-zero-invalid.html",
+        "css__css-values__vh-inherit.html",
+        "css__css-values__vh-em-inherit.html",
+        "css__css-values__vh-calc-support.html",
+        "css__css-values__calc-in-calc.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 9,
+      "examples": [
+        "css__css-values__ch-unit-008.html",
+        "css__css-values__calc-size__calc-size-flex-006.html",
+        "css__css-values__calc-size__calc-size-aspect-ratio-003.html",
+        "css__css-values__calc-ch-ex-lang.html",
+        "css__css-values__calc-size__calc-size-flex-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__css-values__calc-size__calc-size-grid-repeat.html",
+        "css__css-values__calc-size__calc-size-aspect-ratio-005.html",
+        "css__css-values__max-length-percent-001.html",
+        "css__css-values__min-length-percent-001.html",
+        "css__css-values__calc-size__calc-size-aspect-ratio-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-values__calc-size__calc-size-min-max-sizes-001.html",
+        "css__css-values__calc-background-image-gradient-1.html",
+        "css__css-values__calc-size__calc-size-min-max-sizes-004.html",
+        "css__css-values__min-max-percentage-length-interpolation.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-values__calc-min-height-block-1.html",
+        "css__css-values__attr-style-sharing-4.html",
+        "css__css-values__calc-text-indent-intrinsic-1.html",
+        "css__css-values__calc-size__calc-size-aspect-ratio-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-values__calc-width-table-auto-1.html",
+        "css__css-values__calc-size__calc-size-min-max-sizes-002.html",
+        "css__css-values__calc-size__calc-size-flex-002.html",
+        "css__css-values__calc-size__calc-size-min-max-sizes-005.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-values__ch-unit-010.html",
+        "css__css-values__ch-unit-009.html",
+        "css__css-values__ch-unit-012.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-values__calc-padding-block-1.html",
+        "css__css-values__calc-margin-block-1.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-values__negative-calc-to-non-negative-integer.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-values__calc-width-table-fixed-1.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-values__ch-unit-011.html"
+      ]
+    }
+  ]
+}

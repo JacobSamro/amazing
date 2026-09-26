@@ -3,6 +3,20 @@ use super::*;
 use amazing_dom::events::{EventClass, EventId};
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn dom_resolve_reflected_url(&mut self, input: &[u16]) -> Vec<u16> {
+        // URL parsing consumes scalar values even when the content attribute
+        // itself is DOMString. Invalid URLs reflect the original string.
+        let scalar = String::from_utf16_lossy(input);
+        let base = self.state.borrow().document_url.as_deref()
+            .and_then(|base| amazing_net::url::ParsedUrl::parse(base).ok());
+        let resolved = match base {
+            Some(base) => base.resolve(&scalar),
+            None => amazing_net::url::ParsedUrl::parse(&scalar),
+        };
+        resolved.map(|url| url.serialize().encode_utf16().collect())
+            .unwrap_or_else(|_| input.to_vec())
+    }
+
     pub(super) fn dom_document_default_view(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
         // The current embedding associates its one WindowProxy with the active
         // document. DOMImplementation, DOMParser and clones create inert docs.
@@ -123,6 +137,13 @@ impl RuntimeBindingHost<'_> {
             EventClass::Keyboard => Interface::KeyboardEvent,
             EventClass::Composition => Interface::CompositionEvent,
             EventClass::Message => Interface::MessageEvent,
+            EventClass::HashChange => Interface::HashChangeEvent,
+            EventClass::PopState => Interface::PopStateEvent,
+            EventClass::PageTransition => Interface::PageTransitionEvent,
+            EventClass::BeforeUnload => Interface::BeforeUnloadEvent,
+            EventClass::Error => Interface::ErrorEvent,
+            EventClass::PromiseRejection => Interface::PromiseRejectionEvent,
+
         })
     }
 
@@ -148,6 +169,370 @@ impl RuntimeBindingHost<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkbox_radio_activation_orders_events_rolls_back_and_handles_tree_changes() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'activation check ' + step; }
+            function input(type, attached = true) {
+                const node = document.createElement('input'); node.type = type;
+                if (attached) document.body.append(node); return node;
+            }
+            const checkbox = input('checkbox'); checkbox.indeterminate = true;
+            const log = [];
+            checkbox.addEventListener('click', e => {
+                log.push('click:' + checkbox.checked + ':' + checkbox.indeterminate + ':' + e.isTrusted);
+                checkbox.click();
+            });
+            checkbox.addEventListener('input', e => log.push('input:' + e.bubbles + ':' + e.composed + ':' + e.isTrusted));
+            checkbox.addEventListener('change', e => log.push('change:' + e.bubbles + ':' + e.composed));
+            checkbox.click();
+            check(log.join(',') === 'click:true:false:false,input:true:true:true,change:true:false');
+            const canceled = input('checkbox'); canceled.indeterminate = true; let seen = false, changed = false;
+            canceled.addEventListener('click', e => { seen = canceled.checked && !canceled.indeterminate; e.preventDefault(); });
+            canceled.addEventListener('input', () => changed = true);
+            canceled.click(); check(seen && !changed && !canceled.checked && canceled.indeterminate);
+            const copy = canceled.cloneNode(); check(copy.indeterminate);
+            const detached = input('checkbox', false); detached.addEventListener('input', () => changed = true);
+            detached.click(); check(detached.checked && !changed);
+            const disabled = input('checkbox'); disabled.disabled = true; let clicks = 0, inputs = 0;
+            disabled.addEventListener('click', () => clicks++); disabled.addEventListener('input', () => inputs++);
+            disabled.click(); check(!disabled.checked && clicks === 0);
+            disabled.dispatchEvent(new MouseEvent('click')); check(disabled.checked && clicks === 1 && inputs === 1);
+            disabled.dispatchEvent(new Event('click')); check(disabled.checked && inputs === 1);
+            const a = input('radio'), b = input('radio'); a.checked = true; b.checked = true;
+            check(a.checked && b.checked); a.name = 'group'; b.name = 'group'; a.checked = true;
+            check(a.checked && !b.checked);
+            let rename = false;
+            b.addEventListener('click', e => { if (rename) a.name = 'elsewhere'; e.preventDefault(); });
+            b.click(); check(a.checked && !b.checked);
+            rename = true; b.click(); check(!a.checked && !b.checked);
+            const parent = input('checkbox'); const textInput = input('text', false); parent.append(textInput);
+            textInput.dispatchEvent(new MouseEvent('click', {bubbles: true})); check(!parent.checked);
+            const text = document.createTextNode('child'); parent.append(text);
+            text.dispatchEvent(new MouseEvent('click')); check(!parent.checked);
+            const click = new MouseEvent('click', {bubbles: true}); let cleaned = false;
+            parent.addEventListener('input', () => cleaned = click.eventPhase === 0 && click.currentTarget === null && click.composedPath().length === 0);
+            text.dispatchEvent(click); check(parent.checked && cleaned);
+            const shell = document.createElement('div'); document.body.append(shell);
+            const shadow = shell.attachShadow({mode: 'closed'}); const shadowInput = input('checkbox', false); shadow.append(shadowInput);
+            let hostInput = 0, hostChange = 0;
+            shell.addEventListener('input', () => hostInput++); shell.addEventListener('change', () => hostChange++);
+            shadowInput.click(); check(shadowInput.checked && hostInput === 1 && hostChange === 0);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn onclick_ordering_replacement_removal_and_non_callable_interop_addeventlistener() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.create_element(html, "body");
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'onclick check ' + step; }
+            const div = document.createElement('div'); document.body.append(div);
+
+            // onclick registers at the position it is first assigned, ordered
+            // among addEventListener registrations; getter reads it back.
+            const log = [];
+            div.addEventListener('click', () => log.push('before'));
+            div.onclick = () => log.push('onclick-1');
+            check(div.onclick && log.length === 0);
+            div.addEventListener('click', () => log.push('after'));
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,onclick-1,after');
+
+            // Reassigning onclick replaces in place (position preserved).
+            log.length = 0;
+            div.onclick = () => log.push('onclick-2');
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,onclick-2,after');
+
+            // Clearing then re-adding moves the registration to the end.
+            log.length = 0;
+            div.onclick = null;
+            check(div.onclick === null);
+            div.onclick = () => log.push('onclick-3');
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,onclick-3');
+
+            // The same function used as both onclick and via addEventListener
+            // is two independent registrations; removeEventListener never
+            // touches the onclick slot.
+            log.length = 0;
+            function shared() { log.push('shared'); }
+            div.onclick = shared;
+            div.addEventListener('click', shared);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,shared,shared');
+            log.length = 0;
+            div.removeEventListener('click', shared);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after,shared' && div.onclick === shared);
+
+            // Returning exactly `false` cancels the event; any other return
+            // value (including a falsy non-boolean) does not.
+            log.length = 0;
+            div.onclick = () => false;
+            const cancel = new MouseEvent('click', {cancelable: true});
+            div.dispatchEvent(cancel);
+            check(cancel.defaultPrevented === true);
+            div.onclick = () => 0;
+            const noCancel = new MouseEvent('click', {cancelable: true});
+            div.dispatchEvent(noCancel);
+            check(noCancel.defaultPrevented === false);
+
+            // A thrown handler reports and continues; onclick keeps running
+            // on later dispatches and does not disturb sibling listeners.
+            log.length = 0;
+            div.onclick = () => { throw 'boom'; };
+            div.dispatchEvent(new MouseEvent('click'));
+            check(log.join(',') === 'before,after');
+
+            // Assigning a non-callable object never throws and is silently
+            // ignored: its `handleEvent` (unlike a real EventListener) must
+            // never be read.
+            log.length = 0;
+            let handleEventRead = false;
+            const notCallable = { get handleEvent() { handleEventRead = true; return () => log.push('handleEvent'); } };
+            div.onclick = notCallable;
+            check(div.onclick === notCallable);
+            div.dispatchEvent(new MouseEvent('click'));
+            check(!handleEventRead && log.join(',') === 'before,after');
+
+            // A non-object primitive assigned to onclick clears the handler
+            // (EventHandlerNonNull's [LegacyTreatNonObjectAsNull]).
+            div.onclick = 5;
+            check(div.onclick === null);
+            div.onclick = undefined;
+            check(div.onclick === null);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn error_event_payloads_preserve_identity_defaults_and_conversion_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'error event check ' + step; }
+            check(ErrorEvent.length === 1 && PromiseRejectionEvent.length === 2);
+            const empty = new ErrorEvent('error');
+            check(empty instanceof Event && empty instanceof ErrorEvent);
+            check(empty.message === '' && empty.filename === '' && empty.lineno === 0 && empty.colno === 0);
+            check(empty.error === undefined && !empty.bubbles && !empty.cancelable && !empty.isTrusted);
+            const payload = {};
+            const event = new ErrorEvent('\uD800', {message: '\uD800', filename: '\uD800',
+                error: payload, lineno: -1, colno: 4294967297, cancelable: true});
+            check(event.type === '\uD800' && event.message === '\uD800' && event.filename === '\uFFFD');
+            check(event.error === payload && event.lineno === 4294967295 && event.colno === 1);
+            check(new ErrorEvent('x', {error: null}).error === null);
+            check(new ErrorEvent('x', {error: false}).error === false);
+            check(Object.is(new ErrorEvent('x', {colno: -0.5}).colno, 0));
+            const order = [];
+            const dict = {};
+            for (const name of ['bubbles', 'cancelable', 'composed', 'colno', 'error', 'filename', 'lineno', 'message']) {
+                Object.defineProperty(dict, name, {get() { order.push(name); return undefined; }});
+            }
+            new ErrorEvent('x', dict);
+            check(order.join(',') === 'bubbles,cancelable,composed,colno,error,filename,lineno,message');
+            const promise = {}; // The IDL requires an object, not a Promise brand.
+            const rejection = new PromiseRejectionEvent('unhandledrejection', {promise, reason: payload});
+            check(rejection instanceof Event && rejection.promise === promise && rejection.reason === payload);
+            check(new PromiseRejectionEvent('x', {promise}).reason === undefined);
+            check(new PromiseRejectionEvent('x', {promise, reason: null}).reason === null);
+            for (const dict of [undefined, null, {}, {promise: null}, {promise: 1}]) {
+                let rejected = false;
+                try { new PromiseRejectionEvent('x', dict); } catch (e) { rejected = e instanceof TypeError; }
+                check(rejected);
+            }
+            let brand = false;
+            try { Object.getOwnPropertyDescriptor(ErrorEvent.prototype, 'error').get.call(rejection); }
+            catch (e) { brand = e instanceof TypeError; }
+            check(brand);
+            const target = new EventTarget(); let seen;
+            target.addEventListener('\uD800', e => { seen = e; e.preventDefault(); });
+            check(target.dispatchEvent(event) === false && seen === event && seen.error === payload);
+            event.initEvent('again', false, false); check(event.error === payload && event.message === '\uD800');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+
+    #[test]
+    fn obsolete_reflection_converts_types_preserves_aliases_and_checks_receiver_interfaces() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let bindings = super::super::install(&mut js, host).unwrap();
+        bindings.set_document_url(&mut js, "https://example.test/base/");
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'obsolete reflection check ' + step; }
+            const script = document.createElement('script');
+            script.htmlFor = 'window'; script.event = 'onload'; script.charset = 'utf-8';
+            check(script.getAttribute('for') === 'window' && script.getAttribute('event') === 'onload');
+            script.setAttribute('for', 'target'); check(script.htmlFor === 'target');
+            const col = document.createElement('col'); col.ch = '.'; col.chOff = '12';
+            check(col.getAttribute('char') === '.' && col.getAttribute('charoff') === '12');
+            const table = document.createElement('table');
+            table.bgColor = null; table.cellPadding = null; table.cellSpacing = undefined;
+            check(table.getAttribute('bgcolor') === '' && table.cellPadding === '' && table.cellSpacing === 'undefined');
+            const hr = document.createElement('hr'); hr.color = null;
+            check(hr.color === 'null'); hr.noShade = 'false'; check(hr.noShade && hr.getAttribute('noshade') === '');
+            hr.noShade = 0; check(!hr.hasAttribute('noshade'));
+            const td = document.createElement('td'); td.noWrap = true; check(td.hasAttribute('nowrap'));
+            td.noWrap = false; check(!td.hasAttribute('nowrap'));
+            const image = document.createElement('img'); image.hspace = -1; image.vspace = 4294967297;
+            check(image.getAttribute('hspace') === '0' && image.vspace === 1);
+            image.setAttribute('hspace', '  +12px'); check(image.hspace === 12);
+            image.setAttribute('hspace', '2147483648'); check(image.hspace === 0);
+            image.hspace = 2147483647; check(image.hspace === 2147483647);
+            const pre = document.createElement('pre'); pre.width = 4294967295; check(pre.width === -1);
+            pre.setAttribute('width', ' -7px'); check(pre.width === -7);
+            const iframe = document.createElement('iframe'); iframe.longDesc = 'help';
+            check(iframe.getAttribute('longdesc') === 'help' && iframe.longDesc === 'https://example.test/base/help');
+            iframe.marginWidth = null; check(iframe.marginWidth === '');
+            image.lowsrc = '\uD800'; check(image.getAttribute('lowsrc') === '\uFFFD');
+            const object = document.createElement('object'); object.codeBase = 'code/';
+            check(object.codeBase === 'https://example.test/base/code/');
+            object.codeBase = 'http://['; check(object.codeBase === 'http://[');
+            object.codeBase = '\uD800'; check(object.getAttribute('codebase') === '\uD800');
+            check(object.codeBase.indexOf('%EF%BF%BD') !== -1);
+            object.useMap = '#map'; check(object.useMap === '#map');
+            const body = document.createElement('body'); body.background = 'relative'; check(body.background === 'relative');
+            body.background = '\uD800'; check(body.background === '\uD800');
+            const param = document.createElement('param'); param.name = 'key'; param.value = 'value'; param.valueType = 'ref';
+            check(param.getAttribute('name') === 'key' && param.getAttribute('value') === 'value' && param.getAttribute('valuetype') === 'ref');
+            const area = document.createElement('area'); area.noHref = true; check(area.noHref);
+            const anchor = document.createElement('a'); anchor.name = 'named'; check(anchor.getAttribute('name') === 'named');
+            check(Object.getOwnPropertyDescriptor(HTMLAreaElement.prototype, 'name') === undefined);
+            let converted = false, rejected = false;
+            try { Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'name').set.call(area,
+                {toString() { converted = true; return 'wrong'; }}); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && !converted);
+            const link = document.createElement('link'); link.target = '_blank'; check(link.getAttribute('target') === '_blank');
+            const clone = script.cloneNode(); check(clone.htmlFor === 'target' && clone.event === 'onload');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+
+    #[test]
+    fn event_names_preserve_utf16_through_construction_init_and_listener_lifetime() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'event UTF16 check ' + step; }
+            const names = ['\uD800', '\uDC00', '\uD801', '\uFFFD', '\uD800x\uDC00', '😀'];
+            for (const Constructor of [Event, CustomEvent, UIEvent, FocusEvent, MouseEvent, WheelEvent,
+                KeyboardEvent, CompositionEvent, HashChangeEvent, PopStateEvent, PageTransitionEvent]) {
+                for (const name of names) check(new Constructor(name).type === name);
+            }
+            const target = new EventTarget(), seen = [];
+            function listener(e) { seen.push(e.type); }
+            for (const name of names) target.addEventListener(name, listener);
+            for (const name of names) target.dispatchEvent(new Event(name));
+            check(seen.join('|') === names.join('|'));
+            target.removeEventListener('\uFFFD', listener);
+            seen.length = 0; target.dispatchEvent(new Event('\uD800'));
+            check(seen.length === 1 && seen[0] === '\uD800');
+            target.removeEventListener('\uD800', listener);
+            seen.length = 0; target.dispatchEvent(new Event('\uD800')); check(seen.length === 0);
+            const controller = new AbortController();
+            target.addEventListener('\uD800', listener, {signal: controller.signal});
+            controller.abort(); target.dispatchEvent(new Event('\uD800')); check(seen.length === 0);
+            target.addEventListener('\uD800', listener, {once: true});
+            target.dispatchEvent(new Event('\uD800')); target.dispatchEvent(new Event('\uD800')); check(seen.length === 1);
+            const legacy = document.createEvent('Event');
+            legacy.initEvent('\uD800'); check(legacy.type === '\uD800');
+            legacy.initEvent('\uFFFD'); check(legacy.type === '\uFFFD');
+            const custom = document.createEvent('CustomEvent');
+            custom.initCustomEvent('\uDC00', false, false, {}); check(custom.type === '\uDC00');
+            const message = document.createEvent('MessageEvent');
+            message.initMessageEvent('\uD800'); check(message.type === '\uD800');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn navigation_events_keep_native_payload_identity_and_legacy_return_value() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'navigation event check ' + step; }
+            const payload = {}, order = [];
+            const pop = new PopStateEvent('popstate', {
+                get bubbles() { order.push('bubbles'); return true; },
+                get cancelable() { order.push('cancelable'); return true; },
+                get composed() { order.push('composed'); return true; },
+                get hasUAVisualTransition() { order.push('transition'); return true; },
+                get state() { order.push('state'); return payload; }
+            });
+            check(order.join(',') === 'bubbles,cancelable,composed,transition,state');
+            check(pop instanceof Event && pop instanceof PopStateEvent && !(pop instanceof UIEvent));
+            check(pop.state === payload && pop.hasUAVisualTransition && pop.bubbles && pop.composed);
+            const target = new EventTarget(); let seen = 0;
+            target.addEventListener('popstate', function(e) { check(e === pop && e.state === payload); seen++; });
+            target.dispatchEvent(pop); target.dispatchEvent(pop); check(seen === 2);
+            check(new PopStateEvent('x', {state: undefined}).state === null);
+            check(new PopStateEvent('x', {state: 7}).state === 7);
+            const hash = new HashChangeEvent('hashchange', {oldURL: '\uD800', newURL: '#relative'});
+            check(hash.oldURL === '\uFFFD' && hash.newURL === '#relative');
+            const legacyHash = document.createEvent('hAsHcHaNgEeVeNt');
+            check(legacyHash instanceof HashChangeEvent && legacyHash.oldURL === '' && legacyHash.newURL === '');
+            const page = new PageTransitionEvent('pageshow', {persisted: true});
+            check(page instanceof Event && page.persisted && !page.bubbles && !page.cancelable);
+            check(!new PageTransitionEvent('pageshow').persisted);
+            const before = document.createEvent('BeforeUnloadEvent');
+            check(before instanceof BeforeUnloadEvent && before.returnValue === '');
+            before.initEvent('beforeunload', false, true); before.returnValue = false;
+            check(before.returnValue === 'false' && !before.defaultPrevented);
+            before.preventDefault(); check(before.returnValue === 'false' && before.defaultPrevented);
+            before.returnValue = '\uD800'; check(before.returnValue === '\uD800');
+            let rejected = false;
+            try { new BeforeUnloadEvent(); } catch (e) { rejected = e instanceof TypeError; }
+            check(rejected);
+            for (const constructor of [HashChangeEvent, PopStateEvent, PageTransitionEvent]) check(constructor.length === 1);
+            for (const pair of [[HashChangeEvent, 'oldURL'], [PopStateEvent, 'state'],
+                [PageTransitionEvent, 'persisted'], [BeforeUnloadEvent, 'returnValue']]) {
+                rejected = false;
+                try { Object.getOwnPropertyDescriptor(pair[0].prototype, pair[1]).get.call(new Event('x')); }
+                catch (e) { rejected = e instanceof TypeError; }
+                check(rejected);
+            }
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
 
     #[test]
     fn processing_instruction_constructor_and_attributes_share_native_character_data() {
@@ -212,7 +597,7 @@ mod tests {
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
         js.set_dom_host(host.clone());
         let bindings = super::super::install(&mut js, host).unwrap();
-        bindings.set_document_url("https://example.test/base/");
+        bindings.set_document_url(&mut js, "https://example.test/base/");
         let result = js.run_script(r#"
             let step = 0;
             function check(value) { step++; if (!value) throw 'legacy element reflection check ' + step; }

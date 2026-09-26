@@ -1,0 +1,283 @@
+// Private class elements (§15.7, §7.3.29-31, §6.2.10) and instance-element
+// initialization shared by base and derived constructors. `eval_class_inner`
+// in interp.rs builds the per-class `ClassElements`/`StaticElement` list this
+// file consumes; the AST parses private names already (`ExprKind::PrivateName`,
+// `PropKey::Private`, `MemberProp::Private`) but the tree-walker previously
+// rejected every one of them with a placeholder error.
+
+/// Runs one field initializer or static block with `this` bound and `home`
+/// set for `super` resolution, in a fresh function-scoped child of the
+/// class's own captured environment. Mirrors the frame a real method call
+/// pushes (`call_value_with_new_target_inner`) without going through the
+/// general call machinery, since neither a field initializer nor a static
+/// block is itself a callable value.
+fn eval_class_element_scope<T>(
+    i: &mut Interpreter,
+    this: JsValue,
+    home: Option<Obj>,
+    class_env: &EnvHandle,
+    body: impl FnOnce(&mut Interpreter, &EnvHandle) -> Result<T, Throw>,
+) -> Result<T, Throw> {
+    let scope = EnvHandle::new(EnvKind::Function, Some(class_env.clone()));
+    scope.bind_this(this.clone());
+    i.frames.push(CallFrame { this, home, super_constructor: None, new_target: None, own_function: None });
+    let result = body(i, &scope);
+    i.frames.pop();
+    result
+}
+
+/// DefineField (§15.7.10): evaluates the initializer (or Undefined) with
+/// `this` = the field's owner, then creates the field as an own property
+/// (public) or PrivateElement (private) — never through an inherited setter.
+fn define_field(
+    i: &mut Interpreter,
+    owner: &JsValue,
+    home: Option<Obj>,
+    class_env: &EnvHandle,
+    key: &FieldKey,
+    init: &Option<ast::Expr>,
+) -> Result<(), Throw> {
+    let value = eval_class_element_scope(i, owner.clone(), home, class_env, |i, scope| {
+        match init {
+            Some(expr) => i.eval_expr(expr, scope),
+            None => Ok(JsValue::Undefined),
+        }
+    })?;
+    let JsValue::Object(object) = owner else {
+        return Err(Throw::type_error("class field target is not an object"));
+    };
+    match key {
+        FieldKey::Public(property_key) => {
+            object.borrow_mut().define(property_key, Property::data(value)).ok();
+        }
+        FieldKey::Private(name) => {
+            object.borrow_mut().private_add(name.clone(), PrivateElementKind::Field(value))?;
+        }
+    }
+    Ok(())
+}
+
+/// InitializeInstanceElements (§15.7.11): replays a class's own instance
+/// fields and private methods/accessors onto a freshly-constructed `this`,
+/// in declaration order. Called once per class level in an inheritance
+/// chain, right when that level's own constructor makes `this` available
+/// (base-class allocation, or the return of an explicit/implicit `super()`).
+fn initialize_instance_elements(
+    i: &mut Interpreter,
+    this: &JsValue,
+    elements: &ClassElements,
+) -> Result<(), Throw> {
+    let home = Some(elements.home.clone());
+    for element in &elements.instance {
+        match element {
+            InstanceElement::Field { key, init } => {
+                define_field(i, this, home.clone(), &elements.class_env, key, init)?;
+            }
+            InstanceElement::PrivateMethod { name, value } => {
+                let JsValue::Object(object) = this else {
+                    return Err(Throw::type_error("class instance target is not an object"));
+                };
+                object.borrow_mut().private_add(name.clone(), PrivateElementKind::Method(value.clone()))?;
+            }
+            InstanceElement::PrivateAccessor { name, get, set } => {
+                let JsValue::Object(object) = this else {
+                    return Err(Throw::type_error("class instance target is not an object"));
+                };
+                object.borrow_mut().private_add(
+                    name.clone(),
+                    PrivateElementKind::Accessor { get: get.clone(), set: set.clone() },
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Evaluates a class's static fields, static private methods/accessors, and
+/// static blocks once, in declaration order, right after the class's own
+/// prototype methods are installed. `this` inside every one of them is the
+/// constructor itself; `home` is the constructor (so `super.x` in a static
+/// initializer resolves via the parent *constructor*, matching the static
+/// side's own prototype chain).
+fn run_static_elements(
+    i: &mut Interpreter,
+    constructor: &JsValue,
+    home: Obj,
+    class_env: &EnvHandle,
+    statics: &[StaticElement],
+) -> Result<(), Throw> {
+    for element in statics {
+        match element {
+            StaticElement::Field { key, init } => {
+                define_field(i, constructor, Some(home.clone()), class_env, key, init)?;
+            }
+            StaticElement::PrivateMethod { name, value } => {
+                let JsValue::Object(object) = constructor else { unreachable!("constructor is always an object") };
+                object.borrow_mut().private_add(name.clone(), PrivateElementKind::Method(value.clone()))?;
+            }
+            StaticElement::PrivateAccessor { name, get, set } => {
+                let JsValue::Object(object) = constructor else { unreachable!("constructor is always an object") };
+                object.borrow_mut().private_add(
+                    name.clone(),
+                    PrivateElementKind::Accessor { get: get.clone(), set: set.clone() },
+                )?;
+            }
+            StaticElement::Block(block) => {
+                eval_class_element_scope(i, constructor.clone(), Some(home.clone()), class_env, |i, scope| {
+                    i.hoist(&block.body, scope)?;
+                    i.exec_stmts(&block.body, scope).map(|_| ())
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// PrivateFieldFind + the TypeError a missing brand throws on read (§7.3.29).
+fn private_field_get(i: &mut Interpreter, base: &JsValue, name: &PrivateName) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = base else {
+        return Err(Throw::type_error("cannot read a private member from a non-object"));
+    };
+    let kind = object
+        .borrow()
+        .private_find(name)
+        .map(|element| element.kind.clone())
+        .ok_or_else(|| {
+            Throw::type_error(format!(
+                "cannot read private member {} from an object whose class did not declare it",
+                name.text()
+            ))
+        })?;
+    match kind {
+        PrivateElementKind::Field(value) => Ok(value),
+        PrivateElementKind::Method(value) => Ok(value),
+        PrivateElementKind::Accessor { get: Some(getter), .. } => i.call_value(&getter, base.clone(), Vec::new()),
+        PrivateElementKind::Accessor { get: None, .. } => {
+            Err(Throw::type_error(format!("{} was defined without a getter", name.text())))
+        }
+    }
+}
+
+/// PrivateFieldSet + the TypeError a missing brand, a method, or a
+/// getter-only accessor throws on write (§7.3.29).
+fn private_field_set(i: &mut Interpreter, base: &JsValue, name: &PrivateName, value: JsValue) -> Result<(), Throw> {
+    let JsValue::Object(object) = base else {
+        return Err(Throw::type_error("cannot write a private member on a non-object"));
+    };
+    enum Action {
+        Field,
+        Setter(JsValue),
+        NotWritable,
+        NoSetter,
+    }
+    let action = match object.borrow_mut().private_find_mut(name) {
+        None => {
+            return Err(Throw::type_error(format!(
+                "cannot write private member {} to an object whose class did not declare it",
+                name.text()
+            )));
+        }
+        Some(element) => match &mut element.kind {
+            PrivateElementKind::Field(slot) => {
+                *slot = value.clone();
+                Action::Field
+            }
+            PrivateElementKind::Method(_) => Action::NotWritable,
+            PrivateElementKind::Accessor { set: Some(setter), .. } => Action::Setter(setter.clone()),
+            PrivateElementKind::Accessor { set: None, .. } => Action::NoSetter,
+        },
+    };
+    match action {
+        Action::Field => Ok(()),
+        Action::Setter(setter) => i.call_value(&setter, base.clone(), vec![value]).map(|_| ()),
+        Action::NotWritable => Err(Throw::type_error(format!("private method {} is not writable", name.text()))),
+        Action::NoSetter => Err(Throw::type_error(format!("{} was defined without a setter", name.text()))),
+    }
+}
+
+/// `#x in obj` brand check (§13.10.1): a non-object right-hand side throws;
+/// an unbranded object simply answers `false`.
+fn private_field_has(base: &JsValue, name: &PrivateName) -> Result<bool, Throw> {
+    match base {
+        JsValue::Object(object) => Ok(object.borrow().private_has(name)),
+        _ => Err(Throw::type_error("cannot use 'in' operator to search for a private name in a non-object")),
+    }
+}
+
+/// PrivateMethodOrAccessorAdd's definition-time counterpart: a getter and
+/// setter sharing one private name (however far apart they are declared)
+/// become ONE `InstanceElement::PrivateAccessor`, keyed by `PrivateName`
+/// identity rather than declaration adjacency. A bare private method is
+/// pushed as its own element.
+fn upsert_instance_private_accessor_or_method(
+    elements: &mut Vec<InstanceElement>,
+    name: PrivateName,
+    is_accessor: bool,
+    is_getter: bool,
+    method: JsValue,
+) {
+    if !is_accessor {
+        elements.push(InstanceElement::PrivateMethod { name, value: method });
+        return;
+    }
+    if let Some(InstanceElement::PrivateAccessor { get, set, .. }) =
+        elements.iter_mut().find(|element| matches!(element, InstanceElement::PrivateAccessor { name: existing, .. } if *existing == name))
+    {
+        if is_getter { *get = Some(method); } else { *set = Some(method); }
+        return;
+    }
+    elements.push(InstanceElement::PrivateAccessor {
+        name,
+        get: is_getter.then(|| method.clone()),
+        set: (!is_getter).then_some(method),
+    });
+}
+
+/// Static-side twin of [`upsert_instance_private_accessor_or_method`].
+fn upsert_static_private_accessor_or_method(
+    elements: &mut Vec<StaticElement>,
+    name: PrivateName,
+    is_accessor: bool,
+    is_getter: bool,
+    method: JsValue,
+) {
+    if !is_accessor {
+        elements.push(StaticElement::PrivateMethod { name, value: method });
+        return;
+    }
+    if let Some(StaticElement::PrivateAccessor { get, set, .. }) =
+        elements.iter_mut().find(|element| matches!(element, StaticElement::PrivateAccessor { name: existing, .. } if *existing == name))
+    {
+        if is_getter { *get = Some(method); } else { *set = Some(method); }
+        return;
+    }
+    elements.push(StaticElement::PrivateAccessor {
+        name,
+        get: is_getter.then(|| method.clone()),
+        set: (!is_getter).then_some(method),
+    });
+}
+
+/// Collects one `PrivateName` per distinct `#name` spelled directly in this
+/// class's own member list (methods, accessors, fields; static or not).
+/// First occurrence wins the identity; every later element with the same
+/// text (a getter/setter pair, or — invalidly — a redeclaration) shares it.
+/// Nested classes get their own map layered on top by their own
+/// `eval_class_inner` call, so shadowing falls out of `resolve_private`'s
+/// parent-chain walk for free.
+fn collect_private_names(members: &[ast::ClassMember]) -> HashMap<String, PrivateName> {
+    let mut names: HashMap<String, PrivateName> = HashMap::new();
+    let mut note = |key: &ast::PropKey| {
+        if let ast::PropKey::Private(identifier) = key {
+            names.entry(identifier.name.clone()).or_insert_with(|| PrivateName::new(identifier.name.as_str()));
+        }
+    };
+    for member in members {
+        match member {
+            ast::ClassMember::Method(method) => note(&method.key),
+            ast::ClassMember::Field(field) => note(&field.key),
+            ast::ClassMember::StaticBlock(_) => {}
+        }
+    }
+    names
+}

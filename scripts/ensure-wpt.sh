@@ -12,4 +12,11 @@ if [ "$(git -C "$DIR" rev-parse HEAD 2>/dev/null)" != "$REV" ]; then
   [ -d .git ] || { git init -q; git remote add origin https://github.com/web-platform-tests/wpt.git; }
   git fetch -q --depth 1 origin "$REV"; git checkout -q --force FETCH_HEAD
 fi
+# The checkout is shared by every lane on a pooled sandbox. A lane script that
+# ran `git sparse-checkout set` on it hid other lanes' directories (html and ipc,
+# 2026-09-26), so always restore the full tree. Never narrow ~/corpora/wpt; a
+# lane that wants a sparse copy clones its own under $OUT.
+if [ "$(git -C "$DIR" config --get core.sparseCheckout 2>/dev/null)" = true ]; then
+  git -C "$DIR" sparse-checkout disable
+fi
 echo "$DIR"

@@ -128,6 +128,17 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
                 .map_err(CdpError::from)?;
             Ok(DispatchOutcome::empty())
         }
+        "DOM.setOuterHTML" => {
+            let node = require_node(session, request)?;
+            let html = request.string_param("outerHTML")?;
+            session.dev.set_outer_html(node, html).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "DOM.removeNode" => {
+            let node = require_node(session, request)?;
+            session.dev.remove_node(node).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
         "DOM.resolveNode" => {
             let node = resolve_node(session, request)?;
             let described = session.dev.describe_node(node, 0).map_err(CdpError::from)?;

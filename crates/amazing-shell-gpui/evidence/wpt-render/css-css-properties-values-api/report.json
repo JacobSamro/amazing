@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "subdir": "css/css-properties-values-api",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "host": "box-node-0833a32b11cde471",
+  "generated": "2026-09-26T16:09:31Z",
+  "run_directory": "/home/user/amazing/out/shell/wpt-render/css-css-properties-values-api/run-20260926T160929Z-92779",
+  "inventory": {
+    "document_files": 127,
+    "testharness_files": 110,
+    "reftests": 7,
+    "eligible_static_self_contained": 6,
+    "selected": 6,
+    "excluded": {
+      "not-reftest": 120,
+      "scripted": 1
+    }
+  },
+  "counts": {
+    "pass": 3,
+    "mismatch": 3,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-003.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "registered-property-computation-color-003-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-004.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "/css/reference/ref-filled-green-100px-square-only.html",
+      "differing_pixels": 10000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1003d6e363dc1d5884950f03206fa750d16add268188285add488156d325612e",
+      "reference_sha256": "c32732124151ad0e487784a395470d29d9732b4c8564c961f8d6597a9755d000",
+      "diff_sha256": "5efc15a8d3142eb61a7485715c40cc087a6c0c35f80b4fef153c4665ce0bc448",
+      "detail": "maxDifference=255/0; totalPixels=10000/0"
+    },
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-001.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "registered-property-computation-color-001-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "reference_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-005.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "registered-property-computation-color-001-ref.html",
+      "differing_pixels": 10000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "diff_sha256": "dcc9319fee51cd899f285dd895948fa316d9fb8b93b8655bb341712e6cbac4db",
+      "detail": "maxDifference=255/0; totalPixels=10000/0"
+    },
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-002.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "registered-property-computation-color-001-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "reference_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "detail": "maxDifference=0/0; totalPixels=0/0"
+    },
+    {
+      "id": "css__css-properties-values-api__registered-property-computation-color-006.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "registered-property-computation-color-001-ref.html",
+      "differing_pixels": 10000,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "1e0b0089c82415a4f82426ee634c25fa0aba474df9182404a90859c9323213a1",
+      "diff_sha256": "dcc9319fee51cd899f285dd895948fa316d9fb8b93b8655bb341712e6cbac4db",
+      "detail": "maxDifference=255/0; totalPixels=10000/0"
+    }
+  ]
+}

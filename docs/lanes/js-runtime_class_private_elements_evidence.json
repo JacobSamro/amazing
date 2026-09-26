@@ -1,0 +1,1653 @@
+{
+  "before_sha": "69ea3ea79bf96f4b7f7c7c87a62db7e7cd43bcee",
+  "class_subset_only": {
+    "after_summary": {
+      "by_variant": {
+        "module": {
+          "fail": 1,
+          "pass": 20,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 32
+        },
+        "non-strict": {
+          "fail": 4312,
+          "pass": 4699,
+          "skipped": 0,
+          "timeout": 6,
+          "unsupported": 2
+        },
+        "strict": {
+          "fail": 4261,
+          "pass": 4668,
+          "skipped": 0,
+          "timeout": 6,
+          "unsupported": 2
+        }
+      },
+      "discovered": 53872,
+      "files": {
+        "fail": 4316,
+        "pass": 4751,
+        "skipped": 44765,
+        "timeout": 6,
+        "unsupported": 34
+      },
+      "reason_counts": {
+        "fail": {
+          "negative.missing-error": 2,
+          "negative.phase:parse!=runtime": 2,
+          "parse:SyntaxError": 44,
+          "runtime:ReferenceError": 72,
+          "runtime:SyntaxError": 130,
+          "runtime:Test262Error": 1956,
+          "runtime:TypeError": 6368
+        },
+        "pass": {
+          "completed": 6763,
+          "negative.matched": 2624
+        },
+        "skipped": {
+          "fixture": 294,
+          "selection.excluded": 44471
+        },
+        "timeout": {
+          "execution.deadline": 12
+        },
+        "unsupported": {
+          "host.IsHTMLDDA": 4,
+          "module.async-evaluation": 32
+        }
+      },
+      "variant_count": 18009,
+      "variants": {
+        "fail": 8574,
+        "pass": 9387,
+        "skipped": 0,
+        "timeout": 12,
+        "unsupported": 36
+      }
+    },
+    "before_summary": {
+      "by_variant": {
+        "module": {
+          "fail": 1,
+          "pass": 20,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 32
+        },
+        "non-strict": {
+          "fail": 6475,
+          "pass": 2536,
+          "skipped": 0,
+          "timeout": 6,
+          "unsupported": 2
+        },
+        "strict": {
+          "fail": 6381,
+          "pass": 2548,
+          "skipped": 0,
+          "timeout": 6,
+          "unsupported": 2
+        }
+      },
+      "discovered": 53872,
+      "files": {
+        "fail": 6479,
+        "pass": 2588,
+        "skipped": 44765,
+        "timeout": 6,
+        "unsupported": 34
+      },
+      "reason_counts": {
+        "fail": {
+          "host.abnormal-exit": 2,
+          "negative.missing-error": 2,
+          "negative.phase:parse!=runtime": 2,
+          "parse:SyntaxError": 44,
+          "runtime:ReferenceError": 38,
+          "runtime:SyntaxError": 26,
+          "runtime:Test262Error": 2862,
+          "runtime:TypeError": 9881
+        },
+        "pass": {
+          "completed": 2480,
+          "negative.matched": 2624
+        },
+        "skipped": {
+          "fixture": 294,
+          "selection.excluded": 44471
+        },
+        "timeout": {
+          "execution.deadline": 12
+        },
+        "unsupported": {
+          "host.IsHTMLDDA": 4,
+          "module.async-evaluation": 32
+        }
+      },
+      "variant_count": 18009,
+      "variants": {
+        "fail": 12857,
+        "pass": 5104,
+        "skipped": 0,
+        "timeout": 12,
+        "unsupported": 36
+      }
+    },
+    "filter": "class"
+  },
+  "full_corpus": {
+    "after_classification_sha256": "2bcd169024b48d9a51d3145920210f96f4ca8f6d30482263877cbae54b7c5eb5",
+    "after_repeat_classification_sha256": "2bcd169024b48d9a51d3145920210f96f4ca8f6d30482263877cbae54b7c5eb5",
+    "after_summary": {
+      "by_variant": {
+        "module": {
+          "fail": 211,
+          "pass": 370,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 262
+        },
+        "non-strict": {
+          "fail": 17158,
+          "pass": 34672,
+          "skipped": 0,
+          "timeout": 25,
+          "unsupported": 172
+        },
+        "raw": {
+          "fail": 1,
+          "pass": 29,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "strict": {
+          "fail": 15882,
+          "pass": 33940,
+          "skipped": 0,
+          "timeout": 25,
+          "unsupported": 171
+        }
+      },
+      "discovered": 53872,
+      "files": {
+        "fail": 17513,
+        "pass": 35606,
+        "skipped": 294,
+        "timeout": 25,
+        "unsupported": 434
+      },
+      "reason_counts": {
+        "fail": {
+          "negative.missing-error": 5,
+          "negative.phase:parse!=runtime": 29,
+          "negative.phase:resolution!=runtime": 2,
+          "parse:SyntaxError": 1272,
+          "resolution:SyntaxError": 29,
+          "runtime:<unknown constructor>": 2,
+          "runtime:Error": 4,
+          "runtime:Object": 4,
+          "runtime:RangeError": 4369,
+          "runtime:ReferenceError": 2187,
+          "runtime:String": 9,
+          "runtime:SyntaxError": 322,
+          "runtime:Test262Error": 10955,
+          "runtime:TypeError": 14063
+        },
+        "pass": {
+          "completed": 60296,
+          "negative.matched": 8715
+        },
+        "skipped": {
+          "fixture": 294
+        },
+        "timeout": {
+          "execution.deadline": 50
+        },
+        "unsupported": {
+          "host.CanBlockIsTrue": 14,
+          "host.IsHTMLDDA": 84,
+          "host.agent": 222,
+          "host.gc": 23,
+          "module.async-evaluation": 262
+        }
+      },
+      "variant_count": 102918,
+      "variants": {
+        "fail": 33252,
+        "pass": 69011,
+        "skipped": 0,
+        "timeout": 50,
+        "unsupported": 605
+      }
+    },
+    "before_summary": {
+      "by_variant": {
+        "module": {
+          "fail": 214,
+          "pass": 367,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 262
+        },
+        "non-strict": {
+          "fail": 19656,
+          "pass": 32172,
+          "skipped": 0,
+          "timeout": 27,
+          "unsupported": 172
+        },
+        "raw": {
+          "fail": 1,
+          "pass": 29,
+          "skipped": 0,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "strict": {
+          "fail": 18336,
+          "pass": 31484,
+          "skipped": 0,
+          "timeout": 27,
+          "unsupported": 171
+        }
+      },
+      "discovered": 53872,
+      "files": {
+        "fail": 20014,
+        "pass": 33103,
+        "skipped": 294,
+        "timeout": 27,
+        "unsupported": 434
+      },
+      "reason_counts": {
+        "fail": {
+          "host.abnormal-exit": 10,
+          "negative.missing-error": 5,
+          "negative.phase:parse!=runtime": 29,
+          "negative.phase:resolution!=runtime": 2,
+          "parse:SyntaxError": 1272,
+          "resolution:SyntaxError": 29,
+          "runtime:<unknown constructor>": 2,
+          "runtime:Error": 4,
+          "runtime:Object": 4,
+          "runtime:RangeError": 4401,
+          "runtime:ReferenceError": 2148,
+          "runtime:String": 9,
+          "runtime:SyntaxError": 218,
+          "runtime:Test262Error": 12343,
+          "runtime:TypeError": 17731
+        },
+        "pass": {
+          "completed": 55337,
+          "negative.matched": 8715
+        },
+        "skipped": {
+          "fixture": 294
+        },
+        "timeout": {
+          "execution.deadline": 54
+        },
+        "unsupported": {
+          "host.CanBlockIsTrue": 14,
+          "host.IsHTMLDDA": 84,
+          "host.agent": 222,
+          "host.gc": 23,
+          "module.async-evaluation": 262
+        }
+      },
+      "variant_count": 102918,
+      "variants": {
+        "fail": 38207,
+        "pass": 64052,
+        "skipped": 0,
+        "timeout": 54,
+        "unsupported": 605
+      }
+    },
+    "gained_variants_count": 5085,
+    "lost_distinct_files_count": 63,
+    "lost_variants": [
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/arrow-function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/arrow-function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/object/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/object/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "Symbol.iterator",
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-init-iter-get-err-array-prototype.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-ary-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elem-obj-val-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-init-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-init-undefined.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-ary-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-null.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+        "after_reason": "runtime:Test262Error",
+        "after_status": "fail",
+        "features": [
+          "async-iteration"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/async-gen-meth-static-obj-ptrn-prop-obj-value-undef.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/meth-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/class/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/statements/class/dstr/meth-dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/const/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/const/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/const-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/const-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/const-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/const-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/let-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/let-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/let-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/let-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/var-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/var-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for-of/dstr/var-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for-of/dstr/var-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/const-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/const-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/const-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/const-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/let-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/let-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/let-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/let-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/var-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/var-ary-ptrn-elem-ary-empty-init.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/for/dstr/var-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/for/dstr/var-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/function/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding",
+          "default-parameters"
+        ],
+        "mode": "strict",
+        "path": "language/statements/function/dstr/dflt-ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/let/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/let/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "non-strict",
+        "path": "language/statements/variable/dstr/ary-ptrn-rest-ary-empty.js"
+      },
+      {
+        "after_detail": "TypeError: value is not iterable",
+        "after_reason": "runtime:TypeError",
+        "after_status": "fail",
+        "features": [
+          "generators",
+          "destructuring-binding"
+        ],
+        "mode": "strict",
+        "path": "language/statements/variable/dstr/ary-ptrn-rest-ary-empty.js"
+      }
+    ],
+    "lost_variants_count": 126,
+    "repeat_hashes_match": true
+  },
+  "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398"
+}

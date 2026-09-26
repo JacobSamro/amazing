@@ -97,6 +97,12 @@ pub enum Role {
     Row,
     Rowgroup,
     Rowheader,
+    /// Tentative ARIA role (https://github.com/w3c/aria/pull/1931): a
+    /// section's heading content, structurally like `banner`/`contentinfo`
+    /// but scoped to a sectioning element rather than the whole page.
+    Sectionheader,
+    /// Tentative counterpart to `Sectionheader`.
+    Sectionfooter,
     Separator,
     Strong,
     Subscript,
@@ -195,6 +201,9 @@ impl Role {
             Columnheader => "columnheader",
             Definition => "definition",
             Deletion => "deletion",
+            // `directory` is deprecated in ARIA 1.2 and computes as `list`, so
+            // `from_aria` never produces this variant anymore; kept only so
+            // `as_str`/`Role` stay total if something else ever constructs it.
             Directory => "directory",
             Document => "document",
             Emphasis => "emphasis",
@@ -203,7 +212,10 @@ impl Role {
             Generic => "generic",
             Group => "group",
             Heading => "heading",
-            Img => "img",
+            // ARIA 1.2 treats `img`/`image` as synonyms; both compute the
+            // canonical string `image` (see `from_aria`, which maps both
+            // tokens to this variant).
+            Img => "image",
             Insertion => "insertion",
             List => "list",
             Listitem => "listitem",
@@ -219,6 +231,8 @@ impl Role {
             Row => "row",
             Rowgroup => "rowgroup",
             Rowheader => "rowheader",
+            Sectionheader => "sectionheader",
+            Sectionfooter => "sectionfooter",
             Separator => "separator",
             Strong => "strong",
             Subscript => "subscript",
@@ -296,7 +310,8 @@ impl Role {
             "columnheader" => Columnheader,
             "definition" => Definition,
             "deletion" => Deletion,
-            "directory" => Directory,
+            // Deprecated in ARIA 1.2; computes as `list`.
+            "directory" => List,
             "document" => Document,
             "emphasis" => Emphasis,
             "feed" => Feed,
@@ -321,6 +336,8 @@ impl Role {
             "row" => Row,
             "rowgroup" => Rowgroup,
             "rowheader" => Rowheader,
+            "sectionheader" => Sectionheader,
+            "sectionfooter" => Sectionfooter,
             "strong" => Strong,
             "subscript" => Subscript,
             "superscript" => Superscript,
@@ -469,12 +486,22 @@ pub fn role_for(dom: &Dom, node: NodeIdx) -> Role {
 }
 
 /// First valid, non-abstract token of the `role` attribute. `none`/`presentation`
-/// are valid explicit roles and are returned as-is.
+/// are valid explicit roles and are returned as-is. Role tokens are matched
+/// case-insensitively (ARIA 1.2 role-token matching is ASCII case-insensitive).
+/// `form` and `region` additionally require an author-supplied accessible
+/// name (`aria-label`/`aria-labelledby`) to be a valid match; without one the
+/// token is skipped and the fallback list continues, per ARIA 1.2's
+/// name-required landmark roles (section 5.2.8).
 pub fn explicit_role(dom: &Dom, node: NodeIdx) -> Option<Role> {
     let value = dom.get_attribute_ns(node, None, "role")?;
-    value
-        .split_ascii_whitespace()
-        .find_map(Role::from_aria)
+    value.split_ascii_whitespace().find_map(|token| {
+        let lower = token.to_ascii_lowercase();
+        let role = Role::from_aria(&lower)?;
+        if matches!(role, Role::Form | Role::Region) && !has_author_name(dom, node) {
+            return None;
+        }
+        Some(role)
+    })
 }
 
 /// HTML-AAM implicit role. `Role::Generic` is the fallback for elements that

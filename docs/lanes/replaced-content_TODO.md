@@ -1283,3 +1283,152 @@ skipped** (up from 149 at RC-26).
 Still outstanding for COMP-15: `polygon()`/`path()` clip-path shapes and
 `mask-image`/`mask-*`. No WPT credit is claimed under the Linux-first
 deferral.
+
+## RC-28 — `<img src="*.svg">` rendered nothing (2026-09-26)
+
+Visible bug, reported against `tests/real-pages/pages/docs-index.html`: the
+header logo and all six card thumbnails (`../assets/logo.svg`,
+`thumb-N.svg`) painted nothing. `amazing render-page` on that page reported
+`amazing render: image "...logo.svg": UnsupportedSvg` for all seven images,
+in ~1.2s with a clean `"status":"ok"` exit — a genuine decode rejection, not
+an IPC/utility-process timeout (the layout lane's held-image-loss hypothesis
+did not reproduce here; the sandboxed decode path and its Linux fallback both
+call the same `amazing_svg::decode`, and neither hung).
+
+Root cause: `amazing_svg::svg::parse` (the byte decoder behind `<img
+src="*.svg">`, distinct from the DOM-based `from_dom`/`visit_dom` used for
+inline `<svg>`) rejects the *whole* document on the first unrecognized
+element, per its documented "never return a partial successful SVG" policy.
+Both fixtures pair a supported `<rect>` background with a `<text>` label;
+`<text>` was not in the element dispatch at all, and the tokenizer also
+rejected any non-tag character data (the text content itself), so either one
+alone would already have failed the file.
+
+Fix, consistent with the DOM path's existing behavior for `<text>` (render
+only the WPT-only Ahem-square heuristic; otherwise resolve to nothing rather
+than reject): `append_element` now recognizes `text` structurally, like `g`
+— it validates a small attribute allow-list (`x`, `y`, `dx`, `dy`,
+`font-family`, `font-size`, `font-weight`, `text-anchor`) and contributes no
+shape. The tokenizer allows raw character data only while the open-element
+stack's top is `text`, skipping to the next `<` instead of erroring;
+everywhere else, stray character data is still rejected, so the "reject
+unsupported structure as a whole" policy is unchanged for every other
+element. This does not render glyphs (out of scope per the module's "no
+general text" subset) — it stops a label next to a supported shape from
+blanking the entire image, which is what the corpus fixtures need. Intrinsic
+size and paint were otherwise already correct once decode succeeds: the
+`Image` carries the SVG's own declared width/height, and layout/paint's
+existing replaced-content sizing needed no change.
+
+Regression coverage:
+- `amazing-svg`: `rect_next_to_a_text_label_still_decodes_and_paints_the_rect`
+  and `text_before_a_shape_still_decodes` prove the fix; three negative tests
+  (`unbalanced_text_tag_is_still_rejected`,
+  `character_data_outside_text_is_still_unsupported`,
+  `unknown_attribute_on_text_is_still_rejected`) prove the strictness policy
+  still holds everywhere else.
+- `crates/amazing/tests/svg_image_render.rs` is new: it renders
+  `docs-index.html` end to end through `amazing render-page` and asserts the
+  logo's `#0a58ca` fill and a thumbnail's `#2f6f4e` fill both actually paint
+  (a tolerant ≥200-pixel color match for the CSS-scaled logo, an exact
+  ≥60-pixel horizontal run for the thumbnail painted at intrinsic size),
+  plus that `render-page`'s stderr no longer contains `UnsupportedSvg`. The
+  existing `real_pages_corpus_renders_without_crashes` test continues to pass
+  across the full ~50-page corpus.
+
+No CSS, layout, compositor, driver or lockfile source changed; only
+`amazing-svg`'s byte decoder and a new `amazing` integration test.
+
+Linux gate: workspace nextest **3,032 passed / 0 failed / 12 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-svg` **5 passed / 0
+skipped** (new); `amazing` `svg_image_render` **1 passed**; `real_pages`
+corpus **52 pages, 0 crashes, 0 blank pages** (unchanged pass/fail shape,
+image decode failures gone from stderr). The jump from RC-27's 2,761 to
+3,032 workspace tests reflects `dev` catching up other lanes' merged work
+(`git merge dev` before this ticket), not this fix alone. No WPT credit
+claimed; the pinned RC-21 render/testharness selections stay Windows-only
+under the Linux-first deferral.
+
+## RC-29 — `clip-path` `polygon()`/`path()` and `mask-image`/`mask-mode` reference (2026-09-26)
+
+The COMP-15 remainder filed in `questions.md` after RC-27: the two
+`clip-path` basic shapes still skipped, plus a new `mask-image`/`mask-*`
+paint reference slice.
+
+**`clip-path`: `polygon()` and a straight-edged `path()`.** `ClipMask`
+(`crates/amazing-paint/src/clip.rs`) is now an enum: `Rect` (the existing
+`inset()`/`circle()`/`ellipse()` per-corner rounded-rect test, unchanged)
+and a new `Polygon { points: [(f32, f32); MAX_CLIP_POINTS], len, even_odd }`
+tested by winding rule (`crate::clip::point_in_polygon`, shared with the
+raster mask below). `polygon()`'s vertices resolve directly (no path-string
+parsing: they are already `(LengthPercentage, LengthPercentage)` pairs).
+`path()` gets a new bounded straight-edge-only data parser
+(`parse_straight_path`): `M`/`L`/`H`/`V`/`Z`, absolute or relative, one
+closed subpath. A curve/arc command (`C`/`S`/`Q`/`T`/`A`), a second subpath,
+more than `MAX_CLIP_POINTS` (32) vertices, or malformed syntax is skipped
+rather than approximated — the same policy RC-27 used for `polygon()`/
+`path()` itself and for relative-unit filter arguments. The vertex cap keeps
+`ClipMask` `Copy`, like `FilterPlan`, so it stays inside the copyable paint
+command and effect-node records.
+
+`amazing_paint::paint`'s raster side gets a matching `RasterMask` enum
+(`Rounded`/`Polygon`) so `RasterGroup`/`begin_group`/`composite_group` no
+longer assume every mask is a rounded rect; `push_overflow_clip`'s existing
+CSS-overflow rounded clip now wraps in `RasterMask::Rounded`, unchanged in
+behavior.
+
+**`mask-image`/`mask-mode`.** New `crates/amazing-paint/src/mask.rs`:
+`MaskLayer::from_css` resolves a *single* `mask-image: url(...)` layer (the
+first `url()` reference; gradients, `image()`/`image-set()`/`element()`/
+`cross-fade()`/`paint()`, more than one layer, and `mask-composite` are
+skipped — the element paints unmasked, which is what CSS Masking specifies
+for an unresolved mask reference anyway). `mask-mode: alpha` reads the
+referenced image's alpha channel directly; otherwise (`luminance`, or
+`match-source`'s default for a raster image) the same Filter Effects luma
+coefficients this painter already uses for `grayscale()` convert color to a
+mask value, weighted by the pixel's own alpha. The image is stretched to
+exactly fill the masked box's own border box (`mask-size: 100% 100%`,
+`mask-position: 0 0`, `mask-repeat: no-repeat`); `mask-size`/`mask-position`/
+`mask-repeat`/`mask-clip`/`mask-origin` are not read, a documented
+simplification in the same spirit as `clip-path` always resolving against
+the border box regardless of an explicit `<geometry-box>`. `GroupEffect`/
+`EffectNode` gain `mask_image: Option<MaskLayer>` and `mask_bounds: Rect`; a
+`mask-image` alone now opens a group too, the same filter/clip-path-only
+group policy RC-25/26/27 established. Applying the mask needed `images: &dyn
+ImageProvider` at composite time, which `end_group`/`pop_clip` did not
+previously receive; both now take it and thread it from all three raster
+command loops that already had it in scope. `composite_group` folds the
+per-pixel mask value into the same opacity factor `blend_group` already
+takes, so mask-image, opacity and blend mode compose correctly together.
+
+Focused tests: `polygon()` nonzero-winding containment and percentage
+resolution against the reference box; `path()` with only straight commands
+producing the same closed-outline containment, its `evenodd` keyword
+threading through, and a curve command / too many vertices being skipped;
+`mask-image`'s `none`/gradient skip, single-`url()` resolution (both the
+unquoted-URL-token and quoted-string-function tokenizer forms), a second
+layer being ignored, `alpha` vs `luminance` mode, and out-of-extent sampling
+masking out; two new `paint_document`/`paint_document_with_resources`
+end-to-end tests (`clip_path_polygon_clips_the_elements_own_content_to_the_triangle`,
+`mask_image_group_uses_the_referenced_images_luminance_as_alpha`). No CSS,
+layout, compositor or driver source changed; the two `GroupEffect`/
+`EffectNode` field additions are backward-compatible (no other crate reads
+`ClipMask`'s fields directly yet — compositor's own `EffectOperations`
+adoption is still open per `questions.md`).
+
+Linux gate: workspace nextest **3,044 passed / 0 failed / 12 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-paint` **168 passed / 0
+skipped** (up from 156 at RC-27: net +6 in `clip.rs`, +5 new in `mask.rs`,
++2 new end-to-end tests in `paint.rs`, -1 retired
+`polygon_path_and_bare_geometry_box_are_skipped_not_guessed`, replaced by
+positive coverage plus a narrower negative test). `amazing-compositor` and
+`amazing` both build clean against the changed `GroupEffect`/`EffectNode`
+shape. No WPT credit claimed; the pinned RC-21 render/testharness selections
+stay Windows-only under the Linux-first deferral.
+
+COMP-15 is now fully covered by this lane's paint reference: `filter`,
+`backdrop-filter`, `mix-blend-mode`/`isolation`, and every `clip-path` basic
+shape plus a single-layer `mask-image`. Outstanding for a future ticket, if
+requested: multi-layer masks and `mask-composite`, `mask-size`/
+`mask-position`/`mask-repeat`, and curved `path()` (needs a bezier/arc
+flattener, deliberately out of scope here to keep this ticket bounded).

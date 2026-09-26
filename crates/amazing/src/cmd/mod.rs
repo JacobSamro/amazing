@@ -1,5 +1,4 @@
 //! CLI command families.
-pub(crate) mod axtree;
 pub(crate) mod gpu;
 pub(crate) mod js;
 pub(crate) mod launch;
