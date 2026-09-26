@@ -114,15 +114,18 @@ impl Compositor {
     ) -> Result<(), EffectError> {
         let mut trees = self.trees.clone();
         trees.set_effect_operations(id, from.clone())?;
-        let from_halo = trees.effect_halo();
         trees.set_effect_operations(id, to.clone())?;
-        self.reserved_effect_halo = self
-            .reserved_effect_halo
-            .max(from_halo)
-            .max(trees.effect_halo());
+        let halo = |op: &EffectOperations| {
+            let mut backdrop = op.clone();
+            backdrop.filters = op.backdrop_filters.clone();
+            op.outset() + backdrop.outset()
+        };
+        let reserved = self.reserved_effect_halos.entry(id).or_default();
+        *reserved = reserved.max(halo(from)).max(halo(to));
         Ok(())
     }
     pub(crate) fn effect_raster_halo(&self) -> f32 {
-        self.reserved_effect_halo.max(self.trees.effect_halo())
+        self.trees
+            .effect_halo_with_reservations(&self.reserved_effect_halos)
     }
 }

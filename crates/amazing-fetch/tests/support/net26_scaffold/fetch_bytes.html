@@ -1,0 +1,19 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("Body.bytes yields Uint8Array and arrayBuffer yields ArrayBuffer");
+var first = new Response("ok");
+first.bytes().then(function(bytes) {
+  assert_equals(bytes instanceof Uint8Array, true);
+  assert_equals(bytes.length, 2);
+  assert_equals(bytes[0], 111);
+  assert_equals(first.bodyUsed, true);
+  var second = new Response("ok");
+  return second.arrayBuffer().then(function(buffer) {
+    assert_equals(buffer instanceof ArrayBuffer, true);
+    assert_equals(buffer.byteLength, 2);
+    t.done();
+    done();
+  });
+});
+</script>
