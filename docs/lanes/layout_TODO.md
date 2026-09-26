@@ -1612,3 +1612,52 @@ Merge commit: see `.agents/layout/status.json` for the SHA.
 Next: LAYOUT-24 (this newly-discovered shrink-to-fit/paint bug, own-lane,
 high priority), then inline positioned ancestors and fragment containing
 blocks (LAYOUT-25).
+
+**LAYOUT-24 (2026-09-27): fixed.** Root cause confirmed via fresh
+instrumentation: `table::intrinsic` (used by `crate::flex::min/
+max_content_width` for any `Role::Table` box) hardcodes `text: None`
+(fallback glyph-width heuristics), while the *same* table's live
+`table::layout` → `constraints()` call always receives real shaped text —
+for `table-anonymous-objects-059.xht` this was a 643.2px (fallback) vs.
+809.16px (shaped) max-content estimate for the identical table, so a
+shrink-to-fit box wrapping it resolved ~166px too narrow and `auto_widths`
+squeezed every column below its true content width, causing the observed
+text overlap/bleed-through. Fixed in `position.rs`/`table.rs` only
+(`flex.rs`/`grid.rs` untouched, no layout-flexgrid coordination needed):
+`table::intrinsic_with_text` is now `pub(crate)`, and `position.rs`'s
+`intrinsic_content_widths` routes through a new recursive helper
+(`shaped_intrinsic_width`) that descends through block-flow ancestors to
+find a `Role::Table` box anywhere in a shrink-to-fit box's subtree (not just
+when the box itself is the table wrapper) and measures it with real text.
+Full write-up, including a broader variant that was tried and reverted
+(shaping nested inline runs too, which fixed `abspos-008` but introduced 17
+new regressions elsewhere from short lines tipping into wrapping), in the
+"Resolution" section of
+`crates/amazing-layout/evidence/layout23/lfg3-shrink-to-fit-loss.md`.
+
+Measured (Boat, workspace 3267 passed/14 skipped clean, doctests clean, at
+`512912d5`): position `abspos-008` now matches exactly (1 pass recovered, 0
+new losses); tables pass count unchanged at **271** (not fully recovered)
+but the target cases are structurally fixed, not just less-bad:
+`table-anonymous-objects-059.xht` differing pixels 26,103 → 8,929 (-66%),
+`-098.xht` 26,686 → 9,544 (-64%); visual inspection confirms the
+overlap/bleed-through defect itself is gone. The residual mismatch
+(confirmed via direct pixel measurement, not assumed) is a separate,
+pre-existing ~1px cumulative rounding drift in `auto_widths`'s column-width
+distribution, which a strict zero-tolerance pixel comparison turns into
+thousands of differing anti-aliased glyph-edge pixels — confirmed
+pre-existing and unrelated to LFG-3 (`fixed-table-layout-003a03/04` already
+had exactly 2 differing pixels before this fix, unchanged after). Filed
+separately as **LAYOUT-26** (table column-width rounding precision vs.
+reference browsers; affects tables generally, not just shrink-to-fit ones).
+writing/ruby/retained unchanged (0 net movement, no new losses); those
+corpora's LAYOUT-24 exceptions were not individually pixel-traced the way
+tables/position were, so some may turn out to be LAYOUT-26 territory too —
+left for a future retriage. `gate.sh`'s `accepted` dict updated: `abspos-008`
+removed (fixed); all other entries unchanged (same cases, comment updated to
+describe the fix and the LAYOUT-26 follow-up). Full workspace + all five
+corpora gated clean (zero `CORPUS GATE HELD`) both before and after.
+
+Next: LAYOUT-26 (table column-width rounding precision, own-lane, follow-up
+from this ticket), then inline positioned ancestors and fragment containing
+blocks (LAYOUT-25).
