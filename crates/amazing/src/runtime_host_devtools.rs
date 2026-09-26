@@ -121,6 +121,37 @@
 //! * `Debugger.*` (stepping, breakpoints) stays `Unsupported`: CDP-18's
 //!   ticket explicitly keeps that seam for the js-runtime lane, since it
 //!   needs VM-level hooks this driver does not implement.
+//!
+//! CDP-19 implements `DOM.getBoxModel`/`getContentQuads` and
+//! `Overlay.highlightNode`/`highlightRect`/`highlightQuad` on the live page
+//! (`DOM.getDocument`/`querySelector`/`getOuterHTML`/`setAttributeValue` and
+//! `CSS.getComputedStyleForNode` were already implemented from CDP-16/17;
+//! this ticket's own delta is the box model and overlay).
+//!
+//! * `find_box_for_node` walks the same fallback layout tree `hit_test_node`/
+//!   `full_ax_tree` use, matching by node identity instead of by point, to
+//!   build a `DOM.BoxModel` (content/padding/border/margin quads) from a
+//!   `LayoutBox`'s already-resolved `border_box`/`content_box` plus its
+//!   `border`/`margin` side widths. `getContentQuads` (whose dispatch layer
+//!   already extracted just `model.content` from an earlier ticket) does
+//!   not split inline content into one quad per line box — every node gets
+//!   the single content quad `getBoxModel`'s `content` field would also
+//!   report (the same `Flow::Inlines` gap `hit_test`/`find_box_for_node`
+//!   already document).
+//! * **No compositor overlay layer exists in this engine**, so
+//!   `Overlay.highlightNode`/`highlightRect`/`highlightQuad` never paint
+//!   anything — there is no pixel difference to prove over
+//!   `Page.captureScreenshot`. `highlightNode` still does real work: it
+//!   validates the node resolves to actual box geometry (the same
+//!   computation `getBoxModel` uses), reporting `HostError::NotFound` for an
+//!   unknown or box-less node exactly as a real highlight request would
+//!   fail. `highlightRect`/`highlightQuad` accept any coordinates (matching
+//!   real Chrome, which does too) and answer directly from
+//!   `DriverPageSession` without a page-thread round trip, since there is no
+//!   engine state to check them against. `overlay_enabled`/
+//!   `set_inspect_mode`/`hideHighlight` are left at the trait's own `Ok(())`
+//!   defaults for the same reason. Proof is `DOM.getBoxModel`'s real
+//!   geometry, not a rendered overlay.
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -132,12 +163,13 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use amazing_devtools::host::{
-    AxNode, CallArgument, CallFunctionParams, ConsoleEvent, DevToolsHost, DevToolsSession,
-    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, ExceptionEvent, FrameInfo,
-    FrameTree, HostError, KeyEvent, LayoutMetrics, LogEntry, MatchedRule, MouseEvent,
-    NetworkFailedEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent,
-    NodeDescription, PropertyDescriptor, RemoteObject, ResourceContent, Screenshot,
-    ScreenshotFormat, ScreenshotParams, StyleOrigin, TargetInfo, Viewport,
+    AxNode, BoxModel, CallArgument, CallFunctionParams, ConsoleEvent, DevToolsHost,
+    DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
+    ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
+    LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad,
+    RemoteObject, ResourceContent, Screenshot, ScreenshotFormat, ScreenshotParams, StyleOrigin,
+    TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
 use amazing_js::DomHost;
@@ -183,6 +215,9 @@ enum PageCommand {
     DrainNetworkFailed(Reply<Vec<NetworkFailedEvent>>),
     DrainExceptions(Reply<Vec<ExceptionEvent>>),
     DrainLog(Reply<Vec<LogEntry>>),
+    GetBoxModel(EngineNodeId, Reply<BoxModel>),
+    GetContentQuads(EngineNodeId, Reply<Vec<BoxModel>>),
+    HighlightNode(EngineNodeId, Reply<()>),
     Shutdown,
 }
 
@@ -475,6 +510,77 @@ fn hit_test<'a>(box_: &'a amazing_layout::LayoutBox, x: f32, y: f32) -> Option<&
         amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => {}
     }
     Some(box_)
+}
+
+/// Depth-first search for the laid-out box whose `node` is `target`,
+/// checking `positioned` descendants first (mirrors [`hit_test`]'s own
+/// traversal order, though identity search doesn't care about paint order).
+/// Does not descend into `Flow::Inlines` line boxes — same documented gap as
+/// `hit_test`: a node that only contributes to an inline line box (a `<span>`
+/// with no box of its own, say) is not found. Used by `DOM.getBoxModel`/
+/// `getContentQuads` and `Overlay.highlightNode`'s validation.
+fn find_box_for_node<'a>(
+    box_: &'a amazing_layout::LayoutBox,
+    target: amazing_dom::NodeIdx,
+) -> Option<&'a amazing_layout::LayoutBox> {
+    if box_.node == Some(target) {
+        return Some(box_);
+    }
+    for child in &box_.positioned {
+        if let Some(found) = find_box_for_node(child, target) {
+            return Some(found);
+        }
+    }
+    match &box_.flow {
+        amazing_layout::Flow::Blocks(children)
+        | amazing_layout::Flow::Flex(children)
+        | amazing_layout::Flow::Grid(children) => {
+            for child in children {
+                if let Some(found) = find_box_for_node(child, target) {
+                    return Some(found);
+                }
+            }
+        }
+        amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => {}
+    }
+    None
+}
+
+/// An axis-aligned CDP `Quad` for a layout `Rect`.
+fn quad_from_rect(rect: &amazing_layout::Rect) -> Quad {
+    Quad::rect(rect.x as f64, rect.y as f64, rect.w as f64, rect.h as f64)
+}
+
+/// Builds a CDP `DOM.BoxModel` (content/padding/border/margin quads) from a
+/// laid-out box: `border_box`/`content_box` are already resolved by layout;
+/// the padding box is the border box inset by `border`'s resolved
+/// thicknesses, and the margin box is the border box outset by `margin`
+/// (auto margins that layout left unresolved report as `0`, the same
+/// simplification `SidesM::unwrap_or` invites elsewhere in this crate).
+fn box_model_from(box_: &amazing_layout::LayoutBox) -> BoxModel {
+    let border = box_.border_box;
+    let content = box_.content_box;
+    let margin_sides = box_.margin.unwrap_or(0.0);
+    let padding = amazing_layout::Rect {
+        x: border.x + box_.border.left,
+        y: border.y + box_.border.top,
+        w: (border.w - box_.border.left - box_.border.right).max(0.0),
+        h: (border.h - box_.border.top - box_.border.bottom).max(0.0),
+    };
+    let margin = amazing_layout::Rect {
+        x: border.x - margin_sides.left,
+        y: border.y - margin_sides.top,
+        w: border.w + margin_sides.left + margin_sides.right,
+        h: border.h + margin_sides.top + margin_sides.bottom,
+    };
+    BoxModel {
+        content: quad_from_rect(&content),
+        padding: quad_from_rect(&padding),
+        border: quad_from_rect(&border),
+        margin: quad_from_rect(&margin),
+        width: border.w.round() as i64,
+        height: border.h.round() as i64,
+    }
 }
 
 /// Converts the a11y lane's own tree into the CDP-shaped seam, matching the
@@ -1285,6 +1391,45 @@ impl PageOwner {
             .ok_or(HostError::NotFound)
     }
 
+    /// Computes style + the same fallback layout `hit_test_node`/
+    /// `full_ax_tree` use, then finds `node`'s own laid-out box
+    /// (`find_box_for_node`) and converts it to a CDP box model
+    /// (`DOM.getBoxModel`). `HostError::NotFound` covers both an unknown
+    /// node and a node with no box of its own (`display: none`, or one that
+    /// only contributes to an inline line box — see the module's "Known
+    /// limitations").
+    fn get_box_model(&self, node: EngineNodeId) -> Result<BoxModel, HostError> {
+        let host = self.dom_host.borrow();
+        let dom = &host.dom;
+        let sheets = self.author_sheets(dom);
+        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_styled_document(
+            dom, &styled, &text, &amazing_layout::NoReplacedElements, self.width, None,
+        );
+        let target = amazing_dom::NodeIdx(node.0 as u32);
+        let box_ = find_box_for_node(&layout, target).ok_or(HostError::NotFound)?;
+        Ok(box_model_from(box_))
+    }
+
+    /// `DOM.getContentQuads`: this driver does not split inline content into
+    /// one quad per line box (the same `Flow::Inlines` gap `get_box_model`
+    /// documents), so every node gets exactly the one border-box quad
+    /// `getBoxModel` would also report.
+    fn get_content_quads(&self, node: EngineNodeId) -> Result<Vec<BoxModel>, HostError> {
+        Ok(vec![self.get_box_model(node)?])
+    }
+
+    /// `Overlay.highlightNode`: no compositor overlay layer exists in this
+    /// engine yet (see the module's "Known limitations"), so there is
+    /// nothing to paint — but the command still validates that `node`
+    /// resolves to real box geometry (the same computation `getBoxModel`
+    /// uses), reporting `HostError::NotFound` for an unknown or box-less
+    /// node exactly as a real highlight request would fail.
+    fn highlight_node(&self, node: EngineNodeId) -> Result<(), HostError> {
+        self.get_box_model(node).map(|_| ())
+    }
+
     fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
         let dom_event = match event.kind.as_str() {
             "mousePressed" => "mousedown",
@@ -1487,6 +1632,15 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             PageCommand::DrainLog(reply) => {
                 let _ = reply.send(Ok(page.drain_log()));
             }
+            PageCommand::GetBoxModel(node, reply) => {
+                let _ = reply.send(page.get_box_model(node));
+            }
+            PageCommand::GetContentQuads(node, reply) => {
+                let _ = reply.send(page.get_content_quads(node));
+            }
+            PageCommand::HighlightNode(node, reply) => {
+                let _ = reply.send(page.highlight_node(node));
+            }
             PageCommand::Shutdown => break,
         }
     }
@@ -1669,6 +1823,35 @@ impl DevToolsSession for DriverPageSession {
 
     fn drain_log(&mut self) -> Vec<LogEntry> {
         request(&self.sender, PageCommand::DrainLog).unwrap_or_default()
+    }
+
+    fn get_box_model(&mut self, node: EngineNodeId) -> Result<BoxModel, HostError> {
+        request(&self.sender, |reply| PageCommand::GetBoxModel(node, reply))
+    }
+
+    fn get_content_quads(&mut self, node: EngineNodeId) -> Result<Vec<BoxModel>, HostError> {
+        request(&self.sender, |reply| PageCommand::GetContentQuads(node, reply))
+    }
+
+    /// `Overlay.highlightNode`: routed to the page thread since it validates
+    /// against real layout (`PageOwner::highlight_node`, which reuses
+    /// `get_box_model`'s computation). `highlightRect`/`highlightQuad` take
+    /// arbitrary coordinates with nothing engine-specific to validate (real
+    /// Chrome accepts any rect/quad too), so they answer directly without a
+    /// round trip; `overlay_enabled`/`set_inspect_mode`/`hide_highlight` are
+    /// left at the trait's own `Ok(())` defaults — bookkeeping this driver
+    /// has nothing further to do for, since no overlay is actually painted
+    /// (see the module's "Known limitations").
+    fn highlight_node(&mut self, node: EngineNodeId, _config: &HighlightConfig) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::HighlightNode(node, reply))
+    }
+
+    fn highlight_rect(&mut self, _rect: amazing_devtools::host::Rect, _config: &HighlightConfig) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    fn highlight_quad(&mut self, _quad: Quad, _config: &HighlightConfig) -> Result<(), HostError> {
+        Ok(())
     }
 }
 
@@ -2016,6 +2199,27 @@ mod tests {
                     return (result, events);
                 }
                 events.push(reply);
+            }
+        }
+
+        /// Sends a command and returns the whole reply message, including an
+        /// error response (`result()`/`result_and_events()` both assume
+        /// success and panic on an `"error"` reply). For tests that expect a
+        /// command to fail.
+        fn raw(&mut self, method: &str, params: Json) -> Json {
+            self.next_id += 1;
+            let id = self.next_id;
+            let message = Json::Object(vec![
+                ("id".into(), Json::Number(id as f64)),
+                ("method".into(), Json::String(method.into())),
+                ("params".into(), params),
+            ]);
+            self.ws.write_message(&message.to_string()).expect("write message");
+            loop {
+                let reply = self.recv_json();
+                if reply.get("id").and_then(Json::as_f64) == Some(id as f64) {
+                    return reply;
+                }
             }
         }
     }
@@ -2585,6 +2789,150 @@ mod tests {
                         == Some("javascript")
             }),
             "no Log.entryAdded for the page's own uncaught error: {events:?}"
+        );
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-19's "prove it end to end" test: `DOM.getDocument`/`querySelector`/
+    /// `getOuterHTML`/`setAttributeValue` and `CSS.getComputedStyleForNode`
+    /// (already implemented from CDP-16/17) chained onto the *new* work —
+    /// `DOM.getBoxModel`/`getContentQuads` and `Overlay.highlightNode`/
+    /// `hideHighlight` — against one live node, over a real WebSocket client.
+    #[test]
+    fn end_to_end_box_model_and_overlay_highlight_on_the_live_page() {
+        let host = spawn_test_host(
+            "http://example.test/box.html",
+            "<title>Box</title><body>\
+             <div id=\"target\" style=\"position:absolute;left:10px;top:20px;width:100px;\
+             height:50px;border:5px solid black;margin:3px;padding:2px\">hi</div>\
+             <span id=\"hidden\" style=\"display:none\">gone</span>\
+             </body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
+        let root_id = document
+            .get("root")
+            .and_then(|root| root.get("nodeId"))
+            .and_then(Json::as_f64)
+            .expect("root nodeId") as u64;
+
+        let target = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#target".into())),
+            ]),
+        );
+        let target_id = target.get("nodeId").and_then(Json::as_f64).expect("target nodeId") as u64;
+        assert!(target_id > 0, "{target}");
+
+        let outer = client.result(
+            "DOM.getOuterHTML",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        assert!(
+            outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default().contains("hi"),
+            "{outer}"
+        );
+
+        client.result(
+            "DOM.setAttributeValue",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(target_id as f64)),
+                ("name".into(), Json::String("data-cdp19".into())),
+                ("value".into(), Json::String("1".into())),
+            ]),
+        );
+        let outer_after = client.result(
+            "DOM.getOuterHTML",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        assert!(
+            outer_after.get("outerHTML").and_then(Json::as_str).unwrap_or_default().contains("data-cdp19=\"1\""),
+            "{outer_after}"
+        );
+
+        let computed = client.result(
+            "CSS.getComputedStyleForNode",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        let computed = computed.get("computedStyle").and_then(Json::as_array).expect("computedStyle array");
+        assert!(
+            computed.iter().any(|entry| entry.get("name").and_then(Json::as_str) == Some("width")),
+            "{computed:?}"
+        );
+
+        // DOM.getBoxModel: content is the CSS content box (100x50, unaffected
+        // by position), the border box adds the 2px padding + 5px border on
+        // every side (114x64), and the margin box adds the 3px margin
+        // (120x70) — pure box-model arithmetic, independent of where the
+        // absolutely-positioned box actually landed on the page.
+        let box_model = client.result(
+            "DOM.getBoxModel",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        let model = box_model.get("model").expect("model field");
+        assert_eq!(model.get("width").and_then(Json::as_f64), Some(114.0), "{model}");
+        assert_eq!(model.get("height").and_then(Json::as_f64), Some(64.0), "{model}");
+        let quad_width = |points: &[Json]| -> f64 {
+            points[2].as_f64().unwrap() - points[0].as_f64().unwrap()
+        };
+        let content = model.get("content").and_then(Json::as_array).expect("content quad");
+        assert!((quad_width(content) - 100.0).abs() < 0.01, "{content:?}");
+        let margin = model.get("margin").and_then(Json::as_array).expect("margin quad");
+        assert!((quad_width(margin) - 120.0).abs() < 0.01, "{margin:?}");
+
+        // DOM.getContentQuads: one *content*-box quad (the dispatch layer
+        // extracts `model.content`, matching real Chrome's own semantics —
+        // "content quads", not border quads); this driver does not split
+        // inline content by line box, so every node gets exactly one.
+        let quads = client.result(
+            "DOM.getContentQuads",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        let quads = quads.get("quads").and_then(Json::as_array).expect("quads array");
+        assert_eq!(quads.len(), 1, "{quads:?}");
+        assert!((quad_width(quads[0].as_array().unwrap()) - 100.0).abs() < 0.01, "{quads:?}");
+
+        // Overlay.highlightNode succeeds on a real, laid-out node...
+        let highlight = client.result(
+            "Overlay.highlightNode",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(target_id as f64)),
+                ("highlightConfig".into(), Json::Object(Vec::new())),
+            ]),
+        );
+        assert_eq!(highlight, Json::Object(Vec::new()), "{highlight}");
+        client.result("Overlay.hideHighlight", Json::Object(Vec::new()));
+
+        // ...but reports a real error for a node with no box of its own
+        // (`display: none`), exactly as a real highlight request would fail.
+        let hidden = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#hidden".into())),
+            ]),
+        );
+        let hidden_id = hidden.get("nodeId").and_then(Json::as_f64).expect("hidden nodeId") as u64;
+        let bogus = client.raw(
+            "Overlay.highlightNode",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(hidden_id as f64)),
+                ("highlightConfig".into(), Json::Object(Vec::new())),
+            ]),
+        );
+        assert!(
+            bogus.get("error").is_some(),
+            "highlighting a display:none node (no box) should fail: {bogus}"
         );
 
         shutdown.store(true, Ordering::Relaxed);
