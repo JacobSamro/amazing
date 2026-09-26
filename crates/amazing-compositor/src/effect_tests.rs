@@ -1,7 +1,7 @@
 use super::*;
+use FilterOperation as F;
 use std::cell::Cell;
 use std::sync::Arc;
-use FilterOperation as F;
 
 struct Blocks {
     items: Vec<(Rect, [u8; 4])>,
@@ -663,4 +663,60 @@ fn reserved_blur_animation_and_worker_jobs_keep_offscreen_tiles_ready() {
         assert!(frame.resources.uploads.is_empty());
         assert!(p.present(&frame).unwrap().get_pixel(0, 4).unwrap()[3] > 180);
     }
+}
+
+#[test]
+fn nested_animation_reservations_sum_ancestors_but_not_siblings() {
+    let from = EffectOperations::default();
+    let to = EffectOperations {
+        filters: vec![F::Blur(3.)],
+        ..Default::default()
+    };
+    let mut trees = PropertyTrees::new();
+    let parent = trees
+        .add_effect(EffectId(0), 1., BlendMode::Normal, None)
+        .unwrap();
+    let child = trees
+        .add_effect(parent, 1., BlendMode::Normal, None)
+        .unwrap();
+    let sibling = trees
+        .add_effect(EffectId(0), 1., BlendMode::Normal, None)
+        .unwrap();
+    let bounds = Rect::new(-20., 0., 40., 8.);
+    let mut c = Compositor::new(
+        trees,
+        vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState {
+                effect: child,
+                ..Default::default()
+            },
+            bounds,
+            reasons: CompositingReasons::WILL_CHANGE,
+        }],
+        1,
+    )
+    .unwrap();
+    for id in [child, parent, sibling] {
+        c.reserve_effect_animation(id, &from, &to).unwrap();
+    }
+    assert_eq!(c.effect_raster_halo(), 18.);
+    // A repeated reservation must not reduce an earlier endpoint envelope.
+    c.reserve_effect_animation(parent, &from, &from).unwrap();
+    assert_eq!(c.effect_raster_halo(), 18.);
+    let source = Blocks {
+        items: vec![(bounds, [255, 0, 0, 255])],
+        calls: Cell::new(0),
+    };
+    let first = c.build_frame(&source, 20, 8).unwrap();
+    let mut presenter = ReferenceCpuPresenter::default();
+    presenter.present(&first).unwrap();
+    let calls = source.calls.get();
+    for id in [parent, child] {
+        c.set_effect_operations(id, to.clone()).unwrap();
+    }
+    let cached = c.build_cached_frame(20, 8).unwrap();
+    assert!(cached.resources.uploads.is_empty());
+    presenter.present(&cached).unwrap();
+    assert_eq!(source.calls.get(), calls);
 }
