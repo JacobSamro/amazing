@@ -21,7 +21,9 @@ fn native_object_entries(
         return Err(Throw::type_error("Object.entries requires an object"));
     }
     let mut entries = Vec::new();
-    for key in i.enumerable_keys(&object)? {
+    for key in i.own_property_keys(&object)? {
+        let PropertyKey::String(key) = key else { continue; };
+        if !i.object_own_enumerable(&object, &PropertyKey::String(key.clone()))? { continue; }
         let value = i.get_prop(&object, &key)?;
         entries.push(array_values(i, vec![JsValue::Str(key), value])?);
     }
@@ -84,7 +86,8 @@ fn native_object_descriptors(
             ],
         )?;
         if !descriptor.is_undefined() {
-            i.set_prop(&result, key, descriptor)?;
+            let JsValue::Object(result) = &result else { unreachable!() };
+            result.borrow_mut().define(key, Property::data(descriptor)).unwrap();
         }
     }
     Ok(result)
@@ -102,10 +105,22 @@ fn native_object_define_properties(
     }
     // Validate all descriptors before defining any of them.
     let mut pending = Vec::new();
-    for key in i.enumerable_property_keys(&descriptors)? {
+    for key in i.own_property_keys(&descriptors)? {
+        if !i.object_own_enumerable(&descriptors, &key)? { continue; }
         let descriptor = i.get_prop(&descriptors, &key)?;
-        i.std_descriptor_fields(&descriptor)?;
-        pending.push((key, descriptor));
+        let fields = i.std_descriptor_fields(&descriptor)?;
+        // Keep the converted record, not the user object whose getters or
+        // prototype can change while subsequent descriptors are collected.
+        let mut snapshot = JsObject::ordinary();
+        for (name, value) in [
+            ("value", fields.value), ("writable", fields.writable.map(JsValue::Bool)),
+            ("get", fields.get), ("set", fields.set),
+            ("enumerable", fields.enumerable.map(JsValue::Bool)),
+            ("configurable", fields.configurable.map(JsValue::Bool)),
+        ] {
+            if let Some(value) = value { snapshot.set_own(name, value); }
+        }
+        pending.push((key, JsValue::object(snapshot)));
     }
     for (key, descriptor) in pending {
         if !i.define_own_property(&target, &key, &descriptor)? {
@@ -445,5 +460,104 @@ impl Interpreter {
                 .define(name, symbol_data(method, true, true))
                 .unwrap();
         }
+    }
+}
+
+// EnumerableOwnProperties and ObjectDefineProperties snapshot keys but inspect
+// each descriptor immediately before Get, after previous getters have run.
+impl Interpreter {
+    fn object_own_enumerable(&mut self, value: &JsValue, key: &PropertyKey) -> Result<bool, Throw> {
+        match value {
+            JsValue::Object(object) => {
+                let property = match binary_index_descriptor(object, key) {
+                    Some(property) => property,
+                    None => match key {
+                        PropertyKey::String(name) => self.legacy_own_property(object, name.clone(), false)?,
+                        PropertyKey::Symbol(_) => object.borrow().own_prop(key).cloned(),
+                    },
+                };
+                Ok(property.is_some_and(|property| property.enumerable))
+            }
+            JsValue::Str(string) => Ok(array_index_key(key).is_some_and(|index| (index as usize) < string.len())),
+            _ => Ok(false),
+        }
+    }
+}
+
+#[cfg(test)]
+mod object_collection_tests {
+    use super::*;
+
+    #[test]
+    fn descriptor_collection_snapshots_converted_fields_once() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var reads = 0, descriptor = { get value() { reads++; return 7; } };
+            var props = { a: descriptor, get b() {
+                Object.defineProperty(descriptor, 'value', {value: 9});
+                return {value: 2};
+            }};
+            var target = Object.defineProperties({}, props);
+            reads === 1 && target.a === 7 && target.b === 2;
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn property_collection_rechecks_enumerability_after_getters() {
+        for operation in ["Object.values(source)", "Object.entries(source)", "Object.assign({}, source)"] {
+            let mut i = Interpreter::new();
+            let script = format!(r#"
+                var reads = 0, source = {{ get a() {{
+                    Object.defineProperty(source, 'b', {{enumerable: false}});
+                    Object.defineProperty(source, 'c', {{enumerable: true}});
+                    return 1;
+                }}, get b() {{ reads++; return 2; }} }};
+                Object.defineProperty(source, 'c', {{value: 3, configurable: true}});
+                var result = {operation};
+                reads === 0 && (Array.isArray(result) ? result.length === 2 : result.c === 3 && !Object.hasOwn(result, 'b'));
+            "#);
+            assert_eq!(i.run_script(&script).unwrap(), JsValue::Bool(true), "{operation}");
+        }
+    }
+
+    #[test]
+    fn define_properties_rechecks_keys_and_validates_before_writing() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var target = {}, source = { get a() { delete source.b; return {value: 1}; }, b: null };
+            Object.defineProperties(target, source);
+            var sentinel = {}, failed = false, untouched = {};
+            try { Object.defineProperties(untouched, {a: {value: 1}, get b() { throw sentinel; }}); }
+            catch (e) { failed = e === sentinel; }
+            target.a === 1 && !Object.hasOwn(target, 'b') && failed && !Object.hasOwn(untouched, 'a');
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn primitive_descriptors_preserve_code_units_and_key_conversion() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var descriptors = Object.getOwnPropertyDescriptors('\uD800x');
+            var calls = 0, key = { toString() { calls++; return 'absent'; } };
+            var absent = Object.getOwnPropertyDescriptor(Symbol(), key);
+            descriptors[0].value === '\uD800' && descriptors[1].value === 'x' &&
+                descriptors[0].enumerable && !descriptors[0].writable &&
+                !descriptors[0].configurable && descriptors.length.value === 2 &&
+                !descriptors.length.enumerable && absent === undefined && calls === 1 &&
+                Object.getOwnPropertyDescriptor(42, 'x') === undefined;
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn descriptors_create_own_proto_property_and_create_requires_prototype() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var source = Object.create(null);
+            source.__proto__ = 42;
+            var descriptors = Object.getOwnPropertyDescriptors(source), failed = false;
+            try { Object.create(); } catch (e) { failed = e instanceof TypeError; }
+            Object.hasOwn(descriptors, '__proto__') && descriptors.__proto__.value === 42 &&
+                Object.getPrototypeOf(descriptors) === Object.prototype && failed;
+        "#).unwrap(), JsValue::Bool(true));
     }
 }
