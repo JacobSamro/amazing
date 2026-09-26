@@ -258,14 +258,10 @@ fn intl_array(i: &mut Interpreter, values: impl IntoIterator<Item = JsValue>) ->
 }
 
 fn intl_method(i: &Interpreter, owner: &Obj, name: &str, arity: usize, native: crate::value::NativeFn) {
-    let method = Interpreter::native(name, native, &i.function_proto);
+    let method = Interpreter::native_arity(name, native, &i.function_proto, arity);
     if let JsValue::Object(function) = &method {
         function.borrow_mut().constructible = false;
         function.borrow_mut().delete_own("prototype");
-        let _ = function.borrow_mut().define("length", Property {
-            value: JsValue::num(arity as f64), writable: false, enumerable: false,
-            configurable: true, getter: None, setter: None,
-        });
     }
     let _ = owner.borrow_mut().define(name, Property {
         value: method, writable: true, enumerable: false,
