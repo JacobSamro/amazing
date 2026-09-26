@@ -136,6 +136,7 @@ pub(super) struct QuadSnapshot {
     blend: BlendMode,
     bounds: Rect,
     clip: ClipId,
+    effect_revision: u64,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PresenterError {
@@ -223,13 +224,24 @@ impl Compositor {
     /// This is used when a shell adopts a cached frame after the initial
     /// presenter was created, without rerasterizing the paint source.
     pub fn resource_snapshot(&self) -> ResourceDelta {
-        let mut uploads = self.tile_resource_ids.iter().filter_map(|(key, id)| {
-            let surface = &self.tiles.get(key)?.surface;
-            Some(ResourceUpload { id: *id, width: surface.width, height: surface.height,
-                pixels: surface.pixels.clone() })
-        }).collect::<Vec<_>>();
+        let mut uploads = self
+            .tile_resource_ids
+            .iter()
+            .filter_map(|(key, id)| {
+                let surface = &self.tiles.get(key)?.surface;
+                Some(ResourceUpload {
+                    id: *id,
+                    width: surface.width,
+                    height: surface.height,
+                    pixels: surface.pixels.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
         uploads.sort_by_key(|upload| upload.id);
-        ResourceDelta { uploads, evictions: Vec::new() }
+        ResourceDelta {
+            uploads,
+            evictions: Vec::new(),
+        }
     }
 
     /// Builds passes and resource deltas without flattening any layer into an
@@ -267,10 +279,21 @@ impl Compositor {
             return Err(SceneError::InvalidRange);
         }
         if source.is_none() {
-            let viewport = Rect::new(0., 0., width as f32, height as f32);
+            let halo: f32 = self.effect_raster_halo();
+            let viewport = Rect::new(
+                -halo,
+                -halo,
+                width as f32 + 2. * halo,
+                height as f32 + 2. * halo,
+            );
             for (li, layer) in self.layers.iter().enumerate() {
                 let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
-                let scissor = clip_rect(&self.trees, layer.state, viewport);
+                let scissor =
+                    if self.trees.has_composited_effects() || self.reserved_effect_halo > 0. {
+                        viewport
+                    } else {
+                        clip_rect(&self.trees, layer.state, viewport)
+                    };
                 for key in tile_keys(li, layer.bounds) {
                     if matrix
                         .map_bounds(tile_rect(key))
@@ -283,6 +306,15 @@ impl Compositor {
             }
         }
         let viewport = Rect::new(0., 0., width as f32, height as f32);
+        let enhanced = self.trees.has_composited_effects();
+        let halo: f32 = self.effect_raster_halo();
+        let raster_viewport = Rect::new(
+            -halo,
+            -halo,
+            width as f32 + 2. * halo,
+            height as f32 + 2. * halo,
+        );
+        let mut effect_passes = super::effects::EffectPassBuilder::default();
         let mut passes = vec![RenderPass {
             id: 0,
             effect_node: None,
@@ -306,6 +338,7 @@ impl Compositor {
                 blend,
                 bounds,
                 clip,
+                effect_revision: self.trees.effect_revision,
             });
             let scissor = clip_rect(&self.trees, layer.state, viewport);
             let keys = tile_keys(li, layer.bounds);
@@ -321,9 +354,13 @@ impl Compositor {
             }
             // A single tile can carry opacity and rectangular clip directly;
             // multiple tiles need an isolated pass to apply opacity once.
-            let needs_pass =
-                blend != BlendMode::Normal || rounded_clip || (opacity < 1. && keys.len() > 1);
-            let pass_id = if needs_pass {
+            let needs_pass = enhanced
+                || blend != BlendMode::Normal
+                || rounded_clip
+                || (opacity < 1. && keys.len() > 1);
+            let pass_id = if enhanced {
+                effect_passes.select(&self.trees, layer.state.effect, viewport, &mut passes)?
+            } else if needs_pass {
                 let id = passes.len();
                 passes.push(RenderPass {
                     id,
@@ -345,10 +382,13 @@ impl Compositor {
             };
             for key in keys {
                 let local = tile_rect(key);
-                if !matrix
-                    .map_bounds(local)
-                    .is_some_and(|r| r.intersects(scissor))
-                {
+                if !matrix.map_bounds(local).is_some_and(|r| {
+                    r.intersects(if enhanced || self.reserved_effect_halo > 0. {
+                        raster_viewport
+                    } else {
+                        scissor
+                    })
+                }) {
                     continue;
                 }
                 visible.insert(key);
@@ -417,7 +457,7 @@ impl Compositor {
                     rect: local,
                     content_rect: layer.bounds,
                     transform: matrix,
-                    clip_rect: scissor,
+                    clip_rect: if enhanced { raster_viewport } else { scissor },
                     opacity: if needs_pass { 1. } else { opacity },
                     blend: if needs_pass { BlendMode::Normal } else { blend },
                     state: layer.state,
@@ -461,6 +501,12 @@ impl Compositor {
                     add_damage(&mut damage, intersect(new.bounds, viewport))
                 }
             }
+        }
+        // Backdrop effects depend on every preceding draw in their root.
+        // Conservatively damage the complete viewport for any effect change
+        // or source damage; no source tiles are invalidated by this decision.
+        if enhanced && !damage.is_empty() {
+            damage = vec![viewport];
         }
         self.previous_quad_layers = snapshots;
         self.previous_quad_size = Some((width, height));
@@ -626,34 +672,9 @@ fn sample(
     ]
 }
 fn blend(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: BlendMode) -> [u8; 4] {
-    let opacity = amazing_paint::quantize_opacity(opacity);
-    if mode == BlendMode::Normal {
-        return amazing_paint::blend_source_over(src, dst, opacity);
-    }
-    let sa = (src[3] as u32 * opacity as u32 + 127) / 255;
-    if sa == 0 {
-        return dst;
-    }
-    let da = dst[3] as u32;
-    let oa = sa + (da * (255 - sa) + 127) / 255;
-    if oa == 0 {
-        return [0; 4];
-    }
-    let mut out = [0; 4];
-    for c in 0..3 {
-        let s = src[c] as u32;
-        let d = dst[c] as u32;
-        let b = match mode {
-            BlendMode::Normal => s,
-            BlendMode::Multiply => (s * d + 127) / 255,
-            BlendMode::Screen => 255 - ((255 - s) * (255 - d) + 127) / 255,
-        };
-        let premul = b * sa * 255 + d * da * (255 - sa);
-        out[c] = ((premul + oa * 127) / (oa * 255)).min(255) as u8
-    }
-    out[3] = oa as u8;
-    out
+    super::effect_pixels::blend(dst, src, opacity, mode.into())
 }
+
 fn integer_translation(m: Matrix4) -> bool {
     let a = m.0;
     a[0] == [1., 0., 0., a[0][3]]
@@ -668,7 +689,12 @@ impl ReferenceCpuPresenter {
         frame: &CompositorFrame,
         pass_id: usize,
         depth: usize,
+        initial: Option<Surface>,
     ) -> Result<(Surface, Vec<bool>), PresenterError> {
+        let pixels = u64::from(frame.width) * u64::from(frame.height);
+        if pixels.saturating_mul(48 + 24 * (depth as u64 + 1)) > 512 * 1024 * 1024 {
+            return Err(PresenterError::InvalidResource);
+        }
         if depth > 16 {
             return Err(PresenterError::PassCycle);
         }
@@ -676,7 +702,7 @@ impl ReferenceCpuPresenter {
             .passes
             .get(pass_id)
             .ok_or(PresenterError::MissingPass(pass_id))?;
-        let mut out = Surface::new(frame.width, frame.height);
+        let mut out = initial.unwrap_or_else(|| Surface::new(frame.width, frame.height));
         let len = frame.width as usize * frame.height as usize;
         let mut boundaries = vec![false; len];
         let mut owner = vec![None; len];
@@ -784,7 +810,45 @@ impl ReferenceCpuPresenter {
                     }
                 }
                 DrawQuad::Pass(q) => {
-                    let (sub, sub_boundaries) = self.draw_pass(frame, q.pass_id, depth + 1)?;
+                    let operations = frame
+                        .passes
+                        .get(q.pass_id)
+                        .and_then(|p| p.effect_node)
+                        .and_then(|id| frame.trees.effect_operations(id));
+                    // Seed the group's backdrop before its children draw. A
+                    // nested backdrop filter then sees the already-filtered
+                    // parent background, without escaping its backdrop root.
+                    let initial =
+                        operations
+                            .filter(|op| !op.backdrop_filters.is_empty())
+                            .map(|op| {
+                                let bounds = op.backdrop_bounds.expect("validated backdrop bounds");
+                                let mut backdrop = super::effect_pixels::backdrop_filters(
+                                    &out,
+                                    &op.backdrop_filters,
+                                    bounds,
+                                );
+                                for y in 0..out.height {
+                                    for x in 0..out.width {
+                                        if !bounds.contains(x as f32 + 0.5, y as f32 + 0.5) {
+                                            backdrop.set_pixel(x, y, [0; 4]);
+                                        }
+                                    }
+                                }
+                                backdrop
+                            });
+                    let (mut sub, mut sub_boundaries) =
+                        self.draw_pass(frame, q.pass_id, depth + 1, initial)?;
+                    let mut mode = EffectBlend::from(q.blend);
+                    if let Some(operations) = operations {
+                        sub = super::effect_pixels::filters(&sub, &operations.filters);
+                        super::effect_clip::apply_masks(&mut sub, operations);
+                        if !operations.filters.is_empty() || !operations.backdrop_filters.is_empty()
+                        {
+                            sub_boundaries.fill(false);
+                        }
+                        mode = operations.blend;
+                    }
                     let draw = intersect(
                         intersect(q.rect, q.clip_rect),
                         Rect::new(0., 0., frame.width as f32, frame.height as f32),
@@ -820,7 +884,8 @@ impl ReferenceCpuPresenter {
                                 }
                                 owner[index] = Some(layer);
                             }
-                            out.set_pixel(x, y, blend(dst, src, q.opacity, q.blend))
+                            let pixel = super::effect_pixels::blend(dst, src, q.opacity, mode);
+                            out.set_pixel(x, y, pixel)
                         }
                     }
                 }
@@ -833,8 +898,31 @@ impl Presenter for ReferenceCpuPresenter {
     type Output = Surface;
     type Error = PresenterError;
     fn present(&mut self, frame: &CompositorFrame) -> Result<Surface, PresenterError> {
+        if u64::from(frame.width) * u64::from(frame.height) > MAX_EFFECT_PIXELS
+            || frame.passes.len() > 1024
+        {
+            return Err(PresenterError::InvalidResource);
+        }
+        for operations in frame.trees.effect_operations.values() {
+            operations
+                .validate()
+                .map_err(|_| PresenterError::InvalidResource)?;
+        }
         self.resources.apply(&frame.resources)?;
-        let (out, boundaries) = self.draw_pass(frame, 0, 0)?;
+        let (out, boundaries) = if let Some((padded, pad)) = super::effect_padding::padded(frame)? {
+            let (large, mask) = self.draw_pass(&padded, 0, 0, None)?;
+            let mut cropped = Surface::new(frame.width, frame.height);
+            let mut boundaries = Vec::with_capacity(frame.width as usize * frame.height as usize);
+            for y in 0..frame.height {
+                for x in 0..frame.width {
+                    cropped.set_pixel(x, y, large.get_pixel(x + pad, y + pad).unwrap());
+                    boundaries.push(mask[((y + pad) * padded.width + x + pad) as usize]);
+                }
+            }
+            (cropped, boundaries)
+        } else {
+            self.draw_pass(frame, 0, 0, None)?
+        };
         self.layer_boundaries = boundaries;
         self.presented_size = (frame.width, frame.height);
         Ok(out)

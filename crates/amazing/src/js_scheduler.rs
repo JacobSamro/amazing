@@ -2,7 +2,7 @@
 //! `enter`, which transfers the complete ordered outbox before another entry.
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
-use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TimerId};
+use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, RenderPhase, TimerId};
 use amazing_dom::abort::AbortSignalId;
 use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
@@ -125,6 +125,9 @@ impl DriverScheduler {
         // Cross-document storage notifications enter this document as tasks,
         // after requests already emitted by its own script execution.
         self.bindings.schedule_storage_events(&mut self.js)?;
+        // Cross-document messages (postMessage/MessageChannel/BroadcastChannel)
+        // enter this document as tasks at the same checkpoint.
+        self.bindings.schedule_messages(&mut self.js)?;
         self.pending.extend(self.js.take_scheduling_requests());
         while let Some(request) = self.pending.front().copied() {
             self.admit(request)?;
@@ -239,6 +242,20 @@ impl DriverScheduler {
     /// Callback exceptions are returned after the step has been completed and
     /// all newly emitted requests have been admitted.
     pub(crate) fn pump_at(&mut self, now: Duration, render: bool) -> Result<bool, Throw> {
+        self.pump_at_with_render(now, render, |_, _| {})
+    }
+
+    /// Like [`Self::pump_at`], but invokes `on_render` for each `Action::Render`
+    /// the event loop yields. The loop orders resize/scroll, then rAF callbacks,
+    /// then the `AfterAnimationFrames` render step, so a compositor can tick at
+    /// the frame boundary without a second clock. Drivers that do not render in
+    /// the loop keep using `pump_at`, which ignores the actions.
+    pub(crate) fn pump_at_with_render(
+        &mut self,
+        now: Duration,
+        render: bool,
+        mut on_render: impl FnMut(RenderPhase, Duration),
+    ) -> Result<bool, Throw> {
         self.drain_outbox()?;
         self.now = self.now.max(now);
         self.loop_.advance_to(self.now).map_err(loop_error)?;
@@ -259,7 +276,7 @@ impl DriverScheduler {
                     self.invoke(callback, Some(timestamp))
                 }
                 Action::CheckpointCleanup => { self.bindings.storage_deactivate_transactions(); Ok(()) },
-                Action::Render { .. } => Ok(()),
+                Action::Render { phase, timestamp, .. } => { on_render(phase, timestamp); Ok(()) },
             };
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.
@@ -272,6 +289,16 @@ impl DriverScheduler {
 
     pub(crate) fn pump_now(&mut self, render: bool) -> Result<bool, Throw> {
         self.pump_at(self.started.elapsed(), render)
+    }
+
+    /// [`Self::pump_now`] variant that ticks a host render hook at the loop's
+    /// frame boundary (see [`Self::pump_at_with_render`]).
+    pub(crate) fn pump_now_with_render(
+        &mut self,
+        render: bool,
+        on_render: impl FnMut(RenderPhase, Duration),
+    ) -> Result<bool, Throw> {
+        self.pump_at_with_render(self.started.elapsed(), render, on_render)
     }
 }
 
@@ -325,6 +352,27 @@ mod tests {
         frame.pump_at(Duration::from_millis(16), true).unwrap();
         assert_eq!(frame.trace, ["F1"]);
         println!("TRACE frame-cancel: {}", frame.trace.join(","));
+    }
+
+    #[test]
+    fn driver_render_hook_brackets_animation_frames() {
+        let (mut driver, _) = adapter(16, false);
+        driver.run_script("requestAnimationFrame(()=>console.log('F'))").unwrap();
+        let phases = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+        let record = phases.clone();
+        driver.pump_at_with_render(Duration::from_millis(16), true, move |phase, timestamp| {
+            let label = match phase {
+                RenderPhase::BeforeAnimationFrames => "before",
+                RenderPhase::AfterAnimationFrames => "after",
+            };
+            assert_eq!(timestamp, Duration::from_millis(16));
+            record.borrow_mut().push(label);
+        }).unwrap();
+        // The loop yields the pre-rAF render step, then the rAF callback, then the
+        // post-rAF render step, so a compositor ticks once per frame in order.
+        assert_eq!(&*phases.borrow(), &["before", "after"]);
+        assert_eq!(driver.trace, ["F"]);
+        println!("TRACE render-hook-phases: before,F,after");
     }
 
     #[test]

@@ -16,16 +16,19 @@ pub enum PaintViewRasterMode {
 }
 
 /// Apply the paint view's opaque page canvas to a source-free retained frame.
-pub fn add_paint_view_canvas_background(
-    mode: PaintViewRasterMode,
-    frame: &mut CompositorFrame,
-) {
+pub fn add_paint_view_canvas_background(mode: PaintViewRasterMode, frame: &mut CompositorFrame) {
     if mode == PaintViewRasterMode::RawLocal {
         let viewport = Rect::new(0., 0., frame.width as f32, frame.height as f32);
-        frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
-            rect: viewport, color: [255, 255, 255, 255], clip_rect: viewport,
-            opacity: 1., blend: BlendMode::Normal,
-        }));
+        frame.passes[0].quads.insert(
+            0,
+            DrawQuad::SolidColor(SolidColorQuad {
+                rect: viewport,
+                color: [255, 255, 255, 255],
+                clip_rect: viewport,
+                opacity: 1.,
+                blend: BlendMode::Normal,
+            }),
+        );
     }
 }
 
@@ -312,8 +315,11 @@ pub fn paint_view_metadata(
             if h.will_change {
                 reasons = reasons.union(CompositingReasons::WILL_CHANGE);
             }
-            if h.fixed || h.sticky {
+            if h.fixed {
                 reasons = reasons.union(CompositingReasons::FIXED);
+            }
+            if h.sticky {
+                reasons = reasons.union(CompositingReasons::STICKY);
             }
             if h.video {
                 reasons = reasons.union(CompositingReasons::VIDEO);
