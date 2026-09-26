@@ -2,7 +2,7 @@
 use super::*;
 use amazing_bindings::fetch_interfaces::{FetchHeaders, FetchHost, FetchInterface, FetchObject, FetchOperation, HeaderIterationKind};
 use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
-use amazing_net::dispatch::{DispatchLimits, NetEvent};
+use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
@@ -501,15 +501,22 @@ impl FetchHost for RuntimeBindingHost<'_> {
             }
             return Ok(events);
         }
+        // A synchronous XHR blocks the event loop, but it must not drive the
+        // shared NetworkService dispatcher: `Dispatcher::step` advances every
+        // in-flight connection, so consuming its events here would silently drop
+        // the replies of pending asynchronous XHRs and fetches, leaving them
+        // hung. Give the blocking request its own dispatcher (same StdResolver,
+        // so the WPT shim host routing still applies) so asynchronous traffic
+        // keeps its events.
         let start = Instant::now();
-        let mut state = self.state.borrow_mut();
-        let mut pending = xhr.start_dispatch(&mut state.net.fetch_network.dispatcher, 0, start)?;
+        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+        let mut pending = xhr.start_dispatch(&mut dispatcher, 0, start)?;
         let mut events = Vec::new();
         for tick in 0..15_000 {
             let now = start + Duration::from_millis(tick);
-            for event in state.net.fetch_network.dispatcher.step(8192, now) {
+            for event in dispatcher.step(8192, now) {
                 events.extend(xhr.on_dispatch_event(&mut pending, &event,
-                    &mut state.net.fetch_network.dispatcher, tick, now)?);
+                    &mut dispatcher, tick, now)?);
             }
             if matches!(xhr.state(), XhrState::HeadersReceived | XhrState::Loading) {
                 while matches!(xhr.state(), XhrState::HeadersReceived | XhrState::Loading) {
@@ -746,5 +753,72 @@ mod tests {
         let result = scheduler.run_script("var r = new Request('/'); var h = new Headers(); h.append('X-Probe', 'yes'); r.method === 'GET' && !!r.signal && h.has('x-probe') && h.get('x-probe') === 'yes'")
             .unwrap_or_else(|error| panic!("Fetch wrapper probe: {}", error.describe()));
         assert_eq!(result, JsValue::Bool(true));
+    }
+
+    /// A synchronous XHR blocks the event loop, but it must not advance the
+    /// shared NetworkService dispatcher: doing so consumes and discards the
+    /// replies of pending asynchronous requests, leaving them hung. The async
+    /// `/slow` reply lands during the blocking `/fast` sync request.
+    #[test]
+    fn synchronous_xhr_keeps_pending_async_xhr_reply() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        // One thread per connection, detached; the process exits with the test.
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break; };
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 2048];
+                    let _ = stream.read(&mut buf);
+                    let request = String::from_utf8_lossy(&buf);
+                    let delay = if request.starts_with("GET /slow") { 60 } else { 600 };
+                    std::thread::sleep(Duration::from_millis(delay));
+                    let body = b"ok";
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n",
+                        body.len());
+                    let _ = stream.write_all(head.as_bytes());
+                    let _ = stream.write_all(body);
+                    let _ = stream.flush();
+                });
+            }
+        });
+
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url(&format!("http://127.0.0.1:{port}/"));
+
+        scheduler.run_script(
+            "var asyncDone=false; var a=new XMLHttpRequest(); a.onload=function(){asyncDone=true;}; \
+             a.open('GET','/slow'); a.send();"
+        ).unwrap();
+        // Drive the asynchronous request into its in-flight read state.
+        for _ in 0..30 {
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // The blocking request runs for 600ms; the 60ms async reply arrives while
+        // it is blocked. Before the isolation fix the sync loop ate that reply.
+        scheduler.run_script(
+            "var s=new XMLHttpRequest(); s.open('GET','/fast',false); s.send(); s.status"
+        ).unwrap();
+
+        let mut done = false;
+        for _ in 0..800 {
+            if scheduler.run_script("asyncDone").unwrap() == JsValue::Bool(true) {
+                done = true;
+                break;
+            }
+            scheduler.pump_now(false).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(done, "pending async XHR lost its reply behind a synchronous XHR");
     }
 }
