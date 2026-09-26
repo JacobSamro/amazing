@@ -14,13 +14,16 @@ pub(crate) struct Program {
 }
 #[derive(Debug, Clone)]
 enum Op {
-    Char(u32),
-    Any,
-    Class(Rc<FoldedClass>),
-    Set(Rc<CompiledSet>),
-    Start,
-    End,
-    Boundary(bool),
+    /// The pattern character, and the flags in effect at this instruction's
+    /// position (only `ignore_case` differs from the outer search flags,
+    /// via a `(?ims-ims:...)` modifier group).
+    Char(u32, Flags),
+    Any(Flags),
+    Class(Rc<FoldedClass>, Flags),
+    Set(Rc<CompiledSet>, Flags),
+    Start(Flags),
+    End(Flags),
+    Boundary(bool, Flags),
     Split(usize, usize),
     Jump(usize),
     Save(usize),
@@ -28,7 +31,11 @@ enum Op {
     Mark(usize),
     Progress(usize),
     Look(Box<Program>, bool),
-    Backref(usize),
+    /// A lookbehind assertion, matched by re-running its nested program from
+    /// every candidate start position at or before the current position,
+    /// requiring it to end exactly there (see `run`'s `required_end`).
+    LookBehind(Box<Program>, bool),
+    Backref(Vec<usize>, Flags),
     Accept,
 }
 #[derive(Debug, Clone)]
@@ -148,15 +155,38 @@ impl SetExpr {
                         .all(|(a, b)| canonical(*a, flags) == canonical(*b, flags))
             }
             Self::Property(name, invert) => {
-                let base = if crate::unicode_sets::supported(name) {
-                    crate::unicode_sets::contains(name, sequence)
+                if crate::unicode_sets::supported(name) {
+                    let direct = crate::unicode_sets::contains(name, sequence);
+                    if *invert {
+                        sequence.len() == 1 && !direct
+                    } else {
+                        direct
+                    }
                 } else {
-                    matches!(sequence, [c] if crate::unicode_props::contains(name, *c))
-                };
-                if *invert {
-                    sequence.len() == 1 && !base
-                } else {
-                    base
+                    match sequence {
+                        // `invert` is folded in *before* the ignoreCase
+                        // case-fold check runs, not applied to its result:
+                        // under `i`, `\P{Lu}` must match `A` (its lowercase
+                        // fold partner is outside Lu) even though `A` itself
+                        // is directly in Lu. A post-hoc `!` on a
+                        // direct-membership-only test can't express that.
+                        [c] => {
+                            let test = |x: u32| {
+                                let hit = crate::unicode_props::contains(name, x);
+                                if *invert {
+                                    !hit
+                                } else {
+                                    hit
+                                }
+                            };
+                            test(*c)
+                                || (flags.ignore_case
+                                    && crate::unicode_casefold::PAIRS.iter().any(|&(a, b)| {
+                                        (*c == a && test(b)) || (*c == b && test(a))
+                                    }))
+                        }
+                        _ => false,
+                    }
                 }
             }
             Self::Union(terms) => terms.iter().any(|term| term.contains(sequence, flags)),
@@ -261,7 +291,10 @@ impl Compiler {
                         range(n, out, remaining)?;
                     }
                 }
-                Node::Repeat(n, ..) | Node::Look(n, _) => range(n, out, remaining)?,
+                Node::Repeat(n, ..) | Node::Look(n, _) | Node::LookBehind(n, _) => {
+                    range(n, out, remaining)?
+                }
+                Node::Mode(_, _, n) => range(n, out, remaining)?,
                 _ => {}
             }
             Ok(())
@@ -281,10 +314,10 @@ impl Compiler {
         match n {
             Node::Empty => {}
             Node::Char(c) => {
-                self.emit(Op::Char(*c))?;
+                self.emit(Op::Char(*c, self.flags))?;
             }
             Node::Any => {
-                self.emit(Op::Any)?;
+                self.emit(Op::Any(self.flags))?;
             }
             Node::Class(c) => {
                 // Safe pointer identity is used only as a compilation-local cache
@@ -307,22 +340,25 @@ impl Compiler {
                     self.classes.insert(key, prepared.clone());
                     prepared
                 };
-                self.emit(Op::Class(prepared))?;
+                self.emit(Op::Class(prepared, self.flags))?;
             }
             Node::Set(expression) => {
-                self.emit(Op::Set(Rc::new(CompiledSet::new(expression, self.flags))))?;
+                self.emit(Op::Set(
+                    Rc::new(CompiledSet::new(expression, self.flags)),
+                    self.flags,
+                ))?;
             }
             Node::Start => {
-                self.emit(Op::Start)?;
+                self.emit(Op::Start(self.flags))?;
             }
             Node::End => {
-                self.emit(Op::End)?;
+                self.emit(Op::End(self.flags))?;
             }
             Node::Boundary(b) => {
-                self.emit(Op::Boundary(*b))?;
+                self.emit(Op::Boundary(*b, self.flags))?;
             }
-            Node::Backref(i) => {
-                self.emit(Op::Backref(*i))?;
+            Node::Backref(ids) => {
+                self.emit(Op::Backref(ids.clone(), self.flags))?;
             }
             Node::Group(i, n) => {
                 self.emit(Op::Save(i * 2))?;
@@ -405,6 +441,51 @@ impl Compiler {
                     *positive,
                 ))?;
             }
+            Node::LookBehind(n, positive) => {
+                let mut nested = Compiler {
+                    code: Vec::new(),
+                    marks: 0,
+                    flags: self.flags,
+                    remaining: self.remaining,
+                    classes: self.classes.clone(),
+                };
+                nested.node(n)?;
+                nested.emit(Op::Accept)?;
+                self.remaining = nested.remaining;
+                self.classes = nested.classes;
+                self.emit(Op::LookBehind(
+                    Box::new(Program {
+                        code: nested.code,
+                        marks: nested.marks,
+                    }),
+                    *positive,
+                ))?;
+            }
+            Node::Mode(add, remove, n) => {
+                let saved = self.flags;
+                let mut effective = self.flags;
+                if add[0] {
+                    effective.ignore_case = true;
+                }
+                if remove[0] {
+                    effective.ignore_case = false;
+                }
+                if add[1] {
+                    effective.multiline = true;
+                }
+                if remove[1] {
+                    effective.multiline = false;
+                }
+                if add[2] {
+                    effective.dot_all = true;
+                }
+                if remove[2] {
+                    effective.dot_all = false;
+                }
+                self.flags = effective;
+                self.node(n)?;
+                self.flags = saved;
+            }
         }
         Ok(())
     }
@@ -468,6 +549,7 @@ pub(crate) fn search(
             vec![None; (captures + 1) * 2],
             flags,
             budget,
+            None,
         )? {
             let groups = result
                 .captures
@@ -495,6 +577,7 @@ fn run(
     captures: Vec<Option<usize>>,
     flags: Flags,
     budget: &mut Budget,
+    required_end: Option<usize>,
 ) -> Result<Option<State>, Error> {
     let mut state = State {
         pc: 0,
@@ -507,14 +590,17 @@ fn run(
         budget.step()?;
         let mut success = true;
         match &program.code[state.pc] {
-            Op::Accept => {
-                budget.saved -= stack.len();
-                budget.slots -= stack.len() * (state.captures.len() + state.marks.len() + 3);
-                return Ok(Some(state));
-            }
-            Op::Char(c) => {
+            Op::Accept => match required_end {
+                Some(end) if end != state.pos => success = false,
+                _ => {
+                    budget.saved -= stack.len();
+                    budget.slots -= stack.len() * (state.captures.len() + state.marks.len() + 3);
+                    return Ok(Some(state));
+                }
+            },
+            Op::Char(c, cflags) => {
                 if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
-                    if canonical(*c, flags) == canonical(next, flags) {
+                    if canonical(*c, *cflags) == canonical(next, *cflags) {
                         state.pos = end;
                     } else {
                         success = false;
@@ -523,9 +609,9 @@ fn run(
                     success = false;
                 }
             }
-            Op::Any => {
+            Op::Any(aflags) => {
                 if let Some((c, end)) = point(input, state.pos, flags.unicode_mode()) {
-                    if flags.dot_all || !line(c) {
+                    if aflags.dot_all || !line(c) {
                         state.pos = end;
                     } else {
                         success = false;
@@ -534,9 +620,9 @@ fn run(
                     success = false;
                 }
             }
-            Op::Class(c) => {
+            Op::Class(c, cflags) => {
                 if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
-                    if c.contains(next, flags) {
+                    if c.contains(next, *cflags) {
                         state.pos = end;
                     } else {
                         success = false;
@@ -545,8 +631,8 @@ fn run(
                     success = false;
                 }
             }
-            Op::Set(set) => {
-                let ends = set.ends(input, state.pos, flags);
+            Op::Set(set, sflags) => {
+                let ends = set.ends(input, state.pos, *sflags);
                 if let Some((&first, alternatives)) = ends.split_first() {
                     for &end in alternatives.iter().rev() {
                         if budget.saved >= MAX_STACK
@@ -567,14 +653,15 @@ fn run(
                     success = false;
                 }
             }
-            Op::Start => {
-                success = state.pos == 0 || (flags.multiline && line(input[state.pos - 1] as u32))
+            Op::Start(sflags) => {
+                success =
+                    state.pos == 0 || (sflags.multiline && line(input[state.pos - 1] as u32))
             }
-            Op::End => {
+            Op::End(eflags) => {
                 success = state.pos == input.len()
-                    || (flags.multiline && input.get(state.pos).is_some_and(|u| line(*u as u32)))
+                    || (eflags.multiline && input.get(state.pos).is_some_and(|u| line(*u as u32)))
             }
-            Op::Boundary(positive) => {
+            Op::Boundary(positive, bflags) => {
                 let left = if state.pos == 0 {
                     false
                 } else {
@@ -588,10 +675,10 @@ fn run(
                         state.pos - 1
                     };
                     point(input, previous, flags.unicode_mode())
-                        .is_some_and(|(c, _)| word(c, flags))
+                        .is_some_and(|(c, _)| word(c, *bflags))
                 };
                 let right = point(input, state.pos, flags.unicode_mode())
-                    .is_some_and(|(c, _)| word(c, flags));
+                    .is_some_and(|(c, _)| word(c, *bflags));
                 success = (left != right) == *positive;
             }
             Op::Split(a, b) => {
@@ -619,7 +706,8 @@ fn run(
             Op::Mark(id) => state.marks[*id] = Some(state.pos),
             Op::Progress(id) => success = state.marks[*id] != Some(state.pos),
             Op::Look(n, positive) => {
-                let result = run(n, input, state.pos, state.captures.clone(), flags, budget)?;
+                let result =
+                    run(n, input, state.pos, state.captures.clone(), flags, budget, None)?;
                 success = result.is_some() == *positive;
                 if *positive {
                     if let Some(result) = result {
@@ -627,9 +715,47 @@ fn run(
                     }
                 }
             }
-            Op::Backref(id) => {
-                if let (Some(mut a), Some(b)) = (state.captures[id * 2], state.captures[id * 2 + 1])
-                {
+            Op::LookBehind(n, positive) => {
+                let target = state.pos;
+                let mut found = None;
+                // Ascending order: the leftmost candidate start is the one a
+                // real backward/reversed matcher would pick first, since it
+                // corresponds to a greedy quantifier inside the lookbehind
+                // consuming as much as possible (e.g. `(?<=(\d+)-)` on
+                // "42-x" should capture "42", not "2").
+                for candidate in 0..=target {
+                    budget.step()?;
+                    if let Some(result) = run(
+                        n,
+                        input,
+                        candidate,
+                        state.captures.clone(),
+                        flags,
+                        budget,
+                        Some(target),
+                    )? {
+                        found = Some(result.captures);
+                        break;
+                    }
+                }
+                success = found.is_some() == *positive;
+                if *positive {
+                    if let Some(captures) = found {
+                        state.captures = captures;
+                    }
+                }
+            }
+            Op::Backref(ids, rflags) => {
+                // At most one id can be bound at once when several names
+                // collapse onto the same backref (mutually-exclusive
+                // alternatives); an unbound name is a no-op match.
+                let bound = ids.iter().find_map(|id| {
+                    match (state.captures[id * 2], state.captures[id * 2 + 1]) {
+                        (Some(a), Some(b)) => Some((a, b)),
+                        _ => None,
+                    }
+                });
+                if let Some((mut a, b)) = bound {
                     let mut pos = state.pos;
                     while a < b {
                         budget.step()?;
@@ -637,7 +763,7 @@ fn run(
                         let right = point(input, pos, flags.unicode_mode());
                         match (left, right) {
                             (Some((c, next)), Some((d, end)))
-                                if canonical(c, flags) == canonical(d, flags) =>
+                                if canonical(c, *rflags) == canonical(d, *rflags) =>
                             {
                                 a = next;
                                 pos = end;

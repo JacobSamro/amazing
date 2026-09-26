@@ -112,7 +112,10 @@ fn named_capture_groups() {
         r"'2024-06'.replace(/(?<year>\d{4})-(?<month>\d{2})/,function(full,year,month,index,source,groups){return groups.year+'!'+groups.month;})==='2024!06'",
     );
     truth(r"var error=false;try{new RegExp('(?<a>x)(?<a>y)')}catch(e){error=e.name==='SyntaxError'}error");
-    truth(r"var error=false;try{new RegExp('\\k<a>')}catch(e){error=e.name==='SyntaxError'}error");
+    // Annex B: with no named group anywhere in the pattern, `\k<a>` is a
+    // plain identity escape (literal `k`), not a forced backreference.
+    truth(r"new RegExp('\\k<a>').test('k<a>')");
+    truth(r"var error=false;try{new RegExp('(?<b>x)\\k<a>')}catch(e){error=e.name==='SyntaxError'}error");
 }
 #[test]
 fn regexp_escape_static_method() {
@@ -183,4 +186,42 @@ fn harness_setup_uses_actual_argument_count_and_function_identity() {
 #[test]
 fn harness_completion_some_skips_holes_and_short_circuits() {
     truth("var calls=0;var a=[,2,3];a.some(function(v,k,o){calls++;return v===2 && k===1 && o===a;}) && calls===1 && ![].some(function(){return true;})");
+}
+
+#[test]
+fn lookbehind_assertions_end_to_end() {
+    truth(r"/(?<=\$)\d+/.exec('$100')[0]==='100'");
+    truth(r"/(?<=\$)\d+/.test('100')===false");
+    truth(r"/(?<!\$)\b\d+\b/.test('200')===true && /(?<!\$)\d+/.exec('$100')[0]==='00'");
+    truth(r"/(?<=(\d+)-)\w+/.exec('42-foo')[1]==='42'");
+    truth(r"var error=false;try{new RegExp('(?<=a)+')}catch(e){error=e.name==='SyntaxError'}error");
+}
+
+#[test]
+fn inline_modifier_groups_end_to_end() {
+    truth(r"/(?i:a)b/.test('Ab') && !/(?i:a)b/.test('AB')");
+    truth(r"/(?-i:a)b/i.test('aB') && !/(?-i:a)b/i.test('Ab')");
+    truth(r"/(?s:a.)b/.test('a\nb') && !/a.b/.test('a\nb')");
+    truth(r"/(?m:^b)/.test('a\nb') && !/^b/.test('a\nb')");
+}
+
+#[test]
+fn has_indices_flag_and_indices_property() {
+    truth(r"/a/d.hasIndices===true && /a/.hasIndices===false");
+    truth(r"/a/d.flags==='d'");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices[0][0]===1 && m.indices[0][1]===3");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices[1][0]===1 && m.indices[1][1]===2");
+    truth(r"var m=/(?<x>b)?c/d.exec('c');m.indices[1]===undefined");
+    truth(r"var m=/(?<x>b)c/d.exec('abc');m.indices.groups.x[0]===1 && m.indices.groups.x[1]===2");
+    truth(r"/a/.exec('a').indices===undefined");
+}
+
+#[test]
+fn symbol_split() {
+    truth(r"/,/[Symbol.split]('a,b,,c').join('|')==='a|b||c'");
+    truth(r"/,/[Symbol.split]('a,b,c',2).join('|')==='a|b'");
+    truth(r"/(,)/[Symbol.split]('a,b').join('|')==='a|,|b'");
+    truth(r"/(?:)/[Symbol.split]('abc').join('|')==='a|b|c'");
+    truth(r"/,/[Symbol.split]('').length===1 && /,/[Symbol.split]('')[0]===''");
+    truth(r"var r=/a*/[Symbol.split]('ab');r.length===2 && r[0]==='' && r[1]==='b'");
 }

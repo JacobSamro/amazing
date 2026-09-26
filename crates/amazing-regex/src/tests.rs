@@ -452,7 +452,12 @@ fn named_capture_groups_and_backreferences() {
     // Names accept `$`, `_`, and Unicode ID_Start/ID_Continue (via `\u`
     // escapes too), but reject an undeclared backreference and duplicates.
     assert!(Regex::new(r"(?<$_é>a)\k<$_é>", "").is_ok());
-    assert!(Regex::new(r"\k<undeclared>", "").is_err());
+    // Annex B: `\k<name>` is only forced into GroupName/backreference syntax
+    // when the pattern has a named group SOMEWHERE (or is in unicode mode).
+    // With no named groups anywhere, it's a plain identity escape for `k`.
+    assert!(Regex::new(r"\k<undeclared>", "").is_ok());
+    assert!(Regex::new(r"\k<undeclared>", "u").is_err());
+    assert!(Regex::new(r"(?<b>x)\k<undeclared>", "").is_err());
     assert!(Regex::new(r"(?<a>x)(?<a>y)", "").is_err());
 }
 #[test]
@@ -494,4 +499,61 @@ fn shared_budget_and_compile_limits_fail_closed() {
         .exec("😀", 0)
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn lookbehind_assertions() {
+    assert_eq!(captures(r"(?<=\$)\d+", "", "$100")[0], Some("100".into()));
+    assert!(Regex::new(r"(?<=\$)\d+", "").unwrap().exec("100", 0).unwrap().is_none());
+    assert_eq!(captures(r"(?<!\$)\b\d+", "", "$100 200")[0], Some("200".into()));
+    // The digits right after `$` fail the negative lookbehind, but the
+    // engine keeps trying later start positions, so "00" (starting past
+    // the first digit) still matches.
+    assert_eq!(captures(r"(?<!\$)\d+", "", "$100")[0], Some("00".into()));
+    // Variable-length lookbehind content.
+    assert_eq!(captures(r"(?<=a+)b", "", "aaab")[0], Some("b".into()));
+    assert!(Regex::new(r"(?<=a+)b", "").unwrap().exec("b", 0).unwrap().is_none());
+    // Capturing groups inside a lookbehind populate the outer match.
+    assert_eq!(
+        captures(r"(?<=(\d+)-)\w+", "", "42-foo"),
+        vec![Some("foo".into()), Some("42".into())]
+    );
+    // Quantifying a lookbehind is a syntax error, same as lookahead.
+    assert!(matches!(Regex::new(r"(?<=a)+", ""), Err(Error::Syntax(_))));
+}
+
+#[test]
+fn inline_modifier_groups() {
+    // `i` scoped on: matches case-insensitively only inside the group.
+    assert!(Regex::new(r"(?i:a)b", "").unwrap().exec("Ab", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a)b", "").unwrap().exec("AB", 0).unwrap().is_none());
+    // `i` scoped off inside an outer case-insensitive match.
+    assert!(Regex::new(r"(?-i:a)b", "i").unwrap().exec("Ab", 0).unwrap().is_none());
+    assert!(Regex::new(r"(?-i:a)b", "i").unwrap().exec("aB", 0).unwrap().is_some());
+    // `s` (dotAll) scoped on: only inside the group does `.` match a newline.
+    assert!(Regex::new(r"(?s:a.)b", "").unwrap().exec("a\nb", 0).unwrap().is_some());
+    assert!(Regex::new(r"a.b", "").unwrap().exec("a\nb", 0).unwrap().is_none());
+    // `m` scoped on: `^`/`$` become line-relative only inside the group.
+    assert!(Regex::new(r"(?m:^b)", "").unwrap().exec("a\nb", 0).unwrap().is_some());
+    assert!(Regex::new(r"^b", "").unwrap().exec("a\nb", 0).unwrap().is_none());
+    // Combining add and remove, and nesting.
+    assert!(Regex::new(r"(?i-s:a.)b", "s").unwrap().exec("A\nb", 0).unwrap().is_none());
+    assert!(Regex::new(r"(?i-s:a.)b", "s").unwrap().exec("AXb", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a(?-i:b))", "").unwrap().exec("Ab", 0).unwrap().is_some());
+    assert!(Regex::new(r"(?i:a(?-i:b))", "").unwrap().exec("AB", 0).unwrap().is_none());
+    // A quantified modifier group behaves like a quantified non-capturing group.
+    assert!(Regex::new(r"(?i:a)+", "").unwrap().exec("aAa", 0).unwrap().is_some());
+    // Syntax errors: unknown modifier letters, duplicates, empty modifier list.
+    assert!(matches!(Regex::new(r"(?x:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?ii:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?i-i:a)", ""), Err(Error::Syntax(_))));
+    assert!(matches!(Regex::new(r"(?-:a)", ""), Err(Error::Syntax(_))));
+}
+
+#[test]
+fn has_indices_flag() {
+    assert!(Flags::parse("d").unwrap().has_indices);
+    assert_eq!(Flags::parse("d").unwrap().as_string(), "d");
+    assert_eq!(Flags::parse("gid").unwrap().as_string(), "dgi");
+    assert!(matches!(Flags::parse("dd"), Err(Error::Syntax(_))));
 }

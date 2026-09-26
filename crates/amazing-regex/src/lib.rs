@@ -41,6 +41,7 @@ impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Flags {
+    pub has_indices: bool,
     pub global: bool,
     pub ignore_case: bool,
     pub multiline: bool,
@@ -60,6 +61,7 @@ impl Flags {
         let mut f = Self::default();
         for c in text.chars() {
             let slot = match c {
+                'd' => &mut f.has_indices,
                 'g' => &mut f.global,
                 'i' => &mut f.ignore_case,
                 'm' => &mut f.multiline,
@@ -86,6 +88,7 @@ impl Flags {
     }
     pub fn as_string(self) -> String {
         [
+            (self.has_indices, 'd'),
             (self.global, 'g'),
             (self.ignore_case, 'i'),
             (self.multiline, 'm'),

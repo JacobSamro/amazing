@@ -15,7 +15,14 @@ pub(crate) enum Node {
     Group(usize, Box<Node>),
     Repeat(Box<Node>, usize, Option<usize>, bool),
     Look(Box<Node>, bool),
-    Backref(usize),
+    LookBehind(Box<Node>, bool),
+    /// A `(?ims-ims:...)` modifier group: `[i, m, s]` bits to force on, then
+    /// `[i, m, s]` bits to force off, for the inner subtree only.
+    Mode([bool; 3], [bool; 3], Box<Node>),
+    /// One or more capture indices: more than one only when the referenced
+    /// name is declared on several mutually-exclusive alternatives, in which
+    /// case exactly one of them can be bound (Some) at match time.
+    Backref(Vec<usize>),
 }
 #[derive(Debug, Clone)]
 pub(crate) enum Member {
@@ -86,6 +93,9 @@ pub(crate) fn parse_utf16(
             scanning: true,
             names: Vec::new(),
             known_names: Vec::new(),
+            disjunction_seq: 0,
+            path: Vec::new(),
+            name_paths: Vec::new(),
         };
         let _ = scan.disjunction()?;
         if scan.pos != scan.chars.len() {
@@ -103,6 +113,9 @@ pub(crate) fn parse_utf16(
         scanning: false,
         names: Vec::new(),
         known_names,
+        disjunction_seq: 0,
+        path: Vec::new(),
+        name_paths: Vec::new(),
     };
     let ast = p.disjunction()?;
     if p.pos != p.chars.len() {
@@ -111,10 +124,15 @@ pub(crate) fn parse_utf16(
     if p.refs.iter().any(|n| *n > p.captures) {
         return p.error("invalid backreference (legacy decimal/octal escapes are unsupported)");
     }
-    let mut sorted_names: Vec<&str> = p.names.iter().map(|(n, _)| n.as_ref()).collect();
-    sorted_names.sort_unstable();
-    if sorted_names.windows(2).any(|w| w[0] == w[1]) {
-        return p.error("duplicate capture group name");
+    // Two `(?<name>...)` declarations may share a name only if some ancestor
+    // disjunction they are both nested in sent them down different
+    // alternatives (they can never both be captured by the same match).
+    for (i, (name_a, path_a)) in p.name_paths.iter().enumerate() {
+        for (name_b, path_b) in &p.name_paths[i + 1..] {
+            if name_a == name_b && !Parser::paths_diverge(path_a, path_b) {
+                return p.error("duplicate capture group name");
+            }
+        }
     }
     Ok((ast, p.captures, p.names))
 }
@@ -134,8 +152,23 @@ struct Parser {
     /// Names available to `\k<name>` (from the pre-pass); empty while
     /// `scanning`.
     known_names: GroupNames,
+    /// Next fresh id handed to each `disjunction()` call, for `path`.
+    disjunction_seq: usize,
+    /// The chain of (disjunction id, chosen alternative index) ancestors at
+    /// the current parse position, used only to validate duplicate names.
+    path: Vec<(usize, usize)>,
+    /// Every declared name's ancestor `path` at the point it was declared.
+    name_paths: Vec<(Box<str>, Vec<(usize, usize)>)>,
 }
 impl Parser {
+    /// True unless every disjunction shared by both paths chose the same
+    /// alternative (in which case the two occurrences can both be live in
+    /// the same match, so a shared name between them is a real conflict).
+    fn paths_diverge(a: &[(usize, usize)], b: &[(usize, usize)]) -> bool {
+        let by_id: std::collections::HashMap<usize, usize> = a.iter().copied().collect();
+        b.iter()
+            .any(|(id, index)| by_id.get(id).is_some_and(|other| other != index))
+    }
     fn peek(&self) -> Option<u32> {
         self.chars.get(self.pos).copied()
     }
@@ -159,10 +192,15 @@ impl Parser {
         )))
     }
     fn disjunction(&mut self) -> Result<Node, Error> {
+        let id = self.disjunction_seq;
+        self.disjunction_seq += 1;
+        self.path.push((id, 0));
         let mut alternatives = vec![self.sequence()?];
         while self.eat('|') {
+            self.path.last_mut().unwrap().1 += 1;
             alternatives.push(self.sequence()?);
         }
+        self.path.pop();
         Ok(if alternatives.len() == 1 {
             alternatives.remove(0)
         } else {
@@ -200,9 +238,11 @@ impl Parser {
                     return Err(Error::Limit("pattern nesting"));
                 }
                 // 0 = non-capturing, 1 = lookahead, 2 = negative lookahead,
-                // 3 = capturing (name, if any, in `name`), 4/5 = lookbehind
-                // (not yet supported).
+                // 3 = capturing (name, if any, in `name`), 4 = lookbehind,
+                // 5 = negative lookbehind, 6 = modifier group (add/remove in
+                // `mode`).
                 let mut name = None;
+                let mut mode = None;
                 let kind = if self.eat('?') {
                     if self.eat(':') {
                         0
@@ -212,9 +252,9 @@ impl Parser {
                         2
                     } else if self.eat('<') {
                         if self.eat('=') {
-                            return self.error("lookbehind assertions are unsupported");
+                            4
                         } else if self.eat('!') {
-                            return self.error("lookbehind assertions are unsupported");
+                            5
                         } else {
                             name = Some(self.group_name()?);
                             if !self.eat('>') {
@@ -222,6 +262,15 @@ impl Parser {
                             }
                             3
                         }
+                    } else if matches!(
+                        self.peek().and_then(char::from_u32),
+                        Some('i' | 'm' | 's' | '-')
+                    ) {
+                        mode = Some(self.modifiers()?);
+                        if !self.eat(':') {
+                            return self.error("expected ':' after RegExp modifiers");
+                        }
+                        6
                     } else {
                         return self.error("unsupported group modifier");
                     }
@@ -232,6 +281,7 @@ impl Parser {
                     self.captures += 1;
                     if let Some(name) = &name {
                         self.names.push((name.clone(), self.captures));
+                        self.name_paths.push((name.clone(), self.path.clone()));
                     }
                     self.captures
                 } else {
@@ -249,6 +299,12 @@ impl Parser {
                     0 => inner,
                     1 => Node::Look(Box::new(inner), true),
                     2 => Node::Look(Box::new(inner), false),
+                    4 => Node::LookBehind(Box::new(inner), true),
+                    5 => Node::LookBehind(Box::new(inner), false),
+                    6 => {
+                        let (add, remove) = mode.unwrap();
+                        Node::Mode(add, remove, Box::new(inner))
+                    }
                     _ => Node::Group(group, Box::new(inner)),
                 })
             }
@@ -310,7 +366,7 @@ impl Parser {
         if let Some((min, max)) = q {
             if matches!(
                 atom,
-                Node::Start | Node::End | Node::Boundary(_) | Node::Look(..)
+                Node::Start | Node::End | Node::Boundary(_) | Node::Look(..) | Node::LookBehind(..)
             ) {
                 return self.error("quantified assertions are unsupported");
             }
@@ -562,6 +618,48 @@ impl Parser {
             _ => self.error("invalid class escape"),
         }
     }
+    /// `(?ims-ims:...)` modifiers: one or more of `i`/`m`/`s` to force on,
+    /// optionally followed by `-` and one or more of `i`/`m`/`s` to force
+    /// off. Each of the three flags may appear at most once across both
+    /// sets, and at least one flag must be given somewhere.
+    fn modifiers(&mut self) -> Result<([bool; 3], [bool; 3]), Error> {
+        let mut add = [false; 3];
+        let mut remove = [false; 3];
+        loop {
+            let slot = match self.peek().and_then(char::from_u32) {
+                Some('i') => &mut add[0],
+                Some('m') => &mut add[1],
+                Some('s') => &mut add[2],
+                _ => break,
+            };
+            if *slot {
+                return self.error("duplicate RegExp modifier");
+            }
+            *slot = true;
+            self.pos += 1;
+        }
+        if self.eat('-') {
+            // The remove side may be empty (e.g. `(?s-:)`, which adds `s`
+            // and removes nothing); only both sides empty is rejected below.
+            loop {
+                let (slot, added) = match self.peek().and_then(char::from_u32) {
+                    Some('i') => (&mut remove[0], add[0]),
+                    Some('m') => (&mut remove[1], add[1]),
+                    Some('s') => (&mut remove[2], add[2]),
+                    _ => break,
+                };
+                if *slot || added {
+                    return self.error("duplicate RegExp modifier");
+                }
+                *slot = true;
+                self.pos += 1;
+            }
+        }
+        if !(add[0] || add[1] || add[2] || remove[0] || remove[1] || remove[2]) {
+            return self.error("expected a RegExp modifier");
+        }
+        Ok((add, remove))
+    }
     /// GroupName: an IdentifierStart (or `\u` escape resolving to one)
     /// followed by IdentifierPart* (`$`, `_`, ZWNJ/ZWJ, or Unicode
     /// ID_Start/ID_Continue), up to (not including) the closing `>`.
@@ -694,7 +792,7 @@ impl Parser {
                 self.pos -= 1;
                 let n = self.decimal()?.unwrap();
                 self.refs.push(n);
-                Ok(Node::Backref(n))
+                Ok(Node::Backref(vec![n]))
             }
             Some('1'..='9') => self.error("legacy decimal class escapes are unsupported"),
             Some('c') => {
@@ -751,23 +849,43 @@ impl Parser {
                 Ok(Node::Set(self.property(c == 'P' as u32)?))
             }
             Some('p' | 'P') => self.error("Unicode properties are unsupported"),
-            Some('k') if !in_class && self.peek() == Some('<' as u32) => {
+            // Outside unicode mode, `\k<...>` is only GroupName syntax when
+            // the pattern has a named group somewhere (Annex B); otherwise
+            // it is a plain identity escape for `k`, and `<name>` that
+            // follows is ordinary literal text. The scanning pre-pass
+            // always takes this branch since it doesn't yet know the
+            // pattern-wide answer, but that's harmless for name discovery.
+            Some('k')
+                if !in_class
+                    && self.peek() == Some('<' as u32)
+                    && (self.scanning
+                        || self.flags.unicode_mode()
+                        || !self.known_names.is_empty()) =>
+            {
                 self.pos += 1;
                 let name = self.group_name()?;
                 if !self.eat('>') {
                     return self.error("unterminated group name");
                 }
-                let index = self
+                // A name may be declared on several mutually-exclusive
+                // alternatives (checked at the end of `parse_utf16`); collect
+                // every capture index it maps to so the backref can pick out
+                // whichever one is actually bound at match time.
+                let indices: Vec<usize> = self
                     .known_names
                     .iter()
-                    .find(|(n, _)| **n == *name)
+                    .filter(|(n, _)| **n == *name)
                     .map(|(_, i)| *i)
-                    .unwrap_or(0);
-                if !self.scanning && index == 0 {
+                    .collect();
+                if !self.scanning && indices.is_empty() {
                     return self.error("undefined named backreference");
                 }
-                self.refs.push(index);
-                Ok(Node::Backref(index))
+                self.refs.extend(indices.iter().copied());
+                Ok(Node::Backref(if indices.is_empty() {
+                    vec![0]
+                } else {
+                    indices
+                }))
             }
             Some(ch)
                 if self.flags.unicode_mode()

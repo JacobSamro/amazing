@@ -114,6 +114,7 @@ impl Interpreter {
         for name in [
             "source",
             "flags",
+            "hasIndices",
             "global",
             "ignoreCase",
             "multiline",
@@ -147,13 +148,19 @@ impl Interpreter {
                 "[Symbol.matchAll]",
                 native_regexp_symbol_match_all,
             ),
+            (
+                WellKnownSymbol::Split,
+                "[Symbol.split]",
+                native_regexp_symbol_split,
+            ),
         ] {
             let method = Self::native(tag_name, fun, &self.function_proto);
             if let JsValue::Object(o) = &method {
                 o.borrow_mut().constructible = false;
+                let length = if symbol == WellKnownSymbol::Split { 2.0 } else { 1.0 };
                 let _ = o
                     .borrow_mut()
-                    .define("length", regexp_property(JsValue::num(1.0), false));
+                    .define("length", regexp_property(JsValue::num(length), false));
             }
             let _ = self
                 .regexp_proto
@@ -211,6 +218,7 @@ fn native_regexp_getter(
         }
         let mut result = String::new();
         for (property, flag) in [
+            ("hasIndices", 'd'),
             ("global", 'g'),
             ("ignoreCase", 'i'),
             ("multiline", 'm'),
@@ -239,6 +247,7 @@ fn native_regexp_getter(
     let flags = regex.flags();
     Ok(match key {
         "source" => JsValue::Str(regexp_source(regex.pattern_utf16())),
+        "hasIndices" => JsValue::Bool(flags.has_indices),
         "global" => JsValue::Bool(flags.global),
         "ignoreCase" => JsValue::Bool(flags.ignore_case),
         "multiline" => JsValue::Bool(flags.multiline),
@@ -414,6 +423,7 @@ fn regexp_result(
     source: impl Into<crate::value::JsString>,
     matched: amazing_regex::Match,
     group_names: &[(Box<str>, usize)],
+    has_indices: bool,
 ) -> Result<JsValue, Throw> {
     let source = source.into();
     let units = regexp_units(&source)?;
@@ -433,11 +443,72 @@ fn regexp_result(
         let mut object = JsObject::ordinary();
         object.proto = None;
         let groups = JsValue::object(object);
-        for (name, index) in group_names {
-            let value = match matched.captures.get(*index).and_then(|c| c.clone()) {
-                Some(r) => JsValue::str_units(units[r].to_vec()),
-                None => JsValue::Undefined,
-            };
+        // A name may be declared by more than one `(?<name>...)` in
+        // different alternatives (only one can ever participate at once):
+        // pick whichever of its declarations actually matched.
+        let mut seen: Vec<&str> = Vec::new();
+        for (name, _) in group_names {
+            if seen.contains(&name.as_ref()) {
+                continue;
+            }
+            seen.push(name.as_ref());
+            let value = group_names
+                .iter()
+                .filter(|(n, _)| n.as_ref() == name.as_ref())
+                .find_map(|(_, idx)| matched.captures.get(*idx).and_then(|c| c.clone()))
+                .map(|r| JsValue::str_units(units[r].to_vec()))
+                .unwrap_or(JsValue::Undefined);
+            i.set_prop(&groups, name.as_ref(), value)?;
+        }
+        groups
+    };
+    i.set_prop(&array, "groups", groups)?;
+    if has_indices {
+        let indices = regexp_indices_array(i, &matched, group_names)?;
+        i.set_prop(&array, "indices", indices)?;
+    }
+    Ok(array)
+}
+/// MakeIndicesArray ( S, indices, groupNames, hasGroups ): a match array's
+/// `.indices` property, parallel to the match array itself, with a `[start,
+/// end]` UTF-16 code-unit pair per participating capture (`undefined` for
+/// non-participating ones) and its own `.groups` object when named groups
+/// are present.
+fn regexp_indices_array(
+    i: &mut Interpreter,
+    matched: &amazing_regex::Match,
+    group_names: &[(Box<str>, usize)],
+) -> Result<JsValue, Throw> {
+    let mut entries = Vec::with_capacity(matched.captures.len());
+    for capture in &matched.captures {
+        entries.push(match capture {
+            Some(r) => array_values(
+                i,
+                vec![JsValue::num(r.start as f64), JsValue::num(r.end as f64)],
+            )?,
+            None => JsValue::Undefined,
+        });
+    }
+    let array = array_values(i, entries.clone())?;
+    let groups = if group_names.is_empty() {
+        JsValue::Undefined
+    } else {
+        let mut object = JsObject::ordinary();
+        object.proto = None;
+        let groups = JsValue::object(object);
+        let mut seen: Vec<&str> = Vec::new();
+        for (name, _) in group_names {
+            if seen.contains(&name.as_ref()) {
+                continue;
+            }
+            seen.push(name.as_ref());
+            let value = group_names
+                .iter()
+                .filter(|(n, _)| n.as_ref() == name.as_ref())
+                .find_map(|(_, idx)| {
+                    entries.get(*idx).cloned().filter(|v| !v.is_undefined())
+                })
+                .unwrap_or(JsValue::Undefined);
             i.set_prop(&groups, name.as_ref(), value)?;
         }
         groups
@@ -455,7 +526,7 @@ fn native_regexp_exec(
     };
     let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
     match regexp_match(i, &this, &source)? {
-        Some(m) => regexp_result(i, &source, m, regex.group_names()),
+        Some(m) => regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices),
         None => Ok(JsValue::Null),
     }
 }
@@ -493,7 +564,7 @@ fn regexp_exec_abstract(
     let regex =
         regexp_data(regexp).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
     match regexp_match(i, regexp, source.clone())? {
-        Some(m) => regexp_result(i, source.clone(), m, regex.group_names()),
+        Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
         None => Ok(JsValue::Null),
     }
 }
@@ -736,6 +807,91 @@ fn native_regexp_symbol_match_all(
     let full_unicode = flags.units().contains(&(b'u' as u16)) || flags.units().contains(&(b'v' as u16));
     Ok(regexp_string_iterator(i, matcher, s, global, full_unicode))
 }
+/// RegExp.prototype[Symbol.split] ( string, limit )
+fn native_regexp_symbol_split(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error(
+            "RegExp.prototype[Symbol.split] receiver must be an object",
+        ));
+    }
+    let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let limit_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let ctor = regexp_species_constructor(i, &this)?;
+    let flags_value = i.get_prop(&this, "flags")?;
+    let flags = i.to_js_string(&flags_value)?;
+    let flag_units = flags.units();
+    let unicode_matching =
+        flag_units.contains(&(b'u' as u16)) || flag_units.contains(&(b'v' as u16));
+    let sticky = flag_units.contains(&(b'y' as u16));
+    let new_flags = if sticky {
+        flags.clone()
+    } else {
+        let mut units = flags.units().to_vec();
+        units.push(b'y' as u16);
+        crate::value::JsString::from_units(units)
+    };
+    let splitter = i.construct(&ctor, vec![this.clone(), JsValue::str(new_flags)])?;
+    let units = s.units().to_vec();
+    let size = units.len();
+    let lim = if limit_value.is_undefined() {
+        u32::MAX as usize
+    } else {
+        i.to_uint32(&limit_value)? as usize
+    };
+    if lim == 0 {
+        return array_values(i, Vec::new());
+    }
+    if size == 0 {
+        let z = regexp_exec_abstract(i, &splitter, &s)?;
+        if !z.is_null() {
+            return array_values(i, Vec::new());
+        }
+        return array_values(i, vec![JsValue::str(s)]);
+    }
+    let mut results = Vec::new();
+    let mut p = 0usize;
+    let mut q = 0usize;
+    while q < size {
+        i.set_prop(&splitter, "lastIndex", JsValue::num(q as f64))?;
+        let z = regexp_exec_abstract(i, &splitter, &s)?;
+        if z.is_null() {
+            q = amazing_regex::advance_index(&units, q, unicode_matching);
+            continue;
+        }
+        let last_index = regexp_last_index(i, &splitter)?;
+        let e = last_index.min(size);
+        if e == p {
+            q = amazing_regex::advance_index(&units, q, unicode_matching);
+            continue;
+        }
+        results.push(JsValue::str_units(units[p..q].to_vec()));
+        if results.len() == lim {
+            return array_values(i, results);
+        }
+        p = e;
+        let length_value = i.get_prop(&z, "length")?;
+        let length = i.to_number(&length_value)?;
+        let number_of_captures = if length.is_finite() && length > 1.0 {
+            (length as usize) - 1
+        } else {
+            0
+        };
+        for idx in 1..=number_of_captures {
+            let capture = i.get_prop(&z, idx.to_string())?;
+            results.push(capture);
+            if results.len() == lim {
+                return array_values(i, results);
+            }
+        }
+        q = p;
+    }
+    results.push(JsValue::str_units(units[p..size].to_vec()));
+    array_values(i, results)
+}
 fn native_string_match(
     i: &mut Interpreter,
     this: JsValue,
@@ -751,7 +907,7 @@ fn native_string_match(
     let regex = regexp_data(&regexp).unwrap();
     if !regex.flags().global {
         return match regexp_match(i, &regexp, &source)? {
-            Some(m) => regexp_result(i, &source, m, regex.group_names()),
+            Some(m) => regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices),
             None => Ok(JsValue::Null),
         };
     }
