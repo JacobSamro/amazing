@@ -320,3 +320,43 @@ variants, 125 files); it is `js-runtime`'s and recorded in this lane's
 beyond the ISO surface and shared engine semantics, all left visible as
 measured failures.
 
+## JSS-next String symbol dispatch and RegExp prototype methods
+
+`String.prototype.matchAll` now always builds `RegExpCreate(searchValue, "g")`
+and reads `@@matchAll` from that copy; `match`/`search` dispatch `@@match`/
+`@@search` on the argument and on the internally created RegExp;
+`replaceAll` reads `@@replace` before coercing this/replaceValue and coerces
+`ToString(replaceValue)` exactly once; `split` reads `@@split` only for object
+separators and reports length 2; `substring` defaults an undefined end to the
+length. `RegExp.prototype[Symbol.match/search/matchAll/replace/split]` are
+installed, delegating to the internal regexp engine, with SpeciesConstructor
+validation for `@@matchAll`.
+
+built-ins/String: 1,278 -> 1,307 / 1,341 pass (+58 variants, zero lost;
+classification SHA-256
+`b3e0e8a7fbb41d1d554b8d1c1a73e6051bdabd28cbdb155b08a03bcfb91f86bd`).
+built-ins/RegExp: 1,031 -> 1,135 pass (+212 variants); six previously-passing
+variants call a symbol method that used to be absent, so their vacuous
+`TypeError` passes now reach RegExpExec details owned by js-runtime (recorded
+in `questions.md`).
+
+## JSS-next Temporal option validation
+
+Temporal string precision validates `roundingMode` even when the call does not
+round; `Instant.prototype.since`/`until` reject day/week/year/month
+smallestUnit; plain-type `from` validates its options bag. A duplicated
+`native_string` tail left by the dev merge was removed so `amazing-js`
+compiles.
+
+built-ins/Temporal: 3,745 -> 3,765 / 4,603 pass (+40 variants, zero lost;
+classification SHA-256
+`61a3fe6c127c7de1183be0d5383ff09f0e4201c8fae5cb65723b9f7cf16b5d8b`).
+
+## Final Linux gate
+
+Workspace `cargo nextest run --workspace --locked --no-fail-fast` passed
+2,701/2,701 with 10 skipped; workspace doctests passed. String 1,307/1,341,
+Temporal 3,765/4,603 and RegExp 1,135/1,941 were all measured on the lane
+Boat sandbox before and after each group.
+
+
