@@ -150,3 +150,13 @@ pixels, 0 layer-rounding, 0 losses**. Evidence is committed under
 `crates/amazing-compositor/evidence/comp15/`. The native compositor area is
 gated; full COMP-15 remains open for the CSS/painter/driver adoption and the
 new effect-fixture parity criterion described above.
+
+### COMP-15 restart recovery
+
+`5196e881` completes the interrupted nested-animation halo correction. Endpoint
+reservations are per effect: sum ancestors, maximize siblings, retain larger
+previous reservations. Cached and worker raster paths use that same envelope.
+Boat iteration: **76/76**, **0 doctests**. Windows gate remains pending: the
+fixed-commit archive upload lost connection before the gate; no new Windows
+result is claimed. Full CSS-effect parity still depends on painter reference
+effects and metadata, plus CSS/driver adoption.
