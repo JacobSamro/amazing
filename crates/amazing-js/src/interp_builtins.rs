@@ -2761,10 +2761,6 @@ fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
     } else {
         Ok(value)
     }
-        Ok(this)
-    } else {
-        Ok(value)
-    }
 }
 
 fn native_string_split(

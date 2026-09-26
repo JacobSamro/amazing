@@ -721,6 +721,10 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         _ => return Err(Throw::range_error("invalid largestUnit")),
     };
     let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+    if data.kind == StdEpochKind::Instant
+        && !matches!(smallest.as_str(), "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
+        return Err(Throw::range_error("invalid smallestUnit"));
+    }
     let delta = if since { data.epoch_ns - other } else { other - data.epoch_ns };
     let rounded = std_temporal_round_integer(delta, step * increment as i128, &mode)?;
     std_temporal_make(i, StdTemporalKind::Duration, std_temporal_split_duration_ns(rounded, index))
