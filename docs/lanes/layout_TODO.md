@@ -1467,7 +1467,7 @@ Fifty static mismatches remain; font metrics, tab-size inheritance and flex/grid
 intrinsic adoption are routed to their owners. General inline alignment and ruby
 fragmentation/box edges remain follow-up. Windows deferred.
 
-## LAYOUT-22 — vertical inline placement and alignment (in progress)
+## LAYOUT-22 — vertical inline placement and alignment (held on CSS default)
 
 Full static css-writing-modes baseline fromec384d80: **230/1112 pass**,749
 mismatch,133 unsupported XML/DTD cases;28 script-dependent exclusions. No
@@ -1476,3 +1476,14 @@ Implement inline-axis alignment, containing-block struts, vertical atomics,
 and the remaining LAYOUT-14 bidi/tcy cases as one area. Absolute-position and
 orthogonal block clusters stay visible for follow-up. Whole directory and
 retained ruby118/table386/union449 run in every bulk candidate.
+
+Candidate4 implements line-relative alignment, plaintext paragraph direction,
+anonymous formatting inheritance, vertical atomic/auto sizing, shaped shrink
+widths, and font hwid/twid/qwid composition with fullwidth reversal. Eleven new
+geometry tests bring layout to356pass/1skip. Both original LAYOUT-14 open cases,
+direction-upright-001 and text-combine-upright-compression-001, now pass.
+Final workspace2809pass/10skip,59.874s, four doctests pass. Final gate
+reproduces candidate4 case/hash projections exactly: writing230→243/1112 (+13/-0), ruby68→70/118 (+2/-0), retained
+299→303/449 (+4/-0). Tables310→309: sole loss th-text-align.html is routed to CSS
+(default th alignment must inherit non-start values rather than unconditional
+UA center). Do not mark done or merge until the raw loss is resolved/approved.

@@ -53,6 +53,7 @@ pub(crate) fn layout_root_with_text(
     text: &dyn amazing_text::TextSystem,
 ) {
     root.containing_block_height = height;
+    root.available_height = height;
     let fonts = FontSource::fallback();
     layout_block_in_context(
         root,
@@ -210,19 +211,22 @@ fn layout_block_in_context(
     let pl = b.padding.left;
     let pr = b.padding.right;
 
-    // Token-only intrinsic measurement cannot account for annotations or nested
-    // ruby. Use the same shaped units as line layout whenever this flow has ruby.
-    let ruby_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
-        items.iter().any(|item| matches!(item, crate::InlineNode::Ruby { .. })).then(|| {
-            let direction = if b.style.get("direction") == Some("rtl") {
-                amazing_text::Direction::RightToLeft
-            } else { amazing_text::Direction::LeftToRight };
-            crate::inline::intrinsic_widths_shaped(items, direction, text)
-        }).flatten().map(|(min,max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
+    // Intrinsic queries use the same provider as painting. Avoid measuring
+    // ordinary fill-width paragraphs twice; only shrink-to-fit, ruby keyword
+    // constraints and vertical flow need this contribution here.
+    let has_ruby = matches!(&b.flow, Flow::Inlines(items) if items.iter().any(|item| matches!(item, crate::InlineNode::Ruby { .. })));
+    let vertical_text = b.font_metric_style.as_ref().is_some_and(|style| style.writing_mode.is_vertical_flow());
+    let shaped_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
+        (has_ruby || floating || b.inline_atomic || vertical_text).then(|| {
+            crate::inline::intrinsic_widths_shaped(items,
+                b.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(), text)
+        }).flatten().map(|(min, max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
     } else { None };
+    let ruby_intrinsic = shaped_intrinsic.filter(|_| has_ruby);
     let intrinsic = |b: &LayoutBox, minimum| ruby_intrinsic.map(|pair| if minimum {pair.0} else {pair.1})
         .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
             else { crate::flex::max_content_width(b, fonts) });
+    let mut vertical_intrinsic = vertical_inline_measure(b, cbw, text);
     // --- §10.3.3 horizontal constraint ---------------------------------
     let mut content_w;
     match values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)) {
@@ -276,7 +280,7 @@ fn layout_block_in_context(
                     (crate::grid::intrinsic_lanes_width(b, fonts, true),
                         crate::grid::intrinsic_lanes_width(b, fonts, false))
                 } else {
-                    (intrinsic(b, true), intrinsic(b, false))
+                    shaped_intrinsic.unwrap_or_else(|| (intrinsic(b, true), intrinsic(b, false)))
                 };
                 content_w = (min_width
                     .max(available)
@@ -290,6 +294,11 @@ fn layout_block_in_context(
                 let used_mr = b.margin.right.unwrap_or(0.0);
                 content_w = (cbw - used_ml - bl - pl - pr - br_ - used_mr).max(0.0);
             }
+        }
+    }
+    if let Some((cross, _)) = vertical_intrinsic {
+        if (floating || b.inline_atomic) && matches!(values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)), MaybeLen::Auto) {
+            content_w = cross;
         }
     }
     let chrome = bl + pl + pr + br_;
@@ -371,6 +380,8 @@ fn layout_block_in_context(
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children.iter_mut() {
                 c.containing_block_height = inline_basis;
+                c.available_height = inline_basis.or_else(|| height_constraint("max-height"))
+                    .or(b.available_height);
                 if c.node.is_none() {
                     c.line_height = b.line_height;
                     if let Some(value) = b.style.get("line-height") {
@@ -389,6 +400,14 @@ fn layout_block_in_context(
     // but their outer boxes take part in this box's line breaking.
     if matches!(b.flow, Flow::Inlines(_)) {
         layout_atomic_inlines(b, content_x, content_y, content_w, fonts, text);
+        if vertical_text && vertical_intrinsic.is_none() {
+            vertical_intrinsic = vertical_inline_measure(b, content_w, text);
+            if let Some((cross, _)) = vertical_intrinsic {
+                if (floating || b.inline_atomic) && matches!(values::resolve_extent_with_units(&b.style, "width", font_units, Some(cbw)), MaybeLen::Auto) {
+                    content_w = max_width.map_or(cross, |maximum| cross.min(maximum)).max(min_width);
+                }
+            }
+        }
     }
 
     // --- children ------------------------------------------------------
@@ -454,7 +473,7 @@ fn layout_block_in_context(
             x: content_x,
             y: content_y,
             w: content_w,
-            h: def_h.unwrap_or(content.content_end),
+            h: def_h.or(vertical_intrinsic.map(|(_, inline)| inline)).unwrap_or(content.content_end),
         };
         if matches!(b.flow, Flow::Inlines(_) | Flow::Flex(_) | Flow::Grid(_)) {
             crate::apply_shaped_text(b, text);
@@ -544,6 +563,33 @@ fn layout_block_in_context(
     };
 
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
+}
+
+/// Auto inline extent and shrink-to-fit cross extent for a vertical text flow.
+/// Atomic descendants need their own layout first and retain the existing path.
+fn vertical_inline_measure(b: &LayoutBox, available: f32, text: Option<&dyn amazing_text::TextSystem>) -> Option<(f32, f32)> {
+    let text = text?;
+    let style = b.font_metric_style.as_ref()?;
+    if !style.writing_mode.is_vertical_flow() { return None; }
+    let Flow::Inlines(items) = &b.flow else { return None; };
+    if items.iter().any(|item| matches!(item, crate::InlineNode::Atomic { size, .. } if size.width == 0.0 && size.height == 0.0)) { return None; }
+    let (_, max) = crate::inline::intrinsic_widths_shaped(items, style.direction, text)?;
+    let inline = specified_height(b, b.font_size).unwrap_or_else(|| {
+        b.containing_block_height.or(b.available_height).map_or(max, |limit| max.min(limit.max(0.0)))
+    });
+    let metrics = text.metrics(style).ok()?;
+    let strut = crate::inline::Strut {
+        font_size: style.size, line_height: b.line_height, ascent: metrics.ascent, descent: metrics.descent,
+        vertical_ascent: metrics.vertical_ascent, vertical_descent: metrics.vertical_descent,
+    };
+    let lines = crate::inline::layout_lines_shaped(items,
+        crate::inline::InlineContainingBlock { x:0.0,y:0.0,width:available,height:inline },
+        &strut, style.direction, style.writing_mode, text, &FloatContext::default(),
+        !matches!(b.style.get("white-space"), Some("nowrap" | "pre")), None,
+        "start", "auto", b.style.get("unicode-bidi") == Some("plaintext"))?;
+    let cross = lines.iter().map(|line| line.replaced.iter().map(|fragment| fragment.width)
+        .fold(b.line_height, f32::max)).sum();
+    Some((cross, inline))
 }
 
 fn layout_atomic_inlines(parent: &mut LayoutBox, x: f32, y: f32, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {

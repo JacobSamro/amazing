@@ -83,7 +83,7 @@ pub fn build_layout_tree_with_replaced(
                 ))
                 .or_else(|| root.font_metric_style.clone())
                 .unwrap_or_default();
-            assign_root_font_metric_style(&mut root, &root_metric_style, None);
+            assign_root_font_metric_style(&mut root, &root_metric_style, None, None);
             let order = document_order(dom);
             assign_source_order(&mut root, &order);
             root
@@ -300,19 +300,36 @@ fn assign_root_font_metric_style(
     box_: &mut LayoutBox,
     root_style: &TextStyle,
     inherited_style: Option<&TextStyle>,
+    inherited_box_style: Option<&ComputedStyle>,
 ) {
     if box_.font_metric_style.is_none() {
         box_.font_metric_style = inherited_style.cloned();
+    }
+    // Anonymous block wrappers inherit inline formatting properties from the
+    // containing block. An empty ComputedStyle otherwise silently resets
+    // alignment when a block child splits an inline into multiple runs.
+    if box_.node.is_none() {
+        if let Some(parent) = inherited_box_style {
+            for property in ["text-align", "text-align-last", "direction", "unicode-bidi", "writing-mode",
+                "text-orientation", "white-space", "line-height", "color"] {
+                if box_.style.get(property).is_none() {
+                    if let Some(value) = parent.get(property) { box_.style.set(property, value); }
+                }
+            }
+        }
+    }
+    if box_.node.is_none() {
+        box_.line_height = values::resolve_used_line_height(&box_.style, box_.font_size, box_.line_height);
     }
     box_.root_font_metric_style = Some(root_style.clone());
     let current = box_.font_metric_style.as_ref();
     if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut box_.flow {
         for child in children {
-            assign_root_font_metric_style(child, root_style, current);
+            assign_root_font_metric_style(child, root_style, current, Some(&box_.style));
         }
     }
     for child in &mut box_.positioned {
-        assign_root_font_metric_style(child, root_style, current);
+        assign_root_font_metric_style(child, root_style, current, Some(&box_.style));
     }
 }
 

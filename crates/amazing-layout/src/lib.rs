@@ -193,6 +193,9 @@ pub struct LayoutBox {
     pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
     pub(crate) containing_block_height: Option<f32>,
+    /// Available physical height for orthogonal auto sizing; unlike a definite
+    /// containing-block height, this does not resolve percentage heights.
+    pub(crate) available_height: Option<f32>,
     /// Parent grid tracks inherited by a subgrid in either axis.
     pub(crate) grid_subgrid: Option<grid::SubgridContext>,
 
@@ -243,6 +246,7 @@ impl LayoutBox {
             table_colspan: 1,
             table_rowspan: 1,
             containing_block_height: None,
+            available_height: None,
             grid_subgrid: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
@@ -562,7 +566,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     }
     block::refresh_atomic_inline_metrics(layout);
     if let Flow::Inlines(items) = &layout.flow {
-        let first_style = items.iter().find_map(|item| match item {
+        let first_style = layout.font_metric_style.as_ref().or_else(|| items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style.as_ref()),
             InlineNode::Ruby { columns, .. } => columns.first().map(|column| column.base.style.as_ref()),
             InlineNode::BidiStart { .. }
@@ -570,7 +574,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             | InlineNode::Break
             | InlineNode::Replaced { .. }
             | InlineNode::Atomic { .. } => None,
-        }).or(layout.font_metric_style.as_ref());
+        }));
         if let Some(style) = first_style
             && let Ok(metrics) = text.metrics(style)
         {
@@ -621,8 +625,13 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                     value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
                 }),
                 layout.first_line_style.as_ref().and_then(|style| style.get("ruby-position")),
+                layout.style.get("text-align").unwrap_or("start"),
+                layout.style.get("text-align-last").unwrap_or("auto"),
+                layout.style.get("unicode-bidi") == Some("plaintext"),
             ) {
-                let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
+                let old_height = if style.writing_mode.is_vertical_flow() {
+                    layout.lines.iter().map(|line| line.height).fold(0.0, f32::max)
+                } else { layout.lines.iter().map(|line| line.height).sum::<f32>() };
                 let new_height = if style.writing_mode.is_vertical_flow() {
                     lines.iter().map(|line| line.height).fold(0.0, f32::max)
                 } else {

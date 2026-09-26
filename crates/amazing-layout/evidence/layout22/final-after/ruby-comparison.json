@@ -1,0 +1,31 @@
+{
+  "before": "crates/amazing-layout/evidence/layout21/final-repaired/ruby/report.json",
+  "after": "/home/user/amazing/out/layout/layout22/final-after/ruby/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 118,
+  "before_counts": {
+    "pass": 68,
+    "mismatch": 50,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 70,
+    "mismatch": 48,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-ruby__ruby-align-001.html",
+    "css-ruby__ruby-align-001a.html"
+  ],
+  "losses": [],
+  "actual_hash_changes": 7,
+  "reference_hash_changes": 10,
+  "before_projection_sha256": "1c70b40f80a5904be87d929ad044264f6c0523e1832a03a4cc047c0f6c57c9d0",
+  "after_projection_sha256": "95f11651bc13ed63cded5bd91fdbea0d2b9f9969a2b9fcff8d9af56e3ae14a2a"
+}

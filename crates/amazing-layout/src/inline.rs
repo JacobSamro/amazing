@@ -483,12 +483,12 @@ enum ShapedUnit {
 /// A line break can only precede a run whose internal provider boundaries are
 /// unbreakable. Look ahead before placing its first unit, so an opening
 /// bracket and following atomic text move to the next line together.
-fn unbreakable_run_widths(units: &[ShapedUnit]) -> Vec<f32> {
+fn unbreakable_run_widths(units: &[ShapedUnit], vertical: bool) -> Vec<f32> {
     let mut needed = vec![0.0; units.len()];
     for index in (0..units.len()).rev() {
         let (width, break_after) = match &units[index] {
             ShapedUnit::Word(word) => (word.width, word.break_after),
-            ShapedUnit::Replaced { size, break_after, .. } => (size.width, *break_after),
+            ShapedUnit::Replaced { size, break_after, .. } => (if vertical { size.height } else { size.width }, *break_after),
             ShapedUnit::Ruby(ruby) => (ruby.width, ruby.break_after),
             ShapedUnit::Combined { shaped, break_after, .. } => (shaped.width, *break_after),
             ShapedUnit::Break => continue,
@@ -526,6 +526,9 @@ pub(crate) fn layout_lines_shaped(
     floats: &crate::floats::FloatContext,
     soft_wrap: bool,
     first_line_position: Option<&str>,
+    text_align: &str,
+    text_align_last: &str,
+    plaintext: bool,
 ) -> Option<Vec<LineBox>> {
     let InlineContainingBlock {
         x: content_x,
@@ -534,17 +537,8 @@ pub(crate) fn layout_lines_shaped(
         height: content_height,
     } = containing;
     let item_refs = items.iter().collect::<Vec<_>>();
-    let units = shape_inline_items(&item_refs, base_direction, text_system)?;
-    let writing_mode = items
-        .iter()
-        .find_map(|item| match item {
-            InlineNode::Text { style, .. } => Some(style.writing_mode),
-            InlineNode::Ruby { columns, .. } => {
-                columns.first().map(|column| column.base.style.writing_mode)
-            },
-            _ => None,
-        })
-        .unwrap_or(container_writing_mode);
+    let units = shape_chunk_in_mode(&item_refs, base_direction, text_system, Some(container_writing_mode))?;
+    let writing_mode = container_writing_mode;
     let vertical_flow = writing_mode.is_vertical_flow();
 
     let atomic_baselines = atomic_baselines(items);
@@ -557,6 +551,9 @@ pub(crate) fn layout_lines_shaped(
     };
     let inline_end = std::cell::Cell::new(inline_start + inline_size);
     let line_y = std::cell::Cell::new(content_y);
+    let line_start = std::cell::Cell::new(inline_start);
+    let column_extent = std::cell::Cell::new(0.0f32);
+    let plaintext_cache = std::cell::RefCell::new(HashMap::new());
     let mut lines = Vec::new();
     let mut words = Vec::new();
     let mut glyphs = Vec::new();
@@ -588,7 +585,7 @@ pub(crate) fn layout_lines_shaped(
             .fold(0.0, f32::max);
         let (atomic_height, baseline_offset) = line_metrics(replaced, &atomic_baselines, strut, *ruby_line_over);
         let height = if vertical_flow {
-            (*cursor - inline_start).max(strut.line_height).max(image_height)
+            (*cursor - inline_start).max(image_height)
         } else {
             atomic_height + ruby_line_under.get()
         };
@@ -598,11 +595,46 @@ pub(crate) fn layout_lines_shaped(
             line_y.get()
         };
         let baseline = y_top + baseline_offset;
-        for image in replaced.iter_mut() {
-            image.y = atomic_fragment_y(image, &atomic_baselines, strut, y_top, height, baseline);
+        if !vertical_flow {
+            for image in replaced.iter_mut() {
+                image.y = atomic_fragment_y(image, &atomic_baselines, strut, y_top, height, baseline);
+            }
         }
         for decoration in decorations.iter_mut() {
             decoration.y += baseline;
+        }
+        let mut line_direction = base_direction;
+        if plaintext {
+            if let Some(first) = placed_text.first() {
+                let mut cache = plaintext_cache.borrow_mut();
+                let paragraphs = cache.entry(Rc::as_ptr(&first.context))
+                    .or_insert_with(|| line_bidi::plaintext_directions(&first.context, text_system));
+                let index = paragraphs.partition_point(|(range, _)| range.end <= first.range.start);
+                if let Some((_, direction)) = paragraphs.get(index) { line_direction = *direction; }
+            }
+        }
+        let mut spaces = std::collections::HashSet::new();
+        if matches!(text_align, "justify" | "justify-all") || text_align_last == "justify" {
+            // Inspect only each context's span on this line, including word
+            // separators. Do not rescan a whole paragraph for every line.
+            let mut ranges = std::collections::HashMap::new();
+            for placed in placed_text.iter() {
+                let entry = ranges.entry(Rc::as_ptr(&placed.context))
+                    .or_insert((&placed.context, placed.range.clone()));
+                entry.1.start = entry.1.start.min(placed.range.start);
+                entry.1.end = entry.1.end.max(placed.range.end);
+            }
+            for (context, range) in ranges.values() {
+                let first = context.spans.partition_point(|span| span.range.end <= range.start);
+                for span in &context.spans[first..] {
+                    if span.range.start >= range.end { break; }
+                    let start = span.range.start.max(range.start);
+                    let end = span.range.end.min(range.end);
+                    for (offset, ch) in context.text[start..end].char_indices() {
+                        if ch == ' ' { spaces.insert((span.source, start + offset)); }
+                    }
+                }
+            }
         }
         reshape_visual_line(
             placed_text,
@@ -615,23 +647,30 @@ pub(crate) fn layout_lines_shaped(
             text_system,
         );
         glyphs.append(ruby_glyphs);
+        let alignment = line_alignment::Alignment {
+            value: text_align, last: text_align_last, final_line: !select_discretionary || force_empty,
+            direction: line_direction, writing_mode,
+            start: line_start.get(), end: inline_end.get(), used_end: *cursor,
+        };
+        line_alignment::apply(alignment, words, glyphs, decorations, replaced, &spaces);
         if vertical_flow {
             glyphs.sort_by(|left, right| left.y.total_cmp(&right.y));
         } else {
             glyphs.sort_by(|left, right| left.x.total_cmp(&right.x));
         }
         if vertical_flow {
-            let column_offset = lines.len() as f32 * strut.line_height;
+            let column_width = replaced.iter().map(|image| image.width)
+                .fold(strut.line_height, f32::max);
+            let column_offset = column_extent.get();
+            column_extent.set(column_offset + column_width);
             let desired_baseline = match writing_mode {
                 amazing_text::WritingMode::VerticalRl
                 | amazing_text::WritingMode::SidewaysRl => {
-                    right_edge - strut.vertical_ascent - column_offset
+                    right_edge - column_width * 0.5 - column_offset
                 },
                 amazing_text::WritingMode::VerticalLr
                 | amazing_text::WritingMode::SidewaysLr => {
-                    // The provider's upright glyph origin sits a horizontal
-                    // descent to the left of the line's content edge.
-                    content_x + strut.descent + column_offset
+                    content_x + column_width * 0.5 + column_offset
                 },
                 amazing_text::WritingMode::HorizontalTb => content_x,
             };
@@ -672,6 +711,7 @@ pub(crate) fn layout_lines_shaped(
         if !vertical_flow {
             let (left, right, y) = floats.fit(content_x, content_width, line_y.get(), height, needed);
             *cursor = left;
+            line_start.set(left);
             inline_end.set(right);
             line_y.set(y);
         }
@@ -689,11 +729,11 @@ pub(crate) fn layout_lines_shaped(
             if let InlineNode::Ruby { columns, .. } = item { override_position(columns, position); }
         }
         let refs: Vec<_> = first_items.iter().collect();
-        shape_inline_items(&refs, base_direction, text_system).unwrap_or_default().into_iter().enumerate()
+        shape_chunk_in_mode(&refs, base_direction, text_system, Some(container_writing_mode)).unwrap_or_default().into_iter().enumerate()
             .filter_map(|(index,unit)| if let ShapedUnit::Ruby(ruby) = unit {Some((index,ruby))} else {None})
             .collect::<HashMap<_,_>>()
     }).unwrap_or_default();
-    let needed = unbreakable_run_widths(&units);
+    let needed = unbreakable_run_widths(&units, vertical_flow);
     for (unit_index, unit) in units.into_iter().enumerate() {
         let has_content = !words.is_empty() || !replaced.is_empty();
         match unit {
@@ -795,8 +835,9 @@ pub(crate) fn layout_lines_shaped(
                 range,
                 context,
             } => {
+                let advance = if vertical_flow { size.height } else { size.width };
                 if !has_content {
-                    prepare(&mut cursor, size.width, strut.line_height.max(size.height));
+                    prepare(&mut cursor, advance, strut.line_height.max(size.height));
                 }
                 let mut spacing = if has_content { space_before } else { preserved_space_before };
                 if has_content
@@ -817,15 +858,15 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
-                    prepare(&mut cursor, size.width, strut.line_height.max(size.height));
+                    prepare(&mut cursor, advance, strut.line_height.max(size.height));
                     spacing = preserved_space_before;
                 }
                 cursor += spacing;
                 replaced.push(ReplacedFrag {
                     node,
                     source_order,
-                    x: cursor,
-                    y: 0.0,
+                    x: if vertical_flow { inline_start - size.width * 0.5 } else { cursor },
+                    y: if vertical_flow { cursor } else { 0.0 },
                     width: size.width,
                     height: size.height,
                 });
@@ -836,7 +877,7 @@ pub(crate) fn layout_lines_shaped(
                     hyphen_after: false,
                     requires_reshape: false,
                 });
-                cursor += size.width;
+                cursor += advance;
                 may_break_after = break_after;
             }
             ShapedUnit::Ruby(mut ruby) => {
@@ -1110,7 +1151,8 @@ fn reshape_visual_line(
                         if let Some(index) = replaced_by_node.get(&(node.0, *source_order))
                             && let Some(fragment) = replaced.get_mut(*index)
                         {
-                            fragment.x = if vertical { start_x } else { pen };
+                            fragment.x = if vertical { start_x - size.width * 0.5 } else { pen };
+                            if vertical { fragment.y = pen; }
                             pen += if vertical { size.height } else { size.width };
                         }
                     },
@@ -1423,61 +1465,15 @@ fn shape_inline_items(
     shape_chunk(items, base_direction, text_system)
 }
 
-fn shape_combined_text(
-    node: NodeIdx,
-    text: &str,
-    source_mappings: &[crate::TextSourceMapping],
-    font_size: f32,
-    style: &amazing_text::TextStyle,
-    color: &str,
-    text_system: &dyn TextSystem,
-) -> Option<ShapedRuby> {
-    let outer_writing_mode = style.writing_mode;
-    let mut inner_style = style.clone();
-    inner_style.writing_mode = amazing_text::WritingMode::HorizontalTb;
-    inner_style.text_combine = amazing_text::TextCombine::None;
-    let combined = crate::RubyText {
-        node,
-        raw_text: text.to_owned(),
-        format: Default::default(),
-        nested: Vec::new(),
-        text: text.to_owned(),
-        source_mappings: source_mappings.to_vec(),
-        font_size,
-        style: Box::new(inner_style),
-        color: color.to_owned(),
-    };
-    let (mut glyphs, natural_width, metrics) = shape_ruby_text(&combined, 0.0, text_system)?;
-    let scale = if natural_width > 0.0 {
-        (font_size / natural_width).min(1.0)
-    } else {
-        1.0
-    };
-    let fitted_width = natural_width * scale;
-    let baseline = (font_size - metrics.line_height()) * 0.5 + metrics.ascent;
-    for glyph in &mut glyphs {
-        glyph.x = -fitted_width * 0.5 + glyph.x * scale;
-        glyph.y = baseline;
-        glyph.writing_mode = outer_writing_mode;
-        glyph.orientation = amazing_text::GlyphOrientation::Upright;
-        glyph.scale_x = scale;
-    }
-    Some(ShapedRuby {
-        paragraph_offset: 0,
-        node,
-        text: text.to_owned(),
-        width: font_size,
-        base_width: font_size,
-        overhang_spaces: false,
-        font_size,
-        glyphs,
-        line_over: 0.0,
-        line_under: 0.0,
-        break_after: true,
-        space_before: 0.0,
-        preserved_space_before: 0.0,
-    })
-}
+#[path = "inline_combine.rs"]
+mod combine;
+use combine::shape_combined_text;
+
+#[path = "inline_bidi.rs"]
+mod line_bidi;
+
+#[path = "inline_alignment.rs"]
+mod line_alignment;
 
 #[path = "inline_ruby.rs"]
 mod ruby_shape;
@@ -1487,6 +1483,15 @@ fn shape_chunk(
     items: &[&InlineNode],
     base_direction: amazing_text::Direction,
     text_system: &dyn TextSystem,
+) -> Option<Vec<ShapedUnit>> {
+    shape_chunk_in_mode(items, base_direction, text_system, None)
+}
+
+fn shape_chunk_in_mode(
+    items: &[&InlineNode],
+    base_direction: amazing_text::Direction,
+    text_system: &dyn TextSystem,
+    containing_mode: Option<amazing_text::WritingMode>,
 ) -> Option<Vec<ShapedUnit>> {
     let mut paragraph_text = String::new();
     let mut spans = Vec::new();
@@ -1508,6 +1513,7 @@ fn shape_chunk(
     }
     let default_style = amazing_text::TextStyle {
         direction: base_direction,
+        writing_mode: containing_mode.unwrap_or_default(),
         ..amazing_text::TextStyle::default()
     };
     let mut previous_style = None;
@@ -1583,7 +1589,7 @@ fn shape_chunk(
                 color,
                 ..
             } if style.text_combine == amazing_text::TextCombine::All
-                && style.writing_mode.is_vertical_flow() =>
+                && style.writing_mode.uses_vertical_metrics() =>
             {
                 let collapse = matches!(style.white_space,
                     amazing_text::WhiteSpace::Normal
@@ -1781,7 +1787,7 @@ fn shape_chunk(
                 }).map(|span| span.range.start.max(previous_end)).unwrap_or(offset);
                 let preserved_space_before = advance_in_range(&shaped, preserved_start..offset);
                 logical_pen += space_before + match &atomic {
-                    AtomicInline::Replaced(_, size, _) => size.width,
+                    AtomicInline::Replaced(_, size, _) => if containing_mode.is_some_and(|mode| mode.is_vertical_flow()) { size.height } else { size.width },
                     AtomicInline::Combined(shaped) | AtomicInline::Ruby(shaped) => shaped.width,
                 };
                 match atomic {
@@ -2466,7 +2472,7 @@ mod tests {
             InlineContainingBlock { x: 0.0, y: 0.0, width: 100.0, height: 32.0 },
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl, &provider,
-            &crate::floats::FloatContext::default(), true, None,
+            &crate::floats::FloatContext::default(), true, None, "start", "auto", false,
         ).unwrap();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].words.iter().all(|word| !word.text.contains('「')));
@@ -2500,7 +2506,7 @@ mod tests {
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl,
             &amazing_text::FallbackTextSystem::new(),
-            &crate::floats::FloatContext::default(), true, None,
+            &crate::floats::FloatContext::default(), true, None, "start", "auto", false,
         ).unwrap();
         assert_eq!(lines.len(), 1);
         assert!(lines[0].replaced[0].x > 80.0);
