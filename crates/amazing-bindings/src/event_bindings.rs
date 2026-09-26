@@ -7,7 +7,7 @@ use amazing_dom::{
 use std::time::Duration;
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::MessageEventConstructor | O::MessageEventGet(_) | O::MessageEventInit | O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
+    matches!(op, O::MessageEventConstructor | O::MessageEventGet(_) | O::MessageEventInit | O::MouseGetModifierState | O::KeyboardGetModifierState | O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
         | O::MouseEventConstructor | O::WheelEventConstructor | O::KeyboardEventConstructor
         | O::CompositionEventConstructor | O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
         | O::DispatchEvent | O::EventConstructor | O::CustomEventConstructor
@@ -177,7 +177,8 @@ enum Output { Undefined, Boolean(bool), Number(f64), String(Vec<u16>), Target(Op
 fn extra_spec(name: &'static str) -> EventExtra {
     match name {
         "view" | "relatedTarget" => EventExtra::Root(None),
-        "ctrlKey" | "shiftKey" | "altKey" | "metaKey" | "repeat" | "isComposing" => EventExtra::Boolean(false),
+        "ctrlKey" | "shiftKey" | "altKey" | "metaKey" | "repeat" | "isComposing" | "momentum" => EventExtra::Boolean(false),
+        name if name.starts_with("modifier") => EventExtra::Boolean(false),
         "key" | "code" | "data" => EventExtra::String(vec![]),
         _ => EventExtra::Number(0.),
     }
@@ -197,41 +198,67 @@ fn event_class(op: O) -> Option<EventClass> {
 
 // Inherited dictionaries precede derived dictionaries; each dictionary's
 // supported members are visited in lexicographic order (WebIDL conversion).
-fn event_fields(class: EventClass) -> &'static [&'static str] {
-    const UI: &[&str] = &["detail", "view"];
-    const FOCUS: &[&str] = &["detail", "view", "relatedTarget"];
-    const MOUSE: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
-        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY"];
-    const WHEEL: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
-        "button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY",
-        "deltaMode", "deltaX", "deltaY", "deltaZ"];
-    const KEYBOARD: &[&str] = &["detail", "view", "altKey", "ctrlKey", "metaKey", "shiftKey",
-        "charCode", "code", "isComposing", "key", "keyCode", "location", "repeat", "which"];
-    const COMPOSITION: &[&str] = &["detail", "view", "data"];
-    match class {
-        EventClass::Ui => UI, EventClass::Focus => FOCUS, EventClass::Mouse => MOUSE,
-        EventClass::Wheel => WHEEL, EventClass::Keyboard => KEYBOARD,
-        EventClass::Composition => COMPOSITION, _ => &[],
+fn event_fields(class: EventClass) -> Vec<&'static str> {
+    let mut fields = vec!["detail", "view", "which"];
+    if matches!(class, EventClass::Mouse | EventClass::Wheel | EventClass::Keyboard) {
+        fields.extend(["altKey", "ctrlKey", "metaKey", "modifierAltGraph", "modifierCapsLock",
+            "modifierFn", "modifierFnLock", "modifierHyper", "modifierNumLock", "modifierScrollLock",
+            "modifierSuper", "modifierSymbol", "modifierSymbolLock", "shiftKey"]);
     }
+    if matches!(class, EventClass::Mouse | EventClass::Wheel) {
+        fields.extend(["button", "buttons", "clientX", "clientY", "relatedTarget", "screenX", "screenY"]);
+    }
+    match class {
+        EventClass::Focus => fields.push("relatedTarget"),
+        EventClass::Wheel => fields.extend(["deltaMode", "deltaX", "deltaY", "deltaZ", "momentum"]),
+        EventClass::Keyboard => fields.extend(["charCode", "code", "isComposing", "key", "keyCode", "location", "repeat"]),
+        EventClass::Composition => fields.push("data"),
+        _ => {},
+    }
+    fields
 }
 
-fn ui_detail<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<f64, H::Error> {
+fn event_number<H: BindingHost>(host: &mut H, value: &H::Value, name: &str) -> Result<f64, H::Error> {
     let number = host.to_number(value)?;
-    if !number.is_finite() || number == 0. { return Ok(0.); }
-    Ok(number.trunc().rem_euclid(4294967296.) as u32 as i32 as f64)
+    let integer = match name {
+        "detail" => Some((32, true)),
+        "button" => Some((16, true)),
+        "buttons" => Some((16, false)),
+        "which" | "location" | "keyCode" | "charCode" | "deltaMode" => Some((32, false)),
+        _ => None,
+    };
+    if let Some((bits, signed)) = integer {
+        if !number.is_finite() || number == 0. { return Ok(0.); }
+        let modulus = (1u64 << bits) as f64;
+        let number = number.trunc().rem_euclid(modulus);
+        return Ok(if signed && number >= modulus / 2. { number - modulus } else { number });
+    }
+    // CSSOM View extends mouse coordinates to double; preserve fractions.
+    // Coordinate and wheel-delta dictionaries use finite (not unrestricted) doubles.
+    if !number.is_finite() { return Err(host.type_error("Event dictionary requires a finite double")); }
+    Ok(number)
+}
+
+fn modifier_field(key: &[u16]) -> Option<&'static str> {
+    Some(match String::from_utf16_lossy(key).as_str() {
+        "Alt" => "altKey", "Control" => "ctrlKey", "Meta" => "metaKey", "Shift" => "shiftKey",
+        "AltGraph" => "modifierAltGraph", "CapsLock" => "modifierCapsLock",
+        "Fn" => "modifierFn", "FnLock" => "modifierFnLock", "Hyper" => "modifierHyper",
+        "NumLock" => "modifierNumLock", "ScrollLock" => "modifierScrollLock", "Super" => "modifierSuper",
+        "Symbol" => "modifierSymbol", "SymbolLock" => "modifierSymbolLock", _ => return None,
+    })
 }
 
 enum ConvertedExtra<V> { Native(EventExtra), Root(Option<V>), Target(Option<EventTarget>) }
 fn convert_extras<H: BindingHost>(host: &mut H, dictionary: &H::Value, class: EventClass)
     -> Result<Vec<(&'static str, ConvertedExtra<H::Value>)>, H::Error> {
     let mut extras = Vec::new();
-    for &name in event_fields(class) {
+    for name in event_fields(class) {
         let value = host.get_property(dictionary, name)?;
         if host.is_undefined(&value) { continue; }
         let extra = match extra_spec(name) {
             EventExtra::Boolean(_) => ConvertedExtra::Native(EventExtra::Boolean(host.to_boolean(&value))),
-            EventExtra::Number(_) => ConvertedExtra::Native(EventExtra::Number(
-                if name == "detail" { ui_detail(host, &value)? } else { host.to_number(&value)? })),
+            EventExtra::Number(_) => ConvertedExtra::Native(EventExtra::Number(event_number(host, &value, name)?)),
             EventExtra::String(_) => ConvertedExtra::Native(EventExtra::String(host.to_dom_string(&value)?)),
             EventExtra::Root(_) => {
                 if name == "relatedTarget" {
@@ -403,6 +430,18 @@ pub(crate) fn invoke<H: BindingHost>(
         return Ok(host.undefined());
     }
     let id = event_id(host, &receiver)?;
+    if matches!(op, O::MouseGetModifierState | O::KeyboardGetModifierState) {
+        let class = host.with_dom(|dom| Ok(dom.events().event(id).class()))?;
+        let valid = if op == O::MouseGetModifierState { matches!(class, EventClass::Mouse | EventClass::Wheel) }
+            else { class == EventClass::Keyboard };
+        if !valid { return Err(host.type_error("Invalid modifier-state receiver")); }
+        let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+        let key = host.to_dom_string(value)?;
+        let active = if let Some(field) = modifier_field(&key) {
+            host.with_dom(|dom| Ok(matches!(dom.events().event(id).extra(field), Some(EventExtra::Boolean(true)))))?
+        } else { false };
+        return Ok(host.boolean(active));
+    }
     if let O::EventExtra(name) = op {
         if name == "relatedTarget" {
             let related = host.with_dom(|dom| Ok(dom.events().event(id).related_target()))?;

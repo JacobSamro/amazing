@@ -2554,3 +2554,6 @@ fn document_default_view_uses_host_association_and_enforces_document_brand() {
     let node = element(&mut h);
     assert!(invoke(&mut h, O::DocumentDefaultView, V::Node(node), &[]).is_err());
 }
+
+#[path = "tests_event_modifiers.rs"]
+mod tests_event_modifiers;

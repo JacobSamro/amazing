@@ -118,9 +118,11 @@ const CUSTOM_EVENT: &[Member] = &[
 const UI_EVENT: &[Member] = &[
     getter("view", O::EventExtra("view")),
     getter("detail", O::EventExtra("detail")),
+    getter("which", O::EventExtra("which")),
 ];
 const FOCUS_EVENT: &[Member] = &[getter("relatedTarget", O::EventExtra("relatedTarget"))];
 const MOUSE_EVENT: &[Member] = &[
+    method("getModifierState", O::MouseGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -138,8 +140,10 @@ const WHEEL_EVENT: &[Member] = &[
     getter("deltaY", O::EventExtra("deltaY")),
     getter("deltaZ", O::EventExtra("deltaZ")),
     getter("deltaMode", O::EventExtra("deltaMode")),
+    getter("momentum", O::EventExtra("momentum")),
 ];
 const KEYBOARD_EVENT: &[Member] = &[
+    method("getModifierState", O::KeyboardGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -151,7 +155,6 @@ const KEYBOARD_EVENT: &[Member] = &[
     getter("isComposing", O::EventExtra("isComposing")),
     getter("charCode", O::EventExtra("charCode")),
     getter("keyCode", O::EventExtra("keyCode")),
-    getter("which", O::EventExtra("which")),
 ];
 const MESSAGE_EVENT: &[Member] = &[
     getter("data", O::MessageEventGet("data")),

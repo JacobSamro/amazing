@@ -602,6 +602,8 @@ pub enum Operation {
     MessageEventGet(&'static str),
     MessageEventInit,
     EventExtra(&'static str),
+    MouseGetModifierState,
+    KeyboardGetModifierState,
     CustomEventDetail,
     CustomEventInit,
     CreateEvent,

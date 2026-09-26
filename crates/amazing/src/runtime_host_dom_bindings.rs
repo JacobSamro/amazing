@@ -150,6 +150,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn installed_modifier_queries_and_numeric_dictionaries_follow_webidl() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('event dictionary types'); }
+            const mouse = new MouseEvent('x', {clientX: 1.5, clientY: -0,
+                button: 65535, buttons: -1, modifierAltGraph: true, modifierCapsLock: true});
+            check(mouse.clientX === 1.5 && Object.is(mouse.clientY, -0));
+            check(mouse.button === -1 && mouse.buttons === 65535);
+            check(mouse.getModifierState('AltGraph') && mouse.getModifierState('CapsLock'));
+            check(!mouse.getModifierState('Alt') && !mouse.getModifierState('altgraph'));
+            const key = new KeyboardEvent('x', {location: -1, keyCode: 4294967297,
+                charCode: NaN, which: 4294967298, modifierFn: true});
+            check(key.location === 4294967295 && key.keyCode === 1 && key.charCode === 0);
+            check(key.which === 2 && key.getModifierState('Fn'));
+            const wheel = new WheelEvent('x', {deltaMode: -1, deltaX: 0.25, momentum: true, ctrlKey: true});
+            check(wheel.deltaMode === 4294967295 && wheel.deltaX === 0.25 && wheel.momentum);
+            check(wheel.getModifierState('Control'));
+            let rejected = 0;
+            try { new MouseEvent('x', {clientX: Infinity}); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { new WheelEvent('x', {deltaX: NaN}); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { MouseEvent.prototype.getModifierState.call(key, 'Control'); } catch (e) { if (e instanceof TypeError) rejected++; }
+            try { mouse.getModifierState(); } catch (e) { if (e instanceof TypeError) rejected++; }
+            check(rejected === 4);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn focus_and_mouse_related_targets_follow_native_shadow_dispatch_state() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
