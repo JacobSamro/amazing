@@ -1,0 +1,28 @@
+{
+  "gate_source": "aa2024f325579d4edbe497dbd2146dc239156a4d",
+  "base": "536d0bdcd85ad421f633cf8e511f60a430a25bfb",
+  "platform": "Linux Boat dom-bindings",
+  "owned_pass": 514,
+  "owned_skip": 4,
+  "owned_doctests": 0,
+  "workspace_pass": 2531,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 2,
+  "wpt_files": {
+    "pass": 2,
+    "fail": 3,
+    "timeout": 0,
+    "error": 0,
+    "unsupported": 2
+  },
+  "wpt_counts": {
+    "pass": 234,
+    "fail": 206,
+    "timeout": 0,
+    "notrun": 0,
+    "error": 6
+  },
+  "lost_passing_files": 0,
+  "lost_passing_subtests": 0,
+  "new_passing_subtests": 0
+}

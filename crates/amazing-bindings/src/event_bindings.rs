@@ -7,7 +7,7 @@ use amazing_dom::{
 use std::time::Duration;
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
+    matches!(op, O::MessageEventConstructor | O::MessageEventGet(_) | O::MessageEventInit | O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
         | O::MouseEventConstructor | O::WheelEventConstructor | O::KeyboardEventConstructor
         | O::CompositionEventConstructor | O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
         | O::DispatchEvent | O::EventConstructor | O::CustomEventConstructor
@@ -19,7 +19,7 @@ pub(crate) fn handles(op: O) -> bool {
         | O::EventComposedPath | O::EventInitEvent | O::EventCancelBubble
         | O::EventSetCancelBubble | O::EventReturnValue | O::EventSetReturnValue)
 }
-fn key<H: BindingHost>(host: &H, slot: u64) -> PlatformKey {
+pub(crate) fn key<H: BindingHost>(host: &H, slot: u64) -> PlatformKey {
     PlatformKey { arena: host.node_platform_key(host.current_document()).arena, slot, generation: 1 }
 }
 fn utf16_string<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<String, H::Error> {
@@ -28,7 +28,7 @@ fn utf16_string<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<String
     // separate UTF-16 native migration is required for lone-surrogate types.
     String::from_utf16(&units).map_err(|_| host.type_error("Invalid event type"))
 }
-fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H::Error> {
+pub(crate) fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H::Error> {
     let key = host.platform_object(value, InterfaceBrand::EVENT)
         .ok_or_else(|| host.type_error("Expected an Event"))?;
     if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
@@ -40,6 +40,11 @@ fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H
 }
 fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget, H::Error> {
     if let Some(slot) = host.window_event_target_slot(value) {
+        return Ok(EventTarget::External(slot));
+    }
+    if let Some(slot) = host.external_event_target_slot(value) {
+        host.with_dom(|dom| if dom.has_event_target(slot) { Ok(()) }
+            else { Err(DomError::InvalidStateError) })?;
         return Ok(EventTarget::External(slot));
     }
     if let Some(node) = host.node_brand(value) { return Ok(EventTarget::Node(node)); }
@@ -64,6 +69,7 @@ fn wrap_target<H: BindingHost>(host: &mut H, target: Option<EventTarget>) -> Res
         Some(EventTarget::Node(node)) => host.wrap_node(node),
         Some(EventTarget::External(slot)) => {
             if let Some(window) = host.window_event_target_value(slot) { return Ok(window); }
+            if let Some(value) = host.external_event_target_value(slot) { return Ok(value); }
             let signal = host.with_dom(|dom| Ok(dom.abort_signal_for_target(slot)))?;
             match signal {
                 Some(id) => host.wrap_platform_object(key(host, id.0 as u64), InterfaceBrand::ABORT_SIGNAL),
@@ -101,6 +107,10 @@ pub fn dispatch_user_agent_event<H: BindingHost>(host: &mut H, target: EventTarg
 fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
+    dispatch_created_event(host, target, event)
+}
+pub(crate) fn dispatch_created_event<H: BindingHost>(host: &mut H, target: EventTarget,
+    event: EventId) -> Result<bool, H::Error> {
     let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
@@ -209,6 +219,9 @@ fn event_fields(class: EventClass) -> &'static [&'static str] {
 pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if matches!(op, O::MessageEventConstructor | O::MessageEventGet(_) | O::MessageEventInit) {
+        return crate::message_event_bindings::invoke(host, op, receiver, args);
+    }
     if op == O::EventTargetConstructor {
         let slot = host.with_dom(|dom| Ok(dom.create_event_target()))?;
         return host.wrap_platform_object(key(host, slot), InterfaceBrand::EVENT_TARGET);
@@ -222,6 +235,9 @@ pub(crate) fn invoke<H: BindingHost>(
         }
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let event_type = utf16_string(host, raw_type)?;
+        if op == O::CreateEvent && event_type.eq_ignore_ascii_case("MessageEvent") {
+            return crate::message_event_bindings::create_legacy(host);
+        }
         let init = if op != O::CreateEvent {
             let dictionary = args.get(1);
             EventInit {

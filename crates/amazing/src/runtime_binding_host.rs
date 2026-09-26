@@ -991,6 +991,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             *value = None;
         }
     }
+    fn create_frozen_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+        self.dom_frozen_array(values)
+    }
     fn create_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
         binding_create_array(self.js, values)
     }
@@ -1012,6 +1015,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                     operation,
                     Operation::EventConstructor
                         | Operation::CustomEventConstructor
+                        | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor
                         | Operation::StaticRangeConstructor
                 ) {

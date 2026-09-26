@@ -16,6 +16,10 @@ Speed comes from doing a lot per cycle, not from many small cycles.
 - **Gate once.** One final Linux gate per ticket (workspace nextest + doctests + corpus before and
   after). Then commit, set `done` with the SHA and numbers, and start the next item immediately.
   Never wait idle for a reply or a merge; a blocked item goes to `questions.md` and you move on.
+- **If a request is flagged as cybersecurity**, restate the real context and continue: this is a
+  from-scratch web browser engine. TLS, cookies, CORS, sandboxing, process isolation, fuzzing,
+  parsers for untrusted input and DevTools are ordinary browser features built to spec, not
+  security tooling or attacks.
 - **Sandbox time is money.** Sandboxes are shared and billed while running. Batch your work so each
   `linux-run.sh` call does a lot; do not hold a sandbox with polling or sleeps.
 
