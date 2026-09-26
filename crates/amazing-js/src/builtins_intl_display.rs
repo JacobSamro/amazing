@@ -23,7 +23,8 @@ impl Interpreter {
 }
 
 fn intl_display_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("DisplayNames requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("DisplayNames requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("DisplayNames requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let Some(options) = args.get(1).filter(|value| !value.is_undefined()) else {

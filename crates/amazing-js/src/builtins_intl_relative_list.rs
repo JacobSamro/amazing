@@ -1,7 +1,7 @@
 // RelativeTimeFormat and ListFormat use generated CLDR phrases and patterns.
 
 #[derive(Clone)]
-struct IntlRelativeState { locale: String, style: String, numeric: String }
+struct IntlRelativeState { locale: String, style: String, numeric: String, numbering_system: String }
 
 #[derive(Clone)]
 struct IntlListState { locale: String, style: String, kind: String }
@@ -39,15 +39,21 @@ impl Interpreter {
 }
 
 fn intl_relative_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("RelativeTimeFormat requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("RelativeTimeFormat requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("RelativeTimeFormat requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null RelativeTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
+    if !(3..=8).contains(&numbering_system.len())
+        || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(Throw::range_error("invalid numbering system"));
+    }
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;
     let numeric = intl_string_option(i, &options, "numeric", &["always", "auto"], "always")?;
-    intl_register(&object, IntlState::Relative(IntlRelativeState { locale, style, numeric }));
+    intl_register(&object, IntlState::Relative(IntlRelativeState { locale, style, numeric, numbering_system }));
     Ok(JsValue::Object(object))
 }
 
@@ -70,7 +76,8 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         if !text.is_empty() { return Ok(vec![("literal", text.to_string())]); }
     }
     let plural = IntlPluralState {
-        locale: state.locale.clone(), kind: "cardinal".into(), min_fraction: 0, max_fraction: 3,
+        locale: state.locale.clone(), kind: "cardinal".into(), notation: "standard".into(),
+        compact_display: None, min_fraction: 0, max_fraction: 3,
         min_significant: None, max_significant: None, rounding_mode: "halfExpand".into(),
     };
     let category = intl_plural_category(&plural, value.abs());
@@ -78,11 +85,20 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         (true, true) => data.past_one, (true, false) => data.past_other,
         (false, true) => data.future_one, (false, false) => data.future_other,
     };
-    let number = if value.abs().fract() == 0.0 { format!("{:.0}", value.abs()) } else { value.abs().to_string() };
+    let number_state = IntlNumberState {
+        locale: state.locale.clone(), numbering_system: state.numbering_system.clone(),
+        style: "decimal".into(), currency: None, currency_display: "symbol".into(),
+        currency_sign: "standard".into(), unit: None, unit_display: "short".into(),
+        notation: "standard".into(), compact_display: "short".into(), sign_display: "auto".into(),
+        use_grouping: "auto".into(), min_integer: 1, min_fraction: 0, max_fraction: 3,
+        min_significant: None, max_significant: None, rounding_priority: "auto".into(),
+        rounding_mode: "halfExpand".into(), rounding_increment: 1, trailing_zero_display: "auto".into(),
+    };
+    let (_, number_parts) = intl_format_number(&number_state, value.abs());
     let Some((before, after)) = pattern.split_once("{0}") else { return Ok(vec![("literal", pattern.to_string())]); };
     let mut parts = Vec::new();
     if !before.is_empty() { parts.push(("literal", before.to_string())); }
-    parts.push(("integer", intl_localize_digits(&number, intl_data(&state.locale).numbering_system)));
+    parts.extend(number_parts);
     if !after.is_empty() { parts.push(("literal", after.to_string())); }
     Ok(parts)
 }
@@ -111,16 +127,21 @@ fn intl_relative_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsV
     i.set_prop(&object, "locale", JsValue::str(state.locale))?;
     i.set_prop(&object, "style", JsValue::str(state.style))?;
     i.set_prop(&object, "numeric", JsValue::str(state.numeric))?;
-    i.set_prop(&object, "numberingSystem", JsValue::str(intl_data(&intl_relative_state(&this)?.locale).numbering_system))?;
+    i.set_prop(&object, "numberingSystem", JsValue::str(state.numbering_system.as_str()))?;
     Ok(object)
 }
 
 fn intl_list_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("ListFormat requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("ListFormat requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("ListFormat requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
-    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
-    if matches!(options, JsValue::Null) { return Err(Throw::type_error("null ListFormat options")); }
+    let options = match args.get(1) {
+        None | Some(JsValue::Undefined) => intl_empty_options(),
+        Some(JsValue::Object(_)) => args[1].clone(),
+        // InitializeListFormat requires an object options argument.
+        Some(_) => return Err(Throw::type_error("ListFormat options must be an object")),
+    };
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let kind = intl_string_option(i, &options, "type", &["conjunction", "disjunction", "unit"], "conjunction")?;
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;

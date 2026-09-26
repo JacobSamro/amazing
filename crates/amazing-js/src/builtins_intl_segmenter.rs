@@ -30,7 +30,8 @@ impl Interpreter {
 }
 
 fn intl_segmenter_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("Segmenter requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("Segmenter requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("Segmenter requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);

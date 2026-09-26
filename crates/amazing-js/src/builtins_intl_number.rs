@@ -444,6 +444,25 @@ fn intl_localize_digits(source: &str, numbering: &str) -> String {
     } else { ch }).collect()
 }
 
+/// Unit prefix/suffix and the unit-name segment for one locale and style.
+fn intl_unit_for(locale: &str, unit: &str, style: &str) -> Option<&'static IntlUnitData> {
+    INTL_UNIT_DATA.iter().find(|entry| entry.locale == locale && entry.unit == unit && entry.style == style)
+}
+
+/// Split a unit affix into its literal and unit parts, marking the unit name.
+fn intl_unit_pattern_parts(text: &str, unit_name: &str) -> Vec<(&'static str, String)> {
+    let mut parts = Vec::new();
+    if let Some(position) = text.find(unit_name) {
+        if position > 0 { parts.push(("literal", text[..position].to_string())); }
+        parts.push(("unit", unit_name.to_string()));
+        let after = &text[position + unit_name.len()..];
+        if !after.is_empty() { parts.push(("literal", after.to_string())); }
+    } else if !text.is_empty() {
+        parts.push(("literal", text.to_string()));
+    }
+    parts
+}
+
 /// Compact notation scale and suffix for the largest generated magnitude that
 /// does not exceed the value's decimal exponent. A magnitude whose CLDR
 /// pattern has no suffix (for example German short thousands) yields `None`,
@@ -597,8 +616,25 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         parts.push(("currency", currency_text.unwrap_or_default()));
     }
     if state.style == "unit" {
-        parts.push(("literal", " ".into()));
-        parts.push(("unit", state.unit.clone().unwrap_or_default()));
+        let unit_id = state.unit.clone().unwrap_or_default();
+        match intl_unit_for(&state.locale, &unit_id, &state.unit_display) {
+            Some(entry) => {
+                if !entry.prefix.is_empty() {
+                    let prefix_parts = intl_unit_pattern_parts(entry.prefix, entry.unit_name);
+                    let insert_at = parts.iter().position(|(kind, _)| {
+                        matches!(*kind, "integer" | "group" | "decimal" | "fraction" | "nan" | "infinity" | "compact")
+                    }).unwrap_or(parts.len());
+                    for (offset, part) in prefix_parts.into_iter().enumerate() {
+                        parts.insert(insert_at + offset, part);
+                    }
+                }
+                parts.extend(intl_unit_pattern_parts(entry.suffix, entry.unit_name));
+            }
+            None => {
+                parts.push(("literal", " ".into()));
+                parts.push(("unit", unit_id));
+            }
+        }
     }
     if accounting { parts.push(("literal", ")".into())); }
     let text = parts.iter().map(|(_, value)| value.as_str()).collect();
@@ -660,7 +696,16 @@ fn intl_format_bigint(state: &IntlNumberState, input: &str) -> String {
         groups.reverse();
     } else { groups.push(padded); }
     let mut result = intl_localize_digits(&groups.join(data.group), &state.numbering_system);
-    if state.style == "percent" { result.push_str(data.percent); }
+    if state.min_fraction > 0 {
+        result.push_str(data.decimal);
+        result.push_str(&"0".repeat(state.min_fraction));
+    }
+    if state.style == "percent" {
+        if data.percent_pattern.contains('\u{a0}') || data.percent_pattern.contains(' ') {
+            result.push('\u{a0}');
+        }
+        result.push_str(data.percent);
+    }
     if state.style == "currency" {
         let code = state.currency.as_deref().unwrap_or("");
         let index = INTL_NUMBER_DATA.iter().position(|entry| entry.locale == state.locale).unwrap_or(0);
@@ -671,13 +716,11 @@ fn intl_format_bigint(state: &IntlNumberState, input: &str) -> String {
             "narrowSymbol" => currency.map_or(code.to_string(), |entry| entry.narrow_symbols[index].to_string()),
             _ => currency.map_or(code.to_string(), |entry| entry.symbols[index].to_string()),
         };
-        let suffix = if state.max_fraction > 0 {
-            format!("{}{}", data.decimal, "0".repeat(state.max_fraction))
-        } else { String::new() };
-        result.push_str(&suffix);
         if data.currency_pattern.find('¤').unwrap_or(0) < data.currency_pattern.find('0').unwrap_or(0) {
             result = format!("{symbol}{result}");
-        } else { result = format!("{result} {symbol}"); }
+        } else if data.currency_pattern.contains("¤\u{a0}") || data.currency_pattern.contains("¤ ") {
+            result = format!("{result}\u{a0}{symbol}");
+        } else { result = format!("{result} {symbol}"); }
     }
     if negative && state.sign_display != "never" { result = format!("{}{result}", data.minus); }
     else if !negative && state.sign_display == "always" { result = format!("{}{result}", data.plus); }
@@ -736,5 +779,37 @@ mod intl_number_tests {
         assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'exceptZero'}).format(-0.0001)"), "0");
         assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'negative'}).format(-0)"), "0");
         assert_eq!(eval("new Intl.NumberFormat('en',{style:'currency',currency:'USD',currencySign:'accounting'}).format(-987)"), "($987.00)");
+        assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'exceptZero'}).format(987)"), "+987");
+        assert_eq!(eval("new Intl.NumberFormat('en',{signDisplay:'exceptZero'}).format(NaN)"), "NaN");
+    }
+
+    #[test]
+    fn significant_digits_round_above_the_decimal_point() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumSignificantDigits:3,maximumSignificantDigits:5}).format(123445.01)"), "123450");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumSignificantDigits:3,maximumSignificantDigits:5}).format(1.2)"), "1.20");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumSignificantDigits:3,maximumSignificantDigits:5}).format(0.001234)"), "0.001234");
+    }
+
+    #[test]
+    fn compact_notation_uses_generated_cldr_patterns() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{notation:'compact'}).format(987654321)"), "988M");
+        assert_eq!(eval("new Intl.NumberFormat('en',{notation:'compact'}).format(98765)"), "99K");
+        assert_eq!(eval("new Intl.NumberFormat('de',{notation:'compact'}).format(98765)"), "98.765");
+        assert_eq!(eval("new Intl.NumberFormat('de',{notation:'compact'}).format(98765432)"), "99\u{a0}Mio.");
+        assert_eq!(eval("new Intl.NumberFormat('de',{notation:'compact',compactDisplay:'long'}).format(98765)"), "99 Tausend");
+    }
+
+    #[test]
+    fn unit_display_uses_generated_cldr_patterns() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour'}).format(987)"), "987 km/h");
+        assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'narrow'}).format(987)"), "987km/h");
+        assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'long'}).format(987)"), "987 kilometers per hour");
+        assert_eq!(eval("new Intl.NumberFormat('de',{style:'unit',unit:'kilometer-per-hour'}).format(987)"), "987 km/h");
+    }
+
+    #[test]
+    fn bigint_significant_digits_round_and_group() {
+        assert_eq!(eval("88776655n.toLocaleString('de',{maximumSignificantDigits:4})"), "88.780.000");
+        assert_eq!(eval("88776655n.toLocaleString('de',{minimumFractionDigits:3})"), "88.776.655,000");
     }
 }

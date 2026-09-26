@@ -309,6 +309,20 @@ fn intl_date_to_json(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Res
     Ok(JsValue::str(intl_iso_string(milliseconds)))
 }
 
+fn intl_date_to_string_method(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let milliseconds = intl_date_value_of(i, &this)?;
+    Ok(JsValue::str(intl_date_to_string_value(milliseconds)))
+}
+
+fn intl_date_to_primitive(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let hint = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    match hint.as_str() {
+        "number" => intl_date_get_time(i, this, Vec::new()),
+        "string" | "default" => intl_date_to_string_method(i, this, Vec::new()),
+        _ => Err(Throw::type_error("invalid date hint")),
+    }
+}
+
 /// Civil fields for the engine's fixed zero offset.
 fn intl_date_to_string_value(milliseconds: f64) -> String {
     if !milliseconds.is_finite() { return "Invalid Date".into(); }
@@ -355,11 +369,16 @@ impl Interpreter {
             ("getTimezoneOffset", intl_date_get_timezone_offset as crate::value::NativeFn, 0),
             ("toISOString", intl_date_to_iso_string as crate::value::NativeFn, 0),
             ("toJSON", intl_date_to_json as crate::value::NativeFn, 1),
+            ("toString", intl_date_to_string_method as crate::value::NativeFn, 0),
         ] {
             let method = symbol_method(self, name, native);
             symbol_method_length(&method, length);
             prototype.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
+        let to_primitive = symbol_method(self, "[Symbol.toPrimitive]", intl_date_to_primitive);
+        symbol_method_length(&to_primitive, 1);
+        prototype.borrow_mut().define(
+            WellKnownSymbol::ToPrimitive.symbol(), symbol_data(to_primitive, false, true)).unwrap();
     }
 }
 

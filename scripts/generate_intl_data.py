@@ -125,6 +125,107 @@ def main() -> None:
                 )
     lines.append("];")
 
+    # ECMA-402 unit identifiers mapped to their CLDR unit keys.
+    unit_keys = {
+        "acre": "area-acre", "bit": "digital-bit", "byte": "digital-byte",
+        "celsius": "temperature-celsius", "centimeter": "length-centimeter",
+        "day": "duration-day", "degree": "angle-degree",
+        "fahrenheit": "temperature-fahrenheit", "fluid-ounce": "volume-fluid-ounce",
+        "foot": "length-foot", "gallon": "volume-gallon", "gigabit": "digital-gigabit",
+        "gigabyte": "digital-gigabyte", "gram": "mass-gram", "hectare": "area-hectare",
+        "hour": "duration-hour", "inch": "length-inch", "kilobit": "digital-kilobit",
+        "kilobyte": "digital-kilobyte", "kilogram": "mass-kilogram",
+        "kilometer": "length-kilometer", "liter": "volume-liter",
+        "megabit": "digital-megabit", "megabyte": "digital-megabyte",
+        "meter": "length-meter", "microsecond": "duration-microsecond",
+        "mile": "length-mile", "mile-scandinavian": "length-mile-scandinavian",
+        "milliliter": "volume-milliliter", "millimeter": "length-millimeter",
+        "millisecond": "duration-millisecond", "minute": "duration-minute",
+        "month": "duration-month", "nanosecond": "duration-nanosecond",
+        "ounce": "mass-ounce", "percent": "concentr-percent",
+        "petabyte": "digital-petabyte", "pound": "mass-pound",
+        "second": "duration-second", "stone": "mass-stone", "terabit": "digital-terabit",
+        "terabyte": "digital-terabyte", "week": "duration-week", "yard": "length-yard",
+        "year": "duration-year",
+    }
+    unit_compounds = {
+        "kilometer-per-hour": "speed-kilometer-per-hour",
+        "meter-per-second": "speed-meter-per-second",
+        "mile-per-hour": "speed-mile-per-hour",
+        "liter-per-kilometer": "consumption-liter-per-kilometer",
+        "liter-per-100-kilometer": "consumption-liter-per-100-kilometer",
+        "mile-per-gallon": "consumption-mile-per-gallon",
+        "mile-per-gallon-imperial": "consumption-mile-per-gallon-imperial",
+    }
+    unit_compound_simple = {
+        "kilometer-per-hour": ("kilometer", "hour"),
+        "meter-per-second": ("meter", "second"),
+        "mile-per-hour": ("mile", "hour"),
+        "liter-per-kilometer": ("liter", "kilometer"),
+        "liter-per-100-kilometer": ("liter", "kilometer"),
+        "mile-per-gallon": ("mile", "gallon"),
+        "mile-per-gallon-imperial": ("mile", "gallon"),
+    }
+
+    def singular_name(entry):
+        pattern = entry.get("unitPattern-count-one") or entry.get("unitPattern-count-other") or "{0}"
+        return pattern.replace("{0}", "").strip()
+
+    lines += [
+        "struct IntlUnitData { locale: &'static str, unit: &'static str, style: &'static str,",
+        "    prefix: &'static str, suffix: &'static str, unit_name: &'static str }",
+        "const INTL_UNIT_DATA: &[IntlUnitData] = &[",
+    ]
+    for locale in LOCALES:
+        units = cldr(f"cldr-units-full/main/{locale}/units.json")["main"][locale]["units"]
+        for style in ("long", "short", "narrow"):
+            table = units[style]
+            entries = {}
+            for intl_unit, cldr_key in sorted(unit_keys.items()):
+                entry = table.get(cldr_key)
+                if entry is None:
+                    continue
+                pattern = entry.get("unitPattern-count-other") or entry.get("unitPattern-count-one")
+                if pattern is None:
+                    continue
+                entries[intl_unit] = pattern
+            for intl_unit, cldr_key in unit_compounds.items():
+                entry = table.get(cldr_key)
+                if entry is not None:
+                    pattern = entry.get("unitPattern-count-other") or entry.get("unitPattern-count-one")
+                    if pattern is not None:
+                        entries[intl_unit] = pattern
+                        continue
+                # Compose from the two simple units when CLDR has no dedicated key.
+                first, second = unit_compound_simple[intl_unit]
+                first_entry = table.get(unit_keys[first])
+                second_entry = table.get(unit_keys[second])
+                per = table.get("per", {}).get("compoundUnitPattern")
+                if first_entry is None or second_entry is None or per is None:
+                    continue
+                first_pattern = first_entry.get("unitPattern-count-other") or first_entry.get("unitPattern-count-one")
+                second_name = singular_name(second_entry)
+                entries[intl_unit] = per.replace("{0}", first_pattern).replace("{1}", second_name)
+            for intl_unit, pattern in sorted(entries.items()):
+                if "{0}" not in pattern:
+                    continue
+                prefix, suffix = pattern.split("{0}", 1)
+                if prefix.strip():
+                    # Rare prefix-unit locales fall back to a raw suffix part.
+                    prefix_text = prefix
+                    unit_name = suffix.strip() or intl_unit
+                    suffix_text = suffix
+                else:
+                    prefix_text = ""
+                    unit_name = suffix.strip() or intl_unit
+                    suffix_text = suffix
+                lines.append(
+                    f"    IntlUnitData {{ locale: {rust_string(locale)}, unit: {rust_string(intl_unit)}, "
+                    f"style: {rust_string(style)}, prefix: {rust_string(prefix_text)}, "
+                    f"suffix: {rust_string(suffix_text)}, unit_name: {rust_string(unit_name)} }},"
+                )
+    lines.append("];")
+
     lines += [
         "struct IntlDateData { locale: &'static str, date: [&'static str; 4], time: [&'static str; 4],",
         "    date_time: [&'static str; 4], months_wide: [&'static str; 12], months_abbr: [&'static str; 12],",

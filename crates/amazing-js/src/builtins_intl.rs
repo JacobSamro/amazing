@@ -616,4 +616,26 @@ mod intl_tests {
         let result = i.run_script("new Intl.Locale('en-US-u-nu-latn', {calendar:'gregory',numeric:true}).toString()").unwrap();
         assert_eq!(i.to_string(&result).unwrap(), "en-US-u-ca-gregory-kn-nu-latn");
     }
+
+    #[test]
+    fn user_thrown_custom_errors_keep_identity() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function CustomError() {} \
+             let caught; \
+             try { ({ get x() { throw new CustomError(); } }).x; } catch (e) { caught = e; } \
+             caught.constructor === CustomError;").unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "unexpected: {result:?}");
+    }
+
+    #[test]
+    fn custom_errors_from_intl_option_getters_propagate() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function CustomError() {} \
+             let caught; \
+             try { new Intl.RelativeTimeFormat('en', { get localeMatcher() { throw new CustomError(); } }); } catch (e) { caught = e; } \
+             caught && caught.constructor === CustomError;").unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "unexpected: {result:?}");
+    }
 }

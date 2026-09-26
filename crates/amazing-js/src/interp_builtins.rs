@@ -1230,19 +1230,11 @@ fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result
 }
 
 fn native_date_to_string(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
-    _: Vec<JsValue>,
+    args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let milliseconds = match &this {
-        JsValue::Object(object) => match object.borrow().get_own("[[DateValue]]") {
-            Some(JsValue::Num(value)) => value,
-            Some(_) => f64::NAN,
-            None => return Ok(JsValue::str("Invalid Date")),
-        },
-        _ => return Ok(JsValue::str("Invalid Date")),
-    };
-    Ok(JsValue::str(intl_date_to_string_value(milliseconds)))
+    intl_date_to_string_method(i, this, args)
 }
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
