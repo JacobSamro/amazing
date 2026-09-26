@@ -958,3 +958,55 @@ The pushed RC-20 base is `f66be2b`. `LAYOUT-17` and the requested
 paint-local delta type is ready for their damage list when the owning lanes
 publish it. IA-ORACLE-PAINT's 31 ms p95 cannot be credited until that driver
 adopts the retained path and the Windows release trace measures it.
+
+## RC-21 — responsive/lazy images, scroll fetch and the COMP-14 owner mapping
+
+Landed on `lane/replaced-content-rc21`, merged dev `988b1c4d` (includes
+COMP-13b/14, IPC-10, CSS-15, DOM focus, IA-REAL-PAGES). Three owned changes:
+
+- **Paint scroll owners across reopened clips** (`a70711f0`). A stacking or
+  positioned context re-opens the overflow clips it inherits, so one CSS
+  scroller opened two `ScrollNode`s in a single display list. The duplicate
+  `(node, generation)` owner made `DisplayListView::property_owner_mapping`
+  return `None`, which made `RetainedPaintView::from_view` report
+  `AmbiguousPropertyOwner` for the COMP-14 effects-scroller oracle page. Paint
+  now reuses one scroll node per owner; clip nodes stay per scope. Regression:
+  `effects_scroller_property_owners_stay_unique_across_reopened_clips`.
+- **Script-detached `<img>` loading** (`c18d13f9`). `load_page_media_in_viewport`
+  now visits every live arena slot for an `img` the document walk cannot reach
+  (`new Image()`), so the request starts and a pending `decode()` promise can
+  settle; detached loading is always eager.
+- **Shell lazy fetch after scroll** (`a5734b23`, `cb84e972`, `b8f413ab`). Every
+  successful scroll (wheel, trackpad, keyboard, scrollbar drag) reads the
+  retained root scroll offset from COMP-13b and fetches deferred lazy images
+  whose laid-out box entered the viewport, then repaints the scrolled frame.
+  Layout already reserved each deferred box, so pixels paint into it until the
+  next DOM snapshot relayouts with the real intrinsic size.
+
+Boundaries, not silently credited: inline replaced content still forces the
+baked paint fallback, whose property trees are empty, so a page with an inline
+`<img>` has no compositor root scroll node and the lazy-scroll fetch currently
+exercises block-level images only until RC-17/paint makes inline replaced items
+separable in `raster_raw_local`. `new Image()` still needs the DOM-bindings
+legacy factory global; only the loader side is done. `image-orientation:none`
+through the sandboxed utility remains routed to IPC.
+
+**Linux-first gate** (per the 2026-09-26 orchestrator change; Windows render
+sweeps deferred). Base `988b1c4d`, Boat sandbox warm:
+
+- `cargo nextest run --workspace --locked --no-fail-fast`: **2,543 passed,
+  0 failed, 10 skipped**.
+- `cargo test --workspace --locked --doc`: **2 passed, 0 failed**.
+- `amazing-paint` includes the new regression; Linux paint was **126/126**
+  before the dev merge.
+- Pre-Linux-first Windows run at `b8f413ab`: shell
+  `scrolled_deferred_lazy_image_is_fetched_and_repainted` passed, shell
+  `--locked` build green. The shell is a Windows-only GPUI workspace and is not
+  part of the Linux workspace gate.
+
+The RC-21 pinned render (226) and testharness (117) selections and their
+reproduction scripts live in `tests/wpt-replaced-content/rc21/`. Both runners
+are Windows-only (`scripts/run-render-wpt.ps1` and the `wpt-harness` subcommand
+that byte-pins against the checkout), so no Linux corpus before/after is
+claimed here; the recorded Windows baseline is 185/6/9/26 render and the
+harness candidate 4/58/45/8/2. These are not conformance movement.
