@@ -2517,3 +2517,6 @@ mod message_events;
 
 #[path = "tests_event_dictionaries.rs"]
 mod event_dictionaries;
+
+#[path = "tests_legacy_events.rs"]
+mod legacy_events;

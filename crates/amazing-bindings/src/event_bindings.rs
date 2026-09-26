@@ -270,7 +270,11 @@ pub(crate) fn invoke<H: BindingHost>(
                 else { Err(DomError::TypeError) })?;
         }
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-        let event_type = utf16_string(host, raw_type)?;
+        let event_type = if op == O::CreateEvent {
+            // Interface names are ASCII aliases. An unmatched DOMString, including
+            // lone surrogates, takes the NotSupportedError path rather than TypeError.
+            String::from_utf16_lossy(&host.to_dom_string(raw_type)?)
+        } else { utf16_string(host, raw_type)? };
         if op == O::CreateEvent && event_type.eq_ignore_ascii_case("MessageEvent") {
             return crate::message_event_bindings::create_legacy(host);
         }
@@ -290,7 +294,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 "HashChangeEvent", "HTMLEvents", "KeyboardEvent", "MessageEvent",
                 "MouseEvent", "MouseEvents", "StorageEvent", "SVGEvents", "TextEvent",
                 "UIEvent", "UIEvents"].iter().any(|name| name.eq_ignore_ascii_case(&event_type)) {
-                return Err(host.type_error("Unsupported legacy event interface"));
+                return host.with_dom(|_| Err(DomError::NotSupportedError));
             }
             EventInit::default()
         };
@@ -302,7 +306,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 _ => host.undefined(),
             };
             let root = if host.is_nullish(&detail) { None } else { Some(host.retain_value(detail)) };
-            Event::new_custom(event_type, init, Duration::ZERO, root)
+            Event::new_custom(event_type.clone(), init, Duration::ZERO, root)
         } else if legacy_custom {
             Event::new_custom("", init, Duration::ZERO, None)
         } else {
@@ -322,7 +326,18 @@ pub(crate) fn invoke<H: BindingHost>(
                 }
             }
         }
-        if op == O::CreateEvent { event.mark_uninitialized(); }
+        if op == O::CreateEvent {
+            let class = match event_type.to_ascii_lowercase().as_str() {
+                "compositionevent" => EventClass::Composition,
+                "focusevent" => EventClass::Focus,
+                "keyboardevent" => EventClass::Keyboard,
+                "mouseevent" | "mouseevents" => EventClass::Mouse,
+                "uievent" | "uievents" => EventClass::Ui,
+                _ => event.class(),
+            };
+            event.set_class(class);
+            event.mark_uninitialized();
+        }
         let id = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }
