@@ -1466,3 +1466,13 @@ Parser/shaper resource budgets and18 geometry/model tests cover the new paths.
 Fifty static mismatches remain; font metrics, tab-size inheritance and flex/grid
 intrinsic adoption are routed to their owners. General inline alignment and ruby
 fragmentation/box edges remain follow-up. Windows deferred.
+
+## LAYOUT-22 — vertical inline placement and alignment (in progress)
+
+Full static css-writing-modes baseline fromec384d80: **230/1112 pass**,749
+mismatch,133 unsupported XML/DTD cases;28 script-dependent exclusions. No
+errors/timeouts/crashes. Evidence `layout22/before-final/report.json`.
+Implement inline-axis alignment, containing-block struts, vertical atomics,
+and the remaining LAYOUT-14 bidi/tcy cases as one area. Absolute-position and
+orthogonal block clusters stay visible for follow-up. Whole directory and
+retained ruby118/table386/union449 run in every bulk candidate.
