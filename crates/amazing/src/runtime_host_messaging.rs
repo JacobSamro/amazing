@@ -60,6 +60,7 @@ enum MsgObject {
     },
     Channel {
         name: String,
+        router_client: u64,
         closed: bool,
         handlers: HashMap<String, JsValue>,
         listeners: Vec<Listener>,
@@ -69,7 +70,7 @@ enum MsgObject {
 #[derive(Clone)]
 enum DeliveryTarget {
     Port(PortId),
-    Channel(String),
+    ChannelSlot(usize),
     Window,
 }
 
@@ -84,7 +85,6 @@ pub(crate) struct MessagingRealm {
     client: ClientId,
     objects: Vec<MsgObject>,
     ports: HashMap<PortId, usize>,
-    channels: HashMap<String, usize>,
     classes: HashMap<u64, (JsValue, JsValue)>,
     inbox: VecDeque<QueuedMessage>,
     globals: HashMap<String, JsValue>,
@@ -94,7 +94,9 @@ pub(crate) struct MessagingRealm {
 struct BrowserMessaging {
     router: MessageRouter,
     next_client: ClientId,
+    next_channel: u64,
     realms: BTreeMap<ClientId, Weak<RefCell<BindingState>>>,
+    channels: BTreeMap<u64, (ClientId, usize)>,
 }
 
 thread_local! {
@@ -138,7 +140,6 @@ impl RuntimeBindingHost<'_> {
             client,
             objects: Vec::new(),
             ports: HashMap::new(),
-            channels: HashMap::new(),
             classes: HashMap::new(),
             inbox: VecDeque::new(),
             globals: HashMap::new(),
@@ -208,13 +209,8 @@ impl RuntimeBindingHost<'_> {
             let realm = state.messaging.as_mut().unwrap();
             let slot = realm.objects.len();
             realm.objects.push(object);
-            match &realm.objects[slot] {
-                MsgObject::Port { id, .. } => {
-                    realm.ports.insert(*id, slot);
-                }
-                MsgObject::Channel { name, .. } => {
-                    realm.channels.insert(name.clone(), slot);
-                }
+            if let MsgObject::Port { id, .. } = &realm.objects[slot] {
+                realm.ports.insert(*id, slot);
             }
             slot
         };
@@ -380,9 +376,9 @@ impl RuntimeBindingHost<'_> {
                 let event = self.messaging_make_event(data, &origin, ports)?;
                 self.messaging_dispatch_port(id, event)
             }
-            DeliveryTarget::Channel(name) => {
+            DeliveryTarget::ChannelSlot(slot) => {
                 let event = self.messaging_make_event(data, &origin, ports)?;
-                self.messaging_dispatch_channel(&name, event)
+                self.messaging_dispatch_channel(slot, event)
             }
             DeliveryTarget::Window => self.messaging_dispatch_window(data, &origin),
         }
@@ -467,17 +463,13 @@ impl RuntimeBindingHost<'_> {
         self.messaging_fire(slot, "message", this, event)
     }
 
-    fn messaging_dispatch_channel(&mut self, name: &str, event: JsValue) -> Result<(), Throw> {
-        let (slot, this) = {
+    fn messaging_dispatch_channel(&mut self, slot: usize, event: JsValue) -> Result<(), Throw> {
+        let this = {
             let state = self.state.borrow();
             let Some(realm) = state.messaging.as_ref() else {
                 return Ok(());
             };
-            let Some(slot) = realm.channels.get(name).copied() else {
-                return Ok(());
-            };
-            let this = realm.globals.get(&format!("{KIND_CHANNEL}:{slot}")).cloned();
-            (slot, this)
+            realm.globals.get(&format!("{KIND_CHANNEL}:{slot}")).cloned()
         };
         let Some(this) = this else { return Ok(()) };
         self.messaging_fire(slot, "message", this, event)
@@ -579,7 +571,7 @@ impl RuntimeBindingHost<'_> {
                     handlers.get(key).cloned()
                 }
             })
-            .unwrap_or(JsValue::Undefined)
+            .unwrap_or(JsValue::Null)
     }
 
     fn messaging_window_handler(&self, key: &str) -> JsValue {
@@ -588,7 +580,7 @@ impl RuntimeBindingHost<'_> {
             .messaging
             .as_ref()
             .and_then(|realm| realm.globals.get(&format!("window:{key}")).cloned())
-            .unwrap_or(JsValue::Undefined)
+            .unwrap_or(JsValue::Null)
     }
 
     fn messaging_set_handler(&self, slot: usize, key: &str, value: JsValue) {
@@ -831,22 +823,43 @@ impl RuntimeBindingHost<'_> {
                     .unwrap_or_default();
                 let key = self.messaging_key(&name);
                 let client = self.messaging_client();
-                BROWSER.with(|browser| {
-                    browser
-                        .borrow_mut()
-                        .router
-                        .subscribe(key, client)
-                        .map_err(messaging_error)
-                })?;
                 let value = self.messaging_allocate(
                     KIND_CHANNEL,
                     MsgObject::Channel {
-                        name,
+                        name: name.clone(),
+                        router_client: 0,
                         closed: false,
                         handlers: HashMap::new(),
                         listeners: Vec::new(),
                     },
                 )?;
+                let slot = self.messaging_receiver(&value, KIND_CHANNEL)?;
+                let channel_client = BROWSER.with(|browser| {
+                    let mut browser = browser.borrow_mut();
+                    let client = browser.next_channel.max(1);
+                    browser.next_channel = client + 1;
+                    client
+                });
+                if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
+                    if let Some(MsgObject::Channel { router_client, .. }) =
+                        realm.objects.get_mut(slot)
+                    {
+                        *router_client = channel_client;
+                    }
+                }
+                BROWSER.with(|browser| {
+                    browser
+                        .borrow_mut()
+                        .channels
+                        .insert(channel_client, (client, slot));
+                });
+                BROWSER.with(|browser| {
+                    browser
+                        .borrow_mut()
+                        .router
+                        .subscribe(key, channel_client)
+                        .map_err(messaging_error)
+                })?;
                 Ok(value)
             }
             MessagingOp::ChannelPort1 | MessagingOp::ChannelPort2 => {
@@ -880,36 +893,7 @@ impl RuntimeBindingHost<'_> {
             }
             MessagingOp::PortStart => {
                 let slot = self.messaging_receiver(&this, KIND_PORT)?;
-                let id = self.messaging_object_port_id(slot).ok_or_else(|| {
-                    Throw::type_error("start on a non-port")
-                })?;
-                let client = self.messaging_client();
-                let deliveries = BROWSER.with(|browser| {
-                    browser
-                        .borrow_mut()
-                        .router
-                        .start(id, client)
-                        .map_err(messaging_error)
-                })?;
-                let mut inbox = Vec::new();
-                for delivery in deliveries {
-                    inbox.push(delivery);
-                }
-                for delivery in inbox {
-                    self.messaging_queue(
-                        delivery.client,
-                        DeliveryTarget::Port(delivery.port),
-                        delivery.payload,
-                        Vec::new(),
-                    );
-                }
-                if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
-                    if let Some(MsgObject::Port { started, .. }) =
-                        realm.objects.get_mut(slot)
-                    {
-                        *started = true;
-                    }
-                }
+                self.messaging_start_port(slot)?;
                 Ok(JsValue::Undefined)
             }
             MessagingOp::PortClose => {
@@ -964,6 +948,12 @@ impl RuntimeBindingHost<'_> {
                     .or_else(|_| self.messaging_receiver(&this, KIND_CHANNEL))
                 {
                     self.messaging_set_handler(slot, key, value);
+                    // Setting `onmessage` on a port implicitly starts it.
+                    if key == "message"
+                        && self.messaging_receiver(&this, KIND_PORT).is_ok()
+                    {
+                        self.messaging_start_port(slot)?;
+                    }
                 } else {
                     self.messaging_store_global(&format!("window:{key}"), value);
                 }
@@ -1000,24 +990,47 @@ impl RuntimeBindingHost<'_> {
                 })
                 .unwrap_or_default()
         };
-        let client = self.messaging_client();
         let data = args.first().cloned().unwrap_or(JsValue::Undefined);
         let (payload, _ports) = self.messaging_serialize(&data, None)?;
         let key = self.messaging_key(&name);
+        let router_client = {
+            let state = self.state.borrow();
+            state
+                .messaging
+                .as_ref()
+                .and_then(|realm| realm.objects.get(slot))
+                .map(|object| match object {
+                    MsgObject::Channel { router_client, .. } => *router_client,
+                    _ => 0,
+                })
+                .unwrap_or(0)
+        };
+        if router_client == 0 {
+            return Ok(JsValue::Undefined);
+        }
         let deliveries = BROWSER.with(|browser| {
             browser
                 .borrow()
                 .router
-                .broadcast(&key, client, payload)
+                .broadcast(&key, router_client, payload)
                 .map_err(messaging_error)
         })?;
         for delivery in deliveries {
-            self.messaging_queue(
-                delivery.client,
-                DeliveryTarget::Channel(name.clone()),
-                delivery.payload,
-                Vec::new(),
-            );
+            let target = BROWSER.with(|browser| {
+                browser
+                    .borrow()
+                    .channels
+                    .get(&delivery.client)
+                    .copied()
+            });
+            if let Some((doc_client, target_slot)) = target {
+                self.messaging_queue(
+                    doc_client,
+                    DeliveryTarget::ChannelSlot(target_slot),
+                    delivery.payload,
+                    Vec::new(),
+                );
+            }
         }
         Ok(JsValue::Undefined)
     }
@@ -1065,6 +1078,34 @@ impl RuntimeBindingHost<'_> {
         Ok(JsValue::Undefined)
     }
 
+    fn messaging_start_port(&mut self, slot: usize) -> Result<(), Throw> {
+        let id = self
+            .messaging_object_port_id(slot)
+            .ok_or_else(|| Throw::type_error("start on a non-port"))?;
+        let client = self.messaging_client();
+        let deliveries = BROWSER.with(|browser| {
+            browser
+                .borrow_mut()
+                .router
+                .start(id, client)
+                .map_err(messaging_error)
+        })?;
+        for delivery in deliveries {
+            self.messaging_queue(
+                delivery.client,
+                DeliveryTarget::Port(delivery.port),
+                delivery.payload,
+                Vec::new(),
+            );
+        }
+        if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
+            if let Some(MsgObject::Port { started, .. }) = realm.objects.get_mut(slot) {
+                *started = true;
+            }
+        }
+        Ok(())
+    }
+
     fn messaging_close_port(&mut self, slot: usize) {
         let id = self.messaging_object_port_id(slot);
         let client = self.messaging_client();
@@ -1083,24 +1124,30 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_close_channel(&mut self, slot: usize) {
-        let (name, client) = {
+        let mut name = String::new();
+        let mut router_client: u64 = 0;
+        {
             let state = self.state.borrow();
-            let client = state.messaging.as_ref().map_or(0, |realm| realm.client);
-            let name = state
-                .messaging
-                .as_ref()
-                .and_then(|realm| realm.objects.get(slot))
-                .map(|object| match object {
-                    MsgObject::Channel { name, .. } => name.clone(),
-                    _ => String::new(),
-                })
-                .unwrap_or_default();
-            (name, client)
-        };
+            if let Some(realm) = state.messaging.as_ref() {
+                if let Some(MsgObject::Channel {
+                    name: channel_name,
+                    router_client: channel_client,
+                    ..
+                }) = realm.objects.get(slot)
+                {
+                    name = channel_name.clone();
+                    router_client = *channel_client;
+                }
+            }
+        }
         let key = self.messaging_key(&name);
-        BROWSER.with(|browser| {
-            browser.borrow_mut().router.unsubscribe(&key, client);
-        });
+        if router_client != 0 {
+            BROWSER.with(|browser| {
+                let mut browser = browser.borrow_mut();
+                browser.router.unsubscribe(&key, router_client);
+                browser.channels.remove(&router_client);
+            });
+        }
         if let Some(realm) = self.state.borrow_mut().messaging.as_mut() {
             if let Some(object) = realm.objects.get_mut(slot) {
                 if let MsgObject::Channel { closed, .. } = object {
@@ -1111,15 +1158,48 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_window_post(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let data = args.first().cloned().unwrap_or(JsValue::Undefined);
-        let (payload, transfer_ports) = self.messaging_serialize(&data, args.get(2))?;
+        if args.is_empty() {
+            return Err(Throw::type_error(
+                "postMessage requires a message argument",
+            ));
+        }
+        let data = args[0].clone();
+        let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        let (target_origin, transfer) =
+            if matches!(options, JsValue::Object(_)) && !self.js.binding_is_nullish(&options) {
+                let target = self.js.binding_get_property(&options, "targetOrigin")?;
+                let transfer = self.js.binding_get_property(&options, "transfer")?;
+                (target, transfer)
+            } else {
+                (
+                    options,
+                    args.get(2).cloned().unwrap_or(JsValue::Undefined),
+                )
+            };
+        if matches!(transfer, JsValue::Null) {
+            return Err(Throw::type_error("transfer must be a sequence, not null"));
+        }
+        if !self.js.binding_is_nullish(&target_origin) {
+            let Some(units) = self.js.binding_string_units(&target_origin) else {
+                return Err(Throw::type_error("targetOrigin must be a string"));
+            };
+            let origin = String::from_utf16_lossy(&units);
+            if origin != "*" && origin != "/" {
+                let parsed = amazing_fetch::HttpUrl::parse(&origin)
+                    .map_err(|_| Throw::syntax_error("invalid target origin"))?;
+                if parsed.origin().serialize() != self.messaging_origin() {
+                    // A different origin never receives the message.
+                    return Ok(JsValue::Undefined);
+                }
+            }
+        }
+        let (payload, transfer_ports) = self.messaging_serialize(&data, Some(&transfer))?;
         let client = self.messaging_client();
-        // A window post is delivered to this document's own window task queue.
         self.messaging_queue(
             client,
             DeliveryTarget::Window,
             payload,
-            transfer_ports.clone(),
+            transfer_ports,
         );
         Ok(JsValue::Undefined)
     }
@@ -1172,6 +1252,16 @@ impl RuntimeBindingHost<'_> {
             NativeEntry::IllegalConstructor,
             HostCallPolicy::ConstructOnly,
         );
+        self.define_data_property(&port_constructor, "prototype", prototype.clone(), false, false, false)?;
+        self.define_data_property(&prototype, "constructor", port_constructor.clone(), true, false, true)?;
+        self.define_data_property(
+            &global,
+            "MessagePort",
+            port_constructor.clone(),
+            true,
+            false,
+            true,
+        )?;
         self.messaging_set_class(KIND_PORT, prototype, port_constructor);
 
         // BroadcastChannel
@@ -1341,6 +1431,73 @@ mod tests {
         assert_eq!(
             scheduler
                 .run_script("bc.name === 'updates' && self_delivered === false")
+                .unwrap(),
+            JsValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn post_message_validates_target_origin_transfer_and_arity() {
+        let mut scheduler = scheduler();
+        scheduler.set_location_url("https://example.test/page.html");
+        run(
+            &mut scheduler,
+            r#"
+                var thrown = [];
+                function attempt(fn) {
+                    try { fn(); thrown.push("no"); } catch (e) { thrown.push(e.name); }
+                }
+                attempt(function() { postMessage({}, "not a url"); });
+                attempt(function() { postMessage({}, "http://[bad"); });
+                attempt(function() { postMessage({}, "/", null); });
+                attempt(function() { postMessage(); });
+            "#,
+        );
+        assert_eq!(
+            scheduler.run_script("thrown.join(',')").unwrap(),
+            JsValue::str("SyntaxError,SyntaxError,TypeError,TypeError")
+        );
+    }
+
+    #[test]
+    fn message_port_is_an_instance_and_onmessage_starts_it() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var mc = new MessageChannel();
+                var got = null;
+                var isPort = mc.port1 instanceof MessagePort;
+                mc.port1.onmessage = function(e) { got = e.data; };
+                mc.port2.postMessage(5);
+            "#,
+        );
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(
+            scheduler
+                .run_script("isPort === true && got === 5")
+                .unwrap(),
+            JsValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn two_channels_in_one_document_receive_each_other() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var a = new BroadcastChannel("room");
+                var b = new BroadcastChannel("room");
+                var got = null;
+                b.onmessage = function(e) { got = e.data; };
+                a.postMessage({v: 9});
+            "#,
+        );
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(
+            scheduler
+                .run_script("got !== null && got.v === 9")
                 .unwrap(),
             JsValue::Bool(true)
         );

@@ -23,11 +23,71 @@ impl Kind {
     }
 }
 
-struct Parser { tokens: Vec<Token>, pos: usize }
+struct Parser { tokens: Vec<Token>, pos: usize, allow_size: bool }
 impl Parser {
     fn skip(&mut self) { while matches!(self.tokens.get(self.pos), Some(Token::Whitespace)) { self.pos += 1; } }
     fn peek(&mut self) -> Option<Token> { self.skip(); self.tokens.get(self.pos).cloned() }
     fn eat(&mut self) -> Option<Token> { self.skip(); let t = self.tokens.get(self.pos).cloned(); self.pos += usize::from(t.is_some()); t }
+
+    /// CSS Values 5 `<calc-size-basis>`:
+    /// `[ <size-keyword> | <calc-sum> | <calc-size()> | any ]`.
+    /// Returns `Some(true)` for the `any` basis (whose calculation may not use
+    /// the `size` keyword), `Some(false)` otherwise, `None` when invalid.
+    fn calc_size_basis(&mut self) -> Option<bool> {
+        match self.peek()? {
+            Token::Ident(name) => {
+                let lower = name.to_ascii_lowercase();
+                if lower == "any" {
+                    self.eat();
+                    return Some(true);
+                }
+                matches!(
+                    lower.as_str(),
+                    "auto" | "min-content" | "max-content" | "fit-content" | "stretch" | "contain"
+                )
+                .then(|| {
+                    self.eat();
+                    false
+                })
+            }
+            Token::Function(name) if name.eq_ignore_ascii_case("calc-size") => {
+                self.calc_size_function().then_some(false)
+            }
+            // `fit-content()` is the functional variation of the sizing keyword.
+            Token::Function(name) if name.eq_ignore_ascii_case("fit-content") => {
+                self.eat();
+                if !matches!(self.eat(), Some(Token::OpenParen)) { return None; }
+                self.expression_plain()?;
+                matches!(self.eat(), Some(Token::CloseParen)).then_some(false)
+            }
+            _ => self.expression_plain().map(|_| false),
+        }
+    }
+
+    /// Parse a `<calc-sum>` while the `size` keyword is not in scope.
+    fn expression_plain(&mut self) -> Option<Kind> {
+        let saved = self.allow_size;
+        self.allow_size = false;
+        let kind = self.expression();
+        self.allow_size = saved;
+        kind
+    }
+
+    /// `calc-size( <calc-size-basis> , <calc-sum> )`.
+    fn calc_size_function(&mut self) -> bool {
+        match self.eat() {
+            Some(Token::Function(name)) if name.eq_ignore_ascii_case("calc-size") => {}
+            _ => return false,
+        }
+        if !matches!(self.eat(), Some(Token::OpenParen)) { return false; }
+        let Some(any) = self.calc_size_basis() else { return false; };
+        if !matches!(self.eat(), Some(Token::Comma)) { return false; }
+        let saved = self.allow_size;
+        self.allow_size = !any;
+        let calculation = self.expression();
+        self.allow_size = saved;
+        calculation.is_some() && matches!(self.eat(), Some(Token::CloseParen))
+    }
     fn expression(&mut self) -> Option<Kind> {
         let mut left = self.product()?;
         loop {
@@ -65,6 +125,10 @@ impl Parser {
                 let css = format!("{n}{unit}");
                 crate::values::LengthPercentage::parse(&css).map(|_| Kind::Length)
             }
+            // `size` names the calc-size basis inside its calculation.
+            Token::Ident(name) if self.allow_size && name.eq_ignore_ascii_case("size") => {
+                Some(Kind::Length)
+            }
             Token::OpenParen => {
                 let kind = self.expression()?;
                 match self.eat()? { Token::CloseParen => Some(kind), _ => None }
@@ -101,13 +165,29 @@ pub(crate) fn length_percentage(css: &str, allow_percentage: bool) -> bool {
     let tokens = tokenize(css);
     if !matches!(tokens.iter().find(|t| !matches!(t, Token::Whitespace)),
         Some(Token::Function(name)) if matches!(name.to_ascii_lowercase().as_str(), "calc" | "min" | "max" | "clamp")) { return false; }
-    let mut parser = Parser { tokens, pos: 0 };
+    let mut parser = Parser { tokens, pos: 0, allow_size: false };
     let kind = parser.atom();
     parser.skip();
     parser.pos == parser.tokens.len() && match kind {
         Some(Kind::Length) => true,
         Some(Kind::Percentage | Kind::LengthPercentage) => allow_percentage,
         _ => false,
+    }
+}
+
+/// Validate a CSS Values 5 `calc-size( <calc-size-basis>, <calc-sum> )`
+/// expression without resolving its intrinsic `size` keyword. The caller keeps
+/// the canonical serialized text for the layout used-value stage.
+pub(crate) fn calc_size(css: &str) -> bool {
+    let tokens = tokenize(css);
+    if !matches!(tokens.iter().find(|t| !matches!(t, Token::Whitespace)),
+        Some(Token::Function(name)) if name.eq_ignore_ascii_case("calc-size")) {
+        return false;
+    }
+    let mut parser = Parser { tokens, pos: 0, allow_size: false };
+    parser.calc_size_function() && {
+        parser.skip();
+        parser.pos == parser.tokens.len()
     }
 }
 

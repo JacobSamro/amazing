@@ -1,0 +1,150 @@
+//! The `Network` domain: request/response/loading events from the engine.
+
+use super::{headers, object};
+use crate::host::{NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent};
+use crate::json::Json;
+use crate::protocol::{CdpError, CdpRequest};
+use crate::session::{DispatchOutcome, SessionState};
+
+/// Handles a `Network.*` command.
+pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<DispatchOutcome, CdpError> {
+    match request.method.as_str() {
+        "Network.enable" => {
+            session.enabled.network = true;
+            Ok(DispatchOutcome::empty())
+        }
+        "Network.disable" => {
+            session.enabled.network = false;
+            Ok(DispatchOutcome::empty())
+        }
+        "Network.setCacheDisabled" => {
+            request.optional_bool("cacheDisabled", false)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "Network.clearBrowserCache" => Ok(DispatchOutcome::empty()),
+        "Network.setBypassServiceWorker" => {
+            request.optional_bool("bypass", false)?;
+            Ok(DispatchOutcome::empty())
+        }
+        other => Err(CdpError::method_not_found(other)),
+    }
+}
+
+/// Builds the `Network.requestWillBeSent` event.
+pub fn request_event(item: &NetworkRequestEvent) -> Json {
+    let mut request = vec![
+        ("url", Json::String(item.url.clone())),
+        ("method", Json::String(item.method.clone())),
+        ("headers", headers(&item.headers)),
+        ("hasPostData", Json::Bool(item.post_data.is_some())),
+        ("initialPriority", Json::String("Medium".into())),
+        (
+            "referrerPolicy",
+            Json::String("no-referrer-when-downgrade".into()),
+        ),
+    ];
+    if let Some(post_data) = &item.post_data {
+        request.push(("postData", Json::String(post_data.clone())));
+    }
+    crate::protocol::event(
+        "Network.requestWillBeSent",
+        object(vec![
+            ("requestId", Json::String(item.request_id.clone())),
+            ("loaderId", Json::String(item.loader_id.clone())),
+            ("documentURL", Json::String(item.url.clone())),
+            ("request", object(request)),
+            ("timestamp", Json::number(item.timestamp)),
+            ("wallTime", Json::number(item.wall_time)),
+            (
+                "initiator",
+                object(vec![("type", Json::String("other".into()))]),
+            ),
+            ("type", Json::String(item.resource_type.clone())),
+            ("frameId", Json::String(item.frame_id.clone())),
+        ]),
+    )
+}
+
+/// Builds the `Network.responseReceived` event.
+pub fn response_event(item: &NetworkResponseEvent) -> Json {
+    let response = object(vec![
+        ("url", Json::String(item.url.clone())),
+        ("status", Json::number(item.status as f64)),
+        ("statusText", Json::String(item.status_text.clone())),
+        ("headers", headers(&item.headers)),
+        ("mimeType", Json::String(item.mime_type.clone())),
+        ("connectionReused", Json::Bool(false)),
+        ("connectionId", Json::number(0.0)),
+        ("encodedDataLength", Json::number(item.encoded_data_length as f64)),
+        ("securityState", Json::String("unknown".into())),
+        ("fromDiskCache", Json::Bool(item.from_disk_cache)),
+    ]);
+    crate::protocol::event(
+        "Network.responseReceived",
+        object(vec![
+            ("requestId", Json::String(item.request_id.clone())),
+            ("loaderId", Json::String(String::new())),
+            ("timestamp", Json::number(item.timestamp)),
+            ("type", Json::String(item.resource_type.clone())),
+            ("response", response),
+        ]),
+    )
+}
+
+/// Builds the `Network.loadingFinished` event.
+pub fn finished_event(item: &NetworkFinishedEvent) -> Json {
+    crate::protocol::event(
+        "Network.loadingFinished",
+        object(vec![
+            ("requestId", Json::String(item.request_id.clone())),
+            ("timestamp", Json::number(item.timestamp)),
+            ("encodedDataLength", Json::number(item.encoded_data_length as f64)),
+        ]),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_event_carries_headers_and_type() {
+        let item = NetworkRequestEvent {
+            request_id: "1".into(),
+            url: "https://a/x".into(),
+            method: "GET".into(),
+            headers: vec![("Accept".into(), "*/*".into())],
+            post_data: None,
+            resource_type: "Document".into(),
+            frame_id: "F1".into(),
+            loader_id: String::new(),
+            timestamp: 1.5,
+            wall_time: 2.0,
+        };
+        let event = request_event(&item);
+        assert_eq!(event.get("method").unwrap().as_str(), Some("Network.requestWillBeSent"));
+        let request = event.get("params").unwrap().get("request").unwrap();
+        assert_eq!(request.get("headers").unwrap().get("Accept").unwrap().as_str(), Some("*/*"));
+        assert_eq!(request.get("hasPostData").unwrap().as_bool(), Some(false));
+    }
+
+    #[test]
+    fn response_event_has_status_and_type() {
+        let item = NetworkResponseEvent {
+            request_id: "1".into(),
+            url: "https://a/x".into(),
+            status: 200,
+            status_text: "OK".into(),
+            mime_type: "text/html".into(),
+            headers: Vec::new(),
+            encoded_data_length: 12,
+            from_disk_cache: false,
+            resource_type: "Document".into(),
+            timestamp: 1.5,
+        };
+        let event = response_event(&item);
+        let response = event.get("params").unwrap().get("response").unwrap();
+        assert_eq!(response.get("status").unwrap().as_u64(), Some(200));
+        assert_eq!(event.get("params").unwrap().get("type").unwrap().as_str(), Some("Document"));
+    }
+}

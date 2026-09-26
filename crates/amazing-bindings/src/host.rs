@@ -190,6 +190,7 @@ pub enum Interface {
     WheelEvent,
     KeyboardEvent,
     CompositionEvent,
+    MessageEvent,
     MutationObserver,
     MutationRecord,
     DOMException,
@@ -608,6 +609,9 @@ pub enum Operation {
     WheelEventConstructor,
     KeyboardEventConstructor,
     CompositionEventConstructor,
+    MessageEventConstructor,
+    MessageEventGet(&'static str),
+    MessageEventInit,
     EventExtra(&'static str),
     CustomEventDetail,
     CustomEventInit,
@@ -847,6 +851,23 @@ pub trait BindingHost: Sized {
     /// The embedding's Window is an EventTarget with a stable external slot.
     fn window_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
     fn window_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
+    /// Embedding-owned targets (e.g. MessagePort) use Dom::create_event_target slots.
+    /// Validate private wrapper identity, realm and liveness before returning a slot.
+    fn external_event_target_slot(&self, _value: &Self::Value) -> Option<u64> { None }
+    fn external_event_target_value(&self, _slot: u64) -> Option<Self::Value> { None }
+    fn is_message_port(&self, _value: &Self::Value) -> bool { false }
+    fn is_message_event_source(&self, value: &Self::Value) -> bool {
+        !self.is_nullish(value) && (self.window_event_target_slot(value).is_some()
+            || self.is_message_port(value))
+    }
+    /// WebIDL iterable conversion, including MessagePort brand checks and IteratorClose.
+    fn sequence_message_ports(&mut self, _value: &Self::Value) -> Result<Vec<Self::Value>, Self::Error> {
+        self.with_dom(|_| Err(DomError::NotSupportedError))
+    }
+    /// FrozenArray conversion must not call a script-replaceable Object.freeze.
+    fn create_frozen_array(&mut self, _values: Vec<Self::Value>) -> Result<Self::Value, Self::Error> {
+        self.with_dom(|_| Err(DomError::NotSupportedError))
+    }
     /// Nodes share one private brand; their exact interface is read from Dom.
     fn node_platform_key(&self, node: NodeIdx) -> PlatformKey;
     fn node_from_platform_key(&self, key: PlatformKey) -> Option<NodeIdx>;

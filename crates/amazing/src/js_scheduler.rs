@@ -101,6 +101,10 @@ impl DriverScheduler {
     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
         self.bindings.set_document_content_type(content_type);
     }
+    pub(crate) fn set_image_loader_states(&mut self, media: &crate::page::PageMedia) -> Result<(), Throw> {
+        self.bindings.set_image_loader_states(&mut self.js, media)?;
+        self.drain_outbox()
+    }
     pub(crate) fn dispatch_dom_event(&mut self, node: u32, event: &str) -> Result<(), Throw> {
         let bindings = self.bindings.clone();
         self.enter(|js| {

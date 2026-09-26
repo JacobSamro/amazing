@@ -108,3 +108,43 @@ An earlier attempt failed during extraction with `No space left on device`;
 after the orchestrator purged caches the same gate passed. The final Windows
 run predates the last dev merge to `cad48c43` (siblings only; the lane's own
 crates are unchanged), whose Linux crate gate is 257/257.
+
+## IPC-11d — messaging conformance hardening (code `4aa97770`)
+
+Merged with `dev` at `aef9d5be` (`Linux-first: Windows gates deferred`,
+local dev `8ba1ca55` + IA-REAL-PAGES) so the workspace gate is current.
+Windows gates are deferred; the gate below is Linux on the lane's Boat
+sandbox.
+
+**Landed.** BroadcastChannel router clients are per channel object rather than
+per document, so two channels on one name in one document receive each other
+and the dead realm name→slot map is gone. `Window.postMessage` accepts the
+`WindowPostMessageOptions` form, validates `targetOrigin` (URL parse failure),
+rejects a null transfer and a missing message. `MessagePort` is bound to its
+global constructor (`instanceof`), starts implicitly when `onmessage` is set,
+and shares one start path. `onmessage`/`onmessageerror` default to `null`.
+
+**Linux workspace gate** (Boat sandbox, `--ref aef9d5be`):
+
+| Command | Result |
+| --- | --- |
+| `cargo nextest run --workspace --locked --no-fail-fast` | **2530/2530 passed**, 10 skipped, exit 0 |
+| `cargo test --workspace --locked --doc` | **2/2** passed, exit 0 |
+
+**WPT `webmessaging/`** (95 `.html`, pinned `c2a2fce6`) through
+`amazing wpt-harness`, before `9744fd00` → after `4aa97770`:
+
+| Level | pass | fail | timeout | error |
+| --- | --- | --- | --- | --- |
+| files before | 27 | 29 | 11 | 28 |
+| files after | 33 | 24 | 10 | 28 |
+| subtests before | 51 | 54 | 0 | 0 |
+| subtests after | 58 | 48 | 0 | 0 |
+
+Zero regressions. Fixed files: `with-options/null-transfer`,
+`{with,without}-ports/015` (different origin), `{with,without}-ports/023`,
+`without-ports/009` (zero arguments). Raw JSON:
+[ipc-11d-webmessaging/](ipc-11d-webmessaging/). The remaining in-lane
+conformance gaps are logged as cross-lane requests in `questions.md` (Date
+`valueOf`/`getTime`, DOMException, element event-handler content attributes,
+`__defineGetter__`), plus an `@@iterator` helper request.
