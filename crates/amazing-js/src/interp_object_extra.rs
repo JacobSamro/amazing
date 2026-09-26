@@ -30,26 +30,42 @@ fn native_object_entries(
     array_values(i, entries)
 }
 
+// These Object operations require an iterable, unlike Iterator.from which
+// also accepts an iterator directly. Capture `next` once for the whole walk.
+fn object_iterator(i: &mut Interpreter, input: JsValue) -> Result<StdIteratorRecord, Throw> {
+    let method = i.get_prop(&input, WellKnownSymbol::Iterator.symbol())?;
+    if callable_function(&method).is_none() {
+        return Err(Throw::type_error("value is not iterable"));
+    }
+    let iterator = i.call_value(&method, input, Vec::new())?;
+    i.std_iterator_direct(iterator)
+}
+
 fn native_object_from_entries(
     i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let input = object_argument(&args);
-    let entries = i.iterate(&input)?;
+    let iterator = object_iterator(i, object_argument(&args))?;
     let object = i.object_value();
     let JsValue::Object(result) = &object else { unreachable!() };
-    for entry in entries {
-        if !entry.is_object() {
-            return Err(Throw::type_error("entry is not an object"));
+    // Iterator protocol failures propagate without closing. Failures while
+    // processing an entry close the iterator, preserving the original throw.
+    while let Some(entry) = std_iterator_step(i, &iterator)? {
+        let added = (|| {
+            if !entry.is_object() {
+                return Err(Throw::type_error("entry is not an object"));
+            }
+            let key_value = i.get_prop(&entry, "0")?;
+            let value = i.get_prop(&entry, "1")?;
+            let key = i.to_property_key(&key_value)?;
+            result.borrow_mut().define(key, Property::data(value)).unwrap();
+            Ok(())
+        })();
+        if let Err(error) = added {
+            let _ = std_iterator_close(i, &iterator);
+            return Err(error);
         }
-        let key_value = i.get_prop(&entry, "0")?;
-        let value = i.get_prop(&entry, "1")?;
-        let key = i.to_property_key(&key_value)?;
-        result.borrow_mut().define(key, Property {
-            value, writable: true, enumerable: true, configurable: true,
-            getter: None, setter: None,
-        }).unwrap();
     }
     Ok(object)
 }
@@ -227,23 +243,37 @@ fn native_object_group_by(
     if callable_function(&callback).is_none() {
         return Err(Throw::type_error("groupBy callback is not callable"));
     }
-    let entries = i.iterate(&items)?;
+    let iterator = object_iterator(i, items)?;
     let result = JsValue::object(JsObject::ordinary());
-    for (index, value) in entries.into_iter().enumerate() {
-        let group = i.call_value(
-            &callback,
-            JsValue::Undefined,
-            vec![value.clone(), JsValue::num(index as f64)],
-        )?;
-        let key = i.to_property_key(&group)?;
-        let current = i.get_prop(&result, &key)?;
-        if current.is_undefined() {
-            let group = array_values(i, vec![value])?;
-            i.set_prop(&result, key.clone(), group)?;
-        } else {
-            let length = array_like_length(i, &current)?;
-            i.set_prop(&current, length.to_string(), value)?;
+    let mut index = 0u64;
+    loop {
+        if index >= 9_007_199_254_740_991 {
+            let _ = std_iterator_close(i, &iterator);
+            return Err(Throw::type_error("too many groupBy items"));
         }
+        let Some(value) = std_iterator_step(i, &iterator)? else { break; };
+        let added = (|| {
+            let group = i.call_value(
+                &callback,
+                JsValue::Undefined,
+                vec![value.clone(), JsValue::num(index as f64)],
+            )?;
+            let key = i.to_property_key(&group)?;
+            let current = i.get_prop(&result, &key)?;
+            if current.is_undefined() {
+                let group = array_values(i, vec![value])?;
+                i.set_prop(&result, key, group)?;
+            } else {
+                let length = array_like_length(i, &current)?;
+                i.set_prop(&current, length.to_string(), value)?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = added {
+            let _ = std_iterator_close(i, &iterator);
+            return Err(error);
+        }
+        index += 1;
     }
     Ok(result)
 }
@@ -558,6 +588,78 @@ mod object_collection_tests {
             try { Object.create(); } catch (e) { failed = e instanceof TypeError; }
             Object.hasOwn(descriptors, '__proto__') && descriptors.__proto__.value === 42 &&
                 Object.getPrototypeOf(descriptors) === Object.prototype && failed;
+        "#).unwrap(), JsValue::Bool(true));
+    }
+}
+
+#[cfg(test)]
+mod object_iterator_tests {
+    use super::*;
+
+    #[test]
+    fn from_entries_interleaves_iteration_and_entry_conversion() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var effects = [], count = 0;
+            var entries = { [Symbol.iterator]() { return this; }, next() {
+                effects.push('next');
+                if (count++) return {done:true};
+                return {done:false, value: {
+                    get 0() { effects.push('key'); return {toString() {effects.push('coerce'); return 'x';}}; },
+                    get 1() { effects.push('value'); return 7; }
+                }};
+            }};
+            var result = Object.fromEntries(entries);
+            result.x === 7 && effects.join(',') === 'next,key,value,coerce,next';
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn object_iterators_close_on_consumer_errors_and_keep_original_throw() {
+        for operation in ["Object.fromEntries(iterable)", "Object.groupBy(iterable, function() {throw sentinel;})"] {
+            let mut i = Interpreter::new();
+            let script = format!(r#"
+                var sentinel = {{}}, closed = 0, caught;
+                var iterable = {{ [Symbol.iterator]() {{ return {{
+                    next() {{ return {{done:false, value: {{get 0() {{throw sentinel;}}}}}}; }},
+                    return() {{ closed++; throw 'close error'; }}
+                }}; }} }};
+                try {{ {operation}; }} catch (error) {{ caught = error; }}
+                closed === 1 && caught === sentinel;
+            "#);
+            assert_eq!(i.run_script(&script).unwrap(), JsValue::Bool(true), "{operation}");
+        }
+    }
+
+    #[test]
+    fn object_iterators_do_not_close_after_step_failure() {
+        for operation in ["Object.fromEntries(iterable)", "Object.groupBy(iterable, function() {return 0;})"] {
+            let mut i = Interpreter::new();
+            let script = format!(r#"
+                var sentinel = {{}}, closed = 0, caught;
+                var iterable = {{ [Symbol.iterator]() {{ return {{
+                    next() {{ return {{ get done() {{ throw sentinel; }} }}; }},
+                    return() {{ closed++; return {{}}; }}
+                }}; }} }};
+                try {{ {operation}; }} catch (error) {{ caught = error; }}
+                closed === 0 && caught === sentinel;
+            "#);
+            assert_eq!(i.run_script(&script).unwrap(), JsValue::Bool(true), "{operation}");
+        }
+    }
+
+    #[test]
+    fn group_by_callbacks_observe_and_extend_live_array_iteration() {
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script(r#"
+            var input = [1,2], seen = [];
+            var groups = Object.groupBy(input, function(value, index) {
+                seen.push(index);
+                if (index === 0) input.push(3);
+                return value % 2;
+            });
+            groups[1].join(',') === '1,3' && groups[0][0] === 2 &&
+                seen.join(',') === '0,1,2' && Object.getPrototypeOf(groups) === null;
         "#).unwrap(), JsValue::Bool(true));
     }
 }
