@@ -9,7 +9,11 @@ fn legacy_factory_preserves_supported_event_classes_for_ascii_aliases() {
         ("MouseEvent", EventClass::Mouse), ("MouseEvents", EventClass::Mouse),
         ("UIEvent", EventClass::Ui), ("UIEvents", EventClass::Ui),
         ("Event", EventClass::Event), ("Events", EventClass::Event),
-        ("HTMLEvents", EventClass::Event), ("SVGEvents", EventClass::Event)] {
+        ("HTMLEvents", EventClass::Event), ("SVGEvents", EventClass::Event),
+        ("DeviceMotionEvent", EventClass::DeviceMotion),
+        ("DeviceOrientationEvent", EventClass::DeviceOrientation),
+        ("DragEvent", EventClass::Drag), ("StorageEvent", EventClass::Storage),
+        ("TextEvent", EventClass::Text)] {
         for alias in [name.to_string(), name.to_ascii_lowercase(), name.to_ascii_uppercase()] {
             let event = call(&mut h, O::CreateEvent, V::Node(NodeIdx(0)), &[str_value(&alias)]);
             let V::Platform(key, _) = event.clone() else { panic!("not an event") };
