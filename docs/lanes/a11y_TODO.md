@@ -1,6 +1,10 @@
 # a11y lane — decision map and TODO
 
-Lane owns `crates/amazing-a11y/` and this file. Gate: crate tests + a final
+Lane owns `crates/amazing-a11y/`, its own driver-adapter file
+`crates/amazing/src/runtime_host_a11y.rs` (granted for A11Y-6, per the
+driver-adapter-per-lane rule — the shared `crates/amazing/src/main.rs` and
+`Cargo.toml` only ever get a one-line `mod`/dependency edit and a one-line
+dispatch/call from this lane), and this file. Gate: crate tests + a final
 Linux workspace gate. Corpus for this lane is its own table-driven fixtures
 (accname-1.2 and HTML-AAM selections), since no WPT `accname/` checkout is
 available on the build hosts; add one when the WPT corpus lands.
@@ -47,8 +51,14 @@ available on the build hosts; add one when the WPT corpus lands.
   `aria-activedescendant` was moved to the same pass (it had the identical
   latent staleness since A11Y-2, just never hit by that ticket's fixtures).
   Commit `9adfb13d`.
-- [ ] **A11Y-6 — driver adoption** (with `integrator-assist`), then a CDP
-  `Accessibility.getFullAXTree` backing for `devtools`.
+- [x] **A11Y-6 — driver adoption.** `crates/amazing/src/runtime_host_a11y.rs`:
+  `build_ax_tree(dom, styled, layout)` wraps `amazing_a11y::build` as the seam
+  a future CDP `Accessibility.getFullAXTree` handler in `devtools` calls once
+  the driver holds a live document's DOM/style/layout. `ax_tree_for_page`
+  drives the same parse/style/replaced-content/font/layout pipeline `amazing
+  render`/`amazing layout` use, backing the new `amazing a11y-tree
+  <page.html> [width]` CLI subcommand and a test against
+  `tests/real-pages/pages/app-analytics.html`. Commit `20b7c5f8`.
 
 ## WPT corpus status
 
