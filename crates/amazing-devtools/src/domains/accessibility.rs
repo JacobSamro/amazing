@@ -112,6 +112,17 @@ fn nodes_result(nodes: &[AxNode]) -> Json {
     )])
 }
 
+/// Builds the `Accessibility.nodesUpdated` event.
+pub fn nodes_updated(nodes: &[AxNode]) -> Json {
+    crate::protocol::event(
+        "Accessibility.nodesUpdated",
+        object(vec![(
+            "nodes",
+            Json::Array(nodes.iter().map(ax_node_json).collect()),
+        )]),
+    )
+}
+
 /// Reads the CDP `depth` parameter: `None`/absent/negative means the whole
 /// tree, matching `Accessibility.getFullAXTree`'s `-1` convention.
 fn optional_depth(request: &CdpRequest) -> Result<Option<u32>, CdpError> {
