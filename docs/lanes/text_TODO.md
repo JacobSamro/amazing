@@ -1000,3 +1000,80 @@ Gate: crate nextest `amazing-text`+`amazing-text-provider` 109/109 (2
 skipped). Workspace nextest 3274/3274 passed (15 skipped, 2 slow),
 doctests clean. Zero lost passes against the 47355c3c base. Commit
 `06c753fe`.
+
+## TEXT-26: css-fonts mismatch triage, font-variant-emoji fix
+
+Coordinator ask: base on current dev (b70b5ec0, past df103fca/855b2ca9),
+re-baseline css/css-fonts, fix in-lane clusters (font matching/fallback,
+@font-face descriptors, font-variant/feature-settings shaping, synthesis),
+propose the `TextSpan` ancestor-chain shape for TEXT-25's
+nearest-common-ancestor line-break gap.
+
+**Baseline:** 21 pass / 11 mismatch of 32 selected (host worker-2).
+
+**Fixed: `font-variant-emoji-1` (U+FE0E/U+FE0F presentation selection).**
+The test doesn't set `font-variant-emoji` at all -- it's a UTR #51 test that
+a trailing U+FE0E (text) vs. U+FE0F (emoji) variation selector on U+263A
+must select visibly different glyphs by default, even though the page's own
+`font: serif` already maps the bare code point. Two gaps, both in-lane:
+
+1. `matching_font_with_space_policy` never looked at presentation
+   selectors at all -- both selectors resolved to whatever family the
+   author declared, with no way to prefer or require a colour-capable face.
+   Fixed: `emoji_presentation_intent(text) -> Option<EmojiPresentation>`
+   reads a trailing FE0E/FE0F; `matching_font_impl` now tries a
+   presentation-constrained search first (a forced emoji presentation
+   requires a face with COLR/CBDT/sbix/SVG tables via the new
+   `has_color_glyph_tables`, detected through `harfrust`'s `TableProvider`
+   already used elsewhere in this file for GSUB/cmap access; forced text
+   presentation requires the opposite), falling back to the old
+   coverage-only search when nothing satisfies the constraint -- so an
+   environment with no emoji font installed degrades to exactly today's
+   behaviour, never to a missing glyph. The generic-fallback list also
+   tries the "emoji" alias first when emoji presentation is forced, ahead
+   of serif/sans-serif/system-ui/monospace, since real engines reach past
+   the declared family for a forced presentation.
+2. No "emoji" generic family was ever registered by the driver, so even
+   with (1) there was nothing to select. `font_loader.rs` (owned outright)
+   now does a best-effort scan for an installed emoji font on Linux
+   (`FontBucket::Emoji`, matched by "emoji" in the filename, e.g.
+   NotoColorEmoji) and registers it under the "emoji" family, same pattern
+   as the existing sans/serif/mono scan; Windows registers
+   `seguiemj.ttf`. A missing emoji font is a safe no-op, same as any other
+   absent generic face -- this cluster is host/font-package dependent, same
+   caveat as `standard-font-family-*` below.
+
+Unit-tested: `has_color_glyph_tables_detects_colr_and_not_plain_fonts`,
+`emoji_presentation_intent_reads_the_trailing_variation_selector`,
+`emoji_variation_selectors_pick_presentation_appropriate_fonts` (two
+registered fonts under the same "serif"/"emoji" split as the real test,
+confirms FE0F reaches past a covering "serif" face to the colour "emoji"
+one, FE0E/no-selector keep "serif"), plus
+`classify_font_file_recognizes_emoji_before_the_other_buckets` in
+`amazing`'s font_loader tests.
+
+**Routed to layout (ready, not wired):** `font-size-adjust-order-001`,
+`font-size-adjust-zero-1`, `font-size-adjust-zero-2` -- `adjusted_font_size`
+already exists and is correct in `amazing-text-provider`; `amazing-layout`
+never calls it. `rlh-in-monospace` -- narrower than TEXT-22's cases:
+`FontRelativeMetrics.line_height_normal` already exists, but
+`amazing-layout`'s own `FontRelativeUnits` struct has no `lh`/`root_lh`
+field and `RelativeUnit::Lh`/`Rlh` have zero consumers anywhere in layout.
+Full detail with exact file/line pointers in
+`.agents/layout/questions.md`.
+
+**Not code, host/environment:** `standard-font-family-{2,3,5,11,17}`,
+`matching__font-unicode-PUA-primary-font` -- unchanged code since TEXT-21
+(confirmed via `git log` on `font_loader.rs`/`page.rs`), differ only by
+which fonts this round's host (worker-2) happens to have installed vs.
+TEXT-21's sandbox.
+
+**Also filed:** a concrete `TextSpan` ancestor-chain (or a layout-precomputed
+per-boundary `white_space`) trait sketch for TEXT-25's nearest-common-ancestor
+line-break gap, in `.agents/layout/questions.md`.
+
+Gate: crate nextest `amazing-text-provider` (+`amazing-text`+`amazing`)
+427/427 passed (8 skipped). Workspace nextest 3290/3290 passed (15 skipped,
+1 slow), doctests clean (4 doctests across amazing_a11y/devtools/html/js, all
+passed) -- run on venus-001 (clean host, none of the known worker-2/k-test
+EPERM sealed-memory failures). Commit `<TEXT-26 sha>`.
