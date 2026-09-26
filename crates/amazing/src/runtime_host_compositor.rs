@@ -1,7 +1,513 @@
-//! Canvas-specific runtime adapter and retained JS objects.
+//! Canvas runtime objects and the driver's retained compositor adapter.
 use super::*;
 use amazing_bindings::canvas_interfaces::{self, MemberKind as CanvasMemberKind};
 use amazing_canvas::{self as canvas, FillRule, ImageData as CanvasImageData, PaintStyle, Path2D, Transform};
+use amazing_compositor::{BoundProperty, BoundPropertyChange, BoundPropertyNode, BoundPropertyValue,
+    Compositor, CssCompositorTimeline, CompositorFrame, DrawQuad, HandoffError,
+    HandoffCompletion, HandoffTickOutput, Matrix4, NodePropertyKey, PaintViewRasterMode,
+    PropertyBindingError, Rect, SceneError, ScrollController, ScrollInput, ScrollInputResult,
+    SolidColorQuad, BlendMode};
+use amazing_css::{AttributeStyleUpdate, AnimatedValues, StyledDom};
+use amazing_css::animation::AnimationMainThreadEvent;
+
+/// Driver-owned scene held across rendering updates. CSS supplies already
+/// classified property values; a miss sends the update through full rendering.
+pub(crate) struct RetainedPropertyScene {
+    compositor: Compositor,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PropertySceneError {
+    StaleNode,
+    UnsupportedPaintMode,
+    NeedsFullRendering,
+    Animation(HandoffError),
+    Binding(PropertyBindingError),
+    NeedsPaint(SceneError),
+}
+
+pub(crate) struct ScrollFrame {
+    pub(crate) result: ScrollInputResult,
+    pub(crate) frame: Option<CompositorFrame>,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DomScrollEvent {
+    pub(crate) owner: NodePropertyKey,
+    pub(crate) offset: (f32, f32),
+}
+
+impl RetainedPropertyScene {
+    pub(crate) fn new(
+        dom: &Dom,
+        mut compositor: Compositor,
+        bindings: &[(NodePropertyKey, BoundPropertyNode)],
+        mode: PaintViewRasterMode,
+        width: u32,
+        height: u32,
+    ) -> Result<Self, PropertySceneError> {
+        if mode != PaintViewRasterMode::RawLocal {
+            return Err(PropertySceneError::UnsupportedPaintMode);
+        }
+        for &(key, _) in bindings {
+            if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        compositor.bind_property_nodes(bindings).map_err(PropertySceneError::Binding)?;
+        Ok(Self { compositor, width, height })
+    }
+
+    /// Returns a frame without style computation, layout, paint-view creation,
+    /// or a paint source. The caller rebuilds the scene on any error.
+    pub(crate) fn apply_property_only(
+        &mut self,
+        dom: &Dom,
+        changes: &[BoundPropertyChange],
+    ) -> Result<CompositorFrame, PropertySceneError> {
+        for change in changes {
+            if dom.node_generation(NodeIdx(change.key.node)) != Some(change.key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        self.compositor.apply_bound_property_changes(changes)
+            .map_err(PropertySceneError::Binding)?;
+        let mut frame = self.compositor.build_cached_frame(self.width, self.height)
+            .map_err(PropertySceneError::NeedsPaint)?;
+        let viewport = Rect::new(0., 0., self.width as f32, self.height as f32);
+        frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+        Ok(frame)
+    }
+
+    /// Wheel/trackpad/touch eligibility is resolved from DOM listener
+    /// `passive` flags before this call. Keyboard, drag and scrollTo do not
+    /// have a cancelable wheel/touch default action.
+    pub(crate) fn on_scroll_input(
+        &mut self, dom: &Dom, controller: &mut ScrollController,
+        input: ScrollInput, has_non_passive_listener: bool, now_ms: f64,
+    ) -> Result<ScrollFrame, PropertySceneError> {
+        let start = match input {
+            ScrollInput::Wheel { x, y, .. }
+            | ScrollInput::Trackpad { x, y, .. }
+            | ScrollInput::TouchPan { x, y, .. } =>
+                self.compositor.hit_test(x, y).map(|hit| hit.scroll),
+            ScrollInput::Keyboard { node, .. }
+            | ScrollInput::ScrollbarDrag { node, .. }
+            | ScrollInput::ScrollTo { node, .. }
+            | ScrollInput::Momentum { node, .. } => Some(node),
+        };
+        let mut node = start;
+        while let Some(id) = node.filter(|id| id.0 != 0) {
+            let Some(scroll) = self.compositor.trees().scroll(id) else {
+                return Err(PropertySceneError::NeedsFullRendering);
+            };
+            let Some(owner) = self.compositor.scroll_owner(id) else {
+                return Ok(ScrollFrame { result: ScrollInputResult::MainThread, frame: None });
+            };
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+            node = Some(scroll.parent);
+        }
+        let result = controller.handle_input(&mut self.compositor, input,
+            has_non_passive_listener, now_ms)
+            .map_err(|_| PropertySceneError::NeedsFullRendering)?;
+        let frame = match result {
+            ScrollInputResult::Scrolled { .. } =>
+                Some(self.apply_property_only(dom, &[])?),
+            _ => None,
+        };
+        Ok(ScrollFrame { result, frame })
+    }
+
+    /// Sample smooth and momentum scrolls at vsync, with no upstream call.
+    /// The caller posts `take_scroll_events` as a separate main-thread task.
+    pub(crate) fn on_scroll_vsync(
+        &mut self, dom: &Dom, controller: &mut ScrollController, now_ms: f64,
+    ) -> Result<Option<CompositorFrame>, PropertySceneError> {
+        for id in controller.active_scrolls() {
+            let owner = self.compositor.scroll_owner(id)
+                .ok_or(PropertySceneError::NeedsFullRendering)?;
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        let changed = controller.tick(&mut self.compositor, now_ms)
+            .map_err(|_| PropertySceneError::NeedsFullRendering)?;
+        if changed.is_empty() { return Ok(None); }
+        self.apply_property_only(dom, &[]).map(Some)
+    }
+
+    pub(crate) fn take_scroll_events(
+        &self, dom: &Dom, controller: &mut ScrollController,
+    ) -> Result<Vec<DomScrollEvent>, PropertySceneError> {
+        let mut mapped = Vec::new();
+        for event in controller.pending_scroll_events() {
+            let owner = self.compositor.scroll_owner(event.node)
+                .ok_or(PropertySceneError::NeedsFullRendering)?;
+            if dom.node_generation(NodeIdx(owner.node)) != Some(owner.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+            mapped.push(DomScrollEvent { owner, offset: event.offset });
+        }
+        controller.take_scroll_events();
+        Ok(mapped)
+    }
+
+    /// Consume CSS-13's resolved inline-style delta. Recomputed changes stay
+    /// on the normal style/layout/paint path; a successful property frame also
+    /// patches the retained computed-style cache for the next delta.
+    pub(crate) fn apply_attribute_style_update(
+        &mut self,
+        dom: &Dom,
+        styles: &mut StyledDom,
+        update: &AttributeStyleUpdate,
+    ) -> Result<CompositorFrame, PropertySceneError> {
+        let AttributeStyleUpdate::CompositorOnly(delta) = update else {
+            return Err(PropertySceneError::NeedsFullRendering);
+        };
+        if styles.get(delta.node).is_none() {
+            return Err(PropertySceneError::NeedsFullRendering);
+        }
+        let generation = dom.node_generation(delta.node).ok_or(PropertySceneError::StaleNode)?;
+        let key = |property| NodePropertyKey { node: delta.node.0, generation, property };
+        let mut changes = Vec::with_capacity(2);
+        if let Some(opacity) = delta.opacity {
+            changes.push(BoundPropertyChange {
+                key: key(BoundProperty::Opacity), value: BoundPropertyValue::Opacity(opacity),
+            });
+        }
+        if let Some(matrix) = delta.transform_matrix {
+            changes.push(BoundPropertyChange {
+                key: key(BoundProperty::Transform),
+                value: BoundPropertyValue::Transform(Matrix4(matrix)),
+            });
+        }
+        let frame = self.apply_property_only(dom, &changes)?;
+        if !delta.apply_to_styles(styles) {
+            return Err(PropertySceneError::NeedsFullRendering);
+        }
+        Ok(frame)
+    }
+
+    /// Vsync path after CSS hands off a resolved opacity/transform animation.
+    /// CSS's pure sampler is shared with computed-style reads. Only the
+    /// completion path returns to the main thread for cascade/events.
+    pub(crate) fn on_vsync(
+        &mut self,
+        dom: &Dom,
+        timeline: &mut CssCompositorTimeline,
+        animated: &mut AnimatedValues,
+        now_ms: f64,
+        mut dispatch: impl FnMut(AnimationMainThreadEvent),
+    ) -> Result<(CompositorFrame, HandoffTickOutput), PropertySceneError> {
+        for key in timeline.active_keys() {
+            if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        let (output, completions) = timeline.tick_css(now_ms, &mut self.compositor)
+            .map_err(PropertySceneError::Animation)?;
+        let frame = self.apply_property_only(dom, &[])?;
+        for completion in completions {
+            if !animated.commit_property_update(completion, &mut dispatch) {
+                return Err(PropertySceneError::NeedsFullRendering);
+            }
+        }
+        Ok((frame, output))
+    }
+
+    /// Revoke compositor ownership for a mutation that invalidates CSS's
+    /// resolved handoff, then let CSS commit the sampled cascade value/event.
+    pub(crate) fn cancel_animation(
+        &mut self,
+        dom: &Dom,
+        timeline: &mut CssCompositorTimeline,
+        animated: &mut AnimatedValues,
+        key: NodePropertyKey,
+        now_ms: f64,
+        mut dispatch: impl FnMut(AnimationMainThreadEvent),
+    ) -> Result<(CompositorFrame, HandoffCompletion), PropertySceneError> {
+        if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+            return Err(PropertySceneError::StaleNode);
+        }
+        let (completion, update) = timeline.cancel_css(key, now_ms, &mut self.compositor)
+            .map_err(PropertySceneError::Animation)?;
+        let frame = self.apply_property_only(dom, &[])?;
+        if !animated.commit_property_update(update, &mut dispatch) {
+            return Err(PropertySceneError::NeedsFullRendering);
+        }
+        Ok((frame, completion))
+    }
+
+    pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
+    pub(crate) fn compositor_mut(&mut self) -> &mut Compositor { &mut self.compositor }
+}
+
+#[cfg(test)]
+mod property_scene_tests {
+    use super::*;
+    use amazing_compositor::{BoundProperty, BoundPropertyValue, CompositingReasons,
+        EffectId, PaintChunk, Presenter, PropertyTreeState, PropertyTrees, ReferenceCpuPresenter,
+        TransformId};
+    use amazing_paint::Surface;
+    use amazing_css::animation::{
+        AnimationDirection, AnimationEasing, AnimationFill, AnimationProperty,
+        AnimationTiming, CompositorAnimation,
+    };
+    use std::cell::Cell;
+
+    #[test]
+    fn css13b_opacity_class_mutation_skips_upstream_and_matches_full_frame() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        dom.set_attribute(element, "class", "base").unwrap();
+        let sheet = amazing_css::parse_stylesheet(
+            ".base { opacity:.4 } .dim { opacity:.6 }");
+        let invalidator = amazing_css::StyleInvalidator::new(&[sheet.clone()], 1);
+        let mut styles = amazing_css::compute(&dom, &[sheet]);
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 0.4, BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(32, 32);
+        source.clear([0, 128, 0, 255]);
+        let first = compositor.build_frame(&source, 32, 32).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let key = NodePropertyKey {
+            node: element.0, generation, property: BoundProperty::Opacity,
+        };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal,
+            32, 32).unwrap();
+
+        dom.set_attribute(element, "class", "dim").unwrap();
+        let update = invalidator.update_attribute(&dom, &styles, element, "class",
+            Some("base"), Some("dim"), 1);
+        assert!(matches!(update, AttributeStyleUpdate::CompositorOnly(_)));
+        let style_calls = Cell::new(0);
+        let layout_calls = Cell::new(0);
+        let paint_view_calls = Cell::new(0);
+        let frame = scene.apply_attribute_style_update(&dom, &mut styles, &update)
+            .unwrap_or_else(|_| {
+            style_calls.set(style_calls.get() + 1);
+            layout_calls.set(layout_calls.get() + 1);
+            paint_view_calls.set(paint_view_calls.get() + 1);
+            panic!("property-only class mutation unexpectedly needed full rendering")
+        });
+        let pixels = presenter.present(&frame).unwrap();
+        let mut full_trees = PropertyTrees::new();
+        let full_effect = full_trees.add_effect(EffectId(0), 0.6,
+            BlendMode::Normal, None).unwrap();
+        let mut full = Compositor::new(full_trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect: full_effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut full_frame = full.build_frame(&source, 32, 32).unwrap();
+        let viewport = Rect::new(0., 0., 32., 32.);
+        full_frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+        assert_eq!(pixels, ReferenceCpuPresenter::default().present(&full_frame).unwrap());
+        assert!(frame.resources.uploads.is_empty());
+        assert_eq!(scene.compositor().dirty_tiles(), 0);
+        assert_eq!(styles.get(element).unwrap().get("opacity"), Some("0.6"));
+        assert_eq!((style_calls.get(), layout_calls.get(), paint_view_calls.get()), (0, 0, 0));
+    }
+
+    #[test]
+    fn css13_attribute_delta_updates_bound_nodes_without_recompute() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let element = dom.create_element(html, "div");
+        let before = "opacity:.4; transform:translate(1px,0px)";
+        let after = "opacity:.6; transform:translate(2px,0px)";
+        dom.set_attribute(element, "style", before).unwrap();
+        let sheet = amazing_css::parse_stylesheet("");
+        let mut styles = amazing_css::compute(&dom, &[sheet.clone()]);
+        let invalidator = amazing_css::StyleInvalidator::new(&[sheet], 1);
+
+        let mut trees = PropertyTrees::new();
+        let transform = trees.add_transform(TransformId(0), Matrix4::translation(1., 0., 0.),
+            (0., 0., 0.), false).unwrap();
+        let effect = trees.add_effect(EffectId(0), 0.4, BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { transform, effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 16., 16.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(16, 16);
+        source.clear([80, 120, 160, 255]);
+        let first = compositor.build_frame(&source, 32, 32).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let generation = dom.node_generation(element).unwrap();
+        let key = |property| NodePropertyKey { node: element.0, generation, property };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor, &[
+            (key(BoundProperty::Transform), BoundPropertyNode::Transform(transform)),
+            (key(BoundProperty::Opacity), BoundPropertyNode::Opacity(effect)),
+        ], PaintViewRasterMode::RawLocal, 32, 32).unwrap();
+
+        dom.set_attribute(element, "style", after).unwrap();
+        let update = invalidator.update_attribute(&dom, &styles, element, "style",
+            Some(before), Some(after), 1);
+        assert!(matches!(update, AttributeStyleUpdate::CompositorOnly(_)));
+        let frame = scene.apply_attribute_style_update(&dom, &mut styles, &update).unwrap();
+        assert!(frame.resources.uploads.is_empty());
+        assert_eq!(scene.compositor().trees().effect(effect).unwrap().opacity, 0.6);
+        assert_eq!(scene.compositor().trees().transform(transform).unwrap().matrix,
+            Matrix4::translation(2., 0., 0.));
+        assert_eq!(styles.get(element).unwrap().get("opacity"), Some("0.6"));
+        assert_eq!(styles.get(element).unwrap().get("transform"), Some("translate(2px,0px)"));
+        let pixels = presenter.present(&frame).unwrap();
+        assert_ne!(pixels.get_pixel(2, 2), Some([255; 4]));
+    }
+
+    #[test]
+    fn animation_vsync_uses_retained_scene_and_returns_final_css_update() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 1., BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(32, 32);
+        source.clear([20, 60, 100, 255]);
+        compositor.build_frame(&source, 32, 32).unwrap();
+        let key = NodePropertyKey { node: element.0, generation, property: BoundProperty::Opacity };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal,
+            32, 32).unwrap();
+        let animation = CompositorAnimation::for_transition(
+            4, element, generation, AnimationProperty::Opacity, "1", "0",
+            AnimationTiming { duration_ms: 100., delay_ms: 0., iterations: 1.,
+                direction: AnimationDirection::Normal, fill: AnimationFill::Forwards,
+                easing: AnimationEasing::Linear },
+            0., None,
+        ).unwrap();
+        let mut animated = AnimatedValues::default();
+        assert!(animated.handoff(animation.clone()));
+        let mut timeline = CssCompositorTimeline::default();
+        timeline.install_css(animation).unwrap();
+        let mut events = Vec::new();
+        let (frame, mid) = scene.on_vsync(&dom, &mut timeline, &mut animated, 50.,
+            |event| events.push(event)).unwrap();
+        assert_eq!(mid.compositor_updates, 1);
+        assert!(mid.completions.is_empty());
+        assert!(events.is_empty());
+        assert!(frame.resources.uploads.is_empty());
+        assert_eq!(scene.compositor().dirty_tiles(), 0);
+        let (_, end) = scene.on_vsync(&dom, &mut timeline, &mut animated, 100.,
+            |event| events.push(event)).unwrap();
+        assert_eq!(end.completions.len(), 1);
+        assert_eq!(end.completions[0].update.property, "opacity");
+        assert_eq!(end.completions[0].update.value,
+            amazing_compositor::AnimationValue::Opacity(0.));
+        assert_eq!(animated.get(element, "opacity").unwrap().css, "0");
+        assert_eq!(events.len(), 1);
+        let second = CompositorAnimation::for_transition(
+            5, element, generation, AnimationProperty::Opacity, "0", "1",
+            AnimationTiming { duration_ms: 100., delay_ms: 0., iterations: 1.,
+                direction: AnimationDirection::Normal, fill: AnimationFill::Forwards,
+                easing: AnimationEasing::Linear },
+            0., None,
+        ).unwrap();
+        assert!(animated.handoff(second.clone()));
+        timeline.install_css(second).unwrap();
+        let (_, canceled) = scene.cancel_animation(&dom, &mut timeline, &mut animated,
+            key, 50., |event| events.push(event)).unwrap();
+        assert_eq!(canceled.end, amazing_compositor::HandoffEnd::Canceled);
+        assert_eq!(canceled.update.value,
+            amazing_compositor::AnimationValue::Opacity(0.5));
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].kind,
+            amazing_css::animation::AnimationMainThreadEventKind::TransitionCancel);
+    }
+
+    #[test]
+    fn scroll_frame_oracle_has_zero_upstream_calls_and_async_event() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let scroll = trees.add_scroll(amazing_compositor::ScrollId(0), (0., 0.),
+            Rect::new(0., 0., 64., 64.), Rect::new(0., 0., 64., 192.)).unwrap();
+        let chunk = PaintChunk {
+            items: 0..1, state: PropertyTreeState { scroll, ..Default::default() },
+            bounds: Rect::new(0., 0., 64., 192.),
+            reasons: CompositingReasons::SCROLLER,
+        };
+        let mut compositor = Compositor::new(trees, vec![chunk.clone()], 1).unwrap();
+        let mut source = Surface::new(64, 192);
+        source.clear([40, 80, 160, 255]);
+        let first = compositor.build_frame(&source, 64, 64).unwrap();
+        let mut presenter = ReferenceCpuPresenter::default();
+        presenter.present(&first).unwrap();
+        let key = NodePropertyKey { node: element.0, generation, property: BoundProperty::Scroll };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Scroll(scroll))], PaintViewRasterMode::RawLocal,
+            64, 64).unwrap();
+        let mut controller = ScrollController::default();
+        let style_calls = Cell::new(0);
+        let layout_calls = Cell::new(0);
+        let paint_view_calls = Cell::new(0);
+        let input = ScrollInput::Wheel { x: 10., y: 10., delta: (0., 40.) };
+        let fallback = scene.on_scroll_input(&dom, &mut controller, input, true, 0.).unwrap();
+        assert_eq!(fallback.result, ScrollInputResult::MainThread);
+        assert!(fallback.frame.is_none());
+        let scrolled = scene.on_scroll_input(&dom, &mut controller, input, false, 0.).unwrap();
+        assert_eq!(scrolled.result, ScrollInputResult::Scrolled {
+            node: scroll, offset: (0., 40.),
+        });
+        let frame = scrolled.frame.unwrap();
+        assert!(frame.resources.uploads.is_empty());
+        let actual = presenter.present(&frame).unwrap();
+        let mut full_trees = PropertyTrees::new();
+        let full_scroll = full_trees.add_scroll(amazing_compositor::ScrollId(0), (0., 40.),
+            Rect::new(0., 0., 64., 64.), Rect::new(0., 0., 64., 192.)).unwrap();
+        let mut full = Compositor::new(full_trees, vec![PaintChunk {
+            state: PropertyTreeState { scroll: full_scroll, ..Default::default() }, ..chunk
+        }], 1).unwrap();
+        let mut full_frame = full.build_frame(&source, 64, 64).unwrap();
+        let viewport = Rect::new(0., 0., 64., 64.);
+        full_frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+        assert_eq!(actual.pixels,
+            ReferenceCpuPresenter::default().present(&full_frame).unwrap().pixels);
+        assert_eq!((style_calls.get(), layout_calls.get(), paint_view_calls.get()), (0, 0, 0));
+        assert_eq!(scene.take_scroll_events(&dom, &mut controller).unwrap(),
+            vec![DomScrollEvent { owner: key, offset: (0., 40.) }]);
+        assert!(scene.take_scroll_events(&dom, &mut controller).unwrap().is_empty());
+        assert_eq!(scene.on_scroll_input(&dom, &mut controller, ScrollInput::ScrollTo {
+            node: scroll, target: (0., 100.),
+            behavior: amazing_compositor::ScrollBehavior::Smooth,
+        }, false, 100.).unwrap().result, ScrollInputResult::Scheduled { node: scroll });
+        let smooth_frame = scene.on_scroll_vsync(&dom, &mut controller, 225.).unwrap().unwrap();
+        assert!(smooth_frame.resources.uploads.is_empty());
+        assert_eq!(scene.take_scroll_events(&dom, &mut controller).unwrap().len(), 1);
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum CanvasTarget { Element, Context, Path, Gradient, Pattern, ImageData, TextMetrics }

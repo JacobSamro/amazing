@@ -10,6 +10,7 @@ pub(super) struct Parsed {
     pub secure: bool,
     pub http_only: bool,
     pub same_site: SameSite,
+    pub partitioned: bool,
 }
 fn trim(mut bytes: &[u8]) -> &[u8] {
     while bytes.first().is_some_and(|b| matches!(b, b' ' | b'\t')) {
@@ -70,6 +71,7 @@ pub(super) fn parse(input: &[u8], now: i64, default_path: &[u8]) -> Result<Parse
         secure: false,
         http_only: false,
         same_site: SameSite::Default,
+        partitioned: false,
     };
     let mut age = None;
     for part in parts {
@@ -124,6 +126,8 @@ pub(super) fn parse(input: &[u8], now: i64, default_path: &[u8]) -> Result<Parse
             } else {
                 SameSite::Default
             };
+        } else if name.eq_ignore_ascii_case(b"partitioned") {
+            cookie.partitioned = true;
         }
     }
     if age.is_some() {

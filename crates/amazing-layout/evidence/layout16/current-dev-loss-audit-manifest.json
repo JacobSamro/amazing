@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "diagnostic subset",
+    "description": "LAYOUT-16 fixed-base apparent loss audit on current dev",
+    "case_count": 2
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/compositing",
+    "css/css-backgrounds",
+    "css/css-box",
+    "css/css-display",
+    "css/css-flexbox",
+    "css/css-grid",
+    "css/css-images",
+    "css/css-inline",
+    "css/css-overflow",
+    "css/css-position",
+    "css/css-ruby",
+    "css/css-sizing",
+    "css/css-tables",
+    "css/css-text",
+    "css/css-transforms",
+    "css/css-writing-modes"
+  ],
+  "tests": [
+    {
+      "id": "baseline-empty-cell-001",
+      "test": "css/css-tables/baseline-empty-cell-001.html"
+    },
+    {
+      "id": "css-ruby__ruby-line-break-suppression-004.html",
+      "test": "css/css-ruby/ruby-line-break-suppression-004.html"
+    }
+  ]
+}

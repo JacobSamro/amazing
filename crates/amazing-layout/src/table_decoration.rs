@@ -289,6 +289,18 @@ impl Borders {
         }
     }
     pub(crate) fn segments(&self, xs: &[f32], ys: &[f32]) -> Vec<TableBorderSegment> {
+        // A vertical segment meets horizontal borders at both endpoints.
+        // Their half-widths extend the painted join into an empty row, even
+        // when that row has no cells and therefore no vertical edge of its own.
+        let horizontal_join = |row: usize, column: usize| {
+            [column.checked_sub(1), Some(column)]
+                .into_iter()
+                .flatten()
+                .filter_map(|c| self.edges.get(&(true, row, c)))
+                .filter(|winner| winner.style != "hidden" && winner.style != "none")
+                .map(|winner| winner.width / 2.0)
+                .fold(0.0, f32::max)
+        };
         self.edges
             .iter()
             .filter_map(|(&(h, r, c), w)| {
@@ -303,11 +315,13 @@ impl Borders {
                         h: w.width,
                     }
                 } else {
+                    let start_join = horizontal_join(r, c);
+                    let end_join = horizontal_join(r + 1, c);
                     Rect {
                         x: xs[c] - w.width / 2.0,
-                        y: ys[r],
+                        y: ys[r] - start_join,
                         w: w.width,
-                        h: ys[r + 1] - ys[r],
+                        h: ys[r + 1] - ys[r] + start_join + end_join,
                     }
                 };
                 Some(TableBorderSegment {

@@ -365,6 +365,25 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge" => {
             return ruby_canonical(property, css).map(|_| V::Unparsed);
         }
+        "image-orientation" => {
+            if matches!(s, "from-image" | "none") { return Some(V::Unparsed); }
+            let parts: Vec<_> = s.split_ascii_whitespace().collect();
+            if parts == ["flip"]
+                || matches!(parts.as_slice(), [angle] if Angle::parse(angle).is_some())
+                || matches!(parts.as_slice(), ["flip", angle] | [angle, "flip"] if Angle::parse(angle).is_some()) {
+                return Some(V::Unparsed);
+            }
+            return None;
+        }
+        "object-fit" => {
+            return matches!(s, "fill" | "contain" | "cover" | "none" | "scale-down").then_some(V::Unparsed);
+        }
+        "object-position" => {
+            let parts: Vec<_> = s.split_ascii_whitespace().collect();
+            let valid = |part: &str| matches!(part, "left" | "right" | "top" | "bottom" | "center")
+                || LengthPercentage::parse(part).is_some();
+            return (!parts.is_empty() && parts.len() <= 4 && parts.iter().all(|part| valid(part))).then_some(V::Unparsed);
+        }
         "grid-template-columns" | "grid-template-rows" => {
             return Some(
                 crate::computed::parse_subgrid(css)

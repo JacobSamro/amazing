@@ -1,13 +1,15 @@
 use crate::host::{BindingHost, CallbackId, InterfaceBrand, Operation as O, PlatformKey};
 use amazing_dom::{
     abort::AbortSignalId,
-    events::{DispatchOrigin, Event, EventId, EventInit, EventTarget, ListenerOptions},
+    events::{DispatchOrigin, Event, EventClass, EventExtra, EventId, EventInit, EventTarget, ListenerOptions},
     DomError, NodeKind,
 };
 use std::time::Duration;
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
+    matches!(op, O::EventExtra(_) | O::UIEventConstructor | O::FocusEventConstructor
+        | O::MouseEventConstructor | O::WheelEventConstructor | O::KeyboardEventConstructor
+        | O::CompositionEventConstructor | O::EventTargetConstructor | O::AddEventListener | O::RemoveEventListener
         | O::DispatchEvent | O::EventConstructor | O::CustomEventConstructor
         | O::CustomEventDetail | O::CustomEventInit | O::CreateEvent | O::EventType
         | O::EventTargetValue | O::EventCurrentTarget | O::EventPhase | O::EventBubbles
@@ -37,6 +39,9 @@ fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H
     Ok(id)
 }
 fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget, H::Error> {
+    if let Some(slot) = host.window_event_target_slot(value) {
+        return Ok(EventTarget::External(slot));
+    }
     if let Some(node) = host.node_brand(value) { return Ok(EventTarget::Node(node)); }
     if let Some(key) = host.platform_object(value, InterfaceBrand::ABORT_SIGNAL) {
         if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
@@ -58,6 +63,7 @@ fn wrap_target<H: BindingHost>(host: &mut H, target: Option<EventTarget>) -> Res
     match target {
         Some(EventTarget::Node(node)) => host.wrap_node(node),
         Some(EventTarget::External(slot)) => {
+            if let Some(window) = host.window_event_target_value(slot) { return Ok(window); }
             let signal = host.with_dom(|dom| Ok(dom.abort_signal_for_target(slot)))?;
             match signal {
                 Some(id) => host.wrap_platform_object(key(host, id.0 as u64), InterfaceBrand::ABORT_SIGNAL),
@@ -107,6 +113,15 @@ fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) ->
     let field = host.get_property(value, name)?;
     Ok(host.to_boolean(&field))
 }
+pub(crate) fn passive_option<H: BindingHost>(host: &mut H, options: Option<&H::Value>) -> Result<Option<bool>, H::Error> {
+    let Some(options) = options else { return Ok(None) };
+    if host.is_nullish(options) { return Ok(None); }
+    if host.same_value(options, &host.boolean(true)) || host.same_value(options, &host.boolean(false)) {
+        return Ok(None);
+    }
+    let passive = host.get_property(options, "passive")?;
+    Ok((!host.is_undefined(&passive)).then(|| host.to_boolean(&passive)))
+}
 fn callback_call<H: BindingHost>(
     host: &mut H, callback: CallbackId, this_target: EventTarget, event: EventId,
 ) -> Result<(), H::Error> {
@@ -123,6 +138,45 @@ fn callback_call<H: BindingHost>(
 }
 enum Output { Undefined, Boolean(bool), Number(f64), String(Vec<u16>), Target(Option<EventTarget>), Path(Vec<EventTarget>) }
 
+fn extra_spec(name: &'static str) -> EventExtra {
+    match name {
+        "view" | "relatedTarget" => EventExtra::Root(None),
+        "ctrlKey" | "shiftKey" | "altKey" | "metaKey" | "repeat" | "isComposing" => EventExtra::Boolean(false),
+        "key" | "code" | "data" => EventExtra::String(vec![]),
+        _ => EventExtra::Number(0.),
+    }
+}
+
+fn event_class(op: O) -> Option<EventClass> {
+    Some(match op {
+        O::UIEventConstructor => EventClass::Ui,
+        O::FocusEventConstructor => EventClass::Focus,
+        O::MouseEventConstructor => EventClass::Mouse,
+        O::WheelEventConstructor => EventClass::Wheel,
+        O::KeyboardEventConstructor => EventClass::Keyboard,
+        O::CompositionEventConstructor => EventClass::Composition,
+        _ => return None,
+    })
+}
+
+fn event_fields(class: EventClass) -> &'static [&'static str] {
+    const UI: &[&str] = &["view", "detail"];
+    const FOCUS: &[&str] = &["view", "detail", "relatedTarget"];
+    const MOUSE: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
+        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget"];
+    const WHEEL: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
+        "screenX", "screenY", "clientX", "clientY", "button", "buttons", "relatedTarget",
+        "deltaX", "deltaY", "deltaZ", "deltaMode"];
+    const KEYBOARD: &[&str] = &["view", "detail", "ctrlKey", "shiftKey", "altKey", "metaKey",
+        "key", "code", "location", "repeat", "isComposing", "charCode", "keyCode", "which"];
+    const COMPOSITION: &[&str] = &["view", "detail", "data"];
+    match class {
+        EventClass::Ui => UI, EventClass::Focus => FOCUS, EventClass::Mouse => MOUSE,
+        EventClass::Wheel => WHEEL, EventClass::Keyboard => KEYBOARD,
+        EventClass::Composition => COMPOSITION, _ => &[],
+    }
+}
+
 pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
@@ -130,7 +184,8 @@ pub(crate) fn invoke<H: BindingHost>(
         let slot = host.with_dom(|dom| Ok(dom.create_event_target()))?;
         return host.wrap_platform_object(key(host, slot), InterfaceBrand::EVENT_TARGET);
     }
-    if matches!(op, O::EventConstructor | O::CustomEventConstructor | O::CreateEvent) {
+    if matches!(op, O::EventConstructor | O::CustomEventConstructor | O::CreateEvent)
+        || event_class(op).is_some() {
         if op == O::CreateEvent {
             let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Document"))?;
             host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Document) { Ok(()) }
@@ -138,7 +193,7 @@ pub(crate) fn invoke<H: BindingHost>(
         }
         let raw_type = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let event_type = utf16_string(host, raw_type)?;
-        let init = if matches!(op, O::EventConstructor | O::CustomEventConstructor) {
+        let init = if op != O::CreateEvent {
             let dictionary = args.get(1);
             EventInit {
                 bubbles: option(host, dictionary, "bubbles")?,
@@ -146,13 +201,17 @@ pub(crate) fn invoke<H: BindingHost>(
                 composed: option(host, dictionary, "composed")?,
             }
         } else {
-            if !["Event", "Events", "CustomEvent"].iter().any(|name| name.eq_ignore_ascii_case(&event_type)) {
+            if !["Event", "Events", "CustomEvent", "BeforeUnloadEvent", "CompositionEvent",
+                "DeviceMotionEvent", "DeviceOrientationEvent", "DragEvent", "FocusEvent",
+                "HashChangeEvent", "HTMLEvents", "KeyboardEvent", "MessageEvent",
+                "MouseEvent", "MouseEvents", "StorageEvent", "SVGEvents", "TextEvent",
+                "UIEvent", "UIEvents"].iter().any(|name| name.eq_ignore_ascii_case(&event_type)) {
                 return Err(host.type_error("Unsupported legacy event interface"));
             }
             EventInit::default()
         };
         let legacy_custom = op == O::CreateEvent && event_type.eq_ignore_ascii_case("CustomEvent");
-        let event = if op == O::CustomEventConstructor {
+        let mut event = if op == O::CustomEventConstructor {
             let dictionary = args.get(1);
             let detail = match dictionary {
                 Some(value) if !host.is_nullish(value) => host.get_property(value, "detail")?,
@@ -165,6 +224,24 @@ pub(crate) fn invoke<H: BindingHost>(
         } else {
             Event::new(if op == O::CreateEvent { "" } else { &event_type }, init, Duration::ZERO)
         };
+        if let Some(class) = event_class(op) {
+            event.set_class(class);
+            if let Some(dictionary) = args.get(1).filter(|value| !host.is_nullish(value)) {
+                for &name in event_fields(class) {
+                    let value = host.get_property(dictionary, name)?;
+                    if host.is_undefined(&value) { continue; }
+                    let extra = match extra_spec(name) {
+                        EventExtra::Boolean(_) => EventExtra::Boolean(host.to_boolean(&value)),
+                        EventExtra::Number(_) => EventExtra::Number(host.to_number(&value)?),
+                        EventExtra::String(_) => EventExtra::String(host.to_dom_string(&value)?),
+                        EventExtra::Root(_) => EventExtra::Root(if host.is_nullish(&value) { None }
+                            else { Some(host.retain_value(value)) }),
+                    };
+                    event.set_extra(name, extra);
+                }
+            }
+        }
+        if op == O::CreateEvent { event.mark_uninitialized(); }
         let id = host.with_dom(|dom| Ok(dom.events_mut().create_event(event)))?;
         return host.wrap_platform_object(key(host, id.slot() as u64), InterfaceBrand::EVENT);
     }
@@ -203,13 +280,24 @@ pub(crate) fn invoke<H: BindingHost>(
         if matched.is_some() { return Ok(host.undefined()); }
         let listener_options = ListenerOptions {
             capture, once: option(host, options, "once")?,
-            passive: options.map(|_| option(host, options, "passive")).transpose()?,
+            passive: passive_option(host, options)?,
         };
         let id = host.retain_value(callback.clone());
         host.with_dom(|dom| Ok(dom.add_event_listener(target, &event_type, Some(id), listener_options)))?;
         return Ok(host.undefined());
     }
     let id = event_id(host, &receiver)?;
+    if let O::EventExtra(name) = op {
+        let extra = host.with_dom(|dom| Ok(dom.events().event(id).extra(name).cloned()))?
+            .unwrap_or_else(|| extra_spec(name));
+        return Ok(match extra {
+            EventExtra::Boolean(value) => host.boolean(value),
+            EventExtra::Number(value) => host.number(value),
+            EventExtra::String(value) => host.string(&value)?,
+            EventExtra::Root(Some(root)) => host.root_value(root).unwrap_or_else(|| host.null()),
+            EventExtra::Root(None) => host.null(),
+        });
+    }
     let new_type = if matches!(op, O::EventInitEvent | O::CustomEventInit) {
         let event_type_arg = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         Some(utf16_string(host, event_type_arg)?)

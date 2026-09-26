@@ -6,6 +6,22 @@ fn fixture() -> (Dom, NodeIdx, NodeIdx) {
     (d, p, t)
 }
 #[test]
+fn image_relevant_attribute_mutations_are_queued_including_same_src() {
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "div");
+    let img = dom.create_element(root, "img");
+    let source = dom.create_element(root, "source");
+    dom.set_attribute(img, "src", "photo.png").unwrap();
+    dom.set_attribute(img, "src", "photo.png").unwrap();
+    dom.set_attribute(img, "alt", "label").unwrap();
+    dom.set_attribute(source, "media", "screen").unwrap();
+    dom.remove_attribute(source, "media").unwrap();
+    let events = dom.take_image_relevant_mutations();
+    assert_eq!(events.iter().map(|event| (event.node, event.attribute.as_str())).collect::<Vec<_>>(),
+        [(img, "src"), (img, "src"), (source, "media"), (source, "media")]);
+    assert!(dom.take_image_relevant_mutations().is_empty());
+}
+#[test]
 fn delivery_signal_only_changes_for_interested_records_and_rearms_after_checkpoint() {
     let (mut d, p, _) = fixture();
     d.set_attribute(p, "unobserved", "1").unwrap();

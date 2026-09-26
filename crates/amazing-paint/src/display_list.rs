@@ -204,7 +204,10 @@ fn emit_context<'a>(
         return false;
     };
     commands.extend(controls);
-    commands.push(PaintCommand::PaintContent(root));
+    let table_borders = !root.table_decoration().borders.is_empty();
+    if !table_borders {
+        commands.push(PaintCommand::PaintContent(root));
+    }
     commands.append(&mut middle);
     for item in buckets.middle_phase {
         match item {
@@ -220,6 +223,12 @@ fn emit_context<'a>(
         if !emit_entry(entry, commands, depth + 1, next_effect_depth) {
             return false;
         }
+    }
+
+    // Collapsed winners cover row/cell backgrounds and are painted once by
+    // their table after its descendants, inside the table effect/clip scope.
+    if table_borders {
+        commands.push(PaintCommand::PaintContent(root));
     }
 
     if root_clips {
@@ -342,7 +351,10 @@ fn walk_middle_contents<'a>(
     for control in controls {
         middle.push(control);
     }
-    middle.push(PaintCommand::PaintContent(box_));
+    let table_borders = !box_.table_decoration().borders.is_empty();
+    if !table_borders {
+        middle.push(PaintCommand::PaintContent(box_));
+    }
     let Some(children) = source_children(box_) else {
         return false;
     };
@@ -358,6 +370,9 @@ fn walk_middle_contents<'a>(
         ) {
             return false;
         }
+    }
+    if table_borders {
+        middle.push(PaintCommand::PaintContent(box_));
     }
     if clips {
         inherited_clips.pop();
@@ -409,7 +424,9 @@ fn source_children(box_: &LayoutBox) -> Option<Vec<&LayoutBox>> {
     // LAYOUT-13 assigns every emitted box its pre-order tree position. Older
     // layout producers without that key retain the arena-order fallback.
     children.sort_by_key(|child| {
-        child.source_order.unwrap_or_else(|| child.node.map_or(0, |node| u64::from(node.0)))
+        child
+            .source_order
+            .unwrap_or_else(|| child.node.map_or(0, |node| u64::from(node.0)))
     });
     Some(children)
 }
@@ -607,7 +624,7 @@ fn parse_angle(value: &str) -> Option<f32> {
 
 /// Only this stage enumerates layout's directly-owned replaced fragment view.
 fn control_commands(box_: &LayoutBox) -> Option<Vec<PaintCommand<'_>>> {
-    use amazing_layout::{replaced::ReplacedKind, Display};
+    use amazing_layout::{Display, replaced::ReplacedKind};
     let mut commands = Vec::new();
     for fragment in box_.styled_replaced_fragments() {
         if fragment.kind == ReplacedKind::Image

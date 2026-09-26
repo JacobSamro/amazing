@@ -114,34 +114,6 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
-    pub(super) fn window_storage_listener(&mut self, add: bool, this: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
-        let window = self.js.binding_global_object();
-        let name = self.storage_string(args.first().unwrap_or(&JsValue::Undefined))?;
-        if name != "storage" {
-            let original = {
-                let state = self.state.borrow();
-                if add { state.window_add_listener.clone() } else { state.window_remove_listener.clone() }
-            }.ok_or_else(|| Throw::type_error("window event listener unavailable"))?;
-            return self.js.binding_call(&original, this, args.to_vec());
-        }
-        if !self.js.binding_same_value(&this, &window) && !matches!(this, JsValue::Undefined | JsValue::Null) {
-            return Err(Throw::type_error("Storage listener receiver must be window"));
-        }
-        let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-        if !self.js.binding_is_callable(&callback) {
-            return Err(Throw::type_error("event listener must be callable"));
-        }
-        if add {
-            let existing = self.state.borrow().storage_listeners.iter()
-                .any(|value| self.js.binding_same_value(value, &callback));
-            if !existing { self.state.borrow_mut().storage_listeners.push(callback); }
-        } else {
-            self.state.borrow_mut().storage_listeners.retain(|value|
-                !self.js.binding_same_value(value, &callback));
-        }
-        Ok(JsValue::Undefined)
-    }
-
     fn dispatch_storage_event(&mut self, delivery: StorageEventDelivery) -> Result<(), Throw> {
         let window = self.js.binding_global_object();
         let event = invoke(self, Operation::EventConstructor, JsValue::Undefined,
@@ -159,10 +131,10 @@ impl RuntimeBindingHost<'_> {
         ] {
             self.js.binding_define_data_property(&event, name, value, BindingPropertyFlags::METHOD)?;
         }
-        let listeners = self.state.borrow().storage_listeners.clone();
-        for listener in listeners {
-            let _ = self.js.binding_call(&listener, window.clone(), vec![event.clone()]);
-        }
+        // Window listeners share the DOM EventTarget registry, including
+        // capture, once, and removal semantics. The property handler is kept
+        // below until onstorage joins the common event-handler path.
+        invoke(self, Operation::DispatchEvent, window.clone(), &[event.clone()])?;
         let handler = self.js.binding_get_property(&window, "onstorage")?;
         if self.js.binding_is_callable(&handler) {
             let _ = self.js.binding_call(&handler, window, vec![event]);

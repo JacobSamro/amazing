@@ -57,7 +57,7 @@ impl Dom {
     pub fn create_processing_instruction_in(
         &mut self, document: NodeIdx, target: &str, data: &[u16],
     ) -> Result<NodeIdx, DomError> {
-        if !valid_element_local_name(target) || target.eq_ignore_ascii_case("xml") {
+        if !valid_processing_instruction_target(target) || target.eq_ignore_ascii_case("xml") {
             return Err(DomError::InvalidCharacterError);
         }
         if data.windows(2).any(|pair| pair == [b'?' as u16, b'>' as u16]) {
@@ -308,6 +308,17 @@ fn forbidden(c: char) -> bool {
 }
 fn valid_doctype_name(name: &str) -> bool {
     !name.chars().any(|c| matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '>'))
+}
+fn xml_name_start(c: char) -> bool {
+    matches!(c, ':' | 'A'..='Z' | '_' | 'a'..='z' | '\u{c0}'..='\u{d6}' | '\u{d8}'..='\u{f6}' | '\u{f8}'..='\u{2ff}' | '\u{370}'..='\u{37d}' | '\u{37f}'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '\u{2070}'..='\u{218f}' | '\u{2c00}'..='\u{2fef}' | '\u{3001}'..='\u{d7ff}' | '\u{f900}'..='\u{fdcf}' | '\u{fdf0}'..='\u{fffd}' | '\u{10000}'..='\u{effff}')
+}
+fn xml_name_char(c: char) -> bool {
+    xml_name_start(c)
+        || matches!(c, '-' | '.' | '0'..='9' | '\u{b7}' | '\u{300}'..='\u{36f}' | '\u{203f}'..='\u{2040}')
+}
+fn valid_processing_instruction_target(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(xml_name_start) && chars.all(xml_name_char)
 }
 pub(crate) fn valid_element_local_name(name: &str) -> bool {
     let mut chars = name.chars();

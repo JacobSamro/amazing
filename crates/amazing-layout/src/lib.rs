@@ -333,6 +333,8 @@ pub enum InlineNode {
     Ruby {
         node: NodeIdx,
         columns: Vec<RubyColumn>,
+        /// CSS Ruby 1: annotations may overlap adjacent preserved spaces.
+        overhang_spaces: bool,
     },
     /// `<br>` — force a line break.
     Break,

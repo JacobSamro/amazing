@@ -210,6 +210,26 @@ fn table_collapsed_winner_controls_half_border_geometry() {
     near(winner.rect.x + 5.0, c[1].border_box.x);
     assert!(c.iter().all(|c| c.table_decoration().suppress_border));
 }
+
+#[test]
+fn collapsed_border_joins_cover_short_empty_rows() {
+    let b = layout(
+        "<body><table><tr><td>x</td></tr><tr style='height:2px'></tr><tr><td>y</td></tr></table>",
+        "table{border-collapse:collapse}td{border:10px solid black;line-height:0;padding:0}",
+        false,
+    );
+    let t = collect(&b, Role::Table)[0];
+    let x = t.table_decoration().borders.iter()
+        .filter(|edge| !edge.horizontal && edge.rect.w == 10.0)
+        .map(|edge| edge.rect.x)
+        .fold(f32::INFINITY, f32::min);
+    let mut left_edges = t.table_decoration().borders.iter()
+        .filter(|edge| !edge.horizontal && edge.rect.w == 10.0 && (edge.rect.x - x).abs() < 0.02)
+        .collect::<Vec<_>>();
+    left_edges.sort_by(|a, b| a.rect.y.total_cmp(&b.rect.y));
+    assert!(left_edges.len() >= 2);
+    assert!(left_edges[0].rect.y + left_edges[0].rect.h >= left_edges[1].rect.y);
+}
 #[test]
 fn table_collapsed_hidden_wins_and_none_loses() {
     let b = layout(

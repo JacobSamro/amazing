@@ -1,5 +1,7 @@
 #![cfg(windows)]
+use amazing_ipc::codec::ByteBuf;
 use amazing_ipc::interface;
+use amazing_process::protocol::{DecodeRequest, UtilityProxy};
 use amazing_process::{Capabilities, ProcessHost, RestartPolicy, Role};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -15,8 +17,13 @@ fn renderer_appcontainer_denies_file_network_child_and_browser_process() {
     let _ = listener.accept().unwrap();
     drop(sanity);
     amazing_ipc_platform::probe_open_process(std::process::id()).unwrap();
-    assert!(std::process::Command::new(env!("CARGO_BIN_EXE_ipc-demo-child"))
-        .arg("--probe-noop").status().unwrap().success());
+    assert!(
+        std::process::Command::new(env!("CARGO_BIN_EXE_ipc-demo-child"))
+            .arg("--probe-noop")
+            .status()
+            .unwrap()
+            .success()
+    );
     let mut host = ProcessHost::spawn_sandboxed_renderer(
         std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child")),
         Capabilities(BTreeMap::from([("__sandbox_probe".into(), "1".into())])),
@@ -39,6 +46,37 @@ fn renderer_appcontainer_denies_file_network_child_and_browser_process() {
             result.starts_with("denied:"),
             "{probe} unexpectedly returned {result}"
         );
+    }
+    host.kill().unwrap();
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn utility_image_decoder_appcontainer_denies_file_and_network() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let file = std::env::temp_dir().join(format!("amazing-utility-private-{}", std::process::id()));
+    std::fs::write(&file, b"private").unwrap();
+    let mut host = ProcessHost::spawn_sandboxed_utility(
+        std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child")),
+        Capabilities(BTreeMap::from([("__sandbox_probe".into(), "1".into())])),
+        RestartPolicy::Never,
+    )
+    .unwrap();
+    let decoder = UtilityProxy::new(host.connection.clone(), Duration::from_secs(5));
+    let ready = decoder
+        .decode(DecodeRequest {
+            kind: 1,
+            bytes: ByteBuf(include_bytes!("fixtures/utility-images/two-pixels.png").to_vec()),
+        })
+        .unwrap();
+    assert_eq!((ready.width, ready.height), (2, 1));
+    assert_eq!(host.receive_decoded(&ready).unwrap().bytes().len(), 8);
+    let probe = SandboxProbeProxy::new(host.connection.clone(), Duration::from_secs(5));
+    for request in [
+        format!("open:{}", file.display()),
+        format!("connect:{}", listener.local_addr().unwrap()),
+    ] {
+        assert!(probe.probe(request).unwrap().starts_with("denied:"));
     }
     host.kill().unwrap();
     std::fs::remove_file(file).unwrap();

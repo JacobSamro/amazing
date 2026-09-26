@@ -29,11 +29,17 @@ fn decode(request: DecodeRequest) -> Result<Decoded, Error> {
     let bytes = &request.bytes.0;
     let result = match request.kind {
         IMAGE => {
+            let limits = amazing_image::DecodeLimits {
+                max_input_bytes: MAX_INPUT,
+                max_dimension: MAX_DIMENSION,
+                max_rgba_bytes: MAX_OUTPUT as u64,
+                max_decoder_bytes: 128 * 1024 * 1024,
+            };
             let image = if bytes.iter().copied().find(|b| !b.is_ascii_whitespace()) == Some(b'<') {
-                amazing_svg::decode(bytes, amazing_svg::DecodeLimits::default())
+                amazing_svg::decode(bytes, limits)
                     .map_err(|e| Error::Remote(format!("image: {e}")))?
             } else {
-                amazing_media::decode_image(bytes)
+                amazing_image::decode_with_orientation(bytes, limits, true)
                     .map_err(|e| Error::Remote(format!("image: {e}")))?
             };
             Decoded {

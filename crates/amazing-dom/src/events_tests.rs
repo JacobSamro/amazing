@@ -375,6 +375,45 @@ fn callback_exceptions_are_reported_without_ending_dispatch() {
     assert_eq!(r.dispatch_result(e), Ok(true));
 }
 #[test]
+fn window_target_is_document_event_parent_and_passive_root() {
+    let mut dom = Dom::new();
+    let slot = dom.create_event_target();
+    dom.set_window_event_target(slot).unwrap();
+    let event = Event::new("wheel", EventInit { bubbles: true, cancelable: true, composed: false }, Duration::ZERO);
+    assert_eq!(EventTree::event_parent(&dom, EventTarget::Node(NodeIdx(0)), &event),
+        Some(EventTarget::External(slot)));
+    assert!(EventTree::default_passive(&dom, EventTarget::External(slot), "wheel"));
+    assert!(!EventTree::default_passive(&dom, EventTarget::External(slot), "touchend"));
+}
+
+#[test]
+fn blocking_listener_query_covers_ancestors_and_window_with_generation() {
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "html");
+    let child = dom.create_element(root, "div");
+    let window = dom.create_event_target();
+    dom.set_window_event_target(window).unwrap();
+    let at_child = EventTarget::Node(child);
+    let at_root = EventTarget::Node(root);
+    let at_window = EventTarget::External(window);
+    let types = &["wheel", "mousewheel", "touchstart", "touchmove"];
+    assert!(!dom.has_blocking_listener(at_child, types));
+    let initial = dom.events().listener_generation();
+    dom.add_event_listener(at_root, "wheel", Some(CallbackId(1)), ListenerOptions::default());
+    assert!(!dom.has_blocking_listener(at_child, types)); // root default is passive
+    let passive_generation = dom.events().listener_generation();
+    assert_ne!(initial, passive_generation);
+    dom.add_event_listener(at_window, "touchmove", Some(CallbackId(2)),
+        ListenerOptions { passive: Some(false), ..Default::default() });
+    assert!(dom.has_blocking_listener(at_child, types));
+    assert!(!dom.has_blocking_listener(at_child, &["wheel"]));
+    let blocking_generation = dom.events().listener_generation();
+    dom.events_mut().remove_listener(at_window, "touchmove", Some(CallbackId(2)), false);
+    assert!(!dom.has_blocking_listener(at_child, types));
+    assert_ne!(blocking_generation, dom.events().listener_generation());
+}
+
+#[test]
 fn default_passive_depends_on_type_and_document_target() {
     let (d, mut r, t) = fixture();
     r.add_listener(

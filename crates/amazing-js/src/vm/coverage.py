@@ -7,7 +7,10 @@ unchanged; this wrapper only retains the VM trace written to child stderr.
 
 import importlib.util
 import json
+import os
 import pathlib
+import shutil
+import signal
 import subprocess
 import sys
 
@@ -20,18 +23,37 @@ original_classify = runner.classify
 
 
 def execute(binary, payload, timeout):
+    # A parent runner can be interrupted while a Test262 host is still busy.
+    # Keep an independent deadline around the host, and kill the whole group
+    # when the shorter per-test deadline fires.
+    guarded = os.name == "posix" and shutil.which("timeout") is not None
+    command = ["timeout", "120", str(binary)] if guarded else [str(binary)]
     try:
-        child = subprocess.run([str(binary)], input=payload, capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return runner.result("timeout", "execution.deadline")
+        with subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, start_new_session=guarded,
+        ) as child:
+            try:
+                stdout, stderr = child.communicate(input=payload, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                if guarded:
+                    try:
+                        os.killpg(child.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    child.kill()
+                child.communicate()
+                return runner.result("timeout", "execution.deadline")
+            returncode = child.returncode
     except OSError as error:
         return runner.result("fail", "runner.launch", detail=str(error))
-    if child.returncode:
+    if returncode:
         return runner.result(
-            "fail", "host.abnormal-exit", exit_code=child.returncode,
-            detail=child.stderr.decode("utf-8", errors="replace")[-4096:],
+            "fail", "host.abnormal-exit", exit_code=returncode,
+            detail=stderr.decode("utf-8", errors="replace")[-4096:],
         )
-    lines = child.stdout.decode("utf-8", errors="replace").rstrip("\r\n").split("\n")
+    lines = stdout.decode("utf-8", errors="replace").rstrip("\r\n").split("\n")
     try:
         final = lines[-1]
         if not final.startswith("TEST262_RESULT "):
@@ -42,7 +64,7 @@ def execute(binary, payload, timeout):
         } or not isinstance(outcome.get("error_type"), str):
             raise ValueError("invalid host result")
         markers = [line.removeprefix("AMAZING_VM ") for line in
-                   child.stderr.decode("utf-8", errors="replace").splitlines()
+                   stderr.decode("utf-8", errors="replace").splitlines()
                    if line.startswith("AMAZING_VM ")]
         fields = 0
         cursor = 0

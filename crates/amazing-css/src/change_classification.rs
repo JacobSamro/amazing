@@ -43,7 +43,10 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "fill-opacity" |
         "fill-rule" |
         "font-palette" |
+        "image-orientation" |
         "mask" |
+        "object-fit" |
+        "object-position" |
         "stroke" |
         "stroke-dasharray" |
         "stroke-dashoffset" |
@@ -236,7 +239,7 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [2, 37, 125, 29]);
+        assert_eq!(counts, [2, 40, 125, 29]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

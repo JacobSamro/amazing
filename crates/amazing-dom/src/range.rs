@@ -133,7 +133,7 @@ impl Dom {
         // Construction deliberately does not enforce offsets, order, or common root.
         for p in [start, end] {
             self.check_node(p.node)?;
-            if matches!(self.get(p.node).kind, NodeKind::DocumentType { .. }) {
+            if matches!(self.get(p.node).kind, NodeKind::DocumentType { .. } | NodeKind::Attr { .. }) {
                 return Err(DomError::InvalidNodeTypeError);
             }
         }
