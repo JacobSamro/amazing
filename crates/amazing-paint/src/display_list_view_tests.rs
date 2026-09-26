@@ -314,7 +314,7 @@ fn raw_tile_rasterizes_inline_replaced_content_and_retains_it() {
     }
     let node = NodeIdx(7);
     let mut root = LayoutBox::new(
-        None,
+        Some(NodeIdx(1)),
         amazing_layout::Display::Block,
         amazing_css::ComputedStyle::default(),
         16.0,
