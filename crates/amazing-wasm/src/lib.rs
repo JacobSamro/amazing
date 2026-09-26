@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 pub mod decode;
+pub mod embed;
 pub mod encode;
 pub mod error;
 pub mod instr;
@@ -27,6 +28,11 @@ pub mod wast;
 pub mod wat;
 
 pub use decode::decode_module;
+pub use embed::{
+    compile, CompiledModule, Engine, ExportType, ExternKind, ExternValue, FuncHandle,
+    GlobalHandle, ImportResolver, ImportType, InstanceHandle, JsErrorClass, MemoryHandle,
+    TableHandle,
+};
 pub use encode::encode_module;
 pub use error::{ErrorKind, Result, WasmError};
 pub use interp::Interpreter;
