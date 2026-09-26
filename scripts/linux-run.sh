@@ -43,9 +43,10 @@ done
 [ $# -gt 0 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
 
-# Lane homes. Since 2026-09-26 every lane runs on its own Boat sandbox
-# (scripts/boat-lane.py: one sandbox per lane from the amazing-builder template,
-# stopped by boat-idle-reaper.py after 15 idle minutes). The venus hosts remain
+# Lane homes. Since 2026-09-26 lanes run on pooled Boat sandboxes
+# (scripts/boat-lane.py: related lanes share one sandbox from the amazing-builder
+# template, stopped by boat-idle-reaper.py after 5 idle minutes). Outputs go to
+# $OUT (~/amazing/out/<lane>) on the sandbox. The venus hosts remain
 # available with --host venus-001 / venus-003.
 if [ -z "$HOST" ]; then
   # Boat needs the amazing-builder template; without it (for example after
@@ -97,24 +98,31 @@ else
 fi
 
 if [ "$HOST" = boat ]; then
-  read -r BOAT_HOST BOAT_PORT BOAT_ID < <("$REPO/scripts/boat-lane.py" ensure "$LANE") || {
+  read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL < <("$REPO/scripts/boat-lane.py" ensure "$LANE") || {
     echo "linux-run: no Boat sandbox for $LANE" >&2; exit 3; }
-  echo "linux-run[$LANE]: boat sandbox $BOAT_ID" >&2
+  echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
   BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
-  # The template keeps a warm target/ and the Test262 checkout outside the
-  # synced tree; never let --delete touch them.
+  # Pooled sandboxes host several lanes: each lane syncs into its own
+  # ~/amazing/wt/<lane>, and all share ~/amazing/target. Cargo's lock on that
+  # directory serializes the lanes' compiles; dependencies stay warm for all.
+  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE" || {
+    echo "linux-run: cannot reach $BOAT_ID" >&2; exit 3; }
   rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
-    --exclude /.agents --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/" || {
+    --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" || {
     echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
   REMOTE=". ~/.amazing-env
-cd ~/amazing || exit 3
+cd ~/amazing/wt/$LANE || exit 3
 export CARGO_TARGET_DIR=\$HOME/amazing/target JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
-export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1
-mkdir -p ~/amazing/out; ln -sfn ~/corpora ~/amazing/corpora
+export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
+ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
+  T0=$(date +%s)
   $BSSH "$BOAT_HOST" "echo $ENCODED | base64 -d | bash"
-  exit $?
+  rc=$?
+  # Start/end per run, for `boat-lane.py pool-report` (busy and overlap per pool).
+  echo "$T0 $(date +%s) $LANE $BOAT_POOL $rc" >> "$MAIN/.agents/.boat-runs.log"
+  exit $rc
 fi
 
 # Bulk transfers get their own connection; a stalled one on the shared master

@@ -124,6 +124,30 @@ pub struct CompositorStyleDelta {
     pub transform_matrix: Option<[[f32; 4]; 4]>,
     transform_value: Option<Vec<Transform>>,
     transform_css: Option<String>,
+    /// Effect-only longhands whose canonical text the compositor can apply
+    /// without a CSS recompute (`filter`, `mix-blend-mode`, `clip-path`, ...).
+    pub effects: Vec<(String, String)>,
+}
+
+/// Longhands that a compositor can apply as a value-only effect update.
+pub(crate) fn is_compositor_effect(name: &str) -> bool {
+    matches!(
+        name,
+        "filter"
+            | "backdrop-filter"
+            | "mix-blend-mode"
+            | "isolation"
+            | "clip-path"
+            | "mask-image"
+            | "mask-mode"
+            | "mask-repeat"
+            | "mask-position"
+            | "mask-clip"
+            | "mask-origin"
+            | "mask-size"
+            | "mask-composite"
+            | "mask-type"
+    )
 }
 
 /// Border-box size from the retained layout tree. The caller must only pass
@@ -142,6 +166,7 @@ impl CompositorStyleDelta {
         style.apply_compositor_values(
             self.opacity,
             self.transform_css.as_deref().zip(self.transform_value.clone()),
+            &self.effects,
         );
         true
     }
@@ -328,7 +353,7 @@ impl StyleInvalidator {
         { return None; }
         let before = crate::parse_declarations(old);
         let after = crate::parse_declarations(new);
-        let compositor = |name: &str| matches!(name, "opacity" | "transform");
+        let compositor = |name: &str| matches!(name, "opacity" | "transform") || is_compositor_effect(name);
         if before.iter().filter(|d| !compositor(&d.property)).collect::<Vec<_>>()
             != after.iter().filter(|d| !compositor(&d.property)).collect::<Vec<_>>()
             || before.iter().chain(after.iter()).any(|d| d.property == "all")
@@ -338,7 +363,14 @@ impl StyleInvalidator {
         let mut transform_value = None;
         let mut transform_matrix = None;
         let mut transform_css = None;
-        for property in ["opacity", "transform"] {
+        let mut effects: Vec<(String, String)> = Vec::new();
+        let mut properties: Vec<&str> = Vec::new();
+        for declaration in before.iter().chain(after.iter()) {
+            if compositor(&declaration.property) && !properties.contains(&declaration.property.as_str()) {
+                properties.push(declaration.property.as_str());
+            }
+        }
+        for property in properties {
             let old_decls: Vec<_> = before.iter().filter(|d| d.property == property).collect();
             let new_decls: Vec<_> = after.iter().filter(|d| d.property == property).collect();
             if old_decls == new_decls { continue; }
@@ -346,6 +378,13 @@ impl StyleInvalidator {
             if old.important || new.important
                 || old_styles.source(node, property) != Some(super::ElementStyleSource::Inline)
             { return None; }
+            if is_compositor_effect(property) {
+                if old.value == new.value { continue; }
+                let old_value = crate::values::parse(property, &old.value)?;
+                if style.typed(property) != Some(&old_value) { return None; }
+                effects.push((property.to_owned(), new.value.clone()));
+                continue;
+            }
             let old_value = crate::values::parse(property, &old.value)?;
             let new_value = crate::values::parse(property, &new.value)?;
             if style.typed(property) != Some(&old_value) { return None; }
@@ -364,8 +403,8 @@ impl StyleInvalidator {
                 _ => return None,
             }
         }
-        (opacity.is_some() || transform_matrix.is_some()).then_some(CompositorStyleDelta {
-            node, opacity, transform_matrix, transform_value, transform_css,
+        (opacity.is_some() || transform_matrix.is_some() || !effects.is_empty()).then_some(CompositorStyleDelta {
+            node, opacity, transform_matrix, transform_value, transform_css, effects,
         })
     }
 
@@ -436,7 +475,7 @@ impl StyleInvalidator {
         if changed.is_empty() { return None; }
         let inline = dom.attrs_of(node)?.iter().find(|(key, _)| key == "style").map(|(_, value)| value.as_str()).unwrap_or("");
         if inline.to_ascii_lowercase().contains("attr(") { return None; }
-        if crate::parse_declarations(inline).iter().any(|d| matches!(d.property.as_str(), "all" | "opacity" | "transform")) {
+        if crate::parse_declarations(inline).iter().any(|d| matches!(d.property.as_str(), "all") || is_compositor_effect(&d.property) || matches!(d.property.as_str(), "opacity" | "transform")) {
             return None;
         }
         let style = old_styles.get(node)?;
@@ -444,10 +483,32 @@ impl StyleInvalidator {
         let mut transform_value = None;
         let mut transform_matrix = None;
         let mut transform_css = None;
+        let mut effects: Vec<(String, String)> = Vec::new();
         for property in changed {
             if property == "all" { return None; }
             let old_declaration = old_winners.get(property).map(|(_, _, _, d)| *d);
             let new_declaration = new_winners.get(property).map(|(_, _, _, d)| *d);
+            if is_compositor_effect(property) {
+                if self.context.author_rules.iter().any(|rule| rule.decls.iter().any(|d|
+                    d.property == property && (d.important || rule.layer != usize::MAX))) {
+                    return None;
+                }
+                if !matches!(old_styles.source(node, property),
+                    Some(super::ElementStyleSource::Author | super::ElementStyleSource::Initial)) {
+                    return None;
+                }
+                let old_css = old_declaration.map(|d| d.value.clone()).unwrap_or_else(|| {
+                    crate::computed::initial_value(property).unwrap_or("none").to_owned()
+                });
+                let new_css = new_declaration.map(|d| d.value.clone()).unwrap_or_else(|| {
+                    crate::computed::initial_value(property).unwrap_or("none").to_owned()
+                });
+                if old_css == new_css { continue; }
+                let old_value = crate::values::parse(property, &old_css)?;
+                if style.typed(property) != Some(&old_value) { return None; }
+                effects.push((property.to_owned(), new_css));
+                continue;
+            }
             if !matches!(property, "opacity" | "transform") {
                 if old_declaration.map(|d| (d.value.as_str(), d.important))
                     != new_declaration.map(|d| (d.value.as_str(), d.important)) {
@@ -487,8 +548,8 @@ impl StyleInvalidator {
                 _ => return None,
             }
         }
-        (opacity.is_some() || transform_matrix.is_some()).then_some(CompositorStyleDelta {
-            node, opacity, transform_matrix, transform_value, transform_css,
+        (opacity.is_some() || transform_matrix.is_some() || !effects.is_empty()).then_some(CompositorStyleDelta {
+            node, opacity, transform_matrix, transform_value, transform_css, effects,
         })
     }
 

@@ -140,3 +140,13 @@ CSS owns registration/classification; IA owns scheduler adoption; IPC owns the
 additive EffectsFrameSnapshot V2 wire format. Arbitrarily transformed CSS
 effect groups need reference-space metadata before import. Native API tests
 do not establish full CSS effect parity, so COMP-15 is not marked done.
+
+### COMP-15 Windows native gate
+
+`661ebb62` on fixed base `f5f97c39`: win-001 compositor **75/75**, 0 skipped,
+**0 doctests**; workspace **2495/2495**, 9 skipped, **2/2 doctests**. The IA
+reflow/effects-scroller/article have **1/4/1 layers**, each **262144 exact
+pixels, 0 layer-rounding, 0 losses**. Evidence is committed under
+`crates/amazing-compositor/evidence/comp15/`. The native compositor area is
+gated; full COMP-15 remains open for the CSS/painter/driver adoption and the
+new effect-fixture parity criterion described above.

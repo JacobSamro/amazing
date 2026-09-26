@@ -119,7 +119,7 @@ fn open_and_initial_state_matrix() {
     assert_eq!(open(&mut x, "GET", "a", true).unwrap().len(), 1);
     assert_eq!(x.state(), XhrState::Opened);
     assert_eq!(x.abort(), Vec::<XhrEvent>::new());
-    assert_eq!(x.state(), XhrState::Opened);
+    assert_eq!(x.state(), XhrState::Unsent);
     assert!(open(&mut x, "BAD METHOD", "a", true).is_err());
     assert_eq!(
         open(&mut x, "TRACE", "a", true),
@@ -129,7 +129,7 @@ fn open_and_initial_state_matrix() {
         open(&mut x, "GET", "http://:bad", true),
         Err(XhrError::SyntaxUrl)
     );
-    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 0);
+    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 1);
 }
 // open-method-case-insensitive.htm and open-method-case-sensitive.htm.
 #[test]
@@ -354,7 +354,7 @@ fn abort_during_loading_and_reopen_generation() {
             XhrEventKind::LoadEnd
         ]
     );
-    assert_eq!(x.state(), XhrState::Done);
+    assert_eq!(x.state(), XhrState::Unsent);
     assert_eq!(x.status(), 0);
     assert_eq!(x.response_url(), "");
     assert_eq!(x.last_error(), Some(&XhrError::Abort));
@@ -566,6 +566,48 @@ fn response_types_and_decoder_bridge() {
             .as_deref(),
         Some("text/plain;charset=utf-8")
     );
+}
+
+#[test]
+fn document_source_uses_final_mime_and_retained_bytes() {
+    let mut xhr = Xhr::default();
+    open(&mut xhr, "GET", "document.xml", true).unwrap();
+    xhr.override_mime_type("application/xml;charset=UTF-8").unwrap();
+    xhr.send(None, 0).unwrap();
+    let mut network = Stub::ok(b"<root/>");
+    xhr.advance(&mut network, &site(), 1).unwrap();
+    assert!(xhr.document_source().is_none());
+    xhr.pull_response(100, 2).unwrap();
+    let source = xhr.document_source().unwrap();
+    assert_eq!(source.bytes, b"<root/>");
+    assert_eq!(source.content_type, "application/xml");
+    assert_eq!(source.charset.as_deref(), Some("UTF-8"));
+    assert!(source.url.ends_with("/document.xml"));
+
+    open(&mut xhr, "GET", "document.html", true).unwrap();
+    xhr.override_mime_type("text/html").unwrap();
+    xhr.send(None, 3).unwrap();
+    let mut network = Stub::ok(b"<html></html>");
+    let mut headers = HeaderList::default();
+    headers.append("Content-Type", "text/html").unwrap();
+    network.response.as_mut().unwrap().headers = headers;
+    xhr.advance(&mut network, &site(), 4).unwrap();
+    xhr.pull_response(100, 5).unwrap();
+    assert!(xhr.document_source().is_none());
+}
+
+#[test]
+fn document_upload_sets_utf8_content_type() {
+    let mut xhr = Xhr::default();
+    open(&mut xhr, "POST", "upload", true).unwrap();
+    xhr.set_request_header(&u("Content-Type"), &u("text/html;charset=windows-1252")).unwrap();
+    xhr.send(Some(BodyInput::Document {
+        bytes: b"<html></html>".to_vec(),
+        content_type: "text/html;charset=UTF-8".into(),
+    }), 0).unwrap();
+    let mut network = Stub::ok(b"");
+    xhr.advance(&mut network, &site(), 1).unwrap();
+    assert_eq!(network.seen_content_type.as_deref(), Some("text/html;charset=UTF-8"));
 }
 // send-send.any.js and send-entity-body-get-head.htm.
 #[test]

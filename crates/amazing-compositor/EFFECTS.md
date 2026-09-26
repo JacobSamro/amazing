@@ -24,8 +24,10 @@ For an animation, resolve both endpoints once, call
 `build_cached_frame` calls have no paint source and cannot rebuild a paint view
 or raster a tile. Missing or dirty tiles return `MissingCachedTile`, preserving
 the caller's last complete frame. The reserved halo includes offscreen input to
-blur/drop-shadow; synchronous and worker raster paths use the same visibility
-rule. Filter-list mismatches and blend/geometry/resource changes interpolate
+blur/drop-shadow. Reservations are retained per effect node: nested ancestor
+halos add, independent sibling halos take the maximum, and a later smaller
+reservation cannot shrink the prepared envelope. Synchronous and worker raster
+paths use the same visibility rule. Filter-list mismatches and blend/geometry/resource changes interpolate
 discretely. `apply_bound_effect_changes` validates stable owner generations for
 the whole batch before updating any effect.
 

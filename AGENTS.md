@@ -1,5 +1,32 @@
 # AGENTS.md
 
+## How we work: bulk (read this first)
+
+Speed comes from doing a lot per cycle, not from many small cycles.
+
+- **Write in bulk.** A ticket is a whole area: every Date method, the whole Range interface, all of
+  flex line breaking. Read the spec section once, write the whole area, then compile. Do not
+  compile after each function.
+- **Fix in bulk.** When the compiler reports errors, fix all of them before building again.
+- **Test in bulk.** Each run covers hundreds of cases: the crate's tests plus the whole relevant
+  corpus directory (Test262 directory, WPT directory), in ONE `linux-run.sh` command
+  (`build && tests && corpus`). Never run a single test in a loop.
+- **Triage by cluster.** Group failures by error message, fix the largest cluster first, rerun
+  the whole corpus. A cluster fix is worth dozens of passes; a one-off is worth one.
+- **Gate once.** One final Linux gate per ticket (workspace nextest + doctests + corpus before and
+  after). Then commit, set `done` with the SHA and numbers, and start the next item immediately.
+  Never wait idle for a reply or a merge; a blocked item goes to `questions.md` and you move on.
+- **Sandbox time is money.** Sandboxes are shared and billed while running. Batch your work so each
+  `linux-run.sh` call does a lot; do not hold a sandbox with polling or sleeps.
+
+## Linux-first (2026-09-26, overrides the Windows gate rules below until lifted)
+
+Windows gates are deferred. Every lane's final gate is on Linux, on its own Boat sandbox:
+`scripts/linux-run.sh <lane> -- 'cargo nextest run --workspace --locked --no-fail-fast && cargo test --workspace --locked --doc'`
+plus its corpus (Test262, WPT) before and after. Do not run `scripts/win-run.sh` or win-001 gates
+unless the orchestrator asks. Report Linux gate numbers in status.json and report.md. Merges are
+gated by the integrator on Linux (workspace + sharded Test262 on Boat).
+
 ## Work location policy
 
 **Never build or test on the local macOS machine.** Edit locally, sync to the
@@ -100,12 +127,14 @@ three sequential batches would. The wrapper holds one of three Mac-side slots
 (`mkdir`-atomic, dead holders reclaimed) and queues the rest. Crate-scoped `-p`
 iterations do not need a slot.
 
-**Linux runs on Boat sandboxes (2026-09-26).** `scripts/linux-run.sh <lane> -- '<cmd>'`
-now defaults to the lane's own Boat sandbox (4 vCPU Ryzen 9950X, 8 GB, deployed in
-seconds from the `amazing-builder` template with a warm `target/`, Rust 1.97.1,
-libvpx 1.16, nextest and the pinned Test262). `scripts/boat-lane.py list` shows them;
-`scripts/boat-idle-reaper.py` stops any sandbox idle for 15 minutes and the next run
-resumes it. The venus hosts stay available with `--host venus-001|venus-003`.
+**Linux runs on pooled Boat sandboxes (2026-09-26).** `scripts/linux-run.sh <lane> -- '<cmd>'`
+runs on a Boat sandbox (4 vCPU Ryzen 9950X, 8 GB, from the `amazing-builder` template: Rust 1.97.1,
+libvpx 1.16, nextest, the pinned Test262). Related lanes share one sandbox (`POOLS` in
+`scripts/boat-lane.py`); each lane syncs into its own `~/amazing/wt/<lane>` and writes outputs to
+`$OUT` (`~/amazing/out/<lane>`). All lanes on a sandbox share `~/amazing/target`, so cargo's lock
+serializes their compiles ("Blocking waiting for file lock" means another lane is building; it is
+normal). `scripts/boat-idle-reaper.py` stops a sandbox after 5 idle minutes; the next run resumes
+it in seconds. `scripts/boat-lane.py pool-report` shows busy and overlap per pool.
 **Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
 `boat data-retention`, `boat billing`, ...): the account, its templates and its retention
 settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in
