@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from wpt_render_summary import owning_lane  # noqa: E402
 
-LANES = ["css", "layout", "layout-flexgrid", "text", "replaced-content"]
+LANES = ["css", "layout", "layout-flexgrid", "text", "replaced-content", "compositor"]
 
 
 def main() -> int:
