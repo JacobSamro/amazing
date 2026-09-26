@@ -1012,18 +1012,42 @@ impl Dom {
     }
     pub fn option_text(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.require_tag(node, &["option"])?;
-        let text: Vec<u16> = self
-            .tree_order(node)
-            .into_iter()
-            .skip(1)
-            .filter_map(|child| self.character_data_utf16(child))
-            .flatten()
-            .collect();
-        let compact = String::from_utf16_lossy(&text)
+        let mut text = String::new();
+        for child in self.children(node) {
+            self.collect_option_text(child, &mut text);
+        }
+        let compact = text
             .split_ascii_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
         Ok(units(&compact))
+    }
+    /// Option text is descendant Text data only, skipping script/style subtrees
+    /// and non-text character data (comments, processing instructions).
+    fn collect_option_text(&self, node: NodeIdx, out: &mut String) {
+        // HTML and SVG script elements are excluded from option text; MathML and
+        // null-namespace script elements are ordinary content.
+        let name = self.local_name(node);
+        let namespace = self.namespace(node);
+        let excluded_script = name == Some("script")
+            && matches!(namespace, Some(Namespace::Html) | Some(Namespace::Svg));
+        let excluded_style = name == Some("style") && namespace == Some(Namespace::Html);
+        if excluded_script || excluded_style {
+            return;
+        }
+        match &self.get(node).kind {
+            NodeKind::Text { .. } => {
+                if let Some(data) = self.character_data_utf16(node) {
+                    out.push_str(&String::from_utf16_lossy(&data));
+                }
+            }
+            NodeKind::Element { .. } => {
+                for child in self.children(node) {
+                    self.collect_option_text(child, out);
+                }
+            }
+            _ => {}
+        }
     }
     pub fn option_value(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.require_tag(node, &["option"])?;
