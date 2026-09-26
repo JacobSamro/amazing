@@ -353,6 +353,9 @@ impl Compositor {
 impl PropertyTrees {
     /// Longest nested filter halo, rather than summing independent siblings.
     pub(crate) fn effect_halo(&self) -> f32 {
+        self.effect_halo_with_reservations(&HashMap::new())
+    }
+    pub(crate) fn effect_halo_with_reservations(&self, reserved: &HashMap<EffectId, f32>) -> f32 {
         let mut halos = vec![0f32; self.effects.len()];
         for (i, node) in self.effects.iter().enumerate().skip(1) {
             let own = self.effect_operations(EffectId(i)).map_or(0., |op| {
@@ -360,7 +363,8 @@ impl PropertyTrees {
                 backdrop.filters = op.backdrop_filters.clone();
                 op.outset() + backdrop.outset()
             });
-            halos[i] = halos[node.parent.0] + own;
+            halos[i] =
+                halos[node.parent.0] + own.max(reserved.get(&EffectId(i)).copied().unwrap_or(0.));
         }
         halos.into_iter().fold(0., f32::max)
     }

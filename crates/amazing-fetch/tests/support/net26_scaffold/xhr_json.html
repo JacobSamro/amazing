@@ -1,0 +1,15 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR json response creates JS values");
+var xhr = new XMLHttpRequest();
+xhr.open("GET", "data:application/json,%7B%22a%22%3A%5B1%2Ctrue%5D%7D");
+xhr.responseType = "json";
+xhr.addEventListener("load", function() {
+  assert_equals(xhr.response.a[0], 1);
+  assert_equals(xhr.response.a[1], true);
+  t.done();
+  done();
+});
+xhr.send();
+</script>
