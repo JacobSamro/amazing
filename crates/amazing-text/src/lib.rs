@@ -95,6 +95,12 @@ pub enum WordBreak {
     Normal,
     BreakAll,
     KeepAll,
+    /// CSS Text 4's generalization of `keep-all` to any script with
+    /// dictionary/complex-context-based word segmentation (e.g. Thai, Lao,
+    /// Khmer), not just CJK ideograph adjacency: "words are not broken by
+    /// the UA for the purpose of line-wrapping" beyond explicit break
+    /// opportunities (whitespace, soft hyphen, etc).
+    Manual,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
