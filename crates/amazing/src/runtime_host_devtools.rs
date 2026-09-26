@@ -27,19 +27,56 @@
 //! (globals, closures) across calls — the regression test
 //! `evaluate_persists_full_js_realm_state_across_calls` is the proof.
 //!
+//! CDP-17 makes the session usable by a real DevTools frontend: `DOM`
+//! mutation (`describeNode`, `getOuterHTML`, `setAttributeValue`,
+//! `setOuterHTML`, `removeNode`, `requestChildNodes`), comma-separated
+//! selector lists, `CSS` computed/matched styles and stylesheet text,
+//! `Input.dispatchMouseEvent`/`dispatchKeyEvent` into the page's real event
+//! dispatch, and `Page.captureScreenshot` as PNG through the existing
+//! `amazing render` raster path (`amazing_canvas::encode_png`, reused rather
+//! than duplicated — see its doc comment for the stored-DEFLATE zlib it
+//! writes).
+//!
 //! ## Known limitations (follow-ups, not silently claimed as done)
 //!
-//! * `Page.captureScreenshot` stays `Unsupported`: `ScreenshotFormat` is
-//!   Png/Jpeg/Webp and this driver has no encoder for any of them yet (only
-//!   BMP, via `render`/`render-page`).
-//! * `DOM.querySelector`/`querySelectorAll` use a single selector (no
-//!   comma-separated selector lists) via `amazing_css::selectors`; `describeNode`,
-//!   `getOuterHTML`, `setAttributeValue` and the CSS/Input domains are not
-//!   wired and stay on the crate default of `HostError::Unsupported`.
+//! * `Page.captureScreenshot` only supports `format: "png"`; `jpeg`/`webp`
+//!   stay `Unsupported` (no encoder for either in the workspace). `clip` crops
+//!   the rendered surface; `quality`/`captureBeyondViewport`/`fromSurface`
+//!   are accepted but not honored beyond the existing raster path's own
+//!   viewport sizing.
+//! * `Input.dispatchMouseEvent` hit-tests the *normal-flow and positioned*
+//!   layout tree (`amazing_layout::Flow::Blocks/Flex/Grid` plus
+//!   `LayoutBox::positioned`, topmost-child-wins) to resolve a target node
+//!   from `(x, y)`; it does not descend into `Flow::Inlines` line boxes, so a
+//!   click inside inline text resolves to the nearest block/inline-container
+//!   ancestor, not the exact inline run. The dispatched DOM event carries no
+//!   coordinate/button detail properties — no binding-host API accepts a rich
+//!   init dict at the `dispatch_dom_event` layer this driver already uses for
+//!   scripted event dispatch.
+//! * `Input.dispatchKeyEvent` dispatches to `Dom::active_element`, falling
+//!   back to the document root when nothing is focused; likewise carries no
+//!   key/text detail properties on the constructed event object.
+//! * `CSS.getMatchedStylesForNode` walks the page's own author stylesheets
+//!   (`amazing_css::selectors::matches` against each rule's
+//!   `selector_srcs`) and reports every match as `StyleOrigin::Author`; the
+//!   user-agent/built-in sheet is not separately exposed, so UA-only rules
+//!   are not listed.
+//! * `CSS.getStyleSheetText` uses the 0-based index into the page's collected
+//!   author stylesheets as an ad-hoc `styleSheetId` (this driver does not
+//!   otherwise mint or track stylesheet ids) and reconstructs CSS text from
+//!   parsed `selector_srcs`/`declarations` — an honest re-serialization, not
+//!   the original source bytes (the parser does not retain those).
+//! * `DOM.setOuterHTML` re-parses the replacement HTML with
+//!   `amazing_html::parse_fragment` in the *parent* element's tag-name
+//!   context (or `"body"` if the parent isn't an element) and splices the
+//!   result in at the original position; it does not attempt the spec's
+//!   exact context-element algorithm for every edge case (e.g. `<template>`
+//!   contents, foreign-namespace contexts).
 //! * `Accessibility.getFullAXTree` (like `amazing axtree`) lays out with
 //!   `amazing_text::FallbackTextSystem` and `amazing_layout::NoReplacedElements`,
 //!   so replaced content and real glyph metrics are not reflected — the same
-//!   documented gap as the a11y lane's own CLI entry point.
+//!   documented gap as the a11y lane's own CLI entry point. The same fallback
+//!   layout is used for hit-testing and for computed style's box geometry.
 //! * `depth` on `Accessibility.getFullAXTree` is ignored (the whole tree is
 //!   always returned), matching the CDP `-1` convention this crate already
 //!   normalizes `depth` to at the domain layer.
@@ -54,8 +91,9 @@ use std::thread::JoinHandle;
 
 use amazing_devtools::host::{
     AxNode, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult,
-    ExceptionDetails, FrameInfo, FrameTree, HostError, LayoutMetrics, NodeDescription,
-    RemoteObject, TargetInfo, Viewport,
+    ExceptionDetails, FrameInfo, FrameTree, HostError, KeyEvent, LayoutMetrics, MatchedRule,
+    MouseEvent, NodeDescription, RemoteObject, Screenshot, ScreenshotFormat, ScreenshotParams,
+    StyleOrigin, TargetInfo, Viewport,
 };
 use amazing_devtools::server::CdpServer;
 
@@ -78,6 +116,17 @@ enum PageCommand {
     QuerySelector(EngineNodeId, String, Reply<Option<EngineNodeId>>),
     QuerySelectorAll(EngineNodeId, String, Reply<Vec<EngineNodeId>>),
     FullAxTree(Reply<Vec<AxNode>>),
+    DescribeNode(EngineNodeId, u32, Reply<NodeDescription>),
+    GetOuterHtml(EngineNodeId, Reply<String>),
+    SetAttributeValue(EngineNodeId, String, Option<String>, Reply<()>),
+    SetOuterHtml(EngineNodeId, String, Reply<()>),
+    RemoveNode(EngineNodeId, Reply<()>),
+    ComputedStyleForNode(EngineNodeId, Reply<Vec<(String, String)>>),
+    MatchedStylesForNode(EngineNodeId, Reply<Vec<MatchedRule>>),
+    StyleSheetText(String, Reply<Option<String>>),
+    DispatchMouseEvent(MouseEvent, Reply<()>),
+    DispatchKeyEvent(KeyEvent, Reply<()>),
+    CaptureScreenshot(ScreenshotParams, Reply<Screenshot>),
     Shutdown,
 }
 
@@ -186,16 +235,84 @@ fn describe_node(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, depth: u32)
     desc
 }
 
+/// Splits a CDP/CSS selector list on top-level commas, respecting
+/// parentheses, brackets and quoted strings (`:is(a, b)`, `[data-x="a,b"]`),
+/// so `DOM.querySelector(All)` accepts the same comma-separated lists a page's
+/// own CSS does.
+fn split_selector_list(selector: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut quote: Option<char> = None;
+    let mut start = 0usize;
+    for (index, ch) in selector.char_indices() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                }
+            }
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                '(' | '[' => depth += 1,
+                ')' | ']' => depth -= 1,
+                ',' if depth == 0 => {
+                    parts.push(selector[start..index].trim());
+                    start = index + 1;
+                }
+                _ => {}
+            },
+        }
+    }
+    parts.push(selector[start..].trim());
+    parts
+}
+
+fn parse_selector_list(selector: &str) -> Result<Vec<amazing_css::selectors::Selector>, HostError> {
+    split_selector_list(selector)
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            amazing_css::selectors::parse_selector(part)
+                .ok_or_else(|| HostError::InvalidParams(format!("bad selector: {part}")))
+        })
+        .collect()
+}
+
+fn matches_any(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    selectors: &[amazing_css::selectors::Selector],
+) -> bool {
+    selectors.iter().any(|selector| amazing_css::selectors::matches(dom, node, selector))
+}
+
+/// Copies `source_node`'s subtree (from a standalone fragment `Dom`, as
+/// `amazing_html::parse_fragment` returns) into `target`, appended under
+/// `parent`. Mirrors `amazing-html`'s own `parse_fragment::clone_subtree`
+/// (private to that crate), since there is no cross-`Dom` "adopt" primitive.
+fn clone_subtree_into(
+    source: &amazing_dom::Dom,
+    source_node: amazing_dom::NodeIdx,
+    target: &mut amazing_dom::Dom,
+    parent: amazing_dom::NodeIdx,
+) -> amazing_dom::NodeIdx {
+    let created = target.append_child(parent, source.get(source_node).kind.clone());
+    for child in source.children(source_node) {
+        clone_subtree_into(source, child, target, created);
+    }
+    created
+}
+
 fn find_first(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
-    selector: &amazing_css::selectors::Selector,
+    selectors: &[amazing_css::selectors::Selector],
 ) -> Option<EngineNodeId> {
-    if amazing_css::selectors::matches(dom, node, selector) {
+    if matches_any(dom, node, selectors) {
         return Some(EngineNodeId(node.0 as u64));
     }
     for child in dom.children(node) {
-        if let Some(found) = find_first(dom, child, selector) {
+        if let Some(found) = find_first(dom, child, selectors) {
             return Some(found);
         }
     }
@@ -205,15 +322,78 @@ fn find_first(
 fn find_all(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
-    selector: &amazing_css::selectors::Selector,
+    selectors: &[amazing_css::selectors::Selector],
     out: &mut Vec<EngineNodeId>,
 ) {
-    if amazing_css::selectors::matches(dom, node, selector) {
+    if matches_any(dom, node, selectors) {
         out.push(EngineNodeId(node.0 as u64));
     }
     for child in dom.children(node) {
-        find_all(dom, child, selector, out);
+        find_all(dom, child, selectors, out);
     }
+}
+
+/// Serializes `node`'s outer HTML, reusing the same spec markup serializer
+/// (`Dom::serialize_node`) the JS `outerHTML` getter binding uses
+/// (`amazing-bindings/src/markup_bindings.rs`), so DevTools and scripted
+/// access agree.
+fn outer_html(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Result<String, HostError> {
+    dom.serialize_node(node)
+        .map(|units| String::from_utf16_lossy(&units))
+        .map_err(|error| HostError::Internal(format!("{error:?}")))
+}
+
+/// Crops a rendered RGBA8 surface to `clip` (`Page.captureScreenshot`'s
+/// viewport-relative clip rect), clamped to the surface's own bounds.
+fn crop_surface(surface: &amazing_paint::Surface, clip: &amazing_devtools::host::Rect) -> amazing_paint::Surface {
+    let x = (clip.x.max(0.0) as u32).min(surface.width);
+    let y = (clip.y.max(0.0) as u32).min(surface.height);
+    let w = (clip.width.max(0.0) as u32).min(surface.width.saturating_sub(x));
+    let h = (clip.height.max(0.0) as u32).min(surface.height.saturating_sub(y));
+    let mut pixels = Vec::with_capacity(w as usize * h as usize * 4);
+    for row in y..y + h {
+        let start = (row as usize * surface.width as usize + x as usize) * 4;
+        let end = start + w as usize * 4;
+        pixels.extend_from_slice(&surface.pixels[start..end]);
+    }
+    amazing_paint::Surface { width: w, height: h, pixels }
+}
+
+/// Depth-first, topmost-child-wins point-in-box hit test over a laid-out
+/// page. Checks absolutely/fixed-positioned descendants (`positioned`, which
+/// paint above normal flow) before normal-flow children, and walks
+/// `Flow::Blocks`/`Flex`/`Grid` children in reverse (later paint order wins).
+/// Does not descend into `Flow::Inlines` line boxes — see the module's
+/// "Known limitations".
+fn hit_test<'a>(box_: &'a amazing_layout::LayoutBox, x: f32, y: f32) -> Option<&'a amazing_layout::LayoutBox> {
+    // Positioned descendants are checked unconditionally, before this box's
+    // own bounds: an absolutely/fixed-positioned box commonly extends beyond
+    // the shrink-to-fit box of the ancestor that hoisted it (e.g. a
+    // `position: absolute` child of an otherwise-empty `<body>`), so gating
+    // on the ancestor's own `border_box` first would reject points that are
+    // only inside the positioned descendant.
+    for child in box_.positioned.iter().rev() {
+        if let Some(hit) = hit_test(child, x, y) {
+            return Some(hit);
+        }
+    }
+    let b = &box_.border_box;
+    if x < b.x || y < b.y || x > b.x + b.w || y > b.y + b.h {
+        return None;
+    }
+    match &box_.flow {
+        amazing_layout::Flow::Blocks(children)
+        | amazing_layout::Flow::Flex(children)
+        | amazing_layout::Flow::Grid(children) => {
+            for child in children.iter().rev() {
+                if let Some(hit) = hit_test(child, x, y) {
+                    return Some(hit);
+                }
+            }
+        }
+        amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => {}
+    }
+    Some(box_)
 }
 
 /// Converts the a11y lane's own tree into the CDP-shaped seam, matching the
@@ -322,19 +502,227 @@ impl PageOwner {
     }
 
     fn query_selector(&self, node: EngineNodeId, selector: &str) -> Result<Option<EngineNodeId>, HostError> {
-        let parsed = amazing_css::selectors::parse_selector(selector)
-            .ok_or_else(|| HostError::InvalidParams(format!("bad selector: {selector}")))?;
+        let parsed = parse_selector_list(selector)?;
         let host = self.dom_host.borrow();
         Ok(find_first(&host.dom, amazing_dom::NodeIdx(node.0 as u32), &parsed))
     }
 
     fn query_selector_all(&self, node: EngineNodeId, selector: &str) -> Result<Vec<EngineNodeId>, HostError> {
-        let parsed = amazing_css::selectors::parse_selector(selector)
-            .ok_or_else(|| HostError::InvalidParams(format!("bad selector: {selector}")))?;
+        let parsed = parse_selector_list(selector)?;
         let host = self.dom_host.borrow();
         let mut out = Vec::new();
         find_all(&host.dom, amazing_dom::NodeIdx(node.0 as u32), &parsed, &mut out);
         Ok(out)
+    }
+
+    fn describe_node(&self, node: EngineNodeId, depth: u32) -> NodeDescription {
+        let host = self.dom_host.borrow();
+        describe_node(&host.dom, amazing_dom::NodeIdx(node.0 as u32), depth)
+    }
+
+    fn get_outer_html(&self, node: EngineNodeId) -> Result<String, HostError> {
+        let host = self.dom_host.borrow();
+        outer_html(&host.dom, amazing_dom::NodeIdx(node.0 as u32))
+    }
+
+    fn set_attribute_value(&mut self, node: EngineNodeId, name: &str, value: Option<&str>) -> Result<(), HostError> {
+        let mut host = self.dom_host.borrow_mut();
+        let idx = amazing_dom::NodeIdx(node.0 as u32);
+        let result = match value {
+            Some(value) => host.dom.set_attribute(idx, name, value),
+            None => host.dom.remove_attribute(idx, name),
+        };
+        result.map_err(|error| HostError::Internal(format!("{error:?}")))
+    }
+
+    /// Reparses `html` in the parent element's tag-name context (falling
+    /// back to `"body"` when the parent isn't an element, e.g. the document
+    /// root), splices the result in at `node`'s original position, then
+    /// detaches `node`. See the module doc's "Known limitations".
+    fn set_outer_html(&mut self, node: EngineNodeId, html: &str) -> Result<(), HostError> {
+        let mut host = self.dom_host.borrow_mut();
+        let idx = amazing_dom::NodeIdx(node.0 as u32);
+        let entry = host.dom.get(idx);
+        let parent = entry
+            .parent
+            .ok_or_else(|| HostError::InvalidParams("node has no parent to splice into".into()))?;
+        let next_sibling = entry.next_sibling;
+        let context = match &host.dom.get(parent).kind {
+            amazing_dom::NodeKind::Element { name, .. } => name.clone(),
+            _ => "body".to_owned(),
+        };
+        let fragment = amazing_html::parse_fragment(&context, html)
+            .map_err(HostError::Internal)?;
+        let children: Vec<amazing_dom::NodeIdx> = fragment.children(amazing_dom::NodeIdx(0)).collect();
+        for child in children {
+            let created = clone_subtree_into(&fragment, child, &mut host.dom, parent);
+            host.dom
+                .detach(created);
+            host.dom
+                .pre_insert(created, parent, next_sibling)
+                .map_err(|error| HostError::Internal(format!("{error:?}")))?;
+        }
+        host.dom.detach(idx);
+        Ok(())
+    }
+
+    fn remove_node(&mut self, node: EngineNodeId) -> Result<(), HostError> {
+        let mut host = self.dom_host.borrow_mut();
+        host.dom.detach(amazing_dom::NodeIdx(node.0 as u32));
+        Ok(())
+    }
+
+    fn media_environment(&self) -> amazing_css::MediaEnvironment {
+        amazing_css::MediaEnvironment { viewport_width_px: self.width.max(1.0), ..amazing_css::MediaEnvironment::default() }
+    }
+
+    /// The page's own `<style>`/`<link rel=stylesheet>` sheets, in document
+    /// order — the same collection `full_ax_tree` and `layout_metrics` (via
+    /// `paint_host_surface`) use.
+    fn author_sheets(&self, dom: &amazing_dom::Dom) -> Vec<amazing_css::Stylesheet> {
+        let mut sources = Vec::new();
+        let _ = crate::page::collect_author_css(dom, amazing_dom::NodeIdx(0), &self.url, &mut sources);
+        sources.into_iter().map(|(_, _, sheet)| sheet).collect()
+    }
+
+    fn computed_style_for_node(&self, node: EngineNodeId) -> Result<Vec<(String, String)>, HostError> {
+        let host = self.dom_host.borrow();
+        let dom = &host.dom;
+        let sheets = self.author_sheets(dom);
+        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
+        let style = styled
+            .get(amazing_dom::NodeIdx(node.0 as u32))
+            .ok_or(HostError::NotFound)?;
+        Ok(style.iter().map(|(name, value)| (name.to_owned(), value.to_owned())).collect())
+    }
+
+    /// Matched rules from the page's own author stylesheets. Every match is
+    /// reported as `StyleOrigin::Author` — see the module's "Known
+    /// limitations" on the missing user-agent sheet.
+    fn matched_styles_for_node(&self, node: EngineNodeId) -> Result<Vec<MatchedRule>, HostError> {
+        let host = self.dom_host.borrow();
+        let dom = &host.dom;
+        let idx = amazing_dom::NodeIdx(node.0 as u32);
+        let sheets = self.author_sheets(dom);
+        let mut matched = Vec::new();
+        for sheet in &sheets {
+            for rule in &sheet.rules {
+                for selector_src in &rule.selector_srcs {
+                    let Some(selector) = amazing_css::selectors::parse_selector(selector_src) else { continue };
+                    if amazing_css::selectors::matches(dom, idx, &selector) {
+                        matched.push(MatchedRule {
+                            selector: selector_src.clone(),
+                            origin: StyleOrigin::Author,
+                            properties: rule
+                                .declarations
+                                .iter()
+                                .map(|decl| (decl.property.clone(), decl.value.clone()))
+                                .collect(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(matched)
+    }
+
+    /// `style_sheet_id` is the 0-based index into this page's own collected
+    /// author stylesheets (see the module's "Known limitations"); the text is
+    /// re-serialized from parsed rules, not the original source bytes.
+    fn style_sheet_text(&self, style_sheet_id: &str) -> Result<Option<String>, HostError> {
+        let index: usize = style_sheet_id
+            .parse()
+            .map_err(|_| HostError::InvalidParams(format!("bad styleSheetId: {style_sheet_id}")))?;
+        let host = self.dom_host.borrow();
+        let sheets = self.author_sheets(&host.dom);
+        let Some(sheet) = sheets.get(index) else { return Ok(None) };
+        let mut text = String::new();
+        for rule in &sheet.rules {
+            if rule.selector_srcs.is_empty() {
+                continue;
+            }
+            text.push_str(&rule.selector_srcs.join(", "));
+            text.push_str(" {\n");
+            for decl in &rule.declarations {
+                text.push_str("  ");
+                text.push_str(&decl.property);
+                text.push_str(": ");
+                text.push_str(&decl.value);
+                if decl.important {
+                    text.push_str(" !important");
+                }
+                text.push_str(";\n");
+            }
+            text.push_str("}\n");
+        }
+        Ok(Some(text))
+    }
+
+    /// Computes style + the same fallback layout `full_ax_tree` uses, then
+    /// hit-tests it. Returns `HostError::NotFound` when `(x, y)` misses every
+    /// box (e.g. outside the page).
+    fn hit_test_node(&self, x: f64, y: f64) -> Result<EngineNodeId, HostError> {
+        let host = self.dom_host.borrow();
+        let dom = &host.dom;
+        let sheets = self.author_sheets(dom);
+        let styled = amazing_css::compute_with_environment(dom, &sheets, &self.media_environment());
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_styled_document(
+            dom, &styled, &text, &amazing_layout::NoReplacedElements, self.width, None,
+        );
+        hit_test(&layout, x as f32, y as f32)
+            .and_then(|box_| box_.node)
+            .map(|node| EngineNodeId(node.0 as u64))
+            .ok_or(HostError::NotFound)
+    }
+
+    fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
+        let dom_event = match event.kind.as_str() {
+            "mousePressed" => "mousedown",
+            "mouseReleased" => "mouseup",
+            "mouseMoved" => "mousemove",
+            "mouseWheel" => "wheel",
+            other => other,
+        };
+        let target = self.hit_test_node(event.x, event.y)?;
+        self.scheduler
+            .dispatch_dom_event(target.0 as u32, dom_event)
+            .map_err(|thrown| HostError::Internal(thrown.describe()))
+    }
+
+    fn dispatch_key_event(&mut self, event: &KeyEvent) -> Result<(), HostError> {
+        let dom_event = match event.kind.as_str() {
+            "keyDown" | "rawKeyDown" => "keydown",
+            "keyUp" => "keyup",
+            "char" => "keypress",
+            other => other,
+        };
+        let target = {
+            let host = self.dom_host.borrow();
+            host.dom
+                .active_element(amazing_dom::NodeIdx(0))
+                .unwrap_or(amazing_dom::NodeIdx(0))
+        };
+        self.scheduler
+            .dispatch_dom_event(target.0, dom_event)
+            .map_err(|thrown| HostError::Internal(thrown.describe()))
+    }
+
+    /// Renders through the same `paint_host_surface` path `amazing
+    /// render`/`render-page` use, then encodes the RGBA8 surface as PNG with
+    /// `amazing_canvas::encode_png` (reused, not duplicated).
+    fn capture_screenshot(&self, params: &ScreenshotParams) -> Result<Screenshot, HostError> {
+        if !matches!(params.format, ScreenshotFormat::Png) {
+            return Err(HostError::Unsupported);
+        }
+        let mut surface = crate::cmd::render::paint_host_surface(&self.dom_host, &self.url, self.width, None, "")
+            .map_err(|error| HostError::Internal(error.to_string()))?;
+        if let Some(clip) = &params.clip {
+            surface = crop_surface(&surface, clip);
+        }
+        let image = amazing_canvas::ImageData::from_rgba(surface.width, surface.height, surface.pixels)
+            .map_err(|error| HostError::Internal(format!("{error:?}")))?;
+        Ok(Screenshot { data: amazing_canvas::encode_png(&image), format: ScreenshotFormat::Png })
     }
 
     /// Computes style + layout (the same minimal `FallbackTextSystem` /
@@ -417,6 +805,39 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
             }
             PageCommand::FullAxTree(reply) => {
                 let _ = reply.send(page.full_ax_tree());
+            }
+            PageCommand::DescribeNode(node, depth, reply) => {
+                let _ = reply.send(Ok(page.describe_node(node, depth)));
+            }
+            PageCommand::GetOuterHtml(node, reply) => {
+                let _ = reply.send(page.get_outer_html(node));
+            }
+            PageCommand::SetAttributeValue(node, name, value, reply) => {
+                let _ = reply.send(page.set_attribute_value(node, &name, value.as_deref()));
+            }
+            PageCommand::SetOuterHtml(node, html, reply) => {
+                let _ = reply.send(page.set_outer_html(node, &html));
+            }
+            PageCommand::RemoveNode(node, reply) => {
+                let _ = reply.send(page.remove_node(node));
+            }
+            PageCommand::ComputedStyleForNode(node, reply) => {
+                let _ = reply.send(page.computed_style_for_node(node));
+            }
+            PageCommand::MatchedStylesForNode(node, reply) => {
+                let _ = reply.send(page.matched_styles_for_node(node));
+            }
+            PageCommand::StyleSheetText(style_sheet_id, reply) => {
+                let _ = reply.send(page.style_sheet_text(&style_sheet_id));
+            }
+            PageCommand::DispatchMouseEvent(event, reply) => {
+                let _ = reply.send(page.dispatch_mouse_event(&event));
+            }
+            PageCommand::DispatchKeyEvent(event, reply) => {
+                let _ = reply.send(page.dispatch_key_event(&event));
+            }
+            PageCommand::CaptureScreenshot(params, reply) => {
+                let _ = reply.send(page.capture_screenshot(&params));
             }
             PageCommand::Shutdown => break,
         }
@@ -501,6 +922,57 @@ impl DevToolsSession for DriverPageSession {
 
     fn get_full_ax_tree(&mut self, _depth: Option<u32>) -> Result<Vec<AxNode>, HostError> {
         request(&self.sender, PageCommand::FullAxTree)
+    }
+
+    fn describe_node(&mut self, node: EngineNodeId, depth: u32) -> Result<NodeDescription, HostError> {
+        request(&self.sender, |reply| PageCommand::DescribeNode(node, depth, reply))
+    }
+
+    fn get_outer_html(&mut self, node: EngineNodeId) -> Result<String, HostError> {
+        request(&self.sender, |reply| PageCommand::GetOuterHtml(node, reply))
+    }
+
+    fn set_attribute_value(&mut self, node: EngineNodeId, name: &str, value: Option<&str>) -> Result<(), HostError> {
+        let name = name.to_owned();
+        let value = value.map(str::to_owned);
+        request(&self.sender, |reply| PageCommand::SetAttributeValue(node, name, value, reply))
+    }
+
+    fn set_outer_html(&mut self, node: EngineNodeId, html: &str) -> Result<(), HostError> {
+        let html = html.to_owned();
+        request(&self.sender, |reply| PageCommand::SetOuterHtml(node, html, reply))
+    }
+
+    fn remove_node(&mut self, node: EngineNodeId) -> Result<(), HostError> {
+        request(&self.sender, |reply| PageCommand::RemoveNode(node, reply))
+    }
+
+    fn get_computed_style_for_node(&mut self, node: EngineNodeId) -> Result<Vec<(String, String)>, HostError> {
+        request(&self.sender, |reply| PageCommand::ComputedStyleForNode(node, reply))
+    }
+
+    fn get_matched_styles_for_node(&mut self, node: EngineNodeId) -> Result<Vec<MatchedRule>, HostError> {
+        request(&self.sender, |reply| PageCommand::MatchedStylesForNode(node, reply))
+    }
+
+    fn get_style_sheet_text(&mut self, style_sheet_id: &str) -> Result<Option<String>, HostError> {
+        let style_sheet_id = style_sheet_id.to_owned();
+        request(&self.sender, |reply| PageCommand::StyleSheetText(style_sheet_id, reply))
+    }
+
+    fn dispatch_mouse_event(&mut self, event: &MouseEvent) -> Result<(), HostError> {
+        let event = event.clone();
+        request(&self.sender, |reply| PageCommand::DispatchMouseEvent(event, reply))
+    }
+
+    fn dispatch_key_event(&mut self, event: &KeyEvent) -> Result<(), HostError> {
+        let event = event.clone();
+        request(&self.sender, |reply| PageCommand::DispatchKeyEvent(event, reply))
+    }
+
+    fn capture_screenshot(&mut self, params: &ScreenshotParams) -> Result<Screenshot, HostError> {
+        let params = params.clone();
+        request(&self.sender, |reply| PageCommand::CaptureScreenshot(params, reply))
     }
 }
 
@@ -850,6 +1322,308 @@ mod tests {
         };
         assert!(has_role("heading"), "{nodes:?}");
         assert!(has_role("button"), "{nodes:?}");
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-17: `DOM.describeNode`/`getOuterHTML`/`setAttributeValue`/
+    /// `setOuterHTML`/`removeNode`, plus comma-separated selector lists in
+    /// `querySelectorAll`, all through a real WebSocket client against the
+    /// live DOM.
+    #[test]
+    fn end_to_end_dom_mutation_and_selector_lists_work_through_the_real_websocket_client() {
+        let host = spawn_test_host(
+            "http://example.test/dom.html",
+            "<title>Dom</title><body><div id=\"container\"><span id=\"target\" class=\"x\">old</span><p class=\"x\">p</p></div></body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
+        let root_id = document
+            .get("root")
+            .and_then(|root| root.get("nodeId"))
+            .and_then(Json::as_f64)
+            .expect("root nodeId") as u64;
+
+        // Comma-separated selector list: the <span class=x> and <p class=x>.
+        let all = client.result(
+            "DOM.querySelectorAll",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("span.x, p.x".into())),
+            ]),
+        );
+        assert_eq!(
+            all.get("nodeIds").and_then(Json::as_array).map(<[Json]>::len),
+            Some(2),
+            "{all}"
+        );
+
+        let target = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#target".into())),
+            ]),
+        );
+        let target_id = target.get("nodeId").and_then(Json::as_f64).expect("target nodeId") as u64;
+        assert!(target_id > 0, "{target}");
+
+        let describe = client.result(
+            "DOM.describeNode",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        assert_eq!(
+            describe.get("node").and_then(|node| node.get("nodeName")).and_then(Json::as_str),
+            Some("SPAN"),
+            "{describe}"
+        );
+
+        let outer = client.result(
+            "DOM.getOuterHTML",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        let outer_html = outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
+        assert!(outer_html.contains("old"), "{outer_html}");
+
+        client.result(
+            "DOM.setAttributeValue",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(target_id as f64)),
+                ("name".into(), Json::String("data-x".into())),
+                ("value".into(), Json::String("1".into())),
+            ]),
+        );
+        let outer_after_attr = client.result(
+            "DOM.getOuterHTML",
+            Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+        );
+        let outer_after_attr = outer_after_attr.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
+        assert!(outer_after_attr.contains("data-x=\"1\""), "{outer_after_attr}");
+
+        client.result(
+            "DOM.setOuterHTML",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(target_id as f64)),
+                ("outerHTML".into(), Json::String("<span id=\"target\">new</span>".into())),
+            ]),
+        );
+        let requeried = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#target".into())),
+            ]),
+        );
+        let requeried_id = requeried.get("nodeId").and_then(Json::as_f64).expect("requeried nodeId") as u64;
+        assert!(requeried_id > 0, "{requeried}");
+        let new_outer = client.result(
+            "DOM.getOuterHTML",
+            Json::Object(vec![("nodeId".into(), Json::Number(requeried_id as f64))]),
+        );
+        let new_outer = new_outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
+        assert!(new_outer.contains("new") && !new_outer.contains("old"), "{new_outer}");
+
+        client.result(
+            "DOM.removeNode",
+            Json::Object(vec![("nodeId".into(), Json::Number(requeried_id as f64))]),
+        );
+        let gone = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#target".into())),
+            ]),
+        );
+        assert_eq!(gone.get("nodeId").and_then(Json::as_f64), Some(0.0), "{gone}");
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-17: `CSS.getComputedStyleForNode`, `getMatchedStylesForNode` (the
+    /// matched rules from `amazing-css`) and `getStyleSheetText`.
+    #[test]
+    fn end_to_end_css_computed_matched_styles_and_stylesheet_text() {
+        let host = spawn_test_host(
+            "http://example.test/css.html",
+            "<title>Css</title><style>#head { color: red; }</style><body><h1 id=\"head\">Hi</h1></body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
+        let root_id = document
+            .get("root")
+            .and_then(|root| root.get("nodeId"))
+            .and_then(Json::as_f64)
+            .expect("root nodeId") as u64;
+        let head = client.result(
+            "DOM.querySelector",
+            Json::Object(vec![
+                ("nodeId".into(), Json::Number(root_id as f64)),
+                ("selector".into(), Json::String("#head".into())),
+            ]),
+        );
+        let head_id = head.get("nodeId").and_then(Json::as_f64).expect("head nodeId") as u64;
+        assert!(head_id > 0, "{head}");
+
+        let computed = client.result(
+            "CSS.getComputedStyleForNode",
+            Json::Object(vec![("nodeId".into(), Json::Number(head_id as f64))]),
+        );
+        let computed = computed.get("computedStyle").and_then(Json::as_array).expect("computedStyle array");
+        let color = computed
+            .iter()
+            .find(|entry| entry.get("name").and_then(Json::as_str) == Some("color"))
+            .unwrap_or_else(|| panic!("no color property in {computed:?}"));
+        assert!(
+            color.get("value").and_then(Json::as_str).unwrap_or_default().contains("red"),
+            "{color}"
+        );
+
+        let matched = client.result(
+            "CSS.getMatchedStylesForNode",
+            Json::Object(vec![("nodeId".into(), Json::Number(head_id as f64))]),
+        );
+        let rules = matched.get("matchedCSSRules").and_then(Json::as_array).expect("matchedCSSRules array");
+        assert!(!rules.is_empty(), "{rules:?}");
+        let first_rule = rules[0].get("rule").expect("rule field");
+        assert_eq!(first_rule.get("origin").and_then(Json::as_str), Some("author"), "{first_rule}");
+        assert!(
+            first_rule
+                .get("selectorList")
+                .and_then(|list| list.get("text"))
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .contains("head"),
+            "{first_rule}"
+        );
+
+        let sheet_text = client.result(
+            "CSS.getStyleSheetText",
+            Json::Object(vec![("styleSheetId".into(), Json::String("0".into()))]),
+        );
+        let text = sheet_text.get("text").and_then(Json::as_str).unwrap_or_default();
+        assert!(text.contains("color") && text.contains("red"), "{text}");
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-17: `Input.dispatchMouseEvent`/`dispatchKeyEvent` reach real
+    /// `addEventListener` handlers on the live page (hit-tested for the mouse
+    /// event, `document.activeElement` for the key event).
+    #[test]
+    fn end_to_end_input_dispatch_reaches_real_dom_event_listeners() {
+        let host = spawn_test_host(
+            "http://example.test/input.html",
+            "<title>Input</title><body>\
+             <button id=\"btn\" style=\"position:absolute;left:0;top:0;width:200px;height:200px\">Go</button>\
+             <input id=\"field\">\
+             <script>\
+               document.getElementById('btn').addEventListener('mousedown', () => { window.mouseHit = true; });\
+               document.getElementById('field').addEventListener('keydown', () => { window.keyHit = true; });\
+             </script>\
+             </body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+        client.result(
+            "Input.dispatchMouseEvent",
+            Json::Object(vec![
+                ("type".into(), Json::String("mousePressed".into())),
+                ("x".into(), Json::Number(50.0)),
+                ("y".into(), Json::Number(50.0)),
+                ("button".into(), Json::String("left".into())),
+                ("buttons".into(), Json::Number(1.0)),
+                ("clickCount".into(), Json::Number(1.0)),
+            ]),
+        );
+        let mouse_hit = client.result(
+            "Runtime.evaluate",
+            Json::Object(vec![
+                ("expression".into(), Json::String("window.mouseHit === true".into())),
+                ("returnByValue".into(), Json::Bool(true)),
+            ]),
+        );
+        assert_eq!(
+            mouse_hit.get("result").and_then(|result| result.get("value")).and_then(Json::as_bool),
+            Some(true),
+            "{mouse_hit}"
+        );
+
+        client.result(
+            "Runtime.evaluate",
+            Json::Object(vec![(
+                "expression".into(),
+                Json::String("document.getElementById('field').focus()".into()),
+            )]),
+        );
+        client.result(
+            "Input.dispatchKeyEvent",
+            Json::Object(vec![
+                ("type".into(), Json::String("keyDown".into())),
+                ("key".into(), Json::String("a".into())),
+                ("code".into(), Json::String("KeyA".into())),
+            ]),
+        );
+        let key_hit = client.result(
+            "Runtime.evaluate",
+            Json::Object(vec![
+                ("expression".into(), Json::String("window.keyHit === true".into())),
+                ("returnByValue".into(), Json::Bool(true)),
+            ]),
+        );
+        assert_eq!(
+            key_hit.get("result").and_then(|result| result.get("value")).and_then(Json::as_bool),
+            Some(true),
+            "{key_hit}"
+        );
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = join.join();
+    }
+
+    /// CDP-17: `Page.captureScreenshot` returns a real, decodable PNG through
+    /// the existing raster path.
+    #[test]
+    fn end_to_end_capture_screenshot_returns_a_valid_png() {
+        let host = spawn_test_host(
+            "http://example.test/shot.html",
+            "<title>Shot</title><body style=\"background:white\"><h1>Hello</h1></body>",
+        );
+        let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+        let addr = server.local_addr().expect("local_addr");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_shutdown = shutdown.clone();
+        let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+        let mut client = Client::connect(addr, "/devtools/page/page-1");
+        let shot = client.result(
+            "Page.captureScreenshot",
+            Json::Object(vec![("format".into(), Json::String("png".into()))]),
+        );
+        let data = shot.get("data").and_then(Json::as_str).expect("data field");
+        let bytes = amazing_devtools::base64::decode(data).expect("valid base64");
+        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "not a PNG signature: {bytes:?}");
+        assert!(bytes.len() > 100, "suspiciously small PNG: {} bytes", bytes.len());
 
         shutdown.store(true, Ordering::Relaxed);
         let _ = join.join();

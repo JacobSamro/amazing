@@ -1147,6 +1147,14 @@ pub trait DevToolsSession: Send {
     ) -> Result<(), HostError> {
         Err(HostError::Unsupported)
     }
+    /// Replaces `node`'s entire outer HTML (`DOM.setOuterHTML`).
+    fn set_outer_html(&mut self, _node: EngineNodeId, _html: &str) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Detaches `node` from the tree (`DOM.removeNode`).
+    fn remove_node(&mut self, _node: EngineNodeId) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
     /// Resolves an engine node from a `nodeId`/`backendNodeId` pair.
     fn resolve_node(&mut self, _backend_node_id: u64) -> Result<EngineNodeId, HostError> {
         Err(HostError::Unsupported)
