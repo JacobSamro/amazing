@@ -21,7 +21,7 @@ pub(crate) fn signal<H: BindingHost>(host: &mut H, value: &H::Value, brand: Inte
     host.with_dom(|dom| dom.abort_signal_checked(id))?;
     Ok(id)
 }
-fn default_reason<H: BindingHost>(host: &mut H, name: &str) -> Result<H::Value, H::Error> {
+pub(crate) fn default_reason<H: BindingHost>(host: &mut H, name: &str) -> Result<H::Value, H::Error> {
     let slot = host.with_dom(|dom| Ok(dom.create_dom_exception(
         name.encode_utf16().collect(), Vec::new())))?;
     let key = PlatformKey { arena: host.node_platform_key(host.current_document()).arena,
@@ -32,7 +32,7 @@ fn reason<H: BindingHost>(host: &mut H, arg: Option<&H::Value>, name: &str) -> R
     if let Some(value) = arg.filter(|value| !host.is_undefined(value)) { Ok(value.clone()) }
     else { default_reason(host, name) }
 }
-fn propagate<H: AbortHost>(host: &mut H, id: AbortSignalId, value: H::Value)
+pub(crate) fn propagate<H: AbortHost>(host: &mut H, id: AbortSignalId, value: H::Value)
     -> Result<(), H::Error> {
     let root = host.retain_value(value.clone());
     let deliveries = host.with_dom(|dom| dom.abort_signal(id, root))?;

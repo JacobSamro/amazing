@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
+    observable_handle_unsubscribe,
     html_element_interface, registry_for_document,
     dom_exception::throw_dom_error,
     host::{
@@ -534,6 +535,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
             InterfaceBrand::DOM_PARSER => Interface::DOMParser,
+            InterfaceBrand::OBSERVABLE => Interface::Observable,
+            InterfaceBrand::SUBSCRIBER => Interface::Subscriber,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -1246,6 +1249,19 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         Ok(strings)
     }
+    fn sequence_values(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
+        self.require_object(value)?;
+        let length = self.js.binding_get_property(value, "length")?;
+        let length = self.js.binding_to_number(&length)?;
+        if !length.is_finite() || length < 0.0 || length > u32::MAX as f64 {
+            return Err(Throw::type_error("Invalid sequence length"));
+        }
+        let mut values = Vec::new();
+        for index in 0..length.trunc() as u32 {
+            values.push(self.js.binding_get_property(value, &index.to_string())?);
+        }
+        Ok(values)
+    }
     fn construct_custom_element(&mut self, constructor: &JsValue,
         _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
         // JSRT-7 must make derived `super()` return this element's canonical
@@ -1282,6 +1298,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn dom_exception_value(&mut self, error: DomError) -> Result<JsValue, Throw> {
         Ok(throw_dom_error(self, error).0)
+    }
+    fn range_error_value(&mut self, message: &'static str) -> Result<JsValue, Throw> {
+        Ok(Throw::range_error(message).0)
     }
     fn image_loader_state(&mut self, node: NodeIdx) -> Result<Option<ImageLoaderState>, Throw> {
         let state = self.state.borrow();
@@ -1774,8 +1793,8 @@ impl AbortHost for RuntimeBindingHost<'_> {
         self.state.borrow_mut().abort_timeouts.push((signal, milliseconds));
         Ok(())
     }
-    fn run_abort_algorithm(&mut self, _algorithm: u64, _reason: &JsValue) -> Result<(), Throw> {
-        Err(throw_dom_error(self, DomError::NotSupportedError))
+    fn run_abort_algorithm(&mut self, algorithm: u64, reason: &JsValue) -> Result<(), Throw> {
+        observable_handle_unsubscribe(self, algorithm, reason)
     }
 }
 
