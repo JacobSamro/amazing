@@ -31,6 +31,15 @@ pub(crate) use grid_values::{
     valid_grid_template_areas, valid_grid_track_component, valid_grid_track_list,
     valid_grid_track_tokens, valid_line_names_block, valid_repeat, valid_track_size,
 };
+#[path = "shadow_values.rs"]
+mod shadow_values;
+// CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
+// reason as `grid_values` above (kept this file under the 4,000-line policy
+// after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
+// this seam (called from `values.rs` as `crate::computed::valid_box_shadow`,
+// and from this file's own `expand_declaration` as a bare name); re-exporting
+// keeps both call shapes working unchanged.
+pub(crate) use shadow_values::valid_box_shadow;
 use crate::values::{self, ComputedValue};
 use crate::media_queries::MediaEnvironment;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1855,170 +1864,6 @@ fn valid_background_clip(value: &str) -> bool {
     )
 }
 
-fn valid_box_shadow(value: &str) -> bool {
-    if value.trim().eq_ignore_ascii_case("none") {
-        return true;
-    }
-    let tokens = tokenize(value);
-    if tokens.iter().any(|token| matches!(token, Token::Comma)) {
-        return false;
-    }
-    let Some(components) = top_level_components(&tokens) else {
-        return false;
-    };
-    let mut inset = false;
-    let mut color = false;
-    let mut lengths = Vec::new();
-    for component in components {
-        match trim_tokens(component) {
-            [Token::Ident(keyword)] if keyword.eq_ignore_ascii_case("inset") => {
-                if inset {
-                    return false;
-                }
-                inset = true;
-            }
-            [Token::Ident(keyword)] if valid_supported_color_name(keyword) => {
-                if color {
-                    return false;
-                }
-                color = true;
-            }
-            [Token::Hash(hex)] if valid_hex_color(hex) => {
-                if color {
-                    return false;
-                }
-                color = true;
-            }
-            component
-                if function_inner(component, "rgb").is_some()
-                    || function_inner(component, "rgba").is_some() =>
-            {
-                let inner =
-                    function_inner(component, "rgb").or_else(|| function_inner(component, "rgba"));
-                if color || !inner.is_some_and(valid_rgb_color_tokens) {
-                    return false;
-                }
-                color = true;
-            }
-            component => {
-                let Some(length) = shadow_length(component) else {
-                    return false;
-                };
-                lengths.push(length);
-            }
-        }
-    }
-    (2..=4).contains(&lengths.len()) && lengths.get(2).is_none_or(|blur| *blur >= 0.0)
-}
-
-fn valid_supported_color_name(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "currentcolor"
-            | "aliceblue"
-            | "antiquewhite"
-            | "aqua"
-            | "aquamarine"
-            | "azure"
-            | "beige"
-            | "black"
-            | "blue"
-            | "brown"
-            | "chocolate"
-            | "coral"
-            | "crimson"
-            | "cyan"
-            | "darkgray"
-            | "darkgrey"
-            | "dimgray"
-            | "dimgrey"
-            | "fuchsia"
-            | "gold"
-            | "goldenrod"
-            | "gray"
-            | "green"
-            | "greenyellow"
-            | "grey"
-            | "honeydew"
-            | "hotpink"
-            | "indigo"
-            | "ivory"
-            | "khaki"
-            | "lavender"
-            | "lime"
-            | "magenta"
-            | "maroon"
-            | "navy"
-            | "olive"
-            | "orange"
-            | "orchid"
-            | "pink"
-            | "plum"
-            | "purple"
-            | "rebeccapurple"
-            | "red"
-            | "salmon"
-            | "seagreen"
-            | "silver"
-            | "skyblue"
-            | "slategray"
-            | "snow"
-            | "steelblue"
-            | "tan"
-            | "teal"
-            | "thistle"
-            | "tomato"
-            | "transparent"
-            | "turquoise"
-            | "violet"
-            | "wheat"
-            | "white"
-            | "whitesmoke"
-            | "yellow"
-    )
-}
-
-fn valid_hex_color(hex: &str) -> bool {
-    matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
-fn valid_rgb_color_tokens(tokens: &[Token]) -> bool {
-    let value = serialize(tokens);
-    if value.contains(',') {
-        let parts = value.split(',').map(str::trim).collect::<Vec<_>>();
-        matches!(parts.len(), 3 | 4)
-            && parts[..3].iter().all(|part| valid_rgb_channel(part))
-            && parts.get(3).is_none_or(|alpha| valid_alpha_channel(alpha))
-    } else {
-        let normalized = value.replace('/', " / ");
-        let parts = normalized.split_ascii_whitespace().collect::<Vec<_>>();
-        match parts.as_slice() {
-            [red, green, blue] => [red, green, blue]
-                .into_iter()
-                .all(|part| valid_rgb_channel(part)),
-            [red, green, blue, slash, alpha] if *slash == "/" => {
-                [red, green, blue]
-                    .into_iter()
-                    .all(|part| valid_rgb_channel(part))
-                    && valid_alpha_channel(alpha)
-            }
-            _ => false,
-        }
-    }
-}
-
-fn valid_rgb_channel(value: &str) -> bool {
-    value
-        .strip_suffix('%')
-        .unwrap_or(value)
-        .parse::<f32>()
-        .is_ok_and(|value| value.is_finite())
-}
-
-fn valid_alpha_channel(value: &str) -> bool {
-    valid_rgb_channel(value)
-}
-
 // CSS-27: this used to accept only a bare `Token::Number`/`Token::Percentage`,
 // so a `calc()`/`min()`/`max()`/`clamp()` opacity value failed this earlier
 // gate (`valid_new_paint_property`) and the computed value fell all the way
@@ -2038,14 +1883,6 @@ fn valid_overflow(value: &str) -> bool {
             "visible" | "hidden" | "clip" | "scroll" | "auto"
         )
     )
-}
-
-fn shadow_length(tokens: &[Token]) -> Option<f64> {
-    match trim_tokens(tokens) {
-        [Token::Number(value)] if *value == 0.0 => Some(*value),
-        [Token::Dimension(value, unit)] if unit.eq_ignore_ascii_case("px") => Some(*value),
-        _ => None,
-    }
 }
 
 fn valid_transform(value: &str) -> bool {
