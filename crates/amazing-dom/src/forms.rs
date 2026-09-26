@@ -1102,6 +1102,26 @@ impl Dom {
             .filter(|n| self.html_tag(*n, "option"))
             .collect())
     }
+    /// The option elements currently selected, in tree order. A single select
+    /// is represented by the option at `selectedIndex`, which falls back to the
+    /// first non-disabled option when nothing carries selectedness; a multiple
+    /// select is every option whose selectedness is true.
+    pub fn selected_options(&self, select: NodeIdx) -> Result<Vec<NodeIdx>, DomError> {
+        self.require_tag(select, &["select"])?;
+        let options = self.select_options(select)?;
+        if self.has(select, "multiple") {
+            return Ok(options
+                .into_iter()
+                .filter(|option| self.raw_option_selected(*option))
+                .collect());
+        }
+        let index = self.selected_index(select)?;
+        Ok(usize::try_from(index)
+            .ok()
+            .and_then(|index| options.get(index).copied())
+            .into_iter()
+            .collect())
+    }
     pub fn selected_index(&self, select: NodeIdx) -> Result<i32, DomError> {
         let options = self.select_options(select)?;
         let selected = if self.has(select, "multiple") {

@@ -82,6 +82,7 @@ impl InterfaceBrand {
     pub const LOCATION: Self = Self(34);
     pub const DOM_STRING_LIST: Self = Self(35);
     pub const SELECTION: Self = Self(36);
+    pub const SELECTED_OPTIONS: Self = Self(37);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -258,7 +259,9 @@ pub enum Operation {
     SelectValue, SelectSetValue, SelectSelectedIndex, SelectSetSelectedIndex,
     SelectOptions, SelectLength, SelectMultiple, SelectSetMultiple, SelectAdd, SelectRemove,
     OptionValue, OptionSetValue, OptionSelected, OptionSetSelected,
-    SelectItem, SelectNamedItem, SelectSetLength,
+    SelectItem, SelectNamedItem, SelectSetLength, SelectSelectedOptions,
+    SelectedOptionsIndexedGetter, SelectedOptionsSupportedIndexCount,
+    SelectedOptionsNamedGetter,
     OptionDefaultSelected, OptionSetDefaultSelected, OptionText, OptionSetText,
     OptionIndex,
     ButtonType, ButtonSetType,

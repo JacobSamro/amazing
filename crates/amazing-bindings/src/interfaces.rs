@@ -715,6 +715,7 @@ const SELECT: &[Member] = &[
     getter("selectedIndex", O::SelectSelectedIndex), setter("selectedIndex", O::SelectSetSelectedIndex),
     getter("options", O::SelectOptions), getter("length", O::SelectLength),
     setter("length", O::SelectSetLength),
+    getter("selectedOptions", O::SelectSelectedOptions),
     getter("multiple", O::SelectMultiple), setter("multiple", O::SelectSetMultiple),
     method("add", O::SelectAdd, 1), method("remove", O::SelectRemove, 0),
     method("item", O::SelectItem, 1), method("namedItem", O::SelectNamedItem, 1),
@@ -1242,6 +1243,13 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         supported_names: Some(O::OptionsSupportedNames),
         indexed_getter: O::OptionsIndexedGetter, indexed_setter: Some(O::OptionsIndexedSetter),
         named_getter: Some(O::OptionsNamedGetter), named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::SELECTED_OPTIONS, LegacyPlatformHooks {
+        supported_index_count: O::SelectedOptionsSupportedIndexCount,
+        supported_names: None,
+        indexed_getter: O::SelectedOptionsIndexedGetter, indexed_setter: None,
+        named_getter: Some(O::SelectedOptionsNamedGetter), named_setter: None, named_deleter: None,
         override_builtins: false, unenumerable_names: true,
     })?;
     host.define_legacy_platform_object(InterfaceBrand::RADIO_NODE_LIST, LegacyPlatformHooks {

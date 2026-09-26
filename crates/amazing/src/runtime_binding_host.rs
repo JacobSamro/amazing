@@ -402,6 +402,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::COLLECTION => Interface::HTMLCollection,
             InterfaceBrand::FORM_CONTROLS => Interface::HTMLFormControlsCollection,
             InterfaceBrand::OPTIONS => Interface::HTMLOptionsCollection,
+            InterfaceBrand::SELECTED_OPTIONS => Interface::HTMLCollection,
             InterfaceBrand::RADIO_NODE_LIST => Interface::RadioNodeList,
             InterfaceBrand::VALIDITY_STATE => Interface::ValidityState,
             InterfaceBrand::CUSTOM_ELEMENT_REGISTRY => Interface::CustomElementRegistry,
@@ -677,6 +678,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 Operation::HTMLCollectionSupportedIndexCount => dom.collection_length(handle.slot as usize),
                 Operation::FormCollectionSupportedIndexCount => dom.form_controls(NodeIdx(handle.slot as u32)).map(|items| items.len()),
                 Operation::OptionsSupportedIndexCount => dom.select_options(NodeIdx(handle.slot as u32)).map(|items| items.len()),
+                Operation::SelectedOptionsSupportedIndexCount => dom.selected_options(NodeIdx(handle.slot as u32)).map(|items| items.len()),
                 Operation::RadioNodeListSupportedIndexCount => dom.radio_list_items(handle.slot as usize).map(|items| items.len()),
                 Operation::NodeListSupportedIndexCount => match brand {
                     InterfaceBrand::NODE_LIST => Ok(dom.children(NodeIdx(handle.slot as u32)).count()),

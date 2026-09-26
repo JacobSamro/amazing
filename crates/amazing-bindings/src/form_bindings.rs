@@ -81,6 +81,15 @@ pub(crate) fn handles(op: O) -> bool {
             | O::SelectItem
             | O::SelectNamedItem
             | O::SelectSetLength
+            | O::SelectSelectedOptions
+            | O::SelectedOptionsIndexedGetter
+            | O::SelectedOptionsNamedGetter
+            | O::SelectedOptionsSupportedIndexCount
+            | O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
             | O::OptionValue
             | O::OptionSetValue
             | O::OptionSelected
@@ -315,6 +324,16 @@ fn collection_owner<H: BindingHost>(
     })?;
     Ok(node)
 }
+fn selected_options_owner<H: BindingHost>(
+    host: &mut H,
+    receiver: &H::Value,
+) -> Result<NodeIdx, H::Error> {
+    let key = host
+        .platform_object(receiver, B::SELECTED_OPTIONS)
+        .ok_or_else(|| host.type_error("Expected an HTMLCollection"))?;
+    host.node_from_platform_key(key)
+        .ok_or_else(|| host.type_error("Invalid HTMLCollection"))
+}
 fn radio_slot<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize, H::Error> {
     let key = host
         .platform_object(receiver, B::RADIO_NODE_LIST)
@@ -376,6 +395,12 @@ fn collection_items<H: BindingHost>(
         | O::OptionsSupportedNames => {
             let owner = collection_owner(host, receiver, B::OPTIONS, "select")?;
             host.with_dom(|dom| dom.select_options(owner))
+        }
+        O::SelectedOptionsIndexedGetter
+        | O::SelectedOptionsNamedGetter
+        | O::SelectedOptionsSupportedIndexCount => {
+            let select = selected_options_owner(host, receiver)?;
+            host.with_dom(|dom| dom.selected_options(select))
         }
         _ => {
             let slot = radio_slot(host, receiver)?;
@@ -618,6 +643,53 @@ pub(crate) fn invoke<H: BindingHost>(
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    // HTMLCollection accessors and methods are shared with ordinary element
+    // collections; claim them here only for a select's selectedOptions object
+    // and hand every other receiver back to the collection module.
+    if matches!(
+        op,
+        O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
+    ) && host.platform_object(&receiver, B::SELECTED_OPTIONS).is_none()
+    {
+        return crate::collections::invoke(host, op, receiver, args);
+    }
+    if op == O::SelectSelectedOptions {
+        let select = node(host, &receiver, &["select"])?;
+        return key_node(host, select, B::SELECTED_OPTIONS);
+    }
+    if matches!(
+        op,
+        O::SelectedOptionsIndexedGetter
+            | O::SelectedOptionsNamedGetter
+            | O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
+    ) {
+        let select = selected_options_owner(host, &receiver)?;
+        let items = host.with_dom(|dom| dom.selected_options(select))?;
+        match op {
+            O::SelectedOptionsIndexedGetter
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionIndexedGetter => {
+                let at = index(host, args, 0)?;
+                return wrap(host, items.get(at).copied());
+            }
+            O::SelectedOptionsNamedGetter
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionNamedGetter => {
+                let name = string(host, args, 0)?;
+                let found = host.with_dom(|dom| Ok(named(&items, dom, &name)))?;
+                return wrap(host, found.first().copied());
+            }
+            _ => return Ok(host.number(items.len() as f64)),
+        }
+    }
     if op == O::FormDataFormConstructor {
         let Some(value) = args.first().filter(|value| !host.is_undefined(value)) else {
             return host.form_data_new(FormData::default());
