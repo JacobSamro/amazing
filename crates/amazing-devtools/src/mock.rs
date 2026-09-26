@@ -16,7 +16,8 @@ use crate::host::{
     KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery,
     MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
     PropertyDescriptor, Quad, Rect, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
-    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
+    ScreenshotParams, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent,
+    Viewport,
 };
 use crate::json::Json;
 
@@ -106,6 +107,16 @@ pub struct MockScript {
     pub highlight_config: Option<HighlightConfig>,
     /// Set by `Overlay.hideHighlight`.
     pub highlight_hidden: Option<bool>,
+    /// Metrics returned by `Performance.getMetrics`.
+    pub performance_metrics: Vec<(String, f64)>,
+    /// The target's current security state.
+    pub current_security_state: SecurityState,
+    /// Pending `Security.securityStateChanged` changes.
+    pub security_states: VecDeque<SecurityState>,
+    /// Last `Security.setIgnoreCertificateErrors` value.
+    pub ignore_certificate_errors: Option<bool>,
+    /// `Security.handleCertificateError` calls: (event_id, action).
+    pub certificate_errors: Vec<(i64, i32)>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -185,6 +196,11 @@ impl Default for MockScript {
             highlighted_quad: None,
             highlight_config: None,
             highlight_hidden: None,
+            performance_metrics: vec![("Frames".into(), 12.0), ("Nodes".into(), 340.0)],
+            current_security_state: SecurityState::default(),
+            security_states: VecDeque::new(),
+            ignore_certificate_errors: None,
+            certificate_errors: Vec::new(),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -340,6 +356,16 @@ impl MockScript {
     pub fn set_request_post_data(&mut self, request_id: &str, text: &str) {
         self.request_post_data
             .push((request_id.to_string(), text.to_string()));
+    }
+
+    /// Sets the current security state without queueing an event.
+    pub fn set_current_security_state(&mut self, state: SecurityState) {
+        self.current_security_state = state;
+    }
+
+    /// Queues a `Security.securityStateChanged` change.
+    pub fn push_security_state(&mut self, state: SecurityState) {
+        self.security_states.push_back(state);
     }
 }
 
@@ -890,6 +916,37 @@ impl DevToolsSession for MockSession {
 
     fn hide_highlight(&mut self) -> Result<(), HostError> {
         self.script.lock().unwrap().highlight_hidden = Some(true);
+        Ok(())
+    }
+
+    fn performance_metrics(&mut self) -> Result<Vec<(String, f64)>, HostError> {
+        Ok(self.script.lock().unwrap().performance_metrics.clone())
+    }
+
+    fn security_state(&mut self) -> Result<SecurityState, HostError> {
+        Ok(self.script.lock().unwrap().current_security_state.clone())
+    }
+
+    fn drain_security_states(&mut self) -> Vec<SecurityState> {
+        self.script
+            .lock()
+            .unwrap()
+            .security_states
+            .drain(..)
+            .collect()
+    }
+
+    fn set_ignore_certificate_errors(&mut self, ignore: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().ignore_certificate_errors = Some(ignore);
+        Ok(())
+    }
+
+    fn handle_certificate_error(&mut self, event_id: i64, action: i32) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .certificate_errors
+            .push((event_id, action));
         Ok(())
     }
 

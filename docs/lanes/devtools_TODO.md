@@ -177,3 +177,18 @@ doctests 4 passed.
 New seam types `Rgba` and `HighlightConfig`; `highlight_*` default to
 `Unsupported` while the enable/mode/hide methods are advisory. The `setShow*`
 flags are validated and accepted as engine hints.
+
+## CDP-7 — Performance and Security domains — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 83/83
+nextest (0 skipped) and 1 doctest; workspace 2761 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+- `Performance`: `enable`/`disable`/`setTimeDomain` and `getMetrics` over
+  `DevToolsSession::performance_metrics`.
+- `Security`: `enable`/`disable` (enable emits the current state),
+  `setIgnoreCertificateErrors`, `handleCertificateError`,
+  `setOverrideCertificateErrors`, and `Security.securityStateChanged` changes
+  drained from the engine. New seam type `SecurityState` and
+  `security_state`/`drain_security_states`/`set_ignore_certificate_errors`/
+  `handle_certificate_error`.

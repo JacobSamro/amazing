@@ -13,7 +13,9 @@ pub mod log;
 pub mod network;
 pub mod overlay;
 pub mod page;
+pub mod performance;
 pub mod runtime;
+pub mod security;
 pub mod target;
 
 use crate::host::{
