@@ -1143,3 +1143,30 @@ Compositor handoff: `crates/amazing-compositor/src/paint_view.rs` still passes
 its `EffectOperations` and adopt a matching reference. Filters, backdrop-filter,
 clip-path and mask are not part of RC-24 and remain a separate paint slice.
 No WPT credit is claimed.
+
+## RC-25 — CSS filter color-function reference (2026-09-26)
+
+Second COMP-15 paint reference slice, the color half of `filter`. A new bounded,
+`Copy` `amazing_paint::filter::FilterPlan` parses the computed filter list's
+color functions (`brightness`, `contrast`, `grayscale`, `hue-rotate`, `invert`,
+`opacity`, `saturate`, `sepia`) in source order into a capped fixed array of
+`FilterOp`. Blur, drop-shadow, `url()` and `calc()` functions are skipped rather
+than guessed (the painter previously deferred the whole filter property).
+`effect_for` opens a group for a non-empty plan, `GroupEffect`/`EffectNode`
+carry the plan, and `composite_group` applies it to the group layer before
+blending, so the filter covers the element's own decorations and its subtree.
+Color math is the Filter Effects definitions (luma 0.2126/0.7152/0.0722, the
+sepia and hue-rotate matrices), clamped and rounded per channel.
+
+Focused tests: plan order and unsupported-function skipping; grayscale,
+brightness(0), invert(1) and opacity(0.5) pixel values; and a paint-document
+test that the filter changes only the element subtree. No CSS, layout,
+compositor, driver or lockfile source changed.
+
+Linux gate at `4176b349`: workspace nextest **2,745 passed / 0 failed / 10
+skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**142 passed / 0 skipped**.
+
+Still outstanding for COMP-15: `backdrop-filter`, blur/drop-shadow filters,
+clip-path basic shapes and mask-image, which need the compositor's
+`EffectOperations` metadata contract and raster transforms. No WPT credit.
