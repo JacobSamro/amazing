@@ -53,6 +53,7 @@ pub struct EnabledDomains {
     pub fetch: bool,
     pub security: bool,
     pub accessibility: bool,
+    pub debugger: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -165,6 +166,14 @@ impl SessionState {
                 events.push(domains::security::state_changed(&state));
             }
         }
+        if enabled.debugger {
+            for script in self.dev.drain_scripts_parsed() {
+                events.push(domains::debugger::script_parsed(&script));
+            }
+            for paused in self.dev.drain_debugger_paused() {
+                events.push(domains::debugger::paused(&paused));
+            }
+        }
         events
     }
 }
@@ -190,6 +199,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Log" => domains::log::dispatch(session, request),
         "Fetch" => domains::fetch::dispatch(session, request),
         "Accessibility" => domains::accessibility::dispatch(session, request),
+        "Debugger" => domains::debugger::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }

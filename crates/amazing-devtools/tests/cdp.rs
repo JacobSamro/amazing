@@ -1073,3 +1073,92 @@ fn page_endpoint_reports_the_accessibility_tree() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_supports_breakpoints_stepping_and_call_frame_eval() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Debugger.enable", empty());
+    assert_eq!(host.script().lock().unwrap().debugger_enabled, Some(true));
+
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        obj! { "lineNumber" => n(10.0), "url" => s("https://a/x.js") },
+    );
+    assert_eq!(
+        breakpoint.get("breakpointId").unwrap().as_str(),
+        Some("bp-1")
+    );
+    let locations = breakpoint.get("locations").unwrap().as_array().unwrap();
+    assert_eq!(locations.len(), 1);
+    assert_eq!(
+        locations[0].get("scriptId").unwrap().as_str(),
+        Some("script-1")
+    );
+
+    client.result("Debugger.removeBreakpoint", obj! { "breakpointId" => s("bp-1") });
+
+    client.result("Debugger.pause", empty());
+    client.result("Debugger.stepInto", empty());
+    client.result("Debugger.stepOver", empty());
+    client.result("Debugger.stepOut", empty());
+
+    client.result("Debugger.resume", empty());
+    client.wait_event("Debugger.resumed");
+
+    let eval = client.result(
+        "Debugger.evaluateOnCallFrame",
+        obj! { "callFrameId" => s("cf-1"), "expression" => s("x") },
+    );
+    assert_eq!(
+        eval.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(42.0)
+    );
+
+    let source = client.result(
+        "Debugger.getScriptSource",
+        obj! { "scriptId" => s("script-1") },
+    );
+    assert_eq!(
+        source.get("scriptSource").unwrap().as_str(),
+        Some("function f() { return 42; }")
+    );
+
+    {
+        let script = host.script();
+        let mut script = script.lock().unwrap();
+        assert_eq!(script.removed_breakpoints, ["bp-1"]);
+        assert_eq!(script.debugger_pause_calls, 1);
+        assert_eq!(script.debugger_resume_calls, 1);
+        assert_eq!(script.step_into_calls, 1);
+        assert_eq!(script.step_over_calls, 1);
+        assert_eq!(script.step_out_calls, 1);
+        script.push_script_parsed(amazing_devtools::host::ScriptInfo {
+            script_id: "script-2".into(),
+            url: "https://a/y.js".into(),
+            start_line: 0,
+            start_column: 0,
+            end_line: 5,
+            end_column: 0,
+            hash: "abc".into(),
+        });
+    }
+
+    let script_parsed = client.wait_event("Debugger.scriptParsed");
+    assert_eq!(
+        script_parsed
+            .get("params")
+            .unwrap()
+            .get("url")
+            .unwrap()
+            .as_str(),
+        Some("https://a/y.js")
+    );
+
+    client.result("Debugger.disable", empty());
+    assert_eq!(host.script().lock().unwrap().debugger_enabled, Some(false));
+
+    shutdown.store(true, Ordering::Relaxed);
+}

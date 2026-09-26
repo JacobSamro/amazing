@@ -6,6 +6,7 @@
 
 pub mod accessibility;
 pub mod css;
+pub mod debugger;
 pub mod dom;
 pub mod emulation;
 pub mod fetch;

@@ -10,14 +10,14 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    AxNode, BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
-    EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
-    FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
+    AxNode, BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession,
+    EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern,
+    FrameInfo, FrameResourceTree, FrameTree, HighlightConfig, HostError, HostInfo, HeapUsage,
     InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule,
     MediaFeature, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
-    NetworkResponseEvent, NodeDescription, PropertyDescriptor, Quad, Rect, RemoteObject,
-    ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, SecurityState, TargetEvent,
-    TargetEventKind, TargetInfo, TouchEvent, Viewport,
+    NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor, Quad, Rect,
+    RemoteObject, ResourceContent, ResourceInfo, Screenshot, ScreenshotParams, ScriptInfo,
+    ScriptLocation, SecurityState, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use std::collections::HashMap;
 use crate::json::Json;
@@ -146,6 +146,29 @@ pub struct MockScript {
     pub ax_children: HashMap<String, Vec<AxNode>>,
     /// Result returned by `Accessibility.queryAXTree`.
     pub ax_query_result: Vec<AxNode>,
+    /// Last `Debugger.enable`/`disable` call.
+    pub debugger_enabled: Option<bool>,
+    /// Locations returned by every `Debugger.setBreakpointByUrl` call.
+    pub breakpoint_locations: Vec<ScriptLocation>,
+    /// `breakpointId` counter for `Debugger.setBreakpointByUrl`.
+    pub next_breakpoint_id: u64,
+    /// `Debugger.removeBreakpoint` calls, in order.
+    pub removed_breakpoints: Vec<String>,
+    /// Count of `Debugger.pause`/`resume`/`stepInto`/`stepOver`/`stepOut`
+    /// calls, in that field order.
+    pub debugger_pause_calls: u32,
+    pub debugger_resume_calls: u32,
+    pub step_into_calls: u32,
+    pub step_over_calls: u32,
+    pub step_out_calls: u32,
+    /// Result returned by `Debugger.evaluateOnCallFrame`.
+    pub call_frame_eval_value: EvaluateResult,
+    /// Source text returned by `Debugger.getScriptSource`.
+    pub script_source: String,
+    /// Queued `Debugger.scriptParsed` events.
+    pub scripts_parsed: VecDeque<ScriptInfo>,
+    /// Queued `Debugger.paused` events.
+    pub debugger_paused_events: VecDeque<PausedEvent>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -306,6 +329,23 @@ impl Default for MockScript {
                 node: Some(EngineNodeId(6)),
                 ..AxNode::default()
             }],
+            debugger_enabled: None,
+            breakpoint_locations: vec![ScriptLocation {
+                script_id: "script-1".into(),
+                line_number: 10,
+                column_number: None,
+            }],
+            next_breakpoint_id: 0,
+            removed_breakpoints: Vec::new(),
+            debugger_pause_calls: 0,
+            debugger_resume_calls: 0,
+            step_into_calls: 0,
+            step_over_calls: 0,
+            step_out_calls: 0,
+            call_frame_eval_value: EvaluateResult::value(RemoteObject::number(42.0)),
+            script_source: "function f() { return 42; }".into(),
+            scripts_parsed: VecDeque::new(),
+            debugger_paused_events: VecDeque::new(),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -471,6 +511,16 @@ impl MockScript {
     /// Queues a `Security.securityStateChanged` change.
     pub fn push_security_state(&mut self, state: SecurityState) {
         self.security_states.push_back(state);
+    }
+
+    /// Queues a `Debugger.scriptParsed` event.
+    pub fn push_script_parsed(&mut self, script: ScriptInfo) {
+        self.scripts_parsed.push_back(script);
+    }
+
+    /// Queues a `Debugger.paused` event.
+    pub fn push_debugger_paused(&mut self, event: PausedEvent) {
+        self.debugger_paused_events.push_back(event);
     }
 }
 
@@ -1139,6 +1189,84 @@ impl DevToolsSession for MockSession {
         _role: Option<&str>,
     ) -> Result<Vec<AxNode>, HostError> {
         Ok(self.script.lock().unwrap().ax_query_result.clone())
+    }
+
+    fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_enabled = Some(enabled);
+        Ok(())
+    }
+
+    fn set_breakpoint_by_url(
+        &mut self,
+        _url: &str,
+        _line_number: u32,
+        _column_number: Option<u32>,
+        _condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.next_breakpoint_id += 1;
+        let id = format!("bp-{}", script.next_breakpoint_id);
+        let locations = script.breakpoint_locations.clone();
+        Ok((id, locations))
+    }
+
+    fn remove_breakpoint(&mut self, breakpoint_id: &str) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .removed_breakpoints
+            .push(breakpoint_id.to_string());
+        Ok(())
+    }
+
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_pause_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().debugger_resume_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_into(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_into_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_over_calls += 1;
+        Ok(())
+    }
+
+    fn debugger_step_out(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().step_out_calls += 1;
+        Ok(())
+    }
+
+    fn evaluate_on_call_frame(
+        &mut self,
+        _call_frame_id: &str,
+        _expression: &str,
+    ) -> Result<EvaluateResult, HostError> {
+        Ok(self.script.lock().unwrap().call_frame_eval_value.clone())
+    }
+
+    fn get_script_source(&mut self, _script_id: &str) -> Result<String, HostError> {
+        Ok(self.script.lock().unwrap().script_source.clone())
+    }
+
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        self.script.lock().unwrap().scripts_parsed.drain(..).collect()
+    }
+
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        self.script
+            .lock()
+            .unwrap()
+            .debugger_paused_events
+            .drain(..)
+            .collect()
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {

@@ -193,7 +193,11 @@ doctests 4 passed.
   `security_state`/`drain_security_states`/`set_ignore_certificate_errors`/
   `handle_certificate_error`.
 
-## CDP-8 — Runtime depth — in progress
+## CDP-8 — Runtime depth — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target), measured together with
+CDP-9 in the same bulk pass: `amazing-devtools` 89/89 nextest (0 skipped) and
+1 doctest; workspace 2808 passed, 0 failed, 10 skipped, doctests 4 passed.
 
 `Runtime.compileScript`, `runScript`, `getIsolateId`, `getHeapUsage`,
 `globalLexicalScopeNames`, `queryObjects`, `setAsyncCallStackDepth` and
@@ -219,7 +223,31 @@ and `Overlay`.
 This crate does not depend on `amazing-a11y`; the seam is CDP-shaped only, so
 the driver converts its own `amazing_a11y::AxTree` (role, computed name/
 description, DOM node, children) into `AxNode`s when it adopts this trait —
-same pattern as every other domain here. No push events
-(`Accessibility.nodesUpdated`) yet; a CDP-10 candidate once the driver's tree
-invalidation is wired up, alongside `Debugger`/`Profiler`/`HeapProfiler`,
-`Tracing`, `DOMSnapshot`, `Storage` and `permessage-deflate`.
+same pattern as every other domain here.
+
+## CDP-10 — Debugger domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 95/95
+nextest (0 skipped) and 1 doctest; workspace 2871 passed, 0 failed, 10
+skipped, doctests 4 passed.
+
+`Debugger.enable`/`disable`, `setBreakpointByUrl`, `removeBreakpoint`,
+`pause`/`resume` (emits `Debugger.resumed`), `stepInto`/`stepOver`/`stepOut`,
+`evaluateOnCallFrame` (reuses `Runtime`'s `evaluate_result` serializer) and
+`getScriptSource`. New seam types `ScriptLocation`, `ScriptInfo`, `CallFrame`
+and `PausedEvent`, kept to the fields a front end needs to show a stack and
+evaluate in a frame — Chrome's full `CallFrame`/`Scope` schema carries more
+optional detail (a scope chain, `this`, generator state) the driver can add
+later without breaking this seam. `Debugger.scriptParsed`/`Debugger.paused`
+drain like every other domain's push events (`drain_scripts_parsed`/
+`drain_debugger_paused`), gated by a new `EnabledDomains::debugger` flag.
+
+The seam trait methods for the whole CDP-10..CDP-15 batch (`Debugger`,
+`Profiler`, `HeapProfiler`, `DOMSnapshot`, `Storage`/`DOMStorage`/
+`IndexedDB`, `Tracing`, `Accessibility.nodesUpdated`) were designed and added
+to `host.rs` together in this ticket, each defaulting to
+`HostError::Unsupported` or an advisory no-op like every other domain here,
+so later tickets implement their domain layer against an already-stable
+seam. Recorded the `Debugger`/`Profiler`/`HeapProfiler` seam for the JS
+engine in `.agents/js-runtime/questions.md` (the engine implements
+`DevToolsSession` for these methods, not this crate).

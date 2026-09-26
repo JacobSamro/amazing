@@ -118,7 +118,7 @@ impl TargetInfo {
 }
 
 /// Stable engine node identity (arena slot plus generation, or equivalent).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EngineNodeId(pub u64);
 
 /// CDP `Runtime.RemoteObject`.
@@ -738,6 +738,122 @@ pub struct AxNode {
     pub child_ids: Vec<String>,
 }
 
+/// A CDP `Debugger.Location`: one place in one script.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ScriptLocation {
+    pub script_id: String,
+    pub line_number: u32,
+    pub column_number: Option<u32>,
+}
+
+/// `Debugger.scriptParsed` data for one parsed script.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ScriptInfo {
+    pub script_id: String,
+    pub url: String,
+    pub start_line: u32,
+    pub start_column: u32,
+    pub end_line: u32,
+    pub end_column: u32,
+    /// A hash the client can use to detect edits; the driver may leave this
+    /// empty if it does not track script hashes.
+    pub hash: String,
+}
+
+/// One CDP `Debugger.CallFrame`, simplified to the fields a front end needs
+/// to show a stack and evaluate in a frame's scope. Chrome's full schema also
+/// carries a scope chain and a `this` value; the driver can add those later
+/// without breaking this seam (`evaluateOnCallFrame` already returns a full
+/// `EvaluateResult`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CallFrame {
+    pub call_frame_id: String,
+    pub function_name: String,
+    pub location: ScriptLocation,
+    pub url: String,
+}
+
+/// `Debugger.paused` data.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PausedEvent {
+    pub call_frames: Vec<CallFrame>,
+    /// `"XHR"`, `"DOM"`, `"EventListener"`, `"exception"`, `"assert"`,
+    /// `"debugCommand"`, `"promiseRejection"`, `"OOM"`, `"other"`,
+    /// `"ambiguous"`, or a step landing (also `"other"` by convention).
+    pub reason: String,
+    pub hit_breakpoints: Vec<String>,
+}
+
+/// One node of a `Profiler.stop` CPU profile tree.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CpuProfileNode {
+    pub id: u32,
+    pub function_name: String,
+    pub script_id: String,
+    pub url: String,
+    pub line_number: u32,
+    pub hit_count: u32,
+    pub children: Vec<u32>,
+}
+
+/// A `Profiler.Profile` (`Profiler.stop`'s result).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CpuProfile {
+    pub nodes: Vec<CpuProfileNode>,
+    pub start_time: f64,
+    pub end_time: f64,
+    /// Node id sampled at each tick.
+    pub samples: Vec<u32>,
+    /// Microseconds between consecutive samples.
+    pub time_deltas: Vec<i64>,
+}
+
+/// One node of a `DOMSnapshot.captureSnapshot` document, before string
+/// interning (this crate performs that when serializing the wire format, so
+/// the seam itself stays in plain strings).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DomSnapshotNode {
+    /// A CDP `Node.nodeType` value (1 = element, 3 = text, 9 = document, …).
+    pub node_type: u32,
+    pub node_name: String,
+    pub node_value: String,
+    pub backend_node_id: EngineNodeId,
+    pub attributes: Vec<(String, String)>,
+    /// Indices into this document's flat `nodes`, in tree order.
+    pub children: Vec<u32>,
+}
+
+/// One document of a `DOMSnapshot.captureSnapshot` result: a flat,
+/// depth-first list of [`DomSnapshotNode`]s starting at the document node.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DomSnapshotDocument {
+    pub document_url: String,
+    pub base_url: String,
+    pub nodes: Vec<DomSnapshotNode>,
+}
+
+/// A CDP `Network.Cookie`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub expires: f64,
+    pub http_only: bool,
+    pub secure: bool,
+    /// `"Strict"`, `"Lax"`, `"None"`, or empty when unset.
+    pub same_site: String,
+}
+
+/// Identifies one `localStorage`/`sessionStorage` area
+/// (`DOMStorage.StorageId`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DomStorageId {
+    pub security_origin: String,
+    pub is_local_storage: bool,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -1328,6 +1444,207 @@ pub trait DevToolsSession: Send {
         Err(HostError::Unsupported)
     }
 
+    // --- Debugger -----------------------------------------------------------
+    /// Enables/disables the debugger (`Debugger.enable`/`disable`). Advisory.
+    fn debugger_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Sets a breakpoint by URL pattern, returning its id plus every location
+    /// it resolved to right now (`Debugger.setBreakpointByUrl`).
+    fn set_breakpoint_by_url(
+        &mut self,
+        _url: &str,
+        _line_number: u32,
+        _column_number: Option<u32>,
+        _condition: Option<&str>,
+    ) -> Result<(String, Vec<ScriptLocation>), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Removes a breakpoint by id (`Debugger.removeBreakpoint`).
+    fn remove_breakpoint(&mut self, _breakpoint_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Pauses at the next statement (`Debugger.pause`).
+    fn debugger_pause(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Resumes execution (`Debugger.resume`).
+    fn debugger_resume(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Steps into the next function call (`Debugger.stepInto`).
+    fn debugger_step_into(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Steps over the current line (`Debugger.stepOver`).
+    fn debugger_step_over(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Steps out of the current function (`Debugger.stepOut`).
+    fn debugger_step_out(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Evaluates `expression` in the scope of `call_frame_id`
+    /// (`Debugger.evaluateOnCallFrame`).
+    fn evaluate_on_call_frame(
+        &mut self,
+        _call_frame_id: &str,
+        _expression: &str,
+    ) -> Result<EvaluateResult, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The full source text of a previously parsed script
+    /// (`Debugger.getScriptSource`).
+    fn get_script_source(&mut self, _script_id: &str) -> Result<String, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Profiler -----------------------------------------------------------
+    /// Enables/disables the CPU profiler (`Profiler.enable`/`disable`).
+    /// Advisory.
+    fn profiler_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Sets the sampling interval in microseconds
+    /// (`Profiler.setSamplingInterval`).
+    fn set_sampling_interval(&mut self, _microseconds: u32) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Starts CPU profiling (`Profiler.start`).
+    fn start_profiling(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Stops CPU profiling and returns the collected profile
+    /// (`Profiler.stop`).
+    fn stop_profiling(&mut self) -> Result<CpuProfile, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- HeapProfiler ---------------------------------------------------------
+    /// Enables/disables heap-object tracking (`HeapProfiler.enable`/
+    /// `disable`). Advisory.
+    fn heap_profiler_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Captures a heap snapshot, returned as one or more chunks of the
+    /// snapshot's JSON text (`HeapProfiler.takeHeapSnapshot`, streamed as
+    /// `addHeapSnapshotChunk` events by the domain layer).
+    fn take_heap_snapshot(&mut self) -> Result<Vec<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Forces a garbage collection (`HeapProfiler.collectGarbage`).
+    fn collect_garbage(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// The heap snapshot object id for a `Runtime` `objectId`
+    /// (`HeapProfiler.getHeapObjectId`).
+    fn get_heap_object_id(&mut self, _object_id: &str) -> Result<String, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Resolves a heap snapshot object id back to a `Runtime.RemoteObject`
+    /// (`HeapProfiler.getObjectByHeapObjectId`).
+    fn get_object_by_heap_object_id(
+        &mut self,
+        _heap_object_id: &str,
+        _object_group: Option<&str>,
+    ) -> Result<RemoteObject, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- DOMSnapshot ----------------------------------------------------------
+    /// A flattened snapshot of every document (`DOMSnapshot.captureSnapshot`).
+    /// `computed_styles` lists the CSS property names to include per node;
+    /// the driver may leave a node's `computed_styles` empty for properties
+    /// it does not compute. This crate performs the wire format's string
+    /// interning; the seam stays in plain structs.
+    fn capture_dom_snapshot(
+        &mut self,
+        _computed_styles: &[String],
+    ) -> Result<Vec<DomSnapshotDocument>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Storage --------------------------------------------------------------
+    /// Every cookie visible to the target (`Storage.getCookies`).
+    fn get_cookies(&mut self) -> Result<Vec<Cookie>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Replaces the cookie jar with `cookies` (`Storage.setCookies`).
+    fn set_cookies(&mut self, _cookies: &[Cookie]) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Clears every cookie (`Storage.clearCookies`).
+    fn clear_cookies(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Every `localStorage`/`sessionStorage` item for `storage_id`
+    /// (`DOMStorage.getDOMStorageItems`).
+    fn get_dom_storage_items(
+        &mut self,
+        _storage_id: &DomStorageId,
+    ) -> Result<Vec<(String, String)>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Sets one item (`DOMStorage.setDOMStorageItem`).
+    fn set_dom_storage_item(
+        &mut self,
+        _storage_id: &DomStorageId,
+        _key: &str,
+        _value: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Removes one item (`DOMStorage.removeDOMStorageItem`).
+    fn remove_dom_storage_item(
+        &mut self,
+        _storage_id: &DomStorageId,
+        _key: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Clears every item for `storage_id` (`DOMStorage.clear`).
+    fn clear_dom_storage(&mut self, _storage_id: &DomStorageId) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Every IndexedDB database name for `security_origin`
+    /// (`IndexedDB.requestDatabaseNames`).
+    fn request_database_names(&mut self, _security_origin: &str) -> Result<Vec<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Clears one object store (`IndexedDB.clearObjectStore`).
+    fn clear_object_store(
+        &mut self,
+        _security_origin: &str,
+        _database_name: &str,
+        _object_store_name: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Deletes a whole database (`IndexedDB.deleteDatabase`).
+    fn delete_database(
+        &mut self,
+        _security_origin: &str,
+        _database_name: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Tracing ------------------------------------------------------------
+    /// The category names the engine can trace (`Tracing.getCategories`).
+    fn tracing_categories(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(Vec::new())
+    }
+    /// Starts tracing the given categories, or every category when empty
+    /// (`Tracing.start`).
+    fn start_tracing(&mut self, _categories: &[String]) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Stops tracing (`Tracing.end`). Collected events drain through
+    /// [`DevToolsSession::drain_trace_events`].
+    fn stop_tracing(&mut self) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+
     // --- Events -----------------------------------------------------------
     /// Lifecycle events (`Page.lifecycleEvent`).
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {
@@ -1351,6 +1668,26 @@ pub trait DevToolsSession: Send {
     }
     /// `Log.entryAdded`.
     fn drain_log(&mut self) -> Vec<LogEntry> {
+        Vec::new()
+    }
+    /// Scripts parsed since the last poll (`Debugger.scriptParsed`).
+    fn drain_scripts_parsed(&mut self) -> Vec<ScriptInfo> {
+        Vec::new()
+    }
+    /// Pause events since the last poll (`Debugger.paused`). The connection
+    /// emits `Debugger.resumed` directly from `Debugger.resume`, not through
+    /// a drain queue.
+    fn drain_debugger_paused(&mut self) -> Vec<PausedEvent> {
+        Vec::new()
+    }
+    /// Buffered Trace Event Format entries since the last poll, batched into
+    /// `Tracing.dataCollected`.
+    fn drain_trace_events(&mut self) -> Vec<crate::json::Json> {
+        Vec::new()
+    }
+    /// Accessibility nodes changed since the last poll
+    /// (`Accessibility.nodesUpdated`).
+    fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
         Vec::new()
     }
 }
