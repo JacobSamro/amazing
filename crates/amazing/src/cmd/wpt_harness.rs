@@ -18,6 +18,93 @@ const OUTPUT_LIMIT: u64 = 16 * 1024 * 1024;
 const FIXTURE_LIMIT: usize = 16 * 1024 * 1024;
 thread_local! { static COMPLETE: Cell<bool> = const { Cell::new(false) }; }
 
+/// IA-TESTDRIVER: `testdriver-vendor.js` is a per-implementation resource --
+/// every real browser ships its own, so it does not exist anywhere in the
+/// pinned upstream WPT checkout at all. Before this ticket, a test that
+/// loaded it (`<script src="/resources/testdriver-vendor.js">`, the standard
+/// WPT boilerplate right after `testdriver.js`) failed `local_file`'s
+/// `canonicalize()` and aborted the *entire* file -- every subtest lost as
+/// `error`, not just the ones that actually call a `test_driver` action at
+/// runtime. This is served in its place (see `execute_page`'s script loop
+/// below), the same way that loop already substitutes its own reporter for
+/// `resources/testharnessreport.js`.
+///
+/// It runs *after* `testdriver.js` in script order (real WPT test files load
+/// them in that order), which matters: `testdriver.js` unconditionally
+/// assigns a fresh, every-method-throws `window.test_driver_internal` object
+/// near its own end, so this script's job is to override individual methods
+/// on that *already-created* object, not to create it.
+///
+/// Native backends live in `runtime_host_integrator_assist.rs`
+/// (`IaNativeEntry::Td*`, installed as the global `__amazing_td_*`
+/// functions this script calls). See that file's module-level and per-method
+/// doc comments for what each one actually does and its known gaps
+/// (no per-key `KeyboardEvent` extras; approximate, author-CSS-free
+/// `getClientRects`/`elementsFromPoint` geometry; no cookie store or
+/// Permissions API to back `delete_all_cookies`/`set_permission` with real
+/// effects).
+const TESTDRIVER_VENDOR_JS: &str = r#"(function() {
+    "use strict";
+    function promised(fn) {
+        return function() {
+            var self = this, args = arguments;
+            return new Promise(function(resolve, reject) {
+                try { resolve(fn.apply(self, args)); } catch (e) { reject(e); }
+            });
+        };
+    }
+    // testdriver.js's own click()/send_keys() wrappers call these directly
+    // (via `getPointerInteractablePaintTree`/`inView`) before ever reaching
+    // `test_driver_internal`; only defined when missing, so a real
+    // implementation from `layout`/`dom-bindings` automatically wins later.
+    if (typeof Element !== "undefined" && !Element.prototype.getClientRects) {
+        Element.prototype.getClientRects = function() { return __amazing_td_get_client_rects(this); };
+    }
+    if (typeof Element !== "undefined" && !Element.prototype.getBoundingClientRect) {
+        Element.prototype.getBoundingClientRect = function() {
+            var rects = __amazing_td_get_client_rects(this);
+            return rects[0] || {x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0};
+        };
+    }
+    if (typeof Document !== "undefined" && !Document.prototype.elementsFromPoint) {
+        Document.prototype.elementsFromPoint = function(x, y) { return __amazing_td_elements_from_point(x, y); };
+    }
+    if (typeof Document !== "undefined" && !Document.prototype.elementFromPoint) {
+        Document.prototype.elementFromPoint = function(x, y) {
+            var hits = __amazing_td_elements_from_point(x, y);
+            return hits.length ? hits[0] : null;
+        };
+    }
+    if (typeof window.test_driver_internal === "undefined") { return; }
+    window.test_driver_internal.in_automation = true;
+    window.test_driver_internal.click = promised(function(element) {
+        __amazing_td_click(element);
+    });
+    window.test_driver_internal.send_keys = promised(function(element, keys) {
+        __amazing_td_send_keys(element, keys);
+    });
+    window.test_driver_internal.action_sequence = promised(function(actions, context) {
+        __amazing_td_action_sequence(actions, context);
+    });
+    window.test_driver_internal.set_permission = promised(function(params, context) {
+        __amazing_td_set_permission(params, context);
+    });
+    window.test_driver_internal.delete_all_cookies = promised(function(context) {
+        __amazing_td_delete_all_cookies(context);
+    });
+    window.test_driver_internal.get_computed_label = promised(function(element) {
+        return __amazing_td_get_computed_label(element);
+    });
+    window.test_driver_internal.get_computed_role = promised(function(element) {
+        return __amazing_td_get_computed_role(element);
+    });
+})();
+"#;
+/// Root-relative path every real WPT test loads this resource from
+/// (`/resources/testdriver-vendor.js`), normalized the same way `execute_page`
+/// normalizes a script's own `src` before comparing.
+const TESTDRIVER_VENDOR_PATH: &str = "resources/testdriver-vendor.js";
+
 struct FixtureServer {
     origin: String,
     stop: Arc<AtomicBool>,
@@ -753,20 +840,30 @@ fn execute_page(
         scheduler.narrow_write_insertion_point(0, script.node.0);
         let (text, label, harness) = match script.src {
             Some(src) => {
-                let path = local_file(&root, file.parent().unwrap(), &src)?;
-                // Runner callbacks replace the visual reporter, whether its
-                // URL is root-relative or relative to the upstream test.
-                if !options.scaffold
-                    && path
-                        == root
-                            .join("resources/testharnessreport.js")
-                            .canonicalize()
-                            .map_err(|e| e.to_string())?
-                {
-                    continue;
+                let normalized = src.trim_start_matches('/').replace('\\', "/");
+                if !options.scaffold && normalized == TESTDRIVER_VENDOR_PATH {
+                    // IA-TESTDRIVER: does not exist in the pinned upstream
+                    // checkout at all -- see `TESTDRIVER_VENDOR_JS`'s doc
+                    // comment -- so it never reaches `local_file`, which
+                    // would otherwise fail to `canonicalize` it and abort
+                    // this whole test file.
+                    (TESTDRIVER_VENDOR_JS.to_string(), src, false)
+                } else {
+                    let path = local_file(&root, file.parent().unwrap(), &src)?;
+                    // Runner callbacks replace the visual reporter, whether its
+                    // URL is root-relative or relative to the upstream test.
+                    if !options.scaffold
+                        && path
+                            == root
+                                .join("resources/testharnessreport.js")
+                                .canonicalize()
+                                .map_err(|e| e.to_string())?
+                    {
+                        continue;
+                    }
+                    let harness = path == harness_path;
+                    (source(&root, &path, options.scaffold)?, src, harness)
                 }
-                let harness = path == harness_path;
-                (source(&root, &path, options.scaffold)?, src, harness)
             }
             None => (script.body, "inline script".into(), false),
         };
