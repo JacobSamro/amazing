@@ -485,6 +485,14 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
             .unwrap_or_else(|| if data.kind == StdTemporalKind::Duration { "nanosecond".to_string() }
                 else { String::new() }) };
     let unit = unit.strip_suffix('s').unwrap_or(&unit);
+    if matches!(unit, "year" | "month") {
+        // Calendar-unit rounding is only exact for a blank duration without a
+        // relativeTo; anything else needs calendar arithmetic we do not model.
+        if data.kind == StdTemporalKind::Duration && data.fields.iter().all(|value| *value == 0) {
+            return std_temporal_make(i, StdTemporalKind::Duration, [0; 10]);
+        }
+        return Err(Throw::range_error("calendar units require relativeTo"));
+    }
     let unit_ns = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
     let (increment, mode) = if option.is_object() {
         let increment = std_temporal_property(i, &option, "roundingIncrement")?.unwrap_or(1);

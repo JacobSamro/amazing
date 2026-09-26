@@ -229,6 +229,11 @@ pub struct Interpreter {
     pub date_proto: Obj,
     pub promise_proto: Obj,
     pub regexp_proto: Obj,
+    /// %Error.prototype%, kept as a stored field so the `stack` accessor's
+    /// setter can compare its receiver against the exact home object
+    /// (SetterThatIgnoresPrototypeProperties' SameValue check) without a
+    /// global-lookup round trip that user code could shadow.
+    pub error_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
@@ -245,6 +250,7 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
+    error_brands: std::collections::HashSet<u64>,
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
     pair_iterator_proto: Obj,
@@ -354,6 +360,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let error_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -390,6 +401,7 @@ impl Interpreter {
             date_proto,
             promise_proto,
             regexp_proto,
+            error_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
@@ -406,6 +418,7 @@ impl Interpreter {
             host_cache: HashMap::new(),
             put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
+            error_brands: std::collections::HashSet::new(),
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
             pair_iterator_proto,

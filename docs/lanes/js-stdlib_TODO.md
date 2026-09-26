@@ -256,3 +256,229 @@ SharedArrayBuffer cases remain measured failures.
 
 IPC and storage integration signatures were posted in their lane questions.
 The exact-commit Windows workspace gate is recorded in the lane report.
+
+## JSS-next String core semantics
+
+Fixed base: local `dev` `a0105c17` (`lane/js-stdlib` head `712927c0`). Pinned
+Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, full-input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`.
+
+Spec-exact String core methods that blocked the String directory:
+`split` (`@@split` dispatch, `ToUint32(limit)` ordering, RegExp split via the
+internal engine, string `SplitMatch`, empty-separator/source cases), `matchAll`
+(RegExp match records with empty-match advance, `@@matchAll` dispatch, IsRegExp
+and global validation before `ToString(this)`), `replaceAll` (proper
+`IsRegExp(@@match)`, flags/global checks before `ToString(this)`, `@@replace`
+dispatch), `replace` (`@@replace` dispatch for object search values only, `$`
+substitution, callback `(match, offset, string)`), `includes`/`startsWith`/
+`endsWith` (position/endPosition clamping, IsRegExp TypeError), `charAt`/
+`charCodeAt`/`codePointAt` (out-of-range results), `trim` (full ECMAScript
+WhiteSpace+LineTerminator set), String exotic objects (own `length` and
+per-code-unit index properties) and `Object.prototype.toString` boxed tags.
+
+| built-ins/String | Pass | Fail | Unsupported |
+| --- | ---: | ---: | ---: |
+| Base | 1,154 | 178 | 9 |
+| After | 1,278 | 54 | 9 |
+
+At `(path, variant)` granularity, **248 variants newly pass and zero previously
+passing variants are lost**. Final selection classification SHA-256 is
+`8779bf57d4b600afa1aab51064e2839d3222b500210898732101dceb7d4d75f1`. Linux
+`amazing-js` nextest passed 317/317 with one skipped; its doctest passed 1/1.
+Remaining failures are tagged templates (`String.raw` tag), RegExp engine gaps
+(Unicode property escapes, named captures, `d` flag), Unicode normalization
+tables, `String.prototype[Symbol.iterator]` receiver checking (in
+`interp_symbol.rs`, outside this lane's grant) and global-variable shadowing in
+`String(this)`.
+
+## JSS-next Temporal annotation and Instant coercion
+
+ISO string annotations for `Instant` and `ZonedDateTime` are now validated
+syntactically while remaining semantically opaque for `Instant`: multiple time
+zone annotations, repeated critical calendar annotations, uppercase unknown
+keys, critical unknown annotations, offset annotations with seconds, and
+trailing junk are RangeErrors, but `Instant` accepts and ignores any zone or
+calendar name. `ToTemporalInstant` accepts a `ZonedDateTime` instance and
+coerces other objects through `ToString`. `Instant.prototype.round` rejects
+day/week/year/month units. `Duration.prototype.round` accepts year/month units
+for an exactly blank duration and keeps the relativeTo requirement otherwise.
+
+| built-ins/Temporal | Pass | Fail |
+| --- | ---: | ---: |
+| Base | 3,698 | 905 |
+| After | 3,745 | 858 |
+
+At `(path, variant)` granularity, **94 variants newly pass and zero previously
+passing variants are lost**; `built-ins/String` is unchanged at 1,278/1,341 with
+zero losses. Final selection classification SHA-256 is
+`a6e0af52a317083041bcc7ffa2b98d8037054472cbfeac19c72fba43be2bd905`.
+
+The largest remaining Temporal blocker is the absent `Proxy` (about 250 failing
+variants, 125 files); it is `js-runtime`'s and recorded in this lane's
+`questions.md`, along with tagged templates, RegExp engine gaps and
+`String.prototype[Symbol.iterator]`. The rest are calendar/time-zone arithmetic
+beyond the ISO surface and shared engine semantics, all left visible as
+measured failures.
+
+## JSS-next String symbol dispatch and RegExp prototype methods
+
+`String.prototype.matchAll` now always builds `RegExpCreate(searchValue, "g")`
+and reads `@@matchAll` from that copy; `match`/`search` dispatch `@@match`/
+`@@search` on the argument and on the internally created RegExp;
+`replaceAll` reads `@@replace` before coercing this/replaceValue and coerces
+`ToString(replaceValue)` exactly once; `split` reads `@@split` only for object
+separators and reports length 2; `substring` defaults an undefined end to the
+length. `RegExp.prototype[Symbol.match/search/matchAll/replace/split]` are
+installed, delegating to the internal regexp engine, with SpeciesConstructor
+validation for `@@matchAll`.
+
+built-ins/String: 1,278 -> 1,307 / 1,341 pass (+58 variants, zero lost;
+classification SHA-256
+`b3e0e8a7fbb41d1d554b8d1c1a73e6051bdabd28cbdb155b08a03bcfb91f86bd`).
+built-ins/RegExp: 1,031 -> 1,135 pass (+212 variants); six previously-passing
+variants call a symbol method that used to be absent, so their vacuous
+`TypeError` passes now reach RegExpExec details owned by js-runtime (recorded
+in `questions.md`).
+
+## JSS-next Temporal option validation
+
+Temporal string precision validates `roundingMode` even when the call does not
+round; `Instant.prototype.since`/`until` reject day/week/year/month
+smallestUnit; plain-type `from` validates its options bag. A duplicated
+`native_string` tail left by the dev merge was removed so `amazing-js`
+compiles.
+
+built-ins/Temporal: 3,745 -> 3,765 / 4,603 pass (+40 variants, zero lost;
+classification SHA-256
+`61a3fe6c127c7de1183be0d5383ff09f0e4201c8fae5cb65723b9f7cf16b5d8b`).
+
+## Final Linux gate
+
+Workspace `cargo nextest run --workspace --locked --no-fail-fast` passed
+2,701/2,701 with 10 skipped; workspace doctests passed. String 1,307/1,341,
+Temporal 3,765/4,603 and RegExp 1,135/1,941 were all measured on the lane
+Boat sandbox before and after each group.
+
+## JSS-next: Error.prototype.stack, String/matchAll/replace fixes, Temporal ZonedDateTime string parsing
+
+Fixed base `c2104209` (the prior JSS-next commit). Pinned Test262
+`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+**`Error.prototype.stack`** is a real pinned Test262 directory this revision
+(`built-ins/Error/prototype/stack/`, proposal `error-stack-accessor`), not a
+de-facto extension. Implemented the getter (`get Error.prototype.stack`:
+TypeError on a non-object receiver, `undefined` when the receiver lacks an
+`[[ErrorData]]` internal slot even if `Error.prototype` is on its chain, else
+an implementation-defined header string) and the setter
+(`SetterThatIgnoresPrototypeProperties`: TypeError on a non-object receiver
+or a non-String value; TypeError when the receiver is `%Error.prototype%`
+itself (SameValue against the home object); otherwise `CreateDataPropertyOrThrow`
+when the receiver has no own `"stack"`, or an ordinary `[[Set]]` -- preserving
+an existing data property's attributes, or invoking/rejecting an existing
+accessor -- when it does). Added a stored `Interpreter::error_proto: Obj`
+field (mirroring `map_proto`/`set_proto`) so the constructor's `"prototype"`
+own property IS that object, giving the setter a stable identity for the
+SameValue check. The accessor pair is installed via `symbol_method`
+(non-constructible, no own `"prototype"`) rather than `Self::native`, fixing
+`getter`/`setter-not-a-constructor.js`; `native_error_value`'s shared
+`"message"` own-property install was changed from enumerable-by-default to
+`{writable:true, enumerable:false, configurable:true}` per section 20.5.1.1, fixing
+`instance-not-enumerable.js`. `built-ins/Error/prototype/stack` selection (35
+files, 2 `host.createRealm`-unsupported): 0 -> 27 pass (the files existed but
+nothing implemented the feature before this). 6 remaining fail: 5 need Proxy
+(`ReferenceError: Proxy is not defined`) and 1 (`getter-foreign-new-target.js`)
+needs `Reflect.construct` foreign-new-target `[[ErrorData]]` semantics --
+both js-runtime's core-interpreter territory, tracked below.
+
+**String failure-cluster fixes** (25 failing files -> 21): `String.prototype.matchAll`
+no longer falls back to an internal match-record implementation when the
+freshly `RegExpCreate`d copy's own `@@matchAll` has been deleted from
+`RegExp.prototype` -- step 5's `Invoke` is unconditional and throws
+`TypeError` for a non-callable method, matching
+`matchAll/regexp-prototype-has-no-matchAll.js`. `String.prototype.replace`
+now `ToString`s a non-callable `replaceValue` unconditionally before
+searching (step 6), observable via a `toString` side effect even when the
+search string is never found (`replace/replaceValue-evaluation-order*.js`).
+`String.prototype[Symbol.iterator]` now `RequireObjectCoercible`s `this`
+before `ToString` (`Symbol.iterator/this-val-non-obj-coercible.js`) -- this
+one line lives in `interp_symbol.rs` (js-runtime's file; `native_string_iterator`
+called a bare `to_js_string` with no coercibility check), fixed under the
+lane's standing grant for shared gaps blocking its own directories.
+`built-ins/String`: 1,307 -> 1,311/1,341 pass (+8 variants, zero lost).
+
+**Temporal ZonedDateTime string parsing** (`builtins_temporal_epoch.rs`):
+`Temporal.ZonedDateTime.from`/`compare`/`equals`/`since`/`until` etc. now
+accept a date-time string whose zone comes only from a bracketed annotation
+with no `Z` and no numeric offset (`"1970-01-01T00:00[+01:00]"` --
+`OffsetBehaviour: wall` in the spec, resolved through disambiguation alone;
+previously `std_epoch_parse` required a `Z` or offset unconditionally and
+threw `RangeError: invalid Temporal instant string` for every annotated
+ZonedDateTime string lacking one, a ~29-file cluster).
+
+Added `std_epoch_zone_from_string` (`ParseTemporalTimeZoneString`) so a
+`timeZone` option value that is itself a full ISO date-time string --
+optionally with a bracketed annotation -- resolves to a zone id instead of
+being handed whole to `tz_canonicalize` (which only parses a bare
+identifier). The date-time is always parsed and validated in full even when
+an annotation ultimately supplies the zone (an early version skipped date
+validation whenever a bracket was present, regressing the
+`timezone-string-year-zero.js` negative-zero-year check -- caught and fixed
+before this gate). A bare numeric offset with no annotation is only valid at
+minute precision as a *time zone identifier* (`TimeZoneNumericUTCOffset`),
+unlike the *exact time* offset in an Instant/ZonedDateTime string, which may
+carry seconds -- `timezone-string-datetime.js`'s sub-minute-offset rejections.
+
+Fixed-base full pinned Test262: **32,056 -> 32,147 pass** (files), **+181
+passing variants, zero lost** (identical input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`).
+`built-ins/Temporal` selection unchanged by the last two fixes at
+3,813/4,603 pass (+48 files over this ticket's base). `built-ins/String`
+selection unchanged at 1,311/1,341 pass. `built-ins/Error/prototype/stack`
+selection: 27/35 pass (see above). Linux `amazing-js` crate nextest:
+343/343 passed, 1 skipped; its doctest 1/1 passed -- re-verified after the
+`symbol_method`/message-enumerable fixes.
+
+Commit `dcfcd9d6` was then merged with `origin/dev` (commit `04b835de`) at
+the orchestrator's request, to pick up a Boat sandbox SSH-endpoint fallback
+fix needed to run the gate at all. The merge conflicted in
+`interp_install.rs` (Error.isError install: kept this lane's `stack`
+accessor block, took dev's `runtime_method_attributes`-based isError
+install) and `interp_builtins.rs` (`native_error_value`: took dev's
+`runtime_error_object`/`runtime_install_error_cause` refactor wholesale, since
+it already installs `"message"` via `symbol_data(..., true, true)` --
+`{enumerable:false}` -- superseding this ticket's hand-rolled fix with the
+same result plus §20.5.7.1 `cause` support; `Object.prototype.toString`'s
+exotic-tag chain: merged both sides' checks, since dev's added `[[DateValue]]`
+-> "Date" but silently dropped this ticket's `[[BigIntData]]` -> "BigInt"
+check, which is still exercised elsewhere in the crate). The merge also
+surfaced one build break outside those two conflicts: dev's own Error-family
+refactor (commit `05262079`, js-runtime's) had independently added a second,
+weaker `native_error_is_error` (no `host_error_brand` hook) in the new
+`interp_errors.rs`, name-colliding with this ticket's fuller one in
+`interp_builtins.rs`; removed the weaker duplicate (fixup commit `a7fa4a92`)
+since nothing referenced it and the installed one already subsumes it
+(`Exotic::Error` OR `host_error_brand`).
+
+Post-merge (`a7fa4a92`) re-verification on the same Boat sandbox: Linux
+workspace `cargo nextest run --workspace --locked --no-fail-fast`: **2,934/2,934
+passed** (1 slow, 11 skipped); `cargo test --workspace --locked --doc`: all
+green, including `amazing_js` and `amazing_html`. Targeted directories
+improved slightly from dev's unrelated changes, confirming zero loss:
+`built-ins/Error/prototype/stack` 27 -> **29/35** pass (the 2
+`host.createRealm`-unsupported cases are gone, now otherwise resolved);
+`built-ins/Temporal` 3,813 -> **3,815/4,603** pass; `built-ins/String` 1,311
+-> **1,315/1,341** pass.
+
+Remaining `built-ins/Error/prototype/stack` gaps (5 Proxy-dependent files, 1
+`getter-foreign-new-target.js` needing `Reflect.construct` foreign-new-target
+`[[ErrorData]]` semantics) and the largest Temporal cluster (`ReferenceError:
+Proxy is not defined`, ~125 files) stay js-runtime's, per `questions.md`.
+String's remaining ~21 failures are mostly Unicode NFC/NFD normalization edge
+cases (no external Unicode data crate available) and RegExp `/v` flag /
+named-group parsing (js-lang's regex engine), left as measured failures
+rather than chased for a small tail. `JsObject::error_obj` (`value.rs`,
+internal engine-thrown errors) still installs `"message"` as enumerable,
+unlike the constructor path fixed here; flagged in `questions.md` as a
+deferred parity follow-up for whoever owns `value.rs`.
+
+

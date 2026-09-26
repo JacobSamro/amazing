@@ -262,3 +262,98 @@ impl Interpreter {
         (0..length).map(|index| self.get_prop(value, index.to_string())).collect()
     }
 }
+
+// Annex B.2.2.2-5: Object.prototype.__defineGetter__ / __defineSetter__ /
+// __lookupGetter__ / __lookupSetter__. RequireObjectCoercible(this) then
+// ToObject(this); primitives are boxed so the define/lookup operate on the
+// wrapper's own properties exactly as the spec describes.
+
+fn std_legacy_to_object(i: &mut Interpreter, this: JsValue) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("Object.prototype accessor called on null or undefined"));
+    }
+    native_object(i, JsValue::Undefined, vec![this])
+}
+
+fn std_object_define_accessor(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, is_getter: bool,
+) -> Result<JsValue, Throw> {
+    let object = std_legacy_to_object(i, this)?;
+    let accessor = std_reflect_arg(&args, 1);
+    if callable_function(&accessor).is_none() {
+        return Err(Throw::type_error(if is_getter { "__defineGetter__ requires a callable" } else { "__defineSetter__ requires a callable" }));
+    }
+    let key = i.to_property_key(&std_reflect_arg(&args, 0))?;
+    let mut descriptor = JsObject::ordinary();
+    descriptor.set_own(if is_getter { "get" } else { "set" }, accessor);
+    descriptor.set_own("enumerable", JsValue::Bool(true));
+    descriptor.set_own("configurable", JsValue::Bool(true));
+    let JsValue::Object(target) = object else { return Err(Throw::type_error("receiver is not an object")); };
+    if !i.define_own_property(&target, &key, &JsValue::object(descriptor))? {
+        return Err(Throw::type_error("cannot define property"));
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn std_object_lookup_accessor(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, want_getter: bool,
+) -> Result<JsValue, Throw> {
+    let object = std_legacy_to_object(i, this)?;
+    let key = i.to_property_key(&std_reflect_arg(&args, 0))?;
+    let mut cursor = match &object { JsValue::Object(o) => Some(o.clone()), _ => None };
+    while let Some(target) = cursor {
+        let property = match key.as_string() {
+            Some(name) => i.legacy_own_property(&target, name, false)?,
+            None => target.borrow().own_prop(&key).cloned(),
+        };
+        if let Some(property) = property {
+            if property.getter.is_some() || property.setter.is_some() {
+                let accessor = if want_getter { property.getter } else { property.setter };
+                return Ok(accessor.unwrap_or(JsValue::Undefined));
+            }
+            return Ok(JsValue::Undefined);
+        }
+        cursor = target.borrow().proto.clone();
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_object_define_getter(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    std_object_define_accessor(i, this, args, true)
+}
+
+fn native_object_define_setter(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    std_object_define_accessor(i, this, args, false)
+}
+
+fn native_object_lookup_getter(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    std_object_lookup_accessor(i, this, args, true)
+}
+
+fn native_object_lookup_setter(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    std_object_lookup_accessor(i, this, args, false)
+}
+
+impl Interpreter {
+    /// Register an embedding host brand whose objects carry the [[ErrorData]]
+    /// brand (for example DOMException). `Error.isError` consults this set, so
+    /// a writable JS property can never forge the brand.
+    pub fn binding_register_error_brand(&mut self, brand: u64) {
+        self.error_brands.insert(brand);
+    }
+
+    fn host_error_brand(&self, object: &JsObject) -> bool {
+        object
+            .host_identity
+            .as_ref()
+            .is_some_and(|identity| self.error_brands.contains(&identity.handle.brand))
+    }
+}
