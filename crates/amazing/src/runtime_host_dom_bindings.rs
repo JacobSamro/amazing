@@ -139,6 +139,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn document_collections_are_live_alias_correct_and_rooted_in_their_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('document collection conformance'); }
+            const doc = document.implementation.createHTMLDocument('collections');
+            for (const name of ['images', 'embeds', 'plugins', 'links', 'forms', 'scripts', 'anchors', 'applets']) {
+                check(doc[name] instanceof HTMLCollection && doc[name] === doc[name]);
+                check(doc[name].length === 0);
+            }
+            check(doc.embeds === doc.plugins);
+            const embeds = doc.embeds;
+            const anchors = doc.anchors;
+            const embed = doc.createElement('embed');
+            embed.id = 'plugin';
+            doc.body.appendChild(embed);
+            check(embeds.length === 1 && embeds[0] === embed && embeds.namedItem('plugin') === embed);
+            const foreign = doc.createElementNS('urn:foreign', 'embed');
+            doc.body.appendChild(foreign);
+            check(embeds.length === 1);
+            const anchor = doc.createElement('a');
+            doc.body.appendChild(anchor);
+            check(anchors.length === 0);
+            anchor.setAttribute('name', '');
+            check(anchors.length === 1 && anchors[0] === anchor);
+            anchor.setAttribute('href', '');
+            check(doc.links.length === 1);
+            anchor.removeAttribute('name');
+            check(anchors.length === 0 && doc.links.length === 1);
+            doc.body.appendChild(doc.createElement('applet'));
+            doc.body.appendChild(doc.createElement('object'));
+            check(doc.applets.length === 0);
+            embed.remove();
+            check(embeds.length === 0);
+            const other = document.implementation.createHTMLDocument('other');
+            other.body.appendChild(embed);
+            check(embeds.length === 0 && other.embeds.length === 1);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn collection_members_stay_on_prototypes_and_live_keys_track_mutations() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

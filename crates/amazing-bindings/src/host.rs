@@ -304,6 +304,7 @@ pub enum Operation {
     DocumentImportNode,
     DocumentForms,
     DocumentImages,
+    DocumentEmbeds, DocumentAnchors, DocumentApplets,
     DocumentLinks,
     DocumentScripts,
     DocumentActiveElement,
