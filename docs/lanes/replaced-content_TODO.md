@@ -958,3 +958,88 @@ The pushed RC-20 base is `f66be2b`. `LAYOUT-17` and the requested
 paint-local delta type is ready for their damage list when the owning lanes
 publish it. IA-ORACLE-PAINT's 31 ms p95 cannot be credited until that driver
 adopts the retained path and the Windows release trace measures it.
+
+## RC-21 — responsive/lazy images, scroll fetch and the COMP-14 owner mapping
+
+Landed on `lane/replaced-content-rc21`, merged dev `988b1c4d` (includes
+COMP-13b/14, IPC-10, CSS-15, DOM focus, IA-REAL-PAGES). Three owned changes:
+
+- **Paint scroll owners across reopened clips** (`a70711f0`). A stacking or
+  positioned context re-opens the overflow clips it inherits, so one CSS
+  scroller opened two `ScrollNode`s in a single display list. The duplicate
+  `(node, generation)` owner made `DisplayListView::property_owner_mapping`
+  return `None`, which made `RetainedPaintView::from_view` report
+  `AmbiguousPropertyOwner` for the COMP-14 effects-scroller oracle page. Paint
+  now reuses one scroll node per owner; clip nodes stay per scope. Regression:
+  `effects_scroller_property_owners_stay_unique_across_reopened_clips`.
+- **Script-detached `<img>` loading** (`c18d13f9`). `load_page_media_in_viewport`
+  now visits every live arena slot for an `img` the document walk cannot reach
+  (`new Image()`), so the request starts and a pending `decode()` promise can
+  settle; detached loading is always eager.
+- **Shell lazy fetch after scroll** (`a5734b23`, `cb84e972`, `b8f413ab`). Every
+  successful scroll (wheel, trackpad, keyboard, scrollbar drag) reads the
+  retained root scroll offset from COMP-13b and fetches deferred lazy images
+  whose laid-out box entered the viewport, then repaints the scrolled frame.
+  Layout already reserved each deferred box, so pixels paint into it until the
+  next DOM snapshot relayouts with the real intrinsic size.
+
+Boundaries, not silently credited: inline replaced content still forces the
+baked paint fallback, whose property trees are empty, so a page with an inline
+`<img>` has no compositor root scroll node and the lazy-scroll fetch currently
+exercises block-level images only until RC-17/paint makes inline replaced items
+separable in `raster_raw_local`. `new Image()` still needs the DOM-bindings
+legacy factory global; only the loader side is done. `image-orientation:none`
+through the sandboxed utility remains routed to IPC.
+
+**Linux-first gate** (per the 2026-09-26 orchestrator change; Windows render
+sweeps deferred). Base `988b1c4d`, Boat sandbox warm:
+
+- `cargo nextest run --workspace --locked --no-fail-fast`: **2,543 passed,
+  0 failed, 10 skipped**.
+- `cargo test --workspace --locked --doc`: **2 passed, 0 failed**.
+- `amazing-paint` includes the new regression; Linux paint was **126/126**
+  before the dev merge.
+- Pre-Linux-first Windows run at `b8f413ab`: shell
+  `scrolled_deferred_lazy_image_is_fetched_and_repainted` passed, shell
+  `--locked` build green. The shell is a Windows-only GPUI workspace and is not
+  part of the Linux workspace gate.
+
+The RC-21 pinned render (226) and testharness (117) selections and their
+reproduction scripts live in `tests/wpt-replaced-content/rc21/`. Both runners
+are Windows-only (`scripts/run-render-wpt.ps1` and the `wpt-harness` subcommand
+that byte-pins against the checkout), so no Linux corpus before/after is
+claimed here; the recorded Windows baseline is 185/6/9/26 render and the
+harness candidate 4/58/45/8/2. These are not conformance movement.
+
+## RC-22 — separable inline replaced content in the raw tile path (2026-09-26)
+
+Fixed on top of the RC-21 branch. `raster_raw_local` returned
+`UnseparableItem` for any `PaintContent` box whose lines carried a replaced
+fragment, so a page with an inline `<img>` fell back to the baked painter,
+which has empty property trees and therefore no compositor root scroll node.
+That is why the RC-21 scroll-triggered lazy fetch exercised block-level
+replaced images only.
+
+The full painter and the raw tile path now share `paint_replaced_fragments`:
+it resolves a line's replaced fragments (generated URL, SVG root, or provider
+image) against the **original** box, whose inline flow still carries the
+styled-fragment metadata, with an optional document-space offset. The raw
+content path paints replaced fragments from the original box at the tile
+offset and the shifted glyphs from a local line clone; it still skips group
+transforms, opacity and clips, which remain compositor-owned.
+`raster_raw_local` now accepts `PaintContent` items with or without replaced
+fragments. No pixels changed: the raw tile equals the full painter for the
+item, and `RetainedPaintView::from_view`/`apply_damage` accept such items.
+
+Linux gate at `d7d67c76`: workspace nextest **2,703 passed / 0 failed / 10
+skipped** with `--no-fail-fast`; separate workspace doctests **4 passed / 0
+failed**. The focused `amazing-paint` + `amazing` bulk run was **342 passed /
+4 skipped**, including the new paint regression
+`raw_tile_rasterizes_inline_replaced_content_and_retains_it` and the adapter
+test `inline_replaced_content_retains_and_keeps_the_root_scroll_owner`.
+
+Known adjacent gap, not claimed: the retained path's per-item resource set
+(`retained_paint::resources_for_box`) still records no resource for inline
+replaced fragments on a content item, unlike the old/new delta's `resources()`.
+Seeding and damage must agree before enabling retirement for them, so this
+stays a follow-up when the integrator-assist damage adapter lands.

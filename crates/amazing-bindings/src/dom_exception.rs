@@ -89,9 +89,14 @@ pub(crate) fn invoke<H: BindingHost>(
     host: &mut H, op: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
     if op == O::DOMExceptionConstructor {
-        let message = match args.first() { Some(value) => host.to_dom_string(value)?, None => Vec::new() };
-        let name = match args.get(1) { Some(value) => host.to_dom_string(value)?,
-            None => "Error".encode_utf16().collect() };
+        // Optional arguments with defaults treat explicit undefined as omitted.
+        // Convert message before name; either coercion may execute user code.
+        let message = match args.first().filter(|value| !host.is_undefined(value)) {
+            Some(value) => host.to_dom_string(value)?, None => Vec::new(),
+        };
+        let name = match args.get(1).filter(|value| !host.is_undefined(value)) {
+            Some(value) => host.to_dom_string(value)?, None => "Error".encode_utf16().collect(),
+        };
         return create(host, name, message);
     }
     let key = host.platform_object(&receiver, InterfaceBrand::DOM_EXCEPTION)
