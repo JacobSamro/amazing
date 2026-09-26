@@ -254,16 +254,16 @@ pub(crate) fn load_page_media(
                     if data.body.len() > 16 * 1024 * 1024 {
                         return Err("resource size limit".to_owned());
                     }
-                    if data.mime_type.type_ == "image" && data.mime_type.subtype == "svg+xml" {
-                        amazing_svg::decode(&data.body, amazing_svg::DecodeLimits::default())
-                            .map_err(|error| error.to_string())
-                    } else {
-                        amazing_media::decode_image(&data.body).map_err(|error| error.to_string())
-                    }
+                    amazing_image::decode(&data.body, amazing_image::DecodeLimits::default())
+                        .map_err(|error| error.to_string())
                 })
         } else {
+            // SVG and every raster codec (PNG/JPEG/GIF/WebP/BMP/ICO/PNM) go
+            // through the same bounded web-image adapter as the reftest and
+            // generated-image paths; `amazing-media` alone is BMP/PPM only.
             load_resource(url, 16 * 1024 * 1024)
-                .and_then(|bytes| amazing_media::decode_image(&bytes).map_err(|error| error.to_string()))
+                .and_then(|bytes| amazing_image::decode(&bytes, amazing_image::DecodeLimits::default())
+                    .map_err(|error| error.to_string()))
         };
         match image {
             Ok(image) => { media.decoded.insert(url.to_owned(), image); }

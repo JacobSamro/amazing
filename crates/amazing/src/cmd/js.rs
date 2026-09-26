@@ -59,15 +59,28 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     Ok(())
 }
 
+/// Result of the lenient real-page script pass: the collected failures plus the
+/// console lines produced by the optional API probe script.
+pub(crate) struct LenientScriptResult {
+    pub(crate) errors: Vec<String>,
+    pub(crate) probe: Vec<String>,
+}
+
 /// Real-page headless path: run every script, handler and the bounded event
 /// loop, but collect each failure instead of aborting at the first one. The
 /// page still paints, and the caller reports the errors. The reftest path keeps
 /// the strict `prepare_page_scripts`, where a thrown script is never a pass.
+///
+/// When `probe` is supplied it runs in the same interpreter after the page's
+/// scripts, events and event-loop steps; only its console output is returned in
+/// `probe`, so a live corpus can report missing globals per page.
 pub(crate) fn execute_page_scripts_lenient(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
-) -> Vec<String> {
+    probe: Option<&str>,
+) -> LenientScriptResult {
     let mut errors = Vec::new();
+    let mut probe_lines = Vec::new();
     let (scripts, handlers) = {
         let host_ref = host.borrow();
         let mut scripts = Vec::new();
@@ -76,13 +89,16 @@ pub(crate) fn execute_page_scripts_lenient(
         collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
         (scripts, handlers)
     };
-    if scripts.is_empty() && handlers.is_empty() {
-        return errors;
+    if scripts.is_empty() && handlers.is_empty() && probe.is_none() {
+        return LenientScriptResult { errors, probe: probe_lines };
     }
     let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
         host.clone(), crate::js_scheduler::JS_CAPACITY) {
         Ok(scheduler) => scheduler,
-        Err(error) => { errors.push(format!("scheduler init: {}", error.describe())); return errors; }
+        Err(error) => {
+            errors.push(format!("scheduler init: {}", error.describe()));
+            return LenientScriptResult { errors, probe: probe_lines };
+        }
     };
     scheduler.set_location_url(page);
     for (node, event, body) in handlers {
@@ -129,7 +145,15 @@ pub(crate) fn execute_page_scripts_lenient(
             Err(error) => { errors.push(format!("page event loop: {}", error.describe())); break; }
         }
     }
-    errors
+    if let Some(source) = probe {
+        let before = scheduler.js.output.borrow().len();
+        if let Err(error) = scheduler.run_script(source) {
+            errors.push(format!("probe script: {}", error.describe()));
+        }
+        let output = scheduler.js.output.borrow();
+        probe_lines.extend(output.iter().skip(before).cloned());
+    }
+    LenientScriptResult { errors, probe: probe_lines }
 }
 
 /// Starts the page's script and event-loop lifetime. WPT keeps this scheduler

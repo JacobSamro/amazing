@@ -1,0 +1,58 @@
+# IA-LIVE-PAGES live corpus — public pages, no logins or form submissions.
+# One URL per line; blank lines and lines starting with # are ignored.
+# Pages are fetched live through Amazing's own network stack; nothing is
+# redistributed (no saved copies are committed).
+
+# News
+https://news.ycombinator.com/
+https://news.ycombinator.com/news
+https://news.ycombinator.com/newest
+https://news.ycombinator.com/best
+https://text.npr.org/
+https://lite.cnn.com/
+
+# Documentation
+https://developer.mozilla.org/en-US/docs/Web/JavaScript
+https://developer.mozilla.org/en-US/docs/Web/CSS
+https://developer.mozilla.org/en-US/docs/Web/HTML
+https://developer.mozilla.org/en-US/docs/Web/API
+https://developer.mozilla.org/en-US/docs/Web/HTTP
+https://docs.rust-lang.org/book/
+https://docs.rs/serde/latest/serde/
+https://doc.rust-lang.org/std/
+https://www.rust-lang.org/
+https://web.dev/
+https://v8.dev/
+
+# Wiki
+https://en.wikipedia.org/wiki/Web_browser
+https://en.wikipedia.org/wiki/JavaScript
+https://en.wikipedia.org/wiki/CSS
+https://en.wikipedia.org/wiki/HTTP
+https://en.wikipedia.org/wiki/Rust_(programming_language)
+https://en.wikipedia.org/wiki/World_Wide_Web
+
+# Code hosting and package pages
+https://github.com/rust-lang/rust
+https://github.com/rust-lang/cargo
+https://crates.io/crates/serde
+
+# Shop product / category pages (public, no cart or login)
+https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html
+https://books.toscrape.com/catalogue/category/books/travel_2/index.html
+
+# Heavy SPA landing pages
+https://react.dev/
+https://vuejs.org/
+https://svelte.dev/
+https://nextjs.org/
+https://angular.dev/
+
+# Other everyday sites
+https://example.com/
+https://www.iana.org/help/example-domains
+https://www.w3.org/TR/html52/
+https://httpbin.org/html
+https://www.sqlite.org/index.html
+https://www.kernel.org/
+https://www.debian.org/
