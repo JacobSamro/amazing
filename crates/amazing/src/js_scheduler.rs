@@ -295,6 +295,12 @@ impl DriverScheduler {
         self.pump_at(self.started.elapsed(), render)
     }
 
+    /// Test hook for lane-owned bindings tests (see `runtime_host_messaging`).
+    #[cfg(test)]
+    pub(crate) fn test_bindings(&self) -> &crate::runtime_binding_host::RuntimeBindings {
+        &self.bindings
+    }
+
     /// [`Self::pump_now`] variant that ticks a host render hook at the loop's
     /// frame boundary (see [`Self::pump_at_with_render`]).
     pub(crate) fn pump_now_with_render(
