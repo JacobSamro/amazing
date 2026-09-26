@@ -183,6 +183,13 @@ impl<P: RegistrableDomain> CookieStore<P> {
         self.expire(now);
         self.cookies.retain(Cookie::persistent);
     }
+    /// Drops every cookie regardless of persistence or expiry. Used by
+    /// `document.cookie`'s embedding-side "clear site data" affordances and by
+    /// `test_driver.delete_all_cookies()` in the WPT harness (NET-41), which
+    /// unlike `end_session` must also remove session cookies.
+    pub fn clear(&mut self) {
+        self.cookies.clear();
+    }
     pub fn expire(&mut self, now: i64) {
         self.cookies.retain(|c| c.expires.is_none_or(|t| t > now));
     }

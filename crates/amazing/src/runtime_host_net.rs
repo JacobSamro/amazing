@@ -1,10 +1,22 @@
 //! Fetch, XHR and WebSocket runtime adapter owned by the net lane.
 use super::*;
 use amazing_bindings::fetch_interfaces::{FetchHeaders, FetchHost, FetchInterface, FetchObject, FetchOperation, HeaderIterationKind};
-use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId, WebSocketClient}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
+use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, cookies::{CookieAccess, CookieSite}, service::{ClientContext, NetworkService, ServiceEvent, ServiceId, WebSocketClient}, xhr::{Xhr, XhrError, XhrEvent, XhrEventKind, XhrEventTarget, XhrState}, HttpUrl};
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent};
 use amazing_net::websocket::{Close as WsClose, Event as WsEvent};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+/// UTC seconds "now" for `ClientContext::now_unix` and the `document.cookie`
+/// bindings (NET-41). `ClientContext::default()` leaves `now_unix` at 0
+/// (documented as "supplied by the embedding"); every real call site needs
+/// a real wall clock, or cookie expiry/creation timestamps and the SameSite
+/// Lax grace period are all computed against the Unix epoch.
+fn wall_clock_now_unix() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
 
 /// Own brand namespace for WebSocket instances, disjoint from Fetch's
 /// InterfaceBrand(200..206) and messaging's MESSAGING_BRAND_BASE (200).
@@ -16,6 +28,11 @@ pub(super) enum NetNativeEntry {
     PromiseExecutor,
     Pump,
     WebSocket(WebSocketOp),
+    /// `document.cookie` getter/setter (NET-41), and the
+    /// `test_driver.delete_all_cookies()` vendor hook it shares a store with.
+    CookieGet,
+    CookieSet,
+    CookieDeleteAll,
 }
 
 #[derive(Clone, Copy)]
@@ -159,6 +176,7 @@ impl RuntimeBindingHost<'_> {
         env.declare_lexical("fetch", fetch, false)?;
         self.js.global_env = env;
         self.install_websocket()?;
+        self.install_document_cookie()?;
         Ok(())
     }
 
@@ -175,6 +193,9 @@ impl RuntimeBindingHost<'_> {
             }
             NetNativeEntry::Pump => self.fetch_pump(),
             NetNativeEntry::WebSocket(op) => self.websocket_invoke(op, this, args),
+            NetNativeEntry::CookieGet => self.document_cookie_get(),
+            NetNativeEntry::CookieSet => self.document_cookie_set(args),
+            NetNativeEntry::CookieDeleteAll => self.document_cookie_delete_all(),
         }
     }
 
@@ -521,6 +542,7 @@ impl RuntimeBindingHost<'_> {
         // subresource requests already go through.
         let mut context = ClientContext::default();
         context.security.client_restricts_mixed_content = base.as_parsed().scheme() == "https";
+        context.now_unix = wall_clock_now_unix();
         let client = WebSocketClient { origin: origin.clone(), context };
         let started = self
             .state
@@ -989,6 +1011,88 @@ impl RuntimeBindingHost<'_> {
         }
     }
 
+    /// `document.cookie`'s access context (NET-41): this binding is the
+    /// scripting API, not an HTTP response, so `http_api: false` -- which
+    /// `CookieStore::cookie_header`/`set_cookie` both already gate HttpOnly
+    /// exclusion on -- correctly hides and rejects HttpOnly cookies without
+    /// any extra filtering here. `site_for_cookies: NoClient` matches "no
+    /// client" (same-site) since a same-document script read/write is never
+    /// itself a cross-site request.
+    fn document_cookie_access<'a>(&self, base: &'a HttpUrl) -> CookieAccess<'a> {
+        CookieAccess {
+            url: base,
+            site_for_cookies: CookieSite::NoClient,
+            http_api: false,
+            top_level_navigation: false,
+            method: "GET",
+            partition_key: None,
+        }
+    }
+    fn document_cookie_get(&mut self) -> Result<JsValue, Throw> {
+        let base = self.fetch_base()?;
+        let now = wall_clock_now_unix();
+        let access = self.document_cookie_access(&base);
+        let header = self
+            .state
+            .borrow_mut()
+            .net
+            .fetch_network
+            .cookies
+            .cookie_header(&access, now)
+            .unwrap_or_default();
+        Ok(JsValue::str(String::from_utf8_lossy(&header).into_owned()))
+    }
+    fn document_cookie_set(&mut self, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+        let text = self.dom_string(&value)?;
+        let base = self.fetch_base()?;
+        let now = wall_clock_now_unix();
+        let access = self.document_cookie_access(&base);
+        // `document.cookie = "..."` silently ignores a rejected cookie
+        // (invalid attribute, oversized, HttpOnly, __Secure-/__Host- prefix
+        // mismatch, ...) per the HTML spec's "cookie" setter steps -- there
+        // is no exception to throw and no return value to reflect it in.
+        let _ = self.state.borrow_mut().net.fetch_network.cookies.set_cookie(text.as_bytes(), &access, now);
+        Ok(JsValue::Undefined)
+    }
+    /// Backs `test_driver_internal.delete_all_cookies()` (NET-41): WPT's
+    /// `cookies/resources/cookie-test.js` helpers call
+    /// `test_driver.delete_all_cookies()` before and after nearly every
+    /// cookie test, and `testdriver-vendor.js` is the pinned corpus's
+    /// intentionally-empty extension point for a browser's real
+    /// implementation (see the served override in `wpt_server.rs`/
+    /// `wpt_harness.rs`). Unlike `end_session`, this also removes session
+    /// (non-persistent) cookies, matching WebDriver's "Delete All Cookies".
+    fn document_cookie_delete_all(&mut self) -> Result<JsValue, Throw> {
+        self.state.borrow_mut().net.fetch_network.cookies.clear();
+        Ok(JsValue::Undefined)
+    }
+    fn install_document_cookie(&mut self) -> Result<(), Throw> {
+        let Some(prototype) = self.prototype(Interface::Document) else {
+            return Ok(());
+        };
+        let getter = self.native("cookie", 0, NativeEntry::Net(NetNativeEntry::CookieGet), HostCallPolicy::CallOnly);
+        let setter = self.native("cookie", 1, NativeEntry::Net(NetNativeEntry::CookieSet), HostCallPolicy::CallOnly);
+        self.define_accessor_property(&prototype, "cookie", Some(getter), Some(setter), true, true)?;
+        // The delete-all hook lives on `Document.prototype` as a GETTER (not
+        // a plain data property, and not on `window`) (NET-41): a plain data
+        // property installed once on `Interface::Document`'s prototype at
+        // bootstrap was empirically found NOT reachable from a hidden
+        // iframe's own `document` (`typeof document.__amazingDeleteAllCookies`
+        // came back `"undefined"` there, while a getter/setter pair defined
+        // the same way -- see `cookie` above -- round-trips correctly from
+        // any frame). Reading the property performs the clear as a side
+        // effect and returns `undefined`, matching how
+        // `cookies/resources/cookie-test.js`'s
+        // `getAndExpireCookiesForDefaultPathTest()` calls
+        // `test_driver.delete_all_cookies()` from inside a hidden iframe.
+        let delete_all = self.native(
+            "__amazingDeleteAllCookies", 0,
+            NativeEntry::Net(NetNativeEntry::CookieDeleteAll), HostCallPolicy::CallOnly,
+        );
+        self.define_accessor_property(&prototype, "__amazingDeleteAllCookies", Some(delete_all), None, false, false)?;
+        Ok(())
+    }
     fn install_websocket(&mut self) -> Result<(), Throw> {
         let global = self.js.binding_global_object();
         let object_proto = self.js.binding_object_prototype();
@@ -1210,7 +1314,9 @@ impl FetchHost for RuntimeBindingHost<'_> {
         binding_call(self.js, &reject, &promise, &[reason]).map(Some)
     }
     fn fetch_start(&mut self, request: ApiRequest, signal: AbortSignalId) -> Result<JsValue, Throw> {
-        let started = self.state.borrow_mut().net.fetch_network.start(request, ClientContext::default());
+        let mut context = ClientContext::default();
+        context.now_unix = wall_clock_now_unix();
+        let started = self.state.borrow_mut().net.fetch_network.start(request, context);
         let id = match started {
             Ok(id) => id,
             Err(ApiError::Aborted) => {
@@ -1235,11 +1341,13 @@ impl FetchHost for RuntimeBindingHost<'_> {
     }
     fn fetch_execute(&mut self, request: &mut ApiRequest) -> Result<ApiResponse, ApiError> {
         let owned = request.clone_request()?;
+        let mut context = ClientContext::default();
+        context.now_unix = wall_clock_now_unix();
         let id = self
             .state
             .borrow_mut()
             .net.fetch_network
-            .start(owned, ClientContext::default())?;
+            .start(owned, context)?;
         let start = Instant::now();
         for tick in 0..15_000 {
             let events = self
@@ -2008,6 +2116,39 @@ mod tests {
             )
             .unwrap_or_else(|error| panic!("WebSocket from a file: document: {}", error.describe()));
         assert_eq!(result, JsValue::Bool(true));
+    }
+
+    /// NET-41: `document.cookie` backed by `NetworkService.cookies`
+    /// (`amazing_fetch::cookies::CookieStore`), the same store real fetch/XHR
+    /// already read/write through. Covers get/set round-trip, multiple
+    /// cookies joined with `"; "`, HttpOnly rejection (the setter's
+    /// `http_api: false` context), and the delete-all hook
+    /// `test_driver_internal.delete_all_cookies()` is wired to.
+    #[test]
+    fn document_cookie_get_set_and_delete_all() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        let result = scheduler
+            .run_script(
+                "document.cookie = 'a=1'; \
+                 document.cookie = 'b=2; Path=/'; \
+                 document.cookie = 'c=3; HttpOnly'; \
+                 document.cookie",
+            )
+            .unwrap_or_else(|error| panic!("document.cookie set/get: {}", error.describe()));
+        // `c` was rejected: `document.cookie`'s setter runs with
+        // `http_api: false`, and `CookieStore::set_cookie` rejects an
+        // HttpOnly attribute from a non-HTTP (scripting) context.
+        assert_eq!(result, JsValue::str("a=1; b=2"));
+
+        let cleared = scheduler
+            .run_script("void document.__amazingDeleteAllCookies; document.cookie")
+            .unwrap_or_else(|error| panic!("delete_all_cookies: {}", error.describe()));
+        assert_eq!(cleared, JsValue::str(""));
     }
 
     #[test]
