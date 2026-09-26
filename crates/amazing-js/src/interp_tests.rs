@@ -471,6 +471,43 @@ mod tests {
     }
 
     #[test]
+    fn annex_b_object_accessor_helpers_define_and_lookup() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let get=function(){return 1}; let set=function(v){}; \
+                 let o={}; let r=o.__defineGetter__('x', get); \
+                 let defined = r===undefined && o.x===1; \
+                 o.__defineSetter__('x', set); \
+                 let proto={}; proto.__defineGetter__('y', get); \
+                 let child=Object.create(proto); \
+                 defined && o.__lookupGetter__('x')===get && o.__lookupSetter__('x')===set \
+                 && child.__lookupGetter__('y')===get && child.__lookupSetter__('y')===undefined \
+                 && o.__lookupGetter__('missing')===undefined \
+                 && (function(){ try { Object.prototype.__defineGetter__.call(null,'x',get); return false; } catch(e){ return e instanceof TypeError; } })() \
+                 && (function(){ try { o.__defineGetter__('bad', 3); return false; } catch(e){ return e instanceof TypeError; } })();",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn error_is_error_recognizes_only_real_error_brands() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "Error.isError(new Error('x')) && Error.isError(new TypeError()) \
+                 && Error.isError(new RangeError()) && !Error.isError({}) \
+                 && !Error.isError({name:'Error', message:'x'}) \
+                 && !Error.isError(Object.create(Error.prototype)) \
+                 && !Error.isError(Error.prototype) && !Error.isError(undefined) \
+                 && Error.isError.length===1 && typeof Error.isError==='function';",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn class_inheritance_dispatches_super_methods_with_the_real_receiver() {
         let mut i = Interpreter::new();
         let value = i

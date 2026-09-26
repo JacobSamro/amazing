@@ -90,6 +90,11 @@ impl Interpreter {
             prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
             prototype.set_own("constructor", error_constructor.clone());
         }
+        if let JsValue::Object(function) = &error_constructor {
+            let is_error = symbol_method(self, "isError", native_error_is_error);
+            symbol_method_length(&is_error, 1);
+            function.borrow_mut().define("isError", symbol_data(is_error, true, true)).unwrap();
+        }
         self.define_global("Error", error_constructor.clone());
         for (name, native) in [
             ("EvalError", native_eval_error as crate::value::NativeFn),
@@ -134,6 +139,16 @@ impl Interpreter {
         let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
         symbol_method_length(&property_is_enumerable, 1);
         self.object_proto.borrow_mut().define("propertyIsEnumerable", symbol_data(property_is_enumerable, true, true)).unwrap();
+        for (name, length, native) in [
+            ("__defineGetter__", 2, native_object_define_getter as crate::value::NativeFn),
+            ("__defineSetter__", 2, native_object_define_setter as crate::value::NativeFn),
+            ("__lookupGetter__", 1, native_object_lookup_getter as crate::value::NativeFn),
+            ("__lookupSetter__", 1, native_object_lookup_setter as crate::value::NativeFn),
+        ] {
+            let method = symbol_method(self, name, native);
+            symbol_method_length(&method, length);
+            self.object_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
+        }
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));

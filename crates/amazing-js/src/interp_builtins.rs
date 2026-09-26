@@ -1357,6 +1357,21 @@ fn native_error_to_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -
     Ok(JsValue::str(result))
 }
 
+// ES2026 Error.isError (§20.5.2.1). The [[ErrorData]] brand is the engine's
+// Error exotic, which a writable JS property cannot forge; host platform
+// errors (DOMException) are branded by the embedding via the same identity.
+fn native_error_is_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = std_reflect_arg(&args, 0);
+    let is_error = match &value {
+        JsValue::Object(object) => {
+            let object = object.borrow();
+            matches!(object.exotic, Exotic::Error) || i.host_error_brand(&object)
+        }
+        _ => false,
+    };
+    Ok(JsValue::Bool(is_error))
+}
+
 fn new_promise(i: &Interpreter, state: PromiseFate) -> JsValue {
     let promise = Obj(Rc::new(RefCell::new({
         let mut o = JsObject::ordinary();
