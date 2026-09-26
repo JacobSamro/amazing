@@ -182,6 +182,15 @@ pub trait DomHost {
     fn query_selector(&mut self, selector: &str) -> Option<u32>;
     fn query_selector_all(&mut self, selector: &str) -> Vec<u32>;
     fn matches_selector(&self, node: u32, selector: &str) -> bool;
+    /// Like `matches_selector`, but binds `:scope` to `scope` instead of the
+    /// document root -- `Element.closest()`'s DOM algorithm matches each
+    /// inclusive ancestor with `:scope` bound to the ORIGINAL context
+    /// element throughout the walk. Hosts that don't override this fall back
+    /// to plain `matches_selector` (`:scope` then matches nothing but the
+    /// document root, the pre-existing behavior).
+    fn matches_selector_scoped(&self, node: u32, selector: &str, _scope: u32) -> bool {
+        self.matches_selector(node, selector)
+    }
     fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;

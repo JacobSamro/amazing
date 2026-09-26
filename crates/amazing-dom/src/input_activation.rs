@@ -80,6 +80,15 @@ impl Dom {
             || (["a", "area"].iter().any(|tag| self.html_tag(node, tag)) && self.has(node, "href"))
     }
     pub(crate) fn prepare_input_activation(&mut self, node: NodeIdx) -> Option<InputActivation> {
+        if self.html_tag(node, "label") {
+            // A label's own activation behavior is to run its labeled
+            // control's activation behavior: forward to the resolved
+            // control (if any -- and if it is itself activation-bearing,
+            // i.e. an `<input>`; `label_control` never resolves back to a
+            // `<label>`, so this cannot recurse indefinitely).
+            let control = self.label_control(node).ok()??;
+            return self.prepare_input_activation(control);
+        }
         if !self.html_tag(node, "input") { return None; }
         let checked = self.input_checked(node).ok()?;
         let indeterminate = self.input_indeterminate(node).ok()?;

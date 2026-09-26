@@ -1809,6 +1809,14 @@ impl SelectorEngine for RuntimeBindingHost<'_> {
         if element.0 as usize >= host.dom.node_count() { return Err(DomError::InvalidNode); }
         Ok(selector.iter().any(|part| amazing_css::selectors::matches(&host.dom, element, part)))
     }
+    fn matches_selector_scoped(&mut self, element: NodeIdx, selector: &Self::SelectorHandle, scope: NodeIdx)
+        -> Result<bool, DomError> {
+        let host = self.state.borrow().host.clone();
+        let host = host.borrow();
+        if element.0 as usize >= host.dom.node_count() { return Err(DomError::InvalidNode); }
+        Ok(selector.iter().any(|part|
+            amazing_css::selectors::matches_in_scope(&host.dom, element, part, Some(scope))))
+    }
 }
 
 impl AbortHost for RuntimeBindingHost<'_> {

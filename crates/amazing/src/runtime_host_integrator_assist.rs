@@ -415,7 +415,7 @@ impl RuntimeBindingHost<'_> {
                 // checkbox/radio never toggles and a `<label>` never forwards
                 // to its control -- both are driven by activation completion,
                 // not by the event type name alone.
-                invoke(self, Operation::HTMLElementClick, element, &[])?;
+                invoke(self, Operation::HTMLElementClick(true), element, &[])?;
                 Ok(JsValue::Undefined)
             }
             IaNativeEntry::TdSendKeys => {
@@ -493,7 +493,7 @@ impl RuntimeBindingHost<'_> {
                                             // the actual click operation, not
                                             // just a "click"-named event.
                                             let target = self.wrap_node(node)?;
-                                            invoke(self, Operation::HTMLElementClick, target, &[])?;
+                                            invoke(self, Operation::HTMLElementClick(true), target, &[])?;
                                         }
                                     }
                                     _ => {}
@@ -773,17 +773,13 @@ mod tests {
         crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap()
     }
 
-    // NOTE (IA-TESTDRIVER): `__amazing_td_click` runs the real click-activation
-    // path (`Operation::HTMLElementClick`), which toggles the checkbox as a
-    // genuine default action -- but that path's own event dispatch always goes
-    // through `event_bindings::invoke(host, O::DispatchEvent, ...)`, which is
-    // the *script*-triggered dispatch operation and therefore marks the event
-    // untrusted (`DispatchOrigin::Script`, see amazing-dom/src/events.rs:617).
-    // A driver-generated click should be trusted (WebDriver's own "Element
-    // Click" is a real input action, not a script call to `.click()`). Filed
-    // to dom-bindings/questions.md: expose a trusted variant of the
-    // click-activation sequence. Tracked here so a future fix flips this
-    // assertion from `false` to `true` without anyone having to rediscover it.
+    // `__amazing_td_click` runs the real click-activation path
+    // (`Operation::HTMLElementClick(true)`), which toggles the checkbox as a
+    // genuine default action. It now dispatches via
+    // `event_bindings::dispatch_created_event` with `DispatchOrigin::UserAgent`
+    // for driver-initiated clicks (DOM-B-ACT), so the event is trusted --
+    // matching WebDriver's "Element Click", which is a real input action, not
+    // a script call to `.click()`.
     #[test]
     fn td_click_toggles_a_checkbox_via_the_real_click_default_action() {
         let mut scheduler = checkbox_scheduler();
@@ -794,25 +790,21 @@ mod tests {
         scheduler.run_script("__amazing_td_click(document.getElementById('box'))").unwrap();
         assert_eq!(scheduler.run_script("box.checked").unwrap(), JsValue::Bool(true));
         assert_eq!(scheduler.run_script("clicks").unwrap(), JsValue::num(1.0));
-        // Known gap (see comment above): should be 1, currently 0.
-        assert_eq!(scheduler.run_script("trusted_clicks").unwrap(), JsValue::num(0.0));
+        assert_eq!(scheduler.run_script("trusted_clicks").unwrap(), JsValue::num(1.0));
     }
 
-    // NOTE (IA-TESTDRIVER): clicking a `<label>` does not currently forward
-    // activation to its associated control. `Dom::begin_event_dispatch` only
-    // ever calls `prepare_input_activation` on the click's activation target
-    // (amazing-dom/src/events.rs:790-794), and `prepare_input_activation`
-    // (amazing-dom/src/input_activation.rs) returns `None` for anything that
-    // is not an `<input>`, even though `has_html_activation_behavior` already
-    // lists "label" as activation-bearing. `Dom::label_control` exists
-    // (amazing-dom/src/forms.rs:901) but nothing wires it into activation.
-    // Filed to dom-bindings/questions.md. Flip this assertion to `true` once
-    // that lands.
+    // Clicking a `<label>` forwards activation to its associated control
+    // (DOM-B-ACT): `prepare_input_activation` (amazing-dom/src/
+    // input_activation.rs) now resolves a label's target via
+    // `Dom::label_control` and recurses to prepare activation on the
+    // resolved control, so the label's own activation behavior toggles the
+    // checkbox exactly as the HTML Standard's label activation behavior
+    // requires.
     #[test]
-    fn td_click_on_a_label_does_not_yet_forward_to_its_associated_checkbox() {
+    fn td_click_on_a_label_forwards_to_its_associated_checkbox() {
         let mut scheduler = checkbox_scheduler();
         scheduler.run_script("__amazing_td_click(document.getElementById('lbl'))").unwrap();
-        assert_eq!(scheduler.run_script("document.getElementById('box').checked").unwrap(), JsValue::Bool(false));
+        assert_eq!(scheduler.run_script("document.getElementById('box').checked").unwrap(), JsValue::Bool(true));
     }
 
     #[test]

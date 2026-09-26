@@ -625,10 +625,11 @@ fn native_dom_closest(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let mut node = dom_id(&this)?;
+    let scope = dom_id(&this)?;
+    let mut node = scope;
     let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     loop {
-        let matches = dom_host(i)?.borrow().matches_selector(node, &selector);
+        let matches = dom_host(i)?.borrow().matches_selector_scoped(node, &selector, scope);
         if matches {
             return Ok(i.make_dom_element(node));
         }
