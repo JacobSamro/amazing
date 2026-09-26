@@ -2,6 +2,7 @@
 """Pinned Linux counterpart of run-render-wpt.ps1 (same first-link/fuzzy rules)."""
 import argparse
 import concurrent.futures
+import gzip
 import hashlib
 import json
 import os
@@ -136,6 +137,15 @@ def run_case(case, args):
                       actual_sha256=digest(actual), reference_sha256=digest(expected), diff_sha256=digest(diff))
     except (OSError, ValueError) as error:
         result['detail'] = str(error)
+    finally:
+        if args.compress_images:
+            # Preserve pixel evidence without keeping multi-megabyte blank
+            # raster planes on the shared sandbox. Report hashes remain those
+            # of the original uncompressed PPM files.
+            for path in directory.glob('*.ppm'):
+                with gzip.open(path.with_suffix('.ppm.gz'), 'wb', compresslevel=1) as output:
+                    output.write(path.read_bytes())
+                path.unlink()
     return result
 
 
@@ -147,6 +157,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--source', required=True)
     parser.add_argument('--jobs', type=int, default=3)
+    parser.add_argument('--compress-images', action='store_true')
     args = parser.parse_args()
     args.wpt, args.binary, args.output = args.wpt.resolve(), args.binary.resolve(), args.output.resolve()
     manifest = json.loads(args.manifest.read_text())
