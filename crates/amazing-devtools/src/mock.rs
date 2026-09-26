@@ -10,10 +10,12 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult,
-    ExceptionDetails, FrameInfo, FrameTree, HostError, HostInfo, LifecycleEvent, LogEntry,
-    MatchedRule, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent,
-    NodeDescription, PropertyDescriptor, RemoteObject, Screenshot, ScreenshotParams, TargetInfo,
+    BoxModel, ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams,
+    EvaluateResult, ExceptionDetails, FrameInfo, FrameResourceTree, FrameTree, HostError,
+    HostInfo, LayoutMetrics, LifecycleEvent, LogEntry, MatchedRule, MediaQuery,
+    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
+    PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
+    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, Viewport,
 };
 use crate::json::Json;
 
@@ -41,6 +43,22 @@ pub struct MockScript {
     pub reloads: Vec<bool>,
     /// Attribute writes recorded by `DOM.setAttributeValue`.
     pub mutations: Vec<(EngineNodeId, String, Option<String>)>,
+    /// Text-node writes recorded by `DOM.setNodeValue`.
+    pub node_values: Vec<(EngineNodeId, String)>,
+    /// Layout metrics returned by `Page.getLayoutMetrics`.
+    pub layout_metrics: LayoutMetrics,
+    /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
+    pub box_model: BoxModel,
+    /// Style sheet text returned by `CSS.getStyleSheetText`.
+    pub style_sheet_text: Option<String>,
+    /// Media queries returned by `CSS.getMediaQueries`.
+    pub media_queries: Vec<MediaQuery>,
+    /// Background colors returned by `CSS.getBackgroundColors`.
+    pub background_colors: Vec<Option<String>>,
+    /// Resources advertised in `Page.getResourceTree`.
+    pub resources: Vec<ResourceInfo>,
+    /// Resource bodies for `Page.getResourceContent`: (url, bytes, mime).
+    pub resource_bodies: Vec<(String, Vec<u8>, String)>,
 
     /// Pending `Page.lifecycleEvent` events.
     pub lifecycle: VecDeque<LifecycleEvent>,
@@ -54,6 +72,8 @@ pub struct MockScript {
     pub finished: VecDeque<NetworkFinishedEvent>,
     /// Pending `Log.entryAdded` events.
     pub logs: VecDeque<LogEntry>,
+    /// Pending `Target.*` lifecycle events, polled by the browser endpoint.
+    pub target_events: VecDeque<TargetEvent>,
 }
 
 impl Default for MockScript {
@@ -73,12 +93,51 @@ impl Default for MockScript {
             evaluations: Vec::new(),
             reloads: Vec::new(),
             mutations: Vec::new(),
+            node_values: Vec::new(),
+            layout_metrics: LayoutMetrics {
+                layout_viewport: Viewport {
+                    page_x: 0.0,
+                    page_y: 0.0,
+                    client_width: 800.0,
+                    client_height: 600.0,
+                },
+                visual_viewport: Viewport {
+                    page_x: 0.0,
+                    page_y: 0.0,
+                    client_width: 800.0,
+                    client_height: 600.0,
+                },
+                content_width: 800.0,
+                content_height: 1200.0,
+            },
+            box_model: BoxModel::from_rect(0.0, 0.0, 100.0, 50.0),
+            style_sheet_text: Some("body { color: red }".into()),
+            media_queries: vec![MediaQuery {
+                text: "(min-width: 600px)".into(),
+                source: "mediaRule".into(),
+                source_url: None,
+            }],
+            background_colors: vec![Some("rgb(255, 255, 255)".into()), None],
+            resources: vec![ResourceInfo {
+                url: "https://example.com/".into(),
+                mime_type: "text/html".into(),
+                resource_type: "Document".into(),
+                content_size: Some(5),
+                last_modified: None,
+                cached: false,
+            }],
+            resource_bodies: vec![(
+                "https://example.com/".into(),
+                b"<html>".to_vec(),
+                "text/html".into(),
+            )],
             lifecycle: VecDeque::new(),
             console: VecDeque::new(),
             requests: VecDeque::new(),
             responses: VecDeque::new(),
             finished: VecDeque::new(),
             logs: VecDeque::new(),
+            target_events: VecDeque::new(),
         }
     }
 }
@@ -150,6 +209,30 @@ impl MockScript {
             stack_trace: None,
         });
     }
+
+    /// Queues a `Target.*` lifecycle event, polled by the browser endpoint.
+    pub fn push_target_event(&mut self, kind: TargetEventKind, target: TargetInfo) {
+        self.target_events.push_back(TargetEvent {
+            kind,
+            target,
+            session_id: None,
+        });
+    }
+
+    /// Queues `Target.targetCreated` and adds the target to the host's list.
+    pub fn push_target_created(&mut self, id: &str, url: &str, title: &str) {
+        let target = TargetInfo::page(id, url, title);
+        self.targets.push(target.clone());
+        self.push_target_event(TargetEventKind::Created, target);
+    }
+
+    /// Queues `Target.targetDestroyed` and removes the target from the list.
+    pub fn push_target_destroyed(&mut self, id: &str) {
+        if let Some(index) = self.targets.iter().position(|target| target.id == id) {
+            let target = self.targets.remove(index);
+            self.push_target_event(TargetEventKind::Destroyed, target);
+        }
+    }
 }
 
 /// A [`DevToolsHost`] backed by a [`MockScript`].
@@ -215,6 +298,15 @@ impl DevToolsHost for MockHost {
             script: Arc::clone(&self.script),
             target,
         }))
+    }
+
+    fn drain_target_events(&self) -> Vec<TargetEvent> {
+        self.script
+            .lock()
+            .unwrap()
+            .target_events
+            .drain(..)
+            .collect()
     }
 }
 
@@ -395,6 +487,95 @@ impl DevToolsSession for MockSession {
         Ok(self.script.lock().unwrap().matched_rules.clone())
     }
 
+    fn get_layout_metrics(&mut self) -> Result<LayoutMetrics, HostError> {
+        Ok(self.script.lock().unwrap().layout_metrics)
+    }
+
+    fn get_resource_tree(&mut self) -> Result<FrameResourceTree, HostError> {
+        let url = self.target.url.clone();
+        let script = self.script.lock().unwrap();
+        Ok(FrameResourceTree {
+            frame: self.frame(&url),
+            resources: script.resources.clone(),
+            child_frames: Vec::new(),
+        })
+    }
+
+    fn get_resource_content(
+        &mut self,
+        _frame_id: &str,
+        url: &str,
+    ) -> Result<ResourceContent, HostError> {
+        let script = self.script.lock().unwrap();
+        script
+            .resource_bodies
+            .iter()
+            .find(|(candidate, _, _)| candidate == url)
+            .map(|(_, bytes, mime)| ResourceContent {
+                mime_type: mime.clone(),
+                bytes: bytes.clone(),
+            })
+            .ok_or(HostError::NotFound)
+    }
+
+    fn get_box_model(&mut self, _node: EngineNodeId) -> Result<BoxModel, HostError> {
+        Ok(self.script.lock().unwrap().box_model)
+    }
+
+    fn get_content_quads(&mut self, _node: EngineNodeId) -> Result<Vec<BoxModel>, HostError> {
+        Ok(vec![self.script.lock().unwrap().box_model])
+    }
+
+    fn set_node_value(&mut self, node: EngineNodeId, value: &str) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .node_values
+            .push((node, value.to_string()));
+        Ok(())
+    }
+
+    fn perform_search(&mut self, query: &str) -> Result<Vec<EngineNodeId>, HostError> {
+        let mut found = Vec::new();
+        search_document(&mock_document(), query, &mut found);
+        Ok(found)
+    }
+
+    fn push_nodes(&mut self, backend_node_ids: &[u64]) -> Result<Vec<EngineNodeId>, HostError> {
+        let mut nodes = Vec::with_capacity(backend_node_ids.len());
+        for backend in backend_node_ids {
+            nodes.push(self.resolve_node(*backend)?);
+        }
+        Ok(nodes)
+    }
+
+    fn get_style_sheet_text(
+        &mut self,
+        _style_sheet_id: &str,
+    ) -> Result<Option<String>, HostError> {
+        Ok(self.script.lock().unwrap().style_sheet_text.clone())
+    }
+
+    fn set_style_sheet_text(
+        &mut self,
+        _style_sheet_id: &str,
+        text: &str,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().style_sheet_text = Some(text.to_string());
+        Ok(())
+    }
+
+    fn get_media_queries(&mut self) -> Result<Vec<MediaQuery>, HostError> {
+        Ok(self.script.lock().unwrap().media_queries.clone())
+    }
+
+    fn get_background_colors(
+        &mut self,
+        _node: EngineNodeId,
+    ) -> Result<Vec<Option<String>>, HostError> {
+        Ok(self.script.lock().unwrap().background_colors.clone())
+    }
+
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {
         self.script.lock().unwrap().lifecycle.drain(..).collect()
     }
@@ -455,6 +636,26 @@ fn collect_matches(node: &NodeDescription, selector: &str, out: &mut Vec<EngineN
     }
     for child in &node.children {
         collect_matches(child, selector, out);
+    }
+}
+
+fn search_document(node: &NodeDescription, query: &str, out: &mut Vec<EngineNodeId>) {
+    let needle = query.to_ascii_lowercase();
+    if !needle.is_empty() {
+        let mut matched = node.local_name.to_ascii_lowercase().contains(&needle)
+            || node.node_value.to_ascii_lowercase().contains(&needle);
+        if !matched {
+            matched = node.attributes.iter().any(|(name, value)| {
+                name.to_ascii_lowercase().contains(&needle)
+                    || value.to_ascii_lowercase().contains(&needle)
+            });
+        }
+        if matched {
+            out.push(node.node);
+        }
+    }
+    for child in &node.children {
+        search_document(child, query, out);
     }
 }
 
