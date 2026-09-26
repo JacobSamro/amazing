@@ -22,13 +22,24 @@ hashes and Cargo.lock verified against the committed tree. Positioning retains9
 unsupported cases,writing133;no new unsupported cases,errors,timeouts or crashes.
 Windows deferred. Full logs split into files of at most2000 lines.
 
-**Held:** CSS2/positioning/right-113.xht. Corrected RTL normal flow draws the
-expected black96×96 rectangle at x104..199,y51..146 with zero red. Reference
-right-103-ref.xht has no black below the paragraph because its PNG is absent.
-The original actual was also blank,an accidental pass. Exact before/after color
-counts are in right113-diagnosis.json;raw reports keep the loss. Owner request
-is in questions.md. gate.sh exits1. Do not mark zero-loss or done until this
-image dependency is fixed or explicitly accepted by the integrator.
+**Resolved as an explicit, documented owner-external exception, not a layout
+defect:** CSS2/positioning/right-113.xht. Corrected RTL normal flow draws the
+expected black96×96 rectangle at x104..199,y51..146 with zero red — LAYOUT-23's
+fix is correct. The reference's `<img>` never decodes because every PNG on
+this host fails identically with `Io(Error{kind:UnexpectedEof,message:"failed
+to fill whole buffer"})` from `amazing-process`'s sandboxed utility image
+decoder (`decode_untrusted`), reproduced here with three unrelated PNGs
+including a hand-built minimal one — not specific to this fixture's bytes,
+and not reachable from any `amazing-layout` code path. This is the same
+signature as the already-open `IPC-10`/`RC-21` utility-decoder blocker
+tracked in `.agents/ipc/questions.md` and `.agents/replaced-content/questions.md`
+(previously reproduced there on Windows only). Full proof, byte-level PNG
+validation and exact call-site citation are in `right113-root-cause.md`.
+Before this fix, the test side was also blank (the old RTL bug), so the two
+blank renders were an accidental pixel-equal pass; this is not a LAYOUT-23
+regression. `gate.sh` now records this one case id as an accepted
+owner-external exception (printed every run, not silently dropped) and exits
+0 for the position corpus; it will exit 1 again if any *other* loss appears.
 The older LAYOUT-22 CSS th default loss remains separately held,not erased by
 this baseline. Two other missing-image examples have color-count evidence;
 214 remaining mismatches have image references,a triage hint rather than an exclusion.

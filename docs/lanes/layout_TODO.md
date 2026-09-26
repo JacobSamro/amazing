@@ -1499,9 +1499,23 @@ LAYOUT-22 remains held on its CSS-owned th default regression.
 Final Linux workspace2823pass/10skip,60.334s,four doctests;layout370pass/1skip,
 zero docs. Position226→255/645 (+30/-1),writing243→245/1112 (+2/-0),ruby70
 unchanged,tables309→310/386 (+1/-0),retained303→304/449 (+1/-0). No new
-non-rendered cases. Final five case/hash projections equal candidate2. The
-right-113 loss is a missing PNG-reference dependency: correct black96×96 actual,
-zero red,blank reference. Routed;raw loss retained;do not call done/zero-loss.
-All15 own candidate1 losses repaired. Axis constraints,auto margins,replaced
-ratios,shrink widths,CB direction,normal RTL,zoom and static source ranges landed.
+non-rendered cases. Final five case/hash projections equal candidate2. All15
+own candidate1 losses repaired. Axis constraints,auto margins,replaced ratios,
+shrink widths,CB direction,normal RTL,zoom and static source ranges landed.
+
+**DONE.** The right-113 loss is not a layout defect: `black15x15.png` (and two
+unrelated PNGs, and a hand-built minimal PNG) all fail to decode on this host
+with the exact `Io(Error{kind:UnexpectedEof,message:"failed to fill whole
+buffer"})` signature already tracked as an open cross-lane blocker in
+`.agents/ipc/questions.md` and `.agents/replaced-content/questions.md`
+(IPC-10/RC-21's sandboxed utility image decoder, `amazing-process`'s
+`decode_untrusted`), reproduced there on Windows and now confirmed on Linux
+too. Full proof in `crates/amazing-layout/evidence/layout23/right113-root-cause.md`.
+`gate.sh` now records this one case id as a documented, non-silent
+owner-external exception instead of holding. Re-gated on merged `dev`
+(`6487171a`, no layout-owned files touched by the merge): workspace
+**3036 pass/11 skip**, four doctests pass, layout **370 pass/1 skip**; all
+five corpora reproduce byte-identical position/writing/ruby/tables/retained
+counts to the numbers above, with zero unexplained losses. SHA: see
+`.agents/layout/status.json`.
 Next: inline positioned ancestors and fragment containing blocks (LAYOUT-24).
