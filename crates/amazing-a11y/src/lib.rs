@@ -42,8 +42,8 @@ pub use bounds::{AxRect, BoundsMap};
 pub use event::{AxEvent, AxEventKind, Live, LiveRegionInfo, diff, live_region};
 pub use role::Role;
 pub use tree::{
-    AxDocument, AxNode, AxNodeId, AxTree, SchemaNode, SchemaSnapshot, build, build_document,
-    build_from_html, build_from_html_in_viewport, build_from_parsed_html,
+    AxDocument, AxNode, AxNodeId, AxRelations, AxTree, SchemaNode, SchemaSnapshot, build,
+    build_document, build_from_html, build_from_html_in_viewport, build_from_parsed_html,
 };
 
 #[cfg(test)]

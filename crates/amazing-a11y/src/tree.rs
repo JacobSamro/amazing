@@ -22,6 +22,19 @@ use crate::role::{self, Role};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct AxNodeId(pub u32);
 
+/// Resolved id-reference relationships of one node. Each id is looked up in the
+/// same document and only retained when it maps to a node in this tree.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AxRelations {
+    pub labelledby: Vec<AxNodeId>,
+    pub describedby: Vec<AxNodeId>,
+    pub details: Vec<AxNodeId>,
+    pub errormessage: Option<AxNodeId>,
+    pub controls: Vec<AxNodeId>,
+    pub flowto: Vec<AxNodeId>,
+    pub owns: Vec<AxNodeId>,
+}
+
 /// One node of the accessibility tree.
 #[derive(Clone, Debug)]
 pub struct AxNode {
@@ -38,6 +51,8 @@ pub struct AxNode {
     pub parent: Option<AxNodeId>,
     /// Resolved `aria-activedescendant` target, when present in this tree.
     pub active_descendant: Option<AxNodeId>,
+    /// Resolved id-reference relationships.
+    pub relations: AxRelations,
 }
 
 impl AxNode {
@@ -76,6 +91,11 @@ impl AxTree {
 
     pub fn children(&self, id: AxNodeId) -> &[AxNodeId] {
         self.nodes.get(id.0 as usize).map_or(&[], |node| node.children.as_slice())
+    }
+
+    /// Resolved id-reference relationships of a node.
+    pub fn relations(&self, id: AxNodeId) -> Option<&AxRelations> {
+        self.node(id).map(|node| &node.relations)
     }
 
     /// The exposed node for a DOM arena index, when one exists.
@@ -220,6 +240,8 @@ pub struct SchemaNode {
     pub children: Vec<AxNodeId>,
     pub parent: Option<AxNodeId>,
     pub active_descendant: Option<AxNodeId>,
+    /// Resolved id-reference relationships.
+    pub relations: AxRelations,
 }
 
 impl From<&AxNode> for SchemaNode {
@@ -236,6 +258,7 @@ impl From<&AxNode> for SchemaNode {
             children: node.children.clone(),
             parent: node.parent,
             active_descendant: node.active_descendant,
+            relations: node.relations.clone(),
         }
     }
 }
@@ -327,11 +350,16 @@ enum Decision {
 pub fn build(dom: &Dom, styled: &StyledDom, layout: &LayoutBox) -> AxTree {
     let (ids, labels_by_target) = collect_indices(dom);
     let bounds = bounds::collect_bounds(dom, layout);
-    let mut builder = Builder { dom, styled, ids, labels_by_target, bounds, nodes: Vec::new() };
+    let mut builder =
+        Builder { dom, styled, ids: ids.clone(), labels_by_target, bounds, nodes: Vec::new() };
     let root = builder.build_root();
     builder.apply_owns();
-    builder.apply_active_descendants();
-    builder.finish(root)
+    let mut tree = builder.finish(root);
+    // Id-reference resolution runs on the final, pruned tree so a reference to
+    // a node that presentational flattening removed is dropped rather than
+    // left pointing at a stale id.
+    resolve_references(dom, &ids, &mut tree);
+    tree
 }
 
 /// Convenience entry point: parse HTML, compute styles, lay out, and build the
@@ -393,6 +421,43 @@ pub fn build_from_parsed_html(
     viewport_height: Option<f32>,
 ) -> AxTree {
     build_document(html, author_css, viewport_width, viewport_height).tree
+}
+
+/// Resolves `aria-activedescendant` and the id-reference relationships
+/// (`aria-labelledby`, `aria-describedby`, `aria-details`,
+/// `aria-errormessage`, `aria-controls`, `aria-flowto`, `aria-owns`) against
+/// the final, pruned tree. Ids that do not resolve to a node exposed in
+/// `tree` are dropped. `aria-owns` is resolved here for explicit exposure of
+/// the relationship, independent of the reparenting `Builder::apply_owns`
+/// already applied to the tree structure.
+fn resolve_references(dom: &Dom, ids: &HashMap<String, NodeIdx>, tree: &mut AxTree) {
+    let by_dom: HashMap<NodeIdx, AxNodeId> = tree
+        .nodes
+        .iter()
+        .filter_map(|node| node.dom_node.map(|dom_node| (dom_node, node.id)))
+        .collect();
+    for index in 0..tree.nodes.len() {
+        let Some(dom_node) = tree.nodes[index].dom_node else { continue };
+        let single = |attr: &str| -> Option<AxNodeId> {
+            dom.get_attribute_ns(dom_node, None, attr)
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .and_then(|value| ids.get(value))
+                .and_then(|target| by_dom.get(target).copied())
+        };
+        let active_descendant = single("aria-activedescendant");
+        let errormessage = single("aria-errormessage");
+        tree.nodes[index].active_descendant = active_descendant;
+        tree.nodes[index].relations = AxRelations {
+            labelledby: resolve_ids(dom, ids, &by_dom, dom_node, "aria-labelledby"),
+            describedby: resolve_ids(dom, ids, &by_dom, dom_node, "aria-describedby"),
+            details: resolve_ids(dom, ids, &by_dom, dom_node, "aria-details"),
+            errormessage,
+            controls: resolve_ids(dom, ids, &by_dom, dom_node, "aria-controls"),
+            flowto: resolve_ids(dom, ids, &by_dom, dom_node, "aria-flowto"),
+            owns: resolve_ids(dom, ids, &by_dom, dom_node, "aria-owns"),
+        };
+    }
 }
 
 fn collect_indices(dom: &Dom) -> (HashMap<String, NodeIdx>, HashMap<String, Vec<NodeIdx>>) {
@@ -502,31 +567,6 @@ impl<'a> Builder<'a> {
             current = self.nodes.get(id.0 as usize).and_then(|entry| entry.parent);
         }
         false
-    }
-
-    /// Resolves each `aria-activedescendant` id reference to a tree node.
-    fn apply_active_descendants(&mut self) {
-        let by_dom: HashMap<NodeIdx, AxNodeId> = self
-            .nodes
-            .iter()
-            .filter_map(|node| node.dom_node.map(|dom_node| (dom_node, node.id)))
-            .collect();
-        for index in 0..self.nodes.len() {
-            let Some(dom_node) = self.nodes[index].dom_node else { continue };
-            let Some(reference) =
-                self.dom.get_attribute_ns(dom_node, None, "aria-activedescendant")
-            else {
-                continue;
-            };
-            let reference = reference.trim();
-            if reference.is_empty() {
-                continue;
-            }
-            self.nodes[index].active_descendant = self
-                .ids
-                .get(reference)
-                .and_then(|dom_node| by_dom.get(dom_node).copied());
-        }
     }
 
     fn visit(&mut self, node: NodeIdx, parent: Option<AxNodeId>) {
@@ -664,6 +704,7 @@ impl<'a> Builder<'a> {
             children: Vec::new(),
             parent,
             active_descendant: None,
+            relations: AxRelations::default(),
         });
         if let Some(parent) = parent
             && let Some(entry) = self.nodes.get_mut(parent.0 as usize)
@@ -687,6 +728,7 @@ impl<'a> Builder<'a> {
             children: Vec::new(),
             parent,
             active_descendant: None,
+            relations: AxRelations::default(),
         });
         if let Some(parent) = parent
             && let Some(entry) = self.nodes.get_mut(parent.0 as usize)
@@ -801,6 +843,27 @@ fn style_visibility_hidden(styled: &StyledDom, node: NodeIdx) -> bool {
 fn aria_hidden(dom: &Dom, node: NodeIdx) -> bool {
     dom.get_attribute_ns(node, None, "aria-hidden")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// Splits `attr` on `node` as a whitespace-separated id list and resolves each
+/// id to a node in this tree, dropping ids that do not resolve to an id in
+/// `ids` or a node exposed in `by_dom`.
+fn resolve_ids(
+    dom: &Dom,
+    ids: &HashMap<String, NodeIdx>,
+    by_dom: &HashMap<NodeIdx, AxNodeId>,
+    node: NodeIdx,
+    attr: &str,
+) -> Vec<AxNodeId> {
+    dom.get_attribute_ns(node, None, attr)
+        .map(|value| {
+            value
+                .split_ascii_whitespace()
+                .filter_map(|id| ids.get(id))
+                .filter_map(|target| by_dom.get(target).copied())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Roles that end the current line of accessible text.

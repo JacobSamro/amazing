@@ -217,3 +217,66 @@ fn focus_chain_is_empty_without_focus() {
     assert!(doc.tree.focused().is_none());
     assert!(doc.tree.focus_chain().is_empty());
 }
+
+#[test]
+fn resolved_relationships_map_id_lists_to_tree_nodes() {
+    // Targets use `<p>` (role Paragraph) rather than a bare `<span>`/`<div>`:
+    // an unnamed, non-focusable, non-ARIA generic is flattened out of the tree
+    // by presentational pruning, so it could never be a resolvable target.
+    let doc = document(
+        "<button id=\"open\" aria-labelledby=\"l1 l2\" aria-describedby=\"d1\" \
+         aria-details=\"more\" aria-controls=\"panel\" aria-flowto=\"next\">Open</button>\
+         <p id=\"l1\">Left</p><p id=\"l2\">Right</p>\
+         <p id=\"d1\">Desc</p><p id=\"more\">More</p>\
+         <p id=\"panel\">Panel</p><p id=\"next\">Next</p>",
+    );
+    let open = ax_of_id(&doc, "open").unwrap();
+    let l1 = ax_of_id(&doc, "l1").unwrap().id;
+    let l2 = ax_of_id(&doc, "l2").unwrap().id;
+    let d1 = ax_of_id(&doc, "d1").unwrap().id;
+    let more = ax_of_id(&doc, "more").unwrap().id;
+    let panel = ax_of_id(&doc, "panel").unwrap().id;
+    let next = ax_of_id(&doc, "next").unwrap().id;
+    assert_eq!(open.relations.labelledby, vec![l1, l2]);
+    assert_eq!(open.relations.describedby, vec![d1]);
+    assert_eq!(open.relations.details, vec![more]);
+    assert_eq!(open.relations.controls, vec![panel]);
+    assert_eq!(open.relations.flowto, vec![next]);
+
+    let via_tree = doc.tree.relations(open.id).unwrap();
+    assert_eq!(via_tree, &open.relations);
+}
+
+#[test]
+fn resolved_errormessage_is_a_single_optional_target() {
+    let doc = document(
+        "<input id=\"field\" aria-errormessage=\"err\">\
+         <p id=\"err\">Required</p>",
+    );
+    let field = ax_of_id(&doc, "field").unwrap();
+    let err = ax_of_id(&doc, "err").unwrap().id;
+    assert_eq!(field.relations.errormessage, Some(err));
+}
+
+#[test]
+fn unresolved_relationship_ids_are_dropped() {
+    let doc = document(
+        "<button id=\"open\" aria-labelledby=\"missing\" \
+         aria-errormessage=\"missing-too\">Open</button>",
+    );
+    let open = ax_of_id(&doc, "open").unwrap();
+    assert!(open.relations.labelledby.is_empty());
+    assert_eq!(open.relations.errormessage, None);
+}
+
+#[test]
+fn resolved_owns_reflects_the_reparented_targets() {
+    let doc = document(
+        "<div role=\"group\" id=\"owner\" aria-owns=\"a b\"></div>\
+         <button id=\"a\">A</button><button id=\"b\">B</button>",
+    );
+    let owner = ax_of_id(&doc, "owner").unwrap();
+    let a = ax_of_id(&doc, "a").unwrap().id;
+    let b = ax_of_id(&doc, "b").unwrap().id;
+    assert_eq!(owner.relations.owns, vec![a, b]);
+}
