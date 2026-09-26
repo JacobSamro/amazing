@@ -83,12 +83,21 @@ def main() -> int:
     totals = {"pass": 0, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}
     missing = []
     for slug_dir in sorted(reports_dir.iterdir()):
+        # SHELL-L7: a category baselined with --compact only has compact.json
+        # (no "inventory" key -- it drops everything but schema/counts/tests
+        # to keep committed evidence small); fall back to it, and derive
+        # "eligible" from the counts sum instead of the full report's
+        # inventory field.
         report_path = slug_dir / "report.json"
+        is_compact = False
+        if not report_path.is_file():
+            report_path = slug_dir / "compact.json"
+            is_compact = True
         if not report_path.is_file():
             continue
         report = json.loads(report_path.read_text())
         counts = report["counts"]
-        eligible = report["inventory"]["eligible_static_self_contained"]
+        eligible = report["inventory"]["eligible_static_self_contained"] if not is_compact else sum(counts.values())
         if eligible == 0:
             continue  # nothing to triage or commit for this category
         for key in totals:
@@ -105,7 +114,7 @@ def main() -> int:
         )
         target = evidence_dir / slug_dir.name
         target.mkdir(parents=True, exist_ok=True)
-        shutil.copy(report_path, target / "report.json")
+        shutil.copy(report_path, target / report_path.name)
         clusters_path = slug_dir / "clusters.json"
         if clusters_path.is_file():
             shutil.copy(clusters_path, target / "clusters.json")

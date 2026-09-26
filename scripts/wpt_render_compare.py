@@ -51,11 +51,24 @@ import time
 import urllib.parse
 from pathlib import Path
 
-DOCUMENT_EXTENSIONS = {".html", ".htm", ".xht", ".xhtml"}
+DOCUMENT_EXTENSIONS = {".html", ".htm", ".xht", ".xhtml", ".svg"}
+# .svg is intentionally NOT XML_EXTENSIONS: the driver's document_kind()
+# (crates/amazing/src/document.rs) already dispatches ".svg" to its XML
+# parser and renders script-free XML documents fine (require_static_xml()
+# only refuses <script>/inline-handler content); the .xht/.xhtml exclusion
+# below predates this ticket and is a separate, still-open limitation this
+# ticket does not touch.
 XML_EXTENSIONS = {".xht", ".xhtml"}
 
-LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.I | re.S)
-SCRIPT_RE = re.compile(r"<script\b", re.I | re.S)
+# SHELL-L7: raw .svg WPT reftests commonly embed HTML-behavior elements
+# (reftest link, a reftest-wait/testharness <script>) through an
+# `xmlns:html="http://www.w3.org/1999/xhtml"` declaration, so they appear as
+# `<html:link rel="match" ...>` / `<html:script>` rather than bare tags --
+# e.g. svg/animations/animate-rewind-freeze-indefinite.svg. Every tag-name
+# match below tolerates that (or any other) XML namespace prefix.
+NS_PREFIX = r"(?:[\w-]+:)?"
+LINK_TAG_RE = re.compile(r"<" + NS_PREFIX + r"link\b[^>]*>", re.I | re.S)
+SCRIPT_RE = re.compile(r"<" + NS_PREFIX + r"script\b", re.I | re.S)
 # Inline event-handler attributes (onload="test()", etc.) run script without
 # a <script> tag; the SHELL-L4 fleet sweep found 3/7168 "eligible" reftests
 # that were actually testharness-style pages invoking `test()`/
@@ -64,11 +77,18 @@ SCRIPT_RE = re.compile(r"<script\b", re.I | re.S)
 # ReferenceError, not a real render failure).
 INLINE_EVENT_HANDLER_RE = re.compile(r"\bon\w+\s*=", re.I)
 TESTHARNESS_RE = re.compile(r"testharness\.js", re.I | re.S)
-FLAGS_META_RE = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']flags[\"']", re.I | re.S)
-EMBEDDED_RESOURCE_RE = re.compile(r"<(?:img|object|iframe|video|audio|canvas|svg)\b", re.I | re.S)
+FLAGS_META_RE = re.compile(r"<" + NS_PREFIX + r"meta\b[^>]*\bname\s*=\s*[\"']flags[\"']", re.I | re.S)
+# "svg" was dropped from this list (SHELL-L7): an inline <svg> element is
+# self-contained static content, not a foreign resource fetch, and excluding
+# it as "embedded-resource" was quietly zeroing out the entire svg/ corpus
+# (901 of its 1256+901 documents are .html wrappers around inline <svg>) as
+# well as any css/* test that renders an inline SVG. SVG's own <image> element
+# (raster/external-content fetch, the actual svg/ analogue of <img>) is added
+# in its place.
+EMBEDDED_RESOURCE_RE = re.compile(r"<" + NS_PREFIX + r"(?:img|object|iframe|video|audio|canvas|image)\b", re.I | re.S)
 CSS_RESOURCE_RE = re.compile(r"url\s*\(|@font-face|@import\b", re.I | re.S)
-STYLESHEET_LINK_RE = re.compile(r"<link\b[^>]*\brel\s*=\s*[\"']stylesheet[\"']", re.I | re.S)
-FUZZY_META_RE = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']fuzzy[\"'][^>]*>", re.I | re.S)
+STYLESHEET_LINK_RE = re.compile(r"<" + NS_PREFIX + r"link\b[^>]*\brel\s*=\s*[\"']stylesheet[\"']", re.I | re.S)
+FUZZY_META_RE = re.compile(r"<" + NS_PREFIX + r"meta\b[^>]*\bname\s*=\s*[\"']fuzzy[\"'][^>]*>", re.I | re.S)
 FUZZY_CONTENT_RE = re.compile(r"\bcontent\s*=\s*[\"']([^\"']+)[\"']", re.I | re.S)
 FUZZY_MAX_RE = re.compile(r"maxDifference\s*=\s*\d+-(\d+)")
 FUZZY_PIXELS_RE = re.compile(r"totalPixels\s*=\s*\d+-(\d+)")

@@ -9,3 +9,7 @@ rust-version.workspace = true
 # Std-only engine; amazing-regex is a first-party std-only dependency.
 [dependencies]
 amazing-regex = { path = "../amazing-regex" }
+
+[[bench]]
+name = "vm_performance"
+harness = false
