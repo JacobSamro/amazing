@@ -580,6 +580,59 @@ pub struct TouchEvent {
     pub timestamp: f64,
 }
 
+/// One CDP `Fetch.RequestPattern`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchPattern {
+    /// Wildcard URL pattern (`*` and `?`); `None` or `"*"` matches everything.
+    pub url_pattern: Option<String>,
+    /// `"Document"`, `"Stylesheet"`, `"Image"`, `"XHR"`, `"Fetch"`, ...
+    pub resource_type: Option<String>,
+    /// `"Request"` (default) or `"Response"`.
+    pub request_stage: Option<String>,
+}
+
+/// A request the engine paused for Fetch interception.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterceptedRequest {
+    pub request_id: String,
+    pub url: String,
+    pub method: String,
+    pub headers: Vec<(String, String)>,
+    pub post_data: Option<String>,
+    pub resource_type: String,
+    pub frame_id: String,
+    /// The matching `Network.*` request id, when available.
+    pub network_id: Option<String>,
+    /// `"Request"` or `"Response"`.
+    pub stage: String,
+}
+
+/// A `Fetch.continueRequest` decision.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchContinue {
+    pub url: Option<String>,
+    pub method: Option<String>,
+    pub headers: Option<Vec<(String, String)>>,
+    pub post_data: Option<String>,
+}
+
+/// A `Fetch.fulfillRequest` decision.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FetchFulfill {
+    pub response_code: u16,
+    pub response_phrase: Option<String>,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+/// What the client decided for a paused Fetch request.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FetchDecision {
+    Continue(FetchContinue),
+    Fail(String),
+    Fulfill(FetchFulfill),
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -923,6 +976,44 @@ pub trait DevToolsSession: Send {
     }
     /// Inserts text as if typed (`Input.insertText`).
     fn insert_text(&mut self, _text: &str) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Network ----------------------------------------------------------
+    /// The decoded body of a finished response (`Network.getResponseBody` /
+    /// `Fetch.getResponseBody`). `Ok(None)` means the body is gone or opaque.
+    fn get_response_body(
+        &mut self,
+        _request_id: &str,
+    ) -> Result<Option<ResourceContent>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The posted body of a request (`Network.getRequestPostData`).
+    fn get_request_post_data(&mut self, _request_id: &str) -> Result<Option<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Fetch ------------------------------------------------------------
+    /// Enables/disables request interception for the given patterns.
+    fn set_fetch_enabled(
+        &mut self,
+        _enabled: bool,
+        _patterns: &[FetchPattern],
+        _handle_auth: bool,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Requests the engine has paused and is waiting for a decision on. Must
+    /// not block; default is no requests.
+    fn drain_intercepted_requests(&mut self) -> Vec<InterceptedRequest> {
+        Vec::new()
+    }
+    /// Applies the client's decision to a paused request, unblocking it.
+    fn resolve_intercepted_request(
+        &mut self,
+        _request_id: &str,
+        _decision: &FetchDecision,
+    ) -> Result<(), HostError> {
         Err(HostError::Unsupported)
     }
 

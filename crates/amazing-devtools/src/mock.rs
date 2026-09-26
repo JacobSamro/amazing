@@ -11,11 +11,12 @@ use std::sync::{Arc, Mutex};
 
 use crate::host::{
     BoxModel, ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams,
-    EvaluateResult, ExceptionDetails, FrameInfo, FrameResourceTree, FrameTree, HostError,
-    HostInfo, LayoutMetrics, KeyEvent, LifecycleEvent, LogEntry, MatchedRule, MediaQuery,
-    MouseEvent, NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
-    PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
-    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
+    EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo, FrameResourceTree,
+    FrameTree, HostError, HostInfo, InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent,
+    LogEntry, MatchedRule, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
+    NetworkResponseEvent, NodeDescription, PropertyDescriptor, RemoteObject, ResourceContent,
+    ResourceInfo, Screenshot, ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo,
+    TouchEvent, Viewport,
 };
 use crate::json::Json;
 
@@ -57,6 +58,20 @@ pub struct MockScript {
     pub ignore_input: Option<bool>,
     /// Node returned by `DOM.getNodeForLocation`.
     pub hit_test: Option<EngineNodeId>,
+    /// Fetch interception state from the last `set_fetch_enabled`.
+    pub fetch_enabled: bool,
+    /// Fetch patterns from the last `set_fetch_enabled`.
+    pub fetch_patterns: Vec<FetchPattern>,
+    /// Whether the client asked to handle auth challenges.
+    pub fetch_handle_auth: bool,
+    /// Requests paused for Fetch interception.
+    pub intercepted: VecDeque<InterceptedRequest>,
+    /// Decisions recorded by `resolve_intercepted_request`.
+    pub fetch_decisions: Vec<(String, FetchDecision)>,
+    /// Response bodies for `getResponseBody`: (request_id, bytes, mime).
+    pub response_bodies: Vec<(String, Vec<u8>, String)>,
+    /// Request post data for `getRequestPostData`: (request_id, text).
+    pub request_post_data: Vec<(String, String)>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -112,6 +127,13 @@ impl Default for MockScript {
             inserted_text: Vec::new(),
             ignore_input: None,
             hit_test: Some(EngineNodeId(4)),
+            fetch_enabled: false,
+            fetch_patterns: Vec::new(),
+            fetch_handle_auth: false,
+            intercepted: VecDeque::new(),
+            fetch_decisions: Vec::new(),
+            response_bodies: Vec::new(),
+            request_post_data: Vec::new(),
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -250,6 +272,23 @@ impl MockScript {
             let target = self.targets.remove(index);
             self.push_target_event(TargetEventKind::Destroyed, target);
         }
+    }
+
+    /// Queues a request paused for Fetch interception.
+    pub fn push_intercepted(&mut self, item: InterceptedRequest) {
+        self.intercepted.push_back(item);
+    }
+
+    /// Registers a response body for `Network.getResponseBody`.
+    pub fn set_response_body(&mut self, request_id: &str, bytes: Vec<u8>, mime: &str) {
+        self.response_bodies
+            .push((request_id.to_string(), bytes, mime.to_string()));
+    }
+
+    /// Registers request post data for `Network.getRequestPostData`.
+    pub fn set_request_post_data(&mut self, request_id: &str, text: &str) {
+        self.request_post_data
+            .push((request_id.to_string(), text.to_string()));
     }
 }
 
@@ -628,6 +667,62 @@ impl DevToolsSession for MockSession {
             .unwrap()
             .inserted_text
             .push(text.to_string());
+        Ok(())
+    }
+
+    fn get_response_body(
+        &mut self,
+        request_id: &str,
+    ) -> Result<Option<ResourceContent>, HostError> {
+        let script = self.script.lock().unwrap();
+        Ok(script
+            .response_bodies
+            .iter()
+            .find(|(id, _, _)| id == request_id)
+            .map(|(_, bytes, mime)| ResourceContent {
+                mime_type: mime.clone(),
+                bytes: bytes.clone(),
+            }))
+    }
+
+    fn get_request_post_data(&mut self, request_id: &str) -> Result<Option<String>, HostError> {
+        Ok(self
+            .script
+            .lock()
+            .unwrap()
+            .request_post_data
+            .iter()
+            .find(|(id, _)| id == request_id)
+            .map(|(_, text)| text.clone()))
+    }
+
+    fn set_fetch_enabled(
+        &mut self,
+        enabled: bool,
+        patterns: &[FetchPattern],
+        handle_auth: bool,
+    ) -> Result<(), HostError> {
+        let mut script = self.script.lock().unwrap();
+        script.fetch_enabled = enabled;
+        script.fetch_patterns = patterns.to_vec();
+        script.fetch_handle_auth = handle_auth;
+        Ok(())
+    }
+
+    fn drain_intercepted_requests(&mut self) -> Vec<InterceptedRequest> {
+        self.script.lock().unwrap().intercepted.drain(..).collect()
+    }
+
+    fn resolve_intercepted_request(
+        &mut self,
+        request_id: &str,
+        decision: &FetchDecision,
+    ) -> Result<(), HostError> {
+        self.script
+            .lock()
+            .unwrap()
+            .fetch_decisions
+            .push((request_id.to_string(), decision.clone()));
         Ok(())
     }
 

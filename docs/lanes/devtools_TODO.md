@@ -137,3 +137,17 @@ doctests 4 passed.
   `DevToolsSession::node_for_location` and returns the node id, backend node id
   and frame id.
 - `MockHost` records every input event and returns a configurable `hit_test`.
+
+## CDP-4 — Fetch interception and Network response bodies — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 74/74
+nextest (0 skipped) and 1 doctest; workspace 2736 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+- `Network.getResponseBody` (text or base64) and `Network.getRequestPostData`.
+- `Fetch` domain: `enable` (with `RequestPattern` parsing), `disable`,
+  `continueRequest`, `failRequest`, `fulfillRequest` (base64 body) and
+  `getResponseBody`; `Fetch.requestPaused` events drained from the engine.
+- Seam: `FetchPattern`, `InterceptedRequest`, `FetchContinue`/`FetchFulfill`/
+  `FetchDecision`, and `set_fetch_enabled`/`drain_intercepted_requests`/
+  `resolve_intercepted_request` plus the two body methods.
