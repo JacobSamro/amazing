@@ -1125,6 +1125,24 @@ fn async_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     Ok(JsValue::Undefined)
 }
 
+/// Resume a suspended frame with the compiled function's own strictness.
+///
+/// Suspending at `await`/`yield` leaves the interpreter's strict-eval context,
+/// so a continuation that starts from a promise reaction or a native `next`
+/// call would otherwise run the post-suspension body in sloppy mode. The
+/// branch's strictness is fixed at compile time (`CompiledFunction::strict`).
+fn resume_frame_with_strictness(
+    i: &mut Interpreter,
+    code: &FunctionCode,
+    frame: &mut Box<VmFrame>,
+) -> Result<FrameOutcome, Throw> {
+    let previous = i.strict_eval_context;
+    i.strict_eval_context = code.0.strict;
+    let outcome = code.0.program.resume_frame(i, frame, usize::MAX);
+    i.strict_eval_context = previous;
+    outcome
+}
+
 fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind: u8, value: JsValue) -> Result<(), Throw> {
     let (code, mut frame, target, completion) = {
         let mut state = state.borrow_mut();
@@ -1143,7 +1161,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
     let completion = std::mem::replace(&mut i.completion, previous_completion);
     {
         let mut state = state.borrow_mut();
@@ -1320,7 +1338,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
     let completion = std::mem::replace(&mut i.completion, previous_completion);
     let mut state = state.borrow_mut();
     state.executing = false;
