@@ -89,6 +89,7 @@ fn color_filter_golden_pixels_and_all_blends_on_transparent_backdrop() {
         B::Saturation,
         B::Color,
         B::Luminosity,
+        B::PlusLighter,
     ] {
         assert_eq!(
             effect_pixels::blend([19, 241, 99, 0], [200, 100, 50, 128], 1., mode),
@@ -718,5 +719,56 @@ fn nested_animation_reservations_sum_ancestors_but_not_siblings() {
     let cached = c.build_cached_frame(20, 8).unwrap();
     assert!(cached.resources.uploads.is_empty());
     presenter.present(&cached).unwrap();
+    assert_eq!(source.calls.get(), calls);
+}
+
+#[test]
+fn plus_lighter_crossfade_saturation_and_opacity_match_integer_reference() {
+    assert_eq!(effect_pixels::blend([255, 0, 0, 64], [0, 0, 255, 128],
+        0.5, EffectBlend::PlusLighter), [128, 0, 128, 128]);
+    for sa in [0u8, 1, 64, 128, 255] {
+        for da in [0u8, 1, 64, 128, 255] {
+            for op in [0u8, 1, 64, 128, 255] {
+                for (s, d) in [(255, 255), (255, 0), (0, 255), (93, 171)] {
+                    let effective = (u32::from(sa) * u32::from(op) + 127) / 255;
+                    let alpha = (effective + u32::from(da)).min(255);
+                    let color = if alpha == 0 { 0 } else {
+                        ((u32::from(s) * effective + u32::from(d) * u32::from(da)
+                            + alpha / 2) / alpha).min(255) as u8
+                    };
+                    assert_eq!(effect_pixels::blend([d, d, d, da], [s, s, s, sa],
+                        f32::from(op) / 255., EffectBlend::PlusLighter),
+                        [color, color, color, alpha as u8], "sa={sa}, da={da}, op={op}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn plus_lighter_group_and_effect_snapshot_preserve_crossfade() {
+    let bounds = Rect::new(0., 0., 8., 8.);
+    let mut trees = PropertyTrees::new();
+    let effect = trees.add_effect(EffectId(0), 1., BlendMode::Normal, None).unwrap();
+    trees.set_effect_operations(effect, EffectOperations {
+        blend: EffectBlend::PlusLighter, ..Default::default()
+    }).unwrap();
+    let chunks = vec![
+        PaintChunk { items: 0..1, state: PropertyTreeState::default(), bounds,
+            reasons: CompositingReasons::WILL_CHANGE },
+        PaintChunk { items: 1..2, state: PropertyTreeState { effect, ..Default::default() },
+            bounds, reasons: CompositingReasons::WILL_CHANGE },
+    ];
+    let source = Blocks { items: vec![(bounds, [255,0,0,64]), (bounds, [0,0,255,64])],
+        calls: Cell::new(0) };
+    let mut c = Compositor::new(trees, chunks, 2).unwrap();
+    let frame = c.build_frame(&source, 8, 8).unwrap();
+    let restored = CompositorFrame::from_effects_snapshot(frame.to_effects_snapshot()).unwrap();
+    let mut presenter = ReferenceCpuPresenter::default();
+    assert_eq!(presenter.present(&restored).unwrap().get_pixel(3,3), Some([128,0,128,128]));
+    let calls = source.calls.get();
+    let cached = c.build_cached_frame(8,8).unwrap();
+    assert!(cached.resources.uploads.is_empty());
+    assert_eq!(presenter.present(&cached).unwrap().get_pixel(3,3), Some([128,0,128,128]));
     assert_eq!(source.calls.get(), calls);
 }

@@ -407,3 +407,19 @@ fn unsupported_gradient_syntax_paints_no_layer() {
         assert_eq!(s.get_pixel(4, 4), Some([255; 4]), "{image}");
     }
 }
+
+#[test]
+fn positioned_radial_background_gradient_uses_at_geometry() {
+    let s = draw(&block(
+        &[(
+            "background-image",
+            "radial-gradient(circle at 0 0, red, blue)",
+        )],
+        8.0,
+        8.0,
+    ));
+    let corner = s.get_pixel(0, 0).unwrap();
+    let far = s.get_pixel(7, 7).unwrap();
+    assert!(corner[0] > corner[2], "top-left is red-dominant: {corner:?}");
+    assert!(far[2] > far[0], "bottom-right is blue-dominant: {far:?}");
+}

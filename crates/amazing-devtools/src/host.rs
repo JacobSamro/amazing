@@ -580,6 +580,132 @@ pub struct TouchEvent {
     pub timestamp: f64,
 }
 
+/// One CDP `Fetch.RequestPattern`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchPattern {
+    /// Wildcard URL pattern (`*` and `?`); `None` or `"*"` matches everything.
+    pub url_pattern: Option<String>,
+    /// `"Document"`, `"Stylesheet"`, `"Image"`, `"XHR"`, `"Fetch"`, ...
+    pub resource_type: Option<String>,
+    /// `"Request"` (default) or `"Response"`.
+    pub request_stage: Option<String>,
+}
+
+/// A request the engine paused for Fetch interception.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterceptedRequest {
+    pub request_id: String,
+    pub url: String,
+    pub method: String,
+    pub headers: Vec<(String, String)>,
+    pub post_data: Option<String>,
+    pub resource_type: String,
+    pub frame_id: String,
+    /// The matching `Network.*` request id, when available.
+    pub network_id: Option<String>,
+    /// `"Request"` or `"Response"`.
+    pub stage: String,
+}
+
+/// A `Fetch.continueRequest` decision.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchContinue {
+    pub url: Option<String>,
+    pub method: Option<String>,
+    pub headers: Option<Vec<(String, String)>>,
+    pub post_data: Option<String>,
+}
+
+/// A `Fetch.fulfillRequest` decision.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FetchFulfill {
+    pub response_code: u16,
+    pub response_phrase: Option<String>,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+/// What the client decided for a paused Fetch request.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FetchDecision {
+    Continue(FetchContinue),
+    Fail(String),
+    Fulfill(FetchFulfill),
+}
+
+/// CDP `Emulation.setDeviceMetricsOverride` inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceMetrics {
+    pub width: u32,
+    pub height: u32,
+    pub device_scale_factor: f64,
+    pub mobile: bool,
+    pub screen_width: Option<u32>,
+    pub screen_height: Option<u32>,
+    pub position_x: Option<i64>,
+    pub position_y: Option<i64>,
+    pub dont_set_visible_size: bool,
+    /// `"portraitPrimary"`, `"portraitSecondary"`, `"landscapePrimary"` or
+    /// `"landscapeSecondary"`.
+    pub orientation_type: Option<String>,
+    pub orientation_angle: Option<i64>,
+}
+
+/// One `Emulation.setEmulatedMedia` feature.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaFeature {
+    pub name: String,
+    pub value: String,
+}
+
+/// A CDP RGBA color (`Overlay.*` highlight colors).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rgba {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub alpha: f64,
+}
+
+/// CDP `Overlay.HighlightConfig`, reduced to the node-highlight inputs an
+/// engine needs. Unset colors fall back to the engine's own defaults.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HighlightConfig {
+    pub content_color: Option<Rgba>,
+    pub padding_color: Option<Rgba>,
+    pub border_color: Option<Rgba>,
+    pub margin_color: Option<Rgba>,
+    pub event_target_color: Option<Rgba>,
+    pub shape_color: Option<Rgba>,
+    pub show_info: bool,
+    pub show_styles: bool,
+    pub show_rulers: bool,
+    pub show_extension_lines: bool,
+}
+
+/// CDP `Security.securityStateChanged` data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SecurityState {
+    /// `"unknown"`, `"neutral"`, `"insecure"`, `"secure"`, `"info"`,
+    /// `"insecure-broken"` or `"warning"`.
+    pub security_state: String,
+    pub scheme_is_cryptographic: bool,
+    pub explanations: Vec<String>,
+    /// `"unknown"`, `"blocked"`, `"allowed"` or `"info"`.
+    pub insecure_content_status: String,
+}
+
+impl Default for SecurityState {
+    fn default() -> Self {
+        Self {
+            security_state: "unknown".into(),
+            scheme_is_cryptographic: false,
+            explanations: Vec::new(),
+            insecure_content_status: "unknown".into(),
+        }
+    }
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -924,6 +1050,171 @@ pub trait DevToolsSession: Send {
     /// Inserts text as if typed (`Input.insertText`).
     fn insert_text(&mut self, _text: &str) -> Result<(), HostError> {
         Err(HostError::Unsupported)
+    }
+
+    // --- Network ----------------------------------------------------------
+    /// The decoded body of a finished response (`Network.getResponseBody` /
+    /// `Fetch.getResponseBody`). `Ok(None)` means the body is gone or opaque.
+    fn get_response_body(
+        &mut self,
+        _request_id: &str,
+    ) -> Result<Option<ResourceContent>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The posted body of a request (`Network.getRequestPostData`).
+    fn get_request_post_data(&mut self, _request_id: &str) -> Result<Option<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Fetch ------------------------------------------------------------
+    /// Enables/disables request interception for the given patterns.
+    fn set_fetch_enabled(
+        &mut self,
+        _enabled: bool,
+        _patterns: &[FetchPattern],
+        _handle_auth: bool,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Requests the engine has paused and is waiting for a decision on. Must
+    /// not block; default is no requests.
+    fn drain_intercepted_requests(&mut self) -> Vec<InterceptedRequest> {
+        Vec::new()
+    }
+    /// Applies the client's decision to a paused request, unblocking it.
+    fn resolve_intercepted_request(
+        &mut self,
+        _request_id: &str,
+        _decision: &FetchDecision,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Emulation --------------------------------------------------------
+    //
+    // These are advisory: a driver that does not implement one still succeeds,
+    // because an emulation hint the engine cannot honor must not fail the CDP
+    // command. Implementations apply the override to the engine's own viewport,
+    // UA, locale, media or scheduler.
+    /// Applies a device-metrics override (`Emulation.setDeviceMetricsOverride`).
+    fn set_device_metrics_override(&mut self, _metrics: &DeviceMetrics) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Clears the device-metrics override.
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the user agent string.
+    fn set_user_agent_override(
+        &mut self,
+        _user_agent: &str,
+        _accept_language: Option<&str>,
+        _platform: Option<&str>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides geolocation; `None` clears it.
+    fn set_geolocation_override(
+        &mut self,
+        _position: Option<(f64, f64, f64)>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the time zone.
+    fn set_timezone_override(&mut self, _timezone_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the locale; `None` clears it.
+    fn set_locale_override(&mut self, _locale: Option<&str>) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Emulates a media type and/or features.
+    fn set_emulated_media(
+        &mut self,
+        _media: Option<&str>,
+        _features: &[MediaFeature],
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Hides or shows scrollbars.
+    fn set_scrollbars_hidden(&mut self, _hidden: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables touch emulation.
+    fn set_touch_emulation_enabled(
+        &mut self,
+        _enabled: bool,
+        _max_touch_points: Option<u32>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Throttles the CPU by `rate` (`1.0` is unthrottled).
+    fn set_cpu_throttling_rate(&mut self, _rate: f64) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables script execution.
+    fn set_script_execution_disabled(&mut self, _value: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    // --- Overlay ----------------------------------------------------------
+    /// Enables or disables the inspector overlay.
+    fn overlay_enabled(&mut self, _enabled: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Sets the inspect mode (`"none"`, `"searchForNode"`, `"searchForUAShadowDOM"`,
+    /// `"captureAreaScreenshot"`, `"showDistances"`).
+    fn set_inspect_mode(
+        &mut self,
+        _mode: &str,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Highlights one node with the given configuration.
+    fn highlight_node(
+        &mut self,
+        _node: EngineNodeId,
+        _config: &HighlightConfig,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Highlights a viewport rectangle.
+    fn highlight_rect(&mut self, _rect: Rect, _config: &HighlightConfig) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Highlights a page quad.
+    fn highlight_quad(&mut self, _quad: Quad, _config: &HighlightConfig) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// Clears the current highlight.
+    fn hide_highlight(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    // --- Performance ------------------------------------------------------
+    /// Named metric counters and gauges (`Performance.getMetrics`).
+    fn performance_metrics(&mut self) -> Result<Vec<(String, f64)>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Security ---------------------------------------------------------
+    /// The current security state of the target.
+    fn security_state(&mut self) -> Result<SecurityState, HostError> {
+        Ok(SecurityState::default())
+    }
+    /// Security-state changes since the last poll
+    /// (`Security.securityStateChanged`).
+    fn drain_security_states(&mut self) -> Vec<SecurityState> {
+        Vec::new()
+    }
+    /// Whether certificate errors are ignored.
+    fn set_ignore_certificate_errors(&mut self, _ignore: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Resolves a certificate error (`eventId` plus the CDP action code).
+    fn handle_certificate_error(&mut self, _event_id: i64, _action: i32) -> Result<(), HostError> {
+        Ok(())
     }
 
     // --- Events -----------------------------------------------------------

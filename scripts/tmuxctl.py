@@ -1377,3 +1377,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+# JSD-2 (2026-09-26): the js-date lane takes RegExp while js-lang works on classes.
+LANE_GRANTS.setdefault("js-date", []).extend(["crates/amazing-regex", "crates/amazing-js/src/interp_regexp.rs", "crates/amazing-js/src/regexp_tests.rs"])
