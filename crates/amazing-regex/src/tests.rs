@@ -392,3 +392,40 @@ fn shared_budget_and_compile_limits_fail_closed() {
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn case_insensitive_class_sequences_fit_the_compiler_budget() {
+    let pattern = format!("^{}$", "[a-z]".repeat(32));
+    for flags in ["i", "iu", "iv"] {
+        let regex = Regex::new(&pattern, flags).unwrap();
+        assert!(regex.exec(&"A".repeat(32), 0).unwrap().is_some());
+        assert!(regex.exec(&format!("{}0", "A".repeat(31)), 0).unwrap().is_none());
+    }
+}
+
+#[test]
+fn indexed_class_folding_preserves_unicode_and_legacy_membership() {
+    for flags in ["i", "iu"] {
+        for (pattern, input, expected) in [
+            ("^[a-z]+$", "AZaz", true),
+            ("^[a-z]+$", "Kſ", flags == "iu"),
+            ("^[^a-z]+$", "Kſ", flags == "i"),
+            ("^[Σ]+$", "Σσς", true),
+            ("^[\\uD800]+$", "A", false),
+            ("^[a-zA-Z\\d]+$", "aA0", true),
+            ("^[\\D]+$", "A", true),
+            ("^[\\D]+$", "0", false),
+            ("^(?=[a-z])[a-z]$", "A", true),
+        ] {
+            let regex = Regex::new(pattern, flags).unwrap();
+            assert_eq!(
+                regex.exec(input, 0).unwrap().is_some(),
+                expected,
+                "{pattern:?} / {flags} / {input:?}"
+            );
+        }
+    }
+    // Large repeated ranges still consume a bounded compilation budget.
+    let expensive = "[\\u0000-\\uFFFF]".repeat(32);
+    assert!(matches!(Regex::new(&expensive, "iu"), Err(Error::Limit(_))));
+}

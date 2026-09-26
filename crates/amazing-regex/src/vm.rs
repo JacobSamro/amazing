@@ -166,27 +166,48 @@ impl SetExpr {
     }
 }
 impl FoldedClass {
-    fn new(class: &Class, flags: Flags) -> Self {
+    fn new(class: &Class, flags: Flags, remaining: &mut usize) -> Result<Self, Error> {
+        fn charge(remaining: &mut usize, cost: usize) -> Result<(), Error> {
+            *remaining = remaining
+                .checked_sub(cost)
+                .ok_or(Error::Limit("class compilation work"))?;
+            Ok(())
+        }
+        charge(remaining, class.members.len())?;
         let mut folded = Vec::new();
         if flags.ignore_case {
-            for &(a, b) in crate::unicode_casefold::PAIRS {
-                for c in [a, b] {
-                    if class
-                        .members
-                        .iter()
-                        .any(|m| matches!(m,Member::Range(lo,hi) if (*lo..=*hi).contains(&c)))
-                    {
-                        folded.push(canonical(c, flags));
-                    }
+            // Index the same endpoints used by the old full-table scan. This
+            // fixed Unicode-data index is shared; pattern-dependent work and
+            // allocations below remain charged to the compilation budget.
+            static ENDPOINTS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+            let endpoints = ENDPOINTS.get_or_init(|| {
+                let mut points: Vec<_> = crate::unicode_casefold::PAIRS
+                    .iter()
+                    .flat_map(|&(a, b)| [a, b])
+                    .collect();
+                points.sort_unstable();
+                points.dedup();
+                points
+            });
+            for member in &class.members {
+                if let Member::Range(lo, hi) = member {
+                    // Bound both binary searches as well as the endpoints we
+                    // actually visit, rather than charging an entire Unicode
+                    // table for every small ASCII range.
+                    charge(remaining, 2 * (endpoints.len().ilog2() as usize + 1))?;
+                    let start = endpoints.partition_point(|c| c < lo);
+                    let end = endpoints.partition_point(|c| c <= hi);
+                    charge(remaining, end - start)?;
+                    folded.extend(endpoints[start..end].iter().map(|&c| canonical(c, flags)));
                 }
             }
             folded.sort_unstable();
             folded.dedup();
         }
-        Self {
+        Ok(Self {
             class: class.clone(),
             folded,
-        }
+        })
     }
     fn contains(&self, c: u32, flags: Flags) -> bool {
         let canon = canonical(c, flags);
@@ -288,17 +309,7 @@ impl Compiler {
                 let prepared = if let Some(cached) = self.classes.get(&key) {
                     cached.clone()
                 } else {
-                    let cost = c.members.len()
-                        + if self.flags.ignore_case {
-                            crate::unicode_casefold::PAIRS.len() * 2
-                        } else {
-                            0
-                        };
-                    self.remaining = self
-                        .remaining
-                        .checked_sub(cost)
-                        .ok_or(Error::Limit("class compilation work"))?;
-                    let prepared = Rc::new(FoldedClass::new(c, self.flags));
+                    let prepared = Rc::new(FoldedClass::new(c, self.flags, &mut self.remaining)?);
                     self.classes.insert(key, prepared.clone());
                     prepared
                 };
