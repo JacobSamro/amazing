@@ -21,7 +21,13 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
-HOST=win-002
+HOST="${WIN_HOST:-win-002}" SLOTS=2
+# win-002 went offline on 2026-09-26; fall back to win-001 (same toolchain and
+# %USERPROFILE% layout, its own three-slot pool) instead of failing the gate.
+if [ -z "${WIN_HOST:-}" ] && ! ssh -o ConnectTimeout=8 -o BatchMode=yes win-002 'echo ok' >/dev/null 2>&1; then
+  echo "win-run: win-002 unreachable, using win-001" >&2
+  HOST=win-001 SLOTS=3
+fi
 LANE="${1:?usage: win-run.sh <lane> [--ref REF] -- '<PowerShell commands>'}"
 shift
 REF=""
@@ -81,6 +87,6 @@ tar -xmf (\$env:USERPROFILE + '\wt-LANE.tar')
 '''.replace('LANE', lane) + cmd + '\n'
 print(base64.b64encode(s.encode('utf-16-le')).decode())")
 
-BUILD_POOL="$HOST" BUILD_SLOTS=2 "$REPO/scripts/with-build-slot.sh" "$LANE" -- \
+BUILD_POOL="$HOST" BUILD_SLOTS="$SLOTS" "$REPO/scripts/with-build-slot.sh" "$LANE" -- \
   ssh "$HOST" "powershell -NoProfile -EncodedCommand $PS" 2>&1 | tr -d '\r' |
   grep -v -i -E 'post-quantum|store now|pq\.html|^#< CLIXML|<Objs '
