@@ -327,13 +327,12 @@ fn intl_locale_with_extensions(base: &str, retained: &[(&str, String)]) -> Strin
     format!("{base}-u-{}", subtags.join("-"))
 }
 
-/// The numbering systems the implementation advertises and renders native
-/// digits for. An option value outside this list is ignored per ECMA-402 (the
-/// requested extension or the locale default is used instead). `INTL_SUPPORTED_
-/// NUMBERING_SYSTEMS` is generated to match so `supportedValuesOf` never names
-/// a system the engine cannot render.
+/// The numbering systems the implementation advertises and can render native
+/// digits for (CLDR simple digit mappings). An option value outside this list
+/// is ignored per ECMA-402, and `INTL_SUPPORTED_NUMBERING_SYSTEMS` is generated
+/// to match so `supportedValuesOf` never names an unrenderable system.
 fn intl_supported_numbering_system(value: &str) -> bool {
-    matches!(value, "latn" | "arab" | "deva")
+    INTL_SUPPORTED_NUMBERING_SYSTEMS.split(' ').any(|entry| entry == value)
 }
 
 fn intl_array(i: &mut Interpreter, values: impl IntoIterator<Item = JsValue>) -> Result<JsValue, Throw> {

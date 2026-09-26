@@ -482,10 +482,11 @@ fn intl_round_decimal(value: f64, negative: bool, fraction_digits: i32,
 }
 
 fn intl_localize_digits(source: &str, numbering: &str) -> String {
-    let zero = match numbering { "arab" => '٠', "deva" => '०', _ => return source.to_string() };
-    source.chars().map(|ch| if let Some(digit) = ch.to_digit(10) {
-        char::from_u32(zero as u32 + digit).unwrap()
-    } else { ch }).collect()
+    let Some(digits) = intl_numbering_digits(numbering) else { return source.to_string() };
+    source.chars().map(|ch| match ch.to_digit(10) {
+        Some(digit) => digits.chars().nth(digit as usize).unwrap_or(ch),
+        None => ch,
+    }).collect()
 }
 
 /// Unit prefix/suffix and the unit-name segment for one locale and style.
