@@ -134,6 +134,19 @@ struct BindingState {
     /// `write()` implicitly performs `document.open()`'s full-document
     /// replace first. See `runtime_host_html.rs`.
     write_insertion_points: HashMap<NodeIdx, (NodeIdx, Option<NodeIdx>)>,
+    /// HTML-31: the live, script-interleaved parser for a document currently
+    /// being built by `amazing_html::ResumableParser` (top-level pages, via
+    /// `cmd/wpt_harness.rs`/`cmd/js.rs`; iframes still use HTML-29's DOM-
+    /// splice model and never appear here). A present entry means
+    /// `document.write`/`writeln` must insert into the real tokenizer
+    /// (`ResumableParser::write`) instead of splicing a parsed fragment into
+    /// the DOM directly -- "HTML-29's tracker becomes the real one." Also
+    /// keyed in `write_insertion_points` (with the same placeholder-shaped
+    /// entry `begin_document_parsing_state` always inserts) purely so
+    /// `document.open()`'s existing "already active, no-op" guard keeps
+    /// working unchanged; that map's *value* is never read for a document
+    /// with a live entry here.
+    active_parsers: HashMap<NodeIdx, Rc<RefCell<amazing_html::ResumableParser>>>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -673,6 +686,7 @@ pub(crate) fn install(
         net: NetRuntime::new(),
         integrator_assist: IaRuntime::new(),
         write_insertion_points: HashMap::new(),
+        active_parsers: HashMap::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {

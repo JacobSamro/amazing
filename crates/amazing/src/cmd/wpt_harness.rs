@@ -413,6 +413,14 @@ fn install_callback(js: &mut Interpreter, name: &str, callback: NativeFn) -> Res
         .map_err(|e| e.describe())
 }
 
+/// Matches exactly the message `local_file` produces for its own permanent,
+/// by-design limitation (no query string/fragment/scheme/`%`-escape support
+/// -- this harness has no real HTTP layer to serve WPT's server-side `pipe=`
+/// substitution or other query-driven behavior), as opposed to a genuine
+/// missing-file/escapes-root error, which should still surface.
+fn is_unsupported_resource_url(error: &str) -> bool {
+    error.starts_with("unsupported resource URL: ")
+}
 fn local_file(root: &Path, base: &Path, source: &str) -> Result<PathBuf, String> {
     if source.contains(['?', '#', ':', '%', '\\']) {
         return Err(format!("unsupported resource URL: {source}"));
@@ -537,36 +545,6 @@ fn any_window_wrapper(js: &str, test: &str) -> Result<String, String> {
         attr_escape(&path)
     ))
 }
-fn collect_scripts(
-    dom: &amazing_dom::Dom,
-    node: amazing_dom::NodeIdx,
-    scripts: &mut Vec<crate::PageScript>,
-) -> Result<(), String> {
-    if dom.name(node) == Some("script") {
-        let attrs = dom.attrs_of(node).unwrap_or(&[]);
-        let attr = |name: &str| {
-            attrs
-                .iter()
-                .find(|(n, _)| n == name)
-                .map(|(_, v)| v.as_str())
-        };
-        if attr("type") == Some("module") || attr("async").is_some() || attr("defer").is_some() {
-            return Err("unsupported: module/async/defer script scheduling".into());
-        }
-        if attr("type")
-            .is_some_and(|v| !["", "text/javascript", "application/javascript"].contains(&v))
-        {
-            return Ok(());
-        }
-        crate::collect_script_text(dom, node, scripts);
-    } else {
-        for child in dom.children(node) {
-            collect_scripts(dom, child, scripts)?;
-        }
-    }
-    Ok(())
-}
-
 fn resolve_page_url(base: &str, value: &str) -> Result<String, String> {
     let base = amazing_net::Url::parse(base).map_err(|error| error.to_string())?;
     amazing_net::resolve(value, &base)
@@ -666,12 +644,15 @@ fn execute_page(
     if depth >= 32 {
         return Err("unsupported: navigation depth limit".into());
     }
+    // HTML-31: the DOM starts empty; `run_interleaved_parse` below (via
+    // `amazing_html::ResumableParser`) builds `html` into it directly,
+    // pausing tokenization at each classic parser-blocking script so it runs
+    // against exactly what has been parsed so far, not the finished
+    // document -- see that function's doc comment.
     let host = Rc::new(RefCell::new(crate::BrowserDomHost {
-        dom: amazing_html::parse(&html),
+        dom: amazing_dom::Dom::new(),
         native_forwarded: false,
     }));
-    let mut scripts = Vec::new();
-    collect_scripts(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut scripts)?;
     let mut scheduler =
         crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| error.describe())?;
@@ -714,13 +695,6 @@ fn execute_page(
         .map_err(|e| format!("window host initialization: {}", e.describe()))?;
     install_callback(&mut scheduler.js, "__amazing_result", result_callback)?;
     install_callback(&mut scheduler.js, "__amazing_complete", completion_callback)?;
-    let mut handlers = Vec::new();
-    crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
-    for (node, event, body) in handlers {
-        scheduler
-            .install_inline_handler(node, &event, &body)
-            .map_err(|e| e.describe())?;
-    }
     let harness_path = root
         .join(if options.scaffold {
             "scaffold-harness.js"
@@ -729,55 +703,116 @@ fn execute_page(
         })
         .canonicalize()
         .map_err(|e| e.to_string())?;
+    let testharnessreport_path = root
+        .join("resources/testharnessreport.js")
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
     let mut installed = false;
-    // HTML-29: opens the top-level document's `document.write` parser-
-    // active window for the duration of its own top-level script phase,
-    // narrowed to right after each script as it runs, and closed once its
-    // load event has fired below -- matching the window during which a
-    // real parser has an insertion point at all.
-    scheduler.begin_document_parsing(0);
-    for script in scripts {
-        scheduler.narrow_write_insertion_point(0, script.node.0);
-        let (text, label, harness) = match script.src {
+    // HTML-31: builds `html` into `host`'s DOM directly, pausing right after
+    // each classic parser-blocking script's closing tag so it runs against
+    // exactly what has been parsed so far (`document.write` included, via
+    // `RuntimeBindings::register_active_parser`, called inside this) -- not
+    // the finished document, which is what let `dom/nodes/
+    // MutationObserver-document.html` observe mutations no real parser
+    // could ever have produced.
+    let deferred = crate::cmd::js::run_interleaved_parse(&host, &mut scheduler, &html,
+        |scheduler, script| {
+            let (text, label, harness) = match &script.src {
+                Some(src) => {
+                    // HTML-31: a parser-inserted script (typically from
+                    // `document.write`, e.g. WPT's own render-blocking
+                    // corpus's `generateParserDelay()` helper) can reference
+                    // a `?pipe=trickle(...)`-style URL this offline,
+                    // file-based harness has never been able to serve --
+                    // `local_file` rejects it outright as "unsupported
+                    // resource URL". Before this ticket such a script was
+                    // never discovered at all (document.write only spliced
+                    // into the DOM, never the input stream `collect_scripts`
+                    // had already finished walking), so it silently never
+                    // ran; a real browser also never fails page load or the
+                    // rest of its scripts over one script's failed fetch --
+                    // it just never runs that one and moves on. Match both:
+                    // skip this script rather than erroring the whole page.
+                    let path = match local_file(&root, file.parent().unwrap(), src) {
+                        Ok(path) => path,
+                        Err(e) if is_unsupported_resource_url(&e) => return Ok(()),
+                        Err(e) => return Err(e),
+                    };
+                    // Runner callbacks replace the visual reporter, whether
+                    // its URL is root-relative or relative to the upstream
+                    // test.
+                    if !options.scaffold && path == testharnessreport_path {
+                        return Ok(());
+                    }
+                    let harness = path == harness_path;
+                    (source(&root, &path, options.scaffold)?, src.clone(), harness)
+                }
+                None => (script.body.clone(), "inline script".into(), false),
+            };
+            scheduler
+                .run_script(&text)
+                .map_err(|e| format!("{label}: {}", e.describe()))?;
+            if harness {
+                if installed {
+                    return Err("duplicate harness script".into());
+                }
+                scheduler.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false});")
+                    .map_err(|e| format!("callback installation: {}", e.describe()))?;
+                installed = true;
+            }
+            Ok(())
+        })?;
+    // `defer`/module and `async` scripts never pause tree construction (see
+    // `amazing_html::ScriptMode`); run them, in document order, once the
+    // whole document is parsed -- before `DOMContentLoaded`, matching
+    // deferred timing. This driver has no real concurrent fetch to race an
+    // async script's execution against, so it runs those the same way.
+    for script in &deferred {
+        let (text, label) = match &script.src {
             Some(src) => {
-                let path = local_file(&root, file.parent().unwrap(), &src)?;
-                // Runner callbacks replace the visual reporter, whether its
-                // URL is root-relative or relative to the upstream test.
-                if !options.scaffold
-                    && path
-                        == root
-                            .join("resources/testharnessreport.js")
-                            .canonicalize()
-                            .map_err(|e| e.to_string())?
-                {
+                // Same "unsupported resource URL" skip as the blocking-script
+                // closure above, for a deferred/async script's own `src`.
+                let path = match local_file(&root, file.parent().unwrap(), src) {
+                    Ok(path) => path,
+                    Err(e) if is_unsupported_resource_url(&e) => continue,
+                    Err(e) => return Err(e),
+                };
+                if !options.scaffold && path == testharnessreport_path {
                     continue;
                 }
-                let harness = path == harness_path;
-                (source(&root, &path, options.scaffold)?, src, harness)
+                (source(&root, &path, options.scaffold)?, src.clone())
             }
-            None => (script.body, "inline script".into(), false),
+            None => (script.body.clone(), "inline deferred/async script".into()),
         };
         scheduler
             .run_script(&text)
             .map_err(|e| format!("{label}: {}", e.describe()))?;
-        if harness {
-            if installed {
-                return Err("duplicate harness script".into());
-            }
-            scheduler.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false});")
-                .map_err(|e| format!("callback installation: {}", e.describe()))?;
-            installed = true;
-        }
     }
     if !installed {
         return Err("no harness script loaded".into());
     }
+    // HTML-31: inline `on*` handler attributes only exist once their element
+    // has been parsed, so collecting them has to wait until the interleaved
+    // parse above reaches `Eof` (unlike before, when the whole DOM already
+    // existed prior to running any script at all).
+    let mut handlers = Vec::new();
+    crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
+    for (node, event, body) in handlers {
+        scheduler
+            .install_inline_handler(node, &event, &body)
+            .map_err(|e| e.describe())?;
+    }
     refresh_images(&mut scheduler)?;
-    // Iframes present in the initial DOM were already queued by
-    // `set_location_url` above (`RuntimeBindings::navigate_iframes`, run from
-    // `set_document_url`); this drains that queue, giving each one its own
-    // realm/WindowProxy and firing `DOMContentLoaded`/`load` on the child
-    // document and `load` on the frame element (JSRT-9 + HTML-25..27).
+    // HTML-31: `host.dom` was empty when `set_location_url` first ran above
+    // (before any of `html` was parsed), so its `navigate_iframes` pass found
+    // none of this page's `<iframe>` elements. Calling it again now that the
+    // document is fully built (idempotent: same URL/origin, and `navigate_
+    // iframes` itself skips any frame whose `src`/`srcdoc` hasn't changed)
+    // is what actually discovers and queues them.
+    scheduler.set_location_url(&url);
+    // Drains that queue, giving each iframe its own realm/WindowProxy and
+    // firing `DOMContentLoaded`/`load` on the child document and `load` on
+    // the frame element (JSRT-9 + HTML-25..27).
     scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
     for event in ["DOMContentLoaded", "load"] {
         scheduler
@@ -791,7 +826,6 @@ fn execute_page(
             .dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
-    scheduler.end_document_parsing(0);
     // WPT runs against a deterministic 60 Hz virtual display. Each completed
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut frame = 0_u64;
