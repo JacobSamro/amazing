@@ -107,7 +107,13 @@ pub struct PropertyTreesSnapshot {
 impl PropertyTrees {
     pub fn to_snapshot(&self) -> PropertyTreesSnapshot {
         PropertyTreesSnapshot {
-            version: SNAPSHOT_VERSION,
+            // V1 has no effect payload. Mark it unsupported so an old GPU
+            // transport cannot accept a frame after stripping its effects.
+            version: if self.has_composited_effects() {
+                EFFECT_SNAPSHOT_VERSION
+            } else {
+                SNAPSHOT_VERSION
+            },
             transforms: self.transforms.clone(),
             clips: self.clips.clone(),
             effects: self.effects.clone(),
