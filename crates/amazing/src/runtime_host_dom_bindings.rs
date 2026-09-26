@@ -97,6 +97,10 @@ mod tests {
         adapter.define_data_property(&global, "NativeMessageEvent", constructor, true, false, true).unwrap();
         let result = js.run_script(r#"
             Object.freeze = function() { throw new Error('must not call user freeze'); };
+            const legacy = document.createEvent('MessageEvent');
+            let nullPortsTypeError = false;
+            try { legacy.initMessageEvent('message', false, false, null, '', '', null, null); }
+            catch (e) { nullPortsTypeError = e instanceof TypeError; }
             const payload = {};
             const event = new NativeMessageEvent('message', {data: payload, source: window});
             let rejected = false;
@@ -104,7 +108,7 @@ mod tests {
             event instanceof Event && event instanceof NativeMessageEvent &&
                 NativeMessageEvent.length === 1 && event.data === payload &&
                 event.source === window && event.ports === event.ports &&
-                Object.isFrozen(event.ports) && event.ports.length === 0 && rejected;
+                Object.isFrozen(event.ports) && event.ports.length === 0 && rejected && nullPortsTypeError;
         "#).unwrap();
         assert!(matches!(result, JsValue::Bool(true)));
     }

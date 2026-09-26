@@ -74,7 +74,11 @@ fn string_or_empty<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<Vec
     if host.is_undefined(value) { Ok(vec![]) } else { host.to_dom_string(value) }
 }
 fn ports<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<Vec<H::Value>, H::Error> {
-    if host.is_undefined(value) { Ok(vec![]) } else { host.sequence_message_ports(value) }
+    if host.is_undefined(value) { return Ok(vec![]); }
+    // Reject null and other non-objects with TypeError before an optional host
+    // hook can report NotSupportedError for the iterable conversion capability.
+    host.require_object(value)?;
+    host.sequence_message_ports(value)
 }
 fn source<H: BindingHost>(host: &mut H, value: H::Value) -> Result<Option<H::Value>, H::Error> {
     if host.is_nullish(&value) { return Ok(None); }
