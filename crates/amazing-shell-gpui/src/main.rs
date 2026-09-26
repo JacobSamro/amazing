@@ -11,7 +11,7 @@ mod secure_video;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -2208,7 +2208,7 @@ impl BrowserShell {
                     .py_1()
                     .text_size(px(10.5))
                     .text_color(rgb(DIM))
-                    .child("win-001  ·  GPUI 0.2.2  ·  ThinLTO"),
+                    .child(build_info_label()),
             )
     }
 }
@@ -2657,6 +2657,53 @@ fn main() {
     });
 }
 
+/// The new-tab status line was a Windows-only literal ("win-001 · GPUI 0.2.2
+/// · ThinLTO") baked in when the shell only ever ran on the win-001 build
+/// server. Now that it also runs on Linux Boat sandboxes, report the actual
+/// host and build profile instead of a fixed string. Computed once and
+/// cached: this renders on every frame the new-tab page is visible, and the
+/// hostname lookup can shell out on platforms with no direct env var.
+fn build_info_label() -> &'static str {
+    static LABEL: OnceLock<String> = OnceLock::new();
+    LABEL.get_or_init(|| {
+        let host = host_label();
+        let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+        format!("{host}  ·  GPUI 0.2.2  ·  {profile}")
+    })
+}
+
+/// Best-effort local hostname, without any FFI (this crate denies
+/// `unsafe_code`): environment variables first, then a Linux-specific
+/// `/proc` read, then a `hostname` subprocess as a last resort covering
+/// macOS and any other Unix that lacks `HOSTNAME` in its environment.
+fn host_label() -> String {
+    if let Ok(name) = std::env::var("COMPUTERNAME") {
+        if !name.trim().is_empty() {
+            return name;
+        }
+    }
+    if let Ok(name) = std::env::var("HOSTNAME") {
+        if !name.trim().is_empty() {
+            return name;
+        }
+    }
+    if let Ok(contents) = std::fs::read_to_string("/proc/sys/kernel/hostname") {
+        let trimmed = contents.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Ok(output) = std::process::Command::new("hostname").output() {
+        if output.status.success() {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    "unknown-host".to_string()
+}
+
 /// Reads `--flag value` or `--flag=value` from the process argv. Used for
 /// `--url` and `--size`, which captures pass to open a specific page/size
 /// without touching the interactive default-tab layout.
@@ -2777,6 +2824,22 @@ mod tests {
         assert_eq!(parse_size_flag("0x480"), None);
         assert_eq!(parse_size_flag("nope"), None);
         assert_eq!(parse_size_flag("800x"), None);
+    }
+
+    #[test]
+    fn build_info_label_reports_real_host_and_profile_not_win_001() {
+        let label = build_info_label();
+        assert!(!label.contains("win-001"));
+        assert!(!label.contains("ThinLTO"));
+        assert!(label.contains("GPUI 0.2.2"));
+        assert!(label.contains("debug") || label.contains("release"));
+        // Cached: a second call returns the identical pointer's contents.
+        assert_eq!(label, build_info_label());
+    }
+
+    #[test]
+    fn host_label_is_never_empty() {
+        assert!(!host_label().trim().is_empty());
     }
 
     #[test]
