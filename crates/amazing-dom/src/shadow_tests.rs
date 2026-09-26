@@ -385,3 +385,59 @@ fn flatten_uses_fallback_and_expands_nested_slots() {
     let light = dom.create_element(host, "span");
     assert_eq!(dom.assigned_nodes(outer, true, false), Ok(vec![light]));
 }
+
+#[test]
+fn shadow_related_target_retargets_against_external_targets_and_stays_adjusted() {
+    let mut dom = Dom::new();
+    let host = dom.create_element(NodeIdx(0), "div");
+    let root = dom.attach_shadow(host, options(ShadowMode::Closed, SlotAssignment::Named)).unwrap();
+    let related = dom.create_element(root, "span");
+    let target = EventTarget::External(dom.create_event_target());
+    dom.add_event_listener(target, "focus", Some(CallbackId(1)), ListenerOptions::default());
+    let mut value = Event::new("focus", EventInit::default(), Duration::ZERO);
+    value.set_related_target(Some(EventTarget::Node(related)));
+    let event = dom.events_mut().create_event(value);
+    let mut dispatch = dom.begin_event_dispatch(target, event, DispatchOrigin::Script).unwrap();
+    let invocation = dom.events_mut().next_listener(&mut dispatch).unwrap();
+    assert_eq!(invocation.related_target, Some(EventTarget::Node(host)));
+    assert!(dom.events_mut().next_listener(&mut dispatch).is_none());
+    assert_eq!(dom.events().event(event).related_target(), Some(EventTarget::Node(host)));
+    assert_eq!(dom.events().event(event).target(), Some(target));
+    // Redispatch begins with the retained adjusted target, not the original
+    // private shadow descendant.
+    let mut dispatch = dom.begin_event_dispatch(EventTarget::Node(root), event, DispatchOrigin::Script).unwrap();
+    while dom.events_mut().next_listener(&mut dispatch).is_some() {}
+    assert_eq!(dom.events().event(event).target(), None);
+    assert_eq!(dom.events().event(event).related_target(), None);
+}
+
+#[test]
+fn target_cleanup_uses_shadow_membership_frozen_before_callback_mutation() {
+    let mut dom = Dom::new();
+    let host = dom.create_element(NodeIdx(0), "div");
+    let root = dom.attach_shadow(host, options(ShadowMode::Open, SlotAssignment::Named)).unwrap();
+    let target = dom.create_element(root, "span");
+    dom.add_event_listener(EventTarget::Node(target), "x", Some(CallbackId(1)), ListenerOptions::default());
+    let mut value = Event::new("x", EventInit::default(), Duration::ZERO);
+    value.set_related_target(Some(EventTarget::Node(host)));
+    let event = dom.events_mut().create_event(value);
+    let mut dispatch = dom.begin_event_dispatch(EventTarget::Node(target), event, DispatchOrigin::Script).unwrap();
+    assert!(dom.events_mut().next_listener(&mut dispatch).is_some());
+    dom.pre_insert(target, host, None).unwrap();
+    assert!(dom.events_mut().next_listener(&mut dispatch).is_none());
+    assert_eq!(dom.events().event(event).target(), None);
+    assert_eq!(dom.events().event(event).related_target(), None);
+}
+
+#[test]
+fn identical_original_target_and_related_target_are_not_suppressed() {
+    let mut dom = Dom::new();
+    let target = EventTarget::Node(dom.create_element(NodeIdx(0), "div"));
+    dom.add_event_listener(target, "x", Some(CallbackId(1)), ListenerOptions::default());
+    let mut value = Event::new("x", EventInit::default(), Duration::ZERO);
+    value.set_related_target(Some(target));
+    let event = dom.events_mut().create_event(value);
+    let mut dispatch = dom.begin_event_dispatch(target, event, DispatchOrigin::Script).unwrap();
+    assert_eq!(dom.events_mut().next_listener(&mut dispatch).unwrap().current_target, target);
+    assert!(dom.events_mut().next_listener(&mut dispatch).is_none());
+}

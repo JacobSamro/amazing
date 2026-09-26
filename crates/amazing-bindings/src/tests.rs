@@ -256,6 +256,9 @@ impl BindingHost for Host {
         Ok(matches!(value, V::Dictionary(entries) if entries.iter().any(|(name, value)|
             *name == "__constructor" && *value == V::Bool(true))))
     }
+    fn is_object_value(&mut self, value: &V) -> Result<bool, String> {
+        Ok(!matches!(value, V::Undefined | V::Null | V::Bool(_) | V::Number(_) | V::String(_)))
+    }
     fn require_object(&mut self, value: &V) -> Result<(), String> {
         if matches!(value, V::Dictionary(_) | V::Array(_)) { Ok(()) }
         else { Err("TypeError: Expected an object".into()) }
@@ -512,6 +515,9 @@ impl AbortHost for Host {
     }
 }
 impl DocumentHost for Host {
+    fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<V>, String> {
+        Ok(self.window.as_ref().filter(|_| document == NodeIdx(0)).map(|(_, view)| view.clone()))
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
         assert!(!self.arena_borrowed);
         if let Some(data) = self.dom.document_metadata(document).map_err(|error| error.to_string())? {
@@ -2527,3 +2533,27 @@ mod dom_exception;
 
 #[path = "tests_dataset.rs"]
 mod tests_dataset;
+
+#[path = "tests_legacy_document.rs"]
+mod tests_legacy_document;
+
+#[path = "tests_listener_registration.rs"]
+mod tests_listener_registration;
+
+#[path = "tests_tokenlist_semantics.rs"]
+mod tests_tokenlist_semantics;
+
+#[test]
+fn document_default_view_uses_host_association_and_enforces_document_brand() {
+    let mut h = Host::default();
+    let window = V::Dictionary(vec![]);
+    h.window = Some((0, window.clone()));
+    assert_eq!(call(&mut h, O::DocumentDefaultView, V::Node(NodeIdx(0)), &[]), window);
+    let inert = call(&mut h, O::DocumentConstructor, V::Undefined, &[]);
+    assert_eq!(call(&mut h, O::DocumentDefaultView, inert, &[]), V::Null);
+    let node = element(&mut h);
+    assert!(invoke(&mut h, O::DocumentDefaultView, V::Node(node), &[]).is_err());
+}
+
+#[path = "tests_event_modifiers.rs"]
+mod tests_event_modifiers;
