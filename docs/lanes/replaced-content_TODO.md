@@ -1621,3 +1621,74 @@ workspace doctests all `ok` (no failures); `amazing-css` **160 passed**
 (up from 154); `amazing-paint` **177 passed** (up from 172, +5 net: 6 new
 outline tests, no removals); `amazing-layout` **303 passed / 1 ignored**
 (untouched by this ticket, re-run for the `LayoutBox` field read).
+
+## RC-33 — emphasis-mark painting half of `text-emphasis` (2026-09-27)
+
+Unlike RC-32's `outline` (where nothing else was in flight and self-serving
+the missing CSS registration was the pragmatic call), the coordinator asked
+this ticket be coordinated with the css and layout lanes rather than
+self-served, since `text-emphasis-style`/`-color`/`-position` are entirely
+unregistered in `amazing-css` and there is no placement logic in
+`amazing-layout` (confirmed via `grep` -- zero src-level hits in either
+crate). This ticket delivers only the paint-side consumer, against a new
+seam, and files the exact contract the other two halves need to
+`questions.md`.
+
+**The seam.** `ImageProvider` gains `fn text_emphasis(&self, node: NodeIdx)
+-> Option<TextEmphasis>`, a default-`None` method following exactly the
+precedent `presentation()` already set on the same trait ("paint has no
+DOM/style access; the embedding caller supplies it"). `TextEmphasis {
+shape: EmphasisShape::{Circle, Triangle}, filled: bool, color: [u8; 4],
+over: bool }`. Critically, **no new layout data was needed for the
+geometry** -- `amazing_layout::GlyphFrag` already carries `node`, `x`,
+`advance_x`, and `font_size` per glyph (the same fields `color: String`
+already relies on to resolve per-glyph styling today), which is everything
+paint needs to center a mark over each glyph's own advance box.
+
+**Painting** (`paint_line_glyphs`, now taking `images: &dyn ImageProvider`
+like its sibling glyph-painting entry points already do): a second pass
+after every glyph on the line blits, so a mark always paints on top of the
+text it annotates (CSS Text Decoration 3's own order), skipping vertical
+writing modes entirely (a documented simplification -- `text-emphasis-
+position`'s `right`/`left` inline-axis choice for vertical text is not
+modeled). `paint_emphasis_mark` centers the mark horizontally over
+`glyph.x + glyph.advance_x * 0.5`, and vertically at an approximated
+ascent (`0.85em` above baseline) or descent (`0.25em` below), `0.1em` gap,
+`0.25em` radius -- all fixed ratios, since there is no real vector glyph
+shaping here to place a mark against actual font metrics or draw CSS Text
+Decoration 3's suggested mark glyphs exactly. `fill_mark_shape` fills (or,
+for `filled: false`, rings) a circle or an upward equilateral triangle
+(`crate::clip::point_in_polygon`, reused from `clip-path`'s own polygon
+test), the "open" variant reusing the inset-ring subtraction technique
+`control_raster.rs` already uses for checkbox/radio chrome. `EmphasisShape`
+folds `dot`/`circle`/`double-circle`/`sesame` all onto `Circle` (all
+visually round, and this painter has no vector shaping to reproduce their
+exact suggested outlines) and leaves the `<string>` form entirely
+unrepresented (an author-supplied character needs the same real glyph
+shaping RC-30 already routes SVG `<text>` through, out of scope here).
+
+6 new focused tests (filled circle above by default, `under` position,
+open style's own hollow center, triangle vs. circle shape, no provider
+result is a no-op, vertical writing mode is skipped) using a mock
+`ImageProvider` that hands back a fixed `TextEmphasis`, since there is no
+real cascade path to test against yet.
+
+Filed to `questions.md`: css needs the four longhands registered (mirroring
+`outline`'s own pattern from RC-32, which the note offers as a template)
+and their computed values normalized to what `text_emphasis_mark` expects;
+whoever implements the real `ImageProvider` needs to map the resolved mark
+character to `EmphasisShape`/`filled`, resolve `text-emphasis-color`
+(`currentcolor` falling back to the node's own color, `outline-color`'s
+own policy) and `text-emphasis-position`'s `over`/`under` half; layout is
+asked to confirm `GlyphFrag.node` threads correctly through inline
+splitting for this case (believed already fine, since `color` depends on
+the same threading, but unverified against a real cascade since the
+property doesn't parse yet).
+
+No end-to-end WPT measurement is possible yet -- there is nothing in any
+real page for the new `ImageProvider::text_emphasis` seam to be called
+with until css registers the property. Gate: `amazing-paint` **183
+passed** (up from 177, all 6 new); workspace/doctests carried in the same
+combined gate as RC-32 above (no regressions from re-running after this
+change -- `ImageProvider`'s new method is default-`None`, so every
+existing caller is source- and behavior-compatible unchanged).
