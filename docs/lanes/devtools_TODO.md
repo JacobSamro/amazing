@@ -140,7 +140,7 @@ doctests 4 passed.
 
 ## CDP-4 — Fetch interception and Network response bodies — done
 
-Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 74/74
+Source `11e58a00`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 74/74
 nextest (0 skipped) and 1 doctest; workspace 2736 passed, 0 failed, 10 skipped,
 doctests 4 passed.
 
