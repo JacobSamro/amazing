@@ -87,7 +87,7 @@ trap 'rm -rf "$LANE_LOCK"' EXIT
 # Source: the lane's worktree (with uncommitted edits), or an exact commit.
 if [ -n "$REF" ]; then
   COMMIT="$(git -C "$MAIN" rev-parse "$REF")" || exit 2
-  SRC="$(mktemp -d)"
+  SRC="$(mktemp -d)"; SRC_TMP="$SRC"
   trap 'rm -rf "$SRC" "$LANE_LOCK"' EXIT
   git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC"
   echo "linux-run[$LANE]: $HOST at $REF ($COMMIT)" >&2
@@ -116,6 +116,9 @@ if [ "$HOST" = boat ]; then
     { [ -e amazing/wt/$LANE/Cargo.toml ] || [ ! -e amazing/Cargo.toml ] ||
       tar -C amazing -cf - --exclude=./target --exclude=./wt --exclude=./out --exclude=./corpora . | tar -C amazing/wt/$LANE -xf -; }" || {
     echo "linux-run: cannot reach $BOAT_ID" >&2; exit 3; }
+  # Drop the lease if we exit before the remote command's own trap takes over
+  # (failed or interrupted sync); a stale lease keeps the sandbox billed.
+  trap '$BSSH "$BOAT_HOST" "rm -f $LEASE" 2>/dev/null; rm -rf "${SRC_TMP:-}" "$LANE_LOCK"' EXIT
   rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
     --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" || {
     echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
