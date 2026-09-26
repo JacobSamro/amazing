@@ -82,7 +82,7 @@ fn emit(report: &PageReport<'_>) {
 
 /// Fetch a remote document with a bounded body and a short per-connection
 /// timeout, returning `(final_url, body, content_type)`.
-fn fetch_document(url: &str) -> Result<(String, Vec<u8>, Option<String>), String> {
+pub(crate) fn fetch_document(url: &str) -> Result<(String, Vec<u8>, Option<String>), String> {
     let options = amazing_net::FetchOptions {
         max_response_bytes: 16 * 1024 * 1024,
         timeout: std::time::Duration::from_secs(15),
