@@ -137,7 +137,7 @@ libvpx 1.16, nextest, the pinned Test262). Related lanes share one sandbox (`POO
 `scripts/boat-lane.py`); each lane syncs into its own `~/amazing/wt/<lane>` and writes outputs to
 `$OUT` (`~/amazing/out/<lane>`). All lanes on a sandbox share `~/amazing/target`, so cargo's lock
 serializes their compiles ("Blocking waiting for file lock" means another lane is building; it is
-normal). `scripts/boat-idle-reaper.py` stops a sandbox after 15 idle minutes (20 when Boat starts run low); the next run resumes
+normal). `scripts/boat-idle-reaper.py` stops a sandbox after 30 idle minutes (40 when Boat starts run low; raised 2026-09-27 after the fleet used up the 200 starts/day quota); the next run resumes
 it in seconds. `scripts/boat-lane.py pool-report` shows busy and overlap per pool.
 **Linux desktop and WPT (2026-09-26).** Sandboxes are Ubuntu 24.04 with a GNOME desktop, no
 GPU; Mesa software Vulkan (llvmpipe), Xvfb, xdotool and ImageMagick are in the template.

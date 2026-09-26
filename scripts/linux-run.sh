@@ -55,28 +55,41 @@ if [ -z "$HOST" ]; then
   # delete-on-stop data retention removed it) fall back to the venus hosts.
   # .agents/.boat-off forces the fallback: on 2026-09-26 the fleet used up
   # Boat's 200 sandbox starts per day and every resume was refused.
-  if [ ! -e "$MAIN/.agents/.boat-off" ] &&
+  # Since 2026-09-27 lanes build on the direct hosts below and Boat keeps only
+  # what needs it: parallel Test262 shards and the shell lane's virtual desktop.
+  # That keeps sandbox starts well under the daily quota.
+  case "$LANE" in t262-shard-*|shell) boat_lane=1 ;; *) boat_lane=0 ;; esac
+  if [ "$boat_lane" = 1 ] && [ ! -e "$MAIN/.agents/.boat-off" ] &&
      "$HOME/.ascii/bin/boat" snapshots --json 2>/dev/null | grep -q '"name":"amazing-builder"'; then
     HOST=boat
   else
     # venus-001 (32 threads) takes the Test262-heavy lanes and the gates;
-    # venus-003 (16 threads) the rest of the JS lanes and the render lanes.
+    # venus-003 (16) the other JS lanes; worker-2 (16) layout/render/paint;
+    # k-test (16) the DOM, HTML, net and platform lanes; worker-3 (4) ipc.
     case "$LANE" in
       js-lang|js-vm|js-binary|js-date|integrator-primary|t262-shard-*) HOST=venus-001 ;;
-      js-runtime|js-stdlib|js-intl|wasm|layout|layout-flexgrid|css|text|shell) HOST=venus-003 ;;
+      js-runtime|js-stdlib|js-intl|wasm) HOST=venus-003 ;;
+      layout|layout-flexgrid|css|text|shell|replaced-content|compositor) HOST=worker-2 ;;
+      dom-bindings|html|net|storage|a11y|devtools|integrator-assist) HOST=k-test ;;
+      ipc) HOST=worker-3 ;;
       *) HOST=venus-001 ;;
     esac
-    [ -e "$MAIN/.agents/.boat-off" ] || echo "linux-run: Boat template missing, using $HOST" >&2
+    [ "$boat_lane" = 1 ] && [ ! -e "$MAIN/.agents/.boat-off" ] && echo "linux-run: Boat template missing, using $HOST" >&2
   fi
 fi
-# --which: print the host this lane runs on (boat or venus-*), for copy-backs.
-[ "${WHICH:-0}" = 1 ] && { echo "$HOST"; exit 0; }
+# SSH is the ssh destination; the worker hosts are root logins keyed by the
+# agent's id_rsa (no ~/.ssh/config entries).
 case "$HOST" in
-  boat) SLOTS=0 JOBS=0 ;;
-  venus-001) SLOTS=3 JOBS=10 ;;
-  venus-003) SLOTS=2 JOBS=8 ;;
+  boat) SLOTS=0 JOBS=0 SSH=boat ;;
+  venus-001) SLOTS=3 JOBS=10 SSH=venus-001 ;;
+  venus-003) SLOTS=2 JOBS=8 SSH=venus-003 ;;
+  worker-2) SLOTS=2 JOBS=8 SSH=root@46.224.130.223 ;;
+  k-test) SLOTS=2 JOBS=8 SSH=root@159.69.124.56 ;;
+  worker-3) SLOTS=1 JOBS=4 SSH=root@178.104.111.133 ;;
   *) echo "linux-run: unknown host $HOST" >&2; exit 2 ;;
 esac
+# --which: print the ssh destination this lane runs on ("boat" for Boat), for copy-backs.
+[ "${WHICH:-0}" = 1 ] && { echo "$SSH"; exit 0; }
 
 # One run per lane tree at a time. Two runs of the same lane share the remote
 # tree and output paths; on 2026-09-24 a second comparison synced a different
@@ -162,11 +175,11 @@ fi
 # cargo reused a stale binary after a --ref switch (JSRT-6's Test262 check ran
 # the 7c6824b host). --checksum rewrites only files whose content changed, and
 # a rewritten file gets the current time, so cargo always sees real changes.
-rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
-  -e "ssh -o ControlPath=none" "$SRC/" "$HOST:amazing/wt/$LANE/" || {
+rsync -rlpDz --checksum --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
+  -e "ssh -o ControlPath=none" "$SRC/" "$SSH:amazing/wt/$LANE/" || {
   echo "linux-run: rsync to $HOST failed" >&2; exit 3; }
 # Lane trees may predate ensure-wpt.sh's git-less (tarball) path; use main's.
-scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$HOST:amazing/wt/$LANE/scripts/ensure-wpt.sh" 2>/dev/null
+scp -q -o ControlPath=none "$MAIN/scripts/ensure-wpt.sh" "$SSH:amazing/wt/$LANE/scripts/ensure-wpt.sh" 2>/dev/null
 
 REMOTE=". ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
@@ -177,10 +190,10 @@ mkdir -p \"\$OUT\"
 ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
 $CMD"
 ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
-run() { ssh "$HOST" "echo $ENCODED | base64 -d | bash" 2>&1 | grep -v -i -E 'post-quantum|store now|pq\.html'; return "${PIPESTATUS[0]}"; }
+run() { ssh "$SSH" "echo $ENCODED | base64 -d | bash" 2>&1 | grep -v -i -E 'post-quantum|store now|pq\.html'; return "${PIPESTATUS[0]}"; }
 
 if [ "$SLOT" = 1 ]; then
-  BUILD_POOL="$HOST" BUILD_SLOTS="$SLOTS" "$REPO/scripts/with-build-slot.sh" "$LANE" -- bash -c "$(declare -f run); ENCODED='$ENCODED' HOST='$HOST' run"
+  BUILD_POOL="$HOST" BUILD_SLOTS="$SLOTS" "$REPO/scripts/with-build-slot.sh" "$LANE" -- bash -c "$(declare -f run); ENCODED='$ENCODED' SSH='$SSH' run"
 else
   run
 fi
