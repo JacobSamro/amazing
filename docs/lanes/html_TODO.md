@@ -684,3 +684,14 @@ This is a ported pinned-source sweep, not unmodified WPT harness credit. Two
 engine gaps outside this lane bound the remaining async files:
 `await` on a pending promise does not suspend in the tree-walking interpreter
 (js-runtime), and `Date` has no prototype methods, blocking `valueAsDate`.
+
+The fixed-base full `html/semantics/forms/` sweep (468 selected files, 54
+runner-unsupported) moved from **1,526 pass / 1,717 fail** subtests and 69
+passing files to **2,853 pass / 987 fail** and 116 passing files: **+1,327
+passing subtests, zero pass losses** by named comparison against the baseline.
+File statuses: pass 116, fail 258, timeout 18, error 22, unsupported 54. The
+raw final JSONL SHA-256 is
+`52297889a7836d548d001cdfe020facc202a917549decd023f7e8d9f16b29e82`. Some of
+the earlier full-checkout registrations (`select-event`, submit/requestSubmit,
+`valueAsDate`) are dominated by the two engine gaps above; they are classified
+as such rather than hidden.
