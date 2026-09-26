@@ -147,6 +147,8 @@ pub struct MockScript {
     pub ax_children: HashMap<String, Vec<AxNode>>,
     /// Result returned by `Accessibility.queryAXTree`.
     pub ax_query_result: Vec<AxNode>,
+    /// Queued `Accessibility.nodesUpdated` batches.
+    pub ax_updates: VecDeque<AxNode>,
     /// Last `Debugger.enable`/`disable` call.
     pub debugger_enabled: Option<bool>,
     /// Locations returned by every `Debugger.setBreakpointByUrl` call.
@@ -369,6 +371,7 @@ impl Default for MockScript {
                 node: Some(EngineNodeId(6)),
                 ..AxNode::default()
             }],
+            ax_updates: VecDeque::new(),
             debugger_enabled: None,
             breakpoint_locations: vec![ScriptLocation {
                 script_id: "script-1".into(),
@@ -656,6 +659,11 @@ impl MockScript {
     /// Queues a `Debugger.paused` event.
     pub fn push_debugger_paused(&mut self, event: PausedEvent) {
         self.debugger_paused_events.push_back(event);
+    }
+
+    /// Queues an `Accessibility.nodesUpdated` node.
+    pub fn push_ax_update(&mut self, node: AxNode) {
+        self.ax_updates.push_back(node);
     }
 }
 
@@ -1324,6 +1332,10 @@ impl DevToolsSession for MockSession {
         _role: Option<&str>,
     ) -> Result<Vec<AxNode>, HostError> {
         Ok(self.script.lock().unwrap().ax_query_result.clone())
+    }
+
+    fn drain_ax_nodes_updated(&mut self) -> Vec<AxNode> {
+        self.script.lock().unwrap().ax_updates.drain(..).collect()
     }
 
     fn debugger_enabled(&mut self, enabled: bool) -> Result<(), HostError> {

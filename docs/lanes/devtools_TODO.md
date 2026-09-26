@@ -326,3 +326,24 @@ format is engine-defined, not this crate's to shape), emitting at most one
 always by one `Tracing.tracingComplete`. No `Tracing.enable`/`disable` in
 real CDP either, so no `EnabledDomains` flag. `MockHost` scripts two
 categories and one trace event.
+
+## CDP-15 — Accessibility.nodesUpdated push events — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools`
+113/113 nextest (0 skipped) and 1 doctest; workspace 2889 passed, 0 failed,
+10 skipped, doctests 4 passed.
+
+`Accessibility.nodesUpdated`, drained like every other domain's push events
+(`DevToolsSession::drain_ax_nodes_updated`, added to the CDP-10 batch),
+gated by the `EnabledDomains::accessibility` flag CDP-9 already added — no
+new flag needed since `Accessibility.enable` already sets it. Closes the
+one gap CDP-9's report noted. `MockHost` gains `MockScript::push_ax_update`
+alongside its other `push_*` scripting helpers.
+
+This closes out the CDP-10..15 boundary batch from the brief (Debugger,
+Profiler/HeapProfiler, DOMSnapshot, Storage/DOMStorage/IndexedDB, Tracing,
+Accessibility push events). Remaining candidates for a future ticket:
+`Fetch`'s `permessage-deflate`, `IndexedDB.requestDatabase`/`requestData`
+row-level browsing, `Tracing`'s streamed (rather than synchronous) chunking,
+`Animation`, `ServiceWorker`, `Page.printToPDF`, and multi-process renderer
+target routing.

@@ -1377,3 +1377,31 @@ fn page_endpoint_traces_categories_start_and_end() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_pushes_accessibility_node_updates() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result("Accessibility.enable", empty());
+
+    host.script().lock().unwrap().push_ax_update(amazing_devtools::host::AxNode {
+        ax_node_id: "ax-3".into(),
+        role: Some("StaticText".into()),
+        name: Some("Updated".into()),
+        node: Some(amazing_devtools::host::EngineNodeId(6)),
+        ..Default::default()
+    });
+
+    let updated = client.wait_event("Accessibility.nodesUpdated");
+    let nodes = updated.get("params").unwrap().get("nodes").unwrap().as_array().unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].get("nodeId").unwrap().as_str(), Some("ax-3"));
+    assert_eq!(
+        nodes[0].get("name").unwrap().get("value").unwrap().as_str(),
+        Some("Updated")
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+}

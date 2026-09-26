@@ -168,6 +168,12 @@ impl SessionState {
                 events.push(domains::security::state_changed(&state));
             }
         }
+        if enabled.accessibility {
+            let updated = self.dev.drain_ax_nodes_updated();
+            if !updated.is_empty() {
+                events.push(domains::accessibility::nodes_updated(&updated));
+            }
+        }
         if enabled.debugger {
             for script in self.dev.drain_scripts_parsed() {
                 events.push(domains::debugger::script_parsed(&script));
