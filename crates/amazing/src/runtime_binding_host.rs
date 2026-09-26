@@ -1018,6 +1018,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 let length = if matches!(
                     operation,
                     Operation::EventConstructor
+                        | Operation::ProcessingInstructionConstructor
                         | Operation::CustomEventConstructor
                         | Operation::MessageEventConstructor
                         | Operation::MutationObserverConstructor

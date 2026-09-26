@@ -150,6 +150,63 @@ mod tests {
     use super::*;
 
     #[test]
+    fn processing_instruction_constructor_and_attributes_share_native_character_data() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(value) { step++; if (!value) throw 'PI check ' + step; }
+            const pi = new ProcessingInstruction('xml', 'a="&amp;" b="two"');
+            check(ProcessingInstruction.length === 1 && pi instanceof CharacterData);
+            check(pi.ownerDocument === document && pi.target === 'xml');
+            check(pi.getAttribute('a') === '&' && pi.hasAttributes());
+            check(pi.getAttributeNames().join(',') === 'a,b');
+            const observer = new MutationObserver(function() {});
+            observer.observe(pi, {characterData: true, characterDataOldValue: true, attributes: true});
+            pi.setAttribute('a', '<"&>');
+            check(pi.data === 'a="&lt;&quot;&amp;&gt;" b="two"');
+            let records = observer.takeRecords();
+            check(records.length === 1 && records[0].type === 'characterData' && records[0].target === pi);
+            check(records[0].oldValue === 'a="&amp;" b="two"');
+            check(pi.toggleAttribute('a', true) && observer.takeRecords().length === 0);
+            check(!pi.toggleAttribute('a', undefined));
+            check(pi.toggleAttribute('a') && pi.getAttributeNames().join(',') === 'b,a');
+            const names = pi.getAttributeNames(); names.push('extra');
+            check(pi.getAttributeNames().length === 2);
+            pi.data = 'raw="new"';
+            check(pi.getAttribute('b') === null && pi.getAttribute('raw') === 'new');
+            pi.appendData(' broken'); check(!pi.hasAttributes());
+            pi.setAttribute('$', '\uD800');
+            check(pi.getAttribute('$') === '\uD800' && pi.cloneNode().getAttribute('$') === '\uD800');
+            let calls = '', rejected = false;
+            try { pi.setAttribute({toString() {calls += 'n'; return 'bad name';}},
+                {toString() {calls += 'v'; return 'x';}}); }
+            catch (e) { rejected = e instanceof DOMException && e.name === 'InvalidCharacterError'; }
+            check(rejected && calls === 'nv');
+            calls = ''; rejected = false;
+            try { ProcessingInstruction.prototype.setAttribute.call(document.createTextNode(''),
+                {toString() { calls += 'x'; return 'a';}}, 'b'); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && calls === '');
+            rejected = false;
+            try { pi.setAttribute({toString() { calls += 'x'; return 'a';}}); }
+            catch (e) { rejected = e instanceof TypeError; }
+            check(rejected && calls === '');
+            for (const args of [[], ['0'], ['x', '?>']]) {
+                rejected = false;
+                try { Reflect.construct(ProcessingInstruction, args); }
+                catch (e) { rejected = args.length === 0 ? e instanceof TypeError : e instanceof DOMException; }
+                check(rejected);
+            }
+            check(new ProcessingInstruction('target', undefined).data === '');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn legacy_elements_reflect_attributes_and_keep_interface_identity_when_cloned() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
