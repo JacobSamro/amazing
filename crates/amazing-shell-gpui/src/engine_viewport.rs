@@ -248,6 +248,12 @@ impl PageRuntime {
                 amazing_dom::events::EventTarget::Node(amazing_dom::NodeIdx(index as u32)), types)
         })
     }
+    /// Fetch lazy images the viewport scrolled into view using this page's
+    /// session, then repaint the retained scroll frame.
+    pub fn load_deferred_lazy_images(&self, viewport: &mut EngineViewport) -> bool {
+        viewport.load_deferred_lazy_images(Some(&self.session), &self.options)
+    }
+
     fn new(
         dom: amazing_dom::Dom,
         document_url: String,
@@ -696,6 +702,138 @@ impl EngineViewport {
             .map_err(|error| error.to_string())?;
         *self.scroll_frame.borrow_mut() = Some(presented);
         Ok(true)
+    }
+
+    /// Fetch deferred lazy images the root scroll offset has brought into view,
+    /// then repaint the scrolled frame. Layout already reserved each deferred
+    /// box, so the fetched pixels paint into it; the next DOM snapshot relayouts
+    /// with the real intrinsic size. Returns true when new pixels were loaded.
+    pub fn load_deferred_lazy_images(
+        &mut self,
+        session: Option<&Rc<RefCell<BrowserSession>>>,
+        options: &FetchOptions,
+    ) -> bool {
+        let (scroll_x, scroll_y) = self.root_scroll_offset();
+        let viewport = amazing_media::loading::ViewportRect {
+            x: scroll_x,
+            y: scroll_y,
+            width: self.width as f32,
+            height: self.height as f32,
+        };
+        let loaded = {
+            let Some(page) = self.page.as_mut() else { return false };
+            let Some(page) = Rc::get_mut(page) else { return false };
+            if page.resources.deferred_images.is_empty() {
+                return false;
+            }
+            let pending = std::mem::take(&mut page.resources.deferred_images);
+            let mut loaded = false;
+            for entry in pending {
+                let rect = image_rect(&page.root, entry.node).map(|rect| {
+                    amazing_media::loading::ViewportRect {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.w,
+                        height: rect.h,
+                    }
+                });
+                if !amazing_media::loading::should_fetch(
+                    amazing_media::loading::Loading::Lazy,
+                    rect,
+                    viewport,
+                    0.0,
+                ) {
+                    page.resources.deferred_images.push(entry);
+                    continue;
+                }
+                let retained: usize = page
+                    .resources
+                    .images
+                    .iter()
+                    .map(|entry| entry.image.pixels.len())
+                    .sum();
+                if page.resources.images.len() >= MAX_PAGE_IMAGES
+                    || retained >= 128 * 1024 * 1024
+                {
+                    page.resources.deferred_images.push(entry);
+                    continue;
+                }
+                let Ok(response) = fetch_resource(session, &entry.address, options) else {
+                    page.resources.deferred_images.push(entry);
+                    continue;
+                };
+                if response.status != 200 {
+                    continue;
+                }
+                let Some(image) = decode_web_image(&response.body) else { continue };
+                let retained: usize = page
+                    .resources
+                    .images
+                    .iter()
+                    .map(|entry| entry.image.pixels.len())
+                    .sum();
+                if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 {
+                    continue;
+                }
+                page.resources.images.push(PageImage {
+                    node: entry.node,
+                    image,
+                    density: entry.density,
+                });
+                loaded = true;
+            }
+            loaded
+        };
+        if !loaded {
+            return false;
+        }
+        let _ = self.repaint_scroll_frame();
+        true
+    }
+
+    /// Repaint the retained scroll frame from the current page resources.
+    fn repaint_scroll_frame(&self) -> Result<(), String> {
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else {
+            return Ok(());
+        };
+        let mut frame = {
+            let mut scene = scene.borrow_mut();
+            let images = amazing_paint::image::StyledImages {
+                images: &page.resources,
+                styles: &page.styles,
+            };
+            let view = amazing_paint::display_list_view::DisplayListView::new(
+                &page.root,
+                self.width,
+                self.height,
+                &page.text,
+                &images,
+                &amazing_paint::controls::NoControls,
+            );
+            scene.update(&view)?;
+            scene
+                .compositor_mut()
+                .build_cached_frame(self.width, self.height)
+                .map_err(|error| error.to_string())?
+        };
+        {
+            let mut scene = scene.borrow_mut();
+            amazing_compositor::add_paint_view_canvas_background(scene.mode(), &mut frame);
+            frame.resources.uploads = scene.compositor_mut().resource_snapshot().uploads;
+            frame.damage.push(amazing_compositor::Rect::new(
+                0.,
+                0.,
+                self.width as f32,
+                self.height as f32,
+            ));
+        }
+        let presented = self
+            .scroll_presenter
+            .borrow_mut()
+            .present(&frame)
+            .map_err(|error| error.to_string())?;
+        *self.scroll_frame.borrow_mut() = Some(presented);
+        Ok(())
     }
 
     pub fn scroll_element(&self) -> Option<gpui::AnyElement> {
@@ -1357,6 +1495,23 @@ fn resolve_resource_address(document_url: &str, reference: &str) -> Option<Strin
     Some(path.to_string_lossy().into_owned())
 }
 
+fn image_rect(layout: &amazing_layout::LayoutBox, node: amazing_dom::NodeIdx) -> Option<amazing_layout::Rect> {
+    for line in &layout.lines {
+        if let Some(fragment) = line.replaced.iter().find(|fragment| fragment.node == node) {
+            return Some(amazing_layout::Rect {
+                x: fragment.x, y: fragment.y, w: fragment.width, h: fragment.height,
+            });
+        }
+    }
+    if layout.node == Some(node) { return Some(layout.content_box); }
+    let children = match &layout.flow {
+        amazing_layout::Flow::Blocks(children) | amazing_layout::Flow::Flex(children)
+        | amazing_layout::Flow::Grid(children) => children.as_slice(),
+        _ => &[],
+    };
+    children.iter().chain(&layout.positioned).find_map(|child| image_rect(child, node))
+}
+
 fn load_page_resources(
     dom: &amazing_dom::Dom,
     css: &str,
@@ -1468,22 +1623,6 @@ fn load_page_resources(
         &mut resources,
     );
     if !resources.deferred_images.is_empty() {
-        fn image_rect(layout: &amazing_layout::LayoutBox, node: amazing_dom::NodeIdx) -> Option<amazing_layout::Rect> {
-            for line in &layout.lines {
-                if let Some(fragment) = line.replaced.iter().find(|fragment| fragment.node == node) {
-                    return Some(amazing_layout::Rect {
-                        x: fragment.x, y: fragment.y, w: fragment.width, h: fragment.height,
-                    });
-                }
-            }
-            if layout.node == Some(node) { return Some(layout.content_box); }
-            let children = match &layout.flow {
-                amazing_layout::Flow::Blocks(children) | amazing_layout::Flow::Flex(children)
-                | amazing_layout::Flow::Grid(children) => children.as_slice(),
-                _ => &[],
-            };
-            children.iter().chain(&layout.positioned).find_map(|child| image_rect(child, node))
-        }
         let preliminary = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
             dom, css, VIEWPORT_WIDTH as f32, Some(VIEWPORT_HEIGHT as f32),
             &amazing_text::FallbackTextSystem::new(), &resources,
@@ -2708,6 +2847,76 @@ mod tests {
             node: root, key: amazing_compositor::ScrollKey::ArrowDown,
         }, false).unwrap());
         assert!(viewport.root_scroll_offset().1 > 0.);
+        assert!(viewport.scroll_element().is_some());
+    }
+
+    #[test]
+    fn scrolled_deferred_lazy_image_is_fetched_and_repainted() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let mut stream = (0..100)
+                .find_map(|_| match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        None
+                    }
+                    Err(error) => panic!("lazy fixture accept: {error}"),
+                })
+                .expect("lazy image request timed out");
+            stream.set_nonblocking(false).unwrap();
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            assert!(String::from_utf8_lossy(&request[..count])
+                .starts_with("GET /assets/pixel.ppm HTTP/1.1\r\n"));
+            let body = b"P6\n2 1\n255\n\xff\x00\x00\x00\xff\x00";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: image/x-portable-pixmap\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let document_url = format!("http://127.0.0.1:{port}/pages/index.html");
+        let options = FetchOptions::default();
+        let dom = amazing_html::parse(
+            "<div style='display:block;height:1200px'></div><img src=../assets/pixel.ppm loading=lazy width=8>",
+        );
+        let css = "body{margin:0}";
+        let resources = load_page_resources(&dom, css, &document_url, &options, None);
+        assert_eq!(resources.deferred_images.len(), 1, "below-fold image starts deferred");
+        assert!(resources.images.is_empty());
+        let node = resources.deferred_images[0].node;
+        let mut viewport =
+            EngineViewport::from_dom_with_resources(&dom, css, &resources, Some(&document_url));
+        let root = viewport.root_scroll_id().expect("root scroll node");
+        assert!(viewport
+            .scroll_input(
+                amazing_compositor::ScrollInput::Keyboard {
+                    node: root,
+                    key: amazing_compositor::ScrollKey::End,
+                },
+                false,
+            )
+            .unwrap());
+        assert!(
+            viewport.load_deferred_lazy_images(None, &options),
+            "scrolled lazy image is fetched"
+        );
+        server.join().unwrap();
+        let page = viewport.page.as_ref().expect("retained page");
+        assert!(page.resources.deferred_images.is_empty());
+        let image = page
+            .resources
+            .images
+            .iter()
+            .find(|entry| entry.node == node)
+            .expect("loaded image");
+        assert_eq!(image.image.pixels[0..4], [255, 0, 0, 255]);
         assert!(viewport.scroll_element().is_some());
     }
 }

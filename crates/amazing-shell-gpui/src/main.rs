@@ -521,10 +521,20 @@ impl BrowserShell {
             .and_then(Option::as_ref)
             .is_some_and(PageRuntime::has_blocking_scroll_listener);
         let Some(viewport) = self.tabs[self.active].viewport.as_ref() else { return false };
-        match viewport.scroll_input(input, blocking) {
-            Ok(true) => { cx.notify(); true },
-            Ok(false) | Err(_) => false,
+        if !matches!(viewport.scroll_input(input, blocking), Ok(true)) {
+            return false;
         }
+        self.load_scrolled_lazy_images();
+        cx.notify();
+        true
+    }
+
+    /// After the compositor moves the document, lazy images whose retained
+    /// layout box entered the viewport are fetched and repainted.
+    fn load_scrolled_lazy_images(&mut self) {
+        let Some(runtime) = self.page_runtimes.get(self.active).and_then(Option::as_ref) else { return };
+        let Some(viewport) = self.tabs[self.active].viewport.as_mut() else { return };
+        runtime.load_deferred_lazy_images(viewport);
     }
 
     fn on_shell_key_down(
