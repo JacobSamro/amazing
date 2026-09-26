@@ -30,6 +30,8 @@ mod factories;
 mod collections;
 mod traversal_bindings;
 mod event_bindings;
+mod navigation_event_bindings;
+mod error_event_bindings;
 mod message_event_bindings;
 pub use message_event_bindings::{dispatch_message_event, MessageEventPayload};
 mod focus_bindings;
@@ -66,3 +68,5 @@ pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for
 
 #[cfg(test)]
 mod tests;
+
+mod input_activation_bindings;

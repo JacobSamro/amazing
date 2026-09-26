@@ -2559,3 +2559,12 @@ fn document_default_view_uses_host_association_and_enforces_document_brand() {
 
 #[path = "tests_event_modifiers.rs"]
 mod tests_event_modifiers;
+
+#[path = "tests_navigation_events.rs"]
+mod tests_navigation_events;
+
+#[path = "tests_event_types.rs"]
+mod tests_event_types;
+
+#[path = "tests_error_events.rs"]
+mod error_events;
