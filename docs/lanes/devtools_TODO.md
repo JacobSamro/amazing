@@ -168,7 +168,7 @@ the seam methods are advisory and default to success. New protocol helpers
 
 ## CDP-6 — Overlay domain — done
 
-Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 80/80
+Source `783a1464`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 80/80
 nextest (0 skipped) and 1 doctest; workspace 2749 passed, 0 failed, 10 skipped,
 doctests 4 passed.
 
