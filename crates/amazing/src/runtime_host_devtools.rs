@@ -971,7 +971,7 @@ fn collect_module_scripts(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, ou
             }
             let src = attrs.iter().find(|(name, _)| name == "src").map(|(_, value)| value.clone());
             if src.is_some() || !source.trim().is_empty() {
-                out.push(crate::cmd::js::PageScript { src, body: source });
+                out.push(crate::cmd::js::PageScript { node, src, body: source });
             }
         }
     }
