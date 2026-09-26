@@ -59,6 +59,79 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     Ok(())
 }
 
+/// Real-page headless path: run every script, handler and the bounded event
+/// loop, but collect each failure instead of aborting at the first one. The
+/// page still paints, and the caller reports the errors. The reftest path keeps
+/// the strict `prepare_page_scripts`, where a thrown script is never a pass.
+pub(crate) fn execute_page_scripts_lenient(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    page: &str,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    let (scripts, handlers) = {
+        let host_ref = host.borrow();
+        let mut scripts = Vec::new();
+        collect_script_text(&host_ref.dom, amazing_dom::NodeIdx(0), &mut scripts);
+        let mut handlers = Vec::new();
+        collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
+        (scripts, handlers)
+    };
+    if scripts.is_empty() && handlers.is_empty() {
+        return errors;
+    }
+    let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
+        host.clone(), crate::js_scheduler::JS_CAPACITY) {
+        Ok(scheduler) => scheduler,
+        Err(error) => { errors.push(format!("scheduler init: {}", error.describe())); return errors; }
+    };
+    scheduler.set_location_url(page);
+    for (node, event, body) in handlers {
+        if let Err(error) = scheduler.install_inline_handler(node, &event, &body) {
+            errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
+        }
+    }
+    for script in scripts {
+        let source = match script.src {
+            Some(src) => {
+                let script_url = resolve_script_url(page, &src);
+                let fetched = amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                    .map_err(|error| format!("{error}"))
+                    .and_then(|response| response.text()
+                        .ok_or_else(|| format!("external script {src} was not text")));
+                match fetched {
+                    Ok(source) => source,
+                    Err(error) => { errors.push(format!("external script {src}: {error}")); continue; }
+                }
+            }
+            None => script.body,
+        };
+        if let Err(error) = scheduler.run_script(&source) {
+            errors.push(format!("page script: {}", error.describe()));
+        }
+    }
+    if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
+        errors.push(format!("DOMContentLoaded listener: {}", error.describe()));
+    }
+    if let Err(error) = scheduler.dispatch_dom_event(0, "load") {
+        errors.push(format!("load listener: {}", error.describe()));
+    }
+    let body = host.borrow_mut().query_selector("body");
+    if let Some(body) = body
+        && let Err(error) = scheduler.dispatch_dom_event(body, "load")
+    {
+        errors.push(format!("body load listener: {}", error.describe()));
+    }
+    // Keep the page's timers/rAF bounded and deterministic for headless runs.
+    for _ in 0..16 {
+        match scheduler.pump_at(std::time::Duration::from_millis(16), true) {
+            Ok(true) => {},
+            Ok(false) => break,
+            Err(error) => { errors.push(format!("page event loop: {}", error.describe())); break; }
+        }
+    }
+    errors
+}
+
 /// Starts the page's script and event-loop lifetime. WPT keeps this scheduler
 /// through first paint and its reftest checkpoint; ordinary render performs
 /// its existing 16 ms checkpoint in `execute_inline_scripts`.

@@ -102,6 +102,7 @@ fn main() -> ExitCode {
         Some("style") => cmd::render::cmd_style(&args[2..]),
         Some("layout") => cmd::render::cmd_layout(&args[2..]),
         Some("render") => cmd::render::cmd_render(&args[2..]),
+        Some("render-page") => cmd::real_pages::cmd_render_page(&args[2..]),
         Some("render-wpt") => cmd::wpt::cmd_render_wpt(&args[2..]),
         Some("audio-info") => cmd::render::cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd::render::cmd_play_audio(&args[2..]),
