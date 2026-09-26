@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Range iframe setup diagnostic (not upstream WPT)</title>
+<script src="/scaffold-harness.js"></script>
+<body>
+<script>
+test(function() {
+  const div = document.createElement('div');
+  div.textContent = 'abcdef';
+  const range = document.createRange();
+  range.setStart(div.firstChild, 1);
+  range.setEnd(div.firstChild, 4);
+  assert_equals(range.cloneContents().textContent, 'bcd');
+  assert_equals(range.extractContents().textContent, 'bcd');
+  assert_equals(div.textContent, 'aef');
+}, 'Range clone/extract operations run without iframe setup');
+const frame = document.createElement('iframe');
+document.body.appendChild(frame);
+test(function() {
+  assert_not_equals(frame.contentDocument, undefined);
+  assert_not_equals(frame.contentDocument, null);
+}, 'Inserted iframe has contentDocument');
+test(function() {
+  assert_not_equals(frame.contentWindow, undefined);
+  assert_not_equals(frame.contentWindow, null);
+  assert_equals(typeof frame.contentWindow.Range, 'function');
+}, 'Inserted iframe has a Window realm with Range');
+const loaded = async_test('Navigated iframe fires load and executes Range setup script');
+frame.onload = loaded.step_func_done(function() {
+  assert_equals(typeof frame.contentWindow.setupRangeTests, 'function');
+});
+frame.src = '/dom/ranges/Range-test-iframe.html';
+</script>

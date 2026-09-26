@@ -60,6 +60,20 @@ Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
 - Linux: `amazing-process` 56/56 (3 skipped); `amazing` 191/191 (3 skipped,
   including 3 messaging driver tests). WPT `webmessaging/` gate in progress.
 
+### 11d. WPT conformance hardening (`4aa97770`, merged `aef9d5be`)
+
+- Per-channel BroadcastChannel router clients (two channels on one name in one
+  document receive each other); dead realm name→slot map removed.
+- `Window.postMessage` options form, targetOrigin URL validation, null-transfer
+  and missing-message TypeErrors.
+- `MessagePort` global `instanceof`, implicit start on `onmessage`, shared start
+  path; `onmessage`/`onmessageerror` default `null`.
+- WPT `webmessaging/`: files 27→33 pass, subtests 51→58 pass, zero
+  regressions. Linux workspace 2530/2530 + 2/2 doctests.
+- Evidence `docs/lanes/ipc-11-evidence.md`; raw
+  `docs/lanes/ipc-11d-webmessaging/`. Remaining gaps are cross-lane
+  (`questions.md`).
+
 ### 11c. Follow-ups
 
 - Cross-process JS endpoint: the `ipc-demo-child` renderer is a navigation

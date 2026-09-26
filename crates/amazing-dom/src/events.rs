@@ -45,10 +45,20 @@ pub enum DispatchOrigin {
     UserAgent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventClass { Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition }
+pub enum EventClass { Event, Custom, Ui, Focus, Mouse, Wheel, Keyboard, Composition, Message }
 
 #[derive(Clone, Debug)]
 pub enum EventExtra { Boolean(bool), Number(f64), String(Vec<u16>), Root(Option<CallbackId>) }
+
+/// Message payload roots belong to the embedding, not the native DOM arena.
+#[derive(Clone, Debug, Default)]
+pub struct MessageEventData {
+    pub data: Option<CallbackId>,
+    pub origin: Vec<u16>,
+    pub last_event_id: Vec<u16>,
+    pub source: Option<CallbackId>,
+    pub ports: Option<CallbackId>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Event {
@@ -56,6 +66,7 @@ pub struct Event {
     initialized: bool,
     class: EventClass,
     extras: std::collections::HashMap<&'static str, EventExtra>,
+    message: Option<MessageEventData>,
     custom: bool,
     custom_detail: Option<CallbackId>,
     init: EventInit,
@@ -83,6 +94,7 @@ impl Event {
             initialized: true,
             class: EventClass::Event,
             extras: std::collections::HashMap::new(),
+            message: None,
             custom: false,
             custom_detail: None,
             init,
@@ -118,6 +130,24 @@ impl Event {
         event.class = EventClass::Custom;
         event.custom_detail = detail;
         event
+    }
+    pub fn new_message(event_type: impl Into<String>, init: EventInit,
+        timestamp: Duration, data: MessageEventData) -> Self {
+        let mut event = Self::new(event_type, init, timestamp);
+        event.class = EventClass::Message;
+        event.message = Some(data);
+        event
+    }
+    pub fn message_data(&self) -> Option<&MessageEventData> { self.message.as_ref() }
+    /// Returns old roots for the embedding to release; no change while dispatching.
+    pub fn init_message_event(&mut self, event_type: impl Into<String>, bubbles: bool,
+        cancelable: bool, data: MessageEventData) -> Option<MessageEventData> {
+        if self.dispatching || self.message.is_none() { return None; }
+        self.init_event(event_type, bubbles, cancelable);
+        self.message.replace(data)
+    }
+    pub fn set_message_ports_root(&mut self, root: CallbackId) {
+        if let Some(message) = &mut self.message { message.ports = Some(root); }
     }
     pub fn is_custom(&self) -> bool { self.custom }
     pub fn custom_detail(&self) -> Option<CallbackId> { self.custom_detail }
