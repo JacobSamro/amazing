@@ -93,10 +93,11 @@ def main() -> None:
     lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
                  + rust_string(" ".join(simple_systems)) + ";")
 
-    collation_codes = set()
-    for locale in LOCALES:
-        types = cldr(f"cldr-localenames-full/main/{locale}/localeDisplayNames.json")["main"][locale]["localeDisplayNames"]["types"]
-        collation_codes |= set(types.get("collation", {}))
+    # AvailableCollations is the fixed bcp47 collation type list, not the
+    # localized CLDR display names (which are words, sometimes over 8 chars).
+    collation_codes = {"big5han", "compat", "dict", "direct", "ducet", "emoji",
+                       "eor", "gb2312", "phonebk", "phonetic", "pinyin",
+                       "reformed", "searchjl", "stroke", "trad", "unihan", "zhuyin"}
     lines.append("const INTL_SUPPORTED_COLLATIONS: &str = "
                  + rust_string(" ".join(sorted(collation_codes))) + ";")
     lines.append("const INTL_ALL_CURRENCIES: &str = "

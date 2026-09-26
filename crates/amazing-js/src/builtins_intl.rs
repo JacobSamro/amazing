@@ -414,12 +414,20 @@ fn intl_get_canonical_locales(i: &mut Interpreter, _: JsValue, args: Vec<JsValue
 
 fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    if key == "timeZone" {
+        // AvailableTimeZones is canonicalised and de-duplicated: keep only
+        // fixed points of the resolver so every listed name round-trips.
+        let mut ids: Vec<String> = tz_supported_ids().into_iter()
+            .filter_map(tz_canonicalize).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        return intl_array(i, ids.into_iter().map(JsValue::str));
+    }
     let values: Vec<&str> = match key.as_str() {
         "calendar" => INTL_KNOWN_CALENDARS.to_vec(),
         "collation" => INTL_SUPPORTED_COLLATIONS.split(' ').filter(|value| !value.is_empty()).collect(),
         "currency" => INTL_ALL_CURRENCIES.split(' ').filter(|value| !value.is_empty()).collect(),
         "numberingSystem" => INTL_SUPPORTED_NUMBERING_SYSTEMS.split(' ').collect(),
-        "timeZone" => tz_supported_ids(),
         "unit" => INTL_SIMPLE_UNITS.to_vec(),
         _ => return Err(Throw::range_error("unsupported Intl value key")),
     };
