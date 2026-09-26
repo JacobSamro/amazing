@@ -814,3 +814,146 @@ HTML-25's original report (255/596 at the time) already moved this file to
 not the `contentWindow`-shaped ones HTML-25 flagged, so adding
 `contentWindow` did not move them. Left for a dom-bindings/next-html
 triage pass with the exact per-subtest diff, not chased further here.
+
+## HTML-27 — iframe finishing: per-realm interfaces, srcdoc, sandbox, name/target nav, and a WPT-harness wiring gap
+
+- **Per-realm WebIDL prototypes**: `BindingState.interfaces` (shared driver
+  file `runtime_binding_host.rs`) changed from `Vec<(Interface, JsValue,
+  JsValue)>` to `HashMap<RealmHandle, Vec<(Interface, JsValue, JsValue)>>`,
+  keyed by `binding_current_realm()` at the single write site
+  (`install_interface`) and both read sites (`prototype()`/`constructor()`).
+  Calling `install_interfaces` again inside a child realm (now done for
+  every navigated iframe, not just the JS intrinsics) gives that realm its
+  own `Document`/`Element`/... prototypes and constructors, so
+  `frame.contentWindow.Document !== window.Document` holds the same way
+  `frame.contentWindow.Array !== window.Array` already did. This closes the
+  "scope not attempted" gap HTML-25 part 2 left open.
+- **Split `setup_iframe_window` into an eager `ensure_realm` and a deferred
+  script-running remainder.** Originally everything (realm creation, full
+  interface install, wrapping `document`, running scripts) lived in
+  `setup_iframe_window`, called only from `dispatch_pending_iframe_loads`'s
+  once-per-tick drain. That broke `contentDocument` identity: a script that
+  reads `iframe.contentDocument` **before** that tick (e.g. inline, right
+  after the iframe's own navigation) got a wrapper made in the caller's
+  realm (no child realm existed yet); the same script reading it **after**
+  the tick got a different wrapper from the child realm's own host-object
+  cache. WPT's `iframe-nosrc.html` ("iframe.contentDocument should not be
+  changed") caught this exactly. Fix: `navigate_iframes` now calls
+  `ensure_realm` synchronously at commit time — realm/proxy creation,
+  origin, the full per-realm interface install, and wrapping+binding
+  `document` all happen there — and `setup_iframe_window` only runs the
+  document's classic scripts, later, in the realm `ensure_realm` already
+  built. `navigate_iframes` and `RuntimeBindings::set_document_url` gained a
+  `js: &mut Interpreter` parameter to make this possible (both call sites —
+  `js_scheduler::set_location_url` and
+  `RuntimeBindingHost::invoke_operation_with_html_hooks`/`navigate_form` —
+  already had one in scope).
+- **`load` event suppressed for an iframe with neither `src` nor `srcdoc`**:
+  per spec, only `src`/`srcdoc` **presence** (even empty) queues a load
+  task; a bare `<iframe></iframe>` still gets its `about:blank`
+  `contentDocument`/`contentWindow` (so scripts can use them) but no `load`
+  fires for it. `FrameRuntime::pending_loads` gained a third `fire_load_events:
+  bool` field for this. Also caught by `iframe-nosrc.html`.
+- **`srcdoc` attribute**: takes priority over `src`; its content is parsed
+  directly (no fetch), the navigable's URL becomes `about:srcdoc`, and its
+  origin is inherited from the **parent** document (not opaque) unless
+  sandboxed without `allow-same-origin`. `iframe_content_document`'s
+  same-origin visibility check now special-cases `about:srcdoc` the same as
+  `about:blank`.
+- **`sandbox` attribute**: parsed into a local `SandboxFlags{sandboxed,
+  allow_scripts, allow_same_origin}` (space-separated, ASCII-case-insensitive
+  tokens; only these two tokens are given real behavior — `allow-forms`,
+  `allow-popups`, `allow-top-navigation` etc. are accepted but currently
+  no-ops, since the features they'd gate don't exist yet in this driver).
+  Without `allow-same-origin`, the frame gets a fresh, monotonically
+  counted opaque-origin string every navigation
+  (`FrameRuntime::opaque_origin_counter`), making it cross-origin from the
+  parent (`contentDocument` null, arbitrary `contentWindow.*` property
+  reads throw per JSRT-9's default same-origin WindowProxy check — verified
+  in `iframe_sandbox_without_allow_same_origin_is_cross_origin_from_parent`).
+  Without `allow-scripts`, `setup_iframe_window` skips collecting/running
+  scripts entirely (real scripting-disabled semantics, not just "scripts
+  silently do nothing"). The numeric encoding passed through as
+  `NavigableContext::sandbox_flags` (bits 0-2) is this driver's own; net
+  lane's `amazing-fetch` only validates the field fits 16 bits and does not
+  itself interpret these bits.
+- **name/target navigation**: `RuntimeBindingHost::navigate_form` now checks
+  `request.target` against connected iframes' `name` content attribute
+  (read directly via DOM, not a new IDL property) before falling back to
+  top-level navigation; a match sets that iframe's `src` (reusing the
+  existing GET-only child-navigation fetch — POST bodies are **not** carried
+  into a targeted iframe navigation, a real limitation, not silently
+  dropped: documented here). The special keywords (`_self`/empty, `_blank`,
+  `_parent`, `_top`) never match a frame name (anything starting with `_`
+  is excluded) and always fall through to top-level, even if a page
+  (invalidly) names a frame `_blank`.
+- **External classic script fetch in child realms**: `collect_classic_scripts`
+  now also collects `src=` scripts (previously inline-only);
+  `fetch_child_script` resolves/fetches against the **child's** URL through
+  the same `FrameResourceResolver` pinned-fixture mechanism (or a real
+  network fetch otherwise) used for document fetches. `type="module"`
+  remains unsupported for iframe documents, matching the top-level WPT
+  harness's own classic-only limitation (`wpt_harness.rs` rejects
+  module/async/defer already) — not attempted here.
+- **Found and fixed a real integration gap: the WPT test-running binary
+  never used any of this.** `crates/amazing/src/cmd/wpt_harness.rs` had its
+  own, much older `collect_iframes`/`service_iframes` pair that fetched a
+  child iframe's bytes via `Navigator::navigate_child` and then **discarded
+  the result**, only firing a synthetic `"load"` DOM event on the frame
+  element — never touching `RuntimeBindingHost`'s realm/WindowProxy/
+  `contentDocument`/`contentWindow` machinery at all. Every `iframe`-related
+  WPT measurement this lane has reported (HTML-25 parts 1/2, HTML-26) was
+  against a harness where `contentWindow`/`contentDocument` for a real WPT
+  test page were **always unpopulated by this path** — the corpus numbers
+  literally could not have moved from any of this work, and didn't
+  (confirmed: before/after `html/browsers/{windows,the-window-object,
+  browsing-the-web}` + `html/semantics/embedded-content/the-iframe-element`
+  were byte-for-byte identical at the file-classification level on the
+  first measurement pass, before this fix). Fixed by deleting
+  `collect_iframes`/`service_iframes` and calling
+  `scheduler.dispatch_pending_iframe_loads()` in both of `execute_page`'s
+  call sites instead — `navigate_iframes` already ran as a side effect of
+  `scheduler.set_location_url`/DOM-mutation hooks, so this just drains the
+  same queue every other consumer of this API already used. No resolver
+  wiring was needed: `wpt_harness.rs`'s main document already loads through
+  a real local `FixtureServer` HTTP origin, and `fetch_child_document`'s
+  no-resolver path is a real `amazing_net`/`NetworkService` fetch, so a
+  relative iframe `src` just resolves to another request the same
+  `FixtureServer` already answers.
+- **Measured** (Boat `pool-dom`, `html/browsers/{windows,the-window-object,
+  browsing-the-web}` + `html/semantics/embedded-content/the-iframe-element`,
+  618 selected test files, before = `dev` head `590e1a75` via `--ref`, after
+  = this ticket's diff, both with the `wpt_harness.rs` wiring fix applied
+  for the "after" measurement only — see script
+  `.agents/html/html27-iframes.py` / `.agents/html/html27-sweep.sh`):
+  file-level classification is **identical, 15 pass / ~169-173 fail (the
+  error/timeout/unsupported split among non-passing files is flaky —
+  several `history-traversal`/`scroll-to-fragid` tests are fragment-scroll
+  timing-sensitive and bounce between `unsupported`/`timeout`/`error` run to
+  run on this shared, low-disk sandbox; re-ran 3x to confirm no file's
+  pass/fail classification itself ever changed once the wiring fix and the
+  `ensure_realm` ordering fix both landed).** Net zero regressions, net zero
+  measurable gain on this specific corpus slice: it is dominated by
+  history/fragment-navigation/window-object tests outside iframe scope, and
+  `the-iframe-element` itself is stuck at 9/150 pass both before and after,
+  needing features past this ticket (module scripts, `window.open`, deeper
+  cross-document messaging) to move. The real deliverable is the wiring fix
+  itself: every *future* iframe-shaped WPT measurement by this or another
+  lane will now actually exercise the contentWindow/contentDocument code
+  path instead of silently no-op'ing.
+- New regression tests in `runtime_host_html.rs`:
+  `iframe_srcdoc_runs_scripts_same_origin_with_no_network_fetch`,
+  `iframe_sandbox_without_allow_same_origin_is_cross_origin_from_parent`,
+  `iframe_sandbox_allow_same_origin_without_allow_scripts_blocks_scripts`,
+  `iframe_sandbox_allow_scripts_and_allow_same_origin_runs_scripts`,
+  `form_target_navigates_named_iframe_instead_of_top_level`,
+  `form_target_blank_still_navigates_top_level`.
+
+Linux gate on this head: `amazing` crate nextest **253/253 passed, 5
+skipped**; full workspace `cargo nextest run --workspace --locked
+--no-fail-fast` **2,937/2,937 passed, 11 skipped** (one transient failure
+in `real_pages_corpus_renders_without_crashes` on a concurrent run under
+disk/CPU pressure from sibling `pool-dom` lanes, reproduced as a pass in
+isolation and on a clean re-run of the full workspace); workspace `cargo
+test --workspace --locked --doc` **31/31 crate doctest targets green, 0
+failed**.

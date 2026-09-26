@@ -3,7 +3,6 @@
 use amazing_js::Interpreter;
 use amazing_js::value::{FunctionBody, JsFunction, JsObject, JsValue, NativeFn, Obj, Throw};
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -553,65 +552,6 @@ fn fixture_file(root: &Path, fixture: &FixtureServer, url: &str) -> Result<PathB
     )
 }
 
-fn collect_iframes(
-    dom: &amazing_dom::Dom,
-    node: amazing_dom::NodeIdx,
-    frames: &mut Vec<(u32, String)>,
-) {
-    if dom.name(node) == Some("iframe")
-        && let Some(src) = dom
-            .attrs_of(node)
-            .unwrap_or(&[])
-            .iter()
-            .find(|(name, _)| name == "src")
-            .map(|(_, value)| value)
-    {
-        frames.push((node.0, src.clone()));
-    }
-    for child in dom.children(node) {
-        collect_iframes(dom, child, frames);
-    }
-}
-
-fn service_iframes(
-    host: &Rc<RefCell<crate::BrowserDomHost>>,
-    scheduler: &mut crate::js_scheduler::DriverScheduler,
-    navigator: &mut crate::navigator::Navigator,
-    page_url: &str,
-    loaded: &mut BTreeMap<u32, (u64, String)>,
-) -> Result<(), String> {
-    let mut iframes = Vec::new();
-    collect_iframes(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut iframes);
-    for (node, src) in iframes {
-        if src.is_empty()
-            || src == "about:blank"
-            || loaded.get(&node).is_some_and(|(_, old)| old == &src)
-        {
-            continue;
-        }
-        let child_url = resolve_page_url(page_url, &src)?;
-        let child = match loaded.get(&node) {
-            Some((id, _)) => *id,
-            None => navigator.create_child(1)?,
-        };
-        let use_process = crate::runtime_host_ipc::enabled();
-        navigator.navigate_child(child, &child_url, |url, process_body| {
-            if use_process {
-                Ok(process_body.to_vec())
-            } else {
-                amazing_net::fetch(url, &amazing_net::FetchOptions::default())
-                    .map(|response| response.body)
-                    .map_err(|error| format!("iframe navigation: {error}"))
-            }
-        })?;
-        loaded.insert(node, (child, src));
-        scheduler
-            .dispatch_dom_event(node, "load")
-            .map_err(|error| error.describe())?;
-    }
-    Ok(())
-}
-
 fn execute(options: &Options) -> Result<(), String> {
     COMPLETE.set(false);
     let root = options.root.canonicalize().map_err(|e| e.to_string())?;
@@ -774,8 +714,12 @@ fn execute_page(
         return Err("no harness script loaded".into());
     }
     refresh_images(&mut scheduler)?;
-    let mut loaded_iframes = BTreeMap::new();
-    service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
+    // Iframes present in the initial DOM were already queued by
+    // `set_location_url` above (`RuntimeBindings::navigate_iframes`, run from
+    // `set_document_url`); this drains that queue, giving each one its own
+    // realm/WindowProxy and firing `DOMContentLoaded`/`load` on the child
+    // document and `load` on the frame element (JSRT-9 + HTML-25..27).
+    scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
     for event in ["DOMContentLoaded", "load"] {
         scheduler
             .dispatch_dom_event(0, event)
@@ -792,7 +736,10 @@ fn execute_page(
     // turn gets one rendering opportunity, including a stable rAF timestamp.
     let mut frame = 0_u64;
     while !COMPLETE.get() {
-        service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
+        // Drains iframes queued since the last turn: script-driven
+        // `src`/DOM mutations already pushed them via
+        // `invoke_operation_with_html_hooks`'s `navigate_iframes` call.
+        scheduler.dispatch_pending_iframe_loads().map_err(|e| e.describe())?;
         if let Some((next, replace, state)) = scheduler.js.take_history_update() {
             let next = resolve_page_url(navigator.current_url().unwrap_or(&url), &next)?;
             let serialized = scheduler

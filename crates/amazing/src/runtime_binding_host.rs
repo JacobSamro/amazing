@@ -24,7 +24,8 @@ use amazing_js::value::Exotic;
 use amazing_js::{
     DomHost,
     env::{EnvHandle, EnvKind},
-    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
+    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, RealmHandle,
+        LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
         FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue, Throw,
     },
@@ -89,7 +90,10 @@ struct BindingState {
     host: Rc<RefCell<BrowserDomHost>>,
     arena: u64,
     functions: Vec<NativeEntry>,
-    interfaces: Vec<(Interface, JsValue, JsValue)>,
+    /// Per-realm: a child iframe realm installs its own DOM/WebIDL
+    /// prototypes and constructors (HTML-27), so `frame.contentWindow.Array
+    /// !== window.Array` extends to `Document`/`Element`/etc. too.
+    interfaces: HashMap<RealmHandle, Vec<(Interface, JsValue, JsValue)>>,
     roots: Vec<Option<JsValue>>,
     captured_resolvers: Option<(JsValue, JsValue)>,
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
@@ -180,9 +184,9 @@ impl RuntimeBindings {
         adapter.create_inert_document(bytes, content_type, url, charset)
     }
 
-    pub(crate) fn set_document_url(&self, url: &str) {
+    pub(crate) fn set_document_url(&self, js: &mut Interpreter, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
-        self.navigate_iframes();
+        self.navigate_iframes(js);
     }
 
     pub(crate) fn set_document_metadata(&self, character_set: &str, content_type: &str, referrer: &str) {
@@ -412,6 +416,7 @@ impl RuntimeBindingHost<'_> {
         self.state
             .borrow()
             .interfaces
+            .get(&self.js.binding_current_realm())?
             .iter()
             .find(|(kind, _, _)| *kind == interface)
             .map(|(_, prototype, _)| prototype.clone())
@@ -421,6 +426,7 @@ impl RuntimeBindingHost<'_> {
         self.state
             .borrow()
             .interfaces
+            .get(&self.js.binding_current_realm())?
             .iter()
             .find(|(kind, _, _)| *kind == interface)
             .map(|(_, _, constructor)| constructor.clone())
@@ -552,55 +558,17 @@ mod image_loader_tests {
 
 /// Install once before the first page script. The existing legacy host remains
 /// available for browser features that DOM-7 does not yet define.
-pub(crate) fn install(
-    js: &mut Interpreter,
-    host: Rc<RefCell<BrowserDomHost>>,
-) -> Result<RuntimeBindings, Throw> {
-    let arena = Rc::as_ptr(&host) as u64;
-    let window_event_target_slot = {
-        let mut host = host.borrow_mut();
-        let slot = host.dom.create_event_target();
-        host.dom.set_window_event_target(slot).expect("new Window event target slot");
-        slot
-    };
-    let state = Rc::new(RefCell::new(BindingState {
-        image_states: HashMap::new(),
-        image_decodes: Vec::new(),
-        canvas_text_system: None,
-        canvas_dirty: HashSet::new(),
-        canvas_style_values: HashMap::new(),
-        canvas_slots: HashMap::new(),
-        canvas_objects: Vec::new(),
-        host,
-        arena,
-        functions: Vec::new(),
-        interfaces: Vec::new(),
-        roots: Vec::new(),
-        captured_resolvers: None,
-        promise_resolvers: HashMap::new(),
-        legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
-        legacy_elements: HashMap::new(),
-        constructed_documents: HashSet::new(),
-        abort_timeouts: Vec::new(),
-        document_url: None,
-        document_character_set: None,
-        document_content_type: None,
-        document_referrer: None,
-        web_objects: Vec::new(),
-        web_object_handles: HashMap::new(),
-        font_sets: HashMap::new(),
-        window_event_target_slot,
-        storage: None,
-        storage_classes: HashMap::new(),
-        storage_inbox: VecDeque::new(),
-        frames: html::FrameRuntime::default(),
-        pending_form_selection_events: Vec::new(),
-        messaging: None,
-        net: NetRuntime::new(),
-    }));
-    let for_dispatch = state.clone();
-    let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
-        let entry = for_dispatch
+/// The native-call dispatcher only closes over the shared `BindingState`
+/// (looked up by index into `functions`, which is arena-wide across every
+/// realm), never over a specific realm's JS objects, so it is installed
+/// fresh on each realm's own `Interpreter` — the top realm in [`install`]
+/// and every child realm a browsing context creates (see
+/// `runtime_host_html::setup_iframe_window`). Without this, calling any
+/// native binding from a child realm throws "host function dispatcher is
+/// not installed", since `host_native_dispatch` is itself per-realm state.
+pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> Rc<HostNativeDispatch> {
+    Rc::new(move |js, id, this, args, _new_target| {
+        let entry = state
             .borrow()
             .functions
             .get(id.0 as usize)
@@ -608,7 +576,7 @@ pub(crate) fn install(
             .ok_or_else(|| Throw::type_error("Unknown native binding"))?;
         let mut adapter = RuntimeBindingHost {
             js,
-            state: for_dispatch.clone(),
+            state: state.clone(),
         };
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
@@ -632,8 +600,56 @@ pub(crate) fn install(
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
-    });
-    js.set_host_native_dispatcher(dispatch);
+    })
+}
+
+pub(crate) fn install(
+    js: &mut Interpreter,
+    host: Rc<RefCell<BrowserDomHost>>,
+) -> Result<RuntimeBindings, Throw> {
+    let arena = Rc::as_ptr(&host) as u64;
+    let window_event_target_slot = {
+        let mut host = host.borrow_mut();
+        let slot = host.dom.create_event_target();
+        host.dom.set_window_event_target(slot).expect("new Window event target slot");
+        slot
+    };
+    let state = Rc::new(RefCell::new(BindingState {
+        image_states: HashMap::new(),
+        image_decodes: Vec::new(),
+        canvas_text_system: None,
+        canvas_dirty: HashSet::new(),
+        canvas_style_values: HashMap::new(),
+        canvas_slots: HashMap::new(),
+        canvas_objects: Vec::new(),
+        host,
+        arena,
+        functions: Vec::new(),
+        interfaces: HashMap::new(),
+        roots: Vec::new(),
+        captured_resolvers: None,
+        promise_resolvers: HashMap::new(),
+        legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
+        legacy_elements: HashMap::new(),
+        constructed_documents: HashSet::new(),
+        abort_timeouts: Vec::new(),
+        document_url: None,
+        document_character_set: None,
+        document_content_type: None,
+        document_referrer: None,
+        web_objects: Vec::new(),
+        web_object_handles: HashMap::new(),
+        font_sets: HashMap::new(),
+        window_event_target_slot,
+        storage: None,
+        storage_classes: HashMap::new(),
+        storage_inbox: VecDeque::new(),
+        frames: html::FrameRuntime::default(),
+        pending_form_selection_events: Vec::new(),
+        messaging: None,
+        net: NetRuntime::new(),
+    }));
+    js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
         js,
         state: state.clone(),
@@ -1140,7 +1156,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 }
             }
         }
-        self.state.borrow_mut().interfaces.push((
+        let realm = self.js.binding_current_realm();
+        self.state.borrow_mut().interfaces.entry(realm).or_default().push((
             definition.interface,
             prototype,
             constructor.clone(),
