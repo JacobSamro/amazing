@@ -1,0 +1,373 @@
+{
+  "base": "current-without-fix",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "files": 32,
+  "totals": {
+    "pass": 19,
+    "fail": 90,
+    "timeout": 441,
+    "notrun": 0,
+    "error": 0
+  },
+  "statuses": {
+    "pass": 2,
+    "fail": 1,
+    "timeout": 0,
+    "error": 29,
+    "unsupported": 0
+  },
+  "per_file": [
+    {
+      "file": "IndexedDB/clone-before-keypath-eval.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 15,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-advance.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 15,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-continuePrimaryKey.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 1,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-continue.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 28,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction-index.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 6,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction-objectstore.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 6,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor-direction.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 4,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor_delete_objectstore.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 5,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbcursor_update_objectstore.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 9,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex-multientry.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 2,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_count.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 4,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_getAllKeys.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 153,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_getAll.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 171,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_getKey.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 7,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_get.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 7,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_openCursor.any.js",
+      "status": "fail",
+      "counts": {
+        "pass": 0,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbindex_openKeyCursor.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 3,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbobjectstore_keyPath.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbtransaction-oncomplete.any.js",
+      "status": "pass",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbtransaction_abort.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 1,
+        "timeout": 1,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/idbversionchangeevent.any.js",
+      "status": "pass",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/keypath-exceptions.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 15,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/keypath-special-identifiers.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 15,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/keypath.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 20,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/keypath_invalid.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 23,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/transaction-deactivation-timing.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 10,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/transaction-lifetime-empty.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 1,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/transaction-lifetime.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/transaction-requestqueue.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/transaction-scheduling-ordering.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/upgrade-transaction-lifecycle-committed.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    },
+    {
+      "file": "IndexedDB/upgrade-transaction-lifecycle-user-aborted.any.js",
+      "status": "error",
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      }
+    }
+  ]
+}
