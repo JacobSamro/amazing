@@ -521,10 +521,20 @@ impl BrowserShell {
             .and_then(Option::as_ref)
             .is_some_and(PageRuntime::has_blocking_scroll_listener);
         let Some(viewport) = self.tabs[self.active].viewport.as_ref() else { return false };
-        match viewport.scroll_input(input, blocking) {
-            Ok(true) => { cx.notify(); true },
-            Ok(false) | Err(_) => false,
+        if !matches!(viewport.scroll_input(input, blocking), Ok(true)) {
+            return false;
         }
+        self.load_scrolled_lazy_images();
+        cx.notify();
+        true
+    }
+
+    /// After the compositor moves the document, lazy images whose retained
+    /// layout box entered the viewport are fetched and repainted.
+    fn load_scrolled_lazy_images(&mut self) {
+        let Some(runtime) = self.page_runtimes.get(self.active).and_then(Option::as_ref) else { return };
+        let Some(viewport) = self.tabs[self.active].viewport.as_mut() else { return };
+        runtime.load_deferred_lazy_images(viewport);
     }
 
     fn on_shell_key_down(
@@ -2530,6 +2540,21 @@ impl Render for BrowserShell {
 }
 
 fn main() {
+    if std::env::args().any(|argument| argument == "--type=utility") {
+        let child = amazing_process::bootstrap_child(
+            amazing_process::Role::Utility,
+            amazing_process::Capabilities(std::collections::BTreeMap::new()),
+            |connection, _, channel| {
+                amazing_process::utility::serve_utility(connection, channel);
+                Ok(())
+            },
+        );
+        let Ok(connection) = child else { std::process::exit(1); };
+        while !connection.is_closed() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        return;
+    }
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
     let start_with_video = std::env::args().any(|argument| argument == "--video");
     let start_with_secure_video = std::env::args().any(|argument| argument == "--secure-video");
