@@ -117,3 +117,21 @@ Landed `0196bdb0` (transport) and `9744fd00` (driver bindings):
 - MessageEvent conformance (`instanceof MessageEvent`, `source`/`ports`
   semantics) needs `EventClass::Message` in `amazing-dom`; IPC raises it as a
   cross-lane request if the lane-owned prototype proves insufficient for WPT.
+
+**Done (commit `41b0bdb4`).** `ipc-demo-child` now hosts a real
+`amazing_js::Interpreter` realm (`amazing_process::demo_realm`, one worker
+thread per realm, opt-in via `__js_realm`), with a new `DemoPage` IPC
+interface (20: `eval`/`deliver_window_message`/`deliver_port_message`/
+`take_window_outbox`/`take_port_outbox`). Proved end to end with two real
+spawned processes: page JS in each exchanges `postMessage` payloads both
+directions via structured-clone bytes, and a `MessagePort` created in one
+realm is transferred through `MessageRouter` to the other and stays live
+there (`crates/amazing-process/tests/demo_realm_two_process.rs`). Found and
+fixed a real bug along the way: `MessagingEndpoint::post_port`'s bundled
+`transfer` list resolved the target as the sender's own client
+(`owner_of(request.port)`) instead of the recipient's, making transfer-on-post
+a silent no-op; added `MessageRouter::peer_of()` and a regression test. No
+js-runtime gap found — every `amazing_js` API needed was already public.
+Linux workspace gate: 2901/2901 nextest (10 skipped) + doctests (amazing-html
+1, amazing-js 1, rest 0), all green. Evidence in
+`docs/lanes/ipc-11c-followup-evidence.md`.
