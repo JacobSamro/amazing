@@ -120,7 +120,12 @@ enum StorageObject {
     Area { session: bool },
     Factory { bucket: String },
     Request { result: JsValue, error: JsValue, ready: bool, source: JsValue, transaction: JsValue, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
-    Database { connection: u64, name: String, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
+    // `key` is cached at connection-open time (STORE-6 regression fix): deriving it by
+    // looking up the live `idb::Connection` on every member access throws once the
+    // connection is closed, even for read-only getters (name/objectStoreNames) and for
+    // the idempotent second `close()` call that the spec and WPT cleanup helpers rely
+    // on. See the regression test below for the hang this caused.
+    Database { connection: u64, name: String, key: BucketKey, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Transaction { connection: u64, id: u64, value: Option<IdbTransaction>, mode: Mode, scope: Vec<String>, queued: bool, active_for_requests: bool, handlers: HashMap<String, JsValue>, listeners: Vec<(String, JsValue)> },
     Store { transaction: usize, name: String, key_path_value: Option<JsValue> },
     Index { transaction: usize, store: String, name: String, key_path_value: Option<JsValue>, object_store_value: Option<JsValue> },
@@ -140,7 +145,7 @@ enum StorageJob {
     RequestSuccess { request: usize, result: JsValue },
     RequestError { request: usize, error: JsValue },
     DeleteSuccess { request: usize, old: u64 },
-    OpenUpgrade { request: usize, connection: u64, name: String, old: u64, new: u64 },
+    OpenUpgrade { request: usize, connection: u64, name: String, key: BucketKey, old: u64, new: u64 },
     OpenBlocked { request: usize, old: u64, new: Option<u64> },
     DatabaseVersionChange { connection: u64, old: u64, new: Option<u64> },
     DispatchListener { slot: usize, event: JsValue, callbacks: VecDeque<JsValue> },
@@ -928,17 +933,17 @@ impl RuntimeBindingHost<'_> {
                 let result=self.state.borrow().storage.as_ref().unwrap().idb.borrow_mut().open(key.clone(),name.clone(),version);
                 match result {
                     Ok(open)=>{
-                        if open.blocked {self.state.borrow_mut().storage.as_mut().unwrap().blocked_opens.push_back((key,name.clone(),request));}
+                        if open.blocked {self.state.borrow_mut().storage.as_mut().unwrap().blocked_opens.push_back((key.clone(),name.clone(),request));}
                         for event in open.events {
                             match event {
                                 idb::OpenEvent::UpgradeNeeded{old,new}=>{
-                                    self.storage_schedule(StorageJob::OpenUpgrade{request,connection:open.connection.unwrap(),name:name.clone(),old,new})?;
+                                    self.storage_schedule(StorageJob::OpenUpgrade{request,connection:open.connection.unwrap(),name:name.clone(),key:key.clone(),old,new})?;
                                 },
                                 idb::OpenEvent::Blocked{old,new}=>{
                                     self.storage_schedule(StorageJob::OpenBlocked{request,old,new})?;
                                 },
                                 idb::OpenEvent::Success{connection,..}=>{
-                                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name:name.clone(),handlers:HashMap::new(),listeners:Vec::new()})?;
+                                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name:name.clone(),key:key.clone(),handlers:HashMap::new(),listeners:Vec::new()})?;
                                     self.storage_schedule(StorageJob::RequestSuccess{request,result:database})?;
                                 },
                                 idb::OpenEvent::VersionChange{connection,old,new}=>self.storage_schedule(StorageJob::DatabaseVersionChange{connection,old,new})?,
@@ -982,7 +987,7 @@ impl RuntimeBindingHost<'_> {
             if let Some(request)=request {
                 for event in open.events {
                     if let idb::OpenEvent::UpgradeNeeded{old,new}=event {
-                        self.storage_schedule(StorageJob::OpenUpgrade{request,connection,name:name.clone(),old,new})?;
+                        self.storage_schedule(StorageJob::OpenUpgrade{request,connection,name:name.clone(),key:key.clone(),old,new})?;
                     }
                 }
             }
@@ -1066,10 +1071,13 @@ impl RuntimeBindingHost<'_> {
                         return Ok(JsValue::Undefined)}
                     let state=self.state.borrow();if let StorageObject::Database{handlers,..}=&state.storage.as_ref().unwrap().objects[slot]{return Ok(handlers.get(&member[2..]).cloned().unwrap_or(JsValue::Null))}
                 }
-                let (connection,name)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{StorageObject::Database{connection,name,..}=>(*connection,name.clone()),_=>unreachable!()}};
-                let key=self.state.borrow().storage.as_ref().unwrap().idb.borrow()
-                    .connection(connection).map(|connection|connection.key.clone())
-                    .ok_or_else(||Throw::type_error("IDBDatabase is closed"))?;
+                // `key` comes from the cached field on StorageObject::Database (set when the
+                // connection was opened), not from a live `idb::Connection` lookup: the latter
+                // throws once the connection is closed, which broke every member access
+                // (including the spec-idempotent second `close()` call) after a database's
+                // first close. See `indexeddb_database_members_survive_close` below.
+                let (connection,name,key)={let state=self.state.borrow();match &state.storage.as_ref().unwrap().objects[slot]{
+                    StorageObject::Database{connection,name,key,..}=>(*connection,name.clone(),key.clone()),_=>unreachable!()}};
                 match member {
                     "name"=>Ok(JsValue::str(name)),
                     "version"=>{let state=self.state.borrow();let version=state.storage.as_ref().unwrap().idb.borrow().connection(connection).map_or(0,|connection|connection.version);
@@ -1470,8 +1478,8 @@ impl RuntimeBindingHost<'_> {
                     if !callbacks.is_empty(){self.state.borrow_mut().storage.as_mut().unwrap().pending.push_front(
                         StorageJob::DispatchListener{slot,event,callbacks});}
                 },
-                StorageJob::OpenUpgrade{request,connection,name,old,new}=>{
-                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name,handlers:HashMap::new(),listeners:Vec::new()})?;
+                StorageJob::OpenUpgrade{request,connection,name,key,old,new}=>{
+                    let database=self.storage_allocate(SI::IDBDatabase,StorageObject::Database{connection,name,key,handlers:HashMap::new(),listeners:Vec::new()})?;
                     let (txid,tx)={let state=self.state.borrow();state.storage.as_ref().unwrap().idb.borrow_mut().begin(connection,Vec::<String>::new(),Mode::VersionChange,Durability::Default)}
                         .map_err(|error|self.storage_idb_error(error))?;
                     let transaction=self.storage_allocate(SI::IDBTransaction,StorageObject::Transaction{connection,id:txid,value:Some(tx),mode:Mode::VersionChange,scope:Vec::new(),queued:false,active_for_requests:true,handlers:HashMap::new(),listeners:Vec::new()})?;
@@ -1907,5 +1915,35 @@ mod storage_binding_tests {
         for step in 1..15 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
         assert_eq!(scheduler.run_script("rejected.join(',')").unwrap(),
             JsValue::str("TypeError,TypeError,TypeError,TypeError,TypeError"));
+    }
+
+    // Regression for the STORE-6 bucket-scoping bisection: c1e29741 replaced the cached
+    // BucketKey on StorageObject::Database with a lookup through the live idb::Connection,
+    // so *every* IDBDatabase member access (including the spec-idempotent second
+    // `close()` call, and read-only getters like `name`/`objectStoreNames` that must keep
+    // working after close) threw an uncaught "IDBDatabase is closed" TypeError once the
+    // connection was closed. WPT's IndexedDB support helpers routinely call `db.close()`
+    // defensively during per-subtest cleanup and read `db.name` for diagnostics; the
+    // uncaught throw from that cleanup step left the harness with no completion signal, so
+    // the first subtest in a file passed and every later subtest in that file timed out.
+    // This exercises the same sequence directly against the driver, with no harness
+    // involved, so it fails fast (as an Err/panic) instead of hanging.
+    #[test]
+    fn indexeddb_database_members_survive_close() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            var open=indexedDB.open('members-survive-close',1); \
+            open.onupgradeneeded=function(){open.result.createObjectStore('items')}; \
+            open.onsuccess=function(){ \
+                var db=open.result; \
+                db.close(); \
+                log.push(db.name); \
+                log.push(db.objectStoreNames.length+':'+db.objectStoreNames[0]); \
+                db.close(); \
+                log.push('ok'); \
+            };").unwrap();
+        for step in 1..20 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap(),
+            JsValue::str("members-survive-close|1:items|ok"));
     }
 }
