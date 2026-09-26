@@ -1532,3 +1532,33 @@ max(attr(data-test type(<length>)))`), was already implemented by CSS-15.
 Linux final gate (Boat sandbox, lane head `9bb410cd`): CSS crate **323/323**
 (adds `values::tests::calc_size_is_preserved_for_layout`), workspace nextest
 **2540/2540** (10 skipped), workspace doctests **2/2**, zero failures.
+
+## CSS-21 — CSS Color 5 relative color syntax
+
+Commit `1cf7076c`. `rgb()`/`rgba()`, `hsl()`/`hsla()`, `hwb()`, `lab()`,
+`lch()`, `oklab()`, and `oklch()` accept
+`fn(from <color> <channel> <channel> <channel> [ / <alpha> ])`. Channel tokens
+are the function's keywords (`r g b`, `h s l`, `h w b`, `l a b`, `l c h`),
+plain numbers or percentages on the channel's scale, `none`, and `calc()`
+arithmetic over keywords and numbers. `alpha` is the alpha keyword; an omitted
+alpha keeps the source color's alpha. Sources are any parseable CSS color.
+`color_advanced.rs` gains reverse source-channel conversions (HSL, HWB, Lab,
+OKLab and the LCH builders) plus a shared `hwb_rgb`; `ExprEval` evaluates
+channel `calc()` with keywords bound and handles the tokenizer's bare
+sign-ident spellings.
+
+A `currentcolor` source is retained by the computed-value seam:
+`ComputedStyle` stores the relative source and re-resolves it against the
+element's own `color`, so an explicitly inherited relative color re-binds on
+the child. `ComputedValue::Unparsed` preserves `rgb(from currentcolor ...)`
+until that seam; `color()` relative keeps the previous identity handling there.
+
+Boundaries (not claimed): `none` channels resolve to zero rather than
+propagating a missing component. General `color(from <color> <space> ...)`
+per-space channel references are CSS-22 below.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `fd96655b` containing
+`1cf7076c`, clean worktree): CSS crate **325/325**, workspace nextest
+**2736/2736** (10 skipped), workspace doctests **4/4**, zero failures.
+Tests: `color::tests::relative_color_syntax_resolves_channel_keywords` and
+`values::tests::relative_currentcolor_rebinds_on_inheritance`.
