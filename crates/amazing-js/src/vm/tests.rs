@@ -430,6 +430,41 @@ fn async_frame_resumes_from_pending_promise() {
 }
 
 #[test]
+fn compile_async_body_suspends_and_resumes_with_prebound_env() {
+    use crate::ast::StmtKind;
+    use crate::env::{EnvHandle, EnvKind};
+
+    let mut interpreter = Interpreter::new();
+    // The runtime bridge binds parameters and the surrounding script before
+    // compiling only the async body; set up the same global shape here.
+    interpreter
+        .run_script("var resolve; var pending = new Promise(function(r){ resolve = r; }); var log = '';")
+        .unwrap();
+
+    let program = parse_script(
+        "async function work() { log += 'a'; var value = await pending; log += 'b'; return value + 1; }",
+    )
+    .unwrap();
+    let body = match &program.body[0].kind {
+        StmtKind::Function(function) => function.body.clone(),
+        other => panic!("expected function declaration: {other:?}"),
+    };
+
+    let code = compile_async_body(&body, false).unwrap();
+    let env = EnvHandle::new(EnvKind::Function, Some(interpreter.global_env.clone()));
+    env.bind_this(JsValue::Undefined);
+
+    let promise = code.call_async_with_env(&mut interpreter, env).unwrap();
+    // The body suspended at the pending await: only the prefix ran.
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("a")));
+    assert!(matches!(promise, JsValue::Object(_)));
+
+    // Settling the pending promise resumes the suspended frame to completion.
+    interpreter.run_script("resolve(41)").unwrap();
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ab")));
+}
+
+#[test]
 fn async_await_rejection_runs_catch_and_finally() {
     let mut interpreter = Interpreter::new();
     let source = "
