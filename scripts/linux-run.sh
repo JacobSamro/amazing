@@ -68,10 +68,10 @@ if [ -z "$HOST" ]; then
     # k-test (16) the DOM, HTML, net and platform lanes; worker-3 (4) ipc.
     case "$LANE" in
       js-lang|js-vm|js-binary|js-date|integrator-primary|t262-shard-*) HOST=venus-001 ;;
-      js-runtime|js-stdlib|js-intl|wasm) HOST=venus-003 ;;
-      layout|layout-flexgrid|css|text|shell|replaced-content|compositor) HOST=worker-2 ;;
-      dom-bindings|html|net|storage|a11y|devtools|integrator-assist) HOST=k-test ;;
-      ipc) HOST=worker-3 ;;
+      js-runtime|js-stdlib|js-intl|wasm|layout|layout-flexgrid|css|text|shell|replaced-content|compositor) HOST=venus-003 ;;
+      # worker-2 / k-test / worker-3 are provisioned but the Mac's uplink to them
+      # runs at ~10 KB/s, so a lane tree takes an hour to sync; use them with
+      # --host only once a server-side seed path exists.
       *) HOST=venus-001 ;;
     esac
     [ "$boat_lane" = 1 ] && [ ! -e "$MAIN/.agents/.boat-off" ] && echo "linux-run: Boat template missing, using $HOST" >&2
