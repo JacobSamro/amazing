@@ -327,7 +327,11 @@ impl Compositor {
                 }
                 if self.tiles.get(&key).is_none_or(|t| t.dirty) {
                     dirty_existing_tile |= self.tiles.get(&key).is_some_and(|t| t.dirty);
-                    let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
+                    let mut surface = self
+                        .free_tile_surfaces
+                        .pop()
+                        .unwrap_or_else(|| Surface::new(TILE_SIZE as u32, TILE_SIZE as u32));
+                    surface.clear([0, 0, 0, 0]);
                     for &ci in &layer.chunks {
                         let c = &self.chunks[ci];
                         if c.bounds.intersects(rect) {
@@ -335,21 +339,32 @@ impl Compositor {
                             stats.raster_calls += 1
                         }
                     }
-                    self.tiles.insert(
+                    install_rasterized_tile(
+                        &mut self.tiles,
+                        &mut self.free_tile_surfaces,
+                        self.tile_budget,
+                        &mut self.tile_clock,
                         key,
-                        Tile {
-                            surface,
-                            dirty: false,
-                        },
+                        surface,
                     );
                     stats.rasterized_tiles += 1;
+                }
+                if self.tiles[&key].updated {
                     if let Some(r) = matrix.map_bounds(rect) {
                         add_damage(&mut tile_damage, PixelRect::from_rect(r, width, height))
                     }
+                    self.tiles.get_mut(&key).unwrap().updated = false;
                 }
+                self.tile_clock = self.tile_clock.wrapping_add(1);
+                self.tiles.get_mut(&key).unwrap().last_used = self.tile_clock;
             }
         }
-        self.tiles.retain(|key, _| visible_tiles.contains(key));
+        evict_tile_cache(
+            &mut self.tiles,
+            &mut self.free_tile_surfaces,
+            self.tile_budget,
+            &visible_tiles,
+        );
         let prior = self
             .previous_frame
             .as_ref()

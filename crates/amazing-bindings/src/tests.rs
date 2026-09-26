@@ -43,6 +43,7 @@ struct Host {
     constants: Vec<(&'static str, u16)>,
     interface_constants: Vec<(Interface, &'static str, u32)>,
     conversions: Vec<&'static str>,
+    property_reads: Vec<String>,
     arena_borrowed: bool,
     callbacks: Vec<Option<V>>,
     calls: Vec<u64>,
@@ -138,6 +139,7 @@ impl BindingHost for Host {
     }
     fn get_property(&mut self, object: &V, name: &str) -> Result<V, String> {
         assert!(!self.arena_borrowed);
+        self.property_reads.push(name.to_owned());
         match object {
             V::Dictionary(entries) => Ok(entries.iter().find(|(key, _)| *key == name)
                 .map_or(V::Undefined, |(_, value)| value.clone())),
@@ -675,6 +677,17 @@ fn create_document_null_name_omits_root_and_namespace_sets_mime_type() {
 }
 
 #[test]
+fn xhtml_document_create_element_uses_html_namespace_without_lowercasing() {
+    let mut host = Host::default();
+    let implementation = call(&mut host, O::DocumentImplementation, V::Node(NodeIdx(0)), &[]);
+    let document = node(call(&mut host, O::ImplementationCreateDocument, implementation,
+        &[str_value("http://www.w3.org/1999/xhtml"), str_value("html")]));
+    let element = node(call(&mut host, O::CreateElement, V::Node(document), &[str_value("HeAd")]));
+    assert_eq!(host.dom.namespace_uri(element), Some("http://www.w3.org/1999/xhtml"));
+    assert_eq!(host.dom.local_name(element), Some("HeAd"));
+}
+
+#[test]
 fn static_range_is_immutable_and_uses_inherited_boundary_getters() {
     let mut h = Host::default();
     let text = node(call(&mut h, O::CreateText, V::Node(NodeIdx(0)), &[str_value("abcd")]));
@@ -733,6 +746,70 @@ fn traversal_filter_calls_after_borrow_and_retains_callback_identity() {
     assert_eq!(call(&mut h, O::WalkerFirstChild, walker.clone(), &[]), V::Node(child));
     assert_eq!(call(&mut h, O::WalkerCurrentNode, walker.clone(), &[]), V::Node(child));
     assert_eq!(call(&mut h, O::WalkerParentNode, walker, &[]), V::Node(root));
+}
+
+#[test]
+fn traversal_undefined_what_to_show_uses_show_all_default() {
+    let mut host = Host::default();
+    let root = element(&mut host);
+    for op in [O::CreateNodeIterator, O::CreateTreeWalker] {
+        let traversal = call(&mut host, op, V::Node(NodeIdx(0)),
+            &[V::Node(root), V::Undefined, V::Undefined]);
+        assert_eq!(call(&mut host, O::TraversalWhatToShow, traversal, &[]),
+            V::Number(u32::MAX as f64));
+    }
+}
+
+#[test]
+fn parent_node_move_before_is_exposed_on_document_element_and_fragment() {
+    for interface in [Interface::Document, Interface::Element, Interface::DocumentFragment] {
+        let definition = INTERFACES.iter().find(|definition| definition.interface == interface).unwrap();
+        assert!(definition.members.iter().any(|member| member.name == "moveBefore"
+            && member.operation == O::MoveBefore));
+    }
+    let mut host = Host::default();
+    let parent = element(&mut host);
+    let first = host.dom.create_element(parent, "a");
+    let second = host.dom.create_element(parent, "b");
+    call(&mut host, O::MoveBefore, V::Node(parent), &[V::Node(second), V::Node(first)]);
+    assert_eq!(host.dom.children(parent).collect::<Vec<_>>(), vec![second, first]);
+}
+
+#[test]
+fn adjacent_element_and_text_insert_at_each_tree_position() {
+    let mut host = Host::default();
+    let parent = element(&mut host);
+    let target = host.dom.create_element(parent, "target");
+    let before = host.dom.create_element(parent, "before");
+    assert_eq!(call(&mut host, O::ElementInsertAdjacentElement, V::Node(target),
+        &[str_value("BEFOREBEGIN"), V::Node(before)]), V::Node(before));
+    assert_eq!(host.dom.get(target).prev_sibling, Some(before));
+    let after = host.dom.create_element(parent, "after");
+    call(&mut host, O::ElementInsertAdjacentElement, V::Node(target),
+        &[str_value("afterend"), V::Node(after)]);
+    assert_eq!(host.dom.get(target).next_sibling, Some(after));
+    call(&mut host, O::ElementInsertAdjacentText, V::Node(target),
+        &[str_value("afterbegin"), str_value("prefix")]);
+    call(&mut host, O::ElementInsertAdjacentText, V::Node(target),
+        &[str_value("beforeend"), str_value("suffix")]);
+    assert_eq!(host.dom.children(target).map(|node| host.dom.character_data_utf16(node).unwrap())
+        .collect::<Vec<_>>(), vec!["prefix".encode_utf16().collect::<Vec<_>>(),
+        "suffix".encode_utf16().collect::<Vec<_>>()]);
+    assert_eq!(invoke(&mut host, O::ElementInsertAdjacentElement, V::Node(target),
+        &[str_value("invalid"), V::Node(before)]), Err("SyntaxError".into()));
+    let detached = element(&mut host);
+    assert_eq!(call(&mut host, O::ElementInsertAdjacentElement, V::Node(detached),
+        &[str_value("beforebegin"), V::Node(before)]), V::Null);
+}
+
+#[test]
+fn character_data_data_setter_uses_legacy_null_to_empty_string() {
+    let mut host = Host::default();
+    let text = host.dom.create_node_in(NodeIdx(0), amazing_dom::NodeKind::Text { data: String::new() }).unwrap();
+    call(&mut host, O::SetData, V::Node(text), &[V::Null]);
+    assert_eq!(call(&mut host, O::Data, V::Node(text), &[]), str_value(""));
+    call(&mut host, O::SetData, V::Node(text), &[V::Undefined]);
+    assert_eq!(call(&mut host, O::Data, V::Node(text), &[]), str_value("undefined"));
 }
 
 #[test]
@@ -2376,4 +2453,34 @@ fn blob_file_form_data_and_font_set_bindings_use_native_models() {
     assert_eq!(call(&mut h, O::FontFaceSetStatus, fonts.clone(), &[]), str_value("loaded"));
     let ready = call(&mut h, O::FontFaceSetReady, fonts.clone(), &[]);
     assert_eq!(call(&mut h, O::FontFaceSetReady, fonts, &[]), ready);
+}
+
+
+#[test]
+fn static_range_requires_all_members_and_converts_in_dictionary_order() {
+    let mut h = Host::default();
+    let entries = vec![
+        ("startContainer", V::Node(NodeIdx(0))), ("startOffset", V::Number(0.)),
+        ("endContainer", V::Node(NodeIdx(0))), ("endOffset", V::Number(0.)),
+    ];
+    for missing in 0..entries.len() {
+        for explicit_undefined in [false, true] {
+            let mut init = entries.clone();
+            if explicit_undefined { init[missing].1 = V::Undefined; }
+            else { init.remove(missing); }
+            assert!(invoke(&mut h, O::StaticRangeConstructor, V::Undefined,
+                &[V::Dictionary(init)]).is_err(), "{}", entries[missing].0);
+        }
+    }
+    for init in [V::Null, V::Undefined] {
+        assert!(invoke(&mut h, O::StaticRangeConstructor, V::Undefined, &[init]).is_err());
+    }
+    h.property_reads.clear();
+    call(&mut h, O::StaticRangeConstructor, V::Undefined, &[V::Dictionary(entries.clone())]);
+    assert_eq!(h.property_reads, ["endContainer", "endOffset", "startContainer", "startOffset"]);
+    // null is a present numeric member and converts to zero, unlike undefined.
+    let mut init = entries;
+    init[1].1 = V::Null;
+    init[3].1 = V::Null;
+    call(&mut h, O::StaticRangeConstructor, V::Undefined, &[V::Dictionary(init)]);
 }
