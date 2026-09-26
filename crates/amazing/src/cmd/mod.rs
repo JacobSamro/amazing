@@ -4,6 +4,7 @@ pub(crate) mod js;
 pub(crate) mod launch;
 pub(crate) mod net;
 pub(crate) mod parse;
+pub(crate) mod real_pages;
 pub(crate) mod render;
 pub(crate) mod webrtc;
 pub(crate) mod wpt;

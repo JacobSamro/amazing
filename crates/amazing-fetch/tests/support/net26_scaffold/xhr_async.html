@@ -1,0 +1,20 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR async data URL state and events");
+var xhr = new XMLHttpRequest();
+var events = [];
+xhr.addEventListener("readystatechange", function(e) { events.push("r" + xhr.readyState); });
+xhr.addEventListener("loadstart", function(e) { events.push("start"); });
+xhr.addEventListener("load", function(e) {
+  events.push("load");
+  assert_equals(xhr.status, 200);
+  assert_equals(xhr.responseText, "hello");
+  assert_equals(events.join(","), "r1,start,r2,r3,r3,r4,load");
+  t.done();
+  done();
+});
+xhr.open("GET", "data:text/plain,hello");
+xhr.send();
+assert_equals(xhr.readyState, 1);
+</script>

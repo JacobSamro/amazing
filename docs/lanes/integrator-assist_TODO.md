@@ -907,3 +907,40 @@ Both are routed in `questions.md` as follow-ups (shell grants / a retained GUI
 scene). A first win-001 gate failed on `os error 112` (C: 0 GB free); the lane
 purged its own `debug\incremental` and stale `ia-*` evidence folders, and the
 orchestrator freed the rest. The retry gate is the measurement above.
+
+## IA-REAL-PAGES — headless bulk browsing corpus (2026-09-26)
+
+Built `tests/real-pages/`: 52 synthesized everyday pages (news, docs, wiki, shop,
+web-app shells) plus 30 shared subresources, generated deterministically by
+`tests/real-pages/generate.py`. Ten pages carry one unguarded `feature-*.js`
+probe apiece so missing globals/interfaces surface per page. The corpus is run
+headless by `crates/amazing/tests/real_pages.rs` through a new lenient
+`amazing render-page` command (`crates/amazing/src/cmd/real_pages.rs`), which
+runs every script, inline handler and bounded event-loop step, reports each
+failure, and always paints a result. The harness spawns one child per page so a
+crash is attributed, and fails on a crash, panic, timeout, blank render or
+missing image.
+
+Result on the merged head `5d484278` (includes local `dev` IPC-11 and the
+fleet-expansion crates; Linux Boat, viewport 1024): **52/52 pages ok, 0
+crashes/panics/timeouts, all non-blank**, 93-496 ms in-driver, 9,581 minimum
+non-white pixels. Two consecutive runs were byte-identical in status, error
+count, fallback count and non-white pixels. Six pages reported one
+missing-feature error each. Evidence:
+`crates/amazing/tests/real_pages/evidence/run.tsv` and `feature-matrix.md`; the
+full per-page table is in `.agents/integrator-assist/report.md`.
+
+Triage (routed to the owning lanes' worktree `questions.md`):
+
+- js-lang: non-optional member access on `null`/`undefined` returns `undefined`
+  instead of throwing (`interp.rs` `ExprKind::Member` → `get_prop_receiver`).
+  This hides page bugs (`news-broken-script` reports zero errors, and `app-mail`
+  surfaces as `value is not callable` instead of the real missing member).
+- js-date + js-runtime: `Date.now` and `Date.parse` are undefined.
+- dom-bindings: `navigator` is now present, but `navigator.clipboard`,
+  `matchMedia`, `getComputedStyle`, `requestIdleCallback`, `WebSocket`,
+  `IntersectionObserver` and `Element.prototype.animate` are missing; net and
+  css notes attached for the transport and media/computed-value seams.
+
+Driver-owned: the lenient headless path and the corpus harness; no driver crash
+was found. Ordinary `render` and the strict reftest path keep abort-on-error.

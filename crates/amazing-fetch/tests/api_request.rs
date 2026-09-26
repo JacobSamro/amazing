@@ -19,6 +19,16 @@ fn req(url: &str, init: ApiRequestInit) -> Result<ApiRequest, ApiError> {
     )
 }
 
+#[test]
+fn about_blank_request_exposes_no_cors_header_guard() {
+    let mut init = ApiRequestInit::default();
+    init.mode = Some("no-cors".into());
+    let mut request = req("about:blank", init).unwrap();
+    assert_eq!(request.url().serialize(), "about:blank");
+    request.headers.append(&u("dpr"), &u("2")).unwrap();
+    assert_eq!(request.headers.get(&u("dpr")).unwrap(), None);
+}
+
 // request-error.js and request-error.any.js: each distinct TypeError condition.
 #[test]
 fn constructor_error_matrix() {
