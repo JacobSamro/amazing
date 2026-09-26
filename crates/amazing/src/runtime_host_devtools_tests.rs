@@ -1808,3 +1808,295 @@ fn end_to_end_runtime_return_by_value_and_inherited_properties() {
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
 }
+
+/// CDP-24: `Runtime.getProperties` always attaches a real `preview`
+/// (`ObjectPreview`) for an object-typed property value; `Runtime.evaluate`
+/// only does when `generatePreview: true`; the preview caps at 5 own
+/// properties with `overflow: true` past that; and `objectGroup` tagging on
+/// `evaluate`/`callFunctionOn` plus `Runtime.releaseObjectGroup` actually
+/// invalidates the tagged `objectId`s (including the default `""` group).
+#[test]
+fn end_to_end_runtime_object_previews_and_release_object_group_work_through_the_real_websocket_client() {
+    let host = spawn_test_host("http://example.test/doc.html", "<title>t</title>");
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    // evaluate() without generatePreview: no preview at all.
+    let no_preview = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("({ a: 1, b: 2 })".into()))]),
+    );
+    let no_preview_result = no_preview.get("result").expect("result");
+    assert!(no_preview_result.get("preview").is_none(), "{no_preview_result}");
+
+    // evaluate() with generatePreview: true builds a real ObjectPreview.
+    let small = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![
+            ("expression".into(), Json::String("({ a: 1, b: 'two' })".into())),
+            ("generatePreview".into(), Json::Bool(true)),
+        ]),
+    );
+    let small_result = small.get("result").expect("result");
+    let small_preview = small_result.get("preview").unwrap_or_else(|| panic!("no preview: {small_result}"));
+    assert_eq!(small_preview.get("type").and_then(Json::as_str), Some("object"), "{small_preview}");
+    assert_eq!(small_preview.get("overflow").and_then(Json::as_bool), Some(false), "{small_preview}");
+    let small_props = small_preview.get("properties").and_then(Json::as_array).expect("properties array");
+    assert_eq!(small_props.len(), 2, "{small_props:?}");
+    let prop_a = small_props
+        .iter()
+        .find(|p| p.get("name").and_then(Json::as_str) == Some("a"))
+        .unwrap_or_else(|| panic!("no 'a' property preview: {small_props:?}"));
+    assert_eq!(prop_a.get("type").and_then(Json::as_str), Some("number"), "{prop_a}");
+    assert_eq!(prop_a.get("value").and_then(Json::as_str), Some("1"), "{prop_a}");
+
+    // A wide object (>5 own properties) overflows the preview cap.
+    let wide = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![
+            ("expression".into(), Json::String("({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 })".into())),
+            ("generatePreview".into(), Json::Bool(true)),
+        ]),
+    );
+    let wide_preview =
+        wide.get("result").and_then(|r| r.get("preview")).unwrap_or_else(|| panic!("no preview: {wide}"));
+    assert_eq!(wide_preview.get("overflow").and_then(Json::as_bool), Some(true), "{wide_preview}");
+    assert_eq!(
+        wide_preview.get("properties").and_then(Json::as_array).map(<[Json]>::len),
+        Some(5),
+        "{wide_preview}"
+    );
+
+    // Runtime.getProperties always attaches a preview to an object-typed
+    // value, with no generatePreview flag involved at all.
+    let holder = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![(
+            "expression".into(),
+            Json::String("({ nested: { x: 1, y: 2 } })".into()),
+        )]),
+    );
+    let holder_id = holder
+        .get("result")
+        .and_then(|r| r.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("holder objectId")
+        .to_owned();
+    let properties = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(holder_id)),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    let descriptors = properties.get("result").and_then(Json::as_array).expect("result array");
+    let nested = descriptors
+        .iter()
+        .find(|d| d.get("name").and_then(Json::as_str) == Some("nested"))
+        .unwrap_or_else(|| panic!("no 'nested' property: {descriptors:?}"));
+    let nested_preview = nested
+        .get("value")
+        .and_then(|v| v.get("preview"))
+        .unwrap_or_else(|| panic!("getProperties should attach a preview with no flag needed: {nested}"));
+    assert_eq!(nested_preview.get("type").and_then(Json::as_str), Some("object"), "{nested_preview}");
+
+    // objectGroup tagging + releaseObjectGroup: evaluate() under a named
+    // group, then release it, then prove the objectId no longer resolves.
+    let grouped = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![
+            ("expression".into(), Json::String("({ grouped: true })".into())),
+            ("objectGroup".into(), Json::String("cdp24-group".into())),
+        ]),
+    );
+    let grouped_id = grouped
+        .get("result")
+        .and_then(|r| r.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("grouped objectId")
+        .to_owned();
+    // Still resolvable before release.
+    client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(grouped_id.clone())),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    client.result(
+        "Runtime.releaseObjectGroup",
+        Json::Object(vec![("objectGroup".into(), Json::String("cdp24-group".into()))]),
+    );
+    let after_release = client.raw(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(grouped_id)),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    assert!(after_release.get("error").is_some(), "releaseObjectGroup should invalidate its ids: {after_release}");
+
+    // The default ("" / omitted objectGroup) bucket also releases correctly.
+    let ungrouped = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("({ ungrouped: true })".into()))]),
+    );
+    let ungrouped_id = ungrouped
+        .get("result")
+        .and_then(|r| r.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("ungrouped objectId")
+        .to_owned();
+    client.result("Runtime.releaseObjectGroup", Json::Object(vec![("objectGroup".into(), Json::String("".into()))]));
+    let ungrouped_after = client.raw(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(ungrouped_id)),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    assert!(
+        ungrouped_after.get("error").is_some(),
+        "releaseObjectGroup(\"\") should invalidate the default bucket: {ungrouped_after}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-24's own re-proof of the DOM chain the ticket names explicitly:
+/// `getDocument` -> `querySelector` -> `getOuterHTML` -> `setAttributeValue`
+/// -> `removeNode`, end to end over a real WebSocket client against the
+/// live DOM.
+#[test]
+fn end_to_end_dom_get_document_query_select_outer_html_set_attribute_and_remove_node_chain() {
+    let host = spawn_test_host(
+        "http://example.test/dom24.html",
+        "<title>Dom24</title><body><div id=\"root\"><p id=\"target\" class=\"y\">hello</p></div></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let document = client.result("DOM.getDocument", Json::Object(vec![("depth".into(), Json::Number(-1.0))]));
+    let root_id = document
+        .get("root")
+        .and_then(|root| root.get("nodeId"))
+        .and_then(Json::as_f64)
+        .expect("root nodeId") as u64;
+
+    let found = client.result(
+        "DOM.querySelector",
+        Json::Object(vec![
+            ("nodeId".into(), Json::Number(root_id as f64)),
+            ("selector".into(), Json::String("#target".into())),
+        ]),
+    );
+    let target_id = found.get("nodeId").and_then(Json::as_f64).expect("target nodeId") as u64;
+    assert!(target_id > 0, "{found}");
+
+    let outer = client.result(
+        "DOM.getOuterHTML",
+        Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+    );
+    let outer_html = outer.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
+    assert!(outer_html.contains("hello"), "{outer_html}");
+
+    client.result(
+        "DOM.setAttributeValue",
+        Json::Object(vec![
+            ("nodeId".into(), Json::Number(target_id as f64)),
+            ("name".into(), Json::String("data-cdp24".into())),
+            ("value".into(), Json::String("yes".into())),
+        ]),
+    );
+    let outer_after = client.result(
+        "DOM.getOuterHTML",
+        Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]),
+    );
+    let outer_after = outer_after.get("outerHTML").and_then(Json::as_str).unwrap_or_default();
+    assert!(outer_after.contains("data-cdp24=\"yes\""), "{outer_after}");
+
+    client.result("DOM.removeNode", Json::Object(vec![("nodeId".into(), Json::Number(target_id as f64))]));
+    let gone = client.result(
+        "DOM.querySelector",
+        Json::Object(vec![
+            ("nodeId".into(), Json::Number(root_id as f64)),
+            ("selector".into(), Json::String("#target".into())),
+        ]),
+    );
+    assert_eq!(gone.get("nodeId").and_then(Json::as_f64), Some(0.0), "removeNode should drop it from the tree: {gone}");
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-24's own re-proof of the Network domain: `Network.enable` gates
+/// `requestWillBeSent`/`responseReceived`/`loadingFinished` events from a
+/// **live** `Page.navigate` call made after `enable` — not just from the
+/// initial page-load fetch other tests exercise — proving the events are
+/// wired to the fetch path itself and not to page construction.
+#[test]
+fn end_to_end_network_enable_then_live_navigate_fires_the_fetch_path_events() {
+    let host = spawn_test_host("http://example.test/start.html", "<title>start</title>");
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    let mut events = Vec::new();
+    let (_, more) = client.result_and_events("Network.enable", Json::Object(Vec::new()));
+    events.extend(more);
+
+    let fixture_addr = serve_once("<title>navigated</title>");
+    let (_, more) = client.result_and_events(
+        "Page.navigate",
+        Json::Object(vec![("url".into(), Json::String(format!("http://{fixture_addr}/")))]),
+    );
+    events.extend(more);
+    // Nudge another poll cycle so anything still queued after navigate()
+    // returned is flushed before this test starts asserting.
+    let (_, more) = client.result_and_events(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("1 + 1".into()))]),
+    );
+    events.extend(more);
+
+    let find_all = |method: &str| -> Vec<Json> {
+        events.iter().filter(|event| event.get("method").and_then(Json::as_str) == Some(method)).cloned().collect()
+    };
+    let request_id_of = |event: &Json| -> String {
+        event.get("params").and_then(|params| params.get("requestId")).and_then(Json::as_str).unwrap_or_default().to_owned()
+    };
+
+    let requests = find_all("Network.requestWillBeSent");
+    assert_eq!(requests.len(), 1, "the live navigate should fire exactly one requestWillBeSent: {events:?}");
+    let request_id = request_id_of(&requests[0]);
+    assert!(!request_id.is_empty(), "{requests:?}");
+
+    let responses = find_all("Network.responseReceived");
+    assert!(
+        responses.iter().any(|event| request_id_of(event) == request_id),
+        "no responseReceived for the live navigate's request: {events:?}"
+    );
+
+    let finished = find_all("Network.loadingFinished");
+    assert!(
+        finished.iter().any(|event| request_id_of(event) == request_id),
+        "no loadingFinished for the live navigate's request: {events:?}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}

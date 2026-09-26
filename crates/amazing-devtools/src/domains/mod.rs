@@ -28,7 +28,8 @@ pub mod target;
 pub mod tracing;
 
 use crate::host::{
-    ExceptionDetails, FrameInfo, FrameTree, PropertyDescriptor, RemoteObject, StyleOrigin,
+    ExceptionDetails, FrameInfo, FrameTree, ObjectPreview, PropertyDescriptor, PropertyPreview,
+    RemoteObject, StyleOrigin,
 };
 use crate::json::Json;
 
@@ -77,6 +78,38 @@ pub(crate) fn remote_object(value: &RemoteObject) -> Json {
     }
     if let Some(object_id) = &value.object_id {
         fields.push(("objectId", Json::String(object_id.clone())));
+    }
+    if let Some(preview) = &value.preview {
+        fields.push(("preview", object_preview(preview)));
+    }
+    object(fields)
+}
+
+/// Serializes a CDP `Runtime.ObjectPreview` (CDP-24).
+pub(crate) fn object_preview(preview: &ObjectPreview) -> Json {
+    let mut fields = vec![("type", Json::String(preview.object_type.clone()))];
+    if let Some(subtype) = &preview.subtype {
+        fields.push(("subtype", Json::String(subtype.clone())));
+    }
+    if let Some(description) = &preview.description {
+        fields.push(("description", Json::String(description.clone())));
+    }
+    fields.push(("overflow", Json::Bool(preview.overflow)));
+    fields.push((
+        "properties",
+        Json::Array(preview.properties.iter().map(property_preview).collect()),
+    ));
+    object(fields)
+}
+
+/// Serializes one `Runtime.PropertyPreview` entry.
+fn property_preview(preview: &PropertyPreview) -> Json {
+    let mut fields = vec![
+        ("name", Json::String(preview.name.clone())),
+        ("type", Json::String(preview.object_type.clone())),
+    ];
+    if let Some(value) = &preview.value {
+        fields.push(("value", Json::String(value.clone())));
     }
     object(fields)
 }

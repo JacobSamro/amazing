@@ -1105,3 +1105,86 @@ step targets that survive a `Page.navigate` reload identically to
 `extra_headers`/`cache_disabled` (currently untested either way, since
 `PageOwner::navigate` replaces the whole struct including `breakpoints`);
 `urlRegex`-style breakpoint matching instead of literal `url` equality.
+
+## CDP-24 — Runtime object previews, releaseObjectGroup, and one fresh
+end-to-end test per named domain — done
+
+Coordinator's ticket (base local `dev` at `f748f4a0`, merged CDP-23): "Next is
+CDP-24, all in bulk: `Runtime.getProperties` with real object previews
+(`RemoteObject.preview` and `objectId` handles); `Runtime.callFunctionOn`;
+`Runtime.releaseObject`/`releaseObjectGroup`; `DOM.getDocument`/
+`querySelector`/`getOuterHTML`/`setAttributeValue`/`removeNode` against the
+live DOM; `Network.enable`, with requestWillBeSent/responseReceived/
+loadingFinished events from the fetch path. Add one end-to-end test per
+domain. Gate once: workspace nextest and doctests, excluding the known
+IPC-12 EPERM tests."
+
+- **Scoped by grepping first**: `DOM.getDocument`/`querySelector`/
+  `getOuterHTML`/`setAttributeValue`/`removeNode`, `Runtime.callFunctionOn`
+  and `Network.enable`'s three events were already implemented (CDP-16/17/18)
+  — confirmed by reading their existing tests rather than assuming. The
+  genuinely new work was `RemoteObject.preview`/`Runtime.ObjectPreview` (did
+  not exist at all) and `Runtime.releaseObjectGroup` (the CDP dispatch arm
+  existed but was a pure no-op that never reached the driver).
+- **`RemoteObject.preview` / `Runtime.ObjectPreview`/`PropertyPreview`**: new
+  protocol types in `amazing-devtools/src/host.rs` plus serializers in
+  `domains/mod.rs`. Matches real CDP's own asymmetry: `Runtime.getProperties`
+  has no `generatePreview` parameter, so an object-typed property value
+  always gets a preview; `Runtime.evaluate` only builds one when
+  `generatePreview: true`; `Runtime.callFunctionOn` never does, since
+  `CallFunctionParams` has no such field at all. `PageOwner::object_preview`/
+  `property_preview` cap at 5 own enumerable properties (`overflow: true`
+  past that) and render one level deep only — no nested `valuePreview` — the
+  same depth-cap-not-cycle-tracked choice `remote_object_by_value`'s existing
+  5-level cap already makes, since `JsValue::Object`'s `Rc` has no
+  pointer-identity/cycle check to lean on for something recursive.
+- **`Runtime.releaseObjectGroup`**: `evaluate()`/`call_function_on()` now tag
+  their own top-level result's `objectId` with the call's `objectGroup`
+  (`""` when omitted, matching real CDP's default bucket) via a new
+  `tag_object_group` helper; `release_object_group` on `PageOwner` drops every
+  `objectId` tagged under a given group from the live object table (and
+  `release_object` also untags its id). Deliberately scoped to *only*
+  top-level `evaluate`/`callFunctionOn` results, not nested `getProperties`
+  property values — real CDP's `getProperties` has no `objectGroup`
+  parameter either.
+- **Driver plumbing**: `object_groups: HashMap<String, String>` field on
+  `PageOwner`; `PageCommand::ReleaseObjectGroup`; a `run_page_thread` match
+  arm; `DriverPageSession::release_object_group`. All call sites needing the
+  new `RemoteObject.preview` field picked it up for free via the existing
+  `..Self::undefined()`/`..RemoteObject::undefined()` struct-update spread —
+  only `RemoteObject::undefined()` itself (which spells out every field) and
+  `own_properties()` (which attaches the preview) needed direct edits.
+- **Proof — one fresh end-to-end WebSocket test per named domain**, even
+  though DOM and Network already had CDP-16/17/18 coverage, per the ticket's
+  explicit "add one end-to-end test per domain":
+  - `end_to_end_runtime_object_previews_and_release_object_group_work_through_the_real_websocket_client`
+    (the genuinely new functionality): no preview without `generatePreview`;
+    a real preview with `generatePreview: true` (type/properties/values);
+    `overflow: true` and a 5-property cap past 5 own properties;
+    `Runtime.getProperties` attaching a preview with no flag involved at all;
+    a named `objectGroup` surviving until `releaseObjectGroup` invalidates it
+    (`Runtime.getProperties` on the released id then returns a CDP error);
+    and the default `""` bucket releasing correctly too.
+  - `end_to_end_dom_get_document_query_select_outer_html_set_attribute_and_remove_node_chain`:
+    the exact 5-method chain the ticket names, fresh for this ticket.
+  - `end_to_end_network_enable_then_live_navigate_fires_the_fetch_path_events`:
+    proves `requestWillBeSent`/`responseReceived`/`loadingFinished` fire from
+    a **live** `Page.navigate` call made after `Network.enable`, not just
+    from the initial page-load fetch CDP-18's own test relies on — tighter
+    proof that the events are wired to the fetch path itself.
+
+Gate (single pass, per the ticket's "gate once"): `cargo nextest run
+--workspace --locked --no-fail-fast` — 3282/3293 passed, 16 skipped, 3 slow,
+11 failed. All 11 failures are the known IPC-12
+`amazing-ipc-platform`/`amazing-process` sealed-memory `PermissionDenied`
+("Operation not permitted") sandbox failures, unrelated to this ticket —
+reconfirmed by a direct rerun of one of them. `cargo test --workspace
+--locked --doc`: all green, including every crate with real doctests
+(`amazing_a11y`, `amazing_devtools`, `amazing_html`, `amazing_js`).
+
+Boundary candidates for a future ticket: a recursive/nested `valuePreview`
+for object-typed preview properties (currently one level deep only, see
+above); `objectGroup` tagging for `Runtime.getProperties`' own returned
+values (out of scope here, matching real CDP); breakpoint/step state and
+now object-group tags both not surviving a `Page.navigate` reload (unchanged
+scope note from CDP-21/23).
