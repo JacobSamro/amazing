@@ -289,7 +289,7 @@ impl Compositor {
             for (li, layer) in self.layers.iter().enumerate() {
                 let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
                 let scissor =
-                    if self.trees.has_composited_effects() || self.reserved_effect_halo > 0. {
+                    if self.trees.has_composited_effects() || halo > 0. {
                         viewport
                     } else {
                         clip_rect(&self.trees, layer.state, viewport)
@@ -383,7 +383,7 @@ impl Compositor {
             for key in keys {
                 let local = tile_rect(key);
                 if !matrix.map_bounds(local).is_some_and(|r| {
-                    r.intersects(if enhanced || self.reserved_effect_halo > 0. {
+                    r.intersects(if enhanced || halo > 0. {
                         raster_viewport
                     } else {
                         scissor
