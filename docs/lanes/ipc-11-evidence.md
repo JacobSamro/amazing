@@ -29,10 +29,12 @@ hook next to storage). The shared-file footprint is one `NativeEntry` variant
 
 | Command | Result |
 | --- | --- |
-| `cargo nextest run -p amazing -p amazing-process` (final, `9744fd00`) | 249/249, 7 skipped |
+| `cargo nextest run -p amazing -p amazing-process` (merged head `f330dcf8`) | 256/256, 7 skipped |
+| `cargo nextest run -p amazing -p amazing-process` (messaging `9744fd00`) | 249/249, 7 skipped |
 | `cargo nextest run -p amazing` | 191/191, 3 skipped |
-| `cargo nextest run -p amazing-process` | 56/56, 3 skipped |
+| `cargo nextest run -p amazing-process` | 58/58, 3 skipped |
 | driver messaging tests | 3/3 (`MessageChannel` structured clone, `Window.postMessage`, `BroadcastChannel` sender exclusion) |
+| storage lock-seam tests | 2/2 (FIFO grant/queue, `if_available`, `steal`, query, release-on-disconnect) |
 
 Fuzz (`ipc-fuzz`, 90 s each; 58 decoder targets and 12 dispatcher targets now
 include every messaging message): decoder **8,382,072** cases, dispatcher
@@ -65,18 +67,25 @@ was error-only; the 27 passes are new.
 
 ## Web Locks
 
-38 `web-locks/` files (`.any.js`/`.https.any.js`) through the same harness:
-**0 pass, 19 fail, 19 error** — `navigator`/`navigator.locks` does not exist
-yet, so the tests stop before lock arbitration. Raw JSON:
-[ipc-11-web-locks/](ipc-11-web-locks/).
+Process seam `f330dcf8`: `StorageService(13)` ops 5-8 (`lock_request`,
+`lock_release`, `lock_release_client`, `lock_query`) over one browser-owned
+`LockCoordinator` in the storage process, with wire tests for FIFO
+grant/queue, `if_available`, `steal`, query and release-on-disconnect. Raw
+JSON: [ipc-11-web-locks-merged/](ipc-11-web-locks-merged/).
 
-The process seam is not yet wired: `amazing_storage::locks::LockCoordinator`
-(storage commit `6e190b07`) is not in dev, so the `StorageService` lock
-operations cannot compile. When storage merges its coordinator and
-`navigator.locks` adapter, IPC will own one coordinator in the storage process,
-expose request/release/release_client/query, notify the requesting renderer
-when a queued id is granted, and release clients on disconnect/crash. See
-`questions.md`.
+`web-locks/` (38 `.any.js`/`.https.any.js` files) through the harness:
+
+| Tree | pass | fail | error | timeout |
+| --- | --- | --- | --- | --- |
+| before STORE-5 (no `navigator.locks`) | 0 | 19 | 19 | 0 |
+| merged head `f330dcf8` | 1 | 15 | 21 | 1 |
+
+The single pass is `lock-attributes.https.any.js` (2 subtests), from storage's
+in-process `navigator.locks` binding. Storage's binding still owns the
+coordinator in-process; IPC's process seam and protocol are ready for storage
+to reroute through it (then the browser calls `lock_release_client` on
+renderer disconnect/crash). The `.https.` secure-context tests and the
+steal/if-available/abort/signal families remain engine and binding work.
 
 ## Cross-lane
 

@@ -20,22 +20,22 @@ WebIDL surface for BroadcastChannel/MessageChannel/MessagePort/postMessage.
 
 ### 11a. Web Locks cross-tab operations (StorageService)
 
-Move the keyed lock coordinator into the storage process and expose it over IPC.
-Wires `amazing_storage::locks::LockCoordinator` (storage lane, committed
-`6e190b07`, **not yet in dev** — see questions).
+Landed `f330dcf8` (process seam). Storage independently landed an in-process
+`navigator.locks` binding on dev `838361c5`.
 
 - Protocol: `LockMode`, `LockOptions`, `LockRequest`, `LockOutcome`,
-  `LockQuery`, `LockSnapshot`; `StorageService` ops `lock_request`,
-  `lock_release`, `lock_release_client`, `lock_query` (ids 5-8).
-- Storage process owns one `LockCoordinator`, keyed by browser-minted
-  partition + client id; FIFO pending queue; grant notifications.
-- Release on renderer disconnect and crash (`release_client`), bounded queues.
-- Browser-side `LockSession` proxy in the driver adapter.
-- Tests: process-level grant/queue/steal/if_available/disconnect/crash, plus
-  fuzz targets. Gate WPT `web-locks/` once storage's `navigator.locks` binding
-  is in dev.
-- Blocked on `amazing_storage::locks` in dev; IPC will swap the import when it
-  lands.
+  `LockRelease`, `LockClient`, `LockQuery`, `LockInfo`, `LockSnapshot`;
+  `StorageService` ops 5-8. **Done.**
+- Storage process owns one `LockCoordinator`; FIFO pending queue; grant
+  results returned to the browser. **Done**; grant *notifications* to a
+  renderer are the browser adapter's follow-up when storage reroutes its
+  in-process coordinator through this seam.
+- Release on disconnect/crash via `lock_release_client`. **Done** (browser
+  calls it; `runtime_host_storage.rs` currently releases in-process on Drop).
+- Tests: process-level grant/queue/steal/if_available/query/release_client. Gate
+  WPT `web-locks/` re-measured after the storage merge.
+- Swap of the storage binding from the in-process coordinator to this process
+  proxy is storage-owned; IPC's protocol and endpoint are ready.
 
 ### 11b. Cross-document/process messaging
 
