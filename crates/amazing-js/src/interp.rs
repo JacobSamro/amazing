@@ -3665,6 +3665,7 @@ include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_array.rs");
+include!("interp_array_protocol.rs");
 include!("interp_object_extra.rs");
 include!("interp_errors.rs");
 include!("interp_bound.rs");

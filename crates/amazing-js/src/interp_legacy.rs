@@ -263,6 +263,8 @@ impl Interpreter {
 
     /// Install the value-iterable methods on an interface prototype. The
     /// wrapper's private brand selects the live index hooks at each step.
+    /// The embedding also installs the interface's length attribute: forEach
+    /// is Array.prototype.forEach and snapshots that ordinary property.
     pub fn binding_define_iterable(&mut self, brand: u64, prototype: &JsValue) -> Result<(), Throw> {
         if !self.legacy_hooks.contains_key(&brand) { return Err(Throw::type_error("iterable needs indexed hooks")); }
         let JsValue::Object(prototype) = prototype else { return Err(Throw::type_error("iterable prototype must be an object")); };
@@ -513,10 +515,20 @@ mod tests {
         assert_eq!(i.binding_get_property(&pair, "1").unwrap(), JsValue::num(10.0));
         let seen = Rc::new(RefCell::new(Vec::new()));
         let capture = seen.clone();
-        i.set_host_native_dispatcher(Rc::new(move |_, _, _, args, _| {
+        let collection_values = values.clone();
+        let length_reads = Rc::new(RefCell::new(0));
+        let reads = length_reads.clone();
+        i.set_host_native_dispatcher(Rc::new(move |_, id, _, args, _| {
+            if id.0 == 2 {
+                *reads.borrow_mut() += 1;
+                return Ok(JsValue::num(collection_values.borrow().len() as f64));
+            }
             capture.borrow_mut().push(args);
+            if capture.borrow().len() == 1 { collection_values.borrow_mut().push(JsValue::num(99.0)); }
             Ok(JsValue::Undefined)
         }));
+        let length = i.binding_create_native_function(HostFunctionId(2), "get length", 0, HostCallPolicy::CallOnly);
+        i.binding_define_accessor_property(&prototype, "length", Some(&length), None, true, true).unwrap();
         let callback = i.binding_create_native_function(HostFunctionId(1), "collect", 3, HostCallPolicy::CallOnly);
         let for_each = i.binding_get_property(&object, "forEach").unwrap();
         let array_for_each = i.array_proto.borrow().get_own("forEach").unwrap();
@@ -524,6 +536,8 @@ mod tests {
         i.binding_call(&for_each, object.clone(), vec![callback]).unwrap();
         let seen = seen.borrow();
         assert_eq!(seen.len(), 2);
+        assert_eq!(*length_reads.borrow(), 1);
+        assert_eq!(values.borrow().len(), 3);
         assert_eq!(seen[0][0], JsValue::num(10.0));
         assert_eq!(seen[1][0], JsValue::num(42.0));
     }
