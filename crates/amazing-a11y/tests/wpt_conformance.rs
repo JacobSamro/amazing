@@ -47,6 +47,45 @@
 //! are not browser-runnable HTML fixtures at all and are excluded from the
 //! selection entirely, not counted as "unsupported" files.
 //!
+//! A11Y-13 adds a fourth selection,
+//! `accname_root_shadowdom_and_properties_basic_selection`, covering what's
+//! left of the automatable (non-`-manual.html`, non-Python) pinned a11y
+//! surface once `core-aam/role/` (already just its one file) and
+//! `wai-aria/role/` (already all 23 files) turned out to already be
+//! complete:
+//! - `accname/aria-owns.html`: the ordinary `verifyLabelsBySelector`
+//!   pattern (`run_accname_file` applies unchanged) — real aria-owns
+//!   reparenting/aria-hidden interaction coverage, not just plumbing.
+//! - `accname/basic.html`: a hand-written `promise_test` pair keyed by
+//!   element id, no `aria-utils.js` at all — see `run_accname_basic_file`.
+//! - `accname/name/shadowdom/` (2 files): both build their tested content
+//!   entirely at runtime via `Element.attachShadow()` in an inline
+//!   `<script>`; `amazing-dom` has no shadow-tree representation and this
+//!   runner never executes script, so recorded unsupported rather than
+//!   silently excluded (they are real, non-manual `.html` fixtures, the
+//!   same treatment as `idl-reflection.tentative.html` above).
+//! - `wai-aria/accessibility_properties_basic.tentative.html`: another
+//!   hand-written file (`test_driver.
+//!   get_accessibility_properties_for_element`/`_for_accessibility_node`
+//!   instead of `aria-utils.js`) — see
+//!   `run_accessibility_properties_basic_file`.
+//!
+//! Confirmed out of scope, not part of any selection: `core-aam/aamtests/`
+//! is a `pytest`+WebDriver harness (`conftest.py` wires in the upstream
+//! `webdriver/tests/support` fixtures) whose "expected" values are Python
+//! assertions against real platform AT APIs (`atspi`/`uia`/`ia2`/`axapi`
+//! wrapper fixtures in `aamtests/support/`) driving a live, WebDriver-
+//! controlled browser — its `TEST_HTML` values are Python string literals
+//! inside the `.py` files, not standalone browser-runnable files at all, so
+//! there is nothing here for a static-markup runner to parse or run.
+//! `core-aam/manual/` (a separate, much larger `-manual.html` directory from
+//! `core-aam/arianotify/`) and `accname/manual/` are both interactive-only.
+//! `html-aam/roles-dynamic-switch.tentative.window.js` is a `.window.js`
+//! file (never matched by `html_files`'s `*.html` filter anyway) whose
+//! subtests dynamically create/attach/detach a `<input switch>` element via
+//! script and re-query its role after each mutation — inherently a runtime
+//! behavior test, not a static-markup one.
+//!
 //! Opt-in: requires `AMAZING_WPT_ROOT` at the pinned revision
 //! (`scripts/ensure-wpt.sh` on a Linux sandbox sets up `~/corpora/wpt`). Run:
 //!
@@ -146,6 +185,21 @@ const UNSUPPORTED_ARIA_ACTIONS_FILES: &[&str] = &["idl-reflection.tentative.html
 /// expectedTreeShape)`, a nested role/label/children-count shape rather than
 /// a flat per-element attribute — see `run_subtree_file`.
 const EXPECTED_ARIA_SUBTREE_FILES: usize = 1;
+
+/// A11Y-13: `accname/` top-level files (siblings of `accname/name/`, not
+/// inside it): `aria-owns.html` (`run_accname_file` applies unchanged) and
+/// `basic.html` (`run_accname_basic_file`) — see the module doc.
+const EXPECTED_ACCNAME_ROOT_FILES: usize = 2;
+
+/// A11Y-13: `accname/name/shadowdom/` — both files are unsupported (runtime
+/// `attachShadow()` content this static-markup runner can't build); see the
+/// module doc.
+const EXPECTED_ACCNAME_SHADOWDOM_FILES: usize = 2;
+const UNSUPPORTED_ACCNAME_SHADOWDOM_FILES: &[&str] = &["basic.html", "slot.html"];
+
+/// A11Y-13: `wai-aria/accessibility_properties_basic.tentative.html`, one
+/// hand-written file — see `run_accessibility_properties_basic_file`.
+const EXPECTED_ARIA_PROPERTIES_BASIC_FILES: usize = 1;
 
 /// `accname/name/` files whose expectation is only reachable by running the
 /// page's own `<script>` (a CSSOM mutation of a stylesheet rule, here) after
@@ -728,6 +782,119 @@ fn run_subtree_file(path: &Path, tally: &mut Tally) {
     tally.record(ok, if ok { context } else { format!("{context} ({})", problems.join("; ")) });
 }
 
+/// One id/testname/expected-label case from `accname/basic.html`, checked
+/// against the built `AxNode::name` the same way `run_accname_file` checks
+/// `.ex-label`'s `data-expectedlabel` — just keyed by element id instead of
+/// a class/attribute pair, since this file has neither.
+fn check_accname_basic_case(
+    doc: &amazing_a11y::AxDocument,
+    file: &str,
+    id: &str,
+    testname: &str,
+    expected: &str,
+    tally: &mut Tally,
+) {
+    let context = format!("{file}: {testname}");
+    let Some(node) =
+        doc.dom.tree_order(NodeIdx(0)).into_iter().find(|&n| doc.dom.get_attribute_ns(n, None, "id") == Some(id))
+    else {
+        tally.record(false, format!("{context} (id {id:?} not found in the DOM)"));
+        return;
+    };
+    let Some(ax_id) = doc.tree.find_dom(node) else {
+        tally.record(false, format!("{context} (no exposed AxNode for #{id})"));
+        return;
+    };
+    let Some(ax_node) = doc.tree.node(ax_id) else {
+        tally.record(false, format!("{context} (dangling AxNodeId)"));
+        return;
+    };
+    let computed = normalize_label(&ax_node.name);
+    let ok = computed == expected;
+    tally.record(ok, if ok { context } else { format!("{context} (expected {expected:?}, got {computed:?})") });
+}
+
+/// `accname/basic.html`: two hand-written `promise_test`s
+/// (`test_driver.get_computed_label`) keyed by element id, no `aria-utils.js`
+/// or `.ex-label` markup at all — a one-off fixture, hardcoded to its own
+/// two cases the same way `run_accessibility_properties_basic_file` is
+/// hardcoded to its file's three.
+fn run_accname_basic_file(path: &Path, tally: &mut Tally) {
+    let html = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    let file = path.file_name().unwrap().to_string_lossy().into_owned();
+    let doc = build_document(&html, "", 800.0, Some(600.0));
+    check_accname_basic_case(&doc, &file, "d", "tests labelFrom: author", "test label", tally);
+    check_accname_basic_case(&doc, &file, "h", "tests labelFrom: contents", "test heading", tally);
+}
+
+/// `wai-aria/accessibility_properties_basic.tentative.html`: hand-written
+/// `promise_test`s exercising `test_driver.
+/// get_accessibility_properties_for_element`/`_for_accessibility_node`
+/// directly rather than `aria-utils.js` — hardcoded to this one pinned
+/// file's three checks (ARIA checkbox `checked`, HTML checkbox `checked`,
+/// and the tablist/tab subtree's role/label/parent-child shape).
+fn run_accessibility_properties_basic_file(path: &Path, tally: &mut Tally) {
+    let html = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    let file = path.file_name().unwrap().to_string_lossy().into_owned();
+    let doc = build_document(&html, "", 800.0, Some(600.0));
+
+    let find = |id: &str| -> Option<(amazing_a11y::AxNodeId, &amazing_a11y::AxNode)> {
+        let node = doc
+            .dom
+            .tree_order(NodeIdx(0))
+            .into_iter()
+            .find(|&n| doc.dom.get_attribute_ns(n, None, "id") == Some(id))?;
+        let ax_id = doc.tree.find_dom(node)?;
+        Some((ax_id, doc.tree.node(ax_id)?))
+    };
+
+    for (id, testname) in [
+        ("ariaCheckbox", "ARIA checkbox with aria-checked true"),
+        ("htmlCheckbox", "HTML checkbox with checked true"),
+    ] {
+        let context = format!("{file}: {testname}");
+        match find(id).map(|(_, node)| node.states.checked) {
+            Some(amazing_a11y::Tristate::True) => tally.record(true, context),
+            other => tally.record(false, format!("{context} (expected checked=true, got {other:?})")),
+        }
+    }
+
+    let context = format!("{file}: tablist subtree");
+    let mut problems = Vec::new();
+    match find("tablist") {
+        Some((tablist_id, tablist)) => {
+            if tablist.children.len() != 2 {
+                problems.push(format!(
+                    "tablist children.length: expected 2, got {}",
+                    tablist.children.len()
+                ));
+            }
+            for (id, label) in [("tab1", "tab1"), ("tab2", "tab2")] {
+                match find(id) {
+                    Some((tab_id, tab)) => {
+                        if tab.role.as_str() != "tab" {
+                            problems.push(format!("{id} role: expected \"tab\", got {:?}", tab.role.as_str()));
+                        }
+                        if tab.name != label {
+                            problems.push(format!("{id} label: expected {label:?}, got {:?}", tab.name));
+                        }
+                        if tab.parent != Some(tablist_id) {
+                            problems.push(format!("{id} parent: expected the tablist node, got {:?}", tab.parent));
+                        }
+                        if !tablist.children.contains(&tab_id) {
+                            problems.push(format!("{id}: not among the tablist's children"));
+                        }
+                    }
+                    None => problems.push(format!("{id}: no exposed AxNode")),
+                }
+            }
+        }
+        None => problems.push("no exposed AxNode for #tablist".to_owned()),
+    }
+    let ok = problems.is_empty();
+    tally.record(ok, if ok { context } else { format!("{context} ({})", problems.join("; ")) });
+}
+
 #[test]
 #[ignore = "requires AMAZING_WPT_ROOT at the pinned WPT revision"]
 fn core_aam_and_wai_aria_states_selection() {
@@ -808,6 +975,80 @@ fn core_aam_and_wai_aria_states_selection() {
             println!("  {entry}");
         }
     }
+    if !tally.failures.is_empty() {
+        println!("Failures:");
+        for failure in &tally.failures {
+            println!("  {failure}");
+        }
+    }
+    assert_eq!(tally.fail, 0, "{} subtest(s) failed; see stdout for detail", tally.fail);
+}
+
+/// A11Y-13: everything left of the automatable pinned a11y surface once
+/// `core-aam/role/` and `wai-aria/role/` turned out already complete — see
+/// the module doc's A11Y-13 paragraph.
+#[test]
+#[ignore = "requires AMAZING_WPT_ROOT at the pinned WPT revision"]
+fn accname_root_shadowdom_and_properties_basic_selection() {
+    let root = pinned_wpt_root();
+
+    let accname_root_files = html_files(&root.join("accname"));
+    assert_eq!(
+        accname_root_files.len(),
+        EXPECTED_ACCNAME_ROOT_FILES,
+        "accname/*.html (top-level) count changed — update the pinned selection"
+    );
+    let shadowdom_files = html_files(&root.join("accname/name/shadowdom"));
+    assert_eq!(
+        shadowdom_files.len(),
+        EXPECTED_ACCNAME_SHADOWDOM_FILES,
+        "accname/name/shadowdom/*.html count changed — update the pinned selection"
+    );
+    // `wai-aria/`'s only top-level `.html` file, as of the pinned revision —
+    // `html_files` doesn't recurse, so this can't accidentally pick up
+    // `wai-aria/role/*.html` or any other subdirectory's files.
+    let properties_basic_files = html_files(&root.join("wai-aria"));
+    assert_eq!(
+        properties_basic_files.len(),
+        EXPECTED_ARIA_PROPERTIES_BASIC_FILES,
+        "wai-aria/*.html (top-level) count changed — update the pinned selection"
+    );
+
+    let mut tally = Tally::default();
+    for path in &accname_root_files {
+        let name = path.file_name().unwrap().to_string_lossy();
+        if name == "basic.html" {
+            run_accname_basic_file(path, &mut tally);
+        } else {
+            run_accname_file(path, &mut tally);
+        }
+    }
+    for path in &shadowdom_files {
+        let name = path.file_name().unwrap().to_string_lossy();
+        tally.unsupported_files.push(name.into_owned());
+    }
+    for path in &properties_basic_files {
+        run_accessibility_properties_basic_file(path, &mut tally);
+    }
+
+    let mut actual_unsupported = tally.unsupported_files.clone();
+    actual_unsupported.sort();
+    let mut expected_unsupported: Vec<&str> = UNSUPPORTED_ACCNAME_SHADOWDOM_FILES.to_vec();
+    expected_unsupported.sort_unstable();
+    assert_eq!(
+        actual_unsupported,
+        expected_unsupported,
+        "unsupported-file set changed for the accname-root/shadowdom/properties-basic selection"
+    );
+
+    println!(
+        "WPT accname/{{aria-owns,basic}} + accname/name/shadowdom + \
+         wai-aria/accessibility_properties_basic: {} passed, {} failed, {} file(s) unsupported ({})",
+        tally.pass,
+        tally.fail,
+        tally.unsupported_files.len(),
+        tally.unsupported_files.join(", "),
+    );
     if !tally.failures.is_empty() {
         println!("Failures:");
         for failure in &tally.failures {
