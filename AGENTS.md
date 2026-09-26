@@ -145,6 +145,10 @@ GPU; Mesa software Vulkan (llvmpipe), Xvfb, xdotool and ImageMagick are in the t
 display and copies a window PNG plus metadata to `.agents/<lane>/captures/`. The pinned WPT
 (`c2a2fce`) is at `~/corpora/wpt`; on an older sandbox run `bash scripts/ensure-wpt.sh` first.
 Linux pixel results are reported as Linux numbers.
+**Linux reftests (2026-09-26):** `scripts/linux-render-wpt.sh <lane> css/<category>` renders the
+self-contained static reftests of a pinned-WPT subdir with the headless `amazing` renderer and
+fuzzy-compares them (`scripts/wpt_render_compare.py`), writing one `report.json`; it replaces
+win-001 render sweeps while Windows is deferred. Baselines: `crates/amazing-shell-gpui/evidence/wpt-render/`.
 **Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
 `boat data-retention`, `boat billing`, ...): the account, its templates and its retention
 settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in
