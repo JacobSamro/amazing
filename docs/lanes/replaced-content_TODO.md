@@ -1235,3 +1235,51 @@ arbitrary local-space CSS filters under a 3D/perspective transform (this
 slice's filters run in the group's own post-transform raster space, matching
 `PaintFilterSpace::Raster`). No WPT credit is claimed under the Linux-first
 deferral.
+
+## RC-27 — `clip-path` basic-shape reference (2026-09-26)
+
+Fourth COMP-15 paint reference slice: `inset()`, `circle()` and `ellipse()`.
+
+- New `amazing_paint::clip::ClipMask { x, y, width, height, radii: [(f32,f32);4] }`
+  (top-left/top-right/bottom-right/bottom-left order) resolves `inset()`
+  directly and maps `circle()`/`ellipse()` onto their own bounding box with
+  every corner sharing one radius pair — the same per-corner elliptical test
+  this painter already uses for rounded-rectangle overflow clipping
+  reproduces an exact circle/ellipse when the box's width/height equals
+  `2*rx`/`2*ry`. `inset()`'s offsets and `round` radii both use the CSS
+  four-value shorthand expansion (1/2/3/4 values); `circle()`'s keyword
+  radius resolves against the closest/farthest of all four sides per CSS
+  Shapes 1, while `ellipse()`'s two keyword radii resolve per axis
+  independently. `polygon()`, `path()`, a `url()` reference and a bare
+  `<geometry-box>` with no shape are skipped, not guessed, matching this
+  painter's existing policy for unsupported filter functions; so are
+  `em`/`rem`/viewport-relative lengths, which need font/viewport context this
+  bounded resolver does not have. Every shape resolves against the box's own
+  border box regardless of an explicit `<geometry-box>` keyword (this
+  resolver does not track a separate padding/margin reference box) — a
+  documented simplification, not a spec claim.
+- `GroupEffect`/`EffectNode` gain `clip: Option<ClipMask>`; a `clip-path`
+  alone (no opacity/transform/blend/filter/isolation) now opens a group, the
+  same filter-only-group policy RC-25/RC-26 established. `RasterState::
+  begin_group` converts the resolved `ClipMask` into the same `RoundedRect`
+  mask `push_overflow_clip`'s rounded-corner overflow clip already uses, so
+  clip-path composites through the identical, already-tested per-pixel mask
+  check in `composite_group`.
+
+Focused tests: `inset()`'s offset/round four-value expansion and percentage
+resolution; `circle()`'s closest-side default and centering; `circle()`'s
+explicit radius/position producing an exact disc (inside/outside/corner
+checks); `ellipse()`'s independent per-axis radii; `polygon()`/`path()`/a bare
+geometry keyword/`none` all resolving to no mask; and a `paint_document`
+end-to-end test (`clip_path_circle_clips_the_elements_own_content_to_the_disc`)
+confirming the box's own painted content is clipped to the circle while its
+bounding-rect corners show the parent's background through. No CSS, layout,
+compositor, driver or lockfile source changed.
+
+Linux gate: workspace nextest **2,761 passed / 0 failed / 10 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-paint` **156 passed / 0
+skipped** (up from 149 at RC-26).
+
+Still outstanding for COMP-15: `polygon()`/`path()` clip-path shapes and
+`mask-image`/`mask-*`. No WPT credit is claimed under the Linux-first
+deferral.

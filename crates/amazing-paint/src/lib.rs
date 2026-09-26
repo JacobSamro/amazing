@@ -46,6 +46,7 @@
 
 pub mod background;
 mod blend;
+pub mod clip;
 pub mod color;
 pub mod controls;
 mod display_list;

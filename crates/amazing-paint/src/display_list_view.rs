@@ -198,6 +198,9 @@ pub struct EffectNode {
     /// paint coordinates (meaningful only when `backdrop_filter` is
     /// non-empty).
     pub backdrop_bounds: PaintBounds,
+    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()` only;
+    /// `polygon()`, `path()`, `url()` and a bare `<geometry-box>` are `None`).
+    pub clip: Option<crate::clip::ClipMask>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -356,6 +359,7 @@ impl<'a> DisplayListView<'a> {
                 filter: crate::filter::FilterPlan::default(),
                 backdrop_filter: crate::filter::FilterPlan::default(),
                 backdrop_bounds: PaintBounds::viewport(width, height),
+                clip: None,
             }],
             scrolls: vec![
                 ScrollNode {
@@ -408,6 +412,7 @@ impl<'a> DisplayListView<'a> {
                         filter: group.filter,
                         backdrop_filter: group.backdrop_filter,
                         backdrop_bounds: PaintBounds::from_layout(group.backdrop_bounds),
+                        clip: group.clip,
                     });
                     state.effect = next;
                     if group.transform != Affine::IDENTITY {

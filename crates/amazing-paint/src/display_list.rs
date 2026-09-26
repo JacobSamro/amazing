@@ -82,6 +82,8 @@ pub(crate) struct GroupEffect {
     /// surface pixel space as this box's own decorations (valid only when
     /// `backdrop_filter` is non-empty).
     pub backdrop_bounds: Rect,
+    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()` only).
+    pub clip: Option<crate::clip::ClipMask>,
 }
 
 impl GroupEffect {
@@ -499,16 +501,21 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         box_.style.get("backdrop-filter").unwrap_or("none"),
         current_color,
     );
+    let border = box_.border_box;
+    let clip = box_
+        .style
+        .get("clip-path")
+        .and_then(|value| crate::clip::ClipMask::from_css(value, (border.x, border.y, border.w, border.h)));
     if opacity >= 1.0
         && transform.is_none()
         && blend == amazing_css::effects::BlendMode::Normal
         && !isolate
         && filter.is_empty()
         && backdrop_filter.is_empty()
+        && clip.is_none()
     {
         return None;
     }
-    let border = box_.border_box;
     Some(GroupEffect {
         owner: box_.node,
         opacity,
@@ -520,6 +527,7 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         filter,
         backdrop_filter,
         backdrop_bounds: border,
+        clip,
     })
 }
 

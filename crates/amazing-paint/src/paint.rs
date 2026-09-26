@@ -129,7 +129,19 @@ impl RasterState {
     }
 
     fn begin_group(&mut self, effect: GroupEffect) {
-        self.begin_group_with_mask(effect, None);
+        let mask = effect.clip.map(|clip| RoundedRect {
+            x: clip.x,
+            y: clip.y,
+            width: clip.width,
+            height: clip.height,
+            radii: CornerRadii {
+                top_left: clip.radii[0],
+                top_right: clip.radii[1],
+                bottom_right: clip.radii[2],
+                bottom_left: clip.radii[3],
+            },
+        });
+        self.begin_group_with_mask(effect, mask);
     }
 
     fn begin_group_with_mask(&mut self, effect: GroupEffect, mask: Option<RoundedRect>) {
@@ -196,6 +208,7 @@ impl RasterState {
                     filter: crate::filter::FilterPlan::default(),
                     backdrop_filter: crate::filter::FilterPlan::default(),
                     backdrop_bounds: amazing_layout::Rect::default(),
+                    clip: None,
                 },
                 Some(mask),
             );
@@ -2481,6 +2494,25 @@ mod tests {
         // the box's own right edge (the box spans x in [3, 5)).
         assert_eq!(surface.get_pixel(6, 3), Some([255, 0, 0, 255]));
         assert_eq!(surface.get_pixel(0, 0), Some([255, 255, 255, 255]));
+    }
+
+    #[test]
+    fn clip_path_circle_clips_the_elements_own_content_to_the_disc() {
+        let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 10.0, 10.0);
+        let child = block(
+            &[("background-color", "black"), ("clip-path", "circle(3px at center)")],
+            2.0,
+            2.0,
+            6.0,
+            6.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 10, 10, &FontSource::fallback());
+        // The circle's center (also the box's own center) stays black.
+        assert_eq!(surface.get_pixel(5, 5), Some([0, 0, 0, 255]));
+        // A corner of the box's own bounding rect, outside the inscribed
+        // circle, is clipped away and shows the parent's white background.
+        assert_eq!(surface.get_pixel(2, 2), Some([255, 255, 255, 255]));
     }
 
     #[test]
