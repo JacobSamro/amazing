@@ -125,11 +125,23 @@ def save_map(m: dict) -> None:
     MAP.write_text(json.dumps(m, indent=2) + "\n")
 
 
+def endpoint(d: dict) -> str | None:
+    """host:port for ssh. Bare-metal sandboxes publish sshEndpoint; Hetzner ones
+    publish none but answer on their IPv4 address, port 22 (2026-09-26)."""
+    if d.get("sshEndpoint"):
+        return d["sshEndpoint"]
+    ip = d.get("ip") or ""
+    if ip and ":" not in ip:
+        return f"{ip}:22"
+    return None
+
+
 def wait_ready(sid: str, limit: int = 300) -> dict:
     deadline = time.time() + limit
     while time.time() < deadline:
         d = info(sid)
-        if d.get("state") in READY and d.get("sshEndpoint"):
+        if d.get("state") in READY and endpoint(d):
+            d["sshEndpoint"] = endpoint(d)
             if d.get("machineProvider") != "baremetal":
                 print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
                       "(2-4x slower than bare metal)", file=sys.stderr)
