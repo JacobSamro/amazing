@@ -112,13 +112,15 @@ impl fmt::Debug for JsSymbol {
 pub enum WellKnownSymbol {
     Iterator, AsyncIterator, HasInstance, ToPrimitive, ToStringTag,
     IsConcatSpreadable, Species, Unscopables, Match, MatchAll, Replace, Search, Split,
+    Dispose,
 }
 
 impl WellKnownSymbol {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Iterator, Self::AsyncIterator, Self::HasInstance, Self::ToPrimitive,
         Self::ToStringTag, Self::IsConcatSpreadable, Self::Species, Self::Unscopables,
         Self::Match, Self::MatchAll, Self::Replace, Self::Search, Self::Split,
+        Self::Dispose,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -128,6 +130,7 @@ impl WellKnownSymbol {
             Self::Species => "species", Self::Unscopables => "unscopables",
             Self::Match => "match", Self::MatchAll => "matchAll", Self::Replace => "replace",
             Self::Search => "search", Self::Split => "split",
+            Self::Dispose => "dispose",
         }
     }
     pub fn symbol(self) -> JsSymbol {
@@ -136,6 +139,7 @@ impl WellKnownSymbol {
             Self::ToPrimitive => 4, Self::ToStringTag => 5, Self::IsConcatSpreadable => 6,
             Self::Species => 7, Self::Unscopables => 8, Self::Match => 9,
             Self::MatchAll => 10, Self::Replace => 11, Self::Search => 12, Self::Split => 13,
+            Self::Dispose => 14,
         };
         JsSymbol { id, description: Some(JsString::from(format!("Symbol.{}", self.name()))) }
     }

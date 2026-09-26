@@ -32,6 +32,10 @@ use amazing_js::{
 mod runtime_host_storage;
 use runtime_host_storage::StorageRuntime;
 
+#[path = "runtime_host_messaging.rs"]
+pub(crate) mod runtime_host_messaging;
+use runtime_host_messaging::MessagingOp;
+
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
@@ -48,6 +52,8 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    Messaging(MessagingOp),
+    StorageLockSettled(u64, bool),
 }
 
 enum WebObject {
@@ -82,11 +88,13 @@ struct BindingState {
     document_content_type: Option<String>,
     document_referrer: Option<String>,
     web_objects: Vec<WebObject>,
+    web_object_handles: HashMap<usize, usize>,
     font_sets: HashMap<NodeIdx, u64>,
     window_event_target_slot: u64,
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
+    messaging: Option<runtime_host_messaging::MessagingRealm>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -131,15 +139,17 @@ impl RuntimeBindings {
     }
     pub(crate) fn dispatch_event(&self, js: &mut Interpreter, node: u32, name: &str) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
-        let prototype = adapter.js.binding_object_prototype();
-        let options = adapter.create_object(Some(&prototype))?;
-        adapter.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
-            BindingPropertyFlags::METHOD)?;
-        let event = invoke(&mut adapter, Operation::EventConstructor, JsValue::Undefined,
-            &[JsValue::str(name), options])?;
-        let target = adapter.wrap_node(NodeIdx(node))?;
-        invoke(&mut adapter, Operation::DispatchEvent, target, &[event])?;
-        Ok(())
+        amazing_bindings::dispatch_user_agent_event(&mut adapter,
+            amazing_dom::events::EventTarget::Node(NodeIdx(node)), name,
+            amazing_dom::events::EventInit { bubbles: true, cancelable: false, composed: false })
+    }
+
+    pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+        init: amazing_dom::events::EventInit) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        let slot = adapter.with_dom(|dom| dom.window_event_target().ok_or(DomError::InvalidStateError))?;
+        amazing_bindings::dispatch_user_agent_event(&mut adapter,
+            amazing_dom::events::EventTarget::External(slot), name, init)
     }
 
     pub(crate) fn dispatch_animation_event(&self, js: &mut Interpreter, animation: &amazing_compositor::CssAnimationEvent) -> Result<(), Throw> {
@@ -362,6 +372,8 @@ impl RuntimeBindingHost<'_> {
                 NodeKind::Element { .. } => {
                     if host.dom.namespace(node) == Some(Namespace::Html) {
                         html_element_interface(host.dom.name(node).unwrap_or(""))
+                    } else if host.dom.namespace(node) == Some(Namespace::Svg) {
+                        Interface::SVGElement
                     } else { Interface::Element }
                 },
                 NodeKind::Text { .. } => Interface::Text,
@@ -449,11 +461,13 @@ pub(crate) fn install(
         document_content_type: None,
         document_referrer: None,
         web_objects: Vec::new(),
+        web_object_handles: HashMap::new(),
         font_sets: HashMap::new(),
         window_event_target_slot,
         storage: None,
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
+        messaging: None,
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -480,6 +494,8 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
+            NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -488,9 +504,11 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    adapter.install_dom_unscopables()?;
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
+    adapter.install_messaging()?;
     adapter.install_canvas()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
@@ -531,7 +549,11 @@ impl RuntimeBindingHost<'_> {
             slot
         };
         let arena = self.state.borrow().arena;
-        self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)
+        let value = self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)?;
+        if let JsValue::Object(object) = &value {
+            self.state.borrow_mut().web_object_handles.insert(Rc::as_ptr(&object.0) as usize, slot as usize);
+        }
+        Ok(value)
     }
     fn web_slot(&self, value: &JsValue, brand: InterfaceBrand) -> Result<usize, Throw> {
         let key = self.platform_object(value, brand)
@@ -1511,16 +1533,15 @@ impl DocumentHost for RuntimeBindingHost<'_> {
             DocumentField::CharacterSet => self.state.borrow().document_character_set.clone(),
             DocumentField::ContentType => self.state.borrow().document_content_type.clone(),
             DocumentField::Referrer => self.state.borrow().document_referrer.clone(),
-            DocumentField::CompatMode => None,
+            DocumentField::CompatMode => Some("CSS1Compat".into()),
         };
         let Some(value) = value else {
             return Err(throw_dom_error(self, DomError::NotSupportedError));
         };
         Ok(value.encode_utf16().collect())
     }
-    fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {
-        if _document != NodeIdx(0) { return Ok(None); }
-        Err(throw_dom_error(self, DomError::NotSupportedError))
+    fn active_element(&mut self, document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {
+        self.with_dom(|dom| Ok(dom.active_element(document)))
     }
     fn has_focus(&mut self, _document: NodeIdx) -> Result<bool, Throw> {
         if _document != NodeIdx(0) { return Ok(false); }

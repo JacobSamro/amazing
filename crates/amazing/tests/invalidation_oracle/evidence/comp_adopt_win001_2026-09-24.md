@@ -13,6 +13,6 @@ test result: ok. 1 passed; 0 failed
 | Effects scroller | 120.875 ms | 24.111 ms | 20/20/60 | 20 | 240 | 40 (2 per frame) | 0 |
 | Opacity class in document `<style>` | 39.637 ms | 16.868 ms | 0/0/0 | 0 | 0 | 0 | 0 |
 
-The compositor classified each effects difference as a layer-boundary pixel with no channel differing by more than one. The oracle counted those pixels separately and presented the retained frame without a parity fallback. Article and effects p95 remain above ADR 0010's 20 ms and 31 ms targets; the trace includes the full recomputation oracle on every frame. The property-only opacity frame met the zero stage-work target.
+The compositor classified each effects difference as a layer-boundary pixel with no channel differing by more than one. The oracle counted those pixels separately and presented the retained frame without a parity fallback. These candidate timings include the full recomputation oracle and are diagnostic costs, not the production frame times to compare with ADR 0010's targets. The property-only opacity frame met the zero stage-work target.
 
 The Win-002 locked gate ran on `9cfa5187`, which has the same production code. It passed `amazing` nextest **184 passed / 4 skipped**, workspace nextest **2,377 passed / 7 skipped**, and workspace doctests **2 passed / 0 failed**. Later commits changed the ignored trace assertion and this evidence; the Win-001 run above compiled and exercised that assertion.

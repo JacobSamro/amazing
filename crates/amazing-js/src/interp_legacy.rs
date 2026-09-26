@@ -420,6 +420,19 @@ mod tests {
     }
 
     #[test]
+    fn object_reflection_includes_virtual_collection_descriptors() {
+        let (mut i, object, _, _, _) = fixture(false, true);
+        i.binding_define_data_property(&i.binding_global_object(), "collection", object,
+            BindingPropertyFlags::METHOD).unwrap();
+        assert_eq!(i.run_script(r#"
+            var descriptors = Object.getOwnPropertyDescriptors(collection);
+            descriptors[0].value === 10 && descriptors[0].enumerable &&
+                !descriptors[0].writable && descriptors.item.value === 'item' &&
+                !descriptors.item.enumerable && Object.values(collection).join(',') === '10,20';
+        "#).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
     fn visibility_and_unenumerable_names_follow_hook_flags() {
         let (mut i, object, prototype, _, _) = fixture(false, true);
         i.binding_define_data_property(&prototype, "values", JsValue::num(99.0), BindingPropertyFlags::METHOD).unwrap();
@@ -441,6 +454,15 @@ mod tests {
         i.binding_set_property(&object, "item", JsValue::num(7.0)).unwrap();
         let JsValue::Object(o) = &object else { unreachable!() };
         assert_eq!(i.legacy_own_keys(o, true).unwrap(), vec!["0", "1"]);
+    }
+
+    #[test]
+    fn inherited_collection_name_can_be_shadowed_by_ordinary_object() {
+        let (mut i, collection, _, _, names) = fixture(false, false);
+        names.borrow_mut().push("named".into());
+        i.binding_define_data_property(&i.binding_global_object(), "collection", collection,
+            BindingPropertyFlags::METHOD).unwrap();
+        assert_eq!(i.run_script("var child = Object.create(collection); child.named = 'foo'; Object.hasOwn(child, 'named') && child.named === 'foo' && collection.named === 'named'").unwrap(), JsValue::Bool(true));
     }
 
     #[test]

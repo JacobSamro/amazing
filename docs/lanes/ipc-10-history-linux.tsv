@@ -1,0 +1,22 @@
+# IPC-10 pinned history selection, Linux (venus-001), fixed-base rerun 2026-09-26.
+# Branch lane/ipc, code 7cc90146 (dev base 59492359) + script-only merge a886dbed.
+# WPT revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
+# mode 0 = direct (AMAZING_IPC_HISTORY=0); mode 1 = process-backed (AMAZING_IPC_HISTORY=1).
+# All paths under html/browsers/history/the-history-interface/.
+# Result: identical classification on/off, no process Network(Transport) flake.
+# Raw per-file JSON: docs/lanes/ipc-10-parity/{0,1}-<file>.json (all .err empty).
+mode	file	status
+0	history_pushstate.html	pass
+0	history_replacestate_nooptionalparam.html	pass
+0	history_back.html	timeout
+0	history_go_zero.html	fail
+0	history_state.html	pass
+0	history_pushstate_url.html	fail
+0	iframe_history_go_0.html	fail
+1	history_pushstate.html	pass
+1	history_replacestate_nooptionalparam.html	pass
+1	history_back.html	timeout
+1	history_go_zero.html	fail
+1	history_state.html	pass
+1	history_pushstate_url.html	fail
+1	iframe_history_go_0.html	fail

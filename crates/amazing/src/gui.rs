@@ -228,6 +228,7 @@ mod windows {
     struct Tab {
         surface: Option<Surface>,
         runtime: Option<PageRuntime>,
+        navigator: Option<crate::navigator::Navigator>,
         history: Vec<String>,
         history_pos: usize,
         scroll_y: i32,
@@ -238,6 +239,7 @@ mod windows {
             Self {
                 surface: None,
                 runtime: None,
+                navigator: None,
                 history: Vec::new(),
                 history_pos: 0,
                 scroll_y: 0,
@@ -392,21 +394,64 @@ mod windows {
             if input.is_empty() {
                 return;
             }
-            match render_page(&input, self.width) {
-                Ok(rendered) => {
+            let tab_id = self.active_tab as u64 + 1;
+            let target = (!record).then_some(self.tab().history_pos);
+            let width = self.width;
+            let scroll_y = self.tab().scroll_y;
+            let result = self.tab_mut().navigator
+                .get_or_insert_with(|| crate::navigator::Navigator::new(tab_id))
+                .navigate(&input, record, target, scroll_y, |url, _body| render_page(url, width));
+            match result {
+                Ok(result) => {
+                    let rendered = result.rendered;
+                    let frame_sources = {
+                        let host = rendered.runtime.host.borrow();
+                        let mut pending = vec![NodeIdx(0)];
+                        let mut sources = Vec::new();
+                        while let Some(node) = pending.pop() {
+                            if host.dom.name(node) == Some("iframe")
+                                && let Some(src) = host.dom.attrs_of(node).unwrap_or(&[]).iter()
+                                    .find(|(name, _)| name == "src").map(|(_, value)| value)
+                                && !src.is_empty()
+                            {
+                                sources.push(src.clone());
+                            }
+                            pending.extend(host.dom.children(node));
+                        }
+                        sources
+                    };
                     let tab = self.tab_mut();
                     tab.surface = Some(rendered.surface);
                     tab.runtime = Some(rendered.runtime);
-                    tab.scroll_y = 0;
-                    if record {
-                        let tab = self.tab_mut();
-                        tab.history.truncate(tab.history_pos.saturating_add(1));
-                        tab.history.push(input.clone());
-                        tab.history_pos = tab.history.len().saturating_sub(1);
+                    tab.scroll_y = result.scroll_y;
+                    tab.history = result.history;
+                    tab.history_pos = result.history_index;
+                    for source in frame_sources {
+                        let url = resolve_script_url(&result.url, &source);
+                        let navigator = self.tab_mut().navigator.as_mut().unwrap();
+                        let frame = navigator.create_child(1).and_then(|child| {
+                            navigator.navigate_child(child, &url, |url, _body| {
+                                if !crate::runtime_host_ipc::enabled() {
+                                    amazing_net::fetch(url, &amazing_net::FetchOptions::default())
+                                        .map_err(|error| error.to_string())?;
+                                }
+                                Ok(())
+                            })
+                        });
+                        if let Err(error) = frame {
+                            eprintln!("amazing gui: iframe {url}: {error}");
+                        }
                     }
-                    let history_length = self.tab().history.len();
+                    let history_length = result.history_length;
                     if let Some(runtime) = self.tab_mut().runtime.as_mut() {
                         runtime.js.js.set_history_length(history_length);
+                        let restored = result.history_state.as_ref()
+                            .map(|state| runtime.js.js.structured_deserialize(state))
+                            .transpose();
+                        match restored {
+                            Ok(state) => runtime.js.js.set_history_state(state.unwrap_or(amazing_js::value::JsValue::Null)),
+                            Err(error) => eprintln!("amazing gui: history.state restore: {}", error.describe()),
+                        }
                     }
                     let script_navigation = self
                         .tab_mut()
@@ -414,13 +459,13 @@ mod windows {
                         .as_mut()
                         .and_then(|runtime| runtime.js.js.take_navigation());
                     if let Some(url) = script_navigation
-                        && url != input
+                        && url != result.url
                     {
                         self.navigate(url, true);
                         return;
                     }
-                    set_window_text(self.address, &input);
-                    set_window_text(self.hwnd, &self.window_title(&input));
+                    set_window_text(self.address, &result.url);
+                    set_window_text(self.hwnd, &self.window_title(&result.url));
                     self.update_tab_button();
                     // SAFETY: hwnd is the live top-level window owned by the
                     // message loop; invalidating it schedules a repaint only.
@@ -531,7 +576,13 @@ mod windows {
                 sheet.base_url = Some(url.clone());
                 sheet
             }).collect::<Vec<_>>();
-            let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, runtime.animations.animated());
+            let environment = amazing_css::MediaEnvironment {
+                viewport_width_px: width.max(1) as f32,
+                viewport_height_px: viewport_height,
+                ..amazing_css::MediaEnvironment::default()
+            };
+            let styled = amazing_css::compute_with_animations_and_environment(
+                &host_ref.dom, &sheets, runtime.animations.animated(), &environment);
             let media = load_page_media(&host_ref.dom, &page, &styled);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
@@ -642,48 +693,62 @@ mod windows {
 
         fn pump_timers(&mut self) {
             let page = self.tab().current_url().unwrap_or("").to_owned();
-            let mut fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                match runtime.js.pump_now(true) {
-                    Ok(fired) => fired,
-                    Err(error) => {
-                        eprintln!("amazing gui: timer callback failed: {}", error.describe());
-                        false
+            let mut fired = false;
+            let mut render_output: Option<amazing_compositor::AnimationFrameOutput> = None;
+            let mut render_error: Option<String> = None;
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                let now_ms = runtime.animation_started.elapsed().as_secs_f64() * 1000.;
+                {
+                    let host = runtime.host.clone();
+                    let js = &mut runtime.js;
+                    let animations = &mut runtime.animations;
+                    let page = page.as_str();
+                    let output_slot = &mut render_output;
+                    let error_slot = &mut render_error;
+                    let pumped = js.pump_now_with_render(true, |phase, _timestamp| {
+                        // The frame's animation sample runs at the loop's post-rAF
+                        // render step, after any rAF callbacks have mutated the DOM.
+                        if phase != amazing_dom::event_loop::RenderPhase::AfterAnimationFrames {
+                            return;
+                        }
+                        let dom = host.borrow();
+                        let mut sources = Vec::new();
+                        if collect_author_css(&dom.dom, NodeIdx(0), page, &mut sources).is_err() {
+                            return;
+                        }
+                        let sheets = sources.into_iter().map(|(source, url)| {
+                            let mut sheet = amazing_css::parse_stylesheet(&source);
+                            sheet.base_url = Some(url);
+                            sheet
+                        }).collect::<Vec<_>>();
+                        match animations.frame(&dom.dom, &sheets, now_ms) {
+                            Ok(output) => *output_slot = Some(output),
+                            Err(error) => *error_slot = Some(error),
+                        }
+                    });
+                    match pumped {
+                        Ok(worked) => fired = worked,
+                        Err(error) => eprintln!("amazing gui: timer callback failed: {}", error.describe()),
                     }
                 }
-            } else {
-                false
-            };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                let sampled = (|| -> Result<_, String> {
-                    let host = runtime.host.borrow();
-                    let mut sources = Vec::new();
-                    collect_author_css(&host.dom, NodeIdx(0), &page, &mut sources)?;
-                    let sheets = sources.into_iter().map(|(source, url)| {
-                        let mut sheet = amazing_css::parse_stylesheet(&source);
-                        sheet.base_url = Some(url);
-                        sheet
-                    }).collect::<Vec<_>>();
-                    runtime.animations.frame(&host.dom, &sheets,
-                        runtime.animation_started.elapsed().as_secs_f64() * 1000.)
-                })();
-                match sampled {
-                    Ok(output) => {
-                        if !output.events.is_empty() {
-                            // An event listener can mutate the page without changing
-                            // this frame's sampled animation values.
-                            fired = true;
-                        }
-                        for event in &output.events {
-                            if let Err(error) = runtime.js.dispatch_animation_event(event) {
-                                eprintln!("amazing gui: animation listener failed: {}", error.describe());
-                            }
-                        }
-                        if runtime.animation_updates != output.main_thread_updates {
-                            runtime.animation_updates = output.main_thread_updates;
-                            fired = true;
+                if let Some(error) = render_error {
+                    eprintln!("amazing gui: animation frame failed: {error}");
+                }
+                if let Some(output) = render_output {
+                    if !output.events.is_empty() {
+                        // An event listener can mutate the page without changing
+                        // this frame's sampled animation values.
+                        fired = true;
+                    }
+                    for event in &output.events {
+                        if let Err(error) = runtime.js.dispatch_animation_event(event) {
+                            eprintln!("amazing gui: animation listener failed: {}", error.describe());
                         }
                     }
-                    Err(error) => eprintln!("amazing gui: animation frame failed: {error}"),
+                    if runtime.animation_updates != output.main_thread_updates {
+                        runtime.animation_updates = output.main_thread_updates;
+                        fired = true;
+                    }
                 }
             }
             if let Some(delta) = self
@@ -722,7 +787,11 @@ mod windows {
         }
 
         fn apply_history_delta(&mut self, delta: i32) {
-            if delta < 0 {
+            if delta == 0 {
+                if let Some(url) = self.tab().current_url().map(str::to_owned) {
+                    self.navigate(url, false);
+                }
+            } else if delta < 0 {
                 for _ in 0..delta.unsigned_abs() {
                     self.go_back();
                 }
@@ -740,14 +809,33 @@ mod windows {
             state: amazing_js::value::JsValue,
         ) {
             let url = self.resolve_navigation(&url);
+            let scroll_y = self.tab().scroll_y;
             {
                 let tab = self.tab_mut();
-                if replace && !tab.history.is_empty() {
-                    tab.history[tab.history_pos] = url.clone();
+                let serialized = match tab.runtime.as_mut()
+                    .map(|runtime| runtime.js.js.structured_serialize(&state)) {
+                    Some(Ok(value)) => Some(value),
+                    Some(Err(error)) => {
+                        eprintln!("amazing gui: history.state: {}", error.describe());
+                        return;
+                    }
+                    None => None,
+                };
+                if let Some(navigator) = tab.navigator.as_mut() {
+                    if let Err(error) = navigator.same_document(url.clone(), replace, serialized, scroll_y) {
+                        eprintln!("amazing gui: history update: {error}");
+                        return;
+                    }
+                    tab.history = navigator.urls();
+                    tab.history_pos = navigator.history_index().unwrap_or(0);
                 } else {
-                    tab.history.truncate(tab.history_pos.saturating_add(1));
-                    tab.history.push(url.clone());
-                    tab.history_pos = tab.history.len().saturating_sub(1);
+                    if replace && !tab.history.is_empty() {
+                        tab.history[tab.history_pos] = url.clone();
+                    } else {
+                        tab.history.truncate(tab.history_pos.saturating_add(1));
+                        tab.history.push(url.clone());
+                        tab.history_pos = tab.history.len().saturating_sub(1);
+                    }
                 }
                 let history_length = tab.history.len();
                 if let Some(runtime) = tab.runtime.as_mut() {
@@ -765,21 +853,48 @@ mod windows {
         }
 
         fn go_back(&mut self) {
-            if self.tab().history_pos == 0 || self.tab().history.is_empty() {
-                return;
-            }
-            self.tab_mut().history_pos -= 1;
-            if let Some(url) = self.tab().current_url().map(str::to_owned) {
-                self.navigate(url, false);
-            }
+            self.traverse_history(-1);
         }
 
         fn go_forward(&mut self) {
-            if self.tab().history_pos + 1 >= self.tab().history.len() {
+            self.traverse_history(1);
+        }
+
+        fn traverse_history(&mut self, delta: i32) {
+            let Some((target, url)) = self.tab().navigator.as_ref()
+                .and_then(|navigator| navigator.target(delta))
+                .map(|(target, url)| (target, url.to_owned())) else {
                 return;
-            }
-            self.tab_mut().history_pos += 1;
-            if let Some(url) = self.tab().current_url().map(str::to_owned) {
+            };
+            let outgoing_scroll_y = self.tab().scroll_y;
+            if self.tab().navigator.as_ref()
+                .is_some_and(|navigator| navigator.same_document_target(target)) {
+                let result = self.tab_mut().navigator.as_mut().unwrap()
+                    .traverse_same_document(target, outgoing_scroll_y);
+                match result {
+                    Ok((url, scroll_y, state)) => {
+                        let tab = self.tab_mut();
+                        tab.history_pos = target;
+                        tab.scroll_y = scroll_y;
+                        if let Some(runtime) = tab.runtime.as_mut() {
+                            runtime.js.set_location_url(&url);
+                            let restored = state.as_ref()
+                                .map(|state| runtime.js.js.structured_deserialize(state))
+                                .transpose();
+                            match restored {
+                                Ok(state) => runtime.js.js.set_history_state(state.unwrap_or(amazing_js::value::JsValue::Null)),
+                                Err(error) => eprintln!("amazing gui: history.state restore: {}", error.describe()),
+                            }
+                        }
+                        set_window_text(self.address, &url);
+                        set_window_text(self.hwnd, &self.window_title(&url));
+                        self.update_tab_button();
+                        unsafe { InvalidateRect(self.hwnd, null(), 0) };
+                    }
+                    Err(error) => eprintln!("amazing gui: history traversal: {error}"),
+                }
+            } else {
+                self.tab_mut().history_pos = target;
                 self.navigate(url, false);
             }
         }
@@ -1027,17 +1142,23 @@ mod windows {
             sheet.base_url = Some(url.clone());
             sheet
         }).collect::<Vec<_>>();
+        let environment = amazing_css::MediaEnvironment {
+            viewport_width_px: width.max(1) as f32,
+            viewport_height_px: 700.0,
+            ..amazing_css::MediaEnvironment::default()
+        };
         let mut animations = AnimationScene::new();
         let animation_started = Instant::now();
         let initial_animation = {
             let host_ref = host.borrow();
-            animations.frame(&host_ref.dom, &sheets, 0.)?
+            animations.frame_with_environment(&host_ref.dom, &sheets, &environment, 0.)?
         };
         for event in &initial_animation.events {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, animations.animated());
+        let styled = amazing_css::compute_with_animations_and_environment(
+            &host_ref.dom, &sheets, animations.animated(), &environment);
         let media = load_page_media(&host_ref.dom, input, &styled);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
@@ -1594,6 +1715,7 @@ mod windows {
             state.tabs.push(Tab {
                 surface: Some(surface),
                 runtime: Some(runtime),
+                navigator: None,
                 history: vec!["../../examples/phase8.html".into()],
                 history_pos: 0,
                 scroll_y: 0,

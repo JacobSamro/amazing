@@ -3,27 +3,43 @@
 //! view without this crate depending on layout or changing the full-paint path.
 #![forbid(unsafe_code)]
 mod animation;
+mod effect_animation;
+#[cfg(test)]
+mod effect_tests;
+mod effects;
 mod frame;
+pub use effect_animation::*;
+mod effect_padding;
+mod effect_snapshot;
+pub use effect_snapshot::*;
+mod layer_policy;
+pub use layer_policy::*;
+mod effect_clip;
+mod effect_pixels;
+pub use effect_clip::ClipPathSegment;
+pub use effects::*;
 mod hit;
 mod paint_delta;
 mod paint_view;
-mod property_binding;
 mod property;
+mod property_binding;
 mod quad;
 mod scroll_input;
 mod snapshot;
+mod tile_raster;
 use amazing_paint::Surface;
 pub use animation::*;
 pub use hit::*;
 pub use paint_delta::*;
 pub use paint_view::*;
-pub use property_binding::*;
 pub use property::*;
+pub use property_binding::*;
 pub use quad::*;
 pub use scroll_input::*;
 pub use snapshot::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
+pub use tile_raster::*;
 
 pub const TILE_SIZE: i32 = 256;
 const MAX_VISIBLE_TILES: usize = 1024;
@@ -37,6 +53,8 @@ impl CompositingReasons {
     pub const FIXED: Self = Self(16);
     pub const SCROLLER: Self = Self(32);
     pub const OVERLAP: Self = Self(64);
+    pub const CANVAS: Self = Self(128);
+    pub const STICKY: Self = Self(256);
     pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
@@ -97,32 +115,53 @@ pub struct Layer {
 /// Pending-layer grouping preserves list order. Direct reasons isolate chunks;
 /// overlap with a differing property state promotes the later layer.
 pub fn layerize(trees: &PropertyTrees, chunks: &[PaintChunk]) -> Vec<Layer> {
+    layerize_with_limit(trees, chunks, usize::MAX).expect("unlimited layer diagnostics")
+}
+fn layerize_with_limit(
+    trees: &PropertyTrees,
+    chunks: &[PaintChunk],
+    limit: usize,
+) -> Result<Vec<Layer>, SceneError> {
     let mut layers: Vec<Layer> = Vec::new();
     for (i, c) in chunks.iter().enumerate() {
         if c.bounds.empty() || c.items.is_empty() {
             continue;
         }
-        let mut reasons = c.reasons;
+        let mut reasons = c
+            .reasons
+            .union(layer_policy::inferred_reasons(trees, c.state));
+        if let Some(last) = layers.last_mut() {
+            // Never cross a different property state, a display-list gap, or
+            // an independently updated video/canvas resource.
+            let separate = CompositingReasons::VIDEO.union(CompositingReasons::CANVAS);
+            if last.state == c.state
+                && !last.reasons.contains(separate)
+                && !reasons.contains(separate)
+                && chunks[*last.chunks.last().unwrap()].items.end == c.items.start
+            {
+                last.chunks.push(i);
+                last.bounds = last.bounds.union(c.bounds);
+                last.reasons = last.reasons.union(reasons);
+                continue;
+            }
+        }
+        if layers.len() >= limit {
+            return Err(SceneError::TooManyLayers);
+        }
+        let current_world = trees.matrix(c.state).and_then(|m| m.map_bounds(c.bounds));
         for prior in &layers {
+            if prior.state == c.state {
+                continue;
+            }
             let prior_world = trees
                 .matrix(prior.state)
                 .and_then(|m| m.map_bounds(prior.bounds));
-            let current_world = trees.matrix(c.state).and_then(|m| m.map_bounds(c.bounds));
-            if prior.state != c.state
-                && prior_world
-                    .zip(current_world)
-                    .is_some_and(|(a, b)| a.intersects(b))
+            if prior_world
+                .zip(current_world)
+                .is_some_and(|(a, b)| a.intersects(b))
             {
                 reasons = reasons.union(CompositingReasons::OVERLAP);
-            }
-        }
-        if !reasons.direct() && !reasons.contains(CompositingReasons::OVERLAP) {
-            if let Some(last) = layers.last_mut() {
-                if last.state == c.state && !last.reasons.direct() {
-                    last.chunks.push(i);
-                    last.bounds = last.bounds.union(c.bounds);
-                    continue;
-                }
+                break;
             }
         }
         layers.push(Layer {
@@ -132,7 +171,7 @@ pub fn layerize(trees: &PropertyTrees, chunks: &[PaintChunk]) -> Vec<Layer> {
             reasons,
         });
     }
-    layers
+    Ok(layers)
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SceneError {
@@ -141,6 +180,7 @@ pub enum SceneError {
     UnorderedRanges,
     NonFiniteBounds,
     TooManyTiles,
+    TooManyLayers,
     MissingCachedTile,
 }
 impl std::fmt::Display for SceneError {
@@ -159,6 +199,9 @@ struct TileKey {
 struct Tile {
     surface: Surface,
     dirty: bool,
+    damage: Option<Rect>,
+    updated: bool,
+    last_used: u64,
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FrameStats {
@@ -178,6 +221,12 @@ pub struct Compositor {
     property_bindings: HashMap<NodePropertyKey, BoundPropertyNode>,
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
+    tile_budget: usize,
+    tile_clock: u64,
+    raster_epoch: u64,
+    scroll_generation: u64,
+    reserved_effect_halo: f32,
+    free_tile_surfaces: Vec<Surface>,
     last_frame: FrameStats,
     previous_frame: Option<Surface>,
     previous_layers: Vec<frame::LayerSnapshot>,
@@ -238,7 +287,7 @@ impl Compositor {
                 return Err(SceneError::InvalidState);
             }
         }
-        let layers = layerize(&trees, &chunks);
+        let layers = layerize_with_limit(&trees, &chunks, MAX_COMPOSITOR_LAYERS)?;
         Ok(Self {
             trees,
             chunks,
@@ -247,6 +296,12 @@ impl Compositor {
             property_bindings: HashMap::new(),
             layers,
             tiles: HashMap::new(),
+            tile_budget: 256,
+            tile_clock: 0,
+            raster_epoch: 0,
+            scroll_generation: 0,
+            reserved_effect_halo: 0.,
+            free_tile_surfaces: Vec::new(),
             last_frame: FrameStats::default(),
             previous_frame: None,
             previous_layers: Vec::new(),
@@ -274,11 +329,13 @@ impl Compositor {
         let Some(chunk) = self.chunks.get(index) else {
             return;
         };
+        self.raster_epoch = self.raster_epoch.wrapping_add(1);
         for (li, layer) in self.layers.iter().enumerate() {
             if layer.chunks.contains(&index) {
                 for key in tile_keys(li, chunk.bounds) {
                     if let Some(tile) = self.tiles.get_mut(&key) {
-                        tile.dirty = true
+                        tile.dirty = true;
+                        tile.damage = None;
                     }
                 }
             }
@@ -296,15 +353,48 @@ impl Compositor {
         }
     }
     pub fn repaint_all(&mut self) {
+        self.raster_epoch = self.raster_epoch.wrapping_add(1);
         for tile in self.tiles.values_mut() {
-            tile.dirty = true
+            tile.dirty = true;
+            tile.damage = None;
         }
     }
     pub fn set_transform(&mut self, id: TransformId, matrix: Matrix4) -> Result<(), TreeError> {
         self.trees.set_transform(id, matrix)
     }
     pub fn set_scroll(&mut self, id: ScrollId, offset: (f32, f32)) -> Result<(), TreeError> {
-        self.trees.set_scroll(id, offset)
+        let before = self.trees.scroll(id).map(|node| node.offset);
+        self.trees.set_scroll(id, offset)?;
+        if before != Some(offset) {
+            self.scroll_generation = self.scroll_generation.wrapping_add(1);
+        }
+        Ok(())
+    }
+    /// Current local offset for any property-tree scroll node.
+    pub fn scroll_offset(&self, id: ScrollId) -> Option<(f32, f32)> {
+        self.trees.scroll(id).map(|node| node.offset)
+    }
+    /// Offset of the first top-level scroll node, or zero when no root
+    /// scroller exists in this scene. Node zero is the identity sentinel.
+    pub fn root_scroll_offset(&self) -> (f32, f32) {
+        self.root_scroll_id()
+            .and_then(|id| self.scroll_offset(id))
+            .unwrap_or((0., 0.))
+    }
+    pub fn root_scroll_id(&self) -> Option<ScrollId> {
+        self.trees
+            .scrolls
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find(|(_, node)| node.parent == ScrollId(0))
+            .map(|(index, _)| ScrollId(index))
+    }
+    pub fn scroll_generation(&self) -> u64 {
+        self.scroll_generation
+    }
+    pub fn scroll_changed_since(&self, generation: u64) -> bool {
+        self.scroll_generation != generation
     }
     pub fn set_scroll_contents(&mut self, id: ScrollId, contents: Rect) -> Result<(), TreeError> {
         self.trees.set_scroll_contents(id, contents)
@@ -325,6 +415,87 @@ impl Compositor {
     }
     pub fn dirty_tiles(&self) -> usize {
         self.tiles.values().filter(|t| t.dirty).count()
+    }
+    /// Maximum number of retained RGBA tiles. Visible tiles are pinned for
+    /// the frame even when the viewport itself exceeds this budget.
+    pub fn set_tile_budget(&mut self, tiles: usize) {
+        self.tile_budget = tiles.max(1);
+        self.free_tile_surfaces
+            .truncate(self.tile_budget.saturating_sub(self.tiles.len()));
+    }
+}
+fn install_rasterized_tile(
+    tiles: &mut HashMap<TileKey, Tile>,
+    free_tile_surfaces: &mut Vec<Surface>,
+    tile_budget: usize,
+    tile_clock: &mut u64,
+    key: TileKey,
+    surface: Surface,
+) {
+    *tile_clock = tile_clock.wrapping_add(1);
+    if let Some(old) = tiles.get_mut(&key) {
+        if let Some(damage) = old.damage.take() {
+            let local = tile_rect(key);
+            let x0 = (damage.x - local.x).floor().clamp(0., TILE_SIZE as f32) as usize;
+            let y0 = (damage.y - local.y).floor().clamp(0., TILE_SIZE as f32) as usize;
+            let x1 = (damage.x + damage.w - local.x)
+                .ceil()
+                .clamp(0., TILE_SIZE as f32) as usize;
+            let y1 = (damage.y + damage.h - local.y)
+                .ceil()
+                .clamp(0., TILE_SIZE as f32) as usize;
+            for y in y0..y1 {
+                let start = (y * TILE_SIZE as usize + x0) * 4;
+                let end = (y * TILE_SIZE as usize + x1) * 4;
+                old.surface.pixels[start..end].copy_from_slice(&surface.pixels[start..end]);
+            }
+            old.dirty = false;
+            old.updated = true;
+            old.last_used = *tile_clock;
+            if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+                free_tile_surfaces.push(surface);
+            }
+            return;
+        }
+    }
+    let old = tiles.insert(
+        key,
+        Tile {
+            surface,
+            dirty: false,
+            damage: None,
+            updated: true,
+            last_used: *tile_clock,
+        },
+    );
+    if let Some(old) = old {
+        if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+            free_tile_surfaces.push(old.surface);
+        }
+    }
+}
+fn evict_tile_cache(
+    tiles: &mut HashMap<TileKey, Tile>,
+    free_tile_surfaces: &mut Vec<Surface>,
+    tile_budget: usize,
+    pinned: &HashSet<TileKey>,
+) {
+    let keep = tile_budget.max(pinned.len());
+    if tiles.len() <= keep {
+        return;
+    }
+    let mut victims: Vec<_> = tiles
+        .iter()
+        .filter(|(key, _)| !pinned.contains(key))
+        .map(|(key, tile)| (*key, tile.last_used))
+        .collect();
+    victims.sort_by_key(|(key, used)| (*used, key.layer, key.y, key.x));
+    for (key, _) in victims.into_iter().take(tiles.len() - keep) {
+        if let Some(tile) = tiles.remove(&key) {
+            if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+                free_tile_surfaces.push(tile.surface);
+            }
+        }
     }
 }
 fn tile_count(r: Rect) -> i64 {

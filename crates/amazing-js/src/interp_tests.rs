@@ -949,6 +949,20 @@ mod tests {
     }
 
     #[test]
+    fn sparse_array_search_bounds_follow_from_index() {
+        let mut i = Interpreter::new();
+        for source in [
+            "var a=[]; a[4294967294]=true; a.indexOf(true,Infinity)===-1 && a.indexOf(true,'Infinity')===-1",
+            "var needle={}; var a={length:Number.MAX_SAFE_INTEGER}; a[Number.MAX_SAFE_INTEGER-2]=needle; Array.prototype.indexOf.call(a,needle,Number.MAX_SAFE_INTEGER-4)===Number.MAX_SAFE_INTEGER-2",
+            "var a={length:Number.MAX_SAFE_INTEGER}; a[Number.MAX_SAFE_INTEGER-2]='x'; Array.prototype.lastIndexOf.call(a,'x',Number.MAX_SAFE_INTEGER-2)===Number.MAX_SAFE_INTEGER-2",
+            "var a={length:Number.MAX_SAFE_INTEGER}; a[Number.MAX_SAFE_INTEGER-2]='x'; Array.prototype.includes.call(a,'x',Number.MAX_SAFE_INTEGER-3)",
+            "[,].includes(undefined) && [NaN].includes(NaN) && [NaN].indexOf(NaN)===-1",
+        ] {
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {}", error.describe())), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
     fn object_function_and_boolean_audit_members_work() {
         let mut i = Interpreter::new();
         for source in [

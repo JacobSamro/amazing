@@ -1,6 +1,6 @@
 //! Process boundary messages. All externally supplied fields decode through
 //! amazing-ipc's version and allocation limits.
-use amazing_ipc::codec::ByteBuf;
+pub use amazing_ipc::codec::ByteBuf;
 use amazing_ipc::{interface, wire_enum, wire_struct};
 
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Viewport {width:u32, height:u32}}
@@ -116,16 +116,37 @@ interface! {pub interface UtilityDecoder(12) => UtilityProxy, UtilityReceiver {
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePartition {origin:String, top_level_site:String, bucket:String}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StorageEntry {partition:StoragePartition, namespace:String, key:ByteBuf}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct StoragePut {entry:StorageEntry, value:ByteBuf}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum LockMode {Shared(())=1, Exclusive(())=2}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockOptions {if_available:bool, steal:bool}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockRequest {
+    partition:StoragePartition, client:u64, name:String, mode:LockMode, options:LockOptions
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockOutcome {
+    id:Option<u64>, granted:Vec<u64>, stolen:Vec<u64>
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockRelease {client:u64, id:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockClient {client:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockQuery {partition:StoragePartition}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct LockInfo {
+    id:u64, client:u64, name:String, mode:LockMode
+}}
+wire_struct! {#[derive(Debug, Clone, Default, PartialEq, Eq)] pub struct LockSnapshot {
+    held:Vec<LockInfo>, pending:Vec<LockInfo>
+}}
 interface! {pub interface StorageService(13) => StorageProxy, StorageReceiver {
     fn put(request:StoragePut) -> bool = 1;
     fn get(request:StorageEntry) -> Option<ByteBuf> = 2;
     fn delete(request:StorageEntry) -> bool = 3;
     fn checkpoint(request:()) -> bool = 4;
+    fn lock_request(request:LockRequest) -> LockOutcome = 5;
+    fn lock_release(request:LockRelease) -> Vec<u64> = 6;
+    fn lock_release_client(request:LockClient) -> Vec<u64> = 7;
+    fn lock_query(request:LockQuery) -> LockSnapshot = 8;
 }}
 
 // Browser-minted document tokens and epochs gate every lifecycle transition.
 // The renderer reports the observable HTML event order in its acknowledgment.
-wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64, history_state:Option<ByteBuf>}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryFreeze {document:u64, epoch:u64, deadline_ms:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryRestore {document:u64, epoch:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryDiscard {document:u64, epoch:u64}}
@@ -141,6 +162,37 @@ interface! {pub interface HistoryLifecycle(14) => HistoryProxy, HistoryReceiver 
     fn freeze(request:HistoryFreeze) -> HistoryAck = 2;
     fn restore(request:HistoryRestore) -> HistoryAck = 3;
     fn discard(request:HistoryDiscard) -> bool = 4;
+}}
+
+// Cross-document messaging. The browser mints every client and port id; a
+// renderer only names its own client. Payloads are bounded structured-clone
+// graphs; port `0` in a delivery means a BroadcastChannel message.
+pub const MESSAGING_VERSION: u16 = 1;
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct MessagingClient {client:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct ChannelRegistration {
+    client:u64, partition:StoragePartition, name:String
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct BroadcastPost {
+    client:u64, partition:StoragePartition, name:String, payload:ByteBuf
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct MessageDelivery {
+    client:u64, port:u64, payload:ByteBuf
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortPair {a:u64, b:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortPost {
+    client:u64, port:u64, payload:ByteBuf, transfer:Vec<u64>
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortStart {client:u64, port:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct PortClose {client:u64, port:u64}}
+interface! {pub interface MessagingService(15) => MessagingProxy, MessagingReceiver {
+    fn subscribe(request:ChannelRegistration) -> bool = 1;
+    fn unsubscribe(request:ChannelRegistration) -> bool = 2;
+    fn broadcast(request:BroadcastPost) -> Vec<MessageDelivery> = 3;
+    fn create_ports(request:MessagingClient) -> PortPair = 4;
+    fn start_port(request:PortStart) -> Vec<MessageDelivery> = 5;
+    fn post_port(request:PortPost) -> Option<MessageDelivery> = 6;
+    fn close_port(request:PortClose) -> u64 = 7;
+    fn disconnect(request:MessagingClient) -> Vec<u64> = 8;
 }}
 
 impl Frame {

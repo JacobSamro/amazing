@@ -88,11 +88,13 @@ dependencies = [
  "amazing-dom",
  "amazing-fetch",
  "amazing-html",
+ "amazing-ipc",
  "amazing-js",
  "amazing-layout",
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-process",
  "amazing-regex",
  "amazing-storage",
  "amazing-svg",
@@ -102,6 +104,10 @@ dependencies = [
  "amazing-webrtc-codecs",
  "amazing-webrtc-crypto",
 ]
+
+[[package]]
+name = "amazing-a11y"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-bindings"
@@ -145,6 +151,10 @@ dependencies = [
  "amazing-common",
  "amazing-dom",
 ]
+
+[[package]]
+name = "amazing-devtools"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-dom"
@@ -281,6 +291,9 @@ version = "0.0.1"
 [[package]]
 name = "amazing-storage"
 version = "0.0.1"
+dependencies = [
+ "amazing-js",
+]
 
 [[package]]
 name = "amazing-svg"
@@ -309,6 +322,10 @@ dependencies = [
  "unicode-vo",
  "wuff",
 ]
+
+[[package]]
+name = "amazing-wasm"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-webrtc"

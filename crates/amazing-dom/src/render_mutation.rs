@@ -146,6 +146,8 @@ impl Dom {
         if self.local_name(node) == Some("option") && self.option_selected(node).unwrap_or(false) {
             tokens.states.push("selected");
         }
+        if self.is_focused(node) { tokens.states.push("focus"); }
+        if self.is_focus_visible(node) { tokens.states.push("focus-visible"); }
         tokens
     }
 

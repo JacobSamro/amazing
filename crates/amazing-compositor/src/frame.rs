@@ -174,33 +174,9 @@ fn blit_shift(old: &Surface, new: &mut Surface, dx: i32, dy: i32) -> Vec<PixelRe
     damage
 }
 fn alpha_over(dst: [u8; 4], src: [u8; 4], opacity: u8, mode: BlendMode) -> [u8; 4] {
-    if mode == BlendMode::Normal {
-        return amazing_paint::blend_source_over(src, dst, opacity);
-    }
-    let sa = (src[3] as u32 * opacity as u32 + 127) / 255;
-    if sa == 0 {
-        return dst;
-    }
-    let da = dst[3] as u32;
-    let oa = sa + (da * (255 - sa) + 127) / 255;
-    if oa == 0 {
-        return [0; 4];
-    }
-    let mut out = [0; 4];
-    for c in 0..3 {
-        let s = src[c] as u32;
-        let d = dst[c] as u32;
-        let blended = match mode {
-            BlendMode::Normal => s,
-            BlendMode::Multiply => (s * d + 127) / 255,
-            BlendMode::Screen => 255 - ((255 - s) * (255 - d) + 127) / 255,
-        };
-        let premul = blended * sa * 255 + d * da * (255 - sa);
-        out[c] = ((premul + oa * 127) / (oa * 255)).min(255) as u8
-    }
-    out[3] = oa as u8;
-    out
+    super::effect_pixels::blend(dst, src, f32::from(opacity) / 255., mode.into())
 }
+
 fn tile_pixel(tiles: &HashMap<TileKey, Tile>, layer: usize, x: i32, y: i32) -> [u8; 4] {
     let key = TileKey {
         layer,
@@ -281,6 +257,13 @@ impl Compositor {
         width: u32,
         height: u32,
     ) -> Result<Surface, SceneError> {
+        if self.trees.has_composited_effects() {
+            let mut frame = self.build_frame(source, width, height)?;
+            frame.resources = self.resource_snapshot();
+            return ReferenceCpuPresenter::default()
+                .present(&frame)
+                .map_err(|_| SceneError::InvalidState);
+        }
         if self
             .chunks
             .last()
@@ -327,7 +310,11 @@ impl Compositor {
                 }
                 if self.tiles.get(&key).is_none_or(|t| t.dirty) {
                     dirty_existing_tile |= self.tiles.get(&key).is_some_and(|t| t.dirty);
-                    let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
+                    let mut surface = self
+                        .free_tile_surfaces
+                        .pop()
+                        .unwrap_or_else(|| Surface::new(TILE_SIZE as u32, TILE_SIZE as u32));
+                    surface.clear([0, 0, 0, 0]);
                     for &ci in &layer.chunks {
                         let c = &self.chunks[ci];
                         if c.bounds.intersects(rect) {
@@ -335,21 +322,32 @@ impl Compositor {
                             stats.raster_calls += 1
                         }
                     }
-                    self.tiles.insert(
+                    install_rasterized_tile(
+                        &mut self.tiles,
+                        &mut self.free_tile_surfaces,
+                        self.tile_budget,
+                        &mut self.tile_clock,
                         key,
-                        Tile {
-                            surface,
-                            dirty: false,
-                        },
+                        surface,
                     );
                     stats.rasterized_tiles += 1;
+                }
+                if self.tiles[&key].updated {
                     if let Some(r) = matrix.map_bounds(rect) {
                         add_damage(&mut tile_damage, PixelRect::from_rect(r, width, height))
                     }
+                    self.tiles.get_mut(&key).unwrap().updated = false;
                 }
+                self.tile_clock = self.tile_clock.wrapping_add(1);
+                self.tiles.get_mut(&key).unwrap().last_used = self.tile_clock;
             }
         }
-        self.tiles.retain(|key, _| visible_tiles.contains(key));
+        evict_tile_cache(
+            &mut self.tiles,
+            &mut self.free_tile_surfaces,
+            self.tile_budget,
+            &visible_tiles,
+        );
         let prior = self
             .previous_frame
             .as_ref()
