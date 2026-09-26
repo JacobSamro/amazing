@@ -74,7 +74,7 @@ def wanted_types() -> dict[str, str]:
         lanes = json.loads(LANE_MAP.read_text())
     except Exception:
         return {}
-    return {sid: mod.POOL_TYPE.get(key, "default") for key, sid in lanes.items() if key.startswith("pool-")}
+    return {sid: mod.pool_type(key) for key, sid in lanes.items() if key.startswith("pool-")}
 
 
 def managed_ids() -> set[str]:
