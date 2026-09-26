@@ -218,17 +218,77 @@ fn std_epoch_disambiguate(zone: &str, local_ns: i128, mode: &str) -> Result<i128
     }
 }
 
+// Syntactic validation of ISO annotations for Instant/ZonedDateTime strings.
+// Zone and calendar names are returned opaquely: Instant ignores them, while
+// ZonedDateTime canonicalizes the zone itself. Multiple time zone annotations,
+// a repeated critical calendar annotation, uppercase unknown keys, critical
+// unknown annotations, and trailing junk are syntax errors.
+fn std_epoch_annotation_offset(text: &str) -> bool {
+    let Some(digits) = text.strip_prefix(['+', '-']) else { return false; };
+    if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit() || c == b':') { return false; }
+    match digits.split(':').collect::<Vec<_>>().as_slice() {
+        [hour] => matches!(hour.len(), 2 | 4),
+        [hour, minute] => hour.len() == 2 && minute.len() == 2,
+        _ => false,
+    }
+}
+
+fn std_epoch_annotation_zone(text: &str) -> bool {
+    if text.starts_with(['+', '-']) { return std_epoch_annotation_offset(text); }
+    let mut bytes = text.bytes();
+    matches!(bytes.next(), Some(c) if c.is_ascii_alphabetic())
+        && text.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'/' | b'_' | b'-' | b'+' | b'.'))
+}
+
+fn std_epoch_validate_annotations(text: &str) -> Result<(&str, Option<&str>), Throw> {
+    let invalid = || Throw::range_error("invalid Temporal annotation");
+    let Some(first) = text.find('[') else { return Ok((text, None)); };
+    let body = &text[..first];
+    let mut tail = &text[first..];
+    let mut calendar = false;
+    let mut critical_calendar = false;
+    let mut time_zone: Option<&str> = None;
+    while !tail.is_empty() {
+        let rest = tail.strip_prefix('[').ok_or_else(invalid)?;
+        let end = rest.find(']').ok_or_else(invalid)?;
+        let value = &rest[..end];
+        tail = &rest[end + 1..];
+        let critical = value.starts_with('!');
+        let annotation = value.strip_prefix('!').unwrap_or(value);
+        if let Some(name) = annotation.strip_prefix("u-ca=") {
+            if name.is_empty()
+                || name.bytes().any(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')) {
+                return Err(invalid());
+            }
+            if calendar && (critical_calendar || critical) { return Err(invalid()); }
+            calendar = true;
+            critical_calendar |= critical;
+        } else if let Some((key, _)) = annotation.split_once('=') {
+            if critical || key.is_empty() || key.bytes().any(|c| c.is_ascii_uppercase()) {
+                return Err(invalid());
+            }
+        } else {
+            if time_zone.is_some() || annotation.is_empty() || !std_epoch_annotation_zone(annotation) {
+                return Err(invalid());
+            }
+            time_zone = Some(annotation);
+        }
+    }
+    Ok((body, time_zone))
+}
+
 fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
     disambiguation: &str) -> Result<(i128, String), Throw> {
     let invalid = || Throw::range_error("invalid Temporal instant string");
-    let (body, bracket) = if let Some(start) = text.find('[') {
-        (&text[..start], Some(&text[start..]))
-    } else { (text, None) };
+    // Annotations are validated syntactically for every epoch type. Instant
+    // ignores the zone and calendar; ZonedDateTime requires a zone it can
+    // canonicalize.
+    let (body, zone_annotation) = std_epoch_validate_annotations(text)?;
     let zone = if kind == StdEpochKind::ZonedDateTime {
-        let bracket = bracket.ok_or_else(invalid)?;
-        let end = bracket.find(']').ok_or_else(invalid)?;
-        std_epoch_zone(bracket[1..end].strip_prefix('!').unwrap_or(&bracket[1..end]))?
-    } else { "UTC".into() };
+        std_epoch_zone(zone_annotation.ok_or_else(invalid)?)?
+    } else {
+        "UTC".into()
+    };
     let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' ')).ok_or_else(invalid)?;
     let time = &body[time_start + 1..];
     let (clock, offset, exact) = if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
@@ -272,6 +332,12 @@ fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind)
 fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: StdEpochKind,
     options: JsValue) -> Result<(i128, String), Throw> {
     if let Ok(data) = std_epoch_record(&value, Some(kind)) { return Ok((data.epoch_ns, data.zone_id.clone())); }
+    // ToTemporalInstant also accepts a ZonedDateTime instance.
+    if kind == StdEpochKind::Instant {
+        if let Ok(data) = std_epoch_record(&value, Some(StdEpochKind::ZonedDateTime)) {
+            return Ok((data.epoch_ns, data.zone_id.clone()));
+        }
+    }
     let (disambiguation, offset_option) = if kind == StdEpochKind::ZonedDateTime {
         (std_temporal_option_string(i, &options, "disambiguation")?
             .unwrap_or_else(|| "compatible".into()),
@@ -303,6 +369,11 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
                 }
             };
             Ok((epoch_ns, zone))
+        }
+        // Any other object is coerced to its string form, as ToTemporalInstant does.
+        JsValue::Object(_) => {
+            let text = i.to_js_string(&value)?;
+            std_epoch_parse(&text.to_utf8_lossy(), kind, &offset_option, &disambiguation)
         }
         _ => Err(Throw::type_error("invalid Temporal epoch input")),
     }
@@ -667,7 +738,13 @@ fn std_epoch_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
     let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
         else { std_temporal_option_string(i, &option, "smallestUnit")?
             .ok_or_else(|| Throw::range_error("smallestUnit is required"))? };
-    let step = std_temporal_unit_ns(&unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+    let unit = unit.strip_suffix('s').unwrap_or(&unit);
+    // Instant only supports exact time units; day and larger require a zone.
+    if data.kind == StdEpochKind::Instant
+        && !matches!(unit, "hour" | "minute" | "second" | "millisecond" | "microsecond" | "nanosecond") {
+        return Err(Throw::range_error("invalid smallestUnit"));
+    }
+    let step = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
     let mode = if option.is_object() {
         std_temporal_option_string(i, &option, "roundingMode")?
             .unwrap_or_else(|| "halfExpand".to_string())
