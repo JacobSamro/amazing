@@ -2078,16 +2078,161 @@ shared sandbox ran low (`~/amazing/targets/*/debug/incremental` regrows
 fast under six lanes sharing one host); purged per the established
 disk-hygiene precedent (rebuildable, safe).
 
+## CSS-28 — `place-*` shorthand expansion + the css-grid `*-invalid.html` cluster (base `dev` at `d1d41ec3`)
+
+Two parts, one commit series.
+
+**Part 1: `place-items`/`place-self`/`place-content` reach the full cascade.**
+`expand_declaration` already had real arms for these three shorthands, but
+nothing had exercised them through the full `compute()` pipeline (as opposed
+to `expand_declaration`'s own unit tests) — layout-flexgrid's grid abspos
+static-position code reads `ComputedStyle::get("align-items")`/etc. after a
+real cascade, not via a synthetic call. Added
+`place_shorthands_reach_computed_style_through_the_full_cascade` in
+`crates/amazing-css/tests/css6_grid_values.rs` covering all three shorthands
+plus the ordinary "a longhand declared after the shorthand wins for that
+longhand only" cascade-order case; no production-code gap was found (already
+correct), so this is a regression-proofing test, not a fix.
+
+**Part 2: css-grid's `*-invalid.html` shorthand-strictness cluster.**
+Root cause: `values::parse()` — the function
+`wpt_conformance.rs`'s `test_valid_value`/`test_invalid_value` calls through
+`values::parses()` — had **no match arm at all** for
+`grid-template-columns`/`-rows` (fell through to an unconditional `Some(...)`),
+and no arm whatsoever for `grid-row-start`/`-end`, `grid-column-start`/`-end`,
+`grid-row`/`grid-column`, `grid-area`, `grid-auto-columns`/`-rows`,
+`grid-auto-flow`, `grid-template-areas`, `grid-template`, or `grid` (all fell
+through to the generic bottom-of-function fallback, which accepts anything).
+Every `test_invalid_value` for these properties was therefore unwinnable:
+validity was never actually checked.
+
+Fixed by wiring all of the above into real validators in `computed.rs`
+(`valid_grid_track_list`/`valid_grid_track_tokens` rewritten for
+`<line-names>?` sequencing and fixed-size enforcement alongside an
+auto-repeat; new `valid_track_size` adding `fit-content()`; `valid_grid_line`
+rewritten from a token-order-independent flag check to a word-based,
+position-tracking implementation enforcing "`span` may lead or trail an
+integer+name pair but not sit between them" and rejecting lexical
+`<number>`s like `1.0` where `<integer>` is required; new
+`valid_grid_line_pair`, `valid_grid_area`, `valid_grid_auto_track_list`,
+`valid_grid_auto_flow`, `valid_grid_template_areas`, `valid_grid_template`,
+`valid_grid_shorthand`), then calling them from new `values::parse` match
+arms for every property above. Also added `grid-area`'s cascade expansion in
+`expand_declaration` (it previously had no arm at all and fell to the
+generic passthrough, so it never split into its four longhand quadrants for
+layout).
+
+**Regression found and fixed before this could ship (zero-lost-passes
+check):** giving `grid-area` a real `expand_declaration` arm stopped it from
+being stored under its own shorthand name (matching the crate's established
+"shorthand values are not directly retrievable via `get()`" pattern, per the
+existing `public_set_uses_the_same_shorthand_expansion_seam` test) — but six
+`grid-area-computed.html` cases were passing *only* because the old
+passthrough happened to echo the specified text back verbatim, which is what
+`getComputedStyle().gridArea` needs. Restored that round-trip deliberately:
+`expand_declaration`'s `"grid-area"` arms now emit a fifth `("grid-area",
+value)` pair alongside the four longhands, so `get("grid-area")` still
+works. This is a literal echo, not a re-derived shortest serialization, and
+can go stale if a later, higher-priority `grid-row-end`/etc. declaration
+overrides only one quadrant of the same cascade slot — see Boundary below.
+`grid-row`/`grid-column`'s own equivalent computed-value gap predates this
+ticket (they never had this passthrough) and is not a regression; left
+as-is (see Boundary).
+
+Two more regressions surfaced by the same before/after diff, both inside the
+new `valid_grid_line` rewrite itself (not `grid-area`): (a) it pre-split the
+value on ASCII whitespace *before* tokenizing, which cut a CSS escape's own
+mandatory single trailing whitespace (`\31 st` decodes to the one ident
+`1st`; naive splitting cut it into `\31` and `st`, each unparseable) — fixed
+with a new `split_grid_line_words` that walks the string once, treating an
+escape sequence (and, for the calc case below, anything inside balanced
+parens) as non-splitting; (b) the old value-based (not token-order) rewrite
+had no path for CSS Values 4's "`<integer>` may be a math function"
+(`span calc(-2)`, `span min(-1, 6)`) — added an `integer_calc_function` check
+recognizing a balanced `calc()`/`min()`/`max()`/`clamp()` in the integer slot,
+accepted for grammar purposes with an *unknown* value (exempt from the sign
+checks, since a UA cannot statically evaluate `sibling-index()` or a
+container-query-dependent `sign()`).
+
+**Verification methodology:** measured pass/fail by *test identity*
+(`property: value`, stripping the `-> actual, expected` suffix before
+diffing), not raw line text or net counts — a naive line-diff flags a test
+that fails at both baseline and current-but-with-a-different-actual-value
+text as a "new regression" when it never passed either way. Baseline was
+captured by `git stash`-ing all CSS-28 changes locally (the Boat sandbox tree
+has no `.git`, so `git stash` had to run on the Mac worktree before each
+`scripts/linux-run.sh` sync), running the full `wpt_conformance` corpus, then
+popping the stash and re-running on the same commit (`d1d41ec3`) plus
+uncommitted changes.
+
+Measured (Linux, Boat sandbox `bx_cp5jbn5z`, pool-layout):
+
+| Selection | Baseline (`d1d41ec3`, no CSS-28 changes) | After CSS-28 |
+|---|---|---|
+| css-grid | 454/953 | 792/953 |
+| **All 10 selections total** | **2283/3823** | **2621/3823** |
+
+Zero regressions by test identity across all 10 selections (`comm -13` on the
+sorted, actual-value-stripped FAIL-key sets: empty); 338 tests newly passing,
+all in css-grid. Crate tests: **354/354** (0 doctests, unchanged). Workspace
+gate: `cargo nextest run --workspace --locked --no-fail-fast` **3104/3104
+passed, 13 skipped, 0 failed** (up from baseline's 3102 — the two new
+`place-*` regression tests); `cargo test --workspace --locked --doc` **ok**
+across every doc-tested crate, both before and after.
+
+Boundary (deliberately not fixed here, with the reason):
+
+- **`grid-row`/`grid-column`'s own `*-computed.html` round-trip** (8 of
+  `grid-area-computed.html`'s remaining failures): these two shorthands have
+  never stored a reconstructible value under their own name (no passthrough
+  was ever added for them, unlike `grid-area`'s restored one above), so
+  `get("grid-row")`/`get("grid-column")` return `None` after a full cascade —
+  a pre-existing gap, not a regression from this ticket. A real fix needs
+  actual CSS shortest-serialization (`grid-row-shortest-serialization.html`
+  covers this directly, but that file is never run: `wpt_conformance.rs`'s
+  `collect_files` only picks up `*-valid.html`/`*-invalid.html`/
+  `*-computed.html`, and this file ends in `-serialization.html`).
+- **`calc()`-typed `<integer>` resolving to an actual value** (5 remaining
+  `grid-area-computed.html` failures: `calc(1.1)` rounding, `calc(10 + (sign(
+  2cqw - 10px) * 5))` needing real container-query evaluation against the
+  test's `100px` container, `span calc(-1)`/`span calc(sibling-index() - 2)`
+  needing the spec's "negative or unresolvable → clamp to 1" rule): accepted
+  for *validity* (fixed above, unblocking three `grid-area-valid.html`
+  failures), but computing the actual resolved integer — especially the
+  container-query-dependent case — needs real layout/query evaluation this
+  validator-level fix does not attempt.
+- **`grid-area`'s round-trip staleness** (no current test exercises this,
+  documented as a known edge): the restored `("grid-area", value)` passthrough
+  is the shorthand's own raw text, cascaded as its own independent candidate.
+  If a later, higher-specificity `grid-row-end` (etc.) declaration overrides
+  only one quadrant, `get("grid-area")` still returns the original shorthand
+  text, not a value reflecting the override. Real shortest-serialization
+  (same fix as the bullet above, generalized to all three shorthands) would
+  close this properly.
+- **`grid-lanes` tentative WPT files** (~51 failures per the earlier widened
+  baseline): not touched this ticket, out of the `*-invalid.html` cluster's
+  scope.
+- **`computed.rs` file size**: was already over this repo's 4,000-line
+  budget before this ticket (4,081 lines at `d1d41ec3`); the validators added
+  here bring it to 4,806. Flagged in `.agents/css/questions.md` as a split
+  candidate for a dedicated follow-up ticket (e.g. hiving off the
+  `valid_grid_*` family into a new `grid_values.rs` submodule) rather than
+  attempted under this ticket's gate.
+
 ## Next
 
-Biggest clusters first, per the widened baseline above: `css-grid`'s
-`*-invalid.html` shorthand/track-list strictness (~300+), `color`'s
-computed-value canonicalization (unblocks `alpha-color-computed.html` and
-`color-computed.html` together), `box-shadow-invalid.html`, then the
-css-transforms `*-origin`/`scale`/`rotate` computed files and css-fonts'
-`font-variant`/`font-synthesis` grammar. Legacy comma-form `rgb()`/`hsla()`
-strictness and `sibling-index()`/`sibling-count()` remain smaller, later
-items. Also still open from CSS-25: `calc()` infinity/NaN, relative-color
-channel keywords inside nested `calc()`/`clamp()`, `container` shorthand
-serialization, `random-item()`, and `mediaqueries`' `matchMedia().media`
-canonical serialization.
+Biggest clusters first: `color`'s computed-value canonicalization (unblocks
+`alpha-color-computed.html` and `color-computed.html` together),
+`box-shadow-invalid.html`, then the css-transforms `*-origin`/`scale`/
+`rotate` computed files and css-fonts' `font-variant`/`font-synthesis`
+grammar. `grid-row`/`grid-column`/`grid-area`'s real shortest-serialization
+(see CSS-28's Boundary) would additionally close the
+`grid-row-shortest-serialization.html`-shaped gap if that file selection is
+ever widened to include `*-serialization.html`. Legacy comma-form
+`rgb()`/`hsla()` strictness and `sibling-index()`/`sibling-count()` remain
+smaller, later items. Also still open from CSS-25: `calc()` infinity/NaN,
+relative-color channel keywords inside nested `calc()`/`clamp()`, `container`
+shorthand serialization, `random-item()`, and `mediaqueries`'
+`matchMedia().media` canonical serialization. A `computed.rs` split (see
+CSS-28's Boundary) is also a good early candidate before the file grows
+further.
