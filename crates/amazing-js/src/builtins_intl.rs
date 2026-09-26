@@ -17,6 +17,7 @@ enum IntlState {
     Segments(IntlSegmentsState),
     SegmentIterator(IntlSegmentIteratorState),
     DisplayNames(IntlDisplayState),
+    Duration(IntlDurationState),
 }
 
 thread_local! {
@@ -499,6 +500,7 @@ impl Interpreter {
         self.install_intl_collator(&namespace);
         self.install_intl_segmenter(&namespace);
         self.install_intl_display_names(&namespace);
+        self.install_intl_duration(&namespace);
         let _ = namespace.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(),
             binary_property(JsValue::str("Intl")));
         self.define_global("Intl", intl);

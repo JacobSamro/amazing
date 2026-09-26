@@ -494,9 +494,28 @@ fn intl_localize_digits(source: &str, numbering: &str) -> String {
     }).collect()
 }
 
-/// Unit prefix/suffix and the unit-name segment for one locale and style.
-fn intl_unit_for(locale: &str, unit: &str, style: &str) -> Option<&'static IntlUnitData> {
-    INTL_UNIT_DATA.iter().find(|entry| entry.locale == locale && entry.unit == unit && entry.style == style)
+/// Unit prefix/suffix and the unit-name segment for one locale, style and CLDR
+/// plural category (e.g. "one" so `1 day` is singular, not `1 days`). Falls
+/// back to the "other" row, which every locale/style/unit combination has,
+/// when the specific category carries no dedicated row (most units in most
+/// locales only distinguish "one" from everything else, if that).
+fn intl_unit_for(locale: &str, unit: &str, style: &str, category: &str) -> Option<&'static IntlUnitData> {
+    INTL_UNIT_DATA.iter().find(|entry| entry.locale == locale && entry.unit == unit && entry.style == style && entry.category == category)
+        .or_else(|| INTL_UNIT_DATA.iter().find(|entry| entry.locale == locale && entry.unit == unit && entry.style == style && entry.category == "other"))
+}
+
+/// CLDR cardinal-plural category for a unit-style value, using the same
+/// rounding/fraction options the surrounding NumberFormat call already
+/// resolved (so the category matches the digits actually displayed).
+fn intl_unit_plural_category(state: &IntlNumberState, value: f64) -> &'static str {
+    let plural_state = IntlPluralState {
+        locale: state.locale.clone(), kind: "cardinal".to_string(), notation: state.notation.clone(),
+        compact_display: None, min_integer: state.min_integer, min_fraction: state.min_fraction,
+        max_fraction: state.max_fraction, min_significant: state.min_significant, max_significant: state.max_significant,
+        rounding_increment: state.rounding_increment, rounding_mode: state.rounding_mode.clone(),
+        rounding_priority: state.rounding_priority.clone(), trailing_zero_display: state.trailing_zero_display.clone(),
+    };
+    intl_plural_category(&plural_state, value)
 }
 
 /// Split a unit affix into its literal and unit parts, marking the unit name.
@@ -766,7 +785,8 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
     }
     if state.style == "unit" {
         let unit_id = state.unit.clone().unwrap_or_default();
-        match intl_unit_for(&state.locale, &unit_id, &state.unit_display) {
+        let category = intl_unit_plural_category(state, value);
+        match intl_unit_for(&state.locale, &unit_id, &state.unit_display, category) {
             Some(entry) => {
                 if !entry.prefix.is_empty() {
                     let prefix_parts = intl_unit_pattern_parts(entry.prefix, entry.unit_name);
