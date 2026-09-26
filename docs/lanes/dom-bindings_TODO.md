@@ -2259,3 +2259,23 @@ subtest count non-deterministic across runs on a shared sandbox), **+15
 gained** (exactly the 5 interfaces × 3 case variants). Evidence:
 `crates/amazing-bindings/evidence/dom-b-audit/` (`before-createevent` =
 `cluster-scan`, `after-createevent`).
+
+### Next-cluster scoping (same session, no further code landed)
+
+Widened the corpus scan to `dom/abort`, `dom/lists` (clean) and `dom/observable`
+(245 fails, 0% passing, one missing interface) looking for the next bulk
+cluster. Deliberately did not start implementing `Observable` this ticket:
+reading the real WPT source (`observable-constructor.any.js`,
+`observable-map.any.js`, `observable-take.any.js`) shows its actual model is a
+*shared, ref-counted producer* (one initializer invocation multicasts to every
+concurrent `subscribe()` call; teardown only runs after the last unsubscribe;
+`addTeardown()` is LIFO at real teardown time but synchronous FIFO if the
+subscription is already inactive; `next()` iterates a snapshot of observers),
+not a plain cold/Rx-style Observable — getting that core exactly right is the
+whole ticket, since every operator is just a composition on top of it. Also
+found `RuntimeBindingHost::run_abort_algorithm` (`crates/amazing/src/runtime_binding_host.rs`)
+is currently a no-op stub, so nothing registered via `Dom::add_abort_algorithm`
+(fetch/XHR cancellation, and Observable's per-subscription unsubscribe if built
+the obvious way) actually fires yet. Full writeup and proposed native-registry
+shape in `questions.md` (2026-09-26T19:05Z); proposing `Observable` as its own
+dedicated next ticket rather than rushing it into this one.
