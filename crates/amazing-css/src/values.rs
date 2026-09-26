@@ -480,7 +480,18 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                             .map(|rgba| V::Color(Color::Rgba(rgba)))
                             .unwrap_or(V::Unparsed),
                     ),
-                    _ => crate::color::parse_css_color(css).map(|rgba| V::Color(Color::Rgba(rgba))),
+                    _ => crate::color::parse_css_color(css)
+                        .map(|rgba| V::Color(Color::Rgba(rgba)))
+                        .or_else(|| {
+                            // A relative color whose source is `currentcolor`
+                            // is resolved against the element's `color` by the
+                            // computed-value seam; keep it as a preserved
+                            // grammar rather than an invalid declaration.
+                            let tokens = significant(&tokenize(css));
+                            matches!(tokens.get(2),
+                                Some(Token::Ident(name)) if name.eq_ignore_ascii_case("from"))
+                            .then_some(V::Unparsed)
+                        }),
                 }
             };
         }
@@ -800,6 +811,28 @@ mod tests {
             assert!(parse("min-width", invalid).is_none(), "{invalid}");
         }
         assert!(parse("margin-top", "calc-size(auto, size + 20px)").is_none());
+    }
+    #[test]
+    fn relative_currentcolor_rebinds_on_inheritance() {
+        let parent = style(
+            None,
+            &[
+                ("color", "red"),
+                ("background-color", "rgb(from currentcolor r g b)"),
+            ],
+        );
+        assert_eq!(parent.get("background-color"), Some("#ff0000ff"));
+        // The child's explicit `inherit` re-binds `currentcolor` to the child's
+        // own color, so the retained relative source is re-resolved.
+        let child = style(
+            Some(&parent),
+            &[("color", "blue"), ("background-color", "inherit")],
+        );
+        assert_eq!(child.get("background-color"), Some("#0000ffff"));
+        assert!(matches!(
+            parse("color", "rgb(from currentcolor r g b)"),
+            Some(ComputedValue::Unparsed)
+        ));
     }
     #[test]
     fn ruby_one_grammars_and_display_values() {

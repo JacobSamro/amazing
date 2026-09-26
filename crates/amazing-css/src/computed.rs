@@ -166,11 +166,9 @@ impl ComputedStyle {
         let Some([red, green, blue, alpha]) = crate::color::parse_css_color(color) else { return };
         let resolved = format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}");
         for (property, source) in &self.relative_colors {
-            let value = if relative_currentcolor_identity(source) {
-                Some(resolved.clone())
-            } else {
-                resolve_currentcolor_mix(source, &resolved)
-            };
+            let value = resolve_currentcolor_relative(source, &resolved)
+                .or_else(|| relative_currentcolor_identity(source).then(|| resolved.clone()))
+                .or_else(|| resolve_currentcolor_mix(source, &resolved));
             if let Some(value) = value {
                 self.props.insert(property.clone(), value);
             }
@@ -2861,7 +2859,7 @@ pub(crate) fn resolve_with_root_attrs_environment(
                 environment,
             ),
         };
-        if relative_currentcolor_identity(&value) || color_mix_currentcolor(&value) {
+        if relative_color_uses_currentcolor(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
         } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
             (specified.is_none() && property.inherited)) &&
@@ -3098,6 +3096,37 @@ fn compute_normal_value(
         computed
     };
     (computed, inherits)
+}
+
+/// A relative color whose source is `currentcolor`. Retain its source across
+/// explicit inheritance so each element resolves `currentcolor` against its
+/// own computed `color`.
+fn relative_color_uses_currentcolor(value: &str) -> bool {
+    let tokens = tokenize(value);
+    let mut significant = tokens.iter().filter(|token| !matches!(token, Token::Whitespace));
+    matches!(significant.next(), Some(Token::Function(_)))
+        && matches!(significant.next(), Some(Token::OpenParen))
+        && matches!(significant.next(),
+            Some(Token::Ident(name)) if name.eq_ignore_ascii_case("from"))
+        && tokens.iter().any(|token| {
+            matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor"))
+        })
+}
+
+/// Substitute the element's resolved `color` for `currentcolor` in a relative
+/// color source and parse the result.
+fn resolve_currentcolor_relative(value: &str, color: &str) -> Option<String> {
+    if !relative_color_uses_currentcolor(value) {
+        return None;
+    }
+    let lower = value.to_ascii_lowercase();
+    let index = lower.find("currentcolor")?;
+    let mut substituted = String::with_capacity(value.len() + color.len());
+    substituted.push_str(&value[..index]);
+    substituted.push_str(color);
+    substituted.push_str(&value[index + "currentcolor".len()..]);
+    let rgba = crate::color::parse_css_color(&substituted)?;
+    Some(format!("#{:02x}{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2], rgba[3]))
 }
 
 // A relative color that copies all channels from currentColor into the same
