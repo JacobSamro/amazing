@@ -367,6 +367,11 @@ impl<'a> DisplayListView<'a> {
         let mut group_stack = Vec::new();
         let mut clip_stack = Vec::new();
         let mut ordinals = HashMap::new();
+        // One CSS scroll container can open more than one clip scope in a
+        // single display list: a positioned/stacking context re-opens the
+        // overflow clips it inherits. That is still one compositor scroll
+        // node, so reuse its ID instead of registering a duplicate owner.
+        let mut scroll_owners: HashMap<PaintNodeKey, u32> = HashMap::new();
         for command_index in 0..view.commands.len() {
             let mut item = None;
             match &view.commands[command_index] {
@@ -411,14 +416,24 @@ impl<'a> DisplayListView<'a> {
                     });
                     state.clip = next;
                     if is_scroller(box_) && !std::ptr::eq(*box_, root) {
-                        let next = view.scrolls.len() as u32;
-                        view.scrolls.push(ScrollNode {
-                            parent: state.scroll,
-                            owner: box_.node.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation })),
-                            bounds,
-                            contents: scrollable_extent(box_, bounds, false),
-                            initial_offset: offset_for(box_, scroll_offset),
-                        });
+                        let owner = box_.node.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation }));
+                        let next = match owner.and_then(|owner| scroll_owners.get(&owner).copied()) {
+                            Some(existing) => existing,
+                            None => {
+                                let next = view.scrolls.len() as u32;
+                                view.scrolls.push(ScrollNode {
+                                    parent: state.scroll,
+                                    owner,
+                                    bounds,
+                                    contents: scrollable_extent(box_, bounds, false),
+                                    initial_offset: offset_for(box_, scroll_offset),
+                                });
+                                if let Some(owner) = owner {
+                                    scroll_owners.insert(owner, next);
+                                }
+                                next
+                            }
+                        };
                         state.scroll = next;
                     }
                 }
