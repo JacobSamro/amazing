@@ -635,3 +635,28 @@ Evidence: js-runtime_realm_execution_evidence.json.
 References: ECMA-262 §19.2.1.1 PerformEval and §10.4.1 Bound Function Exotic Objects.
 Next bulk area: generic Array object operations, callback boxing, species results,
 sparse holes, and throwing Set/Delete semantics.
+
+## JSRT-12 generic Array object protocol (completed, 2026-09-26)
+
+Array callbacks box primitive receivers, read ordinary length before callback
+validation, and preserve live HasProperty/Get observations. Map, filter, slice,
+concat and splice allocate through ArraySpeciesCreate, retain sparse holes, and
+create result data properties without invoking inherited setters. A foreign
+realm's intrinsic Array constructor defaults to the calling realm's Array.
+Mutating methods use throwing Set/Delete; splice follows observable operation
+order. Object.prototype.toString recognizes primitive wrapper brands using the
+existing internal-slot representation.
+
+The WebIDL value-iterable test fixture now installs its interface length getter;
+forEach snapshots that ordinary length once while indexed values remain live.
+The complete Array directory gained 237 passing files with no lost variants;
+360 crate tests and its doctest passed. Final Linux gate on fixed base a8b75377:
+2,792 workspace tests passed (10 skipped) in 61.639 seconds, plus four doctests.
+Full Test262: 32,189 → 32,459 passing files (+270),
+62,224 → 62,764 passing variants, zero lost passes.
+Evidence: js-runtime_array_protocol_evidence.json. Existing resource limits,
+missing Proxy support, and property-based primitive slot storage remain separate debt.
+
+Next: synchronous Array.from/of construction, mapping and iterator-close order;
+then Array.fromAsync suspension and proper private primitive slots with owner
+coordination for stdlib/binary/structured-clone callers.
