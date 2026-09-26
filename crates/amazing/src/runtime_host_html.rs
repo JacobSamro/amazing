@@ -99,7 +99,7 @@ pub(super) struct FrameRuntime {
 /// Classic inline `<script>` bodies in tree order. External `src` and
 /// `type="module"` scripts are not fetched or evaluated for iframe
 /// documents yet; this mirrors the WPT harness's classic-only scheduling.
-struct ChildScript { src: Option<String>, body: String }
+struct ChildScript { node: NodeIdx, src: Option<String>, body: String }
 
 /// Classic `<script>` elements in tree order, inline or external.
 /// `type="module"` is still not fetched or evaluated for iframe documents:
@@ -115,12 +115,52 @@ fn collect_classic_scripts(dom: &Dom, node: NodeIdx, out: &mut Vec<ChildScript>)
                 if let NodeKind::Text { data } = &dom.get(child).kind { source.push_str(data); }
             }
             if src.is_some() || !source.trim().is_empty() {
-                out.push(ChildScript { src, body: source });
+                out.push(ChildScript { node, src, body: source });
             }
         }
         return;
     }
     for child in dom.children(node) { collect_classic_scripts(dom, child, out); }
+}
+
+/// HTML-29: the shared state behind a document's `document.write` insertion
+/// point. A present entry means the document's parser is "active" (either
+/// really -- its own top-level scripts are still running -- or synthetically,
+/// inside a `document.open()`/`write()` session); `(parent, before)` matches
+/// `Dom::pre_insert`'s own signature and names exactly where the next write
+/// lands. No entry means a `write()` call must implicitly `open()` (replace
+/// the whole document) before it can insert anything, per spec.
+///
+/// `(document, None)` is a placeholder used only until the first script
+/// narrows it (`narrow_write_insertion_point_state`): `write_into_document`
+/// treats `parent == document` as "no specific point yet" and falls back to
+/// its own body/head/document-element resolution.
+fn begin_document_parsing_state(state: &Rc<RefCell<BindingState>>, document: NodeIdx) {
+    state.borrow_mut().write_insertion_points.entry(document).or_insert((document, None));
+}
+
+/// Narrows `document`'s insertion point to immediately after `script_node`,
+/// its own current tree position -- the parser's insertion point while that
+/// classic script is the one running. A no-op if the document's parser is
+/// not currently marked active.
+fn narrow_write_insertion_point_state(state: &Rc<RefCell<BindingState>>, document: NodeIdx, script_node: NodeIdx) {
+    let mut state_ref = state.borrow_mut();
+    if !state_ref.write_insertion_points.contains_key(&document) { return; }
+    let host = state_ref.host.clone();
+    let (parent, next_sibling) = {
+        let host = host.borrow();
+        let node = host.dom.get(script_node);
+        (node.parent, node.next_sibling)
+    };
+    if let Some(parent) = parent {
+        state_ref.write_insertion_points.insert(document, (parent, next_sibling));
+    }
+}
+
+/// Ends `document`'s parser-active window: a later `document.write()` call
+/// implicitly replaces the document (`open()`) instead of inserting into it.
+fn end_document_parsing_state(state: &Rc<RefCell<BindingState>>, document: NodeIdx) {
+    state.borrow_mut().write_insertion_points.remove(&document);
 }
 
 /// Fetch an external classic script for a child document: resolved against
@@ -265,6 +305,28 @@ impl RuntimeBindings {
         self.state.borrow_mut().frames.pending_loads.drain(..).collect()
     }
 
+    /// HTML-29: opens `document`'s `document.write` parser-active window.
+    /// Callers running a document's own top-level classic scripts (the WPT
+    /// harness's and the real-page `execute_page_scripts_lenient`/
+    /// `prepare_page_scripts` loops, `js_scheduler.rs`'s
+    /// `dispatch_pending_iframe_loads` for an iframe's document) call this
+    /// once before that loop, `narrow_write_insertion_point` before running
+    /// each script, and `end_document_parsing` after the load event has
+    /// fired -- matching the window during which a real parser has an
+    /// insertion point at all. See `write_into_document`.
+    pub(crate) fn begin_document_parsing(&self, document: NodeIdx) {
+        begin_document_parsing_state(&self.state, document);
+    }
+    /// Narrows `document`'s write insertion point to right after
+    /// `script_node`, immediately before running that top-level script.
+    pub(crate) fn narrow_write_insertion_point(&self, document: NodeIdx, script_node: NodeIdx) {
+        narrow_write_insertion_point_state(&self.state, document, script_node);
+    }
+    /// Ends `document`'s parser-active window; see `begin_document_parsing`.
+    pub(crate) fn end_document_parsing(&self, document: NodeIdx) {
+        end_document_parsing_state(&self.state, document);
+    }
+
     /// Everything about a frame's just-committed navigation that must be
     /// visible synchronously -- before any deferred task, including a
     /// script that reads `contentDocument`/`contentWindow` before
@@ -280,17 +342,24 @@ impl RuntimeBindings {
     /// without a prior `navigate_iframes`).
     fn ensure_realm(&self, js: &mut Interpreter, frame: NodeIdx, document: NodeIdx,
         child_url: &str, sandbox: SandboxFlags) -> Result<RealmHandle, Throw> {
-        // `about:srcdoc` inherits the parent document's origin (it is not
-        // opaque on its own); a sandboxed frame without `allow-same-origin`
-        // gets a fresh, never-repeating opaque origin per navigation instead
-        // of whatever its URL would otherwise resolve to, so it can never
-        // observe or be observed as same-origin with anything, including its
-        // own earlier navigations.
+        // `about:srcdoc` and `about:blank` both inherit the parent
+        // document's origin (neither is opaque on its own -- an unsandboxed
+        // `about:blank` iframe is same-origin with its parent, per the
+        // "about:blank" URL's own origin being "the origin of the browsing
+        // context that created it"); without this, `ParsedUrl::parse
+        // ("about:blank").origin()` fell through to the final branch below
+        // and produced a mismatched/opaque origin, tripping JSRT-9's
+        // WindowProxy cross-origin gate on the very first same-origin,
+        // no-`src` `<iframe>` access. A sandboxed frame without
+        // `allow-same-origin` gets a fresh, never-repeating opaque origin
+        // per navigation instead of whatever its URL would otherwise
+        // resolve to, so it can never observe or be observed as
+        // same-origin with anything, including its own earlier navigations.
         let origin = if sandbox.sandboxed && !sandbox.allow_same_origin {
             let mut state = self.state.borrow_mut();
             state.frames.opaque_origin_counter += 1;
             format!("null (sandboxed #{})", state.frames.opaque_origin_counter)
-        } else if child_url == "about:srcdoc" {
+        } else if child_url == "about:srcdoc" || child_url == "about:blank" {
             self.state.borrow().document_url.as_deref()
                 .and_then(|parent| ParsedUrl::parse(parent).ok())
                 .map(|url| url.origin().serialize())
@@ -493,6 +562,14 @@ impl RuntimeBindings {
         js.binding_with_realm(realm, |i| {
             let mut adapter = RuntimeBindingHost { js: i, state: state.clone() };
             for script in &scripts {
+                // HTML-29: narrows the child document's write insertion
+                // point to right after this script (its own tree position)
+                // before running it, matching the top-level page's own
+                // begin/narrow/end_document_parsing bracketing
+                // (`dispatch_pending_iframe_loads`) -- so a `document.write`
+                // call from an iframe's own top-level script inserts
+                // exactly where a parser would, not at the end of the body.
+                narrow_write_insertion_point_state(&state, document, script.node);
                 match &script.src {
                     None => { adapter.js.run_script(&script.body)?; }
                     Some(src) => {
@@ -564,14 +641,14 @@ impl RuntimeBindingHost<'_> {
 }
 
 impl RuntimeBindingHost<'_> {
-    /// `document.write`/`writeln`/`open`/`close`. Markup passed to
-    /// `write`/`writeln` runs its classic `<script>` elements synchronously
-    /// and immediately, like a parser-inserted `<script>` would -- unlike
-    /// `innerHTML`, whose inserted scripts never execute. `open()` and
-    /// `close()` are accepted as near-no-ops here: neither implements the
-    /// spec's "ignore-opens-during-unload" counter or the full-document
-    /// replacement `open()` performs when the document is not currently
-    /// being parsed (ready state not `"loading"`); see docs/lanes/html_TODO.md.
+    /// `document.write`/`writeln`/`open`/`close` (HTML-29). While a
+    /// document's parser is "active" -- its own top-level scripts are still
+    /// running, or it is inside an explicit `open()`/`write()` session --
+    /// `write()`/`writeln()` insert at the tracked parser insertion point
+    /// (`BindingState::write_insertion_points`); otherwise they implicitly
+    /// `open()` first, which replaces the whole document. `open()`/`close()`
+    /// still skip the spec's "ignore-opens-during-unload" counter; see
+    /// docs/lanes/html_TODO.md.
     pub(super) fn install_document_write_globals(&mut self) -> Result<(), Throw> {
         let prototype = self.prototype(Interface::Document)
             .ok_or_else(|| Throw::type_error("Missing Document prototype"))?;
@@ -599,12 +676,20 @@ impl RuntimeBindingHost<'_> {
     }
 
     pub(super) fn document_open(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
-        self.document_receiver_node(&receiver)?;
+        let document = self.document_receiver_node(&receiver)?;
+        // No-op while already parsing/open (matches treating repeated
+        // `open()` calls as idempotent rather than implementing the spec's
+        // "ignore-opens-during-unload" counter); otherwise this *is* the
+        // implicit replace `write()` performs when called outside a parser.
+        if !self.state.borrow().write_insertion_points.contains_key(&document) {
+            self.reopen_document(document)?;
+        }
         Ok(receiver)
     }
 
     pub(super) fn document_close(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
-        self.document_receiver_node(&receiver)?;
+        let document = self.document_receiver_node(&receiver)?;
+        end_document_parsing_state(&self.state, document);
         Ok(JsValue::Undefined)
     }
 
@@ -621,27 +706,69 @@ impl RuntimeBindingHost<'_> {
         Ok(JsValue::Undefined)
     }
 
-    /// Parses `text` as an HTML fragment and appends it to the document's
-    /// body (falling back to `head`, then the document element), then runs
-    /// any classic `<script>` elements the fragment introduced -- inline
-    /// immediately, external fetched relative to the document's own URL --
-    /// synchronously and in document order, before returning. This is
-    /// enough for scripts that only assert *execution order* around a
-    /// `document.write` call (the common WPT idiom); it does not track a
-    /// live parser insertion point, so writes always land at the end of the
-    /// target container rather than exactly where the writing script's own
-    /// `<script>` element was in the source. See docs/lanes/html_TODO.md.
+    /// Replaces `document`'s entire content with a fresh, empty
+    /// `<html><head></head><body></body></html>` and marks its parser
+    /// active with the insertion point at the start of that new, empty
+    /// body -- `document.open()`'s full-document replacement, and the step
+    /// `write()`/`writeln()` perform implicitly when called while the
+    /// document is not already being parsed.
+    fn reopen_document(&mut self, document: NodeIdx) -> Result<(), Throw> {
+        // No `<!doctype html>`: `import_fragment` copies each of the
+        // skeleton's top-level nodes into a `DocumentFragment` one at a
+        // time (`import_node_into`/`pre_insert`), and a `DocumentType` is
+        // never a valid `DocumentFragment` child -- a real
+        // `document.open()` doesn't add one either.
+        let skeleton = amazing_html::parse("<html><head></head><body></body></html>");
+        let body = self.with_dom(|dom| {
+            let fragment = dom.import_fragment(&skeleton, document)?;
+            dom.replace_all(document, Some(fragment))?;
+            Ok(dom.document_body(document)?.unwrap_or(document))
+        })?;
+        self.state.borrow_mut().write_insertion_points.insert(document, (body, None));
+        Ok(())
+    }
+
+    /// Parses `text` as an HTML fragment and inserts it at `document`'s
+    /// current parser insertion point (`BindingState::write_insertion_points`),
+    /// implicitly performing `document.open()`'s full-document replace first
+    /// if the document's parser is not currently marked active -- e.g. a
+    /// `write()` call from a `setTimeout` after the document has already
+    /// finished loading. Any classic `<script>` elements the fragment
+    /// introduces run synchronously and in document order before this
+    /// returns, inline immediately and external fetched relative to the
+    /// document's own URL, each narrowing the insertion point to its own
+    /// position first (a *nested* write from such a script lands right
+    /// after that script, not after the original writing script); the
+    /// outer insertion point is restored once they have all run, so a
+    /// second `write()` call from the original script still lands in
+    /// sequence after the first.
     fn write_into_document(&mut self, document: NodeIdx, text: &str) -> Result<(), Throw> {
+        if !self.state.borrow().write_insertion_points.contains_key(&document) {
+            self.reopen_document(document)?;
+        }
         let parsed = amazing_html::parse_fragment("body", text)
             .map_err(|_| Throw::type_error("Unable to parse document.write markup"))?;
+        let anchor = self.state.borrow().write_insertion_points.get(&document).copied();
         let children = self.with_dom(|dom| {
-            let insertion_parent = dom.document_body(document)?
-                .or(dom.document_head(document)?)
-                .or(dom.document_element(document)?)
-                .unwrap_or(document);
+            let (parent, before) = match anchor {
+                // `parent == document` is the placeholder `begin_document_
+                // parsing_state` leaves before any script has narrowed it
+                // (or a stale one from a document that was never
+                // reopened): fall back to the old body/head/document-
+                // element resolution rather than inserting directly under
+                // the Document node, which `pre_insert` rejects.
+                Some((parent, before)) if parent != document => (parent, before),
+                _ => {
+                    let insertion_parent = dom.document_body(document)?
+                        .or(dom.document_head(document)?)
+                        .or(dom.document_element(document)?)
+                        .unwrap_or(document);
+                    (insertion_parent, None)
+                }
+            };
             let fragment = dom.import_fragment(&parsed, document)?;
             let children: Vec<NodeIdx> = dom.children(fragment).collect();
-            dom.pre_insert(fragment, insertion_parent, None)?;
+            dom.pre_insert(fragment, parent, before)?;
             Ok(children)
         })?;
         let mut scripts = Vec::new();
@@ -655,7 +782,9 @@ impl RuntimeBindingHost<'_> {
         if scripts.is_empty() { return Ok(()); }
         let base = self.state.borrow().document_url.clone();
         let resolver = self.state.borrow().frames.resolver.clone();
+        let saved = self.state.borrow().write_insertion_points.get(&document).copied();
         for script in scripts {
+            narrow_write_insertion_point_state(&self.state, document, script.node);
             match script.src {
                 None => { self.js.run_script(&script.body)?; }
                 Some(src) => {
@@ -666,6 +795,9 @@ impl RuntimeBindingHost<'_> {
                     }
                 }
             }
+        }
+        if let Some(point) = saved {
+            self.state.borrow_mut().write_insertion_points.insert(document, point);
         }
         Ok(())
     }
@@ -1010,6 +1142,45 @@ mod tests {
     }
 
     #[test]
+    fn iframe_created_element_has_a_working_local_name_in_an_xml_child_document() {
+        // WPT regression (dom/nodes/Document-createElement.html /
+        // -createElementNS.html's XML/XHTML-document parametrizations, 488
+        // failing subtests flagged by dom-bindings): the actual per-realm
+        // wrapping/accessor machinery this exercises (`materialize_accessors`,
+        // per-realm `Interface::Element` prototypes from HTML-27) is fine --
+        // confirmed by this same scenario passing here. The real bug was in
+        // `amazing wpt-harness`'s `FixtureServer` (cmd/wpt_harness.rs), which
+        // sent no `Content-Type` header at all, so `content_type()`'s
+        // extension fallback (gated on a resolver or `file:` URL, neither
+        // true for that loopback HTTP fetch) never ran either: every XML/XHTML
+        // iframe failed to navigate at all ("iframe response has no supported
+        // media type"), leaving `contentDocument`/`contentWindow.document`
+        // pointing at a document that never loaded -- not a cross-realm
+        // wrapping bug. Fixed by sending a real extension-derived
+        // `Content-Type`. This test keeps the underlying per-realm path
+        // covered directly, independent of the fixture server.
+        let path = std::env::temp_dir().join(format!("amazing-iframe-localname-{}.xml", std::process::id()));
+        std::fs::write(&path, "<foo>Dummy XML document</foo>").unwrap();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe src='child.xml'></iframe></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        let resolved = path.clone();
+        scheduler.set_frame_resource_resolver(Rc::new(move |_| Some(resolved.to_string_lossy().into_owned())));
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "document.querySelector('iframe').contentDocument.documentElement.textContent"
+        ).unwrap(), JsValue::str("Dummy XML document"));
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); \
+             var el = frame.contentWindow.document.createElement('div'); \
+             el.localName === 'div' && el instanceof frame.contentWindow.Element"
+        ).unwrap(), JsValue::Bool(true));
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
     fn iframe_srcdoc_runs_scripts_same_origin_with_no_network_fetch() {
         let host = Rc::new(RefCell::new(BrowserDomHost {
             dom: amazing_html::parse(
@@ -1030,6 +1201,28 @@ mod tests {
         assert_eq!(scheduler.run_script(
             "frame.contentDocument.body.textContent !== undefined"
         ).unwrap(), JsValue::Bool(true), "srcdoc document readable from the parent realm");
+    }
+
+    #[test]
+    fn bare_iframe_with_no_src_is_about_blank_and_same_origin_with_its_parent() {
+        // A same-origin, unsandboxed `<iframe>` with no `src`/`srcdoc` at all
+        // navigates to `about:blank`, which is same-origin with whatever
+        // created it -- not opaque -- so `contentWindow` access must not
+        // trip JSRT-9's cross-origin WindowProxy gate (`ensure_realm` used to
+        // special-case only `about:srcdoc`, leaving `about:blank` to fall
+        // through to a mismatched origin from `ParsedUrl::parse`).
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><iframe></iframe></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        scheduler.run_script("void document.querySelector('iframe')").unwrap();
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+        assert_eq!(scheduler.run_script(
+            "var frame = document.querySelector('iframe'); \
+             frame.contentWindow.document === frame.contentDocument && \
+             frame.contentDocument.URL === 'about:blank'"
+        ).unwrap(), JsValue::Bool(true), "bare iframe's contentWindow is reachable and about:blank");
     }
 
     #[test]
@@ -1190,5 +1383,50 @@ mod tests {
             .unwrap(), JsValue::Bool(true));
         assert_eq!(scheduler.run_script("document.close()")
             .unwrap(), JsValue::Undefined);
+    }
+
+    #[test]
+    fn document_write_from_a_top_level_script_inserts_at_the_parser_insertion_point() {
+        // HTML-29: a classic top-level script's `document.write` inserts
+        // right after that script's own position (the real parser's
+        // insertion point while it is the one running), not always at the
+        // end of the body the way HTML-28's implementation did -- so
+        // content written by a script between two elements ends up between
+        // them, not after both. Exercised through `prepare_page_scripts`
+        // (cmd/js.rs), the same top-level script-phase wiring a real page
+        // load uses (`begin_document_parsing`/`narrow_write_insertion_point`).
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(
+                "<body><div id=a></div><script>document.write('<div id=written></div>')</script><div id=b></div></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = crate::cmd::js::prepare_page_scripts(&host, "https://example.test/main.html", false)
+            .unwrap().unwrap();
+        // The writing `<script>` element itself stays in the tree (as an
+        // empty-id element between "a" and "written") -- only the *written*
+        // content lands at its insertion point, right after it and before
+        // "b", not at the end of the body.
+        assert_eq!(scheduler.run_script(
+            "Array.from(document.body.children).map(e => e.id).join(',')"
+        ).unwrap(), JsValue::str("a,,written,b"));
+    }
+
+    #[test]
+    fn document_write_after_load_implicitly_reopens_the_document() {
+        // HTML-29: once a document's top-level script phase has finished and
+        // its load event fired, `end_document_parsing` has cleared its
+        // marker, so a later `document.write` (the way a `setTimeout`
+        // callback firing after load would call it) implicitly performs
+        // `document.open()`'s full-document replace instead of appending
+        // next to whatever content the page already had.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body><div id=original></div></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = crate::cmd::js::prepare_page_scripts(&host, "https://example.test/main.html", true)
+            .unwrap().unwrap();
+        scheduler.run_script("document.write('hello')").unwrap();
+        assert_eq!(scheduler.run_script("document.body.textContent").unwrap(), JsValue::str("hello"));
+        assert_eq!(scheduler.run_script("document.getElementById('original')").unwrap(), JsValue::Null);
     }
 }

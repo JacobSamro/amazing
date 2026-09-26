@@ -94,18 +94,38 @@ impl DriverScheduler {
     pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
         for (frame, document, fire_load_events) in self.bindings.take_iframe_loads() {
             if let Some(document) = document {
+                // HTML-29: brackets the child document's own top-level
+                // script phase (`setup_iframe_window` narrows the point per
+                // script) so `document.write` from one of its scripts
+                // inserts at the parser's insertion point instead of always
+                // implicitly reopening the document; ended once its load
+                // event has fired, matching a real parser.
+                self.bindings.begin_document_parsing(document);
                 let bindings = self.bindings.clone();
                 self.enter(|js| bindings.setup_iframe_window(js, frame, document))?;
                 if fire_load_events {
                     self.dispatch_dom_event(document.0, "DOMContentLoaded")?;
                     self.dispatch_dom_event(document.0, "load")?;
                 }
+                self.bindings.end_document_parsing(document);
             }
             if fire_load_events {
                 self.dispatch_dom_event(frame.0, "load")?;
             }
         }
         Ok(())
+    }
+    /// HTML-29: see `RuntimeBindings::begin_document_parsing`.
+    pub(crate) fn begin_document_parsing(&mut self, document: u32) {
+        self.bindings.begin_document_parsing(amazing_dom::NodeIdx(document));
+    }
+    /// HTML-29: see `RuntimeBindings::narrow_write_insertion_point`.
+    pub(crate) fn narrow_write_insertion_point(&mut self, document: u32, script_node: u32) {
+        self.bindings.narrow_write_insertion_point(amazing_dom::NodeIdx(document), amazing_dom::NodeIdx(script_node));
+    }
+    /// HTML-29: see `RuntimeBindings::end_document_parsing`.
+    pub(crate) fn end_document_parsing(&mut self, document: u32) {
+        self.bindings.end_document_parsing(amazing_dom::NodeIdx(document));
     }
     pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
         self.bindings.set_document_metadata(character_set, content_type, referrer);

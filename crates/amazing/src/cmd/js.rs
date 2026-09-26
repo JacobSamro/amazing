@@ -4,6 +4,12 @@ use amazing_js::DomHost;
 use crate::dom_host::BrowserDomHost;
 use super::parse::read_source;
 pub(crate) struct PageScript {
+    /// HTML-29: the script element's own tree position, so a top-level
+    /// script's `document.write` call can be narrowed to the parser's
+    /// insertion point right after it (`DriverScheduler::
+    /// narrow_write_insertion_point`) rather than always landing at the end
+    /// of the body.
+    pub(crate) node: amazing_dom::NodeIdx,
     pub(crate) src: Option<String>,
     pub(crate) body: String,
 }
@@ -56,7 +62,7 @@ pub(crate) fn collect_script_text(
             .find(|(name, _)| name == "src")
             .map(|(_, value)| value.clone());
         if src.is_some() || !source.trim().is_empty() {
-            scripts.push(PageScript { src, body: source });
+            scripts.push(PageScript { node, src, body: source });
         }
         return;
     }
@@ -175,8 +181,14 @@ pub(crate) fn execute_page_scripts_lenient(
             errors.push(format!("inline {event} handler on node {node}: {}", error.describe()));
         }
     }
+    // HTML-29: brackets the page's own top-level script phase so a
+    // `document.write` call inserts at the parser's insertion point
+    // (narrowed to right after each script) rather than always implicitly
+    // reopening the document; ended once the load event has fired below.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
         check_budget!("remaining page scripts");
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
@@ -197,6 +209,7 @@ pub(crate) fn execute_page_scripts_lenient(
     }
     if budget_exceeded {
         errors.push("skipped DOMContentLoaded/load dispatch and the event loop: script phase budget already exceeded".to_owned());
+        scheduler.end_document_parsing(0);
         return LenientScriptResult { errors, probe: probe_lines };
     }
     if let Err(error) = scheduler.dispatch_dom_event(0, "DOMContentLoaded") {
@@ -211,6 +224,7 @@ pub(crate) fn execute_page_scripts_lenient(
     {
         errors.push(format!("body load listener: {}", error.describe()));
     }
+    scheduler.end_document_parsing(0);
     // Keep the page's timers/rAF bounded and deterministic for headless runs.
     for _ in 0..16 {
         if Instant::now() >= deadline {
@@ -264,7 +278,10 @@ pub(crate) fn prepare_page_scripts(
         scheduler.install_inline_handler(node, &event, &body)
             .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
     }
+    // HTML-29: see the matching comment in `execute_page_scripts_lenient`.
+    scheduler.begin_document_parsing(0);
     for script in scripts {
+        scheduler.narrow_write_insertion_point(0, script.node.0);
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
@@ -289,6 +306,7 @@ pub(crate) fn prepare_page_scripts(
         scheduler.dispatch_dom_event(body, "load")
             .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
     }
+    scheduler.end_document_parsing(0);
     Ok(Some(scheduler))
 }
 
