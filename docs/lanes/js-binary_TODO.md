@@ -374,3 +374,76 @@ unchanged (`ArrayBuffer` 215/5, `DataView` 554/5, `TypedArray` 1,375/68,
 passing files or variants. Linux gate: crate nextest 357/357 (one skipped) +
 doctest 1/1; workspace nextest 2,819/2,819 (ten skipped) + doctests 3/3
 (`amazing-devtools`, `amazing-html`, `amazing-js`).
+
+## JSB-9 — indexOf/lastIndexOf/includes shrink regression, Delete/Set clusters (base `4cb1dd40`)
+
+Top priority: js-runtime's `38d4c949` rewrote the
+`"includes" | "indexOf" | "lastIndexOf"` arm in `builtins_binary.rs` to fix a
+grow-during-fromIndex-coercion bug, but it did so by searching the
+`values`/`length` snapshot captured once at `binary_typed_method` entry (before
+fromIndex is even read) for *every* index in the window, unconditionally. That
+is correct for grow (the window must stay capped at the pre-coercion length —
+`coerced-searchelement-fromindex-grow.js`) but wrong for shrink: per spec,
+`indexOf`/`lastIndexOf` consult `HasProperty(O, k)` and `includes` consults
+`Get(O, k)` at each step, so an index at or past the *current* (post-coercion)
+length must be absent/undefined even though the stale snapshot still holds a
+value there. Fixed by keeping the pre-coercion `length` for bounding the
+search window (grow case unaffected) but recomputing `current_length =
+binary_length(&view)` after coercion and gating each index lookup on `j <
+current_length` (a `live(j)` helper returning `None` past it, treated as "not
+found" for `indexOf`/`lastIndexOf` and `undefined` for `includes`). Fixes
+`built-ins/TypedArray/prototype/lastIndexOf/coerced-position-shrink.js` and
+the sibling `indexOf` case, with zero regressions to the grow-case tests
+`38d4c949` fixed.
+
+Also, two more clusters:
+
+- `interp.rs` `UnOp::Delete`: the ordinary-object fallback (`OrdinaryDelete`)
+  was missing the strict-mode throw-on-`false` check that the adjacent
+  WindowProxy/Proxy/typed-array-index paths already had (`delete_own` already
+  correctly returns `false` for non-configurable properties; nothing surfaced
+  it as a `TypeError` in strict mode). Fixes
+  `TypedArrayConstructors/internals/Delete/key-is-not-{canonical,numeric}-index-strict.js`
+  and their `BigInt/` variants (4 files) — these use non-canonical/non-numeric
+  keys, so they fall through past `binary_delete_index` into this generic
+  path. A separate, now-landed `interp.rs` edit also added the missing
+  strict-throw directly on the `binary_delete_index` call site, fixing the 8
+  canonical-index `internals/Delete/*-strict.js` files that DO go through the
+  typed-array path (`indexed-value-{ab,sab}-strict.js`,
+  `key-is-out-of-bounds-strict.js`, `key-is-not-minus-zero-strict.js`, and
+  their `BigInt/` variants).
+- `builtins_std_object_model.rs` `set_with_receiver`: `[[Set]]` with a
+  distinct Receiver on a canonical numeric index of an integer-indexed exotic
+  `target` now checks `IsValidIntegerIndex` via `binary_index_view` directly
+  and either returns `true` (invalid index) or skips straight to the
+  `CreateDataProperty(Receiver, P, V)`-equivalent tail, instead of falling into
+  the generic prototype-chain walk. That walk reads `own_prop`, which can't see
+  virtual typed-array indices, so it was incorrectly walking past `target` to
+  a shadowing prototype accessor the spec says is unreachable once
+  `IsValidIntegerIndex` is true. Fixes the 9 files under
+  `TypedArrayConstructors/internals/Set/*` (`key-is-{valid,canonical-invalid,
+  out-of-bounds-receiver-is-not-object}-*.js`, plain and `BigInt/`).
+
+Not touched (js-runtime lane owns these):
+`TypedArrayConstructors/from/{BigInt/,}custom-ctor-returns-smaller-instance-throws.js`.
+
+Measured (Linux venus-001, base `4cb1dd40`, commit `3413789c`): file-level
+before/after diff over `built-ins/{TypedArray,TypedArrayConstructors}` (the
+`--only` substring also pulls in `TypedArrayConstructors` when scoping to
+`TypedArray`): 0 regressions, 17 fixed files (`TypedArray` scope) / 15 fixed
+files (`TypedArrayConstructors` alone). `ArrayBuffer` 217/4, `DataView` 560/1,
+`Atomics` 245/25, `BigInt` 77/0 all unchanged, zero losses. Workspace gate:
+`cargo nextest run --workspace --locked --no-fail-fast` → 3,338 passed, 17
+skipped, 0 failed; `cargo test --workspace --locked --doc` → 4 doctests
+(`amazing_a11y`, `amazing_devtools`, `amazing_html`, `amazing_js`), all pass.
+
+Remaining JSB-9 failures for the next ticket, none regressed here:
+`Atomics.notify`/`wait`/`waitAsync` evaluation-order and
+non-shared-buffer-vs-SharedArrayBuffer clusters (~20 files, e.g.
+`notify/retrieve-length-before-index-coercion*.js`,
+`notify/non-shared-bufferdata-*.js`, `wait/symbol-for-{timeout,value}-throws.js`,
+`waitAsync/*-for-timeout.js`), `Atomics.{compareExchange,store}/good-views.js`,
+and a handful of `ArrayBuffer`/`DataView` one-offs
+(`options-maxbytelength-compared-before-object-creation.js`,
+`resize/coerced-new-length-detach.js`, `sliceToImmutable/argument-coercion.js`,
+`transferToImmutable/this-is-not-detachable.js`).

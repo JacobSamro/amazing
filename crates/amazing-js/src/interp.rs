@@ -2023,14 +2023,19 @@ impl Interpreter {
                             }
                             return Ok(JsValue::Bool(true));
                         }
-                        if let Some(deleted) = binary_delete_index(&o, &k) { return Ok(JsValue::Bool(deleted)); }
+                        if let Some(deleted) = binary_delete_index(&o, &k) {
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete typed array index")); }
+                            return Ok(JsValue::Bool(deleted));
+                        }
                         if let Some(deleted) = match k.as_string() {
                             Some(name) => self.legacy_delete(&o, name)?,
                             None => None,
                         } {
                             Ok(JsValue::Bool(deleted))
                         } else {
-                            Ok(JsValue::Bool(o.borrow_mut().delete_own(&k)))
+                            let deleted = o.borrow_mut().delete_own(&k);
+                            if !deleted && self.strict_eval_context { return Err(Throw::type_error("cannot delete non-configurable property")); }
+                            Ok(JsValue::Bool(deleted))
                         }
                     } else {
                         Ok(JsValue::Bool(true))

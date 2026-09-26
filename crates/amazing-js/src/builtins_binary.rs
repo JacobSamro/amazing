@@ -1130,18 +1130,34 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             let start = if args.get(1).is_some_and(|x| !matches!(x, JsValue::Undefined)) {
                 binary_relative(i, args.get(1), length as i64)?
             } else if name == "lastIndexOf" { length.saturating_sub(1) } else { 0 };
-            // Coercing fromIndex can detach or shrink the buffer. A view that is
-            // no longer usable reports "not found" rather than throwing. The
-            // search itself still walks `values`/`length` captured above,
-            // before fromIndex coercion: the spec reads TypedArrayLength once,
-            // up front, and neither shrinking nor growing the buffer during
-            // fromIndex coercion changes the window that gets searched.
+            // Coercing fromIndex can detach, shrink or grow the buffer. The
+            // window searched is fixed at `length`, read up front: a later
+            // grow must not extend it (coerced-searchelement-fromindex-grow.js).
+            // A view that is now unusable outright reports "not found" rather
+            // than throwing.
             if binary_view_out_of_bounds(&view) || binary_length(&view) == 0 {
                 return Ok(if name == "includes" { JsValue::Bool(false) } else { JsValue::num(-1.0) });
             }
+            // Within that fixed window, indexOf/lastIndexOf consult
+            // HasProperty(O, k) at each step and includes consults Get(O, k):
+            // after a shrink during fromIndex coercion, an index at or past
+            // the CURRENT (post-coercion) length is absent -- never a match
+            // for indexOf/lastIndexOf, and Get(O, k) is undefined for
+            // includes -- even though `values` above still holds its stale,
+            // pre-coercion snapshot (coerced-position-shrink.js).
+            let current_length = binary_length(&view);
+            let live = |j: usize| -> Option<&JsValue> { if j < current_length { values.get(j) } else { None } };
             let start = start.min(length);
-            let found = if name == "lastIndexOf" { values.iter().enumerate().rev().find(|(j, v)| *j <= start && i.strict_eq(v, &needle)).map(|(j, _)| j) }
-                else { values.iter().enumerate().find(|(j, v)| *j >= start && (i.strict_eq(v, &needle) || name == "includes" && matches!((v, &needle), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()))).map(|(j, _)| j) };
+            let found = if name == "lastIndexOf" {
+                (0..=start).rev().find(|&j| live(j).is_some_and(|v| i.strict_eq(v, &needle)))
+            } else if name == "indexOf" {
+                (start..values.len()).find(|&j| live(j).is_some_and(|v| i.strict_eq(v, &needle)))
+            } else {
+                (start..values.len()).find(|&j| {
+                    let v = live(j).cloned().unwrap_or(JsValue::Undefined);
+                    i.strict_eq(&v, &needle) || matches!((&v, &needle), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan())
+                })
+            };
             Ok(if name == "includes" { JsValue::Bool(found.is_some()) } else { JsValue::num(found.map_or(-1, |x| x as i64) as f64) })
         }
         "fill" => {
