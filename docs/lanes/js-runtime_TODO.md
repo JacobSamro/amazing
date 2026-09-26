@@ -788,8 +788,86 @@ the genuine failure it always was. Evidence, including the full lost-variant
 list with each one's `features` tag and observed error, is retained at
 `docs/lanes/js-runtime_class_private_elements_evidence.json`.
 
-Not implemented: real generators/async-generators (separate, large,
-pre-existing gap — see ADR-locked single-threaded tree-walking decisions),
-Proxy support (still absent, per JSRT-13's note), and the `accessor` keyword
-proposal for class fields (parsed but not given distinct semantics from an
-ordinary field).
+Not implemented (at the time): real generators/async-generators (separate,
+large, pre-existing gap — see ADR-locked single-threaded tree-walking
+decisions; a cross-lane request is filed against js-vm, which already has
+resumable VM generator frames from JSVM-5), Proxy support, and the `accessor`
+keyword proposal for class fields (parsed but not given distinct semantics
+from an ordinary field).
+
+## JSRT-15 Proxy support (2026-09-26)
+
+Implemented `Proxy` (revocable and non-revocable) end to end: a new
+`Exotic::Proxy(Rc<ProxyState>)` variant, all 13 fundamental traps (`get`,
+`set`, `has`, `deleteProperty`, `ownKeys`, `getOwnPropertyDescriptor`,
+`defineProperty`, `getPrototypeOf`, `setPrototypeOf`, `isExtensible`,
+`preventExtensions`, `apply`, `construct`), and the `Proxy`/`Proxy.revocable`
+globals, in a new `crates/amazing-js/src/interp_proxy.rs`. Follows the
+`interp_window_proxy.rs` hook pattern exactly: every fundamental object
+operation gets a `proxy_*` check (`Option<Result<T, Throw>>`, `None` = not a
+proxy, proceed ordinarily) alongside its existing `window_proxy_*` check, at
+every site that already had one, plus the two new [[Call]]/[[Construct]]
+interception points in `call_value_with_new_target_inner` and
+`construct_with_new_target` (added before either function touches
+`.func`/`.constructible`, since a Proxy's own storage never carries real
+callable state — a dummy `FunctionBody::Native` is set only so
+`typeof`/IsCallable/IsConstructor checks that read `.func.is_some()` /
+`.constructible` directly still see a callable-target proxy correctly;
+invocation itself is always intercepted before that body could run).
+`Reflect.*`'s duplicated ad hoc WindowProxy-only logic
+(`isExtensible`/`preventExtensions`/`getPrototypeOf`/`setPrototypeOf`/`has`/
+`deleteProperty`) was collapsed to call the new shared `default_get_prototype`
+/ `default_set_prototype` / `default_is_extensible` / `default_prevent_extensions`
+/ `default_has_property` / `default_delete_property` helpers, which are
+themselves proxy-aware and used identically by `Object.*`; this also gave
+`Object.freeze`/`seal`/`isFrozen`/`isSealed` real (if not fully spec-exhaustive)
+Proxy support essentially for free, by routing their per-key mutation through
+`define_own_property` instead of raw storage writes.
+
+Two more pre-existing bugs were found and fixed while gating (both raw
+`.proto`/`.has_property()` walks that predate this ticket and bypass every
+exotic-object hook, not just Proxy's):
+- `ordinary_has_instance` read `b.borrow().get_own("prototype")` (raw own-storage)
+  instead of `Get(b, "prototype")`, so `x instanceof someProxy` on a
+  Proxy-wrapped constructor could never observe a `get` trap on `"prototype"`.
+  Fixed to call `self.get_prop(b, "prototype")`.
+- Unqualified global identifier resolution (`identifier_value` and
+  `resolve_reference`'s `ExprKind::Ident` arm) checked
+  `self.global_obj.borrow().has_property(name)` — `JsObject::has_property`'s
+  own prototype-chain walk, which has no exotic-object awareness at all.
+  Fixed both call sites to `self.default_has_property(...)`. That in turn
+  exposed a second layer of the same bug one level down: `legacy_has_property`
+  (`interp_legacy.rs`)'s own chain-walking loop checked `window_proxy_has` at
+  each step but never `proxy_has`, so a Proxy discovered while walking a
+  prototype chain (e.g. `Object.setPrototypeOf(globalThis, someProxy)`) was
+  silently skipped. Fixed by adding the missing `proxy_has` check beside the
+  existing `window_proxy_has` one in that loop.
+
+Known, accepted gaps (documented rather than chased, per the same "diagnose
+transparently, don't chase every corner" standard as JSRT-14's generator
+gap): invariant enforcement covers the highest-value checks per trap
+(revocation, non-callable traps, non-configurable/non-extensible-target
+agreement) but not the complete ECMA-262 invariant list — e.g. the `ownKeys`
+"extensible target must report every non-configurable target key" superset
+rule is unenforced. A Proxy inserted mid-prototype-chain is honored at the
+well-known entry points fixed above (`instanceof`, unqualified identifiers,
+`Object`/`Reflect` getPrototypeOf/setPrototypeOf, direct property access) but
+a handful of other raw `.proto` walks elsewhere (e.g. `set_with_receiver`'s
+receiver-shadowing walk was upgraded; `ordinary_has_instance`'s own chain
+walk past the first hop was not) still do not call through it.
+
+Gated on Linux (fixed base `76af29d4`): `amazing-js` crate 384 passed (1
+skipped) + 1 doctest; workspace `cargo nextest run --workspace --locked` 3122
+passed (14 skipped) in 53.929s; `cargo test --workspace --locked --doc` all
+`ok`. Full pinned Test262 sweep: 36,335 → 36,821 passing files (+486),
+70,468 → 71,427 passing variants (+959), **zero lost files, zero lost
+variants** (verified against the pre-Proxy baseline at the same base commit,
+then re-verified after both `legacy_has_property` fixes eliminated the one
+transient regression found mid-gate — see
+`docs/lanes/js-runtime_proxy_evidence.json`).
+
+Not implemented: real generators/async-generators (cross-lane request filed
+to js-vm), the `ownKeys`/invariant gaps above, and full defineProperty-trap
+routing for `Object.freeze`/`seal` (extensibility and per-key attribute
+changes are trap-routed; the TypedArray/array-length special cases are not
+re-verified against a Proxy target).

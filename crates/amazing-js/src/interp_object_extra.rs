@@ -164,15 +164,18 @@ fn object_integrity(
             return Err(Throw::type_error("cannot freeze a TypedArray with indexed elements"));
         }
     }
-    object.borrow_mut().extensible = false;
+    if !i.default_prevent_extensions(object)? {
+        return Err(Throw::type_error("cannot prevent extensions on this object"));
+    }
     for key in i.own_property_keys(&target)? {
-        let existing = object.borrow().own_prop(&key).cloned();
+        let existing = i.default_get_own_property(object, &key)?;
         if let Some(mut property) = existing {
             property.configurable = false;
             if freeze && property.getter.is_none() && property.setter.is_none() {
                 property.writable = false;
             }
-            object.borrow_mut().define(key, property).unwrap();
+            let descriptor = object_descriptor_value(i, property);
+            i.define_own_property(object, &key, &descriptor)?;
         }
     }
     Ok(target)
@@ -201,11 +204,11 @@ fn object_integrity_test(
     let JsValue::Object(object) = &target else {
         return Ok(JsValue::Bool(true));
     };
-    if i.is_window_proxy(object) || i.legacy_for(object).is_some() || object.borrow().extensible {
+    if i.is_window_proxy(object) || i.legacy_for(object).is_some() || i.default_is_extensible(object)? {
         return Ok(JsValue::Bool(false));
     }
     for key in i.own_property_keys(&target)? {
-        if let Some(property) = object.borrow().own_prop(&key) {
+        if let Some(property) = i.default_get_own_property(object, &key)? {
             if property.configurable
                 || (freeze
                     && property.getter.is_none()
@@ -499,17 +502,7 @@ impl Interpreter {
     fn object_own_enumerable(&mut self, value: &JsValue, key: &PropertyKey) -> Result<bool, Throw> {
         match value {
             JsValue::Object(object) => {
-                if let Some(result) = self.window_proxy_own_property(object, key) {
-                    return Ok(result?.is_some_and(|property| property.enumerable));
-                }
-                let property = match binary_index_descriptor(object, key) {
-                    Some(property) => property,
-                    None => match key {
-                        PropertyKey::String(name) => self.legacy_own_property(object, name.clone(), false)?,
-                        PropertyKey::Symbol(_) => object.borrow().own_prop(key).cloned(),
-                    },
-                };
-                Ok(property.is_some_and(|property| property.enumerable))
+                Ok(self.default_get_own_property(object, key)?.is_some_and(|property| property.enumerable))
             }
             JsValue::Str(string) => Ok(array_index_key(key).is_some_and(|index| (index as usize) < string.len())),
             _ => Ok(false),
