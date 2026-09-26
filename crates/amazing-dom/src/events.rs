@@ -74,7 +74,6 @@ pub struct Event {
     trusted: bool,
     target: Option<EventTarget>,
     related_target: Option<EventTarget>,
-    original_related_target: Option<EventTarget>,
     current_target: Option<EventTarget>,
     phase: EventPhase,
     dispatching: bool,
@@ -102,7 +101,6 @@ impl Event {
             trusted: false,
             target: None,
             related_target: None,
-            original_related_target: None,
             current_target: None,
             phase: EventPhase::None,
             dispatching: false,
@@ -178,7 +176,7 @@ impl Event {
     }
     pub fn related_target(&self) -> Option<EventTarget> { self.related_target }
     pub fn set_related_target(&mut self, target: Option<EventTarget>) {
-        if !self.dispatching { self.related_target = target; self.original_related_target = target; }
+        if !self.dispatching { self.related_target = target; }
     }
     pub fn current_target(&self) -> Option<EventTarget> {
         self.current_target
@@ -247,12 +245,13 @@ impl Event {
 
 /// Pure topology hooks, evaluated before callbacks. Shadow DOM can supply
 /// composed-dependent parents and adjusted targets without changing listeners.
-/// Closed-root composedPath filtering and activation behavior are later seams.
+/// The path and shadow membership are captured before any callback runs.
 pub trait EventTree {
     fn event_parent(&self, target: EventTarget, event: &Event) -> Option<EventTarget>;
     fn retarget(&self, original: EventTarget, _against: EventTarget) -> EventTarget {
         original
     }
+    fn is_in_shadow_tree(&self, _target: EventTarget) -> bool { false }
     fn default_passive(&self, _target: EventTarget, _event_type: &str) -> bool {
         false
     }
@@ -276,15 +275,17 @@ impl EventTree for Dom {
         }
     }
     fn retarget(&self, original: EventTarget, against: EventTarget) -> EventTarget {
-        let (EventTarget::Node(mut node), EventTarget::Node(reference)) = (original, against) else {
-            return original;
-        };
+        let EventTarget::Node(mut node) = original else { return original };
         loop {
             let root = self.root(node);
             let Some(data) = self.shadow_data(root) else { return EventTarget::Node(node) };
-            if self.shadow_including_ancestors(reference).contains(&root) { return EventTarget::Node(node); }
+            if matches!(against, EventTarget::Node(reference)
+                if self.shadow_including_ancestors(reference).contains(&root)) { return EventTarget::Node(node); }
             node = data.host;
         }
+    }
+    fn is_in_shadow_tree(&self, target: EventTarget) -> bool {
+        matches!(target, EventTarget::Node(node) if self.shadow_data(self.root(node)).is_some())
     }
     fn default_passive(&self, target: EventTarget, event_type: &str) -> bool {
         if !["touchstart", "touchmove", "wheel", "mousewheel"].contains(&event_type) {
@@ -365,6 +366,7 @@ pub struct Dispatch {
     capturing: bool,
     active_entry: Option<PathEntry>,
     finished: bool,
+    clear_targets: bool,
     exceptions: Vec<String>,
 }
 impl Dispatch {
@@ -399,6 +401,13 @@ impl EventTargets {
     pub fn has_blocking_listener(&self, target: EventTarget, types: &[&str]) -> bool {
         self.listeners.iter().any(|listener| listener.target == target
             && !listener.passive && types.contains(&listener.event_type.as_str()))
+    }
+
+    pub fn listener_id(&self, target: EventTarget, event_type: &str, callback: CallbackId,
+        capture: bool) -> Option<ListenerId> {
+        self.listeners.iter().find(|listener| listener.target == target
+            && listener.event_type == event_type && listener.callback == callback
+            && listener.capture == capture).map(|listener| listener.id)
     }
 
     pub fn listener_callbacks(&self, target: EventTarget, event_type: &str, capture: bool) -> Vec<CallbackId> {
@@ -474,12 +483,14 @@ impl EventTargets {
         }
         removed
     }
-    pub fn remove_listener_id(&mut self, id: ListenerId) {
+    pub fn remove_listener_id(&mut self, id: ListenerId) -> Option<CallbackId> {
+        let callback = self.listeners.iter().find(|listener| listener.id == id).map(|listener| listener.callback);
         let before = self.listeners.len();
         self.listeners.retain(|l| l.id != id);
         if self.listeners.len() != before {
             self.listener_generation = self.listener_generation.wrapping_add(1);
         }
+        callback
     }
     pub fn remove_all_listeners(&mut self, target: EventTarget) {
         let before = self.listeners.len();
@@ -503,15 +514,19 @@ impl EventTargets {
         // non-composed event began inside this shadow root or at a slottable.
         event.target = Some(target);
         let mut path = vec![];
-        let mut current = Some(target);
+        let related = event.related_target.map(|related| tree.retarget(related, target));
+        let mut current = if related == Some(target) && event.related_target != Some(target) {
+            None
+        } else { Some(target) };
         let mut previous_adjusted = None;
         while let Some(invocation) = current {
             if path.iter().any(|p: &PathEntry| p.invocation == invocation) {
                 return Err(DomError::InvalidStateError);
             }
             let adjusted_target = tree.retarget(target, invocation);
-            let adjusted_related = event.original_related_target.map(|related| tree.retarget(related, invocation));
+            let adjusted_related = event.related_target.map(|related| tree.retarget(related, invocation));
             let at_target = previous_adjusted != Some(adjusted_target);
+            if !path.is_empty() && at_target && adjusted_related == Some(invocation) { break; }
             path.push(PathEntry {
                 invocation,
                 adjusted_target,
@@ -521,10 +536,12 @@ impl EventTargets {
             previous_adjusted = Some(adjusted_target);
             current = tree.event_parent(invocation, &event);
         }
+        let clear_targets = path.iter().rev().find(|entry| entry.at_target).is_some_and(|entry|
+            tree.is_in_shadow_tree(entry.adjusted_target)
+                || entry.adjusted_related.is_some_and(|related| tree.is_in_shadow_tree(related)));
         let event = self.event_mut(id);
         event.dispatching = true;
         event.trusted = origin == DispatchOrigin::UserAgent;
-        event.target = Some(target);
         event.path = path.iter().map(|p| p.invocation).collect();
         Ok(Dispatch {
             event: id,
@@ -535,6 +552,7 @@ impl EventTargets {
             capturing: true,
             active_entry: None,
             finished: false,
+            clear_targets,
             exceptions: vec![],
         })
     }
@@ -562,7 +580,7 @@ impl EventTargets {
                     let once = listener.once;
                     let passive = listener.passive;
                     if once {
-                        self.remove_listener_id(id);
+                        let _ = self.remove_listener_id(id);
                     }
                     let event = self.event_mut(dispatch.event);
                     event.passive = passive;
@@ -593,12 +611,11 @@ impl EventTargets {
             };
             let entry = dispatch.path[index].clone();
             let event = self.event_mut(dispatch.event);
-            event.target = Some(entry.adjusted_target);
-            event.related_target = entry.adjusted_related;
-            if entry.adjusted_related == Some(entry.adjusted_target) { continue; }
             if !capturing && !entry.at_target && !event.bubbles() {
                 continue;
             }
+            event.target = Some(entry.adjusted_target);
+            event.related_target = entry.adjusted_related;
             event.phase = if entry.at_target {
                 EventPhase::AtTarget
             } else if capturing {
@@ -628,7 +645,10 @@ impl EventTargets {
         let event = self.event_mut(dispatch.event);
         event.phase = EventPhase::None;
         event.current_target = None;
-        event.related_target = event.original_related_target;
+        if dispatch.clear_targets {
+            event.target = None;
+            event.related_target = None;
+        }
         event.path.clear();
         event.path_closed_roots.clear();
         event.dispatching = false;

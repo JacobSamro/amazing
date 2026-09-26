@@ -92,8 +92,9 @@ impl Interpreter {
 
     fn pair_for(&self, object: &Obj) -> Option<(HostHandle, PairIterableHooks)> {
         let identity = object.borrow().host_identity?;
-        if identity.realm != self.host_realm { return None; }
-        self.pair_hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
+        let hooks = if identity.realm == self.host_realm { &self.pair_hooks }
+            else { &self.realms.get(&identity.realm)?.pair_hooks };
+        hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
     }
 
     fn pair_iterator(&self, this: JsValue, kind: PairIteratorKind) -> Result<JsValue, Throw> {
@@ -113,8 +114,9 @@ impl Interpreter {
 
     pub(super) fn legacy_for(&self, object: &Obj) -> Option<(HostHandle, LegacyPlatformHooks)> {
         let identity = object.borrow().host_identity?;
-        if identity.realm != self.host_realm { return None; }
-        self.legacy_hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
+        let hooks = if identity.realm == self.host_realm { &self.legacy_hooks }
+            else { &self.realms.get(&identity.realm)?.legacy_hooks };
+        hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
     }
 
     fn supported_name(&self, hooks: &LegacyPlatformHooks, handle: HostHandle, key: &crate::value::JsString) -> Result<bool, Throw> {
@@ -138,6 +140,10 @@ impl Interpreter {
 
     pub(super) fn legacy_own_property(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, ignore_named: bool) -> Result<Option<Property>, Throw> {
         let key = key.into();
+        if let Some(realm) = self.foreign_host_realm(object) {
+            return self.binding_with_realm(realm, |i| i.legacy_own_property(object, key, ignore_named));
+        }
+        if let Some(result) = self.window_proxy_own_property(object, &PropertyKey::String(key.clone())) { return result; }
         let Some((handle, hooks)) = self.legacy_for(object) else {
             let ordinary = object.borrow().own_prop(&key).cloned();
             return Ok(ordinary);
@@ -156,20 +162,28 @@ impl Interpreter {
         Ok(ordinary)
     }
 
-    pub(super) fn legacy_has_property(&self, object: &Obj, key: impl Into<crate::value::JsString>) -> Result<bool, Throw> {
+    pub(super) fn legacy_has_property(&mut self, object: &Obj, key: impl Into<crate::value::JsString>) -> Result<bool, Throw> {
         let key = key.into();
-        if let Some((handle, hooks)) = self.legacy_for(object) {
-            if let Some(index) = array_index(&key) {
-                if index < (hooks.supported_index_count)(handle)? { return Ok(true); }
+        let mut cursor = Some(object.clone());
+        while let Some(object) = cursor {
+            if let Some(result) = self.window_proxy_has(&object, &PropertyKey::String(key.clone())) { return result; }
+            if let Some((handle, hooks)) = self.legacy_for(&object) {
+                if let Some(index) = array_index(&key) {
+                    if index < (hooks.supported_index_count)(handle)? { return Ok(true); }
+                }
+                if self.supported_name(&hooks, handle, &key)? && self.named_visible(&object, &key, &hooks) { return Ok(true); }
             }
-            if self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) { return Ok(true); }
+            if object.borrow().own_prop(&key).is_some() { return Ok(true); }
+            cursor = object.borrow().proto.clone();
         }
-        let ordinary = object.borrow().has_property(&key);
-        Ok(ordinary)
+        Ok(false)
     }
 
     pub(super) fn legacy_set(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, value: JsValue) -> Result<bool, Throw> {
         let key = key.into();
+        if let Some(realm) = self.foreign_host_realm(object) {
+            return self.binding_with_realm(realm, |i| i.legacy_set(object, key, value));
+        }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
         if let Some(index) = array_index(&key) {
             if let Some(setter) = hooks.indexed_setter { setter(self, handle, index, value)?; return Ok(true); }
@@ -184,6 +198,9 @@ impl Interpreter {
 
     pub(super) fn legacy_define(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, prop: &Property) -> Result<bool, Throw> {
         let key = key.into();
+        if let Some(realm) = self.foreign_host_realm(object) {
+            return self.binding_with_realm(realm, |i| i.legacy_define(object, key, prop));
+        }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
         if let Some(index) = array_index(&key) {
             if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("indexed property requires a data descriptor")); }
@@ -208,6 +225,9 @@ impl Interpreter {
 
     pub(super) fn legacy_delete(&mut self, object: &Obj, key: impl Into<crate::value::JsString>) -> Result<Option<bool>, Throw> {
         let key = key.into();
+        if let Some(realm) = self.foreign_host_realm(object) {
+            return self.binding_with_realm(realm, |i| i.legacy_delete(object, key));
+        }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(None); };
         if let Some(index) = array_index(&key) { return Ok(Some(index >= (hooks.supported_index_count)(handle)?)); }
         if self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) {
@@ -243,6 +263,8 @@ impl Interpreter {
 
     /// Install the value-iterable methods on an interface prototype. The
     /// wrapper's private brand selects the live index hooks at each step.
+    /// The embedding also installs the interface's length attribute: forEach
+    /// is Array.prototype.forEach and snapshots that ordinary property.
     pub fn binding_define_iterable(&mut self, brand: u64, prototype: &JsValue) -> Result<(), Throw> {
         if !self.legacy_hooks.contains_key(&brand) { return Err(Throw::type_error("iterable needs indexed hooks")); }
         let JsValue::Object(prototype) = prototype else { return Err(Throw::type_error("iterable prototype must be an object")); };
@@ -493,10 +515,20 @@ mod tests {
         assert_eq!(i.binding_get_property(&pair, "1").unwrap(), JsValue::num(10.0));
         let seen = Rc::new(RefCell::new(Vec::new()));
         let capture = seen.clone();
-        i.set_host_native_dispatcher(Rc::new(move |_, _, _, args, _| {
+        let collection_values = values.clone();
+        let length_reads = Rc::new(RefCell::new(0));
+        let reads = length_reads.clone();
+        i.set_host_native_dispatcher(Rc::new(move |_, id, _, args, _| {
+            if id.0 == 2 {
+                *reads.borrow_mut() += 1;
+                return Ok(JsValue::num(collection_values.borrow().len() as f64));
+            }
             capture.borrow_mut().push(args);
+            if capture.borrow().len() == 1 { collection_values.borrow_mut().push(JsValue::num(99.0)); }
             Ok(JsValue::Undefined)
         }));
+        let length = i.binding_create_native_function(HostFunctionId(2), "get length", 0, HostCallPolicy::CallOnly);
+        i.binding_define_accessor_property(&prototype, "length", Some(&length), None, true, true).unwrap();
         let callback = i.binding_create_native_function(HostFunctionId(1), "collect", 3, HostCallPolicy::CallOnly);
         let for_each = i.binding_get_property(&object, "forEach").unwrap();
         let array_for_each = i.array_proto.borrow().get_own("forEach").unwrap();
@@ -504,6 +536,8 @@ mod tests {
         i.binding_call(&for_each, object.clone(), vec![callback]).unwrap();
         let seen = seen.borrow();
         assert_eq!(seen.len(), 2);
+        assert_eq!(*length_reads.borrow(), 1);
+        assert_eq!(values.borrow().len(), 3);
         assert_eq!(seen[0][0], JsValue::num(10.0));
         assert_eq!(seen[1][0], JsValue::num(42.0));
     }

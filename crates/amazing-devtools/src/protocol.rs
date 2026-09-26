@@ -154,6 +154,22 @@ impl CdpRequest {
             }),
         }
     }
+
+    /// A required non-negative integer parameter.
+    pub fn u64_param(&self, name: &str) -> Result<u64, CdpError> {
+        self.optional_u64(name)?
+            .ok_or_else(|| CdpError::invalid_params(format!("missing integer parameter '{name}'")))
+    }
+
+    /// A required boolean parameter.
+    pub fn bool_param(&self, name: &str) -> Result<bool, CdpError> {
+        match self.params.get(name) {
+            Some(Json::Bool(value)) => Ok(*value),
+            _ => Err(CdpError::invalid_params(format!(
+                "missing boolean parameter '{name}'"
+            ))),
+        }
+    }
 }
 
 /// A CDP error payload.

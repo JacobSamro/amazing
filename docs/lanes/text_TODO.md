@@ -354,4 +354,92 @@ survives the line edge, and `line_breaks` emits the correct Emergency/Anywhere
 opportunities. The residual failure is layout break selection / float
 shrink-to-fit.
 
+## TEXT-15: automatic opsz variation axis
 
+CSS Fonts 4 section 7.2's `font-optical-sizing: auto` (the initial and default
+value) sets the `opsz` variation axis to the used font size unless an explicit
+`font-variation-settings` value overrides it. `font_variations::for_face` now
+pushes an `opsz` axis from `TextStyle.size` before the author-face
+`wght`/`wdth`/`ital`/`slnt` axes; the existing explicit-override loop still lets
+an author `font-variation-settings` `opsz` win. A face with no registered
+`opsz` axis silently ignores the coordinate, the same as the existing
+`wght`/`wdth` behavior for non-variable faces. Unlike the width/oblique
+contract in TEXT-8, this needed no `TextStyle` field and no layout handoff:
+`auto` is the initial value, so the common case is a provider-only change.
+`font-optical-sizing: none` remains unimplemented — no field distinguishes it
+from `auto` yet, and adding one would require a layout literal update in
+`amazing-layout/src/box_tree.rs::text_style` (which constructs `TextStyle` as
+a full field literal, not `..Default::default()`), so it stays deferred rather
+than landed as a half-wired field. Commit `a0f68c06` on `bbb0267a`.
+
+No pinned WPT `font-optical-sizing` fixture exists in this lane's frozen
+selections and the Boat sandbox still has no WPT checkout (per TEXT-14's
+filed gap), so the gate is four focused synthetic unit tests against
+`font_variations::for_face` directly: automatic tracking of `TextStyle.size`
+with no author face, tracking across size changes, an explicit
+`font-variation-settings` `opsz` overriding the automatic value with no
+duplicate axis entry, and `opsz` coexisting with an author-face `wght` axis.
+Provider/text crate nextest: 68/68 (1 skipped) before, 72/72 (1 skipped)
+after, zero losses. Doctests green. Workspace nextest on the merged head
+(`dev` fast-forwarded past TEXT-14 by 76 commits, none touching the text
+crates): 2,806 passed, 10 skipped, 0 failed; workspace doctests green.
+
+Re-audited TEXT-14's second candidate, the `font-variant-caps`/`-numeric`/
+`-position`/`-east-asian` GSUB feature contract: on inspection this needs
+little to no new text-owned code. Explicit OpenType feature tags already
+reach HarfRust generically through the existing `TextStyle.features` vector
+(the same seam TEXT-14 used for `kern`/`vkrn`), so mapping each CSS keyword
+(`small-caps` to `smcp`, `all-small-caps` to `smcp`+`c2sc`, `oldstyle-nums` to
+`onum`, `super`/`sub` to `sups`/`subs`, etc.) to feature tags is CSS/layout
+work into that same vector, per the precedent TEXT-12 already established for
+`font-kerning`. The one genuinely provider-owned piece is CSS Fonts 4 section
+6's synthesis fallback: when a requested feature (chiefly `smcp` for
+small-caps) is unsupported by the selected face and `font-synthesis` allows
+it, the UA may synthesize the effect (glyph substitution plus scaling for
+small-caps; baseline shift plus scaling for super/subscript). That is real
+raster-level work comparable in size to the existing synthetic bold/oblique
+path, not a quick follow-on to opsz. `amazing_text::FontSynthesis` currently
+has only `weight`/`style` bools and layout constructs it with
+`FontSynthesis::default()` (not a full literal), so adding `small_caps`/
+`position` fields would be safe for layout's build, but landing the fields
+without the synthesis behavior they gate would be a half-wired contract.
+Proposed as the next ticket rather than started here.
+
+
+
+## TEXT-14: axis-correct kerning features
+
+CSS Fonts 4 §5.2.1 makes `kern` the horizontal-axis and `vkrn` the
+vertical-axis kerning feature, but an explicitly requested HarfBuzz buffer
+feature runs in either buffer direction. Layout maps `font-kerning: normal` to
+kern=1 plus vkrn=1 in both orientations
+(`amazing-layout/src/font_features.rs`), so a horizontal run shaped with the
+wrong-axis feature and regressed `font-kerning-02`. The provider now filters
+both the `@font-face` descriptor features and the explicit `TextStyle.features`
+to the tag matching the actual shaping buffer direction
+(`uses_vertical_metrics() && orientation == Upright` → TopToBottom). An explicit
+`kern`/`vkrn` off value still disables its own axis; an on value no longer leaks
+onto the other axis. Commit `0e4afdd0`.
+
+Evidence: `crates/amazing-text-provider/evidence/text14-gate-summary.json`,
+`text14-kern-before.json` and `text14-kern-after.json`, at the pinned WPT
+revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, measured on the text lane
+Boat sandbox under Linux/fontconfig/freetype. The five pinned kerning cases —
+every kerning case in the 40-case expanded selection — moved **3 pass / 2
+mismatch → 5 pass / 0 mismatch**: `font-kerning-02` (horizontal) and `-03`
+(vertical upright) each gained, while `-01`, `-04` and `-05` retained their
+exact actual/reference PPM SHA-256. The before mismatches were exactly 345
+differing pixels in the `.high` line. The provider and text crate nextest gate
+is 68/68 (one skipped); workspace nextest is 2736 passed, 10 skipped, 0 failed;
+workspace doctests are 4 passed, 0 failed.
+
+The full 15/40/48-case pixel selections cannot run on the Boat sandbox: there is
+no WPT checkout and no PowerShell, so only a focused `render-wpt` subset with a
+lane-local comparator was possible. The shared-runner / WPT-provisioning gap is
+filed in `.agents/text/questions.md`. With the two kerning cases closed, no
+remaining mismatch in the pinned text selections has an established text-owned
+cause: the retained font-face, flow, vertical and vertical/ruby failures are
+layout-owned per the TEXT-7..13 routes, and the PUA/emoji cases are environment
+ones. The lane has asked the orchestrator for its next ticket, proposing
+`font-optical-sizing: auto` (`opsz`) and a `font-variant-caps/-numeric/-position`
+feature contract as provider-local candidates.

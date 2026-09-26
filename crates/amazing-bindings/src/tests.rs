@@ -256,6 +256,9 @@ impl BindingHost for Host {
         Ok(matches!(value, V::Dictionary(entries) if entries.iter().any(|(name, value)|
             *name == "__constructor" && *value == V::Bool(true))))
     }
+    fn is_object_value(&mut self, value: &V) -> Result<bool, String> {
+        Ok(!matches!(value, V::Undefined | V::Null | V::Bool(_) | V::Number(_) | V::String(_)))
+    }
     fn require_object(&mut self, value: &V) -> Result<(), String> {
         if matches!(value, V::Dictionary(_) | V::Array(_)) { Ok(()) }
         else { Err("TypeError: Expected an object".into()) }
@@ -512,6 +515,9 @@ impl AbortHost for Host {
     }
 }
 impl DocumentHost for Host {
+    fn document_default_view(&mut self, document: NodeIdx) -> Result<Option<V>, String> {
+        Ok(self.window.as_ref().filter(|_| document == NodeIdx(0)).map(|(_, view)| view.clone()))
+    }
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
         assert!(!self.arena_borrowed);
         if let Some(data) = self.dom.document_metadata(document).map_err(|error| error.to_string())? {
@@ -1683,7 +1689,9 @@ fn forced_token_toggle_without_a_change_queues_no_attribute_mutation() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 9);
+    // 11: the merge of HTML-26's SELECTED_OPTIONS legacy hook with dev's
+    // DOM_STRING_MAP legacy hook (dataset) adds one each over the prior 9.
+    assert_eq!(h.legacy.len(), 11);
     assert!(h.legacy.iter().any(|(brand, hooks)| *brand == InterfaceBrand::NAMED_NODE_MAP
         && hooks.indexed_getter == O::NamedNodeMapItem
         && hooks.named_getter == Some(O::NamedNodeMapGetNamedItem)
@@ -1691,7 +1699,8 @@ fn html_collection_binding_and_legacy_hooks_are_live() {
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
-    assert!(h.legacy.iter().all(|(brand, hooks)| !hooks.override_builtins
+    assert!(h.legacy.iter().filter(|(brand, _)| *brand != InterfaceBrand::DOM_STRING_MAP)
+        .all(|(brand, hooks)| !hooks.override_builtins
         && (hooks.indexed_setter.is_none() || *brand == InterfaceBrand::OPTIONS)
         && hooks.named_setter.is_none()
         && hooks.named_deleter.is_none()));
@@ -2523,3 +2532,30 @@ mod legacy_events;
 
 #[path = "tests_dom_exception.rs"]
 mod dom_exception;
+
+#[path = "tests_dataset.rs"]
+mod tests_dataset;
+
+#[path = "tests_legacy_document.rs"]
+mod tests_legacy_document;
+
+#[path = "tests_listener_registration.rs"]
+mod tests_listener_registration;
+
+#[path = "tests_tokenlist_semantics.rs"]
+mod tests_tokenlist_semantics;
+
+#[test]
+fn document_default_view_uses_host_association_and_enforces_document_brand() {
+    let mut h = Host::default();
+    let window = V::Dictionary(vec![]);
+    h.window = Some((0, window.clone()));
+    assert_eq!(call(&mut h, O::DocumentDefaultView, V::Node(NodeIdx(0)), &[]), window);
+    let inert = call(&mut h, O::DocumentConstructor, V::Undefined, &[]);
+    assert_eq!(call(&mut h, O::DocumentDefaultView, inert, &[]), V::Null);
+    let node = element(&mut h);
+    assert!(invoke(&mut h, O::DocumentDefaultView, V::Node(node), &[]).is_err());
+}
+
+#[path = "tests_event_modifiers.rs"]
+mod tests_event_modifiers;

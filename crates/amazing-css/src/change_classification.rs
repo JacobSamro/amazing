@@ -51,6 +51,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "box-shadow" |
         "clip-rule" |
         "color" |
+        "color-scheme" |
         "cursor" |
         "fill" |
         "fill-opacity" |
@@ -252,7 +253,7 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [16, 39, 125, 29]);
+        assert_eq!(counts, [16, 40, 125, 29]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

@@ -10,6 +10,8 @@ pub enum CollectionFilter {
     HtmlTag(Vec<u16>),
     Name(Vec<u16>),
     Links,
+    Anchors,
+    Empty,
 }
 
 #[derive(Debug)]
@@ -89,6 +91,9 @@ impl Dom {
                         name.encode_utf16().eq(tag.iter().copied()),
                     CollectionFilter::Name(query) => *namespace == Namespace::Html &&
                         self.attribute_utf16(*node, "name").as_deref() == Some(query),
+                    CollectionFilter::Empty => false,
+                    CollectionFilter::Anchors => *namespace == Namespace::Html && name == "a"
+                        && self.get_attribute_ns(*node, None, "name").is_some(),
                     CollectionFilter::Links => *namespace == Namespace::Html &&
                         matches!(name.as_str(), "a" | "area") &&
                         self.get_attribute_ns(*node, None, "href").is_some(),
@@ -145,6 +150,30 @@ impl Dom {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_document_filters_use_attribute_presence_and_exclude_foreign_namespaces() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let anchor = dom.create_element(root, "a");
+        let unnamed = dom.create_element(root, "a");
+        let foreign = dom.create_element_ns_in(NodeIdx(0), Some("urn:foreign"), "a").unwrap();
+        dom.pre_insert(foreign, root, None).unwrap();
+        dom.set_attribute(anchor, "name", "").unwrap();
+        dom.set_attribute(foreign, "name", "foreign").unwrap();
+        dom.set_attribute(unnamed, "href", "").unwrap();
+        let anchors = dom.collection(NodeIdx(0), CollectionFilter::Anchors).unwrap();
+        let empty = dom.collection(NodeIdx(0), CollectionFilter::Empty).unwrap();
+        assert_eq!(dom.collection_length(anchors).unwrap(), 1);
+        assert_eq!(dom.collection_item(anchors, 0).unwrap(), Some(anchor));
+        assert_eq!(dom.collection(NodeIdx(0), CollectionFilter::Anchors).unwrap(), anchors);
+        dom.set_attribute(unnamed, "name", "second").unwrap();
+        assert_eq!(dom.collection_length(anchors).unwrap(), 2);
+        dom.remove_attribute(anchor, "name").unwrap();
+        assert_eq!(dom.collection_item(anchors, 0).unwrap(), Some(unnamed));
+        dom.create_element(root, "applet");
+        dom.create_element(root, "object");
+        assert_eq!(dom.collection_length(empty).unwrap(), 0);
+    }
     #[test]
     fn tag_name_uses_qualified_name_and_html_document_case_rules() {
         let mut dom = Dom::new();

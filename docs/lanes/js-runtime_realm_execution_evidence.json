@@ -1,0 +1,118 @@
+{
+  "ticket": "JSRT-11 dynamic-code and bound-function realm execution",
+  "base": "af6364b1",
+  "implementation_commit": "5cb48de7cda94325c1a7f059d425be3f0e705a5e",
+  "gate": {
+    "platform": "Linux Boat",
+    "workspace_pass": 2751,
+    "workspace_skipped": 10,
+    "workspace_seconds": 59.342,
+    "doctests_pass": 4,
+    "commands": [
+      "cargo build -p amazing-js --example test262_host --release --locked",
+      "cargo nextest run --workspace --locked --no-fail-fast",
+      "cargo test --workspace --locked --doc",
+      "python3 scripts/test262.py \"$TEST262_ROOT\" --binary \"$OUT/realm-execution-host\" --jobs 4 --timeout 60 --output \"$OUT/realm-execution.json\""
+    ]
+  },
+  "before": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "f25282f476641f1037b83cfc05ef4962bb7d26f15e269ed47bdb492645a04fd5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "classification_sha256": "51a89ba59d00e658924073431ca100c7b0e7d402dc8526e2ee7b2d355b5cd67e",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": false,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "files": {
+      "pass": 32182,
+      "fail": 20945,
+      "timeout": 16,
+      "unsupported": 435,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 62215,
+      "fail": 40063,
+      "timeout": 33,
+      "unsupported": 607,
+      "skipped": 0
+    }
+  },
+  "after": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "host_sha256": "b6fc71357df5fbba9c21da67f98e5ef1794e87197052679f2d0e7456703bcb09",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "classification_sha256": "7bb8813c485beb2449cf097a92a954d692edadbb6f9abb1e386be143eb4fd716",
+    "capabilities": {
+      "protocol": 2,
+      "module": true,
+      "async": true,
+      "can_block": false,
+      "createRealm": true,
+      "detachArrayBuffer": true,
+      "gc": false,
+      "agent": false,
+      "IsHTMLDDA": false,
+      "AbstractModuleSource": false,
+      "evalScript": true,
+      "global": true,
+      "print": true,
+      "intl402": true
+    },
+    "files": {
+      "pass": 32189,
+      "fail": 20937,
+      "timeout": 17,
+      "unsupported": 435,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 62224,
+      "fail": 40053,
+      "timeout": 34,
+      "unsupported": 607,
+      "skipped": 0
+    }
+  },
+  "lost_variants": [],
+  "gained_files": [
+    "language/eval-code/direct/non-string-object.js",
+    "language/eval-code/indirect/non-string-object.js",
+    "language/module-code/eval-gtbndng-indirect-update-as.js",
+    "language/module-code/eval-gtbndng-indirect-update.js",
+    "language/module-code/eval-rqstd-once.js",
+    "language/module-code/eval-rqstd-order.js",
+    "language/module-code/instn-same-global.js"
+  ],
+  "source_manifest_sha256": "3771fd895c1194218e90c962786ff20be5563aa17e2a2775a8722cdd764c0e5e",
+  "changes": [
+    "Indirect eval and Function use realm global environment during active module evaluation",
+    "Host realm eval enters global environment and restores active module even on errors",
+    "Non-String eval inputs return unchanged",
+    "Bound function calls/construct forward without an extra realm context or prototype allocation",
+    "Bound argument storage is consumed as a private List, not through a user-overridable iterator"
+  ],
+  "specifications": [
+    "https://tc39.es/ecma262/multipage/global-object.html#sec-performeval",
+    "https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-bound-function-exotic-objects"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "source": "b73d7bcd66e4c4c03553a3c5a4787c86a93a0bfe",
+  "base": "1122ea30",
+  "platform": "Linux Boat pool-dom isolated target",
+  "workspace_pass": 2739,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "before_pass": 172,
+  "after_pass": 197,
+  "before_fail": 142,
+  "after_fail": 117,
+  "gained_subtests": 25,
+  "lost_subtests": 0,
+  "baseline": "../document-collections/after.json",
+  "measured_at": "2026-09-26T12:31:03Z"
+}
