@@ -1,6 +1,6 @@
 //! Process boundary messages. All externally supplied fields decode through
 //! amazing-ipc's version and allocation limits.
-use amazing_ipc::codec::ByteBuf;
+pub use amazing_ipc::codec::ByteBuf;
 use amazing_ipc::{interface, wire_enum, wire_struct};
 
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Viewport {width:u32, height:u32}}
@@ -125,7 +125,7 @@ interface! {pub interface StorageService(13) => StorageProxy, StorageReceiver {
 
 // Browser-minted document tokens and epochs gate every lifecycle transition.
 // The renderer reports the observable HTML event order in its acknowledgment.
-wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryActivate {document:u64, epoch:u64, history_state:Option<ByteBuf>}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryFreeze {document:u64, epoch:u64, deadline_ms:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryRestore {document:u64, epoch:u64}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HistoryDiscard {document:u64, epoch:u64}}

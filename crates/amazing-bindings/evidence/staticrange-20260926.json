@@ -1,0 +1,174 @@
+{
+  "source_commit": "ae17e53344cf85703e46a2ba78b028114aa9de89",
+  "platform": "Linux venus-001",
+  "kind": "targeted WPT iteration, not Windows conformance gate",
+  "storage": "fresh AMAZING_STORAGE_DIR per invocation",
+  "results": [
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/ranges/StaticRange-constructor.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 120000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 17,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "Construct static range with Element container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with Text container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with Element startContainer and Text endContainer",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with Text startContainer and Element endContainer",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with ProcessingInstruction container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with Comment container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with CDATASection container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with Document container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with DocumentFragment container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct collapsed static range",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct inverted static range",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with offset greater than length",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with standalone Node container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with endpoints in disconnected trees",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Construct static range with endpoints in disconnected documents",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Throw on DocumentType or Attr container",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Throw on missing or invalid arguments",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "suite": "wpt",
+      "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "test": "dom/collections/HTMLCollection-as-prototype.html",
+      "viewport": [
+        800,
+        600
+      ],
+      "timeout_ms": 120000,
+      "status": "pass",
+      "harness_status": 0,
+      "detail": null,
+      "file_counts": {
+        "pass": 1,
+        "fail": 0,
+        "timeout": 0,
+        "error": 0,
+        "unsupported": 0
+      },
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "timeout": 0,
+        "notrun": 0,
+        "error": 0
+      },
+      "subtests": [
+        {
+          "name": "HTMLCollection as a prototype should not allow getting .length on the base object",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "HTMLCollection as a prototype and setting own properties",
+          "status": 0,
+          "message": null
+        }
+      ]
+    }
+  ],
+  "windows_gate": {
+    "host": "win-001 (win-run fallback)",
+    "source_commit": "ae17e53344cf85703e46a2ba78b028114aa9de89",
+    "owned_nextest_pass": 496,
+    "owned_nextest_skip": 4,
+    "owned_doctests": 0,
+    "workspace_nextest_pass": 2464,
+    "workspace_nextest_skip": 7,
+    "workspace_doctests_pass": 2,
+    "exit_code": 0
+  }
+}

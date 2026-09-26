@@ -48,11 +48,20 @@ impl Layers {
     }
 }
 
-pub(super) fn compile_sheets(sheets: &[Stylesheet], ua: bool) -> Vec<CompiledRule> {
+pub(super) fn compile_sheets(
+    sheets: &[Stylesheet],
+    ua: bool,
+    environment: &MediaEnvironment,
+) -> Vec<CompiledRule> {
     let mut layers = Layers::default();
     let mut pending = Vec::new();
     for (sheet_index, sheet) in sheets.iter().enumerate() {
         for rule in &sheet.rules {
+            if !rule.media.iter().all(|query| {
+                crate::media_queries::MediaQueryList::parse(query).evaluate(environment)
+            }) {
+                continue;
+            }
             let key = layers.register(&rule.layer, sheet_index);
             let selectors: Option<Vec<_>> = rule
                 .selector_srcs
