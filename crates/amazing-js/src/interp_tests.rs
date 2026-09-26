@@ -508,6 +508,35 @@ mod tests {
     }
 
     #[test]
+    fn error_prototype_stack_accessor_formats_and_can_be_overwritten() {
+        // Non-string checks and the SameValue-with-home-object check run via
+        // the setter function directly (as the real Test262 suite does),
+        // and before any own "stack" property exists on `e` -- once one
+        // does, ordinary [[Set]] finds it first and never re-enters the
+        // accessor, so order matters here exactly as it does in the spec.
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let e=new TypeError('boom'); let set=Object.getOwnPropertyDescriptor(Error.prototype,'stack').set; \
+                 typeof e.stack==='string' \
+                 && e.stack==='TypeError: boom' \
+                 && !Object.getOwnPropertyDescriptor(e,'stack') \
+                 && new RangeError().stack==='RangeError' \
+                 && Object.getOwnPropertyDescriptor(Error.prototype,'stack').get.call(Object.create(Error.prototype))===undefined \
+                 && (function(){ try { set.call(e, 1); return false; } catch(x){ return x instanceof TypeError; } })() \
+                 && (function(){ try { set.call(Error.prototype, ''); return false; } catch(x){ return x instanceof TypeError; } })() \
+                 && !Object.getOwnPropertyDescriptor(e,'stack') \
+                 && (e.stack='custom', e.stack==='custom') \
+                 && (function(){ let d=Object.getOwnPropertyDescriptor(e,'stack'); \
+                    return d.value==='custom' && d.writable && d.enumerable && d.configurable; })() \
+                 && (function(){ let d=Object.getOwnPropertyDescriptor(Error.prototype,'stack'); \
+                    return typeof d.get==='function' && typeof d.set==='function' && !d.enumerable && d.configurable; })();",
+            )
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn class_inheritance_dispatches_super_methods_with_the_real_receiver() {
         let mut i = Interpreter::new();
         let value = i

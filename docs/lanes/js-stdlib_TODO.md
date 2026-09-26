@@ -359,4 +359,98 @@ Workspace `cargo nextest run --workspace --locked --no-fail-fast` passed
 Temporal 3,765/4,603 and RegExp 1,135/1,941 were all measured on the lane
 Boat sandbox before and after each group.
 
+## JSS-next: Error.prototype.stack, String/matchAll/replace fixes, Temporal ZonedDateTime string parsing
+
+Fixed base `c2104209` (the prior JSS-next commit). Pinned Test262
+`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+**`Error.prototype.stack`** is a real pinned Test262 directory this revision
+(`built-ins/Error/prototype/stack/`, proposal `error-stack-accessor`), not a
+de-facto extension. Implemented the getter (`get Error.prototype.stack`:
+TypeError on a non-object receiver, `undefined` when the receiver lacks an
+`[[ErrorData]]` internal slot even if `Error.prototype` is on its chain, else
+an implementation-defined header string) and the setter
+(`SetterThatIgnoresPrototypeProperties`: TypeError on a non-object receiver
+or a non-String value; TypeError when the receiver is `%Error.prototype%`
+itself (SameValue against the home object); otherwise `CreateDataPropertyOrThrow`
+when the receiver has no own `"stack"`, or an ordinary `[[Set]]` -- preserving
+an existing data property's attributes, or invoking/rejecting an existing
+accessor -- when it does). Added a stored `Interpreter::error_proto: Obj`
+field (mirroring `map_proto`/`set_proto`) so the constructor's `"prototype"`
+own property IS that object, giving the setter a stable identity for the
+SameValue check. The accessor pair is installed via `symbol_method`
+(non-constructible, no own `"prototype"`) rather than `Self::native`, fixing
+`getter`/`setter-not-a-constructor.js`; `native_error_value`'s shared
+`"message"` own-property install was changed from enumerable-by-default to
+`{writable:true, enumerable:false, configurable:true}` per section 20.5.1.1, fixing
+`instance-not-enumerable.js`. `built-ins/Error/prototype/stack` selection (35
+files, 2 `host.createRealm`-unsupported): 0 -> 27 pass (the files existed but
+nothing implemented the feature before this). 6 remaining fail: 5 need Proxy
+(`ReferenceError: Proxy is not defined`) and 1 (`getter-foreign-new-target.js`)
+needs `Reflect.construct` foreign-new-target `[[ErrorData]]` semantics --
+both js-runtime's core-interpreter territory, tracked below.
+
+**String failure-cluster fixes** (25 failing files -> 21): `String.prototype.matchAll`
+no longer falls back to an internal match-record implementation when the
+freshly `RegExpCreate`d copy's own `@@matchAll` has been deleted from
+`RegExp.prototype` -- step 5's `Invoke` is unconditional and throws
+`TypeError` for a non-callable method, matching
+`matchAll/regexp-prototype-has-no-matchAll.js`. `String.prototype.replace`
+now `ToString`s a non-callable `replaceValue` unconditionally before
+searching (step 6), observable via a `toString` side effect even when the
+search string is never found (`replace/replaceValue-evaluation-order*.js`).
+`String.prototype[Symbol.iterator]` now `RequireObjectCoercible`s `this`
+before `ToString` (`Symbol.iterator/this-val-non-obj-coercible.js`) -- this
+one line lives in `interp_symbol.rs` (js-runtime's file; `native_string_iterator`
+called a bare `to_js_string` with no coercibility check), fixed under the
+lane's standing grant for shared gaps blocking its own directories.
+`built-ins/String`: 1,307 -> 1,311/1,341 pass (+8 variants, zero lost).
+
+**Temporal ZonedDateTime string parsing** (`builtins_temporal_epoch.rs`):
+`Temporal.ZonedDateTime.from`/`compare`/`equals`/`since`/`until` etc. now
+accept a date-time string whose zone comes only from a bracketed annotation
+with no `Z` and no numeric offset (`"1970-01-01T00:00[+01:00]"` --
+`OffsetBehaviour: wall` in the spec, resolved through disambiguation alone;
+previously `std_epoch_parse` required a `Z` or offset unconditionally and
+threw `RangeError: invalid Temporal instant string` for every annotated
+ZonedDateTime string lacking one, a ~29-file cluster).
+
+Added `std_epoch_zone_from_string` (`ParseTemporalTimeZoneString`) so a
+`timeZone` option value that is itself a full ISO date-time string --
+optionally with a bracketed annotation -- resolves to a zone id instead of
+being handed whole to `tz_canonicalize` (which only parses a bare
+identifier). The date-time is always parsed and validated in full even when
+an annotation ultimately supplies the zone (an early version skipped date
+validation whenever a bracket was present, regressing the
+`timezone-string-year-zero.js` negative-zero-year check -- caught and fixed
+before this gate). A bare numeric offset with no annotation is only valid at
+minute precision as a *time zone identifier* (`TimeZoneNumericUTCOffset`),
+unlike the *exact time* offset in an Instant/ZonedDateTime string, which may
+carry seconds -- `timezone-string-datetime.js`'s sub-minute-offset rejections.
+
+Fixed-base full pinned Test262: **32,056 -> 32,147 pass** (files), **+181
+passing variants, zero lost** (identical input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`).
+`built-ins/Temporal` selection unchanged by the last two fixes at
+3,813/4,603 pass (+48 files over this ticket's base). `built-ins/String`
+selection unchanged at 1,311/1,341 pass. `built-ins/Error/prototype/stack`
+selection: 27/35 pass (see above). Linux `amazing-js` crate nextest:
+343/343 passed, 1 skipped; its doctest 1/1 passed -- re-verified after the
+`symbol_method`/message-enumerable fixes. Linux workspace `cargo nextest run
+--workspace --locked --no-fail-fast && cargo test --workspace --locked
+--doc` was re-gated after all fixes in this ticket; see the lane's final
+report for the exact count.
+
+Remaining `built-ins/Error/prototype/stack` gaps (5 Proxy-dependent files, 1
+`getter-foreign-new-target.js` needing `Reflect.construct` foreign-new-target
+`[[ErrorData]]` semantics) and the largest Temporal cluster (`ReferenceError:
+Proxy is not defined`, ~125 files) stay js-runtime's, per `questions.md`.
+String's remaining ~21 failures are mostly Unicode NFC/NFD normalization edge
+cases (no external Unicode data crate available) and RegExp `/v` flag /
+named-group parsing (js-lang's regex engine), left as measured failures
+rather than chased for a small tail. `JsObject::error_obj` (`value.rs`,
+internal engine-thrown errors) still installs `"message"` as enumerable,
+unlike the constructor path fixed here; flagged in `questions.md` as a
+deferred parity follow-up for whoever owns `value.rs`.
+
 

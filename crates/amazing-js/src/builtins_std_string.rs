@@ -469,14 +469,15 @@ fn std_string_match_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) 
     // Step 4: RegExpCreate(searchValue, "g") is always a fresh RegExp, even when
     // searchValue already is one; @@matchAll is read from that copy.
     let regex = native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])?;
+    // Step 5: Invoke(rx, @@matchAll, «S») unconditionally -- there is no
+    // fallback to an internal match-record implementation when the
+    // constructed RegExp's own @@matchAll has been removed from
+    // RegExp.prototype; Invoke throws TypeError for a non-callable method.
     let matcher = i.get_prop(&regex, WellKnownSymbol::MatchAll.symbol())?;
-    if !matcher.is_null() && !matcher.is_undefined() {
-        if callable_function(&matcher).is_none() {
-            return Err(Throw::type_error("@@matchAll is not a function"));
-        }
-        return i.call_value(&matcher, regex, vec![JsValue::str(source)]);
+    if callable_function(&matcher).is_none() {
+        return Err(Throw::type_error("@@matchAll is not a function"));
     }
-    std_regexp_match_records(i, &regex, &source)
+    i.call_value(&matcher, regex, vec![JsValue::str(source)])
 }
 
 fn std_string_html(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

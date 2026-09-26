@@ -1287,7 +1287,15 @@ fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue
         let mut object = JsObject::ordinary();
         object.exotic = Exotic::Error;
         if let Some(message) = message {
-            object.set_own("message", JsValue::str(message));
+            // §20.5.1.1: the own "message" property is
+            // {[[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: true},
+            // not the enumerable default `set_own` gives every other data
+            // property -- observable via JSON.stringify/for-in/Object.keys on
+            // a fresh Error instance.
+            object.define("message", Property {
+                value: JsValue::str(message), writable: true, enumerable: false,
+                configurable: true, getter: None, setter: None,
+            }).unwrap();
         }
         if let Some(function) = i.native_stack.last() {
             if let Some(JsValue::Object(proto)) = function.borrow().get_own("prototype") {
@@ -1370,6 +1378,96 @@ fn native_error_is_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) ->
         _ => false,
     };
     Ok(JsValue::Bool(is_error))
+}
+
+// The `Error.prototype.stack` accessor (proposal "error-stack-accessor",
+// pinned in this Test262 revision under built-ins/Error/prototype/stack/).
+//
+// get Error.prototype.stack ( ):
+//   1. Let E be the this value. If E is not an Object, throw TypeError.
+//   2. If E does not have an [[ErrorData]] internal slot, return undefined
+//      (checked per-instance, not inherited -- Object.create(Error.prototype)
+//      has Error.prototype on its chain but no [[ErrorData]] of its own).
+//   3. Return an implementation-defined string; this host has no retained
+//      call-frame metadata, so it formats the same header
+//      Error.prototype.toString would produce.
+fn native_error_stack_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else {
+        return Err(Throw::type_error("Error.prototype.stack getter called on a non-object"));
+    };
+    let has_error_data = {
+        let borrowed = object.borrow();
+        matches!(borrowed.exotic, Exotic::Error) || i.host_error_brand(&borrowed)
+    };
+    if !has_error_data {
+        return Ok(JsValue::Undefined);
+    }
+    let name = i.get_prop(&this, "name")?;
+    let name = if name.is_undefined() { "Error".to_string() } else { i.to_string(&name)? };
+    let message = i.get_prop(&this, "message")?;
+    let message = if message.is_undefined() { String::new() } else { i.to_string(&message)? };
+    let header = if name.is_empty() {
+        message
+    } else if message.is_empty() {
+        name
+    } else {
+        format!("{name}: {message}")
+    };
+    Ok(JsValue::str(header))
+}
+
+// set Error.prototype.stack ( v ):
+//   1. Let E be the this value. If E is not an Object, throw TypeError.
+//   2. If v is not a String, throw TypeError (no ToString coercion).
+//   3. Perform ? SetterThatIgnoresPrototypeProperties(E, %Error.prototype%, "stack", v):
+//      a. If SameValue(E, home) -- the receiver IS %Error.prototype% itself --
+//         throw TypeError (emulates assigning a non-writable data property on
+//         the home object).
+//      b. Let desc be E.[[GetOwnProperty]]("stack") (own only).
+//      c. If desc is undefined, CreateDataPropertyOrThrow(E, "stack", v): a
+//         writable/enumerable/configurable data property, throwing if E is
+//         non-extensible.
+//      d. Else perform Set(E, "stack", v, true): an own data property keeps
+//         its attributes and only its value changes (or throws if
+//         non-writable); an own accessor calls its setter, or throws
+//         TypeError if it has none.
+fn native_error_stack_setter(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else {
+        return Err(Throw::type_error("Error.prototype.stack setter called on a non-object"));
+    };
+    let value = args.into_iter().next().unwrap_or(JsValue::Undefined);
+    if !matches!(value, JsValue::Str(_)) {
+        return Err(Throw::type_error("Error.prototype.stack setter requires a String"));
+    }
+    if Rc::ptr_eq(&object.0, &i.error_proto.0) {
+        return Err(Throw::type_error("cannot set \"stack\" on Error.prototype"));
+    }
+    let existing = object.borrow().own_prop("stack").cloned();
+    match existing {
+        None => {
+            if !object.borrow().extensible {
+                return Err(Throw::type_error("cannot create property \"stack\" on a non-extensible object"));
+            }
+            object.borrow_mut().define("stack", Property {
+                value, writable: true, enumerable: true, configurable: true,
+                getter: None, setter: None,
+            }).unwrap();
+        }
+        Some(descriptor) => {
+            if let Some(setter) = descriptor.setter.clone() {
+                i.call_value(&setter, this.clone(), vec![value])?;
+            } else if descriptor.getter.is_some() {
+                return Err(Throw::type_error("\"stack\" has no setter"));
+            } else if !descriptor.writable {
+                return Err(Throw::type_error("cannot assign to read only property \"stack\""));
+            } else {
+                let mut updated = descriptor;
+                updated.value = value;
+                object.borrow_mut().define("stack", updated).unwrap();
+            }
+        }
+    }
+    Ok(JsValue::Undefined)
 }
 
 fn new_promise(i: &Interpreter, state: PromiseFate) -> JsValue {
@@ -3132,6 +3230,14 @@ fn native_string_replace(
     }
     let search = i.to_js_string(&search_value)?;
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    // Step 6: a non-callable replaceValue is ToString-converted here,
+    // unconditionally and before the search (step 7), even when the search
+    // string is never found -- observable through a `toString` side effect.
+    let replacement = if callable_function(&replacement).is_some() {
+        replacement
+    } else {
+        JsValue::str(i.to_js_string(&replacement)?)
+    };
     let position = if search.is_empty() { Some(0) } else {
         source.units().windows(search.len()).position(|part| part == search.units())
     };

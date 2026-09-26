@@ -143,7 +143,51 @@ fn std_epoch_zone_value(i: &mut Interpreter, value: &JsValue) -> Result<String, 
     if let Ok(data) = std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)) {
         return Ok(data.zone_id);
     }
-    std_epoch_zone(&i.to_string(value)?)
+    std_epoch_zone_from_string(&i.to_string(value)?)
+}
+
+// ParseTemporalTimeZoneString: a bare TimeZoneIdentifier (IANA name, "UTC",
+// or a minute-precision numeric offset) is tried first. Otherwise the text
+// must parse as an ISO date-time; a bracketed time zone annotation wins over
+// the date-time's own `Z`/offset, `Z` alone means UTC, and a bare numeric
+// offset with no annotation becomes the zone itself -- but, unlike an
+// Instant/ZonedDateTime exact offset, only at minute precision (no seconds
+// or sub-second digits; TimeZoneNumericUTCOffset forbids them where
+// TimeZoneUTCOffset, used for exact time, allows them).
+fn std_epoch_zone_from_string(text: &str) -> Result<String, Throw> {
+    let invalid = || Throw::range_error("invalid Temporal time zone");
+    if let Some(zone) = tz_canonicalize(text) { return Ok(zone); }
+    let (body, annotation) = std_epoch_validate_annotations(text)?;
+    // The date-time is validated in full regardless of whether an
+    // annotation ultimately supplies the zone -- an annotation only picks
+    // which zone id wins, it does not exempt the rest of the string from
+    // ParseISODateTime.
+    let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' ')).ok_or_else(invalid)?;
+    let date = &body[..time_start];
+    let (_, _, _, tail) = std_temporal_parse_date(date, true)?;
+    if !tail.is_empty() { return Err(invalid()); }
+    let time = &body[time_start + 1..];
+    let mut fields = [0; 10];
+    if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
+        std_temporal_parse_time(clock, &mut fields)?;
+        return match annotation {
+            Some(zone) => std_epoch_zone(zone),
+            None => Ok("UTC".into()),
+        };
+    }
+    let start = time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-'))
+        .map(|(index, _)| index).ok_or_else(invalid)?;
+    std_temporal_parse_time(&time[..start], &mut fields)?;
+    let offset_text = &time[start..];
+    if let Some(zone) = annotation {
+        std_epoch_parse_offset(offset_text)?;
+        return std_epoch_zone(zone);
+    }
+    let ns = std_epoch_parse_offset(offset_text)?;
+    if ns % (60 * STD_TEMPORAL_NS_SECOND) != 0 { return Err(invalid()); }
+    let sign = if ns < 0 { '-' } else { '+' };
+    let minutes = (ns.unsigned_abs() / (60 * STD_TEMPORAL_NS_SECOND as u128)) as i64;
+    Ok(format!("{sign}{:02}:{:02}", minutes / 60, minutes % 60))
 }
 
 fn std_epoch_offset(data: &StdEpochData) -> i128 {
@@ -291,12 +335,19 @@ fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
     };
     let time_start = body.find('T').or_else(|| body.find('t')).or_else(|| body.find(' ')).ok_or_else(invalid)?;
     let time = &body[time_start + 1..];
-    let (clock, offset, exact) = if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
-        (clock, 0, true)
+    // A ZonedDateTime string may omit both `Z` and a numeric UTC offset when a
+    // bracketed time zone annotation supplies the zone (OffsetBehaviour
+    // "wall" in the spec's ParseISODateTime): the wall-clock local time is
+    // then resolved through disambiguation alone. Instant strings have no
+    // annotation fallback and must always carry `Z` or a numeric offset.
+    let (clock, offset, exact, offset_absent) = if let Some(clock) = time.strip_suffix('Z').or_else(|| time.strip_suffix('z')) {
+        (clock, 0, true, false)
+    } else if let Some(start) = time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-')).map(|(index, _)| index) {
+        (&time[..start], std_epoch_parse_offset(&time[start..])?, false, false)
+    } else if kind == StdEpochKind::ZonedDateTime {
+        (time, 0, false, true)
     } else {
-        let start = time.char_indices().find(|(index, c)| *index > 0 && (*c == '+' || *c == '-'))
-            .map(|(index, _)| index).ok_or_else(invalid)?;
-        (&time[..start], std_epoch_parse_offset(&time[start..])?, false)
+        return Err(invalid());
     };
     let date = &body[..time_start];
     let (year, month, day, tail) = std_temporal_parse_date(date, true)?;
@@ -305,6 +356,9 @@ fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
     fields[0] = year; fields[1] = month; fields[2] = day;
     std_temporal_parse_time(clock, &mut fields)?;
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
+    if kind == StdEpochKind::ZonedDateTime && offset_absent {
+        return Ok((std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?, zone));
+    }
     let epoch_ns = std_temporal_epoch_ns(&fields) - offset;
     if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
         return Err(Throw::range_error("instant outside Temporal range"));
