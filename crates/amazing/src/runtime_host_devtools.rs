@@ -389,9 +389,10 @@ use amazing_devtools::host::{
     DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams, EvaluateResult, ExceptionDetails,
     ExceptionEvent, FrameInfo, FrameTree, HighlightConfig, HostError, KeyEvent, LayoutMetrics,
     LogEntry, MatchedRule, MouseEvent, NetworkFailedEvent, NetworkFinishedEvent,
-    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, PausedEvent, PropertyDescriptor,
-    Quad, RemoteObject, ResourceContent, Scope, Screenshot, ScreenshotFormat, ScreenshotParams,
-    ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo, Viewport,
+    NetworkRequestEvent, NetworkResponseEvent, NodeDescription, ObjectPreview, PausedEvent,
+    PropertyDescriptor, PropertyPreview, Quad, RemoteObject, ResourceContent, Scope, Screenshot,
+    ScreenshotFormat, ScreenshotParams, ScriptInfo, ScriptLocation, StyleOrigin, TargetInfo,
+    Viewport,
 };
 use amazing_devtools::server::CdpServer;
 use amazing_js::debug_hook::DebugHook;
@@ -430,6 +431,7 @@ enum PageCommand {
     GetProperties(String, bool, Reply<Vec<PropertyDescriptor>>),
     CallFunctionOn(CallFunctionParams, Reply<EvaluateResult>),
     ReleaseObject(String, Reply<()>),
+    ReleaseObjectGroup(String, Reply<()>),
     GetResponseBody(String, Reply<Option<ResourceContent>>),
     DrainConsole(Reply<Vec<ConsoleEvent>>),
     DrainNetworkRequests(Reply<Vec<NetworkRequestEvent>>),
@@ -861,6 +863,13 @@ struct PageOwner {
     /// (`Runtime.getProperties`/`callFunctionOn` handles), cleared on
     /// navigation along with the rest of `PageOwner`.
     objects: HashMap<String, amazing_js::value::JsValue>,
+    /// `Runtime.releaseObjectGroup` (CDP-24): the `objectGroup` (or `""` for
+    /// CDP's ungrouped default) each top-level `evaluate`/`callFunctionOn`
+    /// result's `objectId` was minted under, so a whole group can be dropped
+    /// at once. Only top-level results are tagged — `Runtime.getProperties`
+    /// has no `objectGroup` parameter in real CDP either, so a property
+    /// value's own handle stays ungrouped, same as real Chrome.
+    object_groups: HashMap<String, String>,
     /// Response bodies by request id, for `Network.getResponseBody`. Only
     /// the document and `<script src>` fetches this driver instruments are
     /// present — see the module's "Known limitations".
@@ -1179,6 +1188,7 @@ impl PageOwner {
             next_request_id: 0,
             next_object_id: 0,
             objects: HashMap::new(),
+            object_groups: HashMap::new(),
             bodies: HashMap::new(),
             network_requests: VecDeque::new(),
             network_responses: VecDeque::new(),
@@ -1737,15 +1747,27 @@ impl PageOwner {
     /// Runs `expression` in this page's persistent realm. Unlike the first
     /// slice, this is the *same* `DriverScheduler` (and so the same globals
     /// and closures) across every call for this page's lifetime.
+    ///
+    /// CDP-24: `generatePreview` attaches an [`ObjectPreview`] to the result
+    /// (see [`Self::object_preview`]); `objectGroup` tags any minted
+    /// `objectId` so [`Self::release_object_group`] can drop it later (see
+    /// [`Self::tag_object_group`]). Neither applies to a `returnByValue`
+    /// result — it has no `objectId` to tag or preview to attach beyond its
+    /// own serialized `value`.
     fn evaluate(&mut self, params: &EvaluateParams) -> EvaluateResult {
         match self.scheduler.run_script(&params.expression) {
             Ok(value) => {
-                let object =
+                let mut object =
                     if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
+                if params.generate_preview {
+                    object.preview = self.object_preview(&value);
+                }
+                self.tag_object_group(&object, params.object_group.as_deref());
                 EvaluateResult::value(object)
             }
             Err(thrown) => {
                 let exception_object = self.remote_object(&thrown.0);
+                self.tag_object_group(&exception_object, params.object_group.as_deref());
                 EvaluateResult {
                     result: exception_object.clone(),
                     exception: Some(ExceptionDetails {
@@ -1761,11 +1783,88 @@ impl PageOwner {
         }
     }
 
+    /// Tags `object`'s `objectId` (if any) with `group` — `""` for CDP's
+    /// ungrouped default when no `objectGroup` was given — so
+    /// [`Self::release_object_group`] can find it later. A primitive or
+    /// by-value result has no `objectId` and this is a no-op for it.
+    fn tag_object_group(&mut self, object: &RemoteObject, group: Option<&str>) {
+        if let Some(id) = &object.object_id {
+            self.object_groups.insert(id.clone(), group.unwrap_or("").to_owned());
+        }
+    }
+
+    /// Builds a shallow `Runtime.ObjectPreview` for `value` (CDP-24): `None`
+    /// for a non-object — primitives don't carry a `.preview` in real CDP
+    /// either. Caps at 5 own enumerable properties (matching real Chrome's
+    /// own default), setting `overflow: true` when more exist. Each
+    /// property's value is summarized by [`Self::property_preview`] as a
+    /// primitive type/short string only — a nested object/function property
+    /// gets no rendered value (an honest one-level-deep limit: a recursive
+    /// preview risks the same self-referential-object problem
+    /// `remote_object_by_value`'s depth cap already works around, and this
+    /// driver has no cycle/pointer-identity check for `JsValue::Object`'s
+    /// `Rc` to lean on instead).
+    fn object_preview(&mut self, value: &amazing_js::value::JsValue) -> Option<ObjectPreview> {
+        use amazing_js::value::JsValue;
+        if !matches!(value, JsValue::Object(_)) {
+            return None;
+        }
+        const PREVIEW_LIMIT: usize = 5;
+        let object_type = if self.scheduler.js.binding_is_callable(value) { "function" } else { "object" }.to_owned();
+        let subtype = if self.js_is_array(value) { Some("array".to_owned()) } else { None };
+        let description = Some(format!("{value:?}"));
+        let keys = match self.scheduler.js.binding_own_property_keys(value) {
+            Ok(keys) => keys,
+            Err(_) => return Some(ObjectPreview { object_type, subtype, description, overflow: false, properties: Vec::new() }),
+        };
+        let overflow = keys.len() > PREVIEW_LIMIT;
+        let mut properties = Vec::with_capacity(PREVIEW_LIMIT.min(keys.len()));
+        for key in keys.into_iter().take(PREVIEW_LIMIT) {
+            let property = match self.scheduler.js.binding_get_own_property(value, &key) {
+                Ok(Some(property)) if property.enumerable => property,
+                _ => continue,
+            };
+            let property_value = match &property.getter {
+                Some(getter) => {
+                    self.scheduler.js.binding_call(getter, value.clone(), Vec::new()).unwrap_or(JsValue::Undefined)
+                }
+                None => property.value.clone(),
+            };
+            properties.push(self.property_preview(key, &property_value));
+        }
+        Some(ObjectPreview { object_type, subtype, description, overflow, properties })
+    }
+
+    /// One [`ObjectPreview::properties`] entry for `value` under `name` —
+    /// see [`Self::object_preview`]'s doc comment on why a nested object
+    /// gets no rendered value.
+    fn property_preview(&mut self, name: String, value: &amazing_js::value::JsValue) -> PropertyPreview {
+        use amazing_js::value::JsValue;
+        let (object_type, rendered) = match value {
+            JsValue::Undefined => ("undefined".to_owned(), Some("undefined".to_owned())),
+            JsValue::Null => ("object".to_owned(), Some("null".to_owned())),
+            JsValue::Bool(b) => ("boolean".to_owned(), Some(b.to_string())),
+            JsValue::Num(n) => ("number".to_owned(), Some(amazing_devtools::json::Json::Number(*n).to_string())),
+            JsValue::Str(s) => ("string".to_owned(), Some(s.to_utf8_lossy())),
+            JsValue::BigInt(_) => ("bigint".to_owned(), Some(format!("{value:?}"))),
+            JsValue::Symbol(_) => ("symbol".to_owned(), Some(format!("{value:?}"))),
+            JsValue::Object(_) => {
+                (if self.scheduler.js.binding_is_callable(value) { "function" } else { "object" }.to_owned(), None)
+            }
+        };
+        PropertyPreview { name, object_type, value: rendered }
+    }
+
     /// The properties [`Self::get_properties`] reports for one level of an
     /// object's own-property table (either `object_id`'s own properties, or
     /// one prototype's own properties during the chain walk below), each
     /// tagged `is_own` for the caller. Accessor properties are read through
     /// their getter, matching what a DevTools Properties panel shows.
+    ///
+    /// CDP-24: an object-typed value always gets a [`Self::object_preview`]
+    /// attached — real `Runtime.getProperties` has no `generatePreview`
+    /// parameter of its own to gate this on, unlike `evaluate`/
+    /// `callFunctionOn`.
     fn own_properties(&mut self, object: &amazing_js::value::JsValue, is_own: bool) -> Result<Vec<PropertyDescriptor>, HostError> {
         let keys = self
             .scheduler
@@ -1787,7 +1886,8 @@ impl PageOwner {
                     .unwrap_or(amazing_js::value::JsValue::Undefined),
                 None => property.value.clone(),
             };
-            let remote = self.remote_object(&value);
+            let mut remote = self.remote_object(&value);
+            remote.preview = self.object_preview(&value);
             properties.push(PropertyDescriptor {
                 name: key,
                 value: remote,
@@ -1843,6 +1943,11 @@ impl PageOwner {
     /// same `binding_call` embedding entry point `get_properties` uses for
     /// accessors. `returnByValue` (CDP-22 completeness fix) is honored the
     /// same way `evaluate` honors it — see [`Self::remote_object_by_value`].
+    /// CDP-24: `Runtime.callFunctionOn` has no `generatePreview` parameter
+    /// in real CDP (only `evaluate` does, matching `CallFunctionParams`'s
+    /// own fields — no `generate_preview` there), so this driver never
+    /// attaches a preview to its result. `objectGroup` still tags any
+    /// minted `objectId`, same as `evaluate`.
     fn call_function_on(&mut self, params: &CallFunctionParams) -> Result<EvaluateResult, HostError> {
         let this = match &params.object_id {
             Some(id) => self.objects.get(id).cloned().unwrap_or(amazing_js::value::JsValue::Undefined),
@@ -1850,7 +1955,7 @@ impl PageOwner {
         };
         let function = match self.scheduler.run_script(&format!("({})", params.function_declaration)) {
             Ok(value) => value,
-            Err(thrown) => return Ok(self.evaluate_exception(thrown)),
+            Err(thrown) => return Ok(self.evaluate_exception(thrown, params.object_group.as_deref())),
         };
         let mut args = Vec::with_capacity(params.arguments.len());
         for argument in &params.arguments {
@@ -1860,9 +1965,10 @@ impl PageOwner {
             Ok(value) => {
                 let object =
                     if params.return_by_value { self.remote_object_by_value(&value) } else { self.remote_object(&value) };
+                self.tag_object_group(&object, params.object_group.as_deref());
                 Ok(EvaluateResult::value(object))
             }
-            Err(thrown) => Ok(self.evaluate_exception(thrown)),
+            Err(thrown) => Ok(self.evaluate_exception(thrown, params.object_group.as_deref())),
         }
     }
 
@@ -1876,8 +1982,9 @@ impl PageOwner {
         }
     }
 
-    fn evaluate_exception(&mut self, thrown: amazing_js::value::Throw) -> EvaluateResult {
+    fn evaluate_exception(&mut self, thrown: amazing_js::value::Throw, object_group: Option<&str>) -> EvaluateResult {
         let exception_object = self.remote_object(&thrown.0);
+        self.tag_object_group(&exception_object, object_group);
         EvaluateResult {
             result: exception_object.clone(),
             exception: Some(ExceptionDetails {
@@ -1893,6 +2000,20 @@ impl PageOwner {
 
     fn release_object(&mut self, object_id: &str) {
         self.objects.remove(object_id);
+        self.object_groups.remove(object_id);
+    }
+
+    /// `Runtime.releaseObjectGroup` (CDP-24): drops every `objectId` minted
+    /// under `group` by a top-level `evaluate`/`callFunctionOn` result (see
+    /// [`Self::tag_object_group`]). `group == ""` releases CDP's ungrouped
+    /// default bucket — every result whose call omitted `objectGroup`.
+    fn release_object_group(&mut self, group: &str) {
+        let ids: Vec<String> =
+            self.object_groups.iter().filter(|(_, g)| g.as_str() == group).map(|(id, _)| id.clone()).collect();
+        for id in ids {
+            self.objects.remove(&id);
+            self.object_groups.remove(&id);
+        }
     }
 
     fn get_response_body(&self, request_id: &str) -> Option<ResourceContent> {
@@ -2688,6 +2809,10 @@ fn run_page_thread(mut page: PageOwner, rx: Receiver<PageCommand>) {
                 page.release_object(&object_id);
                 let _ = reply.send(Ok(()));
             }
+            PageCommand::ReleaseObjectGroup(group, reply) => {
+                page.release_object_group(&group);
+                let _ = reply.send(Ok(()));
+            }
             PageCommand::GetResponseBody(request_id, reply) => {
                 let _ = reply.send(Ok(page.get_response_body(&request_id)));
             }
@@ -2922,6 +3047,11 @@ impl DevToolsSession for DriverPageSession {
     fn release_object(&mut self, object_id: &str) -> Result<(), HostError> {
         let object_id = object_id.to_owned();
         request(&self.sender, |reply| PageCommand::ReleaseObject(object_id, reply))
+    }
+
+    fn release_object_group(&mut self, object_group: &str) -> Result<(), HostError> {
+        let object_group = object_group.to_owned();
+        request(&self.sender, |reply| PageCommand::ReleaseObjectGroup(object_group, reply))
     }
 
     fn get_response_body(&mut self, request_id: &str) -> Result<Option<ResourceContent>, HostError> {

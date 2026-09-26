@@ -61,7 +61,11 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
             Ok(DispatchOutcome::empty())
         }
         "Runtime.releaseObjectGroup" => {
-            request.string_param("objectGroup")?;
+            let object_group = request.string_param("objectGroup")?;
+            session
+                .dev
+                .release_object_group(object_group)
+                .map_err(CdpError::from)?;
             Ok(DispatchOutcome::empty())
         }
         "Runtime.runIfWaitingForDebugger" => Ok(DispatchOutcome::empty()),

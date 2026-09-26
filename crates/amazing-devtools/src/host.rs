@@ -136,6 +136,14 @@ pub struct RemoteObject {
     pub description: Option<String>,
     /// Opaque handle for `Runtime.callFunctionOn` / `Runtime.getProperties`.
     pub object_id: Option<String>,
+    /// A shallow summary of the object's own enumerable properties
+    /// (CDP-24). Real Chrome always attaches one for an object-typed
+    /// `Runtime.getProperties` value; for `Runtime.evaluate`/
+    /// `callFunctionOn` it is present only when that call's own
+    /// `generatePreview` was `true`. `None` for a primitive or an
+    /// unrequested preview — never a stand-in for `objectId`, which is set
+    /// independently.
+    pub preview: Option<ObjectPreview>,
 }
 
 impl Default for RemoteObject {
@@ -155,6 +163,7 @@ impl RemoteObject {
             unserializable_value: None,
             description: None,
             object_id: None,
+            preview: None,
         }
     }
 
@@ -218,6 +227,35 @@ impl RemoteObject {
             ..Self::undefined()
         }
     }
+}
+
+/// CDP `Runtime.ObjectPreview` (CDP-24): a shallow, best-effort summary of
+/// an object's own enumerable properties, attached to a [`RemoteObject`] —
+/// see [`RemoteObject::preview`]'s own doc comment for exactly when.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ObjectPreview {
+    pub object_type: String,
+    pub subtype: Option<String>,
+    pub description: Option<String>,
+    /// `true` when more own enumerable properties exist than `properties`
+    /// lists (a host may cap the list; see the implementing driver for its
+    /// own limit).
+    pub overflow: bool,
+    pub properties: Vec<PropertyPreview>,
+}
+
+/// One entry in an [`ObjectPreview::properties`] list.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PropertyPreview {
+    pub name: String,
+    /// `"object"`/`"function"`/`"undefined"`/`"string"`/`"number"`/
+    /// `"boolean"`/`"symbol"`/`"bigint"`, matching `RemoteObject::object_type`.
+    pub object_type: String,
+    /// A short rendered value, present for a primitive; `None` for a nested
+    /// object/function (real Chrome nests another preview there via
+    /// `valuePreview`; a host may choose not to build one — see the
+    /// implementing driver's own doc comment on why).
+    pub value: Option<String>,
 }
 
 /// CDP `Runtime.CallArgument`.
@@ -1098,6 +1136,14 @@ pub trait DevToolsSession: Send {
     }
     /// Drops a remote object handle.
     fn release_object(&mut self, _object_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Drops every remote object handle minted under `object_group`
+    /// (`Runtime.releaseObjectGroup`) — the group an `evaluate`/
+    /// `callFunctionOn` call's own `objectGroup` parameter tagged them with,
+    /// or `""` (CDP's default/ungrouped bucket) when that parameter was
+    /// absent.
+    fn release_object_group(&mut self, _object_group: &str) -> Result<(), HostError> {
         Ok(())
     }
     /// Compiles a script and returns its `scriptId` (`Runtime.compileScript`).
