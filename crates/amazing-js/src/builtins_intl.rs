@@ -382,10 +382,22 @@ fn intl_lookup(requested: &[String]) -> String {
 /// locale (en-US) when no requested tag matches the data locale.
 fn intl_resolved_locale(requested: &[String], data_locale: &str) -> String {
     let data_language = data_locale.split('-').next().unwrap_or(data_locale);
+    // Only echo the request's own region/script verbatim when its bare
+    // language itself has a literal data row (e.g. "en" -> keep "en-GB").
+    // When the data locale is reachable only through intl_lookup_one's
+    // relaxed same-language-prefix fallback -- a bare language with no row
+    // of its own, only a more specific one (e.g. "zh" has no row, only
+    // "zh-Hans") -- echoing the bare request would make resolvedOptions()
+    // report it as fully "supported" while supportedLocalesOf (which never
+    // echoes, and matches by strict truncation only) disagrees. Returning
+    // the real data locale instead keeps both consistent. See
+    // intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
+    let data_language_has_own_row = INTL_NUMBER_DATA.iter()
+        .any(|data| data.locale.eq_ignore_ascii_case(data_language));
     for tag in requested {
         let base = tag.split("-u-").next().unwrap_or(tag);
         if base.split('-').next() == Some(data_language) {
-            return base.to_string();
+            return if data_language_has_own_row { base.to_string() } else { data_locale.to_string() };
         }
     }
     "en-US".to_string()
