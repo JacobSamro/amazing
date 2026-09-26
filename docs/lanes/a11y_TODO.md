@@ -29,6 +29,28 @@ available on the build hosts; add one when the WPT corpus lands.
 - **Snapshot is detached plain data** so a driver or a test can hold it without
   borrowing the DOM; `dom_node` is the arena index back to the live document.
 - **No unsafe, no external crates** (`#![forbid(unsafe_code)]`).
+- **A11Y-14: name-from-content walks the flat tree, not light-DOM children.**
+  `accname::flat_children` dispatches on `Dom::shadow_root_of_host`/
+  `is_html_slot` so a shadow host's rendered content (its shadow root's
+  children, or a `<slot>`'s assigned-or-fallback nodes via
+  `assigned_nodes(.., flatten: true, ..)`) is what gets visited. A `<slot>`
+  is always transparent to that content — its own `aria-label`/
+  `aria-labelledby` never substitutes the way `own_name` would for an
+  ordinary element (`accname/name/shadowdom/slot.html`'s cases 3/4 have the
+  same expected label with or without `aria-label` on the slot). Full
+  AX-tree building (`tree::Builder`) is not yet shadow-tree-aware — only
+  name-from-content is — since no target file needed a shadow host's
+  content to have its own AX *nodes*, only to feed another element's
+  *name*; broadening `tree::Builder` the same way is future work if a WPT
+  selection needs it.
+- **A11Y-14: ARIA IDL reflection's *name mapping* is mechanical, not a
+  lookup table.** `aria::aria_mixin_attribute` derives an `ARIAMixin` IDL
+  name's content attribute by rule (hyphenate before each interior capital,
+  lowercase) rather than a hand-maintained list, so it can't drift from the
+  spec's still-growing member set. The actual WebIDL wiring
+  (`Operation`/`InterfaceDefinition::members`) lives in `amazing-bindings`
+  (dom-bindings-owned) — filed in `.agents/a11y/questions.md`, not
+  implemented here.
 
 ## TODO
 
