@@ -309,3 +309,20 @@ Three real CDP domains, grouped under one ticket per the brief's `Storage
 
 `MockHost` scripts a cookie jar, a `localStorage` map keyed by security
 origin, and an IndexedDB database-name map keyed by security origin.
+
+## CDP-14 — Tracing domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools`
+112/112 nextest (0 skipped) and 1 doctest; workspace 2888 passed, 0 failed,
+10 skipped, doctests 4 passed.
+
+`Tracing.getCategories`, `start` (parses the comma-separated `categories`
+string CDP actually sends, not an array), `end`. `Tracing.end` collects
+synchronously: it calls `stop_tracing` then drains whatever the engine
+buffered via the CDP-10 batch's `drain_trace_events() -> Vec<Json>` (each
+entry a free-form Trace Event Format object, so no new struct type — the
+format is engine-defined, not this crate's to shape), emitting at most one
+`Tracing.dataCollected` (skipped when nothing was collected) followed
+always by one `Tracing.tracingComplete`. No `Tracing.enable`/`disable` in
+real CDP either, so no `EnabledDomains` flag. `MockHost` scripts two
+categories and one trace event.

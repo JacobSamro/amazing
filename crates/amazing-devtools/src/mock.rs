@@ -201,6 +201,14 @@ pub struct MockScript {
     pub indexed_databases: HashMap<String, Vec<String>>,
     /// Count of `IndexedDB.deleteDatabase` calls.
     pub deleted_databases: Vec<(String, String)>,
+    /// Categories returned by `Tracing.getCategories`.
+    pub tracing_categories: Vec<String>,
+    /// Categories passed to the last `Tracing.start` call.
+    pub last_trace_categories: Vec<String>,
+    /// Count of `Tracing.end` (`stop_tracing`) calls.
+    pub tracing_stops: u32,
+    /// Trace Event Format entries returned by the next `Tracing.end`.
+    pub trace_events: Vec<Json>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -466,6 +474,13 @@ impl Default for MockScript {
                 databases
             },
             deleted_databases: Vec::new(),
+            tracing_categories: vec!["devtools.timeline".into(), "v8".into()],
+            last_trace_categories: Vec::new(),
+            tracing_stops: 0,
+            trace_events: vec![Json::Object(vec![(
+                "name".to_string(),
+                Json::String("paint".into()),
+            )])],
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -1539,6 +1554,24 @@ impl DevToolsSession for MockSession {
             .deleted_databases
             .push((security_origin.to_string(), database_name.to_string()));
         Ok(())
+    }
+
+    fn tracing_categories(&mut self) -> Result<Vec<String>, HostError> {
+        Ok(self.script.lock().unwrap().tracing_categories.clone())
+    }
+
+    fn start_tracing(&mut self, categories: &[String]) -> Result<(), HostError> {
+        self.script.lock().unwrap().last_trace_categories = categories.to_vec();
+        Ok(())
+    }
+
+    fn stop_tracing(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().tracing_stops += 1;
+        Ok(())
+    }
+
+    fn drain_trace_events(&mut self) -> Vec<Json> {
+        std::mem::take(&mut self.script.lock().unwrap().trace_events)
     }
 
     fn drain_lifecycle(&mut self) -> Vec<LifecycleEvent> {

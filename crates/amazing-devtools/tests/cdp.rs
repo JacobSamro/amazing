@@ -1346,3 +1346,34 @@ fn page_endpoint_lists_and_clears_cookies_storage_and_indexed_db() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_traces_categories_start_and_end() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let categories = client.result("Tracing.getCategories", empty());
+    assert_eq!(
+        categories.get("categories").unwrap().as_array().unwrap().len(),
+        2
+    );
+
+    client.result(
+        "Tracing.start",
+        obj! { "categories" => s("devtools.timeline,v8") },
+    );
+    assert_eq!(
+        host.script().lock().unwrap().last_trace_categories,
+        ["devtools.timeline", "v8"]
+    );
+
+    client.result("Tracing.end", empty());
+    let collected = client.wait_event("Tracing.dataCollected");
+    let value = collected.get("params").unwrap().get("value").unwrap().as_array().unwrap();
+    assert_eq!(value[0].get("name").unwrap().as_str(), Some("paint"));
+    client.wait_event("Tracing.tracingComplete");
+    assert_eq!(host.script().lock().unwrap().tracing_stops, 1);
+
+    shutdown.store(true, Ordering::Relaxed);
+}

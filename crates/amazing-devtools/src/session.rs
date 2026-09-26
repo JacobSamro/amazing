@@ -208,6 +208,7 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Storage" => domains::storage::dispatch(session, request),
         "DOMStorage" => domains::dom_storage::dispatch(session, request),
         "IndexedDB" => domains::indexed_db::dispatch(session, request),
+        "Tracing" => domains::tracing::dispatch(session, request),
         _ => Err(CdpError::method_not_found(&request.method)),
     }
 }

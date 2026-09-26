@@ -25,6 +25,7 @@ pub mod runtime;
 pub mod security;
 pub mod storage;
 pub mod target;
+pub mod tracing;
 
 use crate::host::{
     ExceptionDetails, FrameInfo, FrameTree, PropertyDescriptor, RemoteObject, StyleOrigin,
