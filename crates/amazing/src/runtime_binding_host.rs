@@ -24,7 +24,8 @@ use amazing_js::value::Exotic;
 use amazing_js::{
     DomHost,
     env::{EnvHandle, EnvKind},
-    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
+    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, RealmHandle,
+        LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
         FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue, Throw,
     },
@@ -64,6 +65,10 @@ enum NativeEntry {
     IFrameSrcGet,
     IFrameSrcSet,
     OptionConstructor,
+    DocumentWrite,
+    DocumentWriteln,
+    DocumentOpen,
+    DocumentClose,
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
 }
@@ -89,7 +94,10 @@ struct BindingState {
     host: Rc<RefCell<BrowserDomHost>>,
     arena: u64,
     functions: Vec<NativeEntry>,
-    interfaces: Vec<(Interface, JsValue, JsValue)>,
+    /// Per-realm: a child iframe realm installs its own DOM/WebIDL
+    /// prototypes and constructors (HTML-27), so `frame.contentWindow.Array
+    /// !== window.Array` extends to `Document`/`Element`/etc. too.
+    interfaces: HashMap<RealmHandle, Vec<(Interface, JsValue, JsValue)>>,
     roots: Vec<Option<JsValue>>,
     captured_resolvers: Option<(JsValue, JsValue)>,
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
@@ -180,9 +188,9 @@ impl RuntimeBindings {
         adapter.create_inert_document(bytes, content_type, url, charset)
     }
 
-    pub(crate) fn set_document_url(&self, url: &str) {
+    pub(crate) fn set_document_url(&self, js: &mut Interpreter, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
-        self.navigate_iframes();
+        self.navigate_iframes(js);
     }
 
     pub(crate) fn set_document_metadata(&self, character_set: &str, content_type: &str, referrer: &str) {
@@ -412,6 +420,7 @@ impl RuntimeBindingHost<'_> {
         self.state
             .borrow()
             .interfaces
+            .get(&self.js.binding_current_realm())?
             .iter()
             .find(|(kind, _, _)| *kind == interface)
             .map(|(_, prototype, _)| prototype.clone())
@@ -421,6 +430,7 @@ impl RuntimeBindingHost<'_> {
         self.state
             .borrow()
             .interfaces
+            .get(&self.js.binding_current_realm())?
             .iter()
             .find(|(kind, _, _)| *kind == interface)
             .map(|(_, _, constructor)| constructor.clone())
@@ -552,6 +562,55 @@ mod image_loader_tests {
 
 /// Install once before the first page script. The existing legacy host remains
 /// available for browser features that DOM-7 does not yet define.
+/// The native-call dispatcher only closes over the shared `BindingState`
+/// (looked up by index into `functions`, which is arena-wide across every
+/// realm), never over a specific realm's JS objects, so it is installed
+/// fresh on each realm's own `Interpreter` — the top realm in [`install`]
+/// and every child realm a browsing context creates (see
+/// `runtime_host_html::setup_iframe_window`). Without this, calling any
+/// native binding from a child realm throws "host function dispatcher is
+/// not installed", since `host_native_dispatch` is itself per-realm state.
+pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> Rc<HostNativeDispatch> {
+    Rc::new(move |js, id, this, args, _new_target| {
+        let entry = state
+            .borrow()
+            .functions
+            .get(id.0 as usize)
+            .copied()
+            .ok_or_else(|| Throw::type_error("Unknown native binding"))?;
+        let mut adapter = RuntimeBindingHost {
+            js,
+            state: state.clone(),
+        };
+        match entry {
+            NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
+            NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
+            NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
+            NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
+            NativeEntry::CapturePromiseResolvers => {
+                let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
+                    return Err(Throw::type_error("Promise executor missing resolvers"));
+                };
+                adapter.state.borrow_mut().captured_resolvers = Some((resolve.clone(), reject.clone()));
+                Ok(JsValue::Undefined)
+            }
+            NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
+            NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
+            NativeEntry::IFrameContentWindow => adapter.iframe_content_window(this),
+            NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
+            NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
+            NativeEntry::OptionConstructor => adapter.option_constructor(&args),
+            NativeEntry::DocumentWrite => adapter.document_write(this, &args, false),
+            NativeEntry::DocumentWriteln => adapter.document_write(this, &args, true),
+            NativeEntry::DocumentOpen => adapter.document_open(this),
+            NativeEntry::DocumentClose => adapter.document_close(this),
+            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
+            NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
+        }
+    })
+}
+
 pub(crate) fn install(
     js: &mut Interpreter,
     host: Rc<RefCell<BrowserDomHost>>,
@@ -574,7 +633,7 @@ pub(crate) fn install(
         host,
         arena,
         functions: Vec::new(),
-        interfaces: Vec::new(),
+        interfaces: HashMap::new(),
         roots: Vec::new(),
         captured_resolvers: None,
         promise_resolvers: HashMap::new(),
@@ -598,42 +657,7 @@ pub(crate) fn install(
         messaging: None,
         net: NetRuntime::new(),
     }));
-    let for_dispatch = state.clone();
-    let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
-        let entry = for_dispatch
-            .borrow()
-            .functions
-            .get(id.0 as usize)
-            .copied()
-            .ok_or_else(|| Throw::type_error("Unknown native binding"))?;
-        let mut adapter = RuntimeBindingHost {
-            js,
-            state: for_dispatch.clone(),
-        };
-        match entry {
-            NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
-            NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
-            NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
-            NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
-            NativeEntry::CapturePromiseResolvers => {
-                let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
-                    return Err(Throw::type_error("Promise executor missing resolvers"));
-                };
-                adapter.state.borrow_mut().captured_resolvers = Some((resolve.clone(), reject.clone()));
-                Ok(JsValue::Undefined)
-            }
-            NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
-            NativeEntry::StorageTick => adapter.storage_tick(),
-            NativeEntry::IFrameContentDocument => adapter.iframe_content_document(this),
-            NativeEntry::IFrameContentWindow => adapter.iframe_content_window(this),
-            NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
-            NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
-            NativeEntry::OptionConstructor => adapter.option_constructor(&args),
-            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
-            NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
-        }
-    });
-    js.set_host_native_dispatcher(dispatch);
+    js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
         js,
         state: state.clone(),
@@ -647,6 +671,7 @@ pub(crate) fn install(
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
     adapter.install_html_form_globals()?;
+    adapter.install_document_write_globals()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;
@@ -1140,7 +1165,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 }
             }
         }
-        self.state.borrow_mut().interfaces.push((
+        let realm = self.js.binding_current_realm();
+        self.state.borrow_mut().interfaces.entry(realm).or_default().push((
             definition.interface,
             prototype,
             constructor.clone(),
