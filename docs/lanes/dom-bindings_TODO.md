@@ -2105,3 +2105,51 @@ embedding/JS event-loop work; no automatic-reporting claim is made.
 Spec: https://html.spec.whatwg.org/multipage/webappapis.html#the-errorevent-interface
 Next: checkbox/radio activation. Iframe Range remains deferred for HTML-25 part2;
 JSRT realms are merged. WebSocket belongs to net.
+
+# DOM-B ticket-2 pivot: WebSocket already landed by net; diagnosed the next dom/ cluster instead
+
+Merged `origin/dev` onto `lane/dom-bindings` (175 commits behind; two real conflicts,
+both resolved by combining both sides: `interfaces.rs`'s iframe/embed/object/param
+D{} entries now use the legacy-attribute wrappers (`LEGACY_IFRAME`/`LEGACY_EMBED`/
+`LEGACY_OBJECT`/`LEGACY_PARAM`) built on top of the upstream HTML-25/26 member sets
+(`IFRAME`, `OBJ`) instead of either side's version alone — `LEGACY_OBJECT` now
+builds on `OBJ` (which gained a `form` getter upstream) rather than the empty base
+it used before, so neither ticket's members were lost; `forms.rs`'s
+`clone_form_state` keeps both this lane's `click_in_progress` reset and upstream's
+selection/custom-error/user-edited/last-type/submission-guard resets). Post-merge
+gate on Linux Boat (`9cabc736`): workspace nextest 3074 passed / 13 skipped / 0
+failed, `cargo test --workspace --locked --doc` exit 0.
+
+Checked `git log dev -- crates/amazing/src/runtime_host_net.rs` per the brief:
+net already landed the WebSocket JS interface (`7a657d9d`, "NET-34: install the
+WebSocket JS interface via net's own driver adapter") — full `WebSocketOp` surface
+(constructor, url/protocol/extensions/readyState/bufferedAmount/binaryType,
+send/close, event handlers, add/removeEventListener/dispatchEvent). Nothing to do
+here; not re-verified beyond confirming the merged workspace still builds/gates
+clean with it in place.
+
+Per the brief's fallback ("otherwise the largest WPT dom/ failure cluster"),
+triaged `dom/nodes/Document-createElement.html` / `-createElementNS.html`, which
+html's questions.md thread flagged as needing a fresh per-subtest look now that
+contentWindow exists. Finding: 100% of the remaining 98+390 failing subtests in
+these two files are the "in XML document"/"in XHTML document" parametrizations
+(every "in HTML document" case passes); the common WPT idiom of
+`iframe.contentWindow.document.createElement(...)` then checking `.localName`
+returns `undefined` instead of the correct string, while `instanceof win.Node`/
+`win.Element` both pass and the identical call on the top window works. Read
+through the dom-bindings-owned dispatch path (`invoke.rs`'s `ElementLocalName`,
+`runtime_binding_host.rs`'s `prototype()`/`materialize_accessors`) and found
+nothing there that can produce this — DOM interface prototypes are process-global,
+not per-realm, and the native getter body has no undefined-producing path short of
+throwing (and nothing throws). This is very likely a js-runtime/js-vm cross-realm
+property/getter dispatch bug, filed to `questions.md` with full evidence rather
+than guessed at blindly across a lane boundary. Also filed a smaller, non-blocking
+note: WPT's own `testharness.js` assertion-message template substitution
+(`${expected}`/`${actual}`) silently no-ops in this engine, so every failing
+assertion corpus-wide reports its raw un-substituted template — likely
+`String.prototype.split` with a capturing-group regex, `amazing-js`-owned.
+
+No dom-bindings source changed for this second item (diagnosis only, per AGENTS.md
+"blocked item goes to questions.md and you move on" — the fix crosses into
+another lane's files). Commit is the merge plus the sparse-checkout hygiene fix
+below.
