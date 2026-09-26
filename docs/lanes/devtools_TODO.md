@@ -713,3 +713,115 @@ actually paint highlights (would need the `compositor` lane); per-line-box
 `getContentQuads` for inline content; per-argument `RemoteObject`s for
 console calls; `ownProperties=false` vs `true`; stylesheet/image
 `Network.*` events; `Debugger.*` stepping/breakpoints (js-runtime).
+
+## CDP-20 — Debugger domain (enable/scriptParsed/getScriptSource/
+setBreakpointByUrl/pause/resume) + Page.captureScreenshot — done
+
+Coordinator's ticket: `Debugger.enable`, `scriptParsed` for classic and
+module scripts, `getScriptSource`, `setBreakpointByUrl` at line granularity,
+`pause`/`resume`, a minimal engine hook in `amazing-js` (with any further
+interpreter-side need filed to js-runtime), and `Page.captureScreenshot`.
+
+- `Page.captureScreenshot` was already fully real since CDP-17 (`PageOwner::
+  capture_screenshot` through `amazing_canvas::encode_png`); re-verified
+  (still passing, plus a fresh assertion in this ticket's own end-to-end
+  test) rather than reimplemented.
+- The `amazing-devtools` protocol layer for the whole `Debugger` domain
+  (dispatch, JSON serialization, `ScriptInfo`/`ScriptLocation`/`CallFrame`/
+  `PausedEvent`) already existed from an earlier generic-protocol ticket —
+  this ticket's actual delta is entirely the driver
+  (`runtime_host_devtools.rs`) plus one small addition to `amazing-js`.
+- **New `amazing-js` seam** (`crates/amazing-js/src/debug_hook.rs`): a
+  `DebugHook` trait (`on_statement(&mut self, script_id, url, line)`) and
+  `SharedDebugHook = Rc<RefCell<dyn DebugHook>>`, plus
+  `Interpreter::set_debug_hook`/`set_current_script`. Wired into TWO call
+  sites: `exec_stmt`'s own top (the choke-point for everything except a
+  bare top-level expression statement), and the top-level program loop's own
+  fast path for `StmtKind::Expression` — that fast path bypasses
+  `exec_stmt` entirely for performance, and without its own hook call every
+  bare `expr;` statement (which is what most `Runtime.evaluate` calls are)
+  would be invisible to a line breakpoint. Confirmed this the hard way: the
+  first version only hooked `exec_stmt` and the breakpoint-hit test found
+  zero hits until the fast path got its own call too.
+- **Driver-side state** (`PageOwner`): `scripts: Vec<ScriptRecord>` (id,
+  url, source, extent, hash) for `getScriptSource`; `scripts_parsed:
+  VecDeque<ScriptInfo>` only enqueued once `Debugger.enable` has actually
+  been called — an unconditional enqueue at parse time would double-report
+  every script the page loaded before the client ever connected, since
+  `debugger_enabled(true)` backfills every already-known script; breakpoints/
+  pause-flag/paused-queue are `Rc<RefCell<_>>` cells shared directly with a
+  `DriverDebugHook` living inside the interpreter, not called back into
+  `PageOwner` — the hook fires from deep inside a `PageOwner` method that
+  already holds `&mut self`, so a callback that tried to re-enter `PageOwner`
+  would need a second, disallowed `&mut` borrow. Only plain data (URL/line
+  comparisons, a one-shot bool, an event queue) crosses that boundary.
+- `setBreakpointByUrl` matches by URL string (no regex) against every
+  script's own recorded extent, converts CDP's 0-based `lineNumber` to
+  `amazing_js`'s 1-based `Span::start.line` once at set time, and returns
+  real, currently-resolvable `locations` (empty, not an error, if the line
+  is past every known script). `condition` is accepted but never evaluated.
+- Module scripts (`<script type="module">`) are collected (a new
+  `collect_module_scripts`, mirroring `cmd::js::collect_script_text`'s walk)
+  and reported via `scriptParsed`/`getScriptSource` with real source, but
+  never executed — this engine still does not support ES modules
+  (`cmd::js::is_classic_javascript_type`'s own doc comment); CDP-20's delta
+  is reporting them honestly instead of `collect_script_text` silently
+  dropping them.
+- **The real architectural limit, confirmed and filed, not worked around**:
+  this driver cannot suspend JS execution mid-statement (single-threaded
+  tree-walking interpreter, no coroutine mechanism; the driver's one page
+  thread can't service a `Debugger.resume` while blocked inside a script it
+  is currently running). `Debugger.pause` arms a one-shot flag the *next*
+  statement that actually runs reports as `Debugger.paused` (`reason:
+  "other"`) — real, but after the fact. A genuine breakpoint hit is likewise
+  real but post-hoc: the hook detects the match and queues `Debugger.paused`
+  (`reason: "Breakpoint"`, `hitBreakpoints` set) before the statement
+  finishes, not before it starts. `stepInto`/`stepOver`/`stepOut`/
+  `evaluateOnCallFrame` stay `Unsupported` — there is no suspended call
+  stack for any of them to act on. Filed a heads-up (not a blocking request)
+  to `.agents/js-runtime/questions.md`: real synchronous pause/resume/step
+  needs the interpreter to expose a resumable/steppable execution API
+  (continuation state in the bytecode VM, or a fiber the hook can block on
+  while a separate loop services protocol commands) — a genuine
+  interpreter-level change, correctly out of this ticket's/lane's scope.
+- Proof — one end-to-end WebSocket test
+  (`end_to_end_debugger_domain_scripts_breakpoints_and_pause`): `enable`
+  backfills `scriptParsed` for both a classic and a module script parsed
+  during the page's synchronous initial load (before this client ever
+  connected); `getScriptSource` returns each one's real text;
+  `setBreakpointByUrl` resolves a real location for the script whose extent
+  covers the line and an empty array for one that doesn't; a genuine
+  breakpoint hit (set up by exploiting the driver's own documented
+  script-attribution simplification — a later `Runtime.evaluate` still runs
+  "as" the last top-level script the driver tagged) produces a real
+  `Debugger.paused` with the right `hitBreakpoints`/`reason`;
+  `removeBreakpoint` silences it; `Debugger.pause` fires a forced
+  `reason: "other"` pause on the next statement, and `Debugger.resume`
+  clears it before it fires; `stepInto`/`evaluateOnCallFrame` return real
+  CDP errors; `Page.captureScreenshot` still decodes to a real PNG. Also
+  caught, mid-write: every event here is queued synchronously during its
+  triggering command but only flushed by the server's own poll loop *after*
+  that command's reply is sent (`Connection::run`: `dispatch_message` then
+  `pump()`), so it shows up in the *next* command's push events, not the
+  triggering command's own — the same "nudge" pattern CDP-18's network/
+  console tests already used, generalized here into a small
+  `evaluate_and_collect` test helper.
+
+Known limitations, newly documented: no true synchronous pause/resume/step
+(see above); script identity is coarse (every statement is attributed to
+whichever top-level script was tagged most recently — an inline handler,
+timer callback, or `Runtime.evaluate` call all inherit that, not their own
+identity); script line/column extents are relative to the script's own text,
+not its position in the containing HTML (`startLine`/`startColumn` always
+`0`); `hash` is a `DefaultHasher` (SipHash) digest, not V8's algorithm;
+`setBreakpointByUrl`'s `url` is literal-only, `condition` is unevaluated.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3133
+passed, 0 failed, 14 skipped; all workspace doctests passed (amazing-js 1,
+amazing-devtools 1, everything else 0). Committed as `27128c44`. Cross-lane
+seam filed to `.agents/js-runtime/questions.md` (heads-up, not blocking).
+
+Boundary candidates for a future ticket: real synchronous pause/resume/step
+(js-runtime/js-vm, needs a resumable execution API); per-execution-context
+script identity instead of "last top-level script tagged"; conditional
+breakpoints; `urlRegex` support; HTML-relative script source locations.
