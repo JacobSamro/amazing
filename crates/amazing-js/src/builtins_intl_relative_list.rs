@@ -50,8 +50,7 @@ fn intl_relative_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
     if let Some(value) = numbering_option.as_ref() {
-        if !(3..=8).contains(&value.len())
-            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        if !intl_is_well_formed_type(value) {
             return Err(Throw::range_error("invalid numbering system"));
         }
     }
@@ -82,14 +81,20 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         .ok_or_else(|| Throw::range_error("invalid relative time unit"))?;
     let negative = value < 0.0 || (value == 0.0 && value.is_sign_negative());
     if state.numeric == "auto" {
-        let text = if negative && value == -1.0 { data.previous } else if value == 0.0 && !negative { data.current }
-            else if !negative && value == 1.0 { data.next } else { "" };
+        // Zero has no sign for the "current" text: +0 and -0 both read as
+        // "now"/"today"/etc, even though -0 still formats as "ago" (negative)
+        // once it falls through to the general plural-pattern path below.
+        let text = if value == 0.0 { data.current }
+            else if !negative && value == 1.0 { data.next }
+            else if negative && value == -1.0 { data.previous } else { "" };
         if !text.is_empty() { return Ok(vec![("literal", text.to_string(), false)]); }
     }
     let plural = IntlPluralState {
         locale: state.locale.clone(), kind: "cardinal".into(), notation: "standard".into(),
-        compact_display: None, min_fraction: 0, max_fraction: 3,
-        min_significant: None, max_significant: None, rounding_mode: "halfExpand".into(),
+        compact_display: None, min_integer: 1, min_fraction: 0, max_fraction: 3,
+        min_significant: None, max_significant: None, rounding_increment: 1,
+        rounding_mode: "halfExpand".into(), rounding_priority: "auto".into(),
+        trailing_zero_display: "auto".into(),
     };
     let category = intl_plural_category(&plural, value.abs());
     let pattern = match (negative, category == "one") {

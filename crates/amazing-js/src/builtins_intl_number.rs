@@ -38,17 +38,25 @@ fn intl_string_option(i: &mut Interpreter, options: &JsValue, key: &str, allowed
 
 fn intl_integer_option(i: &mut Interpreter, options: &JsValue, key: &str, min: usize, max: usize, default: usize) -> Result<usize, Throw> {
     let value = i.get_prop(options, key)?;
+    intl_integer_from_value(i, &value, key, min, max, default)
+}
+
+// Same validation as `intl_integer_option`, but for a value already fetched
+// once via `get_prop` -- callers that need the raw value first (e.g. to check
+// whether it's undefined before deciding to read a sibling option) must not
+// fetch it a second time, or a user-defined getter observably fires twice.
+fn intl_integer_from_value(i: &mut Interpreter, value: &JsValue, key: &str, min: usize, max: usize, default: usize) -> Result<usize, Throw> {
     if matches!(value, JsValue::Undefined) { return Ok(default); }
-    let number = i.to_number(&value)?;
+    let number = i.to_number(value)?;
     if !number.is_finite() || number < min as f64 || number > max as f64 {
         return Err(Throw::range_error(format!("invalid {key} option")));
     }
     Ok(number.trunc() as usize)
 }
 
-fn intl_number_state(this: &JsValue) -> Result<IntlNumberState, Throw> {
+fn intl_number_state(i: &mut Interpreter, this: &JsValue) -> Result<IntlNumberState, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("incompatible NumberFormat receiver")); };
-    match intl_state(object) {
+    match intl_unwrap_state(i, object, "NumberFormat")? {
         Some(IntlState::Number(state)) | Some(IntlState::BoundNumber(state)) => Ok(state),
         _ => Err(Throw::type_error("incompatible NumberFormat receiver")),
     }
@@ -105,8 +113,7 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         if value.is_undefined() { None } else { Some(i.to_string(&value)?) }
     };
     if let Some(value) = numbering_option.as_ref() {
-        if !(3..=8).contains(&value.len())
-            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        if !intl_is_well_formed_type(value) {
             return Err(Throw::range_error("invalid numbering system"));
         }
     }
@@ -156,8 +163,13 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let min_integer = intl_integer_option(i, &options, "minimumIntegerDigits", 1, 21, 1)?;
     let currency_digits = currency.as_ref().and_then(|code| INTL_CURRENCY_DATA.iter()
         .find(|entry| entry.code == code)).map_or(2, |entry| entry.digits);
-    let default_fraction = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else { 0 };
-    let default_max = if notation == "compact" { 0 } else if style == "currency" { currency_digits } else if style == "percent" { 0 } else { 3 };
+    // The currency's minor-unit digit count is only the default in "standard"
+    // notation; compact/engineering/scientific fall back to the plain
+    // (non-currency) defaults, same as any other style.
+    let currency_standard = style == "currency" && notation == "standard";
+    let default_fraction = if currency_standard { currency_digits } else { 0 };
+    let default_max = if notation == "compact" { 0 } else if currency_standard { currency_digits }
+        else if style == "percent" { 0 } else { 3 };
     let minimum_option = i.get_prop(&options, "minimumFractionDigits")?;
     let minimum_option = if minimum_option.is_undefined() { None } else {
         let value = i.to_number(&minimum_option)?;
@@ -177,18 +189,16 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let min_fraction = minimum_option.unwrap_or_else(|| default_fraction.min(maximum_option.unwrap_or(100)));
     let max_fraction = maximum_option.unwrap_or_else(|| default_max.max(min_fraction));
     if min_fraction > max_fraction { return Err(Throw::range_error("minimumFractionDigits exceeds maximumFractionDigits")); }
+    // Read each getter exactly once (order: minimum before maximum) and
+    // convert the already-fetched value, rather than fetching it again.
     let min_sig_value = i.get_prop(&options, "minimumSignificantDigits")?;
     let max_sig_value = i.get_prop(&options, "maximumSignificantDigits")?;
     let has_significant = !min_sig_value.is_undefined() || !max_sig_value.is_undefined();
     let min_significant = if has_significant {
-        Some(if min_sig_value.is_undefined() { 1 } else {
-            intl_integer_option(i, &options, "minimumSignificantDigits", 1, 21, 1)?
-        })
+        Some(intl_integer_from_value(i, &min_sig_value, "minimumSignificantDigits", 1, 21, 1)?)
     } else { None };
     let max_significant = if has_significant {
-        Some(if max_sig_value.is_undefined() { 21 } else {
-            intl_integer_option(i, &options, "maximumSignificantDigits", 1, 21, 21)?
-        })
+        Some(intl_integer_from_value(i, &max_sig_value, "maximumSignificantDigits", 1, 21, 21)?)
     } else { None };
     if min_significant.zip(max_significant).is_some_and(|(min, max)| min > max) {
         return Err(Throw::range_error("significant digits range"));
@@ -225,19 +235,7 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         min_fraction, max_fraction, min_significant, max_significant, rounding_priority, rounding_mode,
         rounding_increment, trailing_zero_display,
     };
-    let object = match this {
-        JsValue::Object(object) if i.current_new_target().is_some() => object,
-        _ => {
-            let intl = i.global_env.resolve("Intl").unwrap();
-            let constructor = i.get_prop(&intl, "NumberFormat")?;
-            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
-            let mut raw = JsObject::ordinary();
-            raw.proto = Some(proto);
-            Obj(Rc::new(RefCell::new(raw)))
-        }
-    };
-    intl_register(&object, IntlState::Number(state));
-    Ok(JsValue::Object(object))
+    intl_chain_construct(i, this, "NumberFormat", IntlState::Number(state))
 }
 
 const INTL_SIMPLE_UNITS: &[&str] = &["acre", "bit", "byte", "celsius", "centimeter", "day", "degree",
@@ -253,7 +251,7 @@ fn intl_valid_unit(unit: &str) -> bool {
 }
 
 fn intl_number_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_number_state(&this)?;
+    let state = intl_number_state(i, &this)?;
     let function = Interpreter::native_arity("", intl_number_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
@@ -282,7 +280,7 @@ fn intl_number_bound_format(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
 }
 
 fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_number_state(&this)?;
+    let state = intl_number_state(i, &this)?;
     let object = i.object_value();
     // Property insertion order per ECMA-402 16.5.5 Intl.NumberFormat.prototype.resolvedOptions.
     for (name, value) in [
@@ -318,7 +316,7 @@ fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
 }
 
 fn intl_number_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_number_state(&this)?;
+    let state = intl_number_state(i, &this)?;
     if let Some(JsValue::BigInt(bigint)) = args.first() {
         return intl_parts_array(i, vec![("integer", intl_format_bigint(&state, &bigint.to_radix_string(10)))]);
     }
@@ -361,7 +359,7 @@ fn intl_number_range_endpoint(i: &mut Interpreter, state: &IntlNumberState, valu
 }
 
 fn intl_number_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_number_state(&this)?;
+    let state = intl_number_state(i, &this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRange requires two numbers"));
     }
@@ -389,7 +387,7 @@ fn intl_number_endpoint_parts(i: &mut Interpreter, state: &IntlNumberState, valu
 }
 
 fn intl_number_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_number_state(&this)?;
+    let state = intl_number_state(i, &this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRangeToParts requires two numbers"));
     }

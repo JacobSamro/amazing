@@ -53,6 +53,9 @@ fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     if !collation.bytes().all(|b| b.is_ascii_alphanumeric()) || !(3..=8).contains(&collation.len()) && collation != "default" {
         return Err(Throw::range_error("invalid collation"));
     }
+    // "search" and "standard" are reserved: they name the *usage*, not a
+    // collation, and ECMA-402 requires Collator to disregard them here.
+    let collation = if collation == "search" || collation == "standard" { "default".to_string() } else { collation };
     let numeric_value = i.get_prop(&options, "numeric")?;
     let ext_numeric_value = ext_numeric.as_deref().and_then(|value| match value {
         "" | "true" => Some(true), "false" => Some(false), _ => None,

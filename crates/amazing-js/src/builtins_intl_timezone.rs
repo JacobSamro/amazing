@@ -51,9 +51,12 @@ fn tz_zone(id: &str) -> Option<&'static TzZone> {
 }
 
 fn tz_supported_ids() -> Vec<&'static str> {
+    // "Etc/GMT0" is a standalone IANA zone (not a Link), but it fails the
+    // structural IsValidTimeZoneName grammar (no +/- sign after "GMT") and
+    // ICU's own supported set omits it too; drop it alongside Etc/GMT/Etc/UTC.
     let mut ids: Vec<_> = tz_zones().iter().filter(|zone| zone.name == zone.canonical)
         .map(|zone| zone.name.as_str())
-        .filter(|name| !["Etc/GMT", "Etc/UTC"].contains(name)).collect();
+        .filter(|name| !["Etc/GMT", "Etc/UTC", "Etc/GMT0", "GMT0"].contains(name)).collect();
     if !ids.contains(&"UTC") { ids.push("UTC"); }
     ids.sort_unstable();
     ids

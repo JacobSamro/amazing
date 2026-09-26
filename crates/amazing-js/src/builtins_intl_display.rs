@@ -74,6 +74,15 @@ fn intl_display_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
     let data = INTL_DISPLAY_DATA.iter().find(|(locale, _)| *locale == state.locale).map(|(_, data)| *data)
         .unwrap_or(INTL_DISPLAY_DATA[0].1);
     let mut name = data.iter().find(|entry| entry.kind == state.kind && entry.code == code).map(|entry| entry.name.to_string());
+    if name.is_none() && state.kind == "calendar" {
+        // The generated calendar-name table keys some entries by their CLDR
+        // "type" attribute rather than the BCP47 -u-ca- subtag AvailableCalendars
+        // reports (ethioaa/gregory); look those up under their table alias too.
+        let alias = match code.as_str() { "ethioaa" => "ethiopic-amete-alem", "gregory" => "gregorian", _ => "" };
+        if !alias.is_empty() {
+            name = data.iter().find(|entry| entry.kind == "calendar" && entry.code == alias).map(|entry| entry.name.to_string());
+        }
+    }
     if state.kind == "currency" {
         let index = INTL_NUMBER_DATA.iter().position(|data| data.locale == state.locale).unwrap_or(0);
         name = INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code).map(|entry| entry.names[index].to_string());

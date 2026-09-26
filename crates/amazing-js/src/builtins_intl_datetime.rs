@@ -31,9 +31,9 @@ fn intl_optional_string(i: &mut Interpreter, options: &JsValue, key: &str, allow
     Ok(Some(value))
 }
 
-fn intl_date_state(this: &JsValue) -> Result<IntlDateState, Throw> {
+fn intl_date_state(i: &mut Interpreter, this: &JsValue) -> Result<IntlDateState, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("incompatible DateTimeFormat receiver")); };
-    match intl_state(object) {
+    match intl_unwrap_state(i, object, "DateTimeFormat")? {
         Some(IntlState::DateTime(state)) | Some(IntlState::BoundDateTime(state)) => Ok(state),
         _ => Err(Throw::type_error("incompatible DateTimeFormat receiver")),
     }
@@ -107,8 +107,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
     if let Some(value) = numbering_option.as_ref() {
-        if !(3..=8).contains(&value.len())
-            || !value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        if !intl_is_well_formed_type(value) {
             return Err(Throw::range_error("invalid numbering system"));
         }
     }
@@ -171,19 +170,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle,
     };
-    let object = match this {
-        JsValue::Object(object) if i.current_new_target().is_some() => object,
-        _ => {
-            let intl = i.global_env.resolve("Intl").unwrap();
-            let constructor = i.get_prop(&intl, "DateTimeFormat")?;
-            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
-            let mut raw = JsObject::ordinary();
-            raw.proto = Some(proto);
-            Obj(Rc::new(RefCell::new(raw)))
-        }
-    };
-    intl_register(&object, IntlState::DateTime(state));
-    Ok(JsValue::Object(object))
+    intl_chain_construct(i, this, "DateTimeFormat", IntlState::DateTime(state))
 }
 
 #[derive(Clone, Copy)]
@@ -388,7 +375,7 @@ fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, 
 }
 
 fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_date_state(&this)?;
+    let state = intl_date_state(i, &this)?;
     let function = Interpreter::native_arity("", intl_date_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
@@ -409,13 +396,13 @@ fn intl_date_bound_format(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -
 }
 
 fn intl_date_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_date_state(&this)?;
+    let state = intl_date_state(i, &this)?;
     let timestamp = intl_date_value(i, args.first())?;
     intl_parts_array(i, intl_render_date(&state, timestamp))
 }
 
 fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_date_state(&this)?;
+    let state = intl_date_state(i, &this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRange requires two dates"));
     }
@@ -427,7 +414,7 @@ fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
 }
 
 fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_date_state(&this)?;
+    let state = intl_date_state(i, &this)?;
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRangeToParts requires two dates"));
     }
@@ -469,7 +456,7 @@ fn intl_date_range_parts(state: &IntlDateState, start: f64, end: f64) -> Vec<(&'
 }
 
 fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let state = intl_date_state(&this)?;
+    let state = intl_date_state(i, &this)?;
     let object = i.object_value();
     for (key, value) in [
         ("locale", &state.resolved_locale), ("calendar", &state.calendar),

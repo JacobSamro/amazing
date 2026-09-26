@@ -6,11 +6,15 @@ struct IntlPluralState {
     kind: String,
     notation: String,
     compact_display: Option<String>,
+    min_integer: usize,
     min_fraction: usize,
     max_fraction: usize,
     min_significant: Option<usize>,
     max_significant: Option<usize>,
+    rounding_increment: usize,
     rounding_mode: String,
+    rounding_priority: String,
+    trailing_zero_display: String,
 }
 
 impl Interpreter {
@@ -50,20 +54,31 @@ fn intl_plural_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
         let _ = intl_string_option(i, &options, "compactDisplay", &["short", "long"], "short")?;
         None
     };
+    let min_integer = intl_integer_option(i, &options, "minimumIntegerDigits", 1, 21, 1)?;
     let min_fraction = intl_integer_option(i, &options, "minimumFractionDigits", 0, 100, 0)?;
     let max_fraction = intl_integer_option(i, &options, "maximumFractionDigits", 0, 100, 3.max(min_fraction))?;
     if min_fraction > max_fraction { return Err(Throw::range_error("fraction digits range")); }
+    // Read each significant-digits getter exactly once (min before max).
     let min_sig_value = i.get_prop(&options, "minimumSignificantDigits")?;
     let max_sig_value = i.get_prop(&options, "maximumSignificantDigits")?;
     let min_significant = if min_sig_value.is_undefined() { None }
-        else { Some(intl_integer_option(i, &options, "minimumSignificantDigits", 1, 21, 1)?) };
+        else { Some(intl_integer_from_value(i, &min_sig_value, "minimumSignificantDigits", 1, 21, 1)?) };
     let max_significant = if max_sig_value.is_undefined() { None }
-        else { Some(intl_integer_option(i, &options, "maximumSignificantDigits", 1, 21, 21)?) };
+        else { Some(intl_integer_from_value(i, &max_sig_value, "maximumSignificantDigits", 1, 21, 21)?) };
+    let rounding_increment = intl_integer_option(i, &options, "roundingIncrement", 1, 5000, 1)?;
+    if ![1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000].contains(&rounding_increment) {
+        return Err(Throw::range_error("invalid rounding increment"));
+    }
     let rounding_mode = intl_string_option(i, &options, "roundingMode",
         &["ceil", "floor", "expand", "trunc", "halfCeil", "halfFloor", "halfExpand", "halfTrunc", "halfEven"], "halfExpand")?;
+    let rounding_priority = intl_string_option(i, &options, "roundingPriority",
+        &["auto", "morePrecision", "lessPrecision"], "auto")?;
+    let trailing_zero_display = intl_string_option(i, &options, "trailingZeroDisplay",
+        &["auto", "stripIfInteger"], "auto")?;
     intl_register(&object, IntlState::Plural(IntlPluralState {
-        locale, kind, notation, compact_display, min_fraction, max_fraction,
-        min_significant, max_significant, rounding_mode,
+        locale, kind, notation, compact_display, min_integer, min_fraction, max_fraction,
+        min_significant, max_significant, rounding_increment, rounding_mode,
+        rounding_priority, trailing_zero_display,
     }));
     Ok(JsValue::Object(object))
 }
@@ -83,7 +98,9 @@ fn intl_plural_operands(state: &IntlPluralState, value: f64) -> [f64; 7] {
         let before = if absolute == 0.0 { 1 } else { absolute.log10().floor() as i32 + 1 };
         (max_sig as i32 - before).clamp(0, 100) as usize
     } else { state.max_fraction };
-    let scale = 10f64.powi(fraction.min(100) as i32);
+    // `rounding_increment` (default 1, a no-op) rounds to the nearest
+    // multiple of increment/scale rather than 1/scale.
+    let scale = 10f64.powi(fraction.min(100) as i32) / state.rounding_increment as f64;
     let rounded = intl_round_scaled(absolute * scale, &state.rounding_mode) / scale;
     let mut text = format!("{:.*}", fraction.min(100), rounded);
     if let Some(dot) = text.find('.') {
@@ -168,7 +185,7 @@ fn intl_plural_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
     if let Some(display) = &state.compact_display {
         i.set_prop(&object, "compactDisplay", JsValue::str(display))?;
     }
-    i.set_prop(&object, "minimumIntegerDigits", JsValue::num(1.0))?;
+    i.set_prop(&object, "minimumIntegerDigits", JsValue::num(state.min_integer as f64))?;
     i.set_prop(&object, "minimumFractionDigits", JsValue::num(state.min_fraction as f64))?;
     i.set_prop(&object, "maximumFractionDigits", JsValue::num(state.max_fraction as f64))?;
     if let Some(value) = state.min_significant {
@@ -189,7 +206,10 @@ fn intl_plural_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
     }
     let categories = intl_array(i, categories.into_iter().map(JsValue::str))?;
     i.set_prop(&object, "pluralCategories", categories)?;
+    i.set_prop(&object, "roundingIncrement", JsValue::num(state.rounding_increment as f64))?;
     i.set_prop(&object, "roundingMode", JsValue::str(&state.rounding_mode))?;
+    i.set_prop(&object, "roundingPriority", JsValue::str(&state.rounding_priority))?;
+    i.set_prop(&object, "trailingZeroDisplay", JsValue::str(&state.trailing_zero_display))?;
     Ok(object)
 }
 
@@ -211,6 +231,6 @@ mod intl_plural_tests {
             "Object.prototype.type='ordinal'; Object.prototype.notation='compact'; \
              let p=new Intl.PluralRules('en'); let r=p.resolvedOptions(); \
              [r.type, r.notation, r.pluralCategories.join(','), Object.getOwnPropertyNames(r).join('>')].join('|')").unwrap();
-        assert_eq!(i.to_string(&value).unwrap(), "cardinal|standard|one,other|locale>type>notation>minimumIntegerDigits>minimumFractionDigits>maximumFractionDigits>pluralCategories>roundingMode");
+        assert_eq!(i.to_string(&value).unwrap(), "cardinal|standard|one,other|locale>type>notation>minimumIntegerDigits>minimumFractionDigits>maximumFractionDigits>pluralCategories>roundingIncrement>roundingMode>roundingPriority>trailingZeroDisplay");
     }
 }

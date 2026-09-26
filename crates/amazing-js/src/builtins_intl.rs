@@ -38,6 +38,76 @@ fn intl_state(object: &Obj) -> Option<IntlState> {
     })
 }
 
+thread_local! {
+    static INTL_FALLBACK_SYMBOL: RefCell<Option<JsSymbol>> = RefCell::new(None);
+}
+
+// %Intl%.[[FallbackSymbol]]: a Symbol with description "IntlLegacyConstructedSymbol",
+// created once per realm and shared by ChainDateTimeFormat/ChainNumberFormat below.
+// One process runs one JS realm in this host, so a thread-local stands in for "per
+// realm"; a genuine $262.createRealm() still won't hand back a second distinct one.
+fn intl_fallback_symbol() -> JsSymbol {
+    INTL_FALLBACK_SYMBOL.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            slot.replace(JsSymbol::new(Some(crate::value::JsString::from("IntlLegacyConstructedSymbol"))));
+        }
+        slot.clone().unwrap()
+    })
+}
+
+// ChainDateTimeFormat / ChainNumberFormat (ECMA-402 sec-Intl.DateTimeFormat /
+// sec-Intl.NumberFormat "Abstract Operations"): build the internal state-bearing
+// object and either hand it back directly (the `new` case, and the plain
+// function-call case where `this` isn't already an instance) or, when called as
+// a function on a receiver that already is one (the pre-Reflect.construct
+// subclassing idiom, e.g. `Intl.DateTimeFormat.call(this, ...)`), tag `this`
+// with %Intl%.[[FallbackSymbol]] and return `this` unchanged. `ctor_key` names
+// the constructor under `Intl` ("DateTimeFormat" or "NumberFormat").
+fn intl_chain_construct(i: &mut Interpreter, this: JsValue, ctor_key: &str, state: IntlState) -> Result<JsValue, Throw> {
+    if i.current_new_target().is_some() {
+        let JsValue::Object(object) = this else {
+            unreachable!("`this` under `new` is always the freshly allocated instance")
+        };
+        intl_register(&object, state);
+        return Ok(JsValue::Object(object));
+    }
+    let intl = i.global_env.resolve("Intl").unwrap();
+    let constructor = i.get_prop(&intl, ctor_key)?;
+    let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(proto);
+    let internal = Obj(Rc::new(RefCell::new(raw)));
+    intl_register(&internal, state);
+    if i.ordinary_has_instance(&this, &constructor)?.to_boolean() {
+        if let JsValue::Object(receiver) = &this {
+            let _ = receiver.borrow_mut().define(intl_fallback_symbol(),
+                binary_locked_property(JsValue::Object(internal)));
+            return Ok(this);
+        }
+    }
+    Ok(JsValue::Object(internal))
+}
+
+// UnwrapDateTimeFormat / UnwrapNumberFormat: if `object` itself carries no
+// registered state, and it is (per OrdinaryHasInstance, not the full
+// `instanceof` operator with its @@hasInstance lookup) an instance of the
+// constructor named by `ctor_key`, follow %Intl%.[[FallbackSymbol]] to the
+// internal object ChainDateTimeFormat/ChainNumberFormat stashed there. The
+// property read goes through `Interpreter::get_prop` so a Proxy `this` still
+// sees its `get` trap fire, matching the on-unwrap conformance tests.
+fn intl_unwrap_state(i: &mut Interpreter, object: &Obj, ctor_key: &str) -> Result<Option<IntlState>, Throw> {
+    if let Some(state) = intl_state(object) { return Ok(Some(state)); }
+    let intl = i.global_env.resolve("Intl").unwrap();
+    let constructor = i.get_prop(&intl, ctor_key)?;
+    let this = JsValue::Object(object.clone());
+    if !i.ordinary_has_instance(&this, &constructor)?.to_boolean() { return Ok(None); }
+    match i.get_prop(&this, intl_fallback_symbol())? {
+        JsValue::Object(inner) => Ok(intl_state(&inner)),
+        _ => Ok(None),
+    }
+}
+
 // Calendars for which Intl.DateTimeFormat provides (Gregorian-backed)
 // functionality. ECMA-402 AvailableCalendars; the list is sorted and unique.
 const INTL_KNOWN_CALENDARS: &[&str] = &[
@@ -53,6 +123,15 @@ fn intl_data(locale: &str) -> &'static IntlNumberData {
 fn intl_empty_options() -> JsValue {
     // ECMA-402 uses ObjectCreate(null) when the options argument is absent.
     JsValue::object(JsObject::ordinary())
+}
+
+// UTS35 "type" grammar, shared by the numberingSystem/calendar/collation option
+// values across constructors: one or more hyphen-separated alphanumeric
+// subtags, each 3-8 characters. Well-formed but unrecognized values are
+// accepted here and simply ignored later (kept at the locale/style default).
+fn intl_is_well_formed_type(value: &str) -> bool {
+    !value.is_empty() && value.split('-').all(|part|
+        (3..=8).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_alphanumeric()))
 }
 
 fn intl_unicode_keyword(tag: &str, wanted: &str) -> Option<String> {
