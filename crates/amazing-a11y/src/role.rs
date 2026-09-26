@@ -11,7 +11,11 @@
 //! sectioning content, `th` scope, `td` in a grid table, and so on). An
 //! explicit, valid, non-abstract `role` attribute wins over the implicit role.
 
+use std::collections::HashMap;
+
 use amazing_dom::{Dom, NodeIdx, NodeKind};
+
+use crate::host;
 
 /// Normalized accessibility role.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
@@ -143,6 +147,11 @@ pub enum Role {
     Iframe,
     Mark,
     Ruby,
+    /// `<cite>`: HTML-AAM gives it a distinct "implicit platform computedrole"
+    /// with no ARIA equivalent (html-aam's own `roles-minimum.tentative.html`
+    /// names it `html-cite`), so it is excluded from the "minimum role"
+    /// promotion the same way any other non-generic implicit role is.
+    HtmlCite,
 }
 
 impl Role {
@@ -263,6 +272,7 @@ impl Role {
             Iframe => "iframe",
             Mark => "mark",
             Ruby => "ruby",
+            HtmlCite => "html-cite",
         }
     }
 
@@ -392,7 +402,13 @@ impl Role {
         matches!(self, Role::None | Role::Presentation)
     }
 
-    /// Roles that support `name from content` (accname-1.2 §2F).
+    /// Roles that support `name from content` (accname-1.2 §2F). `Blockquote`
+    /// and `Figure` are deliberately absent (A11Y-10): per HTML-AAM, neither
+    /// derives its accessible name from its own rendered text — a
+    /// `<blockquote>`'s content is a quotation, not a label, and a
+    /// `<figure>`'s name comes only from `aria-label`/`aria-labelledby`/
+    /// `title` (its `<figcaption>` is a separate, `img`-only fallback — see
+    /// `figure_figcaption_fallback` in `accname.rs`, not this content walk).
     pub fn name_from_content(self) -> bool {
         use Role::*;
         matches!(
@@ -422,7 +438,6 @@ impl Role {
                 | Term
                 | Listitem
                 | Paragraph
-                | Blockquote
                 | Code
                 | Emphasis
                 | Strong
@@ -477,27 +492,33 @@ impl Role {
 }
 
 /// Resolved role for an element: its explicit ARIA role when valid, otherwise
-/// the HTML-AAM implicit role.
-pub fn role_for(dom: &Dom, node: NodeIdx) -> Role {
-    if let Some(explicit) = explicit_role(dom, node) {
-        return explicit;
-    }
-    implicit_role(dom, node)
+/// the HTML-AAM implicit role, with the HTML-AAM "minimum role" promotion
+/// (A11Y-10) applied last. `ids` is a document-wide id -> node index map (the
+/// same one `tree::Builder`/`accname::NameContext` already build), used to
+/// resolve `aria-labelledby` references for the landmark-name-required checks
+/// below.
+pub fn role_for(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Role {
+    let role = if let Some(explicit) = explicit_role(dom, ids, node) {
+        explicit
+    } else {
+        implicit_role(dom, ids, node)
+    };
+    apply_minimum_role(dom, node, role)
 }
 
 /// First valid, non-abstract token of the `role` attribute. `none`/`presentation`
 /// are valid explicit roles and are returned as-is. Role tokens are matched
 /// case-insensitively (ARIA 1.2 role-token matching is ASCII case-insensitive).
 /// `form` and `region` additionally require an author-supplied accessible
-/// name (`aria-label`/`aria-labelledby`) to be a valid match; without one the
-/// token is skipped and the fallback list continues, per ARIA 1.2's
+/// name (`aria-label`/`aria-labelledby`/`title`) to be a valid match; without
+/// one the token is skipped and the fallback list continues, per ARIA 1.2's
 /// name-required landmark roles (section 5.2.8).
-pub fn explicit_role(dom: &Dom, node: NodeIdx) -> Option<Role> {
+pub fn explicit_role(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Option<Role> {
     let value = dom.get_attribute_ns(node, None, "role")?;
     value.split_ascii_whitespace().find_map(|token| {
         let lower = token.to_ascii_lowercase();
         let role = Role::from_aria(&lower)?;
-        if matches!(role, Role::Form | Role::Region) && !has_author_name(dom, node) {
+        if matches!(role, Role::Form | Role::Region) && !has_author_name(dom, ids, node) {
             return None;
         }
         Some(role)
@@ -507,7 +528,7 @@ pub fn explicit_role(dom: &Dom, node: NodeIdx) -> Option<Role> {
 /// HTML-AAM implicit role. `Role::Generic` is the fallback for elements that
 /// expose a generic container role; elements with no role at all return
 /// `None` and are pruned by the tree builder.
-pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
+pub fn implicit_role(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Role {
     let NodeKind::Element { name, .. } = &dom.get(node).kind else {
         return Role::None;
     };
@@ -535,16 +556,38 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         }
         "article" => Role::Article,
         "address" => Role::Group,
-        "aside" => Role::Complementary,
+        // An `article`/`aside`/`nav`/`section` ancestor demotes `aside` to
+        // generic unless it still has an accessible name of its own
+        // (HTML-AAM #el-aside), the same name-required pattern as
+        // `form`/`section`/`search` — but note `main` does NOT trigger this
+        // demotion (unlike `footer`/`header`'s sectioning-ancestor check
+        // below, which does include `main`; confirmed against the pinned
+        // `roles-contextual.html`'s `el-aside-in-main` case, which stays
+        // `complementary` with no name at all).
+        "aside" => {
+            if has_aside_demoting_ancestor(dom, node) && !has_author_name(dom, ids, node) {
+                Role::Generic
+            } else {
+                Role::Complementary
+            }
+        }
         "body" => Role::Generic,
+        // `Blockquote` intentionally does not appear in `Role::name_from_content`:
+        // per HTML-AAM/accname-1.2 a blockquote's own text is not its name (see
+        // `dir`-style pinned selection A11Y-10).
         "blockquote" => Role::Blockquote,
         "br" => Role::LineBreak,
         "button" => Role::Button,
         "caption" => Role::Caption,
+        // No ARIA role covers `<cite>`; HTML-AAM's own tests key it as
+        // `html-cite`, the same engine-only-role pattern as `Code`.
+        "cite" => Role::HtmlCite,
         "code" => Role::Code,
         "datalist" => Role::Listbox,
         "dd" => Role::Definition,
         "del" => Role::Deletion,
+        // Obsolete alias for `ul` (HTML-AAM still maps it to `list`).
+        "dir" => Role::List,
         "dl" => Role::List,
         "details" => Role::Group,
         "dfn" => Role::Term,
@@ -554,16 +597,20 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         "fieldset" => Role::Group,
         "figcaption" => Role::Caption,
         "figure" => Role::Figure,
+        // Nested in sectioning content (or `main`), a footer/header is a
+        // "section footer/header" (ARIA PR 1931) rather than losing its
+        // landmark-ness outright — and, unlike aside/form/section, this
+        // demotion is unconditional (no accessible name required).
         "footer" => {
             if has_sectioning_ancestor(dom, node) {
-                Role::Generic
+                Role::Sectionfooter
             } else {
                 Role::Contentinfo
             }
         }
         "form" => {
             // A form is a landmark only when it has an accessible name.
-            if has_author_name(dom, node) {
+            if has_author_name(dom, ids, node) {
                 Role::Form
             } else {
                 Role::Generic
@@ -572,7 +619,7 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => Role::Heading,
         "header" => {
             if has_sectioning_ancestor(dom, node) {
-                Role::Generic
+                Role::Sectionheader
             } else {
                 Role::Banner
             }
@@ -582,23 +629,13 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         "html" => Role::Document,
         "i" => Role::Generic,
         "iframe" => Role::Iframe,
-        "img" => {
-            if attr("alt").is_some_and(|alt| alt.is_empty())
-                && attr("role").is_none()
-                && attr("tabindex").is_none()
-                && !has_global_aria(dom, node)
-            {
-                Role::Presentation
-            } else {
-                Role::Img
-            }
-        }
+        "img" => implicit_img_role(dom, ids, node),
         "input" => implicit_input_role(dom, node),
         "ins" => Role::Insertion,
         "label" => Role::None,
         "legend" => Role::None,
         "li" => {
-            if has_list_ancestor(dom, node) {
+            if has_list_ancestor(dom, ids, node) {
                 Role::Listitem
             } else {
                 Role::Generic
@@ -618,8 +655,13 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         "pre" => Role::Generic,
         "progress" => Role::Progressbar,
         "ruby" => Role::Ruby,
+        // Unlike `form`/`section`, HTML-AAM's `<search>` mapping is
+        // unconditional (confirmed by the pinned `roles.html`'s bare,
+        // nameless `el-search` case, which still expects `search` — it is
+        // not one of ARIA 1.2 5.2.8's name-required landmark roles).
+        "search" => Role::Search,
         "section" => {
-            if has_author_name(dom, node) {
+            if has_author_name(dom, ids, node) {
                 Role::Region
             } else {
                 Role::Generic
@@ -652,10 +694,21 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
         }
         "textarea" => Role::Textbox,
         "th" => {
-            // scope row/rowgroup -> rowheader, else columnheader.
+            // Explicit scope always wins. With no scope, a `<th>` inside
+            // `<thead>` is a columnheader; inside `<tbody>`/`<tfoot>` (or a
+            // headerless table body) it is a rowheader (HTML-AAM #el-th's
+            // default table header algorithm, simplified to the thead/not-
+            // thead split the pinned `table-roles.html` selection exercises).
             match attr("scope").map(str::trim) {
                 Some("row") | Some("rowgroup") => Role::Rowheader,
-                _ => Role::Columnheader,
+                Some("col") | Some("colgroup") => Role::Columnheader,
+                _ => {
+                    if th_in_thead(dom, node) {
+                        Role::Columnheader
+                    } else {
+                        Role::Rowheader
+                    }
+                }
             }
         }
         "time" => Role::Time,
@@ -668,14 +721,68 @@ pub fn implicit_role(dom: &Dom, node: NodeIdx) -> Role {
     }
 }
 
+/// HTML-AAM's `img` role algorithm (html-aam #el-img plus the tentative
+/// `img-src-srcset-roles` extension pinned by A11Y-10). In precedence order:
+///
+/// 1. An `alt` attribute present with empty/whitespace-only content is a
+///    decorative signal (`Role::Presentation`), overridden only by a real
+///    ARIA name (`aria-label`/`aria-labelledby` resolving to non-empty
+///    content) — `title` does NOT override it.
+/// 2. Otherwise (`alt` absent, or non-whitespace), the element is `Role::Img`
+///    when it has *any* accessible name (alt text, `aria-label`,
+///    `aria-labelledby`, or — only when `alt` is entirely absent — `title`),
+///    per the HTML spec's img-accname precedence.
+/// 3. With no name at all, it is still `Role::Img` if it has a "valid" `src`
+///    or `srcset` (present and non-empty; parse-validity of the URL/
+///    descriptor is not checked, matching every "broken value" fixture in
+///    the pinned selection), since the element still represents an image
+///    request. With neither a name nor a valid source, HTML says the element
+///    "represents nothing", so it is `Role::Presentation`.
+fn implicit_img_role(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> Role {
+    let attr = |name: &str| dom.get_attribute_ns(node, None, name);
+    let non_empty_trim = |v: Option<&str>| v.is_some_and(|s| !s.trim().is_empty());
+
+    let has_aria_name = non_empty_trim(attr("aria-label"))
+        || attr("aria-labelledby").is_some_and(|id_list| {
+            id_list.split_ascii_whitespace().any(|id| {
+                ids.get(id).is_some_and(|&target| !host::child_text(dom, target).trim().is_empty())
+            })
+        });
+
+    if let Some(alt) = attr("alt")
+        && alt.trim().is_empty()
+    {
+        return if has_aria_name { Role::Img } else { Role::Presentation };
+    }
+
+    let has_name = non_empty_trim(attr("alt"))
+        || has_aria_name
+        || (attr("alt").is_none() && non_empty_trim(attr("title")));
+    if has_name {
+        return Role::Img;
+    }
+
+    let has_valid_source =
+        non_empty_trim(attr("src")) || non_empty_trim(attr("srcset"));
+    if has_valid_source { Role::Img } else { Role::Presentation }
+}
+
 fn implicit_input_role(dom: &Dom, node: NodeIdx) -> Role {
     let ty = dom
         .get_attribute_ns(node, None, "type")
         .map(|t| t.trim().to_ascii_lowercase())
         .unwrap_or_default();
     match ty.as_str() {
+        "checkbox" => {
+            // The `switch` content attribute (no value needed) switches a
+            // checkbox's role to `switch` (HTML-AAM's `switch` mapping).
+            if dom.get_attribute_ns(node, None, "switch").is_some() {
+                Role::Switch
+            } else {
+                Role::Checkbox
+            }
+        }
         "button" | "submit" | "reset" | "image" => Role::Button,
-        "checkbox" => Role::Checkbox,
         "radio" => Role::Radio,
         "range" => Role::Slider,
         "number" => Role::Spinbutton,
@@ -686,6 +793,27 @@ fn implicit_input_role(dom: &Dom, node: NodeIdx) -> Role {
         }
         "hidden" => Role::None,
         _ => Role::Textbox,
+    }
+}
+
+/// HTML-AAM's "minimum role" (html-aam #minimum-role, HTML-AAM issue #454,
+/// A11Y-10): a generic/none/presentational element that carries `autofocus`,
+/// `draggable` or `popover` is promoted to `Role::Group` instead, since HTML
+/// gives those attributes behavior an AT should not silently lose. This is a
+/// final step, applied on top of whatever explicit/implicit role resolution
+/// produced (including an explicit `role="none"`/`"generic"` or an invalid
+/// token, none of which are "valid" enough to opt out per the fixtures this
+/// mirrors) — an explicit *valid, non-generic/non-none* role, or an implicit
+/// role that isn't generic/none/presentational, is unaffected.
+pub(crate) fn apply_minimum_role(dom: &Dom, node: NodeIdx, role: Role) -> Role {
+    if matches!(role, Role::Generic | Role::None | Role::Presentation)
+        && (dom.get_attribute_ns(node, None, "autofocus").is_some()
+            || dom.get_attribute_ns(node, None, "draggable").is_some()
+            || dom.get_attribute_ns(node, None, "popover").is_some())
+    {
+        Role::Group
+    } else {
+        role
     }
 }
 
@@ -702,14 +830,27 @@ fn has_sectioning_ancestor(dom: &Dom, node: NodeIdx) -> bool {
     false
 }
 
-fn has_list_ancestor(dom: &Dom, node: NodeIdx) -> bool {
+/// `aside`'s own, narrower demoting-ancestor set: `article`, `aside`, `nav`,
+/// `section` — NOT `main` (see the call site's comment).
+fn has_aside_demoting_ancestor(dom: &Dom, node: NodeIdx) -> bool {
+    let mut cursor = dom.get(node).parent;
+    while let Some(parent) = cursor {
+        if matches!(dom.name(parent), Some("article" | "aside" | "nav" | "section")) {
+            return true;
+        }
+        cursor = dom.get(parent).parent;
+    }
+    false
+}
+
+/// True when `node` (a `<th>` with no explicit `scope`) is in a row inside a
+/// `<thead>` ancestor, rather than `<tbody>`/`<tfoot>`.
+fn th_in_thead(dom: &Dom, node: NodeIdx) -> bool {
     let mut cursor = dom.get(node).parent;
     while let Some(parent) = cursor {
         match dom.name(parent) {
-            Some("ul" | "ol" | "menu") => return true,
-            Some("div" | "section" | "article" | "main" | "nav" | "aside" | "body" | "html") => {
-                return false;
-            }
+            Some("thead") => return true,
+            Some("tbody" | "tfoot" | "table") => return false,
             _ => {}
         }
         cursor = dom.get(parent).parent;
@@ -717,17 +858,61 @@ fn has_list_ancestor(dom: &Dom, node: NodeIdx) -> bool {
     false
 }
 
-/// An author-provided name: non-empty `aria-label`, or an `aria-labelledby`
-/// reference that resolves to an element.
-fn has_author_name(dom: &Dom, node: NodeIdx) -> bool {
+/// True when `node` (an `<li>`) is an accessible child of a list: walking up
+/// the DOM, ancestors whose *resolved role* is `Generic` (a plain wrapper
+/// `<div>`, or a list-ish element demoted by, say, `role="none"`) are
+/// transparent and skipped; the walk stops at the first ancestor with any
+/// other role, which counts as a list ancestor only when that role is
+/// `Role::List` (covers `<ul>`/`<ol>`/`<menu>`/`<dl>`/`<dir>`, and an
+/// explicit `role="list"` on any element, e.g. a plain `<div>`).
+///
+/// This does not see `aria-owns`-based reparenting (a later, separate
+/// `tree::Builder` pass over the already-built `AxTree`, after roles are
+/// decided) — an orphaned `<li>` owned only via `aria-owns` is a documented,
+/// logged gap (A11Y-10, `html_aam_selection`'s `KNOWN_GAP_ROLE_TESTNAMES`).
+fn has_list_ancestor(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> bool {
+    let mut cursor = dom.get(node).parent;
+    while let Some(parent) = cursor {
+        if dom.name(parent).is_some() {
+            match role_for(dom, ids, parent) {
+                Role::List => return true,
+                Role::Generic => {}
+                _ => return false,
+            }
+        }
+        cursor = dom.get(parent).parent;
+    }
+    false
+}
+
+/// An author-provided name: non-empty `aria-label`, an `aria-labelledby`
+/// reference that resolves to an element with non-empty text content, or a
+/// non-empty `title`. This is a lighter-weight approximation of the full
+/// accname-1.2 algorithm — good enough for the landmark/aside/img
+/// name-required decisions above (whose pinned fixtures only ever reference
+/// plain-text targets), but it reads raw `host::child_text` rather than
+/// recursing through `accname::accessible_name`, so a target named only via
+/// its own `aria-label` (rather than text content) would be under-counted
+/// here. `role.rs` is a dependency of `accname.rs`, so it cannot call back
+/// into the full algorithm without a cycle; documented rather than routed
+/// around.
+fn has_author_name(dom: &Dom, ids: &HashMap<String, NodeIdx>, node: NodeIdx) -> bool {
     if dom
         .get_attribute_ns(node, None, "aria-label")
         .is_some_and(|v| !v.trim().is_empty())
     {
         return true;
     }
-    if let Some(ids) = dom.get_attribute_ns(node, None, "aria-labelledby")
-        && ids.split_ascii_whitespace().any(|id| !id.is_empty())
+    if let Some(id_list) = dom.get_attribute_ns(node, None, "aria-labelledby")
+        && id_list.split_ascii_whitespace().any(|id| {
+            ids.get(id).is_some_and(|&target| !host::child_text(dom, target).trim().is_empty())
+        })
+    {
+        return true;
+    }
+    if dom
+        .get_attribute_ns(node, None, "title")
+        .is_some_and(|v| !v.trim().is_empty())
     {
         return true;
     }
