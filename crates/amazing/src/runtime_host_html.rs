@@ -334,6 +334,7 @@ impl RuntimeBindings {
             adapter.install_selection_global()?;
             adapter.install_iframe_members()?;
             adapter.install_html_form_globals()?;
+            adapter.install_document_write_globals()?;
             // Wrapped here, inside the child realm, so `document` gets the
             // child's own freshly-installed Document.prototype (its host
             // object cache is per-realm) rather than the caller's; the
@@ -463,8 +464,16 @@ impl RuntimeBindings {
         };
         // Normally already created by `navigate_iframes`; this fallback
         // only matters for a direct call with no prior navigation commit
-        // (e.g. a test driving `setup_iframe_window` on its own).
-        let realm = match self.state.borrow().frames.windows.get(&frame).map(|(realm, _)| *realm) {
+        // (e.g. a test driving `setup_iframe_window` on its own). The
+        // lookup is bound to an owned `Option` first, rather than matched on
+        // directly, so its `Ref` from `borrow()` drops before the `None`
+        // arm runs -- otherwise that immutable borrow stays alive for the
+        // whole match (matches extend a scrutinee temporary's lifetime
+        // across all arms) and `ensure_realm`'s own `borrow_mut()` panics
+        // with "already borrowed" the first time a frame's realm is created
+        // through this fallback instead of through `navigate_iframes`.
+        let existing_realm = self.state.borrow().frames.windows.get(&frame).map(|(realm, _)| *realm);
+        let realm = match existing_realm {
             Some(realm) => realm,
             None => self.ensure_realm(js, frame, document, &child_url, sandbox)?,
         };
@@ -551,6 +560,114 @@ impl RuntimeBindingHost<'_> {
             Ok(node)
         })?;
         self.wrap_node(node)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    /// `document.write`/`writeln`/`open`/`close`. Markup passed to
+    /// `write`/`writeln` runs its classic `<script>` elements synchronously
+    /// and immediately, like a parser-inserted `<script>` would -- unlike
+    /// `innerHTML`, whose inserted scripts never execute. `open()` and
+    /// `close()` are accepted as near-no-ops here: neither implements the
+    /// spec's "ignore-opens-during-unload" counter or the full-document
+    /// replacement `open()` performs when the document is not currently
+    /// being parsed (ready state not `"loading"`); see docs/lanes/html_TODO.md.
+    pub(super) fn install_document_write_globals(&mut self) -> Result<(), Throw> {
+        let prototype = self.prototype(Interface::Document)
+            .ok_or_else(|| Throw::type_error("Missing Document prototype"))?;
+        let write = self.native("write", 0, NativeEntry::DocumentWrite, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "write", write, true, false, true)?;
+        let writeln = self.native("writeln", 0, NativeEntry::DocumentWriteln, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "writeln", writeln, true, false, true)?;
+        let open = self.native("open", 0, NativeEntry::DocumentOpen, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "open", open, true, false, true)?;
+        let close = self.native("close", 0, NativeEntry::DocumentClose, HostCallPolicy::CallOnly);
+        self.define_data_property(&prototype, "close", close, true, false, true)
+    }
+
+    fn document_receiver_node(&self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
+        let key = self.platform_object(receiver, InterfaceBrand::NODE)
+            .ok_or_else(|| Throw::type_error("Invalid Document receiver"))?;
+        let node = self.node_from_platform_key(key)
+            .ok_or_else(|| Throw::type_error("Stale Document receiver"))?;
+        let state = self.state.borrow();
+        let host = state.host.borrow();
+        if !matches!(host.dom.get(node).kind, NodeKind::Document) {
+            return Err(Throw::type_error("Invalid Document receiver"));
+        }
+        Ok(node)
+    }
+
+    pub(super) fn document_open(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        self.document_receiver_node(&receiver)?;
+        Ok(receiver)
+    }
+
+    pub(super) fn document_close(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        self.document_receiver_node(&receiver)?;
+        Ok(JsValue::Undefined)
+    }
+
+    pub(super) fn document_write(&mut self, receiver: JsValue, args: &[JsValue],
+        newline: bool) -> Result<JsValue, Throw> {
+        let document = self.document_receiver_node(&receiver)?;
+        let mut text = String::new();
+        for arg in args {
+            let units = self.to_dom_string(arg)?;
+            text.push_str(&String::from_utf16_lossy(&units));
+        }
+        if newline { text.push('\n'); }
+        self.write_into_document(document, &text)?;
+        Ok(JsValue::Undefined)
+    }
+
+    /// Parses `text` as an HTML fragment and appends it to the document's
+    /// body (falling back to `head`, then the document element), then runs
+    /// any classic `<script>` elements the fragment introduced -- inline
+    /// immediately, external fetched relative to the document's own URL --
+    /// synchronously and in document order, before returning. This is
+    /// enough for scripts that only assert *execution order* around a
+    /// `document.write` call (the common WPT idiom); it does not track a
+    /// live parser insertion point, so writes always land at the end of the
+    /// target container rather than exactly where the writing script's own
+    /// `<script>` element was in the source. See docs/lanes/html_TODO.md.
+    fn write_into_document(&mut self, document: NodeIdx, text: &str) -> Result<(), Throw> {
+        let parsed = amazing_html::parse_fragment("body", text)
+            .map_err(|_| Throw::type_error("Unable to parse document.write markup"))?;
+        let children = self.with_dom(|dom| {
+            let insertion_parent = dom.document_body(document)?
+                .or(dom.document_head(document)?)
+                .or(dom.document_element(document)?)
+                .unwrap_or(document);
+            let fragment = dom.import_fragment(&parsed, document)?;
+            let children: Vec<NodeIdx> = dom.children(fragment).collect();
+            dom.pre_insert(fragment, insertion_parent, None)?;
+            Ok(children)
+        })?;
+        let mut scripts = Vec::new();
+        {
+            let state = self.state.borrow();
+            let host = state.host.borrow();
+            for &child in &children {
+                collect_classic_scripts(&host.dom, child, &mut scripts);
+            }
+        }
+        if scripts.is_empty() { return Ok(()); }
+        let base = self.state.borrow().document_url.clone();
+        let resolver = self.state.borrow().frames.resolver.clone();
+        for script in scripts {
+            match script.src {
+                None => { self.js.run_script(&script.body)?; }
+                Some(src) => {
+                    if let Some(base) = base.as_deref() {
+                        if let Some(text) = fetch_child_script(&src, base, resolver.as_ref()) {
+                            self.js.run_script(&text)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -794,6 +911,38 @@ mod tests {
     }
 
     #[test]
+    fn removing_a_freshly_appended_iframe_before_its_load_dispatch_does_not_panic() {
+        // WPT regression (html/dom/elements/global-attributes/
+        // lang-attribute-document-element-replacement.html): appending a
+        // bare `<iframe>` creates its realm synchronously in
+        // `navigate_iframes` and queues a `pending_loads` entry;
+        // `iframe.remove()` immediately after (still in the same script,
+        // before the harness's next `dispatch_pending_iframe_loads` tick)
+        // runs `navigate_iframes` again and evicts the now-disconnected
+        // frame's entry from `frames.windows` via `retain`. The stale
+        // `pending_loads` entry then makes `dispatch_pending_iframe_loads`
+        // call `setup_iframe_window`, which finds no realm and falls back to
+        // `ensure_realm` -- previously a `RefCell` double-borrow panic
+        // ("already borrowed") because the fallback lookup's `match`
+        // scrutinee kept its `Ref` alive across the arm that calls
+        // `ensure_realm`'s own `borrow_mut()`.
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "var iframe = document.createElement('iframe'); document.body.append(iframe); \
+             var doc = iframe.contentDocument; doc.documentElement.lang = 'de'; \
+             var div = document.createElement('div'); doc.body.append(div); \
+             iframe.remove(); \
+             div.getAttribute !== undefined"
+        ).unwrap(), JsValue::Bool(true));
+        // The stale queue entry drains without panicking.
+        scheduler.dispatch_pending_iframe_loads().unwrap();
+    }
+
+    #[test]
     fn iframe_content_document_enforces_same_origin_after_src_change() {
         let path = std::env::temp_dir().join(format!("amazing-iframe-cross-{}.xml", std::process::id()));
         std::fs::write(&path, "<root/>").unwrap();
@@ -994,5 +1143,52 @@ mod tests {
             .unwrap(), JsValue::Null, "the '_blank' keyword never matches a frame name");
         assert_eq!(scheduler.run_script("location.href")
             .unwrap(), JsValue::str("https://example.test/submitted?"), "falls through to top-level navigation");
+    }
+
+    #[test]
+    fn document_write_runs_its_inserted_inline_script_synchronously_and_in_order() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        // Matches WPT's `execution-timing` idiom: a script that calls
+        // `document.write` with an embedded `<script>` observes that script
+        // run before `write()` returns, not merely at some later point.
+        assert_eq!(scheduler.run_script(
+            "var order = []; order.push('before'); \
+             document.write('<script>order.push(\"written\")<\\/script>'); \
+             order.push('after'); order.join(',')"
+        ).unwrap(), JsValue::str("before,written,after"));
+        // The written markup is really inserted into the document, not just
+        // executed and discarded.
+        assert_eq!(scheduler.run_script("document.body.children.length")
+            .unwrap(), JsValue::num(1.0));
+    }
+
+    #[test]
+    fn document_writeln_appends_a_newline_and_write_does_not() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script(
+            "document.write('a'); document.writeln('b'); document.write('c'); \
+             document.body.textContent"
+        ).unwrap(), JsValue::str("ab\nc"));
+    }
+
+    #[test]
+    fn document_open_and_close_do_not_throw_and_open_returns_the_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/main.html");
+        assert_eq!(scheduler.run_script("document.open() === document")
+            .unwrap(), JsValue::Bool(true));
+        assert_eq!(scheduler.run_script("document.close()")
+            .unwrap(), JsValue::Undefined);
     }
 }

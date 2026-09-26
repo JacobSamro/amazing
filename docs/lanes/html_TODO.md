@@ -957,3 +957,130 @@ disk/CPU pressure from sibling `pool-dom` lanes, reproduced as a pass in
 isolation and on a clean re-run of the full workspace); workspace `cargo
 test --workspace --locked --doc` **31/31 crate doctest targets green, 0
 failed**.
+
+## HTML-28 — broad `html/dom` + `html/semantics` (minus forms) + `html/webappapis/scripting` sweep: `document.write`/`writeln`/`open`/`close`, and a HTML-27 `ensure_realm` double-borrow
+
+Broad measurement sweep across `html/dom`, `html/semantics` (excluding
+`html/semantics/forms`, already covered by HTML-26) and
+`html/webappapis/scripting`, per the ticket's "biggest remaining cluster
+outside forms" mandate. Corpus: 2,154 selected files (Boat `pool-dom`,
+`.agents/html/html28-sweep.py`/`html28-sweep.sh`).
+
+- **Measurement artifact found and fixed first**: the shared `~/corpora/wpt`
+  sparse-checkout on this pool only had `html/dom html/semantics
+  html/webappapis/scripting` added, so tests referencing shared top-level
+  helpers (`/common/*.js`, `/resources/*.js` beyond the harness itself,
+  `/html/canvas/resources/*`, `/html/resources/*`,
+  `/shadow-dom/focus-navigation/*`) hit spurious "resource not found"
+  errors — a checkout gap, not an engine bug. Fixed with `git
+  sparse-checkout add common resources html/canvas html/resources
+  shadow-dom/focus-navigation`, folded into `html28-sweep.sh` itself so a
+  future re-run doesn't reintroduce the gap. This alone moved the honest
+  baseline from 146/2154 to **182/2154** file-pass (`html28-before2.jsonl`).
+  `resources/WebIDLParser.js` is confirmed genuinely absent from the pinned
+  WPT revision itself (`git ls-tree -r --name-only HEAD -- resources/`), a
+  small (9-file) unfixable "unsupported" bucket, not a checkout issue.
+- **Cluster fixed: `document.write`/`writeln`/`open`/`close`.** The largest
+  real (non-checkout-artifact) `error` cluster on the corrected baseline was
+  "inline script: TypeError: value is not callable" / "TypeError: value is
+  not callable" (114 files) — `Document.prototype.write` etc. did not exist
+  at all anywhere in the codebase (confirmed by grep across
+  `amazing-bindings`/`amazing-dom`/`crates/amazing`), so any script calling
+  `document.write(...)` threw immediately. Implemented in
+  `runtime_host_html.rs` (this lane's own file; no `amazing-bindings`/
+  `amazing-dom` edits needed — everything used already-public `Dom` methods:
+  `document_body`/`document_head`/`document_element`, `import_fragment`,
+  `pre_insert`, plus this file's own `collect_classic_scripts`/
+  `fetch_child_script`) and wired in as four new `NativeEntry` variants +
+  dispatch arms in the shared `runtime_binding_host.rs` (matching the
+  existing `IFrame*`/`Option` pattern), installed on `Document.prototype` at
+  both installer call sites (`install()` for the top realm, `ensure_realm`
+  for each child iframe realm — HTML-27's per-realm interfaces apply here
+  too, so a sandboxed/iframe document's `write` is its own realm's, not the
+  parent's):
+  - `write`/`writeln` parse their argument text as an HTML fragment
+    (`amazing_html::parse_fragment("body", ...)`), import and append it to
+    the document's body (falling back to head, then the document element),
+    then run any classic `<script>` elements the fragment introduced --
+    inline immediately, external fetched relative to the document's own URL
+    via the existing `fetch_child_script` helper -- synchronously, in
+    document order, before `write`/`writeln` returns. This matches the
+    common WPT idiom of asserting *execution order* around a
+    `document.write` call (e.g. `execution-timing/005.html`'s
+    `eventOrder` check), but does **not** track a live parser insertion
+    point: writes always land at the end of the target container rather
+    than exactly where the writing script's own `<script>` element was in
+    the source. A `document.write` called when the document is not
+    currently loading does not implement the spec's implicit
+    document-replacing `open()` — accepted as a documented gap given the
+    architecture (this WPT harness pre-parses the whole document before
+    running any collected script, so there is no live "currently parsing"
+    signal to key off of).
+  - `open()`/`close()` are accepted as near-no-ops: `open()` returns the
+    document without nuking existing content, `close()` does nothing. Real
+    behavior for both (the "ignore-opens-during-unload" counter, full
+    document replacement) is out of scope here.
+  - New tests in `runtime_host_html.rs`:
+    `document_write_runs_its_inserted_inline_script_synchronously_and_in_order`,
+    `document_writeln_appends_a_newline_and_write_does_not`,
+    `document_open_and_close_do_not_throw_and_open_returns_the_document`.
+  - Measured impact on the 2,154-file corpus: the "not callable" error
+    bucket dropped from 114 to 71 files (the remaining 71 are almost all
+    `HTMLMediaElement`/`TextTrack` — out of this lane's scope, owned by
+    `dom-bindings`/`replaced-content` — or unrelated causes like a missing
+    `HTMLElement.prototype.click()`, noted below); total `error`-status
+    files dropped 349 → 298 (many crashes now surface as `fail`/`timeout`
+    instead, which is forward progress since the harness now reaches real
+    assertions instead of aborting on the first `document.write` call).
+- **Regression found and fixed while re-measuring, from HTML-27's
+  `ensure_realm`/`setup_iframe_window` split (not from this ticket's own
+  changes):** `html/dom/elements/global-attributes/
+  lang-attribute-document-element-replacement.html` crashed the WPT worker
+  (exit 101, `RefCell already borrowed`) after its one subtest had already
+  recorded a pass. Root cause in `setup_iframe_window`
+  (`runtime_host_html.rs`): `let realm = match
+  self.state.borrow().frames.windows.get(&frame)... { Some(..) => ..,
+  None => self.ensure_realm(...) }` — Rust keeps a `match` scrutinee's
+  temporary `Ref` alive across every arm, so the `None` arm's call into
+  `ensure_realm`'s own `self.state.borrow_mut()` panicked. Triggered by:
+  appending a bare `<iframe>` creates its realm synchronously via
+  `navigate_iframes` and queues a `pending_loads` entry; removing that same
+  iframe before the next `dispatch_pending_iframe_loads` tick (both still
+  inside the same script) runs `navigate_iframes` again, which `retain`s
+  `frames.windows`/`frames.documents` down to now-connected nodes only,
+  evicting the removed frame's entry — so the later, stale
+  `pending_loads` drain hits `setup_iframe_window`'s no-realm fallback for
+  the first time in a real WPT test. Fixed by binding the lookup to an
+  owned `Option<RealmHandle>` before matching on it, so the `Ref` drops
+  before `ensure_realm` runs. New regression test:
+  `removing_a_freshly_appended_iframe_before_its_load_dispatch_does_not_panic`.
+- **Measured** (Boat `pool-dom`, same 2,154-file corpus, before = `dev` head
+  `590e1a75` with the sparse-checkout fix applied
+  (`html28-before2.jsonl`), after = this ticket's diff
+  (`html28-after2.jsonl`), both via `.agents/html/html28-sweep.sh`, re-run
+  once after the double-borrow fix to confirm zero losses):
+  **file-pass 182 → 187 (+5, 0 regressions)**; `error` 349 → 298 (-51);
+  `fail` 710 → 728; `timeout` 495 → 523; `unsupported` unchanged at 418;
+  subtest-pass 23,782 → (not separately re-measured, dominated by the same
+  files). Confirmed stable and zero-loss via a second corpus run after the
+  `ensure_realm` fix landed.
+- **Not attempted this ticket** (largest remaining real clusters on the
+  corrected baseline, left for the next HTML-28-style sweep or another
+  lane): `HTMLMediaElement`/`TextTrack` (17+ files, `replaced-content`/
+  `dom-bindings` scope), `async`/`defer`/module script scheduling (this
+  WPT harness's pre-existing "unsupported: module/async/defer script
+  scheduling" limitation, likely the single largest `unsupported` bucket),
+  a missing `HTMLElement.prototype.click()` (surfaced via
+  `downloading-resources`'s `anchor.click()` pattern, still "not callable"
+  after this fix since its root cause is unrelated to `document.write`),
+  and the 495-file `timeout` bucket (mostly `harness_status: null` with
+  `detail: null`, i.e. the harness itself never completes — needs its own
+  triage pass).
+
+Linux gate on this head: `amazing` crate nextest **257/257 passed, 5
+skipped** (4 new tests over HTML-27's 253); full workspace `cargo nextest
+run --workspace --locked --no-fail-fast` **2,941/2,941 passed, 11 skipped**,
+run twice with a stable count both times; workspace `cargo test --workspace
+--locked --doc` **31/31 crate doctest targets green, 0 failed** (4 crates
+with real doctests — `amazing_a11y`, `amazing_devtools`, `amazing_html`,
+`amazing_js` — 1 each, plus 27 crates with 0 doctests).

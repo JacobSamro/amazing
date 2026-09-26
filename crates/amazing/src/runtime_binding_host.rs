@@ -65,6 +65,10 @@ enum NativeEntry {
     IFrameSrcGet,
     IFrameSrcSet,
     OptionConstructor,
+    DocumentWrite,
+    DocumentWriteln,
+    DocumentOpen,
+    DocumentClose,
     Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
 }
@@ -597,6 +601,10 @@ pub(crate) fn build_host_native_dispatcher(state: Rc<RefCell<BindingState>>) -> 
             NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
             NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
             NativeEntry::OptionConstructor => adapter.option_constructor(&args),
+            NativeEntry::DocumentWrite => adapter.document_write(this, &args, false),
+            NativeEntry::DocumentWriteln => adapter.document_write(this, &args, true),
+            NativeEntry::DocumentOpen => adapter.document_open(this),
+            NativeEntry::DocumentClose => adapter.document_close(this),
             NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
@@ -663,6 +671,7 @@ pub(crate) fn install(
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
     adapter.install_html_form_globals()?;
+    adapter.install_document_write_globals()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;
