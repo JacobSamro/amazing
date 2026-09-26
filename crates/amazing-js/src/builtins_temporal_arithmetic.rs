@@ -99,21 +99,32 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     let mut result = data.fields;
     match data.kind {
         StdTemporalKind::Duration => {
-            // Preserve each unit when the result has a consistent sign. A later
-            // normalization step handles mixed-sign time units.
-            for index in 0..10 {
-                result[index] = result[index].checked_add(factor.checked_mul(duration[index])
-                    .ok_or_else(|| Throw::range_error("duration overflow"))?)
-                    .ok_or_else(|| Throw::range_error("duration overflow"))?;
+            // AddDurations (spec): a calendar unit (year/month/week) on
+            // EITHER side always throws unconditionally -- add/subtract
+            // never take a relativeTo, so there is no calendar to
+            // redistribute those units through, regardless of whether the
+            // resulting sum would itself be representable. Confirmed by
+            // no-calendar-units.js.
+            if result[0] != 0 || result[1] != 0 || result[2] != 0
+                || duration[0] != 0 || duration[1] != 0 || duration[2] != 0 {
+                return Err(Throw::range_error("calendar units require relativeTo"));
             }
-            if std_temporal_validate(StdTemporalKind::Duration, &result).is_err() {
-                if result[0] != 0 || result[1] != 0 {
-                    return Err(Throw::range_error("calendar units require relativeTo"));
-                }
-                let total = std_temporal_duration_time_ns(&data.fields)
-                    + factor as i128 * std_temporal_duration_time_ns(&duration);
-                result = std_temporal_split_duration_ns(total, 3);
-            }
+            // The day-through-nanosecond result is always fully rebalanced
+            // (BalanceTimeDuration), never left as a raw per-field sum --
+            // confirmed by basic.js's "balancing positive" case (ms/us
+            // overflow must carry into seconds even though the raw sum is
+            // itself in safe-integer range) and balance-negative-result.js.
+            // The largest unit that survives is the coarser (smaller rank)
+            // of the two operands' own largest nonzero unit, but never
+            // coarser than "day" (both are already known calendar-unit-free
+            // above); a blank operand contributes nothing and never
+            // coarsens the other side.
+            let largest_rank = |f: &[i64; 10]| (3..10).find(|&idx| f[idx] != 0).unwrap_or(9);
+            let balance_rank = largest_rank(&result).min(largest_rank(&duration)).max(3);
+            let total_ns = std_temporal_duration_time_ns(&result)
+                + factor as i128 * std_temporal_duration_time_ns(&duration);
+            result = std_temporal_split_duration_ns(total_ns, balance_rank);
+            std_temporal_validate(StdTemporalKind::Duration, &result)?;
         }
         StdTemporalKind::PlainTime => {
             if duration[0..4].iter().any(|value| *value != 0) {
