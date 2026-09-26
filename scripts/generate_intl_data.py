@@ -86,6 +86,12 @@ def main() -> None:
         )
     lines.append("];")
 
+    numbering_systems = cldr("cldr-core/supplemental/numberingSystems.json")["supplemental"]["numberingSystems"]
+    simple_systems = sorted(code for code, entry in numbering_systems.items()
+                            if entry.get("_type") == "numeric" and "_digits" in entry)
+    lines.append("const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "
+                 + rust_string(" ".join(simple_systems)) + ";")
+
     lines += [
         "struct IntlCompactData { locale: &'static str, style: &'static str,",
         "    magnitude: u32, divisor: u32, suffix: &'static str }",

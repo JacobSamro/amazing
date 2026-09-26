@@ -415,4 +415,16 @@ mod intl_date_engine_tests {
         assert_eq!(eval("typeof Date.parse"), "function");
         assert_eq!(eval("new Date(2017, 11, 12, 0).getDate()"), "12");
     }
+
+    #[test]
+    fn date_format_propagates_valueof_errors() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function E() {} \
+             let o = { valueOf() { throw new E(); } }; \
+             let caught; \
+             try { new Intl.DateTimeFormat('en').formatToParts(o); } catch (e) { caught = e; } \
+             caught && caught.constructor === E").unwrap();
+        assert!(matches!(result, JsValue::Bool(true)), "unexpected: {result:?}");
+    }
 }

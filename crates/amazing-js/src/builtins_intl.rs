@@ -203,36 +203,46 @@ fn intl_canonical_tag(input: &str) -> Result<String, Throw> {
 
 fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Vec<String>, Throw> {
     if matches!(value, JsValue::Undefined) { return Ok(Vec::new()); }
-    let candidates = match value {
-        JsValue::Str(_) => vec![value.clone()],
-        JsValue::Object(object) if matches!(intl_state(object), Some(IntlState::Locale(_))) => vec![value.clone()],
-        JsValue::Object(_) => {
-            let length = i.get_prop(value, "length")?;
-            let length = i.to_number(&length)?.max(0.0).min(100_000.0) as usize;
-            let mut values = Vec::new();
-            for index in 0..length {
-                let key = index.to_string();
-                if let JsValue::Object(object) = value {
-                    if object.borrow().has_property(&key) { values.push(i.get_prop(value, &key)?); }
-                }
-            }
-            values
-        }
-        JsValue::Null => return Err(Throw::type_error("locales is null")),
-        _ => Vec::new(),
-    };
     let mut output = Vec::new();
-    for candidate in candidates {
-        let tag = match &candidate {
-            JsValue::Str(_) => i.to_string(&candidate)?,
+    let mut push = |i: &mut Interpreter, candidate: &JsValue| -> Result<(), Throw> {
+        let tag = match candidate {
+            JsValue::Str(_) => i.to_string(candidate)?,
             JsValue::Object(object) => match intl_state(object) {
                 Some(IntlState::Locale(tag)) => tag,
-                _ => i.to_string(&candidate)?,
+                _ => i.to_string(candidate)?,
             },
             _ => return Err(Throw::type_error("locale must be a string or object")),
         };
         let tag = intl_canonical_tag(&tag)?;
         if !output.contains(&tag) { output.push(tag); }
+        Ok(())
+    };
+    match value {
+        JsValue::Str(_) => push(i, value)?,
+        JsValue::Object(object) if matches!(intl_state(object), Some(IntlState::Locale(_))) => push(i, value)?,
+        JsValue::Null => return Err(Throw::type_error("locales is null")),
+        _ => {
+            // ToObject followed by LengthOfArrayLike. Plain objects use their
+            // own prototype chain, primitives use the matching wrapper
+            // prototype so inherited length/index properties are observed.
+            let prototype = match value {
+                JsValue::Object(object) => object.clone(),
+                JsValue::Num(_) => i.number_proto.clone(),
+                JsValue::Bool(_) => i.boolean_proto.clone(),
+                JsValue::Symbol(_) => i.symbol_proto.clone(),
+                JsValue::BigInt(_) => i.bigint_proto.clone(),
+                _ => return Ok(Vec::new()),
+            };
+            let length = i.get_prop(value, "length")?;
+            let length = i.to_number(&length)?.max(0.0).min(100_000.0) as usize;
+            for index in 0..length {
+                let key = index.to_string();
+                if prototype.borrow().has_property(&key) {
+                    let candidate = i.get_prop(value, &key)?;
+                    push(i, &candidate)?;
+                }
+            }
+        }
     }
     Ok(output)
 }
@@ -336,7 +346,7 @@ fn intl_supported_values_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
         "calendar" => INTL_KNOWN_CALENDARS.to_vec(),
         "collation" => vec![],
         "currency" => INTL_SUPPORTED_CURRENCIES.to_vec(),
-        "numberingSystem" => vec!["arab", "deva", "latn"],
+        "numberingSystem" => INTL_SUPPORTED_NUMBERING_SYSTEMS.split(' ').collect(),
         "timeZone" => tz_supported_ids(),
         "unit" => INTL_SIMPLE_UNITS.to_vec(),
         _ => return Err(Throw::range_error("unsupported Intl value key")),
@@ -584,6 +594,19 @@ include!("builtins_intl_locale_info.rs");
 #[cfg(test)]
 mod intl_tests {
     use super::*;
+
+    #[test]
+    fn canonical_locale_list_boxes_primitives_and_reads_length_each_step() {
+        let mut i = Interpreter::new();
+        let value = i.run_script(
+            "Number.prototype[0]='en-US'; Number.prototype.length=1; \
+             let boxed = Intl.getCanonicalLocales(NaN).join(','); \
+             Number.prototype.length=0; \
+             let locales = { '0': { toString: function(){ locales[1]='pt-BR'; return 'en-US'; } }, length: 2 }; \
+             let sequenced = Intl.getCanonicalLocales(locales).join(','); \
+             boxed + '|' + sequenced").unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "en-US|en-US,pt-BR");
+    }
 
     #[test]
     fn canonical_locales_deduplicate_and_apply_cldr_aliases() {

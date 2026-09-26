@@ -65,15 +65,16 @@ fn intl_relative_state(this: &JsValue) -> Result<IntlRelativeState, Throw> {
     }
 }
 
-fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Result<Vec<(&'static str, String)>, Throw> {
+fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Result<Vec<(&'static str, String, bool)>, Throw> {
     if !value.is_finite() { return Err(Throw::range_error("non-finite relative time")); }
     let unit = unit.strip_suffix('s').unwrap_or(unit);
     let data = INTL_RELATIVE_DATA.iter().find(|data| data.locale == state.locale && data.unit == unit && data.style == state.style)
         .ok_or_else(|| Throw::range_error("invalid relative time unit"))?;
+    let negative = value < 0.0 || (value == 0.0 && value.is_sign_negative());
     if state.numeric == "auto" {
-        let text = if value == -1.0 { data.previous } else if value == 0.0 { data.current }
-            else if value == 1.0 { data.next } else { "" };
-        if !text.is_empty() { return Ok(vec![("literal", text.to_string())]); }
+        let text = if negative && value == -1.0 { data.previous } else if value == 0.0 && !negative { data.current }
+            else if !negative && value == 1.0 { data.next } else { "" };
+        if !text.is_empty() { return Ok(vec![("literal", text.to_string(), false)]); }
     }
     let plural = IntlPluralState {
         locale: state.locale.clone(), kind: "cardinal".into(), notation: "standard".into(),
@@ -81,7 +82,7 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         min_significant: None, max_significant: None, rounding_mode: "halfExpand".into(),
     };
     let category = intl_plural_category(&plural, value.abs());
-    let pattern = match (value < 0.0, category == "one") {
+    let pattern = match (negative, category == "one") {
         (true, true) => data.past_one, (true, false) => data.past_other,
         (false, true) => data.future_one, (false, false) => data.future_other,
     };
@@ -95,11 +96,13 @@ fn intl_relative_parts(state: &IntlRelativeState, value: f64, unit: &str) -> Res
         rounding_mode: "halfExpand".into(), rounding_increment: 1, trailing_zero_display: "auto".into(),
     };
     let (_, number_parts) = intl_format_number(&number_state, value.abs());
-    let Some((before, after)) = pattern.split_once("{0}") else { return Ok(vec![("literal", pattern.to_string())]); };
+    let Some((before, after)) = pattern.split_once("{0}") else {
+        return Ok(vec![("literal", pattern.to_string(), false)]);
+    };
     let mut parts = Vec::new();
-    if !before.is_empty() { parts.push(("literal", before.to_string())); }
-    parts.extend(number_parts);
-    if !after.is_empty() { parts.push(("literal", after.to_string())); }
+    if !before.is_empty() { parts.push(("literal", before.to_string(), false)); }
+    parts.extend(number_parts.into_iter().map(|(kind, text)| (kind, text, true)));
+    if !after.is_empty() { parts.push(("literal", after.to_string(), false)); }
     Ok(parts)
 }
 
@@ -112,13 +115,23 @@ fn intl_relative_arguments(i: &mut Interpreter, args: &[JsValue]) -> Result<(f64
 fn intl_relative_format(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_relative_state(&this)?;
     let (value, unit) = intl_relative_arguments(i, &args)?;
-    Ok(JsValue::str(intl_relative_parts(&state, value, &unit)?.into_iter().map(|(_, text)| text).collect::<String>()))
+    Ok(JsValue::str(intl_relative_parts(&state, value, &unit)?.into_iter().map(|(_, text, _)| text).collect::<String>()))
 }
 
 fn intl_relative_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_relative_state(&this)?;
     let (value, unit) = intl_relative_arguments(i, &args)?;
-    intl_parts_array(i, intl_relative_parts(&state, value, &unit)?)
+    let unit_name = unit.strip_suffix('s').unwrap_or(&unit).to_string();
+    let parts = intl_relative_parts(&state, value, &unit)?;
+    let mut values = Vec::new();
+    for (kind, text, carries_unit) in parts {
+        let part = i.object_value();
+        i.set_prop(&part, "type", JsValue::str(kind))?;
+        i.set_prop(&part, "value", JsValue::str(text))?;
+        if carries_unit { i.set_prop(&part, "unit", JsValue::str(unit_name.clone()))?; }
+        values.push(part);
+    }
+    intl_array(i, values)
 }
 
 fn intl_relative_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -200,10 +213,32 @@ fn intl_list_parts(state: &IntlListState, values: Vec<String>) -> Vec<(&'static 
 fn intl_list_arguments(i: &mut Interpreter, args: &[JsValue]) -> Result<Vec<String>, Throw> {
     let input = args.first().unwrap_or(&JsValue::Undefined);
     if input.is_undefined() { return Ok(Vec::new()); }
-    i.iterate(input)?.into_iter().map(|value| match value {
-        JsValue::Str(_) => i.to_string(&value),
-        _ => Err(Throw::type_error("ListFormat elements must be strings")),
-    }).collect()
+    // GetIterator: StringListFromIterable advances the iterator one element at
+    // a time and closes it as soon as a non-string value appears.
+    let iterator = {
+        let method = i.get_prop(input, WellKnownSymbol::Iterator.symbol())?;
+        i.call_value(&method, input.clone(), Vec::new())?
+    };
+    if i.get_prop(&iterator, "next")?.is_undefined() {
+        return Err(Throw::type_error("value is not iterable"));
+    }
+    let next = i.get_prop(&iterator, "next")?;
+    let mut values = Vec::new();
+    loop {
+        let step = i.call_value(&next, iterator.clone(), Vec::new())?;
+        let JsValue::Object(result) = step else {
+            i.close_iterator(&iterator);
+            return Err(Throw::type_error("iterator result is not an object"));
+        };
+        let done = result.borrow().get_own("done").map(|value| value.to_boolean()).unwrap_or(false);
+        if done { return Ok(values); }
+        let value = i.get_prop(&JsValue::Object(result), "value")?;
+        if !matches!(value, JsValue::Str(_)) {
+            i.close_iterator(&iterator);
+            return Err(Throw::type_error("ListFormat elements must be strings"));
+        }
+        values.push(i.to_string(&value)?);
+    }
 }
 
 fn intl_list_format(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

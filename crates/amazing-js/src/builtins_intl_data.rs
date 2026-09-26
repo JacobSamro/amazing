@@ -19,6 +19,7 @@ const INTL_NUMBER_DATA: &[IntlNumberData] = &[
     IntlNumberData { locale: "hi", numbering_system: "latn", decimal: ".", group: ",", plus: "+", minus: "-", percent: "%", nan: "NaN", infinity: "∞", decimal_pattern: "#,##,##0.###", percent_pattern: "#,##,##0%", currency_pattern: "¤#,##,##0.00", currency_accounting_pattern: "¤#,##,##0.00", minimum_grouping: 1 },
     IntlNumberData { locale: "ru", numbering_system: "latn", decimal: ",", group: " ", plus: "+", minus: "-", percent: "%", nan: "не число", infinity: "∞", decimal_pattern: "#,##0.###", percent_pattern: "#,##0 %", currency_pattern: "#,##0.00 ¤", currency_accounting_pattern: "#,##0.00 ¤", minimum_grouping: 1 },
 ];
+const INTL_SUPPORTED_NUMBERING_SYSTEMS: &str = "adlm ahom arab arabext bali beng bhks brah cakm cham deva diak fullwide gara gong gonm gujr gukh guru hanidec hmng hmnp java kali kawi khmr knda krai lana lanatham laoo latn lepc limb mathbold mathdbl mathmono mathsanb mathsans mlym modi mong mroo mtei mymr mymrepka mymrpao mymrshan mymrtlng nagm newa nkoo olck onao orya osma outlined rohg saur segment shrd sind sinh sora sund sunu takr talu tamldec telu thai tibt tirh tnsa tols vaii wara wcho";
 struct IntlCompactData { locale: &'static str, style: &'static str,
     magnitude: u32, divisor: u32, suffix: &'static str }
 const INTL_COMPACT_DATA: &[IntlCompactData] = &[
