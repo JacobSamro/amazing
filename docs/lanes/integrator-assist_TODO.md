@@ -848,4 +848,40 @@ Viewport CSS driver adoption is `7c83a744` on CSS-15. Render, layout dump, GUI r
 
 COMP-14 driver adoption is `5cf0e3f4` on owner API `e28f903a`. The retained scene owns one `TileRasterPool`, schedules from `Arc<RetainedPaintView>`, keeps the prior complete surface while workers run, and atomically presents ready tiles at vsync. If a paint delta requires a new scene, its owned snapshot can still be scheduled. Linux `amazing` compiled: 183 other tests passed and the focused parallel-vsync test passed after the fallback fix (3 ignored). A full combined Win-002 gate, Win-001 render trace, and production timings after this change remain for RESUME. The branch contains the compositor owner commit provisionally; rebase onto its eventual `dev` merge before final gate.
 
-On RESUME, also adopt HTML's frame phases in GUI: its scheduler now orders resize/scroll, rAF, then a render hook. Move GUI frame cadence into that hook, call compositor `on_vsync` there, and retain the WPT harness's deterministic 16,667us steps. Do not start this while paused.
+On RESUME, also adopt HTML's frame phases in GUI: its scheduler now orders resize/scroll, rAF, then a render hook. Move GUI frame cadence into that hook, call compositor `on_vsync` there, and retain the WPT harness's deterministic 16,667us steps.
+
+### IA-COMP-14 completed — combined gate and post-adoption trace (2026-09-26)
+
+Resumed on `lane/ia-comp-adopt` after the Mac restart. Merged local `dev`
+`59492359`/`34ec9a9c` (the Boat→venus and win-002→win-001 fallbacks) into the
+branch; HEAD `8dde93ee`. Linux venus-001 `amazing` + `amazing-compositor`
+nextest: **246 passed / 3 skipped**. The former workspace blocker
+`paint_view_owner_mapping_binds_dom_properties_to_tree_nodes` is cleared by
+COMP-13b `6ca61021`: the document viewport scroll owner is a distinct node from
+the nested element's transform/opacity/scroll bindings.
+
+Win-002 was offline, so the combined gate ran on win-001 with the same
+toolchain through `scripts/win-run.sh`: workspace nextest **2453 passed /
+8 skipped** (124 binaries) and workspace doctests **2 passed / 0 failed**. The
+win-001 release `incremental_production_mutation_trace` passed 1/1; its absolute
+p50/p95 numbers are inflated because the host carried two other lane build
+slots (full p95 reached 1.03 s), so the clean 2026-09-24 reference stands for
+timing. Invariants held: opacity 0/0/0 with zero uploads; effects 40
+layer-rounding pixels, zero losses. Full data and the exact commands are in
+`crates/amazing/tests/invalidation_oracle/evidence/comp14_win001_2026-09-26.md`.
+The article `RequiresFullRebuild` paint fallback and effects
+`AmbiguousPropertyOwner` seed fallback remain routed to their owners.
+
+Boat named snapshots are unavailable while the account has zero-data-retention
+enabled, so `boat-lane.py ensure` cannot provision lane sandboxes; `linux-run.sh`
+falls back to venus automatically. Routed in `.agents/integrator-assist/questions.md`.
+
+### IA-FRAME-PHASES — next
+
+The driver EventLoop emits `Action::Render` at `RenderPhase::BeforeAnimationFrames`
+after resize/scroll and at `AfterAnimationFrames` after rAF. The driver scheduler
+ignores those actions, so `pump_at`/`pump_now` callers self-drive rendering
+outside the loop. This ticket exposes a render hook on `DriverScheduler`, calls
+the retained compositor's `on_vsync` from it in the WPT render path, and moves
+the driver GUI's animation-frame cadence into the hook. The GPUI shell's
+`engine_compositor` on_vsync adoption needs shell grants and is routed.
