@@ -101,8 +101,9 @@ pub struct AxStates {
     pub haspopup: bool,
 }
 
-/// `aria-relevant` as a set of change kinds.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+/// `aria-relevant` as a set of change kinds. ARIA's default is
+/// `additions text`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Relevant {
     pub additions: bool,
     pub removals: bool,
@@ -110,10 +111,16 @@ pub struct Relevant {
     pub all: bool,
 }
 
+impl Default for Relevant {
+    fn default() -> Self {
+        Relevant { additions: true, removals: false, text: true, all: false }
+    }
+}
+
 impl Relevant {
     /// Parses a whitespace-separated `aria-relevant` token list.
     pub fn parse(value: &str) -> Self {
-        let mut relevant = Relevant::default();
+        let mut relevant = Relevant { additions: false, removals: false, text: false, all: false };
         for token in value.split_ascii_whitespace() {
             match token.to_ascii_lowercase().as_str() {
                 "additions" => relevant.additions = true,
