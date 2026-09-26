@@ -52,6 +52,7 @@ fn sha1(input: &[u8]) -> [u8; 20] {
                 _ => (b ^ c ^ d, 0xCA62C1D6),
             };
             let temp = a
+                .rotate_left(5)
                 .wrapping_add(f)
                 .wrapping_add(e)
                 .wrapping_add(k)
