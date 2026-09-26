@@ -89,3 +89,19 @@ integrator-assist owns the input/vsync and event-task hooks. The later pinned
 `css/css-scroll-snap` WPT selection will validate snap details after those
 driver hooks land; the current controller uses the existing layout-supplied
 snap points and `settle_scroll` API.
+
+
+## COMP-14 resumed integration boundary
+
+The owner-mapping regression reported after the document scroll merge is
+already corrected by COMP-13b (`6ca61021`). Its regression now explicitly checks
+four bindings: the document viewport at scroll ID 1 plus the nested element's
+transform, opacity and scroll. Synthetic scroll ID 0 has no DOM binding.
+
+Remaining adoption work is routed to the owning lanes: integrator-assist retains
+`TileRasterPool`, collects ready tiles at vsync and drains generation-checked
+scroll events; replaced-content resolves the effects-scroller owned snapshot's
+`AmbiguousPropertyOwner`. These do not block the compositor crate. GPU transform
+support remains deferred by the recorded project decision, and interactive
+window proof still requires an active win-001 session. No new compositor-owned
+ticket is listed in the current brief after COMP-14.

@@ -57,14 +57,21 @@ impl Compositor {
         if !dx.is_finite() || !dy.is_finite() {
             return Err(TreeError::NonFinite);
         }
-        let Some(hit) = self.hit_test(x, y) else {
+        let target = self.hit_test(x, y).map(|hit| hit.scroll).filter(|id| id.0 != 0).or_else(|| {
+            let root = self.root_scroll_id()?;
+            self.trees.scroll(root)?.container.contains(x, y).then_some(root)
+        });
+        let Some(target) = target else {
             return Ok(WheelResult::NoScroller);
         };
-        self.scroll_by_node(hit.scroll, dx, dy)
+        self.scroll_by_node(target, dx, dy)
     }
     /// Scroll a known node, bubbling unused movement to scrollable ancestors.
     pub fn scroll_by_node(
-        &mut self, start: ScrollId, dx: f32, dy: f32,
+        &mut self,
+        start: ScrollId,
+        dx: f32,
+        dy: f32,
     ) -> Result<WheelResult, TreeError> {
         if !dx.is_finite() || !dy.is_finite() {
             return Err(TreeError::NonFinite);
@@ -81,7 +88,7 @@ impl Compositor {
                 (node.offset.1 + dy).clamp(0., max_y),
             );
             if offset != node.offset {
-                self.trees.set_scroll(id, offset)?;
+                self.set_scroll(id, offset)?;
                 return Ok(WheelResult::Scrolled { node: id, offset });
             }
             id = node.parent;
@@ -97,7 +104,9 @@ impl Compositor {
     }
     /// Clamp a direct programmatic, drag or animation target to the scrollport.
     pub fn scroll_to_clamped(
-        &mut self, id: ScrollId, target: (f32, f32),
+        &mut self,
+        id: ScrollId,
+        target: (f32, f32),
     ) -> Result<Option<(f32, f32)>, TreeError> {
         if !target.0.is_finite() || !target.1.is_finite() {
             return Err(TreeError::NonFinite);
@@ -107,7 +116,7 @@ impl Compositor {
         if self.trees.scroll(id).ok_or(TreeError::InvalidNode)?.offset == offset {
             return Ok(None);
         }
-        self.trees.set_scroll(id, offset)?;
+        self.set_scroll(id, offset)?;
         Ok(Some(offset))
     }
     /// Apply computed snap points after a scroll gesture settles.
@@ -117,7 +126,7 @@ impl Compositor {
             .trees
             .snap_offset(id, current)
             .ok_or(TreeError::InvalidNode)?;
-        self.trees.set_scroll(id, snapped)?;
+        self.set_scroll(id, snapped)?;
         Ok(snapped)
     }
 }
@@ -183,6 +192,12 @@ mod tests {
             }
         );
         assert!(c.hit_test(20., 10.).is_none());
+        assert!(c.hit_test(90., 90.).is_none());
+        assert_eq!(
+            c.wheel_scroll(90., 90., 0., 10., false).unwrap(),
+            WheelResult::Scrolled { node: scroll, offset: (0., 40.) }
+        );
+        assert_eq!(c.wheel_scroll(120., 90., 0., 10., false).unwrap(), WheelResult::NoScroller);
     }
     #[test]
     fn clip_rejects_hits_and_wheel_clamps_at_content_edge() {

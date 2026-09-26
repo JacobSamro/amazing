@@ -46,6 +46,13 @@ impl Dom {
         -> Result<NodeIdx, DomError> {
         if self.is_shadow_root(node) { return Err(DomError::NotSupportedError); }
         let copy = self.alloc_unattached(self.get(node).kind.clone());
+        if matches!(self.get(node).kind, NodeKind::Document) {
+            if let Some(metadata) = self.document_metadata(node)?.cloned() {
+                self.set_document_metadata(copy, metadata)?;
+            }
+            let ready = self.document_ready_state(node)?;
+            self.set_document_ready_state(copy, ready)?;
+        }
         if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[copy.0 as usize].kind {
             *owner_element = None;
         }
