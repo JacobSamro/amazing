@@ -34,9 +34,11 @@ LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
 PROBE = (
     "cut -d' ' -f1 /proc/loadavg; "
-    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
-    # linux-run.sh leases (removed when its command exits; stale after 3 h).
-    "find ~/.amazing-busy -type f -mmin -180 2>/dev/null | wc -l"
+    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|amazing|amazing-shell|wpt_render_compare|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
+    # linux-run.sh leases (removed when its command exits). A run killed with
+    # its ssh session can leave one behind, so they count for 60 min only;
+    # long runs stay visible through the build/test process check above.
+    "find ~/.amazing-busy -type f -mmin -60 2>/dev/null | wc -l"
 )
 
 
