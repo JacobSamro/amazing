@@ -3947,6 +3947,7 @@ include!("builtins_binary.rs");
 include!("builtins_binary_bigint.rs");
 include!("builtins_binary_base64.rs");
 include!("builtins_intl_data.rs");
+include!("builtins_intl_bcp47_data.rs");
 include!("builtins_intl_unit_data.rs");
 include!("builtins_intl_timezone.rs");
 include!("builtins_intl.rs");

@@ -139,7 +139,7 @@ fn intl_locale_get_numbering_systems(i: &mut Interpreter, this: JsValue, _: Vec<
     if let Some(value) = intl_unicode_keyword(&tag, "nu") {
         return intl_array(i, [JsValue::str(value)]);
     }
-    let locale = intl_lookup(&[tag]);
+    let locale = intl_lookup(&[tag], false);
     intl_array(i, [JsValue::str(intl_data(&locale).numbering_system)])
 }
 
@@ -153,7 +153,7 @@ fn intl_locale_get_time_zones(i: &mut Interpreter, this: JsValue, _: Vec<JsValue
 
 fn intl_locale_get_text_info(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let tag = intl_locale_tag(&this)?;
-    let locale = intl_lookup(&[tag]);
+    let locale = intl_lookup(&[tag], false);
     let direction = INTL_LOCALE_PREFERENCES.iter().find(|(name, _, _)| *name == locale.as_str())
         .map_or("ltr", |(_, _, direction)| *direction);
     let object = i.object_value();

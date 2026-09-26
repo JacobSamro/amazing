@@ -42,10 +42,10 @@ fn intl_relative_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     if i.current_new_target().is_none() { return Err(Throw::type_error("RelativeTimeFormat requires new")); }
     let JsValue::Object(object) = this else { return Err(Throw::type_error("RelativeTimeFormat requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null RelativeTimeFormat options")); }
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let numbering_default = intl_data(&locale).numbering_system;
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
@@ -164,14 +164,14 @@ fn intl_list_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if i.current_new_target().is_none() { return Err(Throw::type_error("ListFormat requires new")); }
     let JsValue::Object(object) = this else { return Err(Throw::type_error("ListFormat requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = match args.get(1) {
         None | Some(JsValue::Undefined) => intl_empty_options(),
         Some(JsValue::Object(_)) => args[1].clone(),
         // InitializeListFormat requires an object options argument.
         Some(_) => return Err(Throw::type_error("ListFormat options must be an object")),
     };
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let kind = intl_string_option(i, &options, "type", &["conjunction", "disjunction", "unit"], "conjunction")?;
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;
     let resolved = intl_resolved_locale(&requested, &locale);

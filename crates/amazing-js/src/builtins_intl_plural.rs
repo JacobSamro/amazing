@@ -39,11 +39,11 @@ fn intl_plural_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     if i.current_new_target().is_none() { return Err(Throw::type_error("PluralRules requires new")); }
     let JsValue::Object(object) = this else { return Err(Throw::type_error("PluralRules requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null PluralRules options")); }
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let kind = intl_string_option(i, &options, "type", &["cardinal", "ordinal"], "cardinal")?;
     let notation = intl_string_option(i, &options, "notation",
         &["standard", "compact", "scientific", "engineering"], "standard")?;
