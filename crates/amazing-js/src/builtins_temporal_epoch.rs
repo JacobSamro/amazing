@@ -756,14 +756,37 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
     let data = std_epoch_record(&this, None)?;
     let (other, _) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
     let options = std_reflect_arg(&args, 1);
-    let default = if data.kind == StdEpochKind::Instant { "second" } else { "hour" };
-    let largest = std_temporal_largest_unit(i, &options, default)?;
     let (smallest, increment, mode) = std_temporal_rounding_options(i, &options, "nanosecond", "trunc")?;
-    if data.kind == StdEpochKind::ZonedDateTime && matches!(largest.as_str(), "year" | "month") {
+    // The default largestUnit is the coarser of the kind's own default and the
+    // (possibly explicit, possibly coarser) smallestUnit -- e.g. smallestUnit:
+    // "years" with no largestUnit given must default largestUnit to "years"
+    // too, not to the kind's usual "hour"/"second".
+    let kind_default = if data.kind == StdEpochKind::Instant { "second" } else { "hour" };
+    let default = std_temporal_larger_unit(kind_default, &smallest);
+    let largest = std_temporal_largest_unit(i, &options, &default)?;
+    if std_temporal_unit_rank(&largest).zip(std_temporal_unit_rank(&smallest))
+        .is_some_and(|(l, s)| l > s) {
+        return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
+    }
+    if data.kind == StdEpochKind::ZonedDateTime && matches!(largest.as_str(), "year" | "month" | "week") {
+        // Rounds relative to the receiver: the calendar bracket search is
+        // always anchored at `first` (the receiver's own local fields), for
+        // both since and until; since negates the whole result at the end.
         let first = std_epoch_local_fields(&data)?;
         let mut second = [0; 10];
         std_temporal_set_epoch_ns(&mut second, other + tz_offset_ns(&data.zone_id, other))?;
-        let mut fields = std_temporal_calendar_difference(&first, &second, &largest)?;
+        let target_ns = std_temporal_epoch_ns(&second);
+        let smallest_rank = std_temporal_unit_rank(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+        let mut fields = if smallest_rank <= 2 {
+            std_temporal_round_to_calendar_unit(&first, target_ns, &smallest, &largest, increment, &mode)?
+        } else {
+            let total_ns = target_ns - std_temporal_epoch_ns(&first);
+            let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
+                * increment as i128;
+            let rounded_ns = std_temporal_round_integer(total_ns, step, &mode)?;
+            std_temporal_epoch_breakdown(&first, std_temporal_epoch_ns(&first) + rounded_ns, &largest)?
+        };
+        std_temporal_validate(StdTemporalKind::Duration, &fields)?;
         if since { for field in &mut fields { *field = -*field; } }
         return std_temporal_make(i, StdTemporalKind::Duration, fields);
     }
