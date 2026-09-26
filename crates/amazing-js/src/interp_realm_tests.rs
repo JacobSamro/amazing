@@ -228,4 +228,21 @@ mod realm_tests {
         assert_eq!(i.binding_eval_in_realm(child, "outer").unwrap(), JsValue::str("inside"));
     }
 
+    #[test]
+    fn constructor_completion_errors_use_the_callers_realm() {
+        let mut i = Interpreter::new();
+        let child = i.binding_create_realm(i.binding_create_object(None).unwrap()).unwrap();
+        for (source, error_name, construct) in [
+            ("(class {})", "TypeError", false),
+            ("(class extends Object { constructor() { return null; } })", "TypeError", true),
+            ("(class extends Object { constructor() {} })", "ReferenceError", true),
+        ] {
+            let class = i.binding_eval_in_realm(child, source).unwrap();
+            let error = if construct { i.construct(&class, vec![]) } else { i.call_value(&class, JsValue::Undefined, vec![]) }.unwrap_err();
+            let error = i.normalize_throw(error);
+            let prototype = i.run_script(&format!("{error_name}.prototype")).unwrap();
+            assert_eq!(native_object_get_prototype_of(&mut i, JsValue::Undefined, vec![error.0]).unwrap(), prototype);
+        }
+    }
+
 }

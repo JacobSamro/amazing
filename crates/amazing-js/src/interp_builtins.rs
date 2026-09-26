@@ -1287,24 +1287,9 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
 }
 
 fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let message = match args.first() {
-        Some(JsValue::Undefined) | None => None,
-        Some(value) => Some(i.to_string(value)?),
-    };
-    let object = Obj(Rc::new(RefCell::new({
-        let mut object = JsObject::ordinary();
-        object.exotic = Exotic::Error;
-        if let Some(message) = message {
-            object.set_own("message", JsValue::str(message));
-        }
-        if let Some(function) = i.native_stack.last() {
-            if let Some(JsValue::Object(proto)) = function.borrow().get_own("prototype") {
-                object.proto = Some(proto);
-            }
-        }
-        object
-    })));
-    Ok(JsValue::Object(object))
+    let error = runtime_error_object(i, args.first().unwrap_or(&JsValue::Undefined))?;
+    runtime_install_error_cause(i, &error, args.get(1).unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Object(error))
 }
 
 fn native_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1873,7 +1858,7 @@ fn native_any_reject(
         args.first().cloned().unwrap_or(JsValue::Undefined),
     )?;
     if decrement_remaining(&state)? == 0 {
-        settle_promise(&target, PromiseFate::Rejected(errors), i)?;
+        settle_promise(&target, PromiseFate::Rejected(runtime_aggregate_rejection(i, errors)), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -2012,7 +1997,7 @@ fn native_promise_any(
     if inputs.is_empty() {
         settle_promise(
             &target,
-            PromiseFate::Rejected(state_values(&state, "errors")?),
+            PromiseFate::Rejected(runtime_aggregate_rejection(i, state_values(&state, "errors")?)),
             i,
         )?;
     } else {

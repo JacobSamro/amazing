@@ -804,6 +804,7 @@ pub struct JsObject {
     pub constructed: bool,
     /// Built-in methods are callable but lack [[Construct]].
     pub(crate) constructible: bool,
+    pub(crate) class_constructor: bool,
     pub(crate) derived_constructor: Option<DerivedConstructor>,
     pub(crate) lexical_super_constructor: Option<JsValue>,
     pub(crate) lexical_new_target: Option<JsValue>,
@@ -836,6 +837,7 @@ impl JsObject {
             func: None,
             constructed: false,
             constructible: true,
+            class_constructor: false,
             derived_constructor: None,
             lexical_super_constructor: None,
             lexical_new_target: None,

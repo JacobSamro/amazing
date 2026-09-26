@@ -590,3 +590,31 @@ not a claim that the original single full sweep had zero lost variants.
 The recheck also passed 350 crate tests (one skipped) and its doctest.
 Evidence: js-runtime_realms_evidence.json. DOM/iframe WPT gains remain for
 adopting lanes to measure; embedding code supplies cross-origin policy.
+
+## JSRT-10 runtime intrinsic and Error-family audit (completed, 2026-09-26)
+
+Audit runtime-owned constructor lengths/prototype descriptors and Promise method
+attributes, class [[Call]] rejection, and caller-realm derived-constructor
+completion errors. Complete Error message/cause descriptors, AggregateError,
+SuppressedError, Error.isError, and intrinsic AggregateError rejections from
+Promise.any. Specification: ECMA-262 §20.5.
+
+Nullish GetV correction is tracked separately. A diagnostic corpus with the
+correction exposed ArrayBuffer's optional-options lookup and previously masked
+missing Error.prototype.stack accessors (12 lost variants in the first 13,602
+completed files). The core correction remains necessary; js-binary has the
+options request, and Error-stack support needs a proper stack representation.
+Those false passes are recorded as debt, not claimed as working accessors.
+The current audit excludes that correction while its dependencies are fixed.
+
+Final Linux gate on fixed base 7766dbfe: 2,748 workspace tests passed,
+10 skipped, 67.601 seconds; four doctests passed. Full pinned Test262:
+31,990 → 32,182 passing files (+192), 61,831 → 62,215 passing variants,
+zero lost files or variants at the same 60-second deadline. The baseline is
+JSRT-9's documented full sweep plus complete directory recheck; this candidate
+result is one full sweep, with no recheck needed. Evidence:
+js-runtime_intrinsic_audit_evidence.json.
+
+Next: dynamic code must use the realm global environment during module
+execution, and bound function exotica must forward calls/construction without
+an extra realm entry, prototype allocation, or observable argument iteration.

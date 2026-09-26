@@ -2503,6 +2503,7 @@ impl Interpreter {
         this: JsValue,
         args: Vec<JsValue>,
         new_target: Option<JsValue>,
+        caller_realm: RealmHandle,
     ) -> Result<JsValue, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
@@ -2613,11 +2614,7 @@ impl Interpreter {
                     self.hoist(&b.body, &e)?;
                     let completion = self.exec_stmts(&b.body, &e)?;
                     if derived {
-                        match completion {
-                            Flow::Return(value) if value.is_object() => Ok(value),
-                            Flow::Return(value) if !value.is_undefined() => Err(Throw::type_error("derived constructor returned a non-object")),
-                            _ => e.resolve_this_checked(),
-                        }
+                        self.complete_derived_constructor(completion, &e, caller_realm)
                     } else {
                         match completion {
                             Flow::Return(value) => Ok(value),
@@ -2889,6 +2886,7 @@ impl Interpreter {
             )
         };
         if let JsValue::Object(o) = &f {
+            o.borrow_mut().class_constructor = true;
             if o.borrow().get_own("prototype").is_none() {
                 let prototype = Obj(Rc::new(RefCell::new({
                     let mut object = JsObject::ordinary();
@@ -3665,6 +3663,7 @@ include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_array.rs");
 include!("interp_object_extra.rs");
+include!("interp_errors.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");

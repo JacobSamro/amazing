@@ -280,6 +280,10 @@ impl Interpreter {
 impl Interpreter {
     fn call_value_with_new_target(&mut self, function: &JsValue, receiver: JsValue,
         args: Vec<JsValue>, new_target: Option<JsValue>) -> Result<JsValue, Throw> {
+        // [[Call]] rejects class constructors before entering their realm.
+        if new_target.is_none() && matches!(function, JsValue::Object(object) if object.borrow().class_constructor) {
+            return Err(Throw::type_error("class constructor requires new"));
+        }
         let caller = self.binding_current_realm();
         let id = match function { JsValue::Object(object) => object.borrow().realm, _ => None }
             .unwrap_or(self.host_realm);
@@ -289,7 +293,7 @@ impl Interpreter {
         self.entry_realm.get_or_insert(target);
         self.realm_callers.push(if entry.is_some() { caller } else { target });
         let result = self.binding_with_realm(target, |i|
-            i.call_value_with_new_target_inner(function, receiver, args, new_target));
+            i.call_value_with_new_target_inner(function, receiver, args, new_target, caller));
         self.realm_callers.pop();
         self.entry_realm = entry;
         result
@@ -333,6 +337,16 @@ impl Interpreter {
             .map(|realm| &realm.intrinsic_constructors).unwrap_or(&self.intrinsic_constructors);
         intrinsics.get(name).map(|(_, prototype)| prototype.clone())
             .unwrap_or_else(|| self.object_prototype_for_function(new_target))
+    }
+
+    fn complete_derived_constructor(&mut self, completion: Flow, environment: &EnvHandle, caller: RealmHandle) -> Result<JsValue, Throw> {
+        // The function execution context has conceptually returned. Errors
+        // created by [[Construct]] now use the caller's current realm.
+        self.binding_with_realm(caller, |_| match completion {
+            Flow::Return(value) if value.is_object() => Ok(value),
+            Flow::Return(value) if !value.is_undefined() => Err(Throw::type_error("derived constructor returned a non-object")),
+            _ => environment.resolve_this_checked(),
+        })
     }
 
 }
