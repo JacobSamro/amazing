@@ -1,8 +1,14 @@
 [package]
 name = "amazing-a11y"
-version.workspace = true
+description = "Accessibility tree: HTML-AAM roles, accname-1.2 names, states and layout bounds"
 edition.workspace = true
+version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+amazing-dom = { path = "../amazing-dom" }
+amazing-css = { path = "../amazing-css" }
+amazing-layout = { path = "../amazing-layout" }
+amazing-text = { path = "../amazing-text" }
+amazing-html = { path = "../amazing-html" }
