@@ -1401,7 +1401,10 @@ fn ruby_inline(
         columns[column].annotation_hidden = hidden;
         column += span;
     }
-    InlineNode::Ruby { node, columns }
+    let overhang_spaces = styled.get(node)
+        .and_then(|style| style.get("ruby-overhang"))
+        .is_some_and(|value| value.eq_ignore_ascii_case("spaces") || value.eq_ignore_ascii_case("none"));
+    InlineNode::Ruby { node, columns, overhang_spaces }
 }
 
 fn is_ruby_ideograph(ch: char) -> bool {

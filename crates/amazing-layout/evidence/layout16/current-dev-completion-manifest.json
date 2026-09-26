@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "explicit frozen baseline completion",
+    "description": "17 cases unavailable in the transient sparse WPT checkout",
+    "case_count": 17
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/compositing",
+    "css/css-backgrounds",
+    "css/css-box",
+    "css/css-display",
+    "css/css-flexbox",
+    "css/css-grid",
+    "css/css-images",
+    "css/css-inline",
+    "css/css-overflow",
+    "css/css-position",
+    "css/css-ruby",
+    "css/css-sizing",
+    "css/css-tables",
+    "css/css-text",
+    "css/css-transforms",
+    "css/css-writing-modes"
+  ],
+  "tests": [
+    {
+      "id": "anonymous-table-ws-001",
+      "test": "css/css-tables/anonymous-table-ws-001.html"
+    },
+    {
+      "id": "baseline-empty-cell-001",
+      "test": "css/css-tables/baseline-empty-cell-001.html"
+    },
+    {
+      "id": "zero-rowspan-001",
+      "test": "css/css-tables/zero-rowspan-001.html"
+    },
+    {
+      "id": "zero-rowspan-002",
+      "test": "css/css-tables/zero-rowspan-002.html"
+    },
+    {
+      "id": "table-row-group-nested-anonymous-001",
+      "test": "css/css-tables/table-row-group-nested-anonymous-001.html"
+    },
+    {
+      "id": "object-fit-fill-png-001i",
+      "test": "css/css-images/object-fit-fill-png-001i.html"
+    },
+    {
+      "id": "object-fit-fill-png-002i",
+      "test": "css/css-images/object-fit-fill-png-002i.html"
+    },
+    {
+      "id": "object-fit-contain-png-001i",
+      "test": "css/css-images/object-fit-contain-png-001i.html"
+    },
+    {
+      "id": "object-fit-contain-png-002i",
+      "test": "css/css-images/object-fit-contain-png-002i.html"
+    },
+    {
+      "id": "object-fit-cover-png-001i",
+      "test": "css/css-images/object-fit-cover-png-001i.html"
+    },
+    {
+      "id": "object-fit-cover-png-002i",
+      "test": "css/css-images/object-fit-cover-png-002i.html"
+    },
+    {
+      "id": "object-fit-none-png-001i",
+      "test": "css/css-images/object-fit-none-png-001i.html"
+    },
+    {
+      "id": "object-fit-none-png-002i",
+      "test": "css/css-images/object-fit-none-png-002i.html"
+    },
+    {
+      "id": "object-fit-scale-down-png-001i",
+      "test": "css/css-images/object-fit-scale-down-png-001i.html"
+    },
+    {
+      "id": "object-fit-scale-down-png-002i",
+      "test": "css/css-images/object-fit-scale-down-png-002i.html"
+    },
+    {
+      "id": "object-position-png-001i",
+      "test": "css/css-images/object-position-png-001i.html"
+    },
+    {
+      "id": "object-position-png-002i",
+      "test": "css/css-images/object-position-png-002i.html"
+    }
+  ]
+}

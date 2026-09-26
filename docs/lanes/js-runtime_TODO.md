@@ -473,3 +473,37 @@ Test262 BEFORE sweep on the same fixed base had 12,088 passing files; after
 win-002 routing replaced win-001's queued candidate job, the complete pinned
 Linux before/after corpus is the zero-loss evidence for this ticket. The
 integrator rechecks the merged head.
+
+### JSRT-8 priority built-in interrupt
+
+Fixed Test262 comparison base: `82d273a` (JSB-2). The full pinned `3655e746`
+corpus moved from 20,999 to 23,664 passing files and from 41,000 to 46,285
+passing variants: 2,665 fail-to-pass files and no lost file or variant passes.
+Before and after classification hashes are `d6dad40499b358008e52a69ae8d82e91441dcee111f1de3822ce320cb8ddc254`
+and `0001b78eb38467a21e4f87bbefee39eaf4a6f7ff730838f4e1b5f5057d01382a`.
+
+`for...in` now walks own string keys and prototypes with descriptor checks,
+shadowing, deletion awareness, and non-enumerable exclusion. Array methods and
+statics include stable `sort`/`toSorted` and the missing §23.1.3 surface;
+NativeError constructors inherit from `%Error%`. The Object, Function,
+Boolean, and Symbol surfaces were audited. Class prototype methods and
+`constructor` have non-enumerable descriptors. `Array.fromAsync` covers
+synchronous iterable inputs and settled values; true asynchronous iterators
+and pending input promises still take an explicit unsupported path.
+
+The pinned Test262 file `built-ins/Object/freeze/typedarray-backed-by-resizable-buffer.js`
+asserts TypeError even for zero-length resizable-backed TypedArrays despite
+comments saying they should freeze successfully. The runtime currently follows
+those assertions; revisit this when the corpus is updated or the integer-indexed
+integrity model is made complete.
+
+## Queued JSRT-8 internal-slot cleanup
+
+Move `[[...]]` pseudo-properties such as `[[NumberData]]`, `[[StringData]]`, and `[[DateValue]]` out of ordinary property storage into a real `JsObject` internal-slot field. Reflection through `getOwnPropertyNames`, `for...in`, JSON, and `Object.create` must never reveal them. Coordinate the call-site migration with js-stdlib and js-binary. The current Number constructor has a narrow non-enumerable descriptor fix to preserve Object.create conformance until this migration.
+## JSRT-9 — multiple realms in one agent (after built-in audit)
+
+Give each realm its own intrinsics, global object, and global environment in the shared agent heap. Switch to a callable's [[Realm]] during a call, allow shared cross-realm objects, and expose host creation with a custom Window global for HTML-25 iframes. Add `$262.createRealm` to both Test262 hosts and report the resulting full-corpus gain; preserve `intl402: true`.
+
+Accepted seam: `binding_create_realm(global) -> RealmHandle` plus realm-scoped eval and call. Include a host-created WindowProxy exotic whose target global swaps on navigation while identity remains stable; one agent-wide microtask/job queue; current, entry, and incumbent realm accessors; realm-specific Error prototypes; and Test262 `$262.createRealm` through this same API. Ask html for any remaining hooks before locking.
+
+HTML-25 additionally needs scoped realm entry/restoration for realm-specific `binding_global_object`, constructor/prototype installation, and `binding_wrap_host`; WindowProxy get/set hooks with entry/incumbent realm and target origin for cross-origin checks after navigation; and host-native dispatch/`HostHandle` identity across parent-to-child calls, with child-realm error intrinsics.

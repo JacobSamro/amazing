@@ -423,6 +423,7 @@ def main() -> int:
     parser.add_argument("--compare", type=pathlib.Path)
     parser.add_argument("--only", default="")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--shard", default="", help="K/N: run every Nth selected file starting at K (merge shard outputs with test262-merge.py)")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--timeout", type=float, default=10)
     parser.add_argument("--self-test", action="store_true")
@@ -453,6 +454,9 @@ def main() -> int:
     selected = [p for p in files if args.only in p.relative_to(root / "test").as_posix()]
     if args.limit:
         selected = selected[:args.limit]
+    if args.shard:
+        k, n = (int(x) for x in args.shard.split("/"))
+        selected = selected[k::n]
     selected = set(selected)
     # Snapshot the input once. Avoid reopening implicit helpers for every variant,
     # and hash the exact bytes subsequently sent to child processes.
@@ -486,7 +490,7 @@ def main() -> int:
     report = {"schema": 1, "test262_revision": revision, "input_sha256": manifest.hexdigest(),
               "host_sha256": sha(binary), "runner_sha256": sha(pathlib.Path(__file__)),
               "pyyaml": yaml.__version__, "python": sys.version, "capabilities": caps,
-              "timeout_seconds": args.timeout, "jobs": args.jobs, "filter": args.only, "limit": args.limit,
+              "timeout_seconds": args.timeout, "jobs": args.jobs, "filter": args.only, "limit": args.limit, "shard": args.shard,
               "elapsed_seconds": round(time.monotonic() - started, 3), "classification_sha256": digest,
               "summary": summarize(records), "records": records}
     args.output.write_text(json.dumps(report, separators=(",", ":"), ensure_ascii=True, default=str) + "\n", encoding="utf-8")

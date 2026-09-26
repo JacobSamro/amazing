@@ -1,0 +1,35 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection_policy":  "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes.",
+    "exclude_path_regex":  "",
+    "blocked_content_regex":  "",
+    "per_category":  120,
+    "include_path_regex":  "^css/CSS2/tables/",
+    "categories":  [
+                       {
+                           "category":  "CSS2",
+                           "document_files":  11323,
+                           "testharness_files":  2,
+                           "reftests":  372,
+                           "eligible_static_self_contained":  7,
+                           "selected":  7,
+                           "excluded":  {
+                                            "outside-included-path":  10084,
+                                            "xml-parser-mode":  360,
+                                            "not-reftest":  867,
+                                            "xml-reference-mode":  3,
+                                            "scripted":  2
+                                        },
+                           "selected_paths":  [
+                                                  "css/CSS2/tables/border-collapse-005.html",
+                                                  "css/CSS2/tables/collapsing-border-model-012.html",
+                                                  "css/CSS2/tables/border-collapse-empty-row.html",
+                                                  "css/CSS2/tables/border-collapse-006.html",
+                                                  "css/CSS2/tables/collapsing-border-model-011.html",
+                                                  "css/CSS2/tables/collapsing-border-model-014.html",
+                                                  "css/CSS2/tables/collapsing-border-model-013.html"
+                                              ]
+                       }
+                   ]
+}
