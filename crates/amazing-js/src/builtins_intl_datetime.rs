@@ -85,11 +85,10 @@ fn intl_calendar_supported(value: &str) -> bool {
 
 fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
-    let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
-    let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
+    let matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let calendar_raw = i.get_prop(&options, "calendar")?;
     let calendar_present = !calendar_raw.is_undefined();
     if calendar_present {
@@ -109,6 +108,10 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         "gregorian" | "gregory" => "gregory", "islamicc" | "islamic-civil" => "islamic-civil",
         "ethiopic-amete-alem" | "ethioaa" => "ethioaa", other => other,
     }.to_string();
+    // intl_lookup has no observable side effects, so resolving it here
+    // (after localeMatcher is read, once its bool is known) rather than at
+    // the top does not change getter-call order for any other option.
+    let locale = intl_lookup(&requested, matcher == "best fit");
     let numbering_default = intl_data(&locale).numbering_system;
     let numbering_raw = i.get_prop(&options, "numberingSystem")?;
     let numbering_option = if numbering_raw.is_undefined() { None } else { Some(i.to_string(&numbering_raw)?) };
