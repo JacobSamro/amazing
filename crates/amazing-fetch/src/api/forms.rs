@@ -140,6 +140,12 @@ impl FormData {
             .unwrap_or_default()
             .as_nanos();
         let boundary = format!("----amazing-{stamp:032x}-{serial:016x}");
+        // Fetch's multipart/form-data encoding algorithm yields an empty body
+        // when the entry list is empty; WPT response-consume-empty asserts the
+        // consumed text length is 0.
+        if self.entries.is_empty() {
+            return (Vec::new(), format!("multipart/form-data; boundary={boundary}"));
+        }
         let mut out = Vec::new();
         for (name, value) in &self.entries {
             out.extend_from_slice(

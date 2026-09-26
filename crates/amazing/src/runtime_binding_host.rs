@@ -31,6 +31,9 @@ use amazing_js::{
 #[path = "runtime_host_storage.rs"]
 mod runtime_host_storage;
 use runtime_host_storage::StorageRuntime;
+#[path = "runtime_host_net.rs"]
+mod runtime_host_net;
+use runtime_host_net::{NetNativeEntry, NetRuntime};
 
 #[path = "runtime_host_messaging.rs"]
 pub(crate) mod runtime_host_messaging;
@@ -48,6 +51,7 @@ mod dom_bindings;
 enum NativeEntry {
     Canvas(CanvasTarget, Member),
     Operation(Operation),
+    Net(NetNativeEntry),
     IllegalConstructor,
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
@@ -95,6 +99,7 @@ struct BindingState {
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
     messaging: Option<runtime_host_messaging::MessagingRealm>,
+    net: NetRuntime,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -468,6 +473,7 @@ pub(crate) fn install(
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
         messaging: None,
+        net: NetRuntime::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -484,6 +490,7 @@ pub(crate) fn install(
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
+            NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -532,6 +539,7 @@ pub(crate) fn install(
     fresh.declare_lexical("localStorage",local_storage,false)?;
     fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
+    adapter.install_net()?;
     adapter
         .js
         .global_obj
