@@ -2153,3 +2153,41 @@ No dom-bindings source changed for this second item (diagnosis only, per AGENTS.
 "blocked item goes to questions.md and you move on" — the fix crosses into
 another lane's files). Commit is the merge plus the sparse-checkout hygiene fix
 below.
+
+# DOM-B checkbox/radio native activation and onclick ready
+
+Implementation `4993b82c`, evidence `d502fcd1`, fixed base `47bcf7f0`. Finished
+and landed the previous agent's checkbox/radio activation + onclick WIP after
+two correctness fixes found while gating:
+
+1. `onclick`'s setter threw `TypeError` on non-callable objects, and dispatch
+   fell back to reading `handleEvent` when a stored handler was not callable.
+   `EventHandler` is WebIDL `EventHandlerNonNull?` where `EventHandlerNonNull`
+   carries `[LegacyTreatNonObjectAsNull]`: any object (callable or not) is
+   stored without throwing; a non-object primitive (or null/undefined) clears
+   the handler; invoking a non-callable handler is a silent no-op that must
+   never read `handleEvent` (unlike `EventListener`'s callback-interface
+   fallback used by `addEventListener`). Fixed in `event_bindings.rs`
+   (`callback_call` branches on a new `handler` flag before the `handleEvent`
+   fallback) and `input_activation_bindings.rs` (onclick setter no longer
+   checks callability).
+2. Canceled radio activation re-derived the clicked node's *live* type/name to
+   decide whether to recheck the previously-checked peer, which regressed
+   `dom/events/Event-dispatch-click.tentative.html`'s "radio morphed into
+   another type" case (a handler that changes `type` then calls
+   `preventDefault()`). Fixed by snapshotting the peer's own identity
+   (name/form owner/root) at prepare time and validating against that
+   snapshot at completion, never against the clicked node's current state;
+   the clicked node's own checkedness is now explicitly reverted first,
+   independent of whether it still classifies as a radio.
+
+Linux workspace **2883 passed /10 skipped**, doctests all green. WPT
+`dom/events` + `html/semantics/forms` + `uievents` (whole directories):
+**2472→2597 passing subtests (+125), zero lost passes**. Evidence in
+`crates/amazing-bindings/evidence/input-activation/`.
+
+Queued/deferred from this ticket: PointerEvent (click still constructs
+`MouseEvent`), non-input activation targets (submit/reset, `a`/`area`
+navigation, popovers, file pickers), event-handler content attributes (JS
+compiler seam). Continuing with the WebSocket JS interface on net's
+already-landed transport seam (NET-8/NET-19; see questions.md 2026-09-26T19:40Z).
