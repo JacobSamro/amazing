@@ -9,9 +9,9 @@
 //!   parsing continues
 //!
 //! Deferred/deviations:
-//! - `@supports` evaluates the static variable-bearing declaration conditions
-//!   used by the computed-value gate; `@layer` and `@scope` retain group context;
-//!   `@keyframes` is retained for the compositor; other at-rules are consumed
+//! - `@supports` evaluates declaration and selector conditions; `@media`,
+//!   `@layer` and `@scope` retain group context; `@keyframes` is retained
+//!   for the compositor; other at-rules are consumed
 //!   and dropped
 //! - nested style rules remain deferred
 //! - declaration values stay normalized strings; the private computed-value
@@ -33,6 +33,8 @@ pub struct Rule {
     /// Layer path; an empty selector list records a layer ordering statement.
     pub layer: Vec<LayerName>,
     pub scopes: Vec<Scope>,
+    /// Nested `@media` conditions, all of which must match the environment.
+    pub media: Vec<String>,
     /// One entry per top-level comma-separated selector (trimmed).
     pub selector_srcs: Vec<String>,
     pub declarations: Vec<Declaration>,
@@ -43,10 +45,18 @@ pub struct Stylesheet {
     pub rules: Vec<Rule>,
     /// Animation rules in stylesheet order, including supported group rules.
     pub keyframes: Vec<crate::animation::KeyframesRule>,
+    pub(crate) counter_styles: Vec<CounterStyleRule>,
     /// Parent of the stylesheet owner node, for implicit `@scope`.
     pub scope_root: Option<amazing_dom::NodeIdx>,
     /// Final fetched URL, or the document URL for an inline stylesheet.
     pub base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CounterStyleRule {
+    pub name: String,
+    pub descriptors: Vec<Declaration>,
+    pub media: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -483,7 +493,7 @@ impl Parser<'_> {
     }
 
     fn rule_list(&mut self) -> Stylesheet {
-        group_rules::parse(self.toks, &[], &[], &mut 0, 0)
+        group_rules::parse(self.toks, &[], &[], &[], &mut 0, 0)
     }
 
     /// Skips an at-rule: through the next ';' or its balanced {} block.
@@ -552,6 +562,7 @@ impl Parser<'_> {
             declarations,
             layer: Vec::new(),
             scopes: Vec::new(),
+            media: Vec::new(),
         })
     }
 
@@ -705,6 +716,23 @@ fn supports_condition(tokens: &[Token]) -> bool {
         return !supports_condition(trim_ws(&tokens[1..]));
     }
 
+    if matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("selector"))
+        && tokens.get(1) == Some(&Token::OpenParen)
+        && tokens.last() == Some(&Token::CloseParen)
+        && strip_outer_parentheses(&tokens[1..]).is_some()
+    {
+        return crate::selectors::parse_selector(&serialize(&tokens[2..tokens.len() - 1])).is_some();
+    }
+    if matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("at-rule"))
+        && tokens.get(1) == Some(&Token::OpenParen)
+        && tokens.last() == Some(&Token::CloseParen)
+        && strip_outer_parentheses(&tokens[1..]).is_some()
+    {
+        return matches!(trim_ws(&tokens[2..tokens.len() - 1]),
+            [Token::AtKeyword(name)] if matches!(name.to_ascii_lowercase().as_str(),
+                "media" | "supports" | "layer" | "scope" | "keyframes" | "font-face" | "counter-style"));
+    }
+
     let mut paren_depth = 0usize;
     let mut square_depth = 0usize;
     let mut operator: Option<bool> = None; // true = and, false = or
@@ -783,7 +811,9 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
             matches!(value.to_ascii_lowercase().as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer")
                 || crate::values::parse(&name.to_ascii_lowercase(), &value).is_some()
         } else {
-            false
+            let value = serialize(value_tokens);
+            matches!(value.to_ascii_lowercase().as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer")
+                || crate::values::parse(&name.to_ascii_lowercase(), &value).is_some()
         })
 }
 
@@ -901,12 +931,14 @@ mod tests {
     }
 
     #[test]
-    fn at_rules_skipped_including_blocks() {
+    fn media_rules_are_retained_and_imports_skipped() {
         let sheet =
             parse_stylesheet("@import url(x.css); @media screen { p { color: red } } div { x:y }");
-        assert_eq!(sheet.rules.len(), 1);
-        assert_eq!(sheet.rules[0].selector_srcs, vec!["div"]);
-        assert_eq!(sheet.rules[0].declarations[0].value, "y");
+        assert_eq!(sheet.rules.len(), 2);
+        assert_eq!(sheet.rules[0].selector_srcs, vec!["p"]);
+        assert_eq!(sheet.rules[0].media, vec!["screen"]);
+        assert_eq!(sheet.rules[1].selector_srcs, vec!["div"]);
+        assert_eq!(sheet.rules[1].declarations[0].value, "y");
     }
 
     #[test]
@@ -1084,5 +1116,16 @@ mod tests {
         assert_eq!(sheet.rules.len(), 2);
         assert_eq!(sheet.rules[0].selector_srcs, ["p"]);
         assert_eq!(sheet.rules[1].selector_srcs, ["div"]);
+    }
+
+    #[test]
+    fn supports_selector_and_at_rule_conditions() {
+        let sheet = parse_stylesheet(
+            "@supports selector(div > :first-child) and at-rule(@media) { a { color: green } } \
+             @supports selector(:not-a-real-pseudo) { b { color: red } } \
+             @supports at-rule(@unknown) { c { color: red } }",
+        );
+        assert_eq!(sheet.rules.len(), 1);
+        assert_eq!(sheet.rules[0].selector_srcs, ["a"]);
     }
 }

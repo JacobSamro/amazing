@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct StorageKey {
@@ -49,6 +50,39 @@ impl From<io::Error> for Error {
     }
 }
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// One quota ledger spans the Web Storage, IndexedDB, and Cache logs for a profile.
+pub struct QuotaLedger {
+    default_limit: u64,
+    limits: BTreeMap<StorageKey, u64>,
+    stores: BTreeMap<u64, BTreeMap<StorageKey, u64>>,
+}
+impl QuotaLedger {
+    pub fn new(default_limit: u64) -> Self {
+        Self { default_limit, limits: BTreeMap::new(), stores: BTreeMap::new() }
+    }
+    pub fn set_quota(&mut self, key: StorageKey, bytes: u64) { self.limits.insert(key, bytes); }
+    pub fn quota(&self, key: &StorageKey) -> u64 { self.limits.get(key).copied().unwrap_or(self.default_limit) }
+    pub fn usage(&self, key: &StorageKey) -> u64 {
+        self.stores.values().fold(0u64, |total, store|
+            total.saturating_add(store.get(key).copied().unwrap_or(0)))
+    }
+    fn replace(&mut self, id: u64, key: &StorageKey, usage: u64) -> Result<()> {
+        let old = self.stores.get(&id).and_then(|store| store.get(key)).copied().unwrap_or(0);
+        if self.usage(key).saturating_sub(old).saturating_add(usage) > self.quota(key) {
+            return Err(Error::QuotaExceeded);
+        }
+        self.stores.entry(id).or_default().insert(key.clone(), usage);
+        Ok(())
+    }
+    fn register(&mut self, id: u64, memory: &MemoryStore) {
+        let mut uses = BTreeMap::new();
+        for key in memory.entries.keys() {
+            uses.entry(key.bucket.storage.clone()).or_insert_with(|| memory.usage(&key.bucket.storage));
+        }
+        self.stores.insert(id, uses);
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct MemoryStore {
@@ -286,6 +320,8 @@ pub struct DiskStore {
     path: PathBuf,
     memory: MemoryStore,
     generation: u64,
+    shared_quota: Option<Arc<Mutex<QuotaLedger>>>,
+    quota_id: u64,
 }
 impl DiskStore {
     pub fn open(path: impl AsRef<Path>, default_limit: u64) -> Result<Self> {
@@ -328,6 +364,8 @@ impl DiskStore {
                     path,
                     memory,
                     generation,
+                    shared_quota: None,
+                    quota_id: 0,
                 });
             }
             if &data[..8] != LOG_MAGIC {
@@ -379,7 +417,16 @@ impl DiskStore {
             path,
             memory,
             generation,
+            shared_quota: None,
+            quota_id: 0,
         })
+    }
+    pub fn attach_quota(&mut self, ledger: Arc<Mutex<QuotaLedger>>) {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        ledger.lock().unwrap().register(id, &self.memory);
+        self.shared_quota = Some(ledger);
+        self.quota_id = id;
     }
     pub fn memory(&self) -> &MemoryStore {
         &self.memory
@@ -390,18 +437,33 @@ impl DiskStore {
     pub fn put(&mut self, key: EntryKey, value: Vec<u8>) -> Result<()> {
         let mut next = self.memory.clone();
         next.put(key.clone(), value.clone())?;
+        let ledger = self.shared_quota.clone();
+        let mut quota = ledger.as_ref().map(|ledger| ledger.lock().unwrap());
+        let usage = next.usage(&key.bucket.storage);
+        if let Some(quota) = quota.as_mut() {
+            let old = quota.stores.get(&self.quota_id).and_then(|store| store.get(&key.bucket.storage)).copied().unwrap_or(0);
+            if quota.usage(&key.bucket.storage).saturating_sub(old).saturating_add(usage) > quota.quota(&key.bucket.storage) {
+                return Err(Error::QuotaExceeded);
+            }
+        }
         let mut payload = vec![1];
         encode_key(&mut payload, &key);
         bytes(&mut payload, &value);
         self.append(&payload)?;
         self.memory = next;
+        if let Some(quota) = quota.as_mut() { quota.replace(self.quota_id, &key.bucket.storage, usage)?; }
         Ok(())
     }
     pub fn delete(&mut self, key: &EntryKey) -> Result<bool> {
+        let ledger = self.shared_quota.clone();
+        let mut quota = ledger.as_ref().map(|ledger| ledger.lock().unwrap());
         let mut payload = vec![2];
         encode_key(&mut payload, key);
         self.append(&payload)?;
-        Ok(self.memory.delete(key))
+        let deleted = self.memory.delete(key);
+        let usage = self.memory.usage(&key.bucket.storage);
+        if let Some(quota) = quota.as_mut() { quota.stores.entry(self.quota_id).or_default().insert(key.bucket.storage.clone(), usage); }
+        Ok(deleted)
     }
     fn append(&self, payload: &[u8]) -> Result<()> {
         if payload.len() > MAX_RECORD {
@@ -450,5 +512,13 @@ impl DiskStore {
         log.write_all(LOG_MAGIC)?;
         log.sync_all()?;
         Ok(())
+    }
+}
+
+impl Drop for DiskStore {
+    fn drop(&mut self) {
+        if let Some(ledger) = &self.shared_quota {
+            ledger.lock().unwrap().stores.remove(&self.quota_id);
+        }
     }
 }
