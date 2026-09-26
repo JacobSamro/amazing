@@ -91,11 +91,55 @@ impl ClipRect {
     }
 }
 
+/// A resolved raster-space clip mask for a group layer: either the existing
+/// per-corner rounded-rect test (CSS overflow clipping and `inset()`/
+/// `circle()`/`ellipse()` clip-path), or a polygon winding test
+/// (`polygon()`/a straight-edged `path()` clip-path). Both share
+/// [`crate::clip::point_in_polygon`]'s tested containment check.
+#[derive(Clone, Copy)]
+enum RasterMask {
+    Rounded(RoundedRect),
+    Polygon { points: [(f32, f32); crate::clip::MAX_CLIP_POINTS], len: u8, even_odd: bool },
+}
+
+impl RasterMask {
+    fn contains(&self, x: f32, y: f32) -> bool {
+        match self {
+            RasterMask::Rounded(rounded) => rounded.contains(x, y),
+            RasterMask::Polygon { points, len, even_odd } => {
+                crate::clip::point_in_polygon(&points[..*len as usize], x, y, *even_odd)
+            }
+        }
+    }
+}
+
+impl From<crate::clip::ClipMask> for RasterMask {
+    fn from(clip: crate::clip::ClipMask) -> Self {
+        match clip {
+            crate::clip::ClipMask::Rect { x, y, width, height, radii } => RasterMask::Rounded(RoundedRect {
+                x,
+                y,
+                width,
+                height,
+                radii: CornerRadii {
+                    top_left: radii[0],
+                    top_right: radii[1],
+                    bottom_right: radii[2],
+                    bottom_left: radii[3],
+                },
+            }),
+            crate::clip::ClipMask::Polygon { points, len, even_odd } => {
+                RasterMask::Polygon { points, len, even_odd }
+            }
+        }
+    }
+}
+
 struct RasterGroup {
     parent: Surface,
     clips: Vec<ClipRect>,
     effect: GroupEffect,
-    mask: Option<RoundedRect>,
+    mask: Option<RasterMask>,
 }
 
 struct RasterState {
@@ -129,22 +173,11 @@ impl RasterState {
     }
 
     fn begin_group(&mut self, effect: GroupEffect) {
-        let mask = effect.clip.map(|clip| RoundedRect {
-            x: clip.x,
-            y: clip.y,
-            width: clip.width,
-            height: clip.height,
-            radii: CornerRadii {
-                top_left: clip.radii[0],
-                top_right: clip.radii[1],
-                bottom_right: clip.radii[2],
-                bottom_left: clip.radii[3],
-            },
-        });
+        let mask = effect.clip.map(RasterMask::from);
         self.begin_group_with_mask(effect, mask);
     }
 
-    fn begin_group_with_mask(&mut self, effect: GroupEffect, mask: Option<RoundedRect>) {
+    fn begin_group_with_mask(&mut self, effect: GroupEffect, mask: Option<RasterMask>) {
         if self.groups.len() >= MAX_RASTER_GROUP_DEPTH {
             self.failed = true;
             return;
@@ -179,7 +212,7 @@ impl RasterState {
         });
     }
 
-    fn end_group(&mut self) {
+    fn end_group(&mut self, images: &dyn ImageProvider) {
         let Some(group) = self.groups.pop() else {
             return;
         };
@@ -189,7 +222,7 @@ impl RasterState {
             .saturating_sub(child.width as usize * child.height as usize);
         self.clips = group.clips;
         let clip = self.clip();
-        composite_group(&mut self.surface, &child, group.effect, group.mask, clip);
+        composite_group(&mut self.surface, &child, group.effect, group.mask, clip, images);
     }
 
     fn push_overflow_clip(&mut self, box_: &LayoutBox) {
@@ -209,20 +242,22 @@ impl RasterState {
                     backdrop_filter: crate::filter::FilterPlan::default(),
                     backdrop_bounds: amazing_layout::Rect::default(),
                     clip: None,
+                    mask_image: None,
+                    mask_bounds: amazing_layout::Rect::default(),
                 },
-                Some(mask),
+                Some(RasterMask::Rounded(mask)),
             );
         }
         self.clips.push(overflow_clip(box_, self.clip()));
         self.rounded_clip_stack.push(has_rounded);
     }
 
-    fn pop_clip(&mut self) {
+    fn pop_clip(&mut self, images: &dyn ImageProvider) {
         if self.clips.len() > 1 {
             self.clips.pop();
         }
         if self.rounded_clip_stack.pop().unwrap_or(false) {
-            self.end_group();
+            self.end_group(images);
         }
     }
 
@@ -262,8 +297,9 @@ fn composite_group(
     destination: &mut Surface,
     source: &Surface,
     effect: GroupEffect,
-    mask: Option<RoundedRect>,
+    mask: Option<RasterMask>,
     clip: ClipRect,
+    images: &dyn ImageProvider,
 ) {
     let matrix = effect.matrix_about_origin();
     let Some(inverse) = matrix.inverse() else {
@@ -279,6 +315,9 @@ fn composite_group(
         Some(effect.filter.apply_to_surface(source))
     };
     let source = filtered.as_ref().unwrap_or(source);
+    let mask_image = effect
+        .mask_image
+        .and_then(|layer| images.image_by_url(layer.url()).map(|image| (layer, image)));
     let [clip_x0, clip_y0, clip_x1, clip_y1] = clip.pixels();
     let x0 = clip_x0.max(0).min(destination.width as i64);
     let y0 = clip_y0.max(0).min(destination.height as i64);
@@ -301,6 +340,22 @@ fn composite_group(
             if source_pixel[3] == 0 {
                 continue;
             }
+            // `mask-image` is stretched to exactly fill `mask_bounds` (the
+            // masked box's own border box); outside that extent, or when the
+            // reference does not resolve, `MaskLayer::sample` returns 0.0/
+            // treats the element as unmasked respectively (a resource that
+            // fails to load is `none` per CSS Masking, not a hard failure).
+            let mask_value = match mask_image {
+                Some((layer, image)) if effect.mask_bounds.w > 0.0 && effect.mask_bounds.h > 0.0 => {
+                    let u = (source_x - effect.mask_bounds.x) / effect.mask_bounds.w;
+                    let v = (source_y - effect.mask_bounds.y) / effect.mask_bounds.h;
+                    layer.sample(image, u, v)
+                }
+                _ => 1.0,
+            };
+            if mask_value <= 0.0 {
+                continue;
+            }
             let destination_pixel = destination
                 .get_pixel(x as u32, y as u32)
                 .unwrap_or([0, 0, 0, 0]);
@@ -311,7 +366,7 @@ fn composite_group(
                     effect.blend,
                     source_pixel,
                     destination_pixel,
-                    crate::quantize_opacity(effect.opacity),
+                    crate::quantize_opacity(effect.opacity * mask_value),
                 ),
             );
         }
@@ -451,8 +506,8 @@ pub fn paint_document_with_resources(
                 paint_table_borders(&mut state.surface, box_, clip);
             }
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
-            PaintCommand::PopClip => state.pop_clip(),
-            PaintCommand::EndGroup => state.end_group(),
+            PaintCommand::PopClip => state.pop_clip(images),
+            PaintCommand::EndGroup => state.end_group(images),
         }
     }
     state.finish()
@@ -534,8 +589,8 @@ pub fn paint_document_with_text_resources_and_controls(
                 paint_table_borders(&mut state.surface, box_, clip);
             }
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
-            PaintCommand::PopClip => state.pop_clip(),
-            PaintCommand::EndGroup => state.end_group(),
+            PaintCommand::PopClip => state.pop_clip(images),
+            PaintCommand::EndGroup => state.end_group(images),
         }
     }
     state.finish()
@@ -570,9 +625,9 @@ pub(crate) fn raster_command_range(
         let draw = selected.contains(&index);
         match command {
             PaintCommand::BeginGroup(effect) => state.begin_group(*effect),
-            PaintCommand::EndGroup => state.end_group(),
+            PaintCommand::EndGroup => state.end_group(images),
             PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
-            PaintCommand::PopClip => state.pop_clip(),
+            PaintCommand::PopClip => state.pop_clip(images),
             PaintCommand::PaintDecorations(box_, background) if draw => {
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
@@ -2513,6 +2568,64 @@ mod tests {
         // A corner of the box's own bounding rect, outside the inscribed
         // circle, is clipped away and shows the parent's white background.
         assert_eq!(surface.get_pixel(2, 2), Some([255, 255, 255, 255]));
+    }
+
+    #[test]
+    fn clip_path_polygon_clips_the_elements_own_content_to_the_triangle() {
+        let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 10.0, 10.0);
+        let child = block(
+            &[("background-color", "black"), ("clip-path", "polygon(0 0, 6px 0, 0 6px)")],
+            2.0,
+            2.0,
+            6.0,
+            6.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 10, 10, &FontSource::fallback());
+        // Near the child's own top-left corner (the triangle's right angle).
+        assert_eq!(surface.get_pixel(3, 3), Some([0, 0, 0, 255]));
+        // The child's opposite corner, outside the triangle, shows the
+        // parent's white background through instead of the child's own.
+        assert_eq!(surface.get_pixel(7, 7), Some([255, 255, 255, 255]));
+    }
+
+    #[test]
+    fn mask_image_group_uses_the_referenced_images_luminance_as_alpha() {
+        struct MaskProvider {
+            mask: amazing_media::Image,
+        }
+        impl ImageProvider for MaskProvider {
+            fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+                None
+            }
+            fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+                (url == "https://example.test/mask.png").then(|| &self.mask)
+            }
+        }
+        let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
+        let child = block(
+            &[("background-color", "black"), ("mask-image", "url(https://example.test/mask.png)")],
+            0.0,
+            0.0,
+            4.0,
+            2.0,
+        );
+        root.flow = Flow::Blocks(vec![child]);
+        // A 2x1 mask, stretched to fill the child's 4x2 border box: the left
+        // half is opaque white (full luminance mask), the right half fully
+        // transparent (masked out regardless of its color).
+        let images = MaskProvider {
+            mask: amazing_media::Image {
+                width: 2,
+                height: 1,
+                pixels: vec![255, 255, 255, 255, 255, 255, 255, 0],
+            },
+        };
+        let surface = paint_document_with_resources(&root, 4, 2, &FontSource::fallback(), &RectInkProvider, &images);
+        assert_eq!(surface.get_pixel(0, 0), Some([0, 0, 0, 255]), "left half is unmasked");
+        assert_eq!(surface.get_pixel(0, 1), Some([0, 0, 0, 255]), "left half is unmasked");
+        assert_eq!(surface.get_pixel(3, 0), Some([255, 255, 255, 255]), "right half is masked out to the canvas");
+        assert_eq!(surface.get_pixel(3, 1), Some([255, 255, 255, 255]), "right half is masked out to the canvas");
     }
 
     #[test]
