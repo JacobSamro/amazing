@@ -1,5 +1,6 @@
 use amazing_css::{compute, evaluate_media_query, parse_sizes_attribute, parse_stylesheet,
-    ColorScheme, ContrastPreference, MediaEnvironment, MediaQueryList, MediaType};
+    ColorScheme, ContrastPreference, HoverCapability, MediaEnvironment, MediaQueryList, MediaType,
+    PointerCapability};
 use amazing_dom::{Dom, NodeIdx};
 
 #[test]
@@ -56,6 +57,26 @@ fn media_queries_cover_types_ranges_preferences_and_boolean_forms() {
     assert!(MediaQueryList::parse("not print").evaluate(&env));
     assert!(MediaQueryList::parse("").evaluate(&env));
     assert!(!MediaQueryList::parse("not (unknown-feature)").evaluate(&env));
+}
+
+#[test]
+fn hover_pointer_and_aspect_ratio_features_evaluate() {
+    let mouse = MediaEnvironment { viewport_width_px: 1600.0, viewport_height_px: 900.0, ..Default::default() };
+    for query in ["(hover: hover)", "(any-hover: hover)", "(pointer: fine)", "(any-pointer: fine)",
+        "(aspect-ratio: 16/9)", "(min-aspect-ratio: 1/1)", "(max-aspect-ratio: 2/1)", "(aspect-ratio)"] {
+        assert!(MediaQueryList::parse(query).evaluate(&mouse), "{query}");
+    }
+    for query in ["(hover: none)", "(pointer: coarse)", "(pointer: none)", "(aspect-ratio: 4/3)"] {
+        assert!(!MediaQueryList::parse(query).evaluate(&mouse), "{query}");
+    }
+    let touch = MediaEnvironment {
+        hover: HoverCapability::None, any_hover: HoverCapability::Hover,
+        pointer: PointerCapability::Coarse, any_pointer: PointerCapability::Fine,
+        ..Default::default()
+    };
+    assert!(MediaQueryList::parse("(hover: none) and (any-hover: hover)").evaluate(&touch));
+    assert!(MediaQueryList::parse("(pointer: coarse) and (any-pointer: fine)").evaluate(&touch));
+    assert!(!MediaQueryList::parse("(hover: hover)").evaluate(&touch));
 }
 
 #[test]

@@ -5,7 +5,15 @@ use super::{FontRecord, FontStyleDescriptor};
 use amazing_text::{FontSlant, TextStyle, VariationSetting};
 
 pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSetting> {
-    let mut axes = Vec::with_capacity(style.variations.len() + 4);
+    let mut axes = Vec::with_capacity(style.variations.len() + 5);
+    // CSS Fonts 4 section 7.2: `font-optical-sizing: auto` (the initial and
+    // default value) sets the `opsz` axis to the used font size unless an
+    // explicit `font-variation-settings` value overrides it below. A font
+    // without a registered `opsz` axis silently ignores this coordinate.
+    axes.push(VariationSetting {
+        tag: *b"opsz",
+        value: style.size,
+    });
     if let Some(face) = &font.author_face {
         axes.push(VariationSetting {
             tag: *b"wght",
@@ -44,4 +52,99 @@ pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSet
         }
     }
     axes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use amazing_text::FontKey;
+
+    fn plain_record() -> FontRecord {
+        FontRecord {
+            key: FontKey(1),
+            family: "test".into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            sfnt: Vec::new(),
+            author_face: None,
+        }
+    }
+
+    fn axis(axes: &[VariationSetting], tag: [u8; 4]) -> Option<f32> {
+        axes.iter().find(|axis| axis.tag == tag).map(|axis| axis.value)
+    }
+
+    #[test]
+    fn opsz_auto_tracks_used_font_size() {
+        let mut style = TextStyle::default();
+        style.size = 32.0;
+        let axes = for_face(&plain_record(), &style);
+        assert_eq!(axis(&axes, *b"opsz"), Some(32.0));
+    }
+
+    #[test]
+    fn opsz_follows_size_changes_without_author_face() {
+        let mut style = TextStyle::default();
+        style.size = 9.0;
+        let small = for_face(&plain_record(), &style);
+        style.size = 96.0;
+        let large = for_face(&plain_record(), &style);
+        assert_eq!(axis(&small, *b"opsz"), Some(9.0));
+        assert_eq!(axis(&large, *b"opsz"), Some(96.0));
+    }
+
+    #[test]
+    fn explicit_variation_settings_override_automatic_opsz() {
+        let mut style = TextStyle::default();
+        style.size = 20.0;
+        style.variations.push(VariationSetting {
+            tag: *b"opsz",
+            value: 144.0,
+        });
+        let axes = for_face(&plain_record(), &style);
+        // Only one `opsz` entry survives, and it is the explicit value, not
+        // the automatic used-size value.
+        let matches: Vec<f32> = axes
+            .iter()
+            .filter(|axis| axis.tag == *b"opsz")
+            .map(|axis| axis.value)
+            .collect();
+        assert_eq!(matches, vec![144.0]);
+    }
+
+    #[test]
+    fn opsz_coexists_with_author_face_weight_axis() {
+        use super::super::{FontDescriptorRange, FontFaceMetadata, FontDisplay};
+
+        let mut style = TextStyle::default();
+        style.size = 48.0;
+        style.weight = 700;
+        let record = FontRecord {
+            key: FontKey(2),
+            family: "variable-test".into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            sfnt: Vec::new(),
+            author_face: Some(FontFaceMetadata {
+                weight: FontDescriptorRange {
+                    min: 100.0,
+                    max: 900.0,
+                },
+                stretch: FontDescriptorRange::single(100.0),
+                style: FontStyleDescriptor::Normal,
+                unicode_ranges: Vec::new(),
+                display: FontDisplay::Auto,
+                size_adjust: 1.0,
+                ascent_override: None,
+                descent_override: None,
+                line_gap_override: None,
+                features: Vec::new(),
+            }),
+        };
+        let axes = for_face(&record, &style);
+        assert_eq!(axis(&axes, *b"opsz"), Some(48.0));
+        assert_eq!(axis(&axes, *b"wght"), Some(700.0));
+    }
 }

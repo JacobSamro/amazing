@@ -90,6 +90,10 @@ LANE_PATHS = {
     "wasm": ["crates/amazing-wasm/"],
     "a11y": ["crates/amazing-a11y/"],
     "devtools": ["crates/amazing-devtools/"],
+    # Linux port of the GPUI shell on Boat desktops (2026-09-26). Keep edits to
+    # main.rs/engine_viewport.rs minimal: compositor and integrator-assist also
+    # hold shell grants.
+    "shell": ["crates/amazing-shell-gpui/", "scripts/linux-shell-capture.sh"],
     # amazing-js is split between two lanes. js-lang owns the front half
     # (lexing, parsing, AST) and amazing-regex; js-runtime owns the execution
     # half. ast.rs is the contract: js-lang owns it and only adds to it.
@@ -1068,7 +1072,8 @@ def cmd_digest(args) -> int:
     problems: list[str] = []
     for lane in reg:
         session = resolve(lane)
-        raw = capture_live(session)
+        # Sub-agent lanes (no tmux session) report through files only.
+        raw = capture_live(session) if session else ""
         tmux_state = state_of(raw)
         ctx = context_pct(raw)
         st = read_status(lane)
@@ -1377,3 +1382,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+# JSD-2 (2026-09-26): the js-date lane takes RegExp while js-lang works on classes.
+LANE_GRANTS.setdefault("js-date", []).extend(["crates/amazing-regex", "crates/amazing-js/src/interp_regexp.rs", "crates/amazing-js/src/regexp_tests.rs"])
+# A11Y-6 (2026-09-26): a11y adopts its tree in the driver itself (integrator-assist is busy with live pages).
+LANE_GRANTS.setdefault("a11y", []).extend(["crates/amazing/src/runtime_host_a11y.rs", "crates/amazing/src/a11y_host.rs", "crates/amazing/Cargo.toml"])

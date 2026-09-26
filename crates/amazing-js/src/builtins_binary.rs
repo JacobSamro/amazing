@@ -290,6 +290,12 @@ fn binary_method(i: &Interpreter, object: &Obj, name: &str, f: crate::value::Nat
 }
 fn binary_getter(i: &Interpreter, object: &Obj, name: &str, f: crate::value::NativeFn) {
     let method = Interpreter::native(&format!("get {name}"), f, &i.function_proto);
+    if let JsValue::Object(callable) = &method {
+        // Accessor functions are built-in functions that are not constructors:
+        // remove the prototype and every own property a constructor would keep.
+        callable.borrow_mut().constructible = false;
+        callable.borrow_mut().delete_own("prototype");
+    }
     let _ = object.borrow_mut().define(name, binary_accessor(method, None, false));
 }
 

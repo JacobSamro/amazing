@@ -1,5 +1,6 @@
 //! HTML §4.10 form control WebIDL facade. Coercions precede DOM borrows.
-use crate::host::{BindingHost, InterfaceBrand as B, Operation as O};
+use crate::host::{BindingHost, FormNavigationRequest, InterfaceBrand as B, Operation as O};
+use amazing_fetch::api::{File, FormData, FormValue};
 use amazing_dom::{
     forms::{SelectionDirection, ValidityState},
     DomError, NodeIdx, NodeOrString,
@@ -9,13 +10,37 @@ pub(crate) fn handles(op: O) -> bool {
     matches!(
         op,
         O::FormElements
+            | O::FormDataFormConstructor
+            | O::FormAutocompleteGet
+            | O::FormAutocompleteSet
             | O::FormLength
             | O::FormReset
+            | O::FormSubmit
+            | O::FormRequestSubmit
             | O::FormCheckValidity
             | O::FormReportValidity
             | O::FormControlForm
             | O::FormControlName
             | O::FormControlSetName
+            | O::LabelControl
+            | O::LabelForm
+            | O::ProgressValue
+            | O::ProgressSetValue
+            | O::ProgressMax
+            | O::ProgressSetMax
+            | O::ProgressPosition
+            | O::MeterValue
+            | O::MeterSetValue
+            | O::MeterMin
+            | O::MeterSetMin
+            | O::MeterMax
+            | O::MeterSetMax
+            | O::MeterLow
+            | O::MeterSetLow
+            | O::MeterHigh
+            | O::MeterSetHigh
+            | O::MeterOptimum
+            | O::MeterSetOptimum
             | O::InputValue
             | O::InputSetValue
             | O::InputDefaultValue
@@ -28,8 +53,11 @@ pub(crate) fn handles(op: O) -> bool {
             | O::InputSetValueAsNumber
             | O::InputValueAsDate
             | O::InputSetValueAsDate
+            | O::InputStepUp
+            | O::InputStepDown
             | O::InputSelect
             | O::InputSetSelectionRange
+            | O::InputSetRangeText
             | O::InputSelectionStart
             | O::InputSetSelectionStart
             | O::InputSelectionEnd
@@ -50,6 +78,18 @@ pub(crate) fn handles(op: O) -> bool {
             | O::SelectSetMultiple
             | O::SelectAdd
             | O::SelectRemove
+            | O::SelectItem
+            | O::SelectNamedItem
+            | O::SelectSetLength
+            | O::SelectSelectedOptions
+            | O::SelectedOptionsIndexedGetter
+            | O::SelectedOptionsNamedGetter
+            | O::SelectedOptionsSupportedIndexCount
+            | O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
             | O::OptionValue
             | O::OptionSetValue
             | O::OptionSelected
@@ -58,6 +98,11 @@ pub(crate) fn handles(op: O) -> bool {
             | O::OptionSetDefaultSelected
             | O::OptionText
             | O::OptionSetText
+            | O::OptionIndex
+            | O::OutputValue
+            | O::OutputSetValue
+            | O::OutputDefaultValue
+            | O::OutputSetDefaultValue
             | O::ButtonType
             | O::ButtonSetType
             | O::ControlWillValidate
@@ -141,6 +186,15 @@ fn number<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<
     let value = arg(host, args, at)?;
     host.to_number(value)
 }
+/// WebIDL `double` (not `unrestricted double`) rejects non-finite values.
+fn finite_number<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<f64, H::Error> {
+    let value = number(host, args, at)?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(host.type_error("The provided double value is non-finite"))
+    }
+}
 fn boolean<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<bool, H::Error> {
     let value = arg(host, args, at)?;
     Ok(host.to_boolean(value))
@@ -155,6 +209,76 @@ fn set_attr<H: BindingHost>(
     value: &[u16],
 ) -> Result<(), H::Error> {
     host.with_dom(|dom| crate::html_reflection::set(dom, node, name, value.to_vec()))
+}
+fn parsed_attr_number<H: BindingHost>(
+    host: &mut H,
+    node: NodeIdx,
+    name: &str,
+) -> Result<Option<f64>, H::Error> {
+    let raw = attr(host, node, name)?;
+    Ok(String::from_utf16_lossy(&raw)
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite()))
+}
+fn set_attr_number<H: BindingHost>(
+    host: &mut H,
+    node: NodeIdx,
+    name: &str,
+    value: f64,
+) -> Result<(), H::Error> {
+    let text = if value == value.trunc() && value.abs() < 1e15 {
+        format!("{}", value as i64)
+    } else {
+        format!("{value}")
+    };
+    set_attr(host, node, name, &text.encode_utf16().collect::<Vec<_>>())
+}
+fn progress_max<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    Ok(match parsed_attr_number(host, node, "max")? {
+        Some(value) if value > 0. => value,
+        _ => 1.,
+    })
+}
+fn progress_value<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let max = progress_max(host, node)?;
+    let value = parsed_attr_number(host, node, "value")?
+        .filter(|value| *value >= 0.)
+        .unwrap_or(0.);
+    Ok(value.min(max))
+}
+fn meter_min<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    Ok(parsed_attr_number(host, node, "min")?.unwrap_or(0.))
+}
+fn meter_max<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = parsed_attr_number(host, node, "max")?.unwrap_or(1.);
+    Ok(if max < min { min } else { max })
+}
+fn meter_value<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let value = parsed_attr_number(host, node, "value")?.unwrap_or(0.);
+    Ok(value.max(min).min(max))
+}
+fn meter_low<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let low = parsed_attr_number(host, node, "low")?.unwrap_or(min);
+    Ok(low.max(min).min(max))
+}
+fn meter_high<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let low = meter_low(host, node)?;
+    let high = parsed_attr_number(host, node, "high")?.unwrap_or(max);
+    Ok(high.max(min).min(max).max(low))
+}
+fn meter_optimum<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<f64, H::Error> {
+    let min = meter_min(host, node)?;
+    let max = meter_max(host, node)?;
+    let optimum = parsed_attr_number(host, node, "optimum")?.unwrap_or((min + max) / 2.);
+    Ok(optimum.max(min).min(max))
 }
 fn bool_attr<H: BindingHost>(
     host: &mut H,
@@ -199,6 +323,16 @@ fn collection_owner<H: BindingHost>(
         }
     })?;
     Ok(node)
+}
+fn selected_options_owner<H: BindingHost>(
+    host: &mut H,
+    receiver: &H::Value,
+) -> Result<NodeIdx, H::Error> {
+    let key = host
+        .platform_object(receiver, B::SELECTED_OPTIONS)
+        .ok_or_else(|| host.type_error("Expected an HTMLCollection"))?;
+    host.node_from_platform_key(key)
+        .ok_or_else(|| host.type_error("Invalid HTMLCollection"))
 }
 fn radio_slot<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize, H::Error> {
     let key = host
@@ -262,6 +396,12 @@ fn collection_items<H: BindingHost>(
             let owner = collection_owner(host, receiver, B::OPTIONS, "select")?;
             host.with_dom(|dom| dom.select_options(owner))
         }
+        O::SelectedOptionsIndexedGetter
+        | O::SelectedOptionsNamedGetter
+        | O::SelectedOptionsSupportedIndexCount => {
+            let select = selected_options_owner(host, receiver)?;
+            host.with_dom(|dom| dom.selected_options(select))
+        }
         _ => {
             let slot = radio_slot(host, receiver)?;
             host.with_dom(|dom| dom.radio_list_items(slot))
@@ -300,32 +440,58 @@ pub(crate) fn supported_names<H: BindingHost>(
     })
 }
 fn validity<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<ValidityState, H::Error> {
-    let (pattern, value) = host.with_dom(|dom| {
-        let pattern = if dom.html_tag(node, "input")
-            && matches!(
-                dom.input_type(node)?,
-                "text" | "search" | "tel" | "url" | "email" | "password"
-            ) {
+    let (pattern, value, multiple_email) = host.with_dom(|dom| {
+        let is_input = dom.html_tag(node, "input");
+        let input_type = if is_input { Some(dom.input_type(node)?) } else { None };
+        let pattern = if input_type.as_deref().is_some_and(|kind| {
+            matches!(kind, "text" | "search" | "tel" | "url" | "email" | "password")
+        }) {
             dom.attribute_utf16(node, "pattern")
         } else {
             None
         };
-        let value = if dom.html_tag(node, "input") {
+        let value = if is_input {
             dom.input_value(node)?
         } else if dom.html_tag(node, "textarea") {
             dom.textarea_value(node)?
         } else {
             Vec::new()
         };
-        Ok((pattern, value))
+        let multiple_email = input_type.as_deref() == Some("email")
+            && dom.attribute_utf16(node, "multiple").is_some();
+        Ok((pattern, value, multiple_email))
     })?;
+    // A pattern on a multiple email control is matched against each
+    // comma-separated address after stripping surrounding whitespace; any
+    // mismatching address makes the whole control mismatch.
     let match_result = match pattern.filter(|_| !value.is_empty()) {
-        Some(pattern) => host.form_pattern_matches(&pattern, &value)?,
+        Some(pattern) => {
+            let mut mismatched = false;
+            if multiple_email {
+                let text = String::from_utf16_lossy(&value);
+                for address in text.split(',').map(|part| part.trim_matches(|c: char| c.is_ascii_whitespace())) {
+                    let units: Vec<u16> = address.encode_utf16().collect();
+                    if host.form_pattern_matches(&pattern, &units)? == Some(false) {
+                        mismatched = true;
+                        break;
+                    }
+                }
+            } else {
+                mismatched = host.form_pattern_matches(&pattern, &value)? == Some(false);
+            }
+            Some(!mismatched)
+        }
         None => None,
     };
     host.with_dom(|dom| dom.validity(node, |_, _| match_result))
 }
 fn validate<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<bool, H::Error> {
+    // A control that is not a candidate for constraint validation satisfies its
+    // constraints for the purposes of checkValidity/reportValidity and does not
+    // fire an invalid event, even though validity flags may still be set.
+    if !host.with_dom(|dom| dom.will_validate(node))? {
+        return Ok(true);
+    }
     let valid = validity(host, node)?.valid();
     if !valid {
         crate::event_bindings::dispatch_invalid_event(host, node)?;
@@ -348,12 +514,210 @@ fn validity_flag(v: &ValidityState, op: O) -> bool {
         _ => unreachable!(),
     }
 }
+fn autocomplete_value(raw: &[u16], form: bool, hidden: bool) -> Vec<u16> {
+    let value = String::from_utf16_lossy(raw);
+    let tokens: Vec<_> = value.split_ascii_whitespace()
+        .map(str::to_ascii_lowercase).collect();
+    if form {
+        return if tokens.len() == 1 && tokens[0] == "off" {
+            "off".encode_utf16().collect()
+        } else {
+            "on".encode_utf16().collect()
+        };
+    }
+    if tokens.is_empty() { return Vec::new(); }
+    let single = tokens.len() == 1;
+    if single && matches!(tokens[0].as_str(), "on" | "off") && !hidden {
+        return tokens[0].encode_utf16().collect();
+    }
+    if single && tokens[0] == "webauthn" { return tokens[0].encode_utf16().collect(); }
+    let mut at = 0;
+    if tokens[at].starts_with("section-") && tokens[at].len() > 8 { at += 1; }
+    if tokens.get(at).is_some_and(|token| matches!(token.as_str(), "shipping" | "billing")) { at += 1; }
+    if tokens.get(at).is_some_and(|token| matches!(token.as_str(), "home" | "work" | "mobile" | "fax" | "pager")) { at += 1; }
+    const FIELDS: &[&str] = &[
+        "name", "honorific-prefix", "given-name", "additional-name", "family-name", "honorific-suffix",
+        "nickname", "username", "new-password", "current-password", "one-time-code",
+        "organization-title", "organization", "street-address", "address-line1", "address-line2",
+        "address-line3", "address-level4", "address-level3", "address-level2", "address-level1",
+        "country", "country-name", "postal-code", "cc-name", "cc-given-name", "cc-additional-name",
+        "cc-family-name", "cc-number", "cc-exp", "cc-exp-month", "cc-exp-year", "cc-csc",
+        "cc-type", "transaction-currency", "transaction-amount", "language", "bday", "bday-day",
+        "bday-month", "bday-year", "sex", "url", "photo", "tel", "tel-country-code",
+        "tel-national", "tel-area-code", "tel-local", "tel-local-prefix", "tel-local-suffix",
+        "tel-extension", "email", "impp",
+    ];
+    if !tokens.get(at).is_some_and(|token| FIELDS.contains(&token.as_str())) {
+        return Vec::new();
+    }
+    at += 1;
+    if tokens.get(at).is_some_and(|token| token == "webauthn") { at += 1; }
+    if at == tokens.len() { tokens.join(" ").encode_utf16().collect() } else { Vec::new() }
+}
+fn submission_data(dom: &amazing_dom::Dom, form: NodeIdx,
+    submitter: Option<NodeIdx>) -> Result<FormData, DomError> {
+    let mut data = FormData::default();
+    let mut controls = dom.form_controls(form)?;
+    if let Some(submitter) = submitter.filter(|node| dom.html_tag(*node, "input")
+        && dom.input_type(*node).ok() == Some("image")) { controls.push(submitter); }
+    for control in controls {
+        if dom.get_attribute_ns(control, None, "disabled").is_some() { continue; }
+        let name = dom.attribute_utf16(control, "name").unwrap_or_default();
+        let name = String::from_utf16_lossy(&name);
+        if dom.html_tag(control, "input") {
+            let kind = dom.input_type(control)?;
+            if matches!(kind, "button" | "reset")
+                || matches!(kind, "submit" | "image") && submitter != Some(control) { continue; }
+            if matches!(kind, "checkbox" | "radio") && !dom.input_checked(control)? { continue; }
+            if kind == "image" {
+                let prefix = if name.is_empty() { String::new() } else { format!("{name}.") };
+                data.append_text(&format!("{prefix}x"), "0");
+                data.append_text(&format!("{prefix}y"), "0");
+                continue;
+            }
+            if name.is_empty() { continue; }
+            if kind == "file" {
+                data.append_file(&name, File::new([], "", "application/octet-stream", 0), None);
+            } else {
+                let value = if kind == "hidden" && name.eq_ignore_ascii_case("_charset_") {
+                    "UTF-8".into()
+                } else {
+                    String::from_utf16_lossy(&dom.input_value(control)?)
+                };
+                data.append_text(&name, &value);
+            }
+        } else if dom.html_tag(control, "button") {
+            if submitter == Some(control) && !name.is_empty() {
+                data.append_text(&name, &String::from_utf16_lossy(
+                    &dom.attribute_utf16(control, "value").unwrap_or_default()));
+            }
+        } else if dom.html_tag(control, "textarea") {
+            if !name.is_empty() {
+                data.append_text(&name, &String::from_utf16_lossy(&dom.textarea_value(control)?));
+            }
+        } else if dom.html_tag(control, "select") && !name.is_empty() {
+            for option in dom.select_options(control)? {
+                if dom.option_selected(option)?
+                    && dom.get_attribute_ns(option, None, "disabled").is_none() {
+                    data.append_text(&name, &String::from_utf16_lossy(&dom.option_value(option)?));
+                }
+            }
+        }
+        if let Some(dirname) = dom.attribute_utf16(control, "dirname") {
+            if !dirname.is_empty() {
+                data.append_text(&String::from_utf16_lossy(&dirname), "ltr");
+            }
+        }
+    }
+    Ok(data)
+}
+fn is_submit_button(dom: &amazing_dom::Dom, node: NodeIdx) -> Result<bool, DomError> {
+    Ok((dom.html_tag(node, "input")
+        && matches!(dom.input_type(node)?, "submit" | "image"))
+        || (dom.html_tag(node, "button")
+            && !matches!(dom.get_attribute_ns(node, None, "type")
+                .map(str::to_ascii_lowercase).as_deref(), Some("reset" | "button"))))
+}
+fn form_urlencoded(data: &FormData) -> String {
+    amazing_net::url::serialize_form_urlencoded(&data.entries.iter().map(|(name, value)| {
+        (name.clone(), match value {
+            FormValue::Text(text) => text.clone(),
+            FormValue::File(file) => file.name.clone(),
+        })
+    }).collect::<Vec<_>>())
+}
+fn text_plain(data: &FormData) -> Vec<u8> {
+    let mut out = String::new();
+    for (name, value) in &data.entries {
+        let value = match value { FormValue::Text(text) => text, FormValue::File(file) => &file.name };
+        out.push_str(name);
+        out.push('=');
+        out.push_str(value);
+        out.push_str("\r\n");
+    }
+    out.into_bytes()
+}
 pub(crate) fn invoke<H: BindingHost>(
     host: &mut H,
     op: O,
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    // HTMLCollection accessors and methods are shared with ordinary element
+    // collections; claim them here only for a select's selectedOptions object
+    // and hand every other receiver back to the collection module.
+    if matches!(
+        op,
+        O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
+    ) && host.platform_object(&receiver, B::SELECTED_OPTIONS).is_none()
+    {
+        return crate::collections::invoke(host, op, receiver, args);
+    }
+    if op == O::SelectSelectedOptions {
+        let select = node(host, &receiver, &["select"])?;
+        return key_node(host, select, B::SELECTED_OPTIONS);
+    }
+    if matches!(
+        op,
+        O::SelectedOptionsIndexedGetter
+            | O::SelectedOptionsNamedGetter
+            | O::HTMLCollectionLength
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionIndexedGetter
+            | O::HTMLCollectionNamedGetter
+    ) {
+        let select = selected_options_owner(host, &receiver)?;
+        let items = host.with_dom(|dom| dom.selected_options(select))?;
+        match op {
+            O::SelectedOptionsIndexedGetter
+            | O::HTMLCollectionItem
+            | O::HTMLCollectionIndexedGetter => {
+                let at = index(host, args, 0)?;
+                return wrap(host, items.get(at).copied());
+            }
+            O::SelectedOptionsNamedGetter
+            | O::HTMLCollectionNamedItem
+            | O::HTMLCollectionNamedGetter => {
+                let name = string(host, args, 0)?;
+                let found = host.with_dom(|dom| Ok(named(&items, dom, &name)))?;
+                return wrap(host, found.first().copied());
+            }
+            _ => return Ok(host.number(items.len() as f64)),
+        }
+    }
+    if op == O::FormDataFormConstructor {
+        let Some(value) = args.first().filter(|value| !host.is_undefined(value)) else {
+            return host.form_data_new(FormData::default());
+        };
+        let form = node(host, value, &["form"])?;
+        let submitter = args.get(1).filter(|value| !host.is_nullish(value))
+            .map(|value| node(host, value, &["input", "button"]))
+            .transpose()?;
+        if let Some(submitter) = submitter {
+            if !host.with_dom(|dom| is_submit_button(dom, submitter))? {
+                return Err(host.type_error("Expected a submit button"));
+            }
+            let owner = host.with_dom(|dom| Ok(dom.form_owner(submitter)))?;
+            if owner != Some(form) {
+                return host.with_dom(|_| Err(DomError::NotFoundError));
+            }
+        }
+        if !host.with_dom(|dom| dom.begin_form_entry_list(form))? {
+            return host.form_data_new(FormData::default());
+        }
+        let result = (|| {
+            let data = host.with_dom(|dom| submission_data(dom, form, submitter))?;
+            let data = host.form_data_event(form, data)?;
+            host.form_data_new(data)
+        })();
+        host.with_dom(|dom| dom.end_form_entry_list(form))?;
+        return result;
+    }
     if matches!(op, O::SelectAdd | O::SelectRemove)
         && host.platform_object(&receiver, B::OPTIONS).is_some()
     {
@@ -393,6 +757,23 @@ pub(crate) fn invoke<H: BindingHost>(
                 Ok(host.undefined())
             }
         };
+    }
+    if matches!(
+        op,
+        O::FormAutocompleteGet | O::FormAutocompleteSet
+    ) {
+        let element = node(host, &receiver, &["form", "input", "select", "textarea"])?;
+        if op == O::FormAutocompleteSet {
+            let value = string(host, args, 0)?;
+            set_attr(host, element, "autocomplete", &value)?;
+            return Ok(host.undefined());
+        }
+        let (raw, form, hidden) = host.with_dom(|dom| Ok((
+            dom.attribute_utf16(element, "autocomplete").unwrap_or_default(),
+            dom.html_tag(element, "form"),
+            dom.html_tag(element, "input") && dom.input_type(element)? == "hidden",
+        )))?;
+        return host.string(&autocomplete_value(&raw, form, hidden));
     }
     if matches!(
         op,
@@ -532,10 +913,16 @@ pub(crate) fn invoke<H: BindingHost>(
         O::FormElements
             | O::FormLength
             | O::FormReset
+            | O::FormSubmit
+            | O::FormRequestSubmit
             | O::FormCheckValidity
             | O::FormReportValidity
     ) {
         let form = node(host, &receiver, &["form"])?;
+        if matches!(op, O::FormSubmit | O::FormRequestSubmit)
+            && host.with_dom(|dom| dom.form_entry_list_construction_started(form))? {
+            return Ok(host.undefined());
+        }
         return match op {
             O::FormElements => key_node(host, form, B::FORM_CONTROLS),
             O::FormLength => {
@@ -546,6 +933,101 @@ pub(crate) fn invoke<H: BindingHost>(
                 if crate::event_bindings::dispatch_reset_event(host, form)? {
                     host.with_dom(|dom| dom.reset_form(form))?;
                 }
+                Ok(host.undefined())
+            }
+            O::FormSubmit | O::FormRequestSubmit => {
+                let submitter = if op == O::FormRequestSubmit {
+                    args.first().filter(|value| !host.is_nullish(value))
+                        .map(|value| node(host, value, &["input", "button"]))
+                        .transpose()?
+                } else { None };
+                if let Some(submitter) = submitter {
+                    let submit_button = host.with_dom(|dom| is_submit_button(dom, submitter))?;
+                    if !submit_button { return Err(host.type_error("Expected a submit button")); }
+                    let owner = host.with_dom(|dom| Ok(dom.form_owner(submitter)))?;
+                    if owner != Some(form) {
+                        return host.with_dom(|_| Err(DomError::NotFoundError));
+                    }
+                }
+                if !host.with_dom(|dom| Ok(dom.is_connected(form)))? {
+                    return Ok(host.undefined());
+                }
+                if op == O::FormRequestSubmit {
+                    if !host.with_dom(|dom| dom.begin_form_submission_events(form))? {
+                        return Ok(host.undefined());
+                    }
+                    let should_submit = (|| {
+                        let no_validate = host.with_dom(|dom| Ok(dom.get_attribute_ns(form, None, "novalidate").is_some()
+                            || submitter.is_some_and(|button| dom.get_attribute_ns(button, None, "formnovalidate").is_some())))?;
+                        if !no_validate {
+                            let controls = host.with_dom(|dom| dom.form_controls(form))?;
+                            let mut valid = true;
+                            for control in controls {
+                                if host.with_dom(|dom| dom.will_validate(control))?
+                                    && !validate(host, control)? { valid = false; }
+                            }
+                            if !valid { return Ok(false); }
+                        }
+                        host.form_submit_event(form, submitter)
+                    })();
+                    host.with_dom(|dom| dom.end_form_submission_events(form))?;
+                    if !should_submit? { return Ok(host.undefined()); }
+                }
+                if !host.with_dom(|dom| dom.begin_form_entry_list(form))? {
+                    return Ok(host.undefined());
+                }
+                let data = (|| {
+                    let data = host.with_dom(|dom| submission_data(dom, form, submitter))?;
+                    host.form_data_event(form, data)
+                })();
+                host.with_dom(|dom| dom.end_form_entry_list(form))?;
+                let data = data?;
+                let (action, method, enctype, target_name) = host.with_dom(|dom| {
+                    let inherited = |name| dom.attribute_utf16(form, name);
+                    let override_attr = |name| submitter.and_then(|node| dom.attribute_utf16(node, name))
+                        .filter(|value| !value.is_empty());
+                    Ok((override_attr("formaction").or_else(|| inherited("action")),
+                        override_attr("formmethod").or_else(|| inherited("method")),
+                        override_attr("formenctype").or_else(|| inherited("enctype")),
+                        override_attr("formtarget").or_else(|| inherited("target"))))
+                })?;
+                let base = host.location_href()?;
+                let action = action.filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| base.encode_utf16().collect());
+                let url = amazing_net::url::ParsedUrl::parse(&base)
+                    .and_then(|base| base.resolve(&String::from_utf16_lossy(&action)))
+                    .map_err(|_| host.type_error("Invalid form action URL"))?
+                    .serialize();
+                let method = method.map(|value| String::from_utf16_lossy(&value).to_ascii_uppercase())
+                    .filter(|value| matches!(value.as_str(), "GET" | "POST" | "DIALOG"))
+                    .unwrap_or_else(|| "GET".into());
+                if method == "DIALOG" { return Ok(host.undefined()); }
+                let enctype = enctype.map(|value| String::from_utf16_lossy(&value).to_ascii_lowercase())
+                    .filter(|value| matches!(value.as_str(), "application/x-www-form-urlencoded"
+                        | "multipart/form-data" | "text/plain"))
+                    .unwrap_or_else(|| "application/x-www-form-urlencoded".into());
+                let target_name = target_name.map(|value| String::from_utf16_lossy(&value))
+                    .unwrap_or_default();
+                let (url, body, content_type) = if method == "GET" {
+                    let encoded = form_urlencoded(&data);
+                    let (head, fragment) = url.split_once('#').map_or((url.as_str(), None),
+                        |(head, fragment)| (head, Some(fragment)));
+                    let path = head.split_once('?').map_or(head, |(path, _)| path);
+                    let mut url = format!("{path}?{encoded}");
+                    if let Some(fragment) = fragment { url.push('#'); url.push_str(fragment); }
+                    (url, Vec::new(), None)
+                } else if enctype == "multipart/form-data" {
+                    let (body, content_type) = data.encode_multipart();
+                    (url, body, Some(content_type))
+                } else if enctype == "text/plain" {
+                    (url, text_plain(&data), Some("text/plain;charset=UTF-8".into()))
+                } else {
+                    (url, form_urlencoded(&data).into_bytes(),
+                        Some("application/x-www-form-urlencoded;charset=UTF-8".into()))
+                };
+                host.form_navigate(FormNavigationRequest {
+                    url, method, enctype, target: target_name, body, content_type,
+                })?;
                 Ok(host.undefined())
             }
             _ => {
@@ -564,17 +1046,83 @@ pub(crate) fn invoke<H: BindingHost>(
             }
         };
     }
+    if matches!(op, O::LabelControl | O::LabelForm) {
+        let label = node(host, &receiver, &["label"])?;
+        let control = if op == O::LabelControl {
+            host.with_dom(|dom| dom.label_control(label))?
+        } else {
+            host.with_dom(|dom| dom.label_form(label))?
+        };
+        return wrap(host, control);
+    }
     let target = node(
         host,
         &receiver,
         &[
             "input", "textarea", "select", "option", "button", "fieldset", "output",
+            "object", "progress", "meter",
         ],
     )?;
     match op {
         O::FormControlForm => {
             let form = host.with_dom(|dom| Ok(dom.form_owner(target)))?;
             wrap(host, form)
+        }
+        O::ProgressValue => { let value = progress_value(host, target)?; Ok(host.number(value)) }
+        O::ProgressSetValue => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "value", value)?;
+            Ok(host.undefined())
+        }
+        O::ProgressMax => { let value = progress_max(host, target)?; Ok(host.number(value)) }
+        O::ProgressSetMax => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "max", value)?;
+            Ok(host.undefined())
+        }
+        O::ProgressPosition => {
+            if parsed_attr_number(host, target, "value")?.is_none() {
+                return Ok(host.number(-1.));
+            }
+            let value = progress_value(host, target)?;
+            let max = progress_max(host, target)?;
+            Ok(host.number(value / max))
+        }
+        O::MeterValue => { let value = meter_value(host, target)?; Ok(host.number(value)) }
+        O::MeterSetValue => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "value", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterMin => { let value = meter_min(host, target)?; Ok(host.number(value)) }
+        O::MeterSetMin => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "min", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterMax => { let value = meter_max(host, target)?; Ok(host.number(value)) }
+        O::MeterSetMax => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "max", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterLow => { let value = meter_low(host, target)?; Ok(host.number(value)) }
+        O::MeterSetLow => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "low", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterHigh => { let value = meter_high(host, target)?; Ok(host.number(value)) }
+        O::MeterSetHigh => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "high", value)?;
+            Ok(host.undefined())
+        }
+        O::MeterOptimum => { let value = meter_optimum(host, target)?; Ok(host.number(value)) }
+        O::MeterSetOptimum => {
+            let value = finite_number(host, args, 0)?;
+            set_attr_number(host, target, "optimum", value)?;
+            Ok(host.undefined())
         }
         O::FormControlName => {
             let value = attr(host, target, "name")?;
@@ -583,6 +1131,23 @@ pub(crate) fn invoke<H: BindingHost>(
         O::FormControlSetName => {
             let value = string(host, args, 0)?;
             set_attr(host, target, "name", &value)?;
+            Ok(host.undefined())
+        }
+        O::OutputValue | O::OutputDefaultValue => {
+            let text = host.with_dom(|dom| {
+                let mut value = String::new();
+                for child in dom.tree_order(target).into_iter().skip(1) {
+                    if let Some(units) = dom.character_data_utf16(child) {
+                        value.push_str(&String::from_utf16_lossy(&units));
+                    }
+                }
+                Ok(value.encode_utf16().collect::<Vec<u16>>())
+            })?;
+            host.string(&text)
+        }
+        O::OutputSetValue | O::OutputSetDefaultValue => {
+            let value = string(host, args, 0)?;
+            host.with_dom(|dom| dom.replace_children(target, &[NodeOrString::Utf16(value)]))?;
             Ok(host.undefined())
         }
         O::InputValue | O::TextAreaValue | O::SelectValue | O::OptionValue => {
@@ -683,6 +1248,41 @@ pub(crate) fn invoke<H: BindingHost>(
             bool_attr(host, target, "multiple", value)?;
             Ok(host.undefined())
         }
+        O::SelectItem => {
+            let at = index(host, args, 0)?;
+            let options = host.with_dom(|dom| dom.select_options(target))?;
+            wrap(host, options.get(at).copied())
+        }
+        O::SelectNamedItem => {
+            let name = string(host, args, 0)?;
+            if name.is_empty() {
+                return wrap(host, None);
+            }
+            let found = host.with_dom(|dom| {
+                Ok(dom.select_options(target)?.into_iter().find(|option| {
+                    ["id", "name"].iter().any(|attribute| {
+                        dom.attribute_utf16(*option, attribute).as_deref() == Some(name.as_slice())
+                    })
+                }))
+            })?;
+            wrap(host, found)
+        }
+        O::SelectSetLength => {
+            let desired = unsigned(number(host, args, 0)?);
+            host.with_dom(|dom| {
+                let options = dom.select_options(target)?;
+                for old in options.iter().skip(desired as usize).rev() {
+                    if let Some(parent) = dom.get(*old).parent {
+                        dom.pre_remove(*old, parent)?;
+                    }
+                }
+                for _ in options.len()..desired as usize {
+                    dom.create_element(target, "option");
+                }
+                Ok(())
+            })?;
+            Ok(host.undefined())
+        }
         O::SelectAdd => {
             let first = arg(host, args, 0)?;
             let option = node(host, first, &["option", "optgroup"])?;
@@ -727,6 +1327,10 @@ pub(crate) fn invoke<H: BindingHost>(
             let value = string(host, args, 0)?;
             host.with_dom(|dom| dom.replace_children(target, &[NodeOrString::Utf16(value)]))?;
             Ok(host.undefined())
+        }
+        O::OptionIndex => {
+            let index = host.with_dom(|dom| dom.option_index(target))?;
+            Ok(host.number(index as f64))
         }
         O::ControlWillValidate => {
             let value = host.with_dom(|dom| dom.will_validate(target))?;
@@ -791,20 +1395,54 @@ pub(crate) fn invoke<H: BindingHost>(
                 O::InputSelect => {
                     start = 0;
                     end = u32::MAX;
+                    direction = SelectionDirection::None;
                 }
                 O::InputSetSelectionRange => {
                     start = unsigned(number(host, args, 0)?);
                     end = unsigned(number(host, args, 1)?);
-                    if let Some(value) = args.get(2) {
-                        let s = host.to_dom_string(value)?;
-                        direction = direction_from(&s);
-                    }
+                    direction = args.get(2).map(|value| host.to_dom_string(value))
+                        .transpose()?.as_deref().map(direction_from)
+                        .unwrap_or(SelectionDirection::None);
                 }
-                O::InputSetSelectionStart => start = unsigned(number(host, args, 0)?),
-                O::InputSetSelectionEnd => end = unsigned(number(host, args, 0)?),
+                O::InputSetSelectionStart => {
+                    start = unsigned(number(host, args, 0)?);
+                    end = end.max(start);
+                }
+                O::InputSetSelectionEnd => {
+                    end = unsigned(number(host, args, 0)?);
+                    start = start.min(end);
+                }
                 _ => direction = direction_from(&string(host, args, 0)?),
             }
+            let old = host.with_dom(|dom| dom.selection(target))?;
             host.with_dom(|dom| dom.set_selection(target, start, end, direction))?;
+            if host.with_dom(|dom| dom.selection(target))? != old {
+                host.form_selection_changed(target)?;
+            }
+            Ok(host.undefined())
+        }
+        O::InputSetRangeText => {
+            let replacement = string(host, args, 0)?;
+            let range = if args.len() >= 2 {
+                let start = unsigned(number(host, args, 1)?);
+                let end = unsigned(number(host, args, 2)?);
+                Some((start, end))
+            } else {
+                None
+            };
+            let mode = if let Some(value) = args.get(3) {
+                String::from_utf16_lossy(&host.to_dom_string(value)?)
+            } else {
+                "preserve".to_owned()
+            };
+            if !matches!(mode.as_str(), "select" | "start" | "end" | "preserve") {
+                return Err(host.type_error("Invalid selection mode"));
+            }
+            let old = host.with_dom(|dom| dom.selection(target))?;
+            host.with_dom(|dom| dom.set_range_text(target, replacement, range, &mode))?;
+            if host.with_dom(|dom| dom.selection(target))? != old {
+                host.form_selection_changed(target)?;
+            }
             Ok(host.undefined())
         }
         O::InputValueAsNumber => {
@@ -834,6 +1472,12 @@ pub(crate) fn invoke<H: BindingHost>(
                 host.form_date_to_epoch_ms(value)?
             };
             host.with_dom(|dom| dom.set_input_value_as_date_ms(target, date))?;
+            Ok(host.undefined())
+        }
+        O::InputStepUp | O::InputStepDown => {
+            let count = if args.is_empty() { 1 } else { signed(number(host, args, 0)?) };
+            let count = if op == O::InputStepDown { count.wrapping_neg() } else { count };
+            host.with_dom(|dom| dom.step_input(target, count))?;
             Ok(host.undefined())
         }
         O::TextAreaDefaultValue => {

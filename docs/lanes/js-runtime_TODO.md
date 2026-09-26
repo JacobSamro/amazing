@@ -542,3 +542,121 @@ now supplies the tree-walker backlink, so the new integration corpus will
 measure that combination. VM prototype construction and descriptor attributes
 need the corresponding audit. Internal-slot cleanup remains queued above,
 with call-site migration requests recorded for js-stdlib, js-binary and js-vm.
+
+
+## JSRT-9 same-agent realms (completed, 2026-09-26)
+
+One Interpreter owns the agent job queue, scheduler tokens, timers, and Symbol.for registry.
+RealmHandle identifies a global plus its intrinsics and host dispatcher. Cross-realm calls
+enter the callable's creation realm and restore the caller on either return or throw.
+The embedding installs each document's bindings with binding_with_realm.
+
+Public entry points in interp_realms.rs: binding_create_realm(global),
+binding_with_realm, binding_eval_in_realm, binding_call_in_realm, binding_realm_global,
+binding_current_realm, binding_entry_realm, and binding_incumbent_realm.
+Use binding_brand_global for Window host receiver branding, and binding_global_this
+for the script-visible global (binding_global_object remains the installation target).
+WindowProxy entry points: binding_create_window_proxy, binding_retarget_window_proxy,
+binding_set_realm_origin, binding_set_window_proxy_access_hook. Navigation retains
+proxy identity while replacing its target realm. Origin policy is supplied by the host;
+unconfigured cross-origin property access is rejected.
+
+Reference: https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
+WindowProxy has an immutable prototype, stays extensible, and refuses PreventExtensions.
+Test262 createRealm is enabled while retaining intl402.
+
+Host installation order: allocate global → binding_create_realm(global) →
+binding_create_window_proxy(realm) → binding_with_realm(realm, install bindings and
+binding_brand_global(window_handle)). Window getters return binding_global_this().
+Expose the returned proxy as iframe contentWindow; on navigation, prepare the next
+realm's bindings and use binding_retarget_window_proxy with the existing proxy.
+The host supplies origin policy and each document's native dispatcher.
+
+Constructor fallback records intrinsic constructor/prototype identities at realm
+initialization. Foreign newTarget fallback survives reassignment of global
+constructor names. Modules share the root agent and restore its environment.
+Eval declarations are validated before bindings are created, and strict indirect
+eval retains its own scope.
+
+Linux gate on fixed base 500bf39f: 2,744 workspace tests passed, 10 skipped,
+124.639 seconds; four doctests and ten realm regressions passed. Full Test262:
+31,650 → 31,989 passing files (+339), 61,229 → 61,829 passing variants; zero
+lost files, one strict TypedArray sort timeout. A complete 96-file TypedArray
+directory recheck with both frozen binaries at the same 60-second deadline
+passed both sort modes and lost zero variants (33 → 37 files, 66 → 74 variants).
+Replacing all 96 directory records in both sweeps gives 31,651 → 31,990 files
+and 61,230 → 61,831 variants, zero lost passes. These are combined measurements,
+not a claim that the original single full sweep had zero lost variants.
+The recheck also passed 350 crate tests (one skipped) and its doctest.
+Evidence: js-runtime_realms_evidence.json. DOM/iframe WPT gains remain for
+adopting lanes to measure; embedding code supplies cross-origin policy.
+
+## JSRT-10 runtime intrinsic and Error-family audit (completed, 2026-09-26)
+
+Audit runtime-owned constructor lengths/prototype descriptors and Promise method
+attributes, class [[Call]] rejection, and caller-realm derived-constructor
+completion errors. Complete Error message/cause descriptors, AggregateError,
+SuppressedError, Error.isError, and intrinsic AggregateError rejections from
+Promise.any. Specification: ECMA-262 §20.5.
+
+Nullish GetV correction is tracked separately. A diagnostic corpus with the
+correction exposed ArrayBuffer's optional-options lookup and previously masked
+missing Error.prototype.stack accessors (12 lost variants in the first 13,602
+completed files). The core correction remains necessary; js-binary has the
+options request, and Error-stack support needs a proper stack representation.
+Those false passes are recorded as debt, not claimed as working accessors.
+The current audit excludes that correction while its dependencies are fixed.
+
+Final Linux gate on fixed base 7766dbfe: 2,748 workspace tests passed,
+10 skipped, 67.601 seconds; four doctests passed. Full pinned Test262:
+31,990 → 32,182 passing files (+192), 61,831 → 62,215 passing variants,
+zero lost files or variants at the same 60-second deadline. The baseline is
+JSRT-9's documented full sweep plus complete directory recheck; this candidate
+result is one full sweep, with no recheck needed. Evidence:
+js-runtime_intrinsic_audit_evidence.json.
+
+Next: dynamic code must use the realm global environment during module
+execution, and bound function exotica must forward calls/construction without
+an extra realm entry, prototype allocation, or observable argument iteration.
+
+## JSRT-11 dynamic code and bound-function realm execution (completed, 2026-09-26)
+
+Indirect eval, Function, and host realm eval use the realm's global environment
+even while a module environment is active. Host eval restores the prior environment
+on return or throw. Eval returns non-String inputs without coercion. Bound calls
+and construction forward to their target without an extra realm entry or prototype
+allocation, and consume stored arguments as a private List.
+
+On fixed base af6364b1, Linux passed 2,751 workspace tests (10 skipped) in
+59.342 seconds plus four doctests. Full pinned Test262: 32,182 → 32,189 passing
+files and 62,215 → 62,224 variants, with zero lost passes at timeout60/jobs4.
+Evidence: js-runtime_realm_execution_evidence.json.
+
+References: ECMA-262 §19.2.1.1 PerformEval and §10.4.1 Bound Function Exotic Objects.
+Next bulk area: generic Array object operations, callback boxing, species results,
+sparse holes, and throwing Set/Delete semantics.
+
+## JSRT-12 generic Array object protocol (completed, 2026-09-26)
+
+Array callbacks box primitive receivers, read ordinary length before callback
+validation, and preserve live HasProperty/Get observations. Map, filter, slice,
+concat and splice allocate through ArraySpeciesCreate, retain sparse holes, and
+create result data properties without invoking inherited setters. A foreign
+realm's intrinsic Array constructor defaults to the calling realm's Array.
+Mutating methods use throwing Set/Delete; splice follows observable operation
+order. Object.prototype.toString recognizes primitive wrapper brands using the
+existing internal-slot representation.
+
+The WebIDL value-iterable test fixture now installs its interface length getter;
+forEach snapshots that ordinary length once while indexed values remain live.
+The complete Array directory gained 237 passing files with no lost variants;
+360 crate tests and its doctest passed. Final Linux gate on fixed base a8b75377:
+2,792 workspace tests passed (10 skipped) in 61.639 seconds, plus four doctests.
+Full Test262: 32,189 → 32,459 passing files (+270),
+62,224 → 62,764 passing variants, zero lost passes.
+Evidence: js-runtime_array_protocol_evidence.json. Existing resource limits,
+missing Proxy support, and property-based primitive slot storage remain separate debt.
+
+Next: synchronous Array.from/of construction, mapping and iterator-close order;
+then Array.fromAsync suspension and proper private primitive slots with owner
+coordination for stdlib/binary/structured-clone callers.

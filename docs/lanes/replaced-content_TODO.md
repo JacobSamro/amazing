@@ -1043,3 +1043,243 @@ Known adjacent gap, not claimed: the retained path's per-item resource set
 replaced fragments on a content item, unlike the old/new delta's `resources()`.
 Seeding and damage must agree before enabling retirement for them, so this
 stays a follow-up when the integrator-assist damage adapter lands.
+
+## RC-20 — gradient background-image layers (2026-09-26)
+
+Deferred from the RC-18/RC-19 reprioritization. `BackgroundLayer` now carries an
+optional serialized `<gradient>` function beside the existing `url()`.
+`paint` resolves a gradient layer through the same RC-18 `gradient::raster` at
+its used size: a gradient has no intrinsic dimensions, so `auto` resolves to the
+background positioning area and the tile is rasterized there; `cover`,
+`contain` and explicit sizes scale from the positioning area. URL layers keep
+the provider's decoded pixels and natural size. Layer order (first listed
+topmost), repeat modes, position, `background-origin`/`background-clip` and the
+shared per-frame sample budget stay in the existing loop. No CSS parsing and no
+duplicate rasterizer were added; unsupported gradient syntax paints no layer
+rather than guessing.
+
+Recognized functions: `linear-gradient`, `repeating-linear-gradient`,
+`radial-gradient`, `repeating-radial-gradient`, `conic-gradient`,
+`repeating-conic-gradient`. Nothing outside `amazing-paint` changed.
+
+Four new focused paint tests assert pixels: linear fill of the positioning area,
+repeating tiling through `background-size`, first-listed-layer-on-top ordering,
+and unsupported syntax painting nothing. Linux gate at `e3e475fd`: workspace
+nextest **2,707 passed / 0 failed / 10 skipped** with `--no-fail-fast`; separate
+workspace doctests **4 passed / 0 failed**. The focused `amazing-paint` crate run
+was **131 passed / 0 skipped**, including the four new cases.
+
+The ticket's frozen WPT gradient reftest selection and its two-round
+before/after are Windows-only and were not run under the Linux-first deferral,
+so RC-20 claims **zero WPT conformance credit**; the retained RC-18 focused 12,
+SVG 35 and gradient/scroll 4 selections are likewise unclaimed. Reproduction and
+rationale: `tests/wpt-replaced-content/rc20/README.md`. Per-paint gradient
+caching is a performance follow-up, not a correctness gap.
+
+## RC-23 — positioned and shaped radial/conic gradient geometry (2026-09-26)
+
+Follow-up to RC-18/RC-20 in `amazing-paint::gradient`. Any leading geometry part
+other than an exact `circle`/`ellipse` or a bare `from Ndeg` previously made the
+whole gradient paint nothing: the optional-geometry parser could not distinguish
+an unsupported geometry part from a color stop and fell through to treating it
+as a stop, which then failed and rejected the image.
+
+The first gradient part is now classified by whether it begins with a parseable
+color. If it does, it is a stop; if not, it must parse as valid geometry or the
+entire gradient is rejected. Supported geometry:
+
+- radial: `[circle|ellipse]? [closest-side|farthest-side|closest-corner|
+  farthest-corner|<length>]{0,2}? [at <position>]?`, defaulting to
+  farthest-corner. Explicit radii are `px`/`em`/`rem` and share circle/ellipse
+  sampling; corner keywords use a per-axis circle approximation for ellipses.
+- conic: `[from <angle>]? [at <position>]?`, `<angle>` in `deg`/`grad`/`rad`/
+  `turn`.
+- linear angles also accept `grad`/`rad`/`turn` now.
+
+`at <position>` reuses `crate::image::position` (keywords, percentages, px,
+edge-offset syntax). Percent radii, unsupported units, malformed positions and
+unknown keywords reject the gradient rather than guessing. No CSS, layout,
+compositor or driver source changed.
+
+Focused paint tests: positioned/shaped radial, explicit-radius radial, rotated
+conic, and a background-level positioned radial, plus a rejection table for
+percent radii, empty/oversized positions, duplicate size keywords and bad
+angles. Linux gate at `6988c124`: workspace nextest **2,737 passed / 0 failed /
+10 skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**134 passed / 0 skipped**.
+
+The ticket's WPT gradient selection and before/after remain Windows-only and
+deferred under Linux-first, so RC-23 claims **zero WPT conformance credit**;
+ellipse corner-keyword radii and percentage radii remain bounded approximations
+or rejections, recorded here rather than claimed conformant.
+
+## RC-24 — mix-blend-mode and isolation effect-group reference (2026-09-26)
+
+Answer to the compositor lane's COMP-15 request for a full-painter reference.
+`GroupEffect` and the public `DisplayListView::EffectNode` now carry a CSS
+`BlendMode` and an `isolate` flag. `effect_for` opens an effect group for a
+non-normal `mix-blend-mode` or `isolation: isolate`, and `composite_group`
+composites the group layer with the new integer
+`amazing_paint::blend_group(mode, src, dst, opacity)`: blend each channel
+against the backdrop, then source-over, per CSS Compositing and Blending.
+All 17 modes are implemented, including plus-lighter and the non-separable
+hue/saturation/color/luminosity formulas (W3C algorithm, rounded once);
+`Normal` reduces exactly to the shared `blend_source_over`. The blend math is
+integer so the reference is bit-deterministic across platforms, matching the
+existing source-over rule.
+
+Focused tests: separable blend modes against white/black, alpha/opacity
+compositing, non-separable color keeping the backdrop luminance, a
+paint-document multiply child over a gray parent, and `isolation: isolate`
+opening a group without changing normal pixels. No CSS, layout, compositor,
+driver or lockfile source changed.
+
+Linux gate at `608e546c`: workspace nextest **2,742 passed / 0 failed / 10
+skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**139 passed / 0 skipped**.
+
+Compositor handoff: `crates/amazing-compositor/src/paint_view.rs` still passes
+`BlendMode::Normal` to `trees.add_effect`; map `node.blend`/`node.isolate` into
+its `EffectOperations` and adopt a matching reference. Filters, backdrop-filter,
+clip-path and mask are not part of RC-24 and remain a separate paint slice.
+No WPT credit is claimed.
+
+## RC-25 — CSS filter color-function reference (2026-09-26)
+
+Second COMP-15 paint reference slice, the color half of `filter`. A new bounded,
+`Copy` `amazing_paint::filter::FilterPlan` parses the computed filter list's
+color functions (`brightness`, `contrast`, `grayscale`, `hue-rotate`, `invert`,
+`opacity`, `saturate`, `sepia`) in source order into a capped fixed array of
+`FilterOp`. Blur, drop-shadow, `url()` and `calc()` functions are skipped rather
+than guessed (the painter previously deferred the whole filter property).
+`effect_for` opens a group for a non-empty plan, `GroupEffect`/`EffectNode`
+carry the plan, and `composite_group` applies it to the group layer before
+blending, so the filter covers the element's own decorations and its subtree.
+Color math is the Filter Effects definitions (luma 0.2126/0.7152/0.0722, the
+sepia and hue-rotate matrices), clamped and rounded per channel.
+
+Focused tests: plan order and unsupported-function skipping; grayscale,
+brightness(0), invert(1) and opacity(0.5) pixel values; and a paint-document
+test that the filter changes only the element subtree. No CSS, layout,
+compositor, driver or lockfile source changed.
+
+Linux gate at `4176b349`: workspace nextest **2,745 passed / 0 failed / 10
+skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
+**142 passed / 0 skipped**.
+
+Still outstanding for COMP-15: `backdrop-filter`, blur/drop-shadow filters,
+clip-path basic shapes and mask-image, which need the compositor's
+`EffectOperations` metadata contract and raster transforms. No WPT credit.
+
+## RC-26 — `blur`/`drop-shadow` filters and `backdrop-filter` reference (2026-09-26)
+
+Third COMP-15 paint reference slice, answering the compositor's
+`PaintFilterSource`/`PaintFilterInput` producer-boundary preparation
+(`.agents/compositor/questions.md`, `crates/amazing-compositor/src/paint_filters.rs`
+at fixed source base `431a0a04`): ordered resolved filters, `backdrop_filters`
+and `backdrop_bounds` for an existing non-root effect group.
+
+- `amazing_paint::filter::FilterOp` gains `Blur(std_px)` and
+  `DropShadow { dx, dy, std, color }`; `FilterPlan::from_css` now takes the
+  element's resolved `current_color` (for `drop-shadow()`'s default and
+  explicit `currentcolor`) and parses both functions. Only an already-resolved
+  absolute length (the CSS parser folds `in`/`cm`/`mm`/`q`/`pt`/`pc` into
+  `Px`) is accepted for blur radius/shadow offsets; `em`/`rem`/percentage/
+  viewport-unit arguments are skipped, not guessed, matching the existing
+  color-function policy.
+- `FilterPlan::apply_to_surface` is the new whole-surface entry point: color
+  functions still map every pixel independently, but `blur`/`drop-shadow` read
+  neighboring pixels and can only run this way. `composite_group` now always
+  filters the whole child layer once before its per-destination-pixel
+  transform sampling, instead of calling a per-pixel `apply` inside that loop;
+  nearest-neighbor sampling makes this exactly equivalent for the color-only
+  case and is required for the two spatial functions.
+- Blur is the SVG/CSS Filter Effects three-box-blur Gaussian approximation
+  (box size `d = floor(std * 3 * sqrt(2π) / 4 + 0.5)`), run in premultiplied
+  space with the surface edge clamped outward, and using the spec's exact
+  odd/even pass radii (an even `d` cancels its two-pixel-biased passes with
+  one pass shifted left, one shifted right, then a centered `d+1` pass) so
+  the result stays centered rather than drifting. Drop-shadow tints the
+  source's alpha into the resolved shadow color, blurs that shadow, shifts it
+  by the offset (a shift past the surface edge is discarded, matching this
+  painter's per-surface, not per-halo, filter model), and draws the original
+  content over it.
+- `backdrop-filter` is new on `GroupEffect`/`EffectNode`, with the group's
+  border box as `backdrop_bounds`. `RasterState::begin_group_with_mask` now
+  seeds a group's fresh, otherwise-transparent layer with the *filtered*
+  snapshot of the surface directly behind it (before this box's own
+  decorations are drawn), cropped to that border box; the box's own
+  decorations then paint over that seed exactly as they would over any other
+  backdrop (existing decoration painting already alpha-blends, not
+  overwrites). A box with only `backdrop-filter` (no opacity/transform/blend/
+  filter/isolation) now opens a group, the same filter-only-group policy RC-25
+  established for `filter`.
+
+Focused tests: blur/drop-shadow parsing order and relative-length skipping;
+`drop-shadow()`'s offset/blur/color resolution including bare `currentcolor`
+defaults; a uniform field's interior staying unblurred while a single spike
+spreads into (and stays bounded within) its neighbors; a drop shadow drawn
+offset and behind its source; and three `paint_document` end-to-end tests
+(`backdrop_filter_group_filters_the_snapshot_behind_it`,
+`blur_filter_group_softens_its_own_content_edge_into_its_surrounding_transparency`,
+`drop_shadow_filter_group_draws_its_shadow_behind_its_own_content`). No CSS,
+layout, compositor, driver or lockfile source changed.
+
+Linux gate: workspace nextest **2,754 passed / 0 failed / 10 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-paint` **149 passed / 0
+skipped** (up from 142 at RC-25).
+
+Still outstanding for COMP-15: `clip-path` basic shapes/`path()` and
+`mask-image`/`mask-*`, and the reference-space transform contract for
+arbitrary local-space CSS filters under a 3D/perspective transform (this
+slice's filters run in the group's own post-transform raster space, matching
+`PaintFilterSpace::Raster`). No WPT credit is claimed under the Linux-first
+deferral.
+
+## RC-27 — `clip-path` basic-shape reference (2026-09-26)
+
+Fourth COMP-15 paint reference slice: `inset()`, `circle()` and `ellipse()`.
+
+- New `amazing_paint::clip::ClipMask { x, y, width, height, radii: [(f32,f32);4] }`
+  (top-left/top-right/bottom-right/bottom-left order) resolves `inset()`
+  directly and maps `circle()`/`ellipse()` onto their own bounding box with
+  every corner sharing one radius pair — the same per-corner elliptical test
+  this painter already uses for rounded-rectangle overflow clipping
+  reproduces an exact circle/ellipse when the box's width/height equals
+  `2*rx`/`2*ry`. `inset()`'s offsets and `round` radii both use the CSS
+  four-value shorthand expansion (1/2/3/4 values); `circle()`'s keyword
+  radius resolves against the closest/farthest of all four sides per CSS
+  Shapes 1, while `ellipse()`'s two keyword radii resolve per axis
+  independently. `polygon()`, `path()`, a `url()` reference and a bare
+  `<geometry-box>` with no shape are skipped, not guessed, matching this
+  painter's existing policy for unsupported filter functions; so are
+  `em`/`rem`/viewport-relative lengths, which need font/viewport context this
+  bounded resolver does not have. Every shape resolves against the box's own
+  border box regardless of an explicit `<geometry-box>` keyword (this
+  resolver does not track a separate padding/margin reference box) — a
+  documented simplification, not a spec claim.
+- `GroupEffect`/`EffectNode` gain `clip: Option<ClipMask>`; a `clip-path`
+  alone (no opacity/transform/blend/filter/isolation) now opens a group, the
+  same filter-only-group policy RC-25/RC-26 established. `RasterState::
+  begin_group` converts the resolved `ClipMask` into the same `RoundedRect`
+  mask `push_overflow_clip`'s rounded-corner overflow clip already uses, so
+  clip-path composites through the identical, already-tested per-pixel mask
+  check in `composite_group`.
+
+Focused tests: `inset()`'s offset/round four-value expansion and percentage
+resolution; `circle()`'s closest-side default and centering; `circle()`'s
+explicit radius/position producing an exact disc (inside/outside/corner
+checks); `ellipse()`'s independent per-axis radii; `polygon()`/`path()`/a bare
+geometry keyword/`none` all resolving to no mask; and a `paint_document`
+end-to-end test (`clip_path_circle_clips_the_elements_own_content_to_the_disc`)
+confirming the box's own painted content is clipped to the circle while its
+bounding-rect corners show the parent's background through. No CSS, layout,
+compositor, driver or lockfile source changed.
+
+Linux gate: workspace nextest **2,761 passed / 0 failed / 10 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-paint` **156 passed / 0
+skipped** (up from 149 at RC-26).
+
+Still outstanding for COMP-15: `polygon()`/`path()` clip-path shapes and
+`mask-image`/`mask-*`. No WPT credit is claimed under the Linux-first
+deferral.

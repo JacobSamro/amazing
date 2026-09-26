@@ -57,7 +57,7 @@ impl Dom {
     pub fn create_processing_instruction_in(
         &mut self, document: NodeIdx, target: &str, data: &[u16],
     ) -> Result<NodeIdx, DomError> {
-        if !valid_processing_instruction_target(target) || target.eq_ignore_ascii_case("xml") {
+        if !valid_processing_instruction_target(target) {
             return Err(DomError::InvalidCharacterError);
         }
         if data.windows(2).any(|pair| pair == [b'?' as u16, b'>' as u16]) {
@@ -316,7 +316,7 @@ fn xml_name_char(c: char) -> bool {
     xml_name_start(c)
         || matches!(c, '-' | '.' | '0'..='9' | '\u{b7}' | '\u{300}'..='\u{36f}' | '\u{203f}'..='\u{2040}')
 }
-fn valid_processing_instruction_target(name: &str) -> bool {
+pub(crate) fn valid_processing_instruction_target(name: &str) -> bool {
     let mut chars = name.chars();
     chars.next().is_some_and(xml_name_start) && chars.all(xml_name_char)
 }
