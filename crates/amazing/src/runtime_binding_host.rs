@@ -173,7 +173,6 @@ impl RuntimeBindings {
         }
         Ok(())
     }
-    }
     pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
         content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
