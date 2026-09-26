@@ -5,6 +5,7 @@ pub(super) fn parse(
     tokens: &[Token],
     layer: &[LayerName],
     scopes: &[Scope],
+    media: &[String],
     anonymous: &mut usize,
     depth: usize,
 ) -> Stylesheet {
@@ -71,13 +72,15 @@ pub(super) fn parse(
                             sheet.rules.push(Rule {
                                 layer: full.clone(),
                                 scopes: scopes.to_vec(),
+                                media: media.to_vec(),
                                 selector_srcs: vec![],
                                 declarations: vec![],
                             });
                             if block {
-                                let inner = parse(body, &full, scopes, anonymous, depth + 1);
+                                let inner = parse(body, &full, scopes, media, anonymous, depth + 1);
                                 sheet.rules.extend(inner.rules);
                                 sheet.keyframes.extend(inner.keyframes);
+                                sheet.counter_styles.extend(inner.counter_styles);
                             }
                         }
                     }
@@ -85,15 +88,39 @@ pub(super) fn parse(
                         if let Some(scope) = scope_prelude(prelude, !scopes.is_empty()) {
                             let mut inner = scopes.to_vec();
                             inner.push(scope);
-                            let inner_sheet = parse(body, layer, &inner, anonymous, depth + 1);
+                            let inner_sheet = parse(body, layer, &inner, media, anonymous, depth + 1);
                             sheet.rules.extend(inner_sheet.rules);
                             sheet.keyframes.extend(inner_sheet.keyframes);
+                            sheet.counter_styles.extend(inner_sheet.counter_styles);
                         }
                     }
                     "supports" if block && supports_condition(prelude) => {
-                        let inner = parse(body, layer, scopes, anonymous, depth + 1);
+                        let inner = parse(body, layer, scopes, media, anonymous, depth + 1);
                         sheet.rules.extend(inner.rules);
                         sheet.keyframes.extend(inner.keyframes);
+                        sheet.counter_styles.extend(inner.counter_styles);
+                    }
+                    "media" if block => {
+                        let mut conditions = media.to_vec();
+                        conditions.push(serialize(prelude));
+                        let inner = parse(body, layer, scopes, &conditions, anonymous, depth + 1);
+                        sheet.rules.extend(inner.rules);
+                        sheet.keyframes.extend(inner.keyframes);
+                        sheet.counter_styles.extend(inner.counter_styles);
+                    }
+                    "counter-style" if block => {
+                        if let [Token::Ident(name)] = trim_ws(prelude) {
+                            if !matches!(name.to_ascii_lowercase().as_str(),
+                                "initial" | "inherit" | "unset" | "revert" | "revert-layer") {
+                                let mut descriptors = Parser { toks: body, pos: 0 };
+                                sheet.counter_styles.push(CounterStyleRule {
+                                    name: name.clone(),
+                                    descriptors: descriptors.block_declarations().into_iter()
+                                        .filter(|declaration| !declaration.important).collect(),
+                                    media: media.to_vec(),
+                                });
+                            }
+                        }
                     }
                     "keyframes" if block => {
                         if let Some(rule) = crate::animation::parse_keyframes(prelude, body) {
@@ -107,6 +134,7 @@ pub(super) fn parse(
                 if let Some(mut rule) = p.qualified_rule() {
                     rule.layer = layer.to_vec();
                     rule.scopes = scopes.to_vec();
+                    rule.media = media.to_vec();
                     if !rule.selector_srcs.is_empty() && !rule.declarations.is_empty() {
                         sheet.rules.push(rule);
                     }
