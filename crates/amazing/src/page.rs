@@ -156,6 +156,14 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
             (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
             (r"C:\Windows\Fonts\consola.ttf", "monospace"),
             (r"C:\Windows\Fonts\consola.ttf", "Consolas"),
+            // TEXT-21: CSS Fonts 4's standard/system-UI generic families are
+            // generic keywords even when quoted as a string. Windows has no
+            // distinct "rounded" design either, so ui-rounded rides with
+            // Segoe UI alongside ui-sans-serif/system-ui.
+            (r"C:\Windows\Fonts\times.ttf", "ui-serif"),
+            (r"C:\Windows\Fonts\segoeui.ttf", "ui-sans-serif"),
+            (r"C:\Windows\Fonts\consola.ttf", "ui-monospace"),
+            (r"C:\Windows\Fonts\segoeui.ttf", "ui-rounded"),
         ] {
             font_loader::register_system_face(provider, path, family, 400, FontSlant::Normal);
         }

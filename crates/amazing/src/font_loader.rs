@@ -464,9 +464,17 @@ fn local_font_path(lower_name: &str) -> Option<String> {
 #[cfg(not(target_os = "windows"))]
 fn local_font_path(lower_name: &str) -> Option<String> {
     let bucket = match lower_name {
-        "arial" | "helvetica" | "sans-serif" | "system-ui" | "segoe ui" => FontBucket::Sans,
-        "times new roman" | "times" | "georgia" | "serif" => FontBucket::Serif,
-        "consolas" | "courier" | "courier new" | "monospace" => FontBucket::Mono,
+        // CSS Fonts 4's standard/system-UI generic families
+        // (ui-sans-serif/ui-serif/ui-monospace/ui-rounded) are generic
+        // keywords even when quoted as a string (TEXT-21) -- map them to the
+        // same buckets as their non-"ui-" counterparts. Linux has no distinct
+        // "rounded" system design (unlike macOS's SF Pro Rounded), so
+        // ui-rounded falls back to the sans bucket, matching other engines'
+        // non-Apple-platform behavior.
+        "arial" | "helvetica" | "sans-serif" | "system-ui" | "segoe ui" | "ui-sans-serif"
+        | "ui-rounded" => FontBucket::Sans,
+        "times new roman" | "times" | "georgia" | "serif" | "ui-serif" => FontBucket::Serif,
+        "consolas" | "courier" | "courier new" | "monospace" | "ui-monospace" => FontBucket::Mono,
         _ => return None,
     };
     best_linux_font(bucket).map(|path| path.to_string_lossy().into_owned())
@@ -765,9 +773,22 @@ pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::
         }
     };
 
-    register_all(sans, &["sans-serif", "system-ui", "Arial", "Helvetica"]);
-    register_all(serif, &["serif", "Times", "Times New Roman", "Georgia"]);
-    register_all(mono, &["monospace", "Courier", "Courier New", "Consolas"]);
+    // TEXT-21: CSS Fonts 4's standard/system-UI generic families
+    // (ui-sans-serif/ui-serif/ui-monospace/ui-rounded) are generic keywords
+    // per spec even when the page quotes them as a string (WPT
+    // standard-font-family-*), so they need the same registered-face
+    // treatment as serif/sans-serif/monospace/system-ui -- otherwise they
+    // resolve to zero faces and silently render as the engine's last-resort
+    // default, indistinguishable from having no font-family at all. Linux has
+    // no distinct "rounded" system design (unlike macOS's SF Pro Rounded), so
+    // ui-rounded rides along with the sans bucket, matching other engines'
+    // non-Apple-platform behavior.
+    register_all(
+        sans,
+        &["sans-serif", "system-ui", "ui-sans-serif", "ui-rounded", "Arial", "Helvetica"],
+    );
+    register_all(serif, &["serif", "ui-serif", "Times", "Times New Roman", "Georgia"]);
+    register_all(mono, &["monospace", "ui-monospace", "Courier", "Courier New", "Consolas"]);
 }
 
 #[cfg(test)]
