@@ -76,8 +76,27 @@ POOL_TYPE = {
 }
 
 
+# Large is only worth its 2x rate on bare metal. A large resume that lands on
+# Hetzner (8 slower cores) is dropped back to default for a while, which has
+# landed on bare metal every time (2026-09-26). The reaper reads the same rule.
+DOWNSIZED = MAIN / ".agents" / ".boat-downsized.json"
+DOWNSIZE_HOURS = 6
+
+
+def downsized() -> dict:
+    try:
+        d = json.loads(DOWNSIZED.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in d.items() if v > time.time()}
+
+
+def pool_type(pool: str) -> str:
+    return "default" if pool in downsized() else POOL_TYPE.get(pool, "default")
+
+
 def type_of(lane: str) -> str:
-    return POOL_TYPE.get(pool_of(lane), "default")
+    return pool_type(pool_of(lane))
 
 
 def pool_of(lane: str) -> str:
@@ -125,11 +144,23 @@ def save_map(m: dict) -> None:
     MAP.write_text(json.dumps(m, indent=2) + "\n")
 
 
+def endpoint(d: dict) -> str | None:
+    """host:port for ssh. Bare-metal sandboxes publish sshEndpoint; Hetzner ones
+    publish none but answer on their IPv4 address, port 22 (2026-09-26)."""
+    if d.get("sshEndpoint"):
+        return d["sshEndpoint"]
+    ip = d.get("ip") or ""
+    if ip and ":" not in ip:
+        return f"{ip}:22"
+    return None
+
+
 def wait_ready(sid: str, limit: int = 300) -> dict:
     deadline = time.time() + limit
     while time.time() < deadline:
         d = info(sid)
-        if d.get("state") in READY and d.get("sshEndpoint"):
+        if d.get("state") in READY and endpoint(d):
+            d["sshEndpoint"] = endpoint(d)
             if d.get("machineProvider") != "baremetal":
                 print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
                       "(2-4x slower than bare metal)", file=sys.stderr)
@@ -179,7 +210,34 @@ def ensure(lane: str, size: str) -> dict:
     with open(MAP.with_suffix(".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         sid = _ensure_locked(pool_of(lane), size)
-    return wait_ready(sid)
+    d = wait_ready(sid)
+    if d.get("type") == "large" and d.get("machineProvider") == "hetzner" and not busy(d):
+        pool = pool_of(lane)
+        print(f"boat-lane: {sid} came up large on Hetzner; using default for "
+              f"{DOWNSIZE_HOURS} h", file=sys.stderr)
+        marks = downsized()
+        marks[pool] = time.time() + DOWNSIZE_HOURS * 3600
+        DOWNSIZED.write_text(json.dumps(marks))
+        boat("stop", sid, timeout=240)
+        with open(MAP.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            _ensure_locked(pool, "default")
+        d = wait_ready(sid)
+    return d
+
+
+def busy(d: dict) -> bool:
+    """True if another run holds a lease on this sandbox (don't restart it)."""
+    host, port = d["sshEndpoint"].rsplit(":", 1)
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15", "-i", str(KEY), "-p", port,
+             f"user@{host}", "find ~/.amazing-busy -type f -mmin -60 | wc -l"],
+            capture_output=True, text=True, timeout=60)
+        return int(r.stdout.strip() or 0) > 0
+    except (subprocess.TimeoutExpired, ValueError):
+        return True
 
 
 def _ensure_locked(lane: str, size: str) -> str:

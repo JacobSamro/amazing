@@ -86,6 +86,7 @@ dependencies = [
  "amazing-common",
  "amazing-compositor",
  "amazing-css",
+ "amazing-devtools",
  "amazing-dom",
  "amazing-fetch",
  "amazing-html",

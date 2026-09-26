@@ -7,6 +7,7 @@ use amazing_paint::controls::NoControls;
 use amazing_paint::display_list_view::DisplayListView;
 use amazing_paint::{paint_document_with_text_resources_and_controls, NoImages};
 use amazing_text::FallbackTextSystem;
+use std::path::Path;
 use std::time::Instant;
 
 const VIEWPORT: u32 = 96;
@@ -185,8 +186,27 @@ fn retained_real_page_property_trace() {
         .unwrap();
     let initial = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     assert!(!initial.resources.uploads.is_empty());
+    // The same effect node used for the opacity scenario: `EffectOperations`
+    // carries filters/blend/clip, not opacity, so animating one does not
+    // disturb the other. Reserve both endpoint halos up front, exactly as
+    // `effect_tests::reserved_blur_animation_...` does for a synthetic scene,
+    // so a sampled blur never needs a source raster mid-animation.
+    let filter_from = compositor
+        .trees()
+        .effect_operations(effect)
+        .cloned()
+        .unwrap_or_default();
+    let mut filter_to = filter_from.clone();
+    filter_to.filters = vec![amazing_compositor::FilterOperation::Blur(6.)];
+    compositor
+        .reserve_effect_animation(effect, &filter_from, &filter_to)
+        .unwrap();
+    // Reserving a wider halo can itself dirty tiles that now need the extra
+    // margin; absorb that one-time cost here so it does not land inside the
+    // "scroll" scenario's timed, zero-upload loop below.
+    let _ = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
     println!("scenario,frames,full_paint_us,retained_build_us,uploads");
-    for scenario in ["scroll", "transform", "opacity"] {
+    for scenario in ["scroll", "transform", "opacity", "filter"] {
         let mut full_us = 0;
         let mut retained_us = 0;
         let mut uploads = 0;
@@ -213,6 +233,17 @@ fn retained_real_page_property_trace() {
                     .unwrap(),
                 "opacity" => compositor
                     .set_opacity(effect, 0.5 + index as f32 / 100.)
+                    .unwrap(),
+                "filter" => compositor
+                    .set_effect_operations(
+                        effect,
+                        amazing_compositor::sample_effect_operations(
+                            &filter_from,
+                            &filter_to,
+                            (index + 1) as f32 / 20.,
+                        )
+                        .unwrap(),
+                    )
                     .unwrap(),
                 _ => unreachable!(),
             }
@@ -260,6 +291,44 @@ fn control_uses_baked_fallback_with_parity() {
         &NoControls,
     );
     assert_eq!(actual.pixels, expected.pixels);
+}
+
+/// Regression for a shell-reported panic: `PaintViewSource::new` treated
+/// `RawRasterError::RasterFailed` (a `PaintDecorations`/`PaintContent` item
+/// that `raster_raw_item` declines) as an unexpected error and panicked,
+/// instead of falling back like `UnseparableItem`. `app-mail.html` and
+/// `docs-reference.html` both have a `<table>` under `base.css`'s
+/// `table{border-collapse:collapse}`, which routes the table's row/cell
+/// backgrounds and borders through the table decoration path that
+/// `raster_raw_item` explicitly declines (`suppress_background`,
+/// `suppress_border`, non-empty `background_holes` or table `borders`).
+#[test]
+fn real_pages_with_border_collapse_tables_use_baked_fallback_without_panicking() {
+    const VIEWPORT: u32 = 1024;
+    let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/real-pages");
+    let base_css = std::fs::read_to_string(root_dir.join("assets/base.css"))
+        .expect("real-pages base.css fixture");
+    for name in ["app-mail", "docs-reference"] {
+        let html = std::fs::read_to_string(root_dir.join("pages").join(format!("{name}.html")))
+            .unwrap_or_else(|e| panic!("read {name}.html: {e}"));
+        let text = FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(&html, &base_css, VIEWPORT as f32, &text);
+        let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+        // The regression is this call not panicking.
+        let source = PaintViewSource::new(&view);
+        assert_eq!(
+            source.mode(),
+            PaintViewRasterMode::BakedFallback,
+            "{name}: a border-collapse table item declines raw-local raster"
+        );
+        let mut compositor = source.compositor(VIEWPORT, VIEWPORT).unwrap();
+        let frame = source.build_frame(&mut compositor, VIEWPORT, VIEWPORT).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls,
+        );
+        assert_eq!(actual.pixels, expected.pixels, "{name} baked-fallback pixel parity");
+    }
 }
 
 #[test]

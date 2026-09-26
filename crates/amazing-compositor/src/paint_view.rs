@@ -45,10 +45,27 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
         let mut probe = Surface::new(1, 1);
         let mode = match view.raster_raw_local(0..view.items().len(), &mut probe, (0, 0)) {
             Ok(()) => PaintViewRasterMode::RawLocal,
-            Err(RawRasterError::UnseparableItem(_)) => PaintViewRasterMode::BakedFallback,
+            // `UnseparableItem` is a paint command outside the two supported
+            // variants; `RasterFailed` is one of those two variants declining
+            // a specific item it cannot separate (observed on real pages with
+            // `border-collapse` table decorations: `raster_raw_item` returns
+            // `false` for a `PaintDecorations` box with `suppress_background`,
+            // `suppress_border` or non-empty `background_holes`, and for a
+            // `PaintContent` box with non-empty table borders — all painted by
+            // a different, non-per-item table code path). Both mean the same
+            // thing to this probe: fall back to the pixel-exact baked range
+            // raster rather than panicking on real-world content.
+            Err(RawRasterError::UnseparableItem(_) | RawRasterError::RasterFailed(_)) => {
+                PaintViewRasterMode::BakedFallback
+            }
             Err(error) => panic!("raw paint-view probe failed: {error:?}"),
         };
-        Self { view, mode, filter_inputs: Vec::new() }
+        let imported = PainterFilterSource::from_view(view);
+        let (mode, filter_inputs) = match imported {
+            Ok(provider) => (mode, provider.filter_inputs().to_vec()),
+            Err(_) => (PaintViewRasterMode::BakedFallback, Vec::new()),
+        };
+        Self { view, mode, filter_inputs }
     }
 
     /// Attach producer-resolved filters to raw paint groups. Construction is
@@ -277,7 +294,7 @@ impl PaintSource for RetainedPaintView {
 }
 
 /// Converts the view's stable per-build property IDs and direct hints.
-pub fn paint_view_metadata(
+pub(crate) fn paint_view_metadata_base(
     view: &DisplayListView<'_>,
 ) -> Result<(PropertyTrees, Vec<PaintChunk>), SceneError> {
     let mut trees = PropertyTrees::new();

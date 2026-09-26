@@ -496,6 +496,11 @@ impl Ctx {
                     i += 1;
                 }
                 Some("type") => {
+                    // `(type)` is only valid as the very first clause: before
+                    // any `(param)`, `(result)` or `(local)`.
+                    if phase != 0 || !params.is_empty() {
+                        return Err(WasmError::malformed("type use after param, result or local"));
+                    }
                     let t = self.type_idx(list[i].list().and_then(|l| l.get(1)).ok_or_else(|| WasmError::malformed("malformed type use"))?)?;
                     explicit_type = Some(t);
                     i += 1;
@@ -553,10 +558,25 @@ impl Ctx {
             }
             return Ok(());
         }
-        // Parse the body with parameters and locals in scope.
+        // Parse the body with parameters and locals in scope. When the
+        // function used only `(type $sig)` with no inline `(param)` clauses,
+        // `params` is empty even though the referenced type has parameters —
+        // those parameters still occupy the low local indices, so named
+        // locals declared in this function must start numbering after them.
+        let param_count = if params.is_empty() {
+            self.module.types.get(type_idx as usize).map_or(0, |t| t.params.len())
+        } else {
+            params.len()
+        };
         self.locals = HashMap::new();
-        self.nlocals = (params.len() + locals.len()) as u32;
-        let mut li = 0u32;
+        self.nlocals = (param_count + locals.len()) as u32;
+        // The field-iteration loop below walks the *literal* `(param)`/
+        // `(local)` clauses in the text and numbers them from 0, which is
+        // correct whenever any `(param)` clause is actually written (it
+        // counts those itself). Only when there is none in the text — all
+        // params came from an explicit `(type $sig)` reference — does
+        // numbering need to start after that type's implicit param count.
+        let mut li = if params.is_empty() { param_count as u32 } else { 0 };
         for field in list.iter().take(i).skip(1) {
             match field.head() {
                 Some("param") | Some("local") => {
@@ -768,18 +788,27 @@ impl Ctx {
                     i += 1;
                 }
             }
-            // An `(offset ...)` or a leading i32-producing expression.
+            // An `(offset ...)`, or any other leading folded expression: the
+            // old MVP shorthand `(elem <expr> <item>*)` takes ANY expression
+            // (not just `i32.const`/`global.get`) as the offset of an
+            // implicit active segment at table 0 — including a wrongly typed
+            // one, so e.g. `(elem (ref.null func))` must surface as a type
+            // mismatch (offset must be i32) rather than be reinterpreted as
+            // a passive segment with one `funcref` item. Only an explicit
+            // `(item ...)` wrapper marks a passive/declarative item here;
+            // an unwrapped, unmarked passive item needs a preceding reftype
+            // atom (`func`/`funcref`/`extern`/`externref`) instead.
             if let Some(l) = list.get(i).and_then(Sexpr::list) {
                 match l.first().and_then(Sexpr::atom) {
                     Some("offset") => {
                         offset = Some(self.parse_instrs(&l[1..], true)?);
                         i += 1;
                     }
-                    Some("i32.const") | Some("global.get") => {
-                        offset = Some(self.parse_instrs(&[list[i].clone()], true)?);
+                    Some("item") => {}
+                    _ => {
+                        offset = Some(self.parse_instrs(std::slice::from_ref(&list[i]), true)?);
                         i += 1;
                     }
-                    _ => {}
                 }
             }
         }
@@ -921,16 +950,38 @@ impl Ctx {
                 out.push(Instr::If(bt));
                 self.labels.push(label);
             }
-            "else" => out.push(Instr::Else),
+            "else" => {
+                let expected = self.labels.last().and_then(Option::as_deref);
+                self.consume_matching_label(items, i, expected)?;
+                out.push(Instr::Else);
+            }
             "end" => {
+                let closed = self.labels.pop().flatten();
+                self.consume_matching_label(items, i, closed.as_deref())?;
                 out.push(Instr::End);
-                self.labels.pop();
             }
             _ => {
                 let start = *i;
                 self.consume_immediates(op, items, i)?;
                 let instr = self.build(op, &items[start..*i])?;
                 out.push(instr);
+            }
+        }
+        Ok(())
+    }
+
+    /// In the unfolded (flat) instruction syntax, `else` and `end` may
+    /// optionally repeat the label of the block they close (`if $body ...
+    /// else $body ... end $body`), purely for readability; it must match the
+    /// label the block was opened with (or be absent if the block was
+    /// unlabeled).
+    fn consume_matching_label(&self, items: &[Sexpr], i: &mut usize, expected: Option<&str>) -> Result<()> {
+        if let Some(Sexpr::Atom(a)) = items.get(*i) {
+            if let Some(name) = a.strip_prefix('$') {
+                if expected != Some(name) {
+                    return Err(WasmError::malformed("mismatching label"));
+                }
+                *i += 1;
             }
         }
         Ok(())
@@ -1100,6 +1151,17 @@ impl Ctx {
             "memory.fill" | "memory.size" | "memory.grow" => {
                 advance_index(i);
             }
+            "select" => {
+                // The unfolded typed form `select (result t)` carries a
+                // trailing type immediate that `build` looks for; without
+                // consuming it here it would be parsed as the next,
+                // unrelated instruction (`(result ...)` is not one). Like
+                // other typeuse positions, `(result ...)` clauses may repeat
+                // and are concatenated.
+                while matches!(get(*i).and_then(Sexpr::head), Some("result")) {
+                    *i += 1;
+                }
+            }
             "i32.const" | "i64.const" | "f32.const" | "f64.const" => {
                 if get(*i).and_then(Sexpr::atom).is_none() {
                     return Err(WasmError::malformed("constant without a value"));
@@ -1146,9 +1208,15 @@ impl Ctx {
             "return" => Instr::Return,
             "drop" => Instr::Drop,
             "select" => {
-                if let Some(l) = imm.iter().find(|x| x.head() == Some("result")) {
-                    let l = l.list().expect("result");
-                    Instr::SelectT(parse_val_types(&l[1..])?.into_boxed_slice())
+                // Concatenate every `(result ...)` clause, mirroring block
+                // types and `call_indirect`'s typeuse (a module can legally
+                // repeat, or even pass an empty `(result)`, clause).
+                let mut types = Vec::new();
+                for x in imm.iter().filter(|x| x.head() == Some("result")) {
+                    types.extend(parse_val_types(&x.list().expect("result")[1..])?);
+                }
+                if imm.iter().any(|x| x.head() == Some("result")) {
+                    Instr::SelectT(types.into_boxed_slice())
                 } else {
                     Instr::Select
                 }
@@ -1177,6 +1245,12 @@ impl Ctx {
                 for e in imm {
                     match e.head() {
                         Some("type") => {
+                            // `(type)` must be the first typeuse clause: before
+                            // any `(param)`/`(result)` (a table index, if
+                            // present, still comes before all of them).
+                            if !params.is_empty() || seen_result {
+                                return Err(WasmError::malformed("type use after param or result"));
+                            }
                             ty = Some(self.type_idx(
                                 e.list().and_then(|l| l.get(1)).ok_or_else(|| WasmError::malformed("malformed type use"))?,
                             )?);

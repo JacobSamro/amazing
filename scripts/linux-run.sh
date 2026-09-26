@@ -113,7 +113,7 @@ if [ "$HOST" = boat ]; then
   ok=0
   for attempt in 1 2 3; do
     if [ "$attempt" = 1 ]; then how=ensure; else how=heal; sleep 10; fi
-    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$REPO/scripts/boat-lane.py" "$how" "$LANE") || continue
+    read -r BOAT_HOST BOAT_PORT BOAT_ID BOAT_POOL BOAT_TARGET < <("$MAIN/scripts/boat-lane.py" "$how" "$LANE") || continue
     [ "$attempt" = 1 ] && echo "linux-run[$LANE]: boat sandbox $BOAT_ID ($BOAT_POOL)" >&2
     BSSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30 -i $HOME/.ssh/ascii_box_ed25519 -p $BOAT_PORT"
     # Drop the lease if we exit before the remote command's own trap takes
@@ -134,7 +134,7 @@ cd ~/amazing/wt/$LANE || exit 3
 export CARGO_TARGET_DIR=\$HOME/$BOAT_TARGET JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE
 ln -sfn ~/corpora ~/amazing/wt/$LANE/corpora
-free=\$(df -Pk ~ | awk 'NR==2{print int(\$4/1048576)}'); [ \"\$free\" -lt 8 ] && echo \"linux-run: WARNING only \${free} GB free on this sandbox\" >&2
+free=\$(df -Pk ~ | awk 'NR==2{print int(\$4/1048576)}'); if [ \"\$free\" -lt 10 ]; then rm -rf \"\$CARGO_TARGET_DIR\"/*/incremental; find \"\$OUT\" -type f -mmin +120 -size +1M -delete 2>/dev/null; echo \"linux-run: only \${free} GB free; cleared this lane's incremental cache and outputs older than 2 h\" >&2; fi
 $CMD"
   ENCODED="$(printf '%s' "$REMOTE" | base64 | tr -d '\n')"
   T0=$(date +%s)

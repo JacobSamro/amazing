@@ -202,7 +202,9 @@ pub fn origin_of(url: &str) -> String {
     }
 }
 
-fn evaluate_result(result: &EvaluateResult) -> Json {
+/// Serializes a CDP `Runtime.RemoteObject`/`ExceptionDetails` evaluation
+/// result. Shared with `Debugger.evaluateOnCallFrame`.
+pub(crate) fn evaluate_result(result: &EvaluateResult) -> Json {
     let mut fields = vec![("result", remote_object(&result.result))];
     if let Some(exception) = &result.exception {
         fields.push(("exceptionDetails", exception_details(exception)));

@@ -970,6 +970,11 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "mask-composite", initial: "add", inherited: false },
     PropertyMetadata { name: "mask-type", initial: "luminance", inherited: true },
     PropertyMetadata { name: "color-scheme", initial: "normal", inherited: true },
+    // CSS Contain 3: not evaluated (no size-container-query matching), but
+    // registered so `initial`/`inherit`/`unset` resolve instead of dropping
+    // the declaration entirely.
+    PropertyMetadata { name: "container-name", initial: "none", inherited: false },
+    PropertyMetadata { name: "container-type", initial: "normal", inherited: false },
 ];
 
 pub(crate) fn initial_value(name: &str) -> Option<&'static str> {
@@ -4037,14 +4042,14 @@ mod tests {
     #[test]
     fn font_shorthand_expands_size_line_height_family_and_resets_optionals() {
         let expanded =
-            expand_declaration("font", "italic 700 120px / 2 \"Arabic Test\",sans-serif");
+            expand_declaration("font", "italic 700 120px / 2 \"Arabic Test\", sans-serif");
         let values: BTreeMap<_, _> = expanded.into_iter().collect();
 
         assert_eq!(values.get("font-size").map(String::as_str), Some("120px"));
         assert_eq!(values.get("line-height").map(String::as_str), Some("2"));
         assert_eq!(
             values.get("font-family").map(String::as_str),
-            Some("\"Arabic Test\",sans-serif")
+            Some("\"Arabic Test\", sans-serif")
         );
         assert_eq!(values.get("font-style").map(String::as_str), Some("italic"));
         assert_eq!(

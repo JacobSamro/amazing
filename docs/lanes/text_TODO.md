@@ -510,3 +510,118 @@ from real pages — computed `font-variant-caps`/`font-variant-position` into
 the audit found no CSS-owned gap (both properties are already parsed and
 computed as plain keyword strings), and the layout side ties into the
 already-open `font-synthesis` wiring request from TEXT-13.
+
+## TEXT-17: Linux glyph rendering was a solid box for every character
+
+Root cause: `register_system_text_faces` in `crates/amazing/src/page.rs` (and
+`FontFaceLoader::load_local` in `crates/amazing/src/font_loader.rs`, for
+`src: local(...)`) hardcoded Windows-only `C:\Windows\Fonts\*.ttf` paths for
+the generic families (`serif`/`sans-serif`/`monospace`/`system-ui`) and named
+families (`Arial`, `Times`, `Consolas`, ...). `amazing_net::fetch` on those
+paths fails on Linux, so every one of those `continue`s silently: zero font
+faces were ever registered, for any family, on Linux. Pages that rely on the
+UA default (`body { font-family: serif }`, the common case — `docs-index.html`
+in the real-pages corpus declares no `font-family` at all) then resolved to
+no usable face, and the engine's no-face fallback path painted every glyph as
+a full-coverage box instead of an outline (visible in
+`amazing-shell-gpui/evidence/linux/shell-docs-index.png`: chrome text, drawn
+by GPUI, was fine; every engine-rendered glyph was a filled rectangle).
+
+Headless reproduction first, per instruction: `amazing render
+tests/real-pages/pages/docs-index.html out.bmp 960` on the Boat sandbox,
+converted to PNG and inspected — confirmed the same solid-box rendering
+headless, isolating the bug to the engine's paint/font pipeline rather than
+anything GPUI-specific.
+
+Fix, in `crates/amazing/src/font_loader.rs` (text's outright file — kept the
+`page.rs` diff to only the already-granted `register_system_text_faces`
+function body, which now dispatches on `cfg(target_os = "windows")` and
+otherwise calls into `font_loader`): a bounded scan of the standard Linux
+font directories (`/usr/share/fonts`, `/usr/local/share/fonts`,
+`$HOME/.fonts`, `$HOME/.local/share/fonts`; depth <= 8, <= 4096 files) with
+filename-only classification into sans/serif/mono buckets (`serif` in the
+name and not `sans` -> serif; `mono` in the name -> mono; else sans), scored
+to prefer well-known, broadly-hinted families (DejaVu > Liberation > Noto >
+Freefont/Free) and plain regular weights over bold/italic/condensed
+variants, deterministic tie-break. The winning file per bucket is registered
+under the generic family plus a handful of common named aliases pages
+request directly (sans -> `sans-serif`/`system-ui`/`Arial`/`Helvetica`, serif
+-> `serif`/`Times`/`Times New Roman`/`Georgia`, mono ->
+`monospace`/`Courier`/`Courier New`/`Consolas`). `load_local` gets the same
+treatment for `src: local(...)` lookups via a small alias table into the same
+three buckets. No new dependency: pure `std::fs` scan, no fontconfig binding.
+
+On the Boat sandbox (Ubuntu 24.04, `pool-layout`), this resolves to DejaVu
+Sans/Serif/Sans Mono (97 font files present: DejaVu, Liberation, Lato, Noto,
+URW base35, Droid, FontAwesome). Headless re-render of the same page: PNG
+grew from 2,791 bytes (solid boxes) to 62,527 bytes (real antialiased glyph
+outlines); visually confirmed by reading both PNGs.
+
+Regression test: `glyphs_render_as_outlines_not_solid_boxes` in
+`crates/amazing/src/driver_tests.rs` renders `<div style="font-size:120px">
+OOO</div>` with no explicit `font-family` (exercising the same UA-default
+path as docs-index.html) through `cmd::render::render_surface`, finds the
+tight bounding box of dark pixels, and asserts foreground coverage within
+that box is under 85% — a real "O" has a light interior counter, a
+full-coverage box does not. Verified both directions: fails at 100.0% dark
+coverage with `register_linux_system_faces` temporarily disabled, passes at
+the real (much lower) coverage with the fix in place.
+
+`scripts/linux-shell-capture.sh` failed on this pooled sandbox for an
+unrelated reason (`amazing-shell-gpui/Cargo.lock` "cannot update the lock
+file because --locked was passed" — a stale lockfile issue on the shared
+sandbox, not Xvfb-related); per the coordinator's stated fallback, the
+headless render PNG is the proof, saved at
+`.agents/text/captures/text17-glyphs-headless.png` (+ `.json` metadata).
+
+Gate: crate tests `amazing-text`/`amazing-text-provider`/`amazing` 340/340
+(6 skipped), including the new regression test, and the real-pages corpus
+harness (`amazing::real_pages`) green. Workspace nextest 2993/2993 (11
+skipped), workspace doctests green. Commit: see `.agents/text/status.json`.
+
+## TEXT-18: pinned css-fonts pixel selections, first Linux measurement
+
+WPT was unavailable on the Boat sandbox through TEXT-14/15/16 (filed gap in
+`.agents/text/questions.md`), so those tickets gated on unit tests or a
+hand-rolled focused subset. `scripts/ensure-wpt.sh` now provisions the pinned
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` checkout on the sandbox, so this
+ticket runs the lane's four pinned manifests there for the first time:
+`text1-fonts-manifest.json` (15), `text2-font-face-manifest.json` (8),
+`text5-vertical-manifest.json` (7), `text12-expanded-manifest.json` (40).
+
+New comparator `crates/amazing-text-provider/evidence/text18-render-wpt.py`,
+a Python port of `scripts/run-render-wpt.ps1`'s comparison (exact PPM diff,
+`<meta name=fuzzy>` tolerance, `mismatch`-relation inversion) that runs
+`amazing render-wpt <page> <out.ppm> 800 600` with `AMAZING_WPT_ROOT` set to
+the checkout — the same driver command and viewport the Windows harness
+uses, so the numbers are directly comparable, just measured on Linux instead
+of win-001. Each selection was run twice back to back with identical counts
+and per-test actual/reference/diff SHA-256 (stable).
+
+Results at `bbd741b6` (TEXT-17, on this branch):
+- fonts (15): **14 pass / 1 mismatch** — matches TEXT-13's win-001 number
+  exactly; the one mismatch is `font-unicode-PUA-primary-font`, the
+  environment-owned PUA-coverage case.
+- font-face (8): **4 pass / 4 mismatch** — matches the TEXT-12/13 win-001
+  number (retained both tickets); the four `matching__*` mismatches are the
+  pre-existing `@font-face` descriptor-matching gap, the four `variations__*`
+  cases pass.
+- vertical (7): **5 pass / 2 mismatch** — matches TEXT-12's win-001 number;
+  both mismatches are layout-owned per the existing TEXT-7..13 routing.
+- expanded (40): **40 pass / 0 mismatch** — up from TEXT-13's win-001 38/40;
+  the two prior mismatches (`font-kerning-02` and the `font-size-adjust`
+  area) are gone, consistent with TEXT-14's kerning-axis fix landing after
+  TEXT-13 was measured. First Linux run of this selection.
+
+Total: 63 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash
+across 70 cases. Every number either matches or improves on the last
+Windows measurement — zero regressions crossing platforms. Before TEXT-17's
+fix this corpus would have rendered as full-coverage boxes throughout
+(register_system_text_faces registered no face for any family on Linux), so
+these are the first *meaningful* Linux numbers for it. Evidence:
+`crates/amazing-text-provider/evidence/text18-gate-summary.json` and the four
+`text18-*-linux.json` result files.
+
+Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
+skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
+workspace doctests green (`--locked --doc`).

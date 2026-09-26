@@ -193,6 +193,9 @@ pub struct LayoutBox {
     pub(crate) containing_block_height: Option<f32>,
     /// Parent grid tracks inherited by a subgrid in either axis.
     pub(crate) grid_subgrid: Option<grid::SubgridContext>,
+    /// Resolved track geometry of this box when it is a grid/grid-lanes
+    /// container, used by absolutely-positioned descendants' static position.
+    pub(crate) grid_tracks: Option<grid::GridTracks>,
 
     // --- box model, resolved at layout time ---
     pub margin: values::SidesM,
@@ -241,6 +244,7 @@ impl LayoutBox {
             table_rowspan: 1,
             containing_block_height: None,
             grid_subgrid: None,
+            grid_tracks: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
             border: values::Sides::default(),
