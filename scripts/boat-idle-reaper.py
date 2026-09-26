@@ -108,7 +108,7 @@ def starts_left_this_hour() -> int | None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--idle-minutes", type=float, default=5)
+    ap.add_argument("--idle-minutes", type=float, default=15)
     # Every resume counts against Boat's 60 starts per hour. When few are left,
     # stopping early just forces a resume that may be refused, so wait longer.
     ap.add_argument("--scarce-idle-minutes", type=float, default=20)
