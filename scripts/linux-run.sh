@@ -105,12 +105,17 @@ if [ "$HOST" = boat ]; then
   # Pooled sandboxes host several lanes: each lane syncs into its own
   # ~/amazing/wt/<lane>, and all share ~/amazing/target. Cargo's lock on that
   # directory serializes the lanes' compiles; dependencies stay warm for all.
-  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE" || {
+  # A lease file marks the sandbox busy for boat-idle-reaper.py from before the
+  # sync until the command exits; without it the reaper stopped a sandbox
+  # mid-sync (low load, no cargo yet) and killed the run (2026-09-26).
+  LEASE=".amazing-busy/$LANE.$$"
+  $BSSH "$BOAT_HOST" "mkdir -p amazing/wt/$LANE amazing/out/$LANE .amazing-busy && touch $LEASE" || {
     echo "linux-run: cannot reach $BOAT_ID" >&2; exit 3; }
   rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /out --exclude /corpora \
     --exclude /.agents --exclude /.opencode --exclude .DS_Store -e "$BSSH" "$SRC/" "$BOAT_HOST:amazing/wt/$LANE/" || {
     echo "linux-run: rsync to $BOAT_ID failed" >&2; exit 3; }
-  REMOTE=". ~/.amazing-env
+  REMOTE="trap 'rm -f ~/$LEASE' EXIT
+. ~/.amazing-env
 cd ~/amazing/wt/$LANE || exit 3
 export CARGO_TARGET_DIR=\$HOME/amazing/target JOBS=\$(nproc) CARGO_BUILD_JOBS=\$(nproc)
 export TEST262_ROOT=\$HOME/corpora/test262 RUSTUP_TOOLCHAIN=1.97.1 OUT=\$HOME/amazing/out/$LANE

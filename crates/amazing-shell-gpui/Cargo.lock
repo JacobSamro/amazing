@@ -233,6 +233,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-ipc"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-ipc-platform"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "amazing-js"
 version = "0.0.1"
 dependencies = [
@@ -288,6 +300,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-process"
+version = "0.0.1"
+dependencies = [
+ "amazing-compositor",
+ "amazing-css",
+ "amazing-dom",
+ "amazing-fetch",
+ "amazing-html",
+ "amazing-image",
+ "amazing-ipc",
+ "amazing-ipc-platform",
+ "amazing-layout",
+ "amazing-media",
+ "amazing-net",
+ "amazing-paint",
+ "amazing-storage",
+ "amazing-svg",
+ "amazing-text-provider",
+]
+
+[[package]]
 name = "amazing-regex"
 version = "0.0.1"
 
@@ -306,6 +339,7 @@ dependencies = [
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-process",
  "amazing-text",
  "amazing-text-provider",
  "amazing-webrtc-codecs",
@@ -314,6 +348,10 @@ dependencies = [
  "image",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "amazing-storage"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-svg"

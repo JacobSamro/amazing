@@ -44,6 +44,15 @@ fn looks_like_missing_feature(error: &str) -> bool {
     MARKERS.iter().any(|marker| lower.contains(marker))
 }
 
+/// Collapse a renderer warning like `image "URL": UnsupportedSvg` to its error
+/// kind so per-URL messages cluster.
+fn warning_kind(warning: &str) -> String {
+    match warning.rsplit_once("\": ") {
+        Some((_, kind)) => kind.to_owned(),
+        None => warning.to_owned(),
+    }
+}
+
 fn sanitize(url: &str) -> String {
     let mut out = String::new();
     for c in url.chars() {
@@ -63,6 +72,7 @@ struct Row {
     url: String,
     status: String,
     errors: Vec<String>,
+    warnings: Vec<String>,
     probe: Vec<(String, String)>,
     render_ms: u64,
     total_ms: u64,
@@ -112,6 +122,7 @@ fn run_page(binary: &str, url: &str, probe: &Path, out_dir: &Path, timeout: Dura
     let mut wrote_image = false;
     let mut nonwhite = 0;
     let mut errors = Vec::new();
+    let mut warnings = Vec::new();
     let mut probe_values = Vec::new();
     for line in stdout.lines() {
         if let Some(rest) = line.strip_prefix("SUMMARY\t") {
@@ -140,6 +151,14 @@ fn run_page(binary: &str, url: &str, probe: &Path, out_dir: &Path, timeout: Dura
             }
         }
     }
+    // Media/resource warnings are printed by the renderer even on a successful
+    // page; keep them separate from errors so the live report can cluster them
+    // (for example UnsupportedSvg or an unsupported image format).
+    for line in stderr.lines() {
+        if let Some(warning) = line.strip_prefix("amazing render: ") {
+            warnings.push(warning.to_owned());
+        }
+    }
     if timed_out {
         errors.push(format!("timeout after {}s", timeout.as_secs()));
     }
@@ -147,6 +166,7 @@ fn run_page(binary: &str, url: &str, probe: &Path, out_dir: &Path, timeout: Dura
         url: url.to_owned(),
         status,
         errors,
+        warnings,
         probe: probe_values,
         render_ms,
         total_ms,
@@ -189,12 +209,13 @@ fn live_pages_corpus() {
     let _ = std::fs::remove_dir_all(&out_dir);
 
     // Aggregates.
-    let mut table = String::from("url\tstatus\terrors\tfallbacks\trender_ms\ttotal_ms\tnonwhite\texit\tfirst_error\n");
+    let mut table = String::from("url\tstatus\terrors\twarnings\tfallbacks\trender_ms\ttotal_ms\tnonwhite\texit\tfirst_error\n");
     let mut errored = 0;
     let mut crashes = 0;
     let mut missing: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut probed: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut error_freq: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut warn_freq: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for row in &rows {
         let fallbacks = row.errors.iter().filter(|e| looks_like_missing_feature(e)).count();
         if !row.errors.is_empty() {
@@ -206,6 +227,9 @@ fn live_pages_corpus() {
         for error in &row.errors {
             *error_freq.entry(error.clone()).or_default() += 1;
         }
+        for warning in &row.warnings {
+            *warn_freq.entry(warning_kind(warning)).or_default() += 1;
+        }
         for (name, kind) in &row.probe {
             if kind != "error" {
                 *probed.entry(name.clone()).or_default() += 1;
@@ -215,9 +239,9 @@ fn live_pages_corpus() {
             }
         }
         table.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            row.url, row.status, row.errors.len(), fallbacks, row.render_ms,
-            row.total_ms, row.nonwhite, row.exit,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            row.url, row.status, row.errors.len(), row.warnings.len(), fallbacks,
+            row.render_ms, row.total_ms, row.nonwhite, row.exit,
             row.errors.first().map(String::as_str).unwrap_or(""),
         ));
     }
@@ -249,6 +273,14 @@ fn live_pages_corpus() {
         err_report.push_str(&format!("| {} | {} |\n", count, error.replace('|', "\\|")));
     }
 
+    let mut warn_report = String::from("# IA-LIVE-PAGES — renderer/resource warnings by frequency\n\n| count | warning kind |\n|---:|---|\n");
+    let mut warn_ranked: Vec<(&String, &usize)> = warn_freq.iter().collect();
+    warn_ranked.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    for (warning, count) in warn_ranked.iter().take(30) {
+        warn_report.push_str(&format!("| {} | {} |\n", count, warning.replace('|', "\\|")));
+    }
+    println!("{warn_report}");
+
     let evidence_dir = std::env::var_os("AMAZING_LIVE_PAGES_EVIDENCE")
         .map(PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/live_pages/evidence"));
@@ -260,4 +292,5 @@ fn live_pages_corpus() {
     let _ = std::fs::write(evidence_dir.join("run.tsv"), format!("{header}{table}"));
     let _ = std::fs::write(evidence_dir.join("top-missing-apis.md"), api_report);
     let _ = std::fs::write(evidence_dir.join("errors.md"), err_report);
+    let _ = std::fs::write(evidence_dir.join("warnings.md"), warn_report);
 }

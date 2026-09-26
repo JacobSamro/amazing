@@ -20,7 +20,12 @@ scripts/linux-run.sh integrator-assist -- \
    cargo nextest run -p amazing --locked --run-ignored -E "test(live_pages)" --no-capture'
 ```
 
-Evidence (`run.tsv`, `top-missing-apis.md`, `errors.md`) is written under
-`crates/amazing/tests/live_pages/evidence/` by default, or to
+Evidence (`run.tsv`, `top-missing-apis.md`, `errors.md`, `warnings.md`) is written
+under `crates/amazing/tests/live_pages/evidence/` by default, or to
 `$AMAZING_LIVE_PAGES_EVIDENCE` when set. This corpus is a robustness net, not
 conformance credit.
+
+`warnings.md` clusters the renderer's per-resource warnings (`UnsupportedSvg`,
+unsupported image/font formats) by kind; `errors.md` clusters page-script and
+fetch failures; `top-missing-apis.md` counts probed APIs whose `typeof` is
+`undefined` per page.

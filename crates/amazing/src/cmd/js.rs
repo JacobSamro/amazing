@@ -8,21 +8,52 @@ pub(crate) struct PageScript {
     pub(crate) body: String,
 }
 
+/// A `<script>` is classic JavaScript only when its `type` is absent, empty, or
+/// a JavaScript MIME type. Data blocks (`application/ld+json`, `text/template`,
+/// `importmap`, ...) must never execute, and modules are not supported here, so
+/// both are skipped instead of being parsed as classic scripts. Executing a
+/// data block or a module as classic JS produced spurious parse errors on real
+/// pages.
+fn is_classic_javascript_type(raw: Option<&str>) -> bool {
+    let Some(raw) = raw else { return true };
+    let value = raw.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    value.is_empty()
+        || matches!(
+            value.as_str(),
+            "text/javascript"
+                | "application/javascript"
+                | "application/ecmascript"
+                | "text/ecmascript"
+                | "application/x-javascript"
+                | "text/x-javascript"
+                | "text/jscript"
+                | "text/livescript"
+        )
+}
+
 pub(crate) fn collect_script_text(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
     scripts: &mut Vec<PageScript>,
 ) {
     if dom.name(node) == Some("script") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let script_type = attrs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("type"))
+            .map(|(_, value)| value.as_str());
+        if !is_classic_javascript_type(script_type) {
+            return;
+        }
         let mut source = String::new();
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
                 source.push_str(data);
             }
         }
-        let src = dom
-            .attrs_of(node)
-            .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+        let src = attrs
+            .iter()
+            .find(|(name, _)| name == "src")
             .map(|(_, value)| value.clone());
         if src.is_some() || !source.trim().is_empty() {
             scripts.push(PageScript { src, body: source });
@@ -420,5 +451,28 @@ mod tests {
         assert_eq!(wpt_root_relative_url("https://example.org/page", "/common/helper.js", &root), None);
         assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), "/C:/outside.js", &root), Some("about:invalid#blocked-wpt-resource".into()));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_classic_javascript_script_types_execute() {
+        assert!(is_classic_javascript_type(None));
+        assert!(is_classic_javascript_type(Some("")));
+        assert!(is_classic_javascript_type(Some("text/javascript")));
+        assert!(is_classic_javascript_type(Some("TEXT/JavaScript; charset=utf-8")));
+        assert!(is_classic_javascript_type(Some("application/javascript")));
+        for data in [
+            "module",
+            "application/ld+json",
+            "application/json",
+            "text/template",
+            "importmap",
+            "text/html",
+            "speculationrules",
+        ] {
+            assert!(
+                !is_classic_javascript_type(Some(data)),
+                "{data} must not run as classic JS"
+            );
+        }
     }
 }
