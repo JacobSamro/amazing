@@ -1,0 +1,30 @@
+{
+  "before": "crates/amazing-layout/evidence/layout22/final-after/tables/report.json",
+  "after": "/home/user/amazing/out/layout/layout23/candidate2/tables/report.json",
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 386,
+  "before_counts": {
+    "pass": 309,
+    "mismatch": 77,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 310,
+    "mismatch": 76,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "gains": [
+    "css-tables__absolute-tables-016.html"
+  ],
+  "losses": [],
+  "actual_hash_changes": 2,
+  "reference_hash_changes": 3,
+  "before_projection_sha256": "b60cc98f293955bca4234763d339440309e1babbc4576d33ced3076ecf2626f9",
+  "after_projection_sha256": "71be257cb0fdff4f8f6a8d6ec90547a99a18925c23df5da23e982d80ac15a2bb"
+}

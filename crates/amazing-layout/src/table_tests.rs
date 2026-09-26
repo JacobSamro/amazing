@@ -117,8 +117,8 @@ fn table_auto_uses_content_and_distributes_extra_width() {
             shaped,
         );
         let c = collect(&b, Role::Cell);
-        near(c[0].border_box.w, 80.0);
-        near(c[1].border_box.w, 120.0);
+        near(c[0].border_box.w, 200.0 / 3.0);
+        near(c[1].border_box.w, 400.0 / 3.0);
     }
 }
 #[test]
@@ -219,11 +219,17 @@ fn collapsed_border_joins_cover_short_empty_rows() {
         false,
     );
     let t = collect(&b, Role::Table)[0];
-    let x = t.table_decoration().borders.iter()
+    let x = t
+        .table_decoration()
+        .borders
+        .iter()
         .filter(|edge| !edge.horizontal && edge.rect.w == 10.0)
         .map(|edge| edge.rect.x)
         .fold(f32::INFINITY, f32::min);
-    let mut left_edges = t.table_decoration().borders.iter()
+    let mut left_edges = t
+        .table_decoration()
+        .borders
+        .iter()
         .filter(|edge| !edge.horizontal && edge.rect.w == 10.0 && (edge.rect.x - x).abs() < 0.02)
         .collect::<Vec<_>>();
     left_edges.sort_by(|a, b| a.rect.y.total_cmp(&b.rect.y));
@@ -468,5 +474,325 @@ fn table_intrinsic_width_in_a_float_honors_width_and_collapsed_padding() {
         );
         near(kids(&b)[0].border_box.w, 100.0);
         near(kids(&b)[0].border_box.h, 100.0);
+    }
+}
+
+#[test]
+fn fixed_table_distributes_excess_by_column_kind_and_width() {
+    for shaped in [false, true] {
+        for (columns, expected) in [
+            (
+                "<col style='width:20px'><col style='width:60px'>",
+                [40.0, 120.0],
+            ),
+            (
+                "<col style='width:25%'><col style='width:25%'>",
+                [80.0, 80.0],
+            ),
+            ("<col style='width:40px'><col>", [40.0, 120.0]),
+            (
+                "<col style='width:0px'><col style='width:0px'>",
+                [80.0, 80.0],
+            ),
+        ] {
+            let b = layout(
+                &format!("<body><table>{columns}<tr><td></td><td></td></tr></table>"),
+                "table{table-layout:fixed;width:160px}",
+                shaped,
+            );
+            let cells = collect(&b, Role::Cell);
+            near(cells[0].border_box.w, expected[0]);
+            near(cells[1].border_box.w, expected[1]);
+        }
+    }
+    // The pinned scripted fixed-layout-excess-width-distribution fixture:
+    // excess goes to absolute columns before percentage columns.
+    let b = layout(
+        "<body><table><tr><td style='width:20px'></td><td style='width:10px'></td><td style='width:10%'></td></tr></table>",
+        "table{table-layout:fixed;width:300px}",
+        false,
+    );
+    for (cell, width) in collect(&b, Role::Cell).iter().zip([180.0, 90.0, 30.0]) {
+        near(cell.border_box.w, width);
+    }
+}
+
+#[test]
+fn fixed_table_preserves_lengths_when_percentages_overcommit() {
+    for columns in [
+        "<col style='width:100px'><col style='width:80%'>",
+        "<col style='width:calc(50px + 40%)'><col style='width:calc(50px + 40%)'>",
+    ] {
+        let b = layout(
+            &format!("<body><table>{columns}<tr><td></td><td></td></tr></table>"),
+            "table{table-layout:fixed;width:200px}",
+            false,
+        );
+        let cells = collect(&b, Role::Cell);
+        near(cells[0].border_box.w, 100.0);
+        near(cells[1].border_box.w, 100.0);
+        near(collect(&b, Role::Table)[0].border_box.w, 200.0);
+    }
+}
+
+#[test]
+fn fixed_table_colgroup_fallback_and_spanning_cell_use_unassigned_columns() {
+    let b = layout(
+        "<body><table><colgroup style='width:40px'><col><col style='width:60px'></colgroup><col><tr><td colspan='2' style='width:200px'></td><td></td></tr></table>",
+        "table{table-layout:fixed;width:160px}",
+        false,
+    );
+    let cols = collect(&b, Role::Column);
+    near(cols[0].border_box.w, 40.0);
+    near(cols[1].border_box.w, 60.0);
+    near(cols[2].border_box.w, 60.0);
+    let b = layout(
+        "<body><table><col style='width:40px'><col><col><tr><td colspan='2' style='width:100px'></td><td></td></tr></table>",
+        "table{table-layout:fixed;width:160px}",
+        false,
+    );
+    let cols = collect(&b, Role::Column);
+    near(cols[0].border_box.w, 40.0);
+    near(cols[1].border_box.w, 60.0);
+    near(cols[2].border_box.w, 60.0);
+}
+
+#[test]
+fn table_cell_box_sizing_and_fixed_percentage_offsets() {
+    for algorithm in ["auto", "fixed"] {
+        for (sizing, expected) in [("border-box", 100.0), ("content-box", 124.0)] {
+            let b = layout(
+                "<body><table><tr><td></td><td></td></tr></table>",
+                &format!(
+                    "table{{table-layout:{algorithm};width:200px}}td:first-child{{width:100px;padding:10px;border:2px solid;box-sizing:{sizing}}}"
+                ),
+                false,
+            );
+            // The second, unconstrained column absorbs remaining space in fixed
+            // mode. In auto mode isolate the outer width with shrink-to-fit.
+            if algorithm == "fixed" {
+                near(collect(&b, Role::Cell)[0].border_box.w, expected);
+            }
+            let b = layout(
+                "<body><table><tr><td></td></tr></table>",
+                &format!("td{{width:100px;padding:10px;border:2px solid;box-sizing:{sizing}}}"),
+                false,
+            );
+            near(collect(&b, Role::Table)[0].border_box.w, expected);
+        }
+    }
+    let b = layout(
+        "<body><table><tr><td></td><td></td></tr></table>",
+        "table{table-layout:fixed;width:200px}td:first-child{width:50%;padding:10px;border:2px solid}",
+        false,
+    );
+    near(collect(&b, Role::Cell)[0].border_box.w, 124.0);
+    near(collect(&b, Role::Cell)[1].border_box.w, 76.0);
+}
+
+#[test]
+fn auto_table_prioritizes_percent_then_unconstrained_columns() {
+    for shaped in [false, true] {
+        let b = layout(
+            "<body><table><tr><td style='width:25%'></td><td style='width:40px'></td><td></td></tr></table>",
+            "table{width:200px}",
+            shaped,
+        );
+        let c = collect(&b, Role::Cell);
+        near(c[0].border_box.w, 50.0);
+        near(c[1].border_box.w, 40.0);
+        near(c[2].border_box.w, 110.0);
+        let b = layout(
+            "<body><table><tr><td style='width:80%'></td><td style='width:80%'></td></tr></table>",
+            "table{width:200px}",
+            shaped,
+        );
+        let c = collect(&b, Role::Cell);
+        near(c[0].border_box.w, 160.0);
+        near(c[1].border_box.w, 40.0);
+    }
+}
+
+#[test]
+fn auto_table_spanning_percentage_preserves_existing_column_shares() {
+    let b = layout(
+        "<body><table><col style='width:30%'><col><col><tr><td colspan='2' style='width:70%'></td><td></td></tr></table>",
+        "table{width:200px}",
+        false,
+    );
+    let cols = collect(&b, Role::Column);
+    near(cols[0].border_box.w, 60.0);
+    near(cols[1].border_box.w, 80.0);
+    near(cols[2].border_box.w, 60.0);
+}
+
+#[test]
+fn table_min_width_participates_in_column_distribution() {
+    for algorithm in ["auto", "fixed"] {
+        let b = layout(
+            "<body><table><tr><td></td><td></td></tr></table>",
+            &format!("table{{table-layout:{algorithm};width:100px;min-width:200px}}"),
+            false,
+        );
+        near(collect(&b, Role::Table)[0].border_box.w, 200.0);
+        for cell in collect(&b, Role::Cell) {
+            near(cell.border_box.w, 100.0);
+        }
+    }
+}
+
+#[test]
+fn fixed_spans_subtract_existing_columns_across_length_and_percentage_terms() {
+    for (column, cell, expected) in [
+        ("40px", "50%", [40.0, 60.0, 100.0]),
+        ("30%", "100px", [60.0, 40.0, 100.0]),
+    ] {
+        let b = layout(
+            &format!(
+                "<body><table><col style='width:{column}'><col><col><tr><td colspan='2' style='width:{cell}'></td><td></td></tr></table>"
+            ),
+            "table{table-layout:fixed;width:200px}",
+            false,
+        );
+        let cols = collect(&b, Role::Column);
+        for (col, width) in cols.iter().zip(expected) {
+            near(col.border_box.w, width);
+        }
+    }
+}
+
+#[test]
+fn auto_table_cell_min_max_constraints_use_outer_box_sizes() {
+    for shaped in [false, true] {
+        for (sizing, expected) in [("content-box", 60.0), ("border-box", 40.0)] {
+            let b = layout(
+                "<body><table><tr><td></td></tr></table>",
+                &format!("td{{min-width:40px;padding:10px;box-sizing:{sizing}}}"),
+                shaped,
+            );
+            near(collect(&b, Role::Table)[0].border_box.w, expected);
+        }
+        let b = layout(
+            "<body><table><tr><td>x x x x x x x</td></tr></table>",
+            "td{max-width:30px}",
+            shaped,
+        );
+        near(collect(&b, Role::Table)[0].border_box.w, 30.0);
+    }
+}
+
+#[test]
+fn auto_table_percentage_max_width_caps_share_not_intrinsic_text() {
+    let b = layout(
+        "<body><table><tr><td style='width:80%;max-width:25%'></td><td></td></tr></table>",
+        "table{width:200px}",
+        false,
+    );
+    let cells = collect(&b, Role::Cell);
+    near(cells[0].border_box.w, 50.0);
+    near(cells[1].border_box.w, 150.0);
+    let b = layout(
+        "<body><table><tr><td>x x x x</td></tr></table>",
+        "td{min-width:90%;max-width:10%}",
+        false,
+    );
+    let reference = layout("<body><table><tr><td>x x x x</td></tr></table>", "", false);
+    near(
+        collect(&b, Role::Table)[0].border_box.w,
+        collect(&reference, Role::Table)[0].border_box.w,
+    );
+}
+
+#[test]
+fn auto_table_scroll_cell_max_width_limits_track_without_shrinking_contents() {
+    for shaped in [false, true] {
+        for overflow in ["auto", "scroll", "hidden"] {
+            let b = layout(
+                "<body><table><tr><td><div></div></td></tr></table>",
+                &format!(
+                    "td{{max-width:100px;overflow-x:{overflow}}}td div{{width:120px;height:50px}}"
+                ),
+                shaped,
+            );
+            near(collect(&b, Role::Table)[0].border_box.w, 100.0);
+            let cell = collect(&b, Role::Cell)[0];
+            near(cell.border_box.w, 100.0);
+            near(kids(cell)[0].border_box.w, 120.0);
+        }
+    }
+}
+
+#[test]
+fn fixed_table_decoration_stays_in_tracks_narrower_than_cell_offsets() {
+    for shaped in [false, true] {
+        for (padding, borders) in [
+            ("50px 25px", ""),
+            (
+                "50px 10px",
+                "border-left:15px solid;border-right:15px solid",
+            ),
+            ("50px 25px 50px 0", "border-left:25px solid"),
+            ("50px 0 50px 25px", "border-right:25px solid"),
+        ] {
+            let b = layout(
+                "<body><table><tr><td></td><td id='middle'></td><td></td></tr></table>",
+                &format!(
+                    "table{{table-layout:fixed;width:100px}}td{{padding:{padding}}}#middle{{width:50%;{borders}}}"
+                ),
+                shaped,
+            );
+            let cells = collect(&b, Role::Cell);
+            for (cell, (x, width)) in cells.iter().zip([(0.0, 0.0), (0.0, 100.0), (100.0, 0.0)]) {
+                near(cell.border_box.x, x);
+                near(cell.border_box.w, width);
+                near(cell.border_box.h, 100.0);
+                near(cell.content_box.w, if width > 0.0 { 50.0 } else { 0.0 });
+            }
+        }
+    }
+}
+
+#[test]
+fn fixed_table_column_percentages_exclude_table_borders_and_spacing() {
+    for (width, border, spacing, columns, expected) in [
+        (
+            "533px",
+            29,
+            15,
+            "13% 22% 31% auto",
+            [52.0, 88.0, 124.0, 136.0],
+        ),
+        (
+            "533px",
+            29,
+            15,
+            "13% 100px 31% auto",
+            [52.0, 100.0, 124.0, 124.0],
+        ),
+        (
+            "80%",
+            11,
+            18,
+            "13% 100px 31% auto",
+            [52.0, 100.0, 124.0, 124.0],
+        ),
+    ] {
+        let cols = columns
+            .split_whitespace()
+            .map(|w| format!("<col style='width:{w}'>"))
+            .collect::<String>();
+        let b = layout(
+            &format!("<body><table>{cols}<tr><td></td><td></td><td></td><td></td></tr></table>"),
+            &format!(
+                "body{{width:640px}}table{{table-layout:fixed;width:{width};border:solid;border-width:0 {border}px;border-spacing:{spacing}px 4px}}td{{padding:1px 10px}}"
+            ),
+            false,
+        );
+        let mut x = (border + spacing) as f32;
+        for (cell, width) in collect(&b, Role::Cell).iter().zip(expected) {
+            near(cell.border_box.x, x);
+            near(cell.border_box.w, width);
+            x += width + spacing as f32;
+        }
     }
 }

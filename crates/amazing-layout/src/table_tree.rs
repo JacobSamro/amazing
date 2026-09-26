@@ -62,7 +62,7 @@ pub(crate) fn role(b: &LayoutBox) -> Role {
     Role::of(&b.style)
 }
 
-fn anonymous(parent: &LayoutBox, role: Role, children: Vec<LayoutBox>) -> LayoutBox {
+pub(crate) fn anonymous(parent: &LayoutBox, role: Role, children: Vec<LayoutBox>) -> LayoutBox {
     let mut style = ComputedStyle::default();
     // Anonymous boxes inherit computed inherited values; they do not inherit
     // widths, margins, padding, backgrounds, positions or DOM span attributes.
@@ -129,6 +129,10 @@ fn wrap_runs(
 }
 
 pub(crate) fn normalize(b: &mut LayoutBox) {
+    // A moved atomic box may already have been normalized with its old host.
+    if b.table_wrapper {
+        return;
+    }
     for child in &mut b.positioned {
         normalize(child);
     }
@@ -144,6 +148,15 @@ pub(crate) fn normalize(b: &mut LayoutBox) {
         Flow::Inlines(items) if r == Role::Table || r.group() || r == Role::Row => {
             let mut inline = anonymous(b, Role::Other, Vec::new());
             inline.flow = Flow::Inlines(items);
+            let mut remaining = Vec::new();
+            for child in std::mem::take(&mut b.positioned) {
+                if child.inline_atomic {
+                    inline.positioned.push(child);
+                } else {
+                    remaining.push(child);
+                }
+            }
+            b.positioned = remaining;
             vec![inline]
         }
         Flow::Flex(mut children) => {
@@ -168,6 +181,7 @@ pub(crate) fn normalize(b: &mut LayoutBox) {
             return;
         }
     };
+    remove_irrelevant_whitespace(r, &mut children);
     if r == Role::ColumnGroup {
         children.retain(|c| role(c) == Role::Column);
     } else {
@@ -204,6 +218,7 @@ pub(crate) fn normalize(b: &mut LayoutBox) {
 fn wrap_table(b: &mut LayoutBox) {
     let mut wrapper = anonymous(b, Role::Other, Vec::new());
     wrapper.table_wrapper = true;
+    wrapper.inline_atomic = std::mem::take(&mut b.inline_atomic);
     // The principal wrapper retains source identity for paint ordering; the
     // inner grid uses the same element identity for table style and hit data.
     wrapper.node = b.node;
@@ -250,3 +265,44 @@ fn wrap_table(b: &mut LayoutBox) {
     children.extend(captions);
     b.flow = Flow::Blocks(children);
 }
+
+/// Anonymous white-space boxes do not separate consecutive table siblings,
+/// including when white-space preservation would otherwise keep a line box.
+fn remove_irrelevant_whitespace(parent: Role, children: &mut Vec<LayoutBox>) {
+    let internal = |r: Role| r != Role::Other && r != Role::Table;
+    let proper_descendant = |r: Role| match parent {
+        Role::Table => internal(r),
+        Role::RowGroup | Role::Header | Role::Footer => matches!(r, Role::Row | Role::Cell),
+        Role::Row => r == Role::Cell,
+        _ => false,
+    };
+    let tabular = parent == Role::Table || parent.group() || parent == Role::Row;
+    let remove: Vec<_> = children
+        .iter()
+        .enumerate()
+        .map(|(i, child)| {
+            let whitespace = child.node.is_none()
+                && child.positioned.is_empty()
+                && matches!(&child.flow, Flow::Inlines(items) if items.iter().all(|item|
+                matches!(item, crate::InlineNode::Text { text, .. }
+                    if text.chars().all(|c| matches!(c, ' ' | '\t' | '\r' | '\n' | '\u{000c}')))));
+            let previous = i.checked_sub(1).map(|j| role(&children[j]));
+            let next = children.get(i + 1).map(role);
+            whitespace
+                && ((tabular
+                    && previous.is_none_or(proper_descendant)
+                    && next.is_none_or(proper_descendant))
+                    || (previous.is_some_and(internal) && next.is_some_and(internal)))
+        })
+        .collect();
+    let mut i = 0;
+    children.retain(|_| {
+        let keep = !remove[i];
+        i += 1;
+        keep
+    });
+}
+
+#[cfg(test)]
+#[path = "table_tree_tests.rs"]
+mod tests;

@@ -1,0 +1,543 @@
+linux-run[layout]: boat from /Users/jMac/Projects/OpenSource/amazing-wt/layout (9d89433c)
+linux-run[layout]: boat sandbox bx_cp5jbn5z
+Linux render runner: pixel counts, channel maximum, diff bytes, first reftest link, fuzzy limits verified
+{"output": "/home/user/amazing/out/layout18-linux-before-complete-v2-layout16-full", "source": "6db18c89", "counts": {"pass": 279, "mismatch": 170, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-after-complete-v2-layout16-full", "source": "9d89433c", "counts": {"pass": 280, "mismatch": 169, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-before-complete-v2-css-values", "source": "6db18c89", "counts": {"pass": 4, "mismatch": 13, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+{"output": "/home/user/amazing/out/layout18-linux-after-complete-v2-css-values", "source": "9d89433c", "counts": {"pass": 7, "mismatch": 10, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}}
+   Compiling amazing-dom v0.0.1 (/home/user/amazing/crates/amazing-dom)
+   Compiling amazing-text v0.0.1 (/home/user/amazing/crates/amazing-text)
+   Compiling amazing-js v0.0.1 (/home/user/amazing/crates/amazing-js)
+   Compiling amazing-text-provider v0.0.1 (/home/user/amazing/crates/amazing-text-provider)
+   Compiling amazing-css v0.0.1 (/home/user/amazing/crates/amazing-css)
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
+36 | fn cyclic(number: i32, symbols: &str) -> Option<String> {
+   |    ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `binary_define_index` is never used
+   --> crates/amazing-js/src/builtins_binary.rs:555:4
+    |
+555 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `minimum_grouping` is never read
+ --> crates/amazing-js/src/builtins_intl_data.rs:8:37
+  |
+3 | struct IntlNumberData {
+  |        -------------- field in this struct
+...
+8 |     currency_pattern: &'static str, minimum_grouping: usize,
+  |                                     ^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_fixed_offset` is never used
+   --> crates/amazing-js/src/builtins_temporal.rs:267:4
+    |
+267 | fn std_temporal_fixed_offset(text: &str) -> Result<i64, Throw> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+    --> crates/amazing-js/src/builtins_temporal.rs:1010:4
+     |
+1010 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates/amazing-js/src/builtins_temporal_epoch.rs:427:4
+    |
+427 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+   Compiling amazing-html v0.0.1 (/home/user/amazing/crates/amazing-html)
+   Compiling amazing-svg v0.0.1 (/home/user/amazing/crates/amazing-svg)
+   Compiling amazing-layout v0.0.1 (/home/user/amazing/crates/amazing-layout)
+   Compiling amazing-storage v0.0.1 (/home/user/amazing/crates/amazing-storage)
+   Compiling amazing-paint v0.0.1 (/home/user/amazing/crates/amazing-paint)
+warning: `amazing-css` (lib) generated 1 warning
+   Compiling amazing-canvas v0.0.1 (/home/user/amazing/crates/amazing-canvas)
+   Compiling amazing-compositor v0.0.1 (/home/user/amazing/crates/amazing-compositor)
+   Compiling amazing-image v0.0.1 (/home/user/amazing/crates/amazing-image)
+   Compiling amazing-process v0.0.1 (/home/user/amazing/crates/amazing-process)
+warning: unused import: `LockOptions as WireLockOptions`
+ --> crates/amazing-process/src/storage.rs:4:69
+  |
+4 |     LockClient, LockInfo as WireLockInfo, LockMode as WireLockMode, LockOptions as WireLockOptions,
+  |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling amazing-bindings v0.0.1 (/home/user/amazing/crates/amazing-bindings)
+warning: `amazing-js` (lib) generated 5 warnings
+warning: `amazing-process` (lib) generated 1 warning (run `cargo fix --lib -p amazing-process` to apply 1 suggestion)
+   Compiling amazing v0.0.1 (/home/user/amazing/crates/amazing)
+warning: unused imports: `Command`, `ExitCode`, and `ExitStatus`
+ --> crates/amazing/src/cmd/launch.rs:2:20
+  |
+2 | use std::process::{Command, ExitCode, ExitStatus};
+  |                    ^^^^^^^  ^^^^^^^^  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::gui`
+ --> crates/amazing/src/cmd/launch.rs:3:5
+  |
+3 | use crate::gui;
+  |     ^^^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_binding_host.rs:4:24
+  |
+4 | use std::collections::{BTreeMap, VecDeque};
+  |                        ^^^^^^^^
+
+warning: unused import: `BTreeMap`
+ --> crates/amazing/src/runtime_host_storage.rs:3:25
+  |
+3 | use std::{collections::{BTreeMap,VecDeque}, path::PathBuf, rc::Weak, sync::{Arc,Mutex,Weak as SyncWeak}};
+  |                         ^^^^^^^^
+
+warning: unused import: `self`
+ --> crates/amazing/src/runtime_host_storage.rs:5:267
+  |
+5 | ..., Transaction as IdbTransaction, Cursor as IdbCursor}, cache::{self, PersistentCacheStorage}, manager::StorageManager, buckets::{B...
+  |                                                                   ^^^^
+
+warning: unused import: `BoundPropertyValue`
+   --> crates/amazing/src/runtime_host_compositor.rs:254:45
+    |
+254 |     use amazing_compositor::{BoundProperty, BoundPropertyValue, CompositingReasons,
+    |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `PageMedia`, `load_page_media`, and `load_page_text`
+  --> crates/amazing/src/main.rs:23:12
+   |
+23 | use page::{PageMedia, load_page_media, load_page_text};
+   |            ^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: type `CanvasGradientKind` is more private than the item `CanvasObject::Gradient::1`
+   --> crates/amazing/src/runtime_host_compositor.rs:521:32
+    |
+521 |     Gradient(canvas::Gradient, CanvasGradientKind),
+    |                                ^^^^^^^^^^^^^^^^^^ field `CanvasObject::Gradient::1` is reachable at visibility `pub(in crate::runtime_binding_host)`
+    |
+note: but type `CanvasGradientKind` is only usable at visibility `pub(self)`
+   --> crates/amazing/src/runtime_host_compositor.rs:516:1
+    |
+516 | enum CanvasGradientKind { Linear, Radial, Conic }
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: methods `set_document_content_type` and `pump_now_with_render` are never used
+   --> crates/amazing/src/js_scheduler.rs:67:19
+    |
+ 42 | impl DriverScheduler {
+    | -------------------- methods in this implementation
+...
+ 67 |     pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+296 |     pub(crate) fn pump_now_with_render(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `history_index` is never used
+   --> crates/amazing/src/navigator.rs:372:12
+    |
+350 | impl Navigator {
+    | -------------- method in this implementation
+...
+372 |     pub fn history_index(&self) -> Option<usize> {
+    |            ^^^^^^^^^^^^^
+
+warning: field `0` is never read
+  --> crates/amazing/src/runtime_binding_host.rs:66:17
+   |
+66 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+66 -     FontFaceSet(NodeIdx, Option<JsValue>),
+66 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: methods `set_document_content_type` and `dispatch_window_event` are never used
+   --> crates/amazing/src/runtime_binding_host.rs:129:19
+    |
+111 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+...
+129 |     pub(crate) fn set_document_content_type(&self, content_type: &str) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+147 |     pub(crate) fn dispatch_window_event(&self, js: &mut Interpreter, name: &str,
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `cache` is never read
+  --> crates/amazing/src/runtime_host_storage.rs:87:5
+   |
+84 | pub(super) struct StorageRuntime {
+   |                   -------------- field in this struct
+...
+87 |     cache: Rc<RefCell<PersistentCacheStorage>>,
+   |     ^^^^^
+
+warning: field `bucket` is never read
+   --> crates/amazing/src/runtime_host_storage.rs:129:20
+    |
+129 |     CacheStorage { bucket: String },
+    |     ------------   ^^^^^^
+    |     |
+    |     field in this variant
+
+warning: variant `Cache` is never constructed
+   --> crates/amazing/src/runtime_host_storage.rs:130:5
+    |
+119 | enum StorageObject {
+    |      ------------- variant in this enum
+...
+130 |     Cache { name: String },
+    |     ^^^^^
+
+warning: method `storage_bucket` is never used
+   --> crates/amazing/src/runtime_host_storage.rs:404:8
+    |
+252 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+404 |     fn storage_bucket(&self) -> Result<BucketKey, Throw> {Ok(BucketKey::new(self.storage_key()?,"default"))}
+    |        ^^^^^^^^^^^^^^
+
+warning: method `messaging_peer_owner` is never used
+   --> crates/amazing/src/runtime_host_messaging.rs:349:8
+    |
+120 | impl RuntimeBindingHost<'_> {
+    | --------------------------- method in this implementation
+...
+349 |     fn messaging_peer_owner(&self, port: PortId) -> Option<ClientId> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `set_canvas_text_system` and `take_canvas_damage` are never used
+   --> crates/amazing/src/runtime_host_compositor.rs:528:19
+    |
+527 | impl RuntimeBindings {
+    | -------------------- methods in this implementation
+528 |     pub(crate) fn set_canvas_text_system(&self, system: Rc<dyn amazing_text::TextSystem>) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+533 |     pub(crate) fn take_canvas_damage(&self) -> Vec<(NodeIdx, amazing_paint::Surface)> {
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `save_snapshot` and `renderer_crashed` are never used
+   --> crates/amazing/src/runtime_host_ipc.rs:642:12
+    |
+408 | impl Driver {
+    | ----------- methods in this implementation
+...
+642 |     pub fn save_snapshot(
+    |            ^^^^^^^^^^^^^
+...
+723 |     pub fn renderer_crashed(&mut self, tab_id: u64) -> Result<Vec<u64>, String> {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: `amazing` (bin "amazing" test) generated 19 warnings (run `cargo fix --bin "amazing" -p amazing --tests` to apply 7 suggestions)
+    Finished `release` profile [optimized] target(s) in 51.93s
+     Running unittests src/main.rs (target/release/deps/amazing-0ae4360b37aa06a9)
+
+running 2 tests
+amazing oracle: style mutations=18 recalculated=19 full_fallback=true
+amazing oracle: layout outcome=RequiresFullRebuild("initial layout") dirty=0 changed=0 paint=None
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=1 style_recalculated=19 layout_dirty=0 layout_full=true paint_changed=0 paint_full=true tile_uploads=4 tiles_dirtied=0
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: frame uploads=4 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: paint delta fallback: RequiresFullRebuild
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+production_trace fixture=article-class frames=20 p50_us=35579 p95_us=38400 full_p50_us=6032 full_p95_us=6529 style_calls=20 layout_update_calls=20 layout_full=20 paint_view_calls=20 paint_full=20 uploads=80 dirtied_tiles=0 layer_rounding_pixels=0
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=6 full_fallback=false
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=6 paint=Some("delta(changed=1,ranges=1)")
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=6 layout_dirty=4 layout_full=true paint_changed=1 paint_full=false tile_uploads=1 tiles_dirtied=4
+amazing oracle: frame uploads=1 dirtied_tiles=4
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+oracle_trace fixture=article-class frames=20 p50_us=69364 p95_us=83362 full_p50_us=6016 full_p95_us=6620 style_calls=20 layout_update_calls=20 layout_full=20 paint_view_calls=60 paint_full=0 uploads=20 dirtied_tiles=80 layer_rounding_pixels=0
+amazing oracle: style mutations=20 recalculated=17 full_fallback=true
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: layout outcome=RequiresFullRebuild("initial layout") dirty=0 changed=0 paint=None
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=1 style_recalculated=17 layout_dirty=0 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+production_trace fixture=effects-class frames=20 p50_us=53753 p95_us=55866 full_p50_us=5908 full_p95_us=7988 style_calls=20 layout_update_calls=20 layout_full=20 paint_view_calls=20 paint_full=20 uploads=240 dirtied_tiles=0 layer_rounding_pixels=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+amazing oracle: style mutations=1 recalculated=5 full_fallback=false
+amazing oracle: layout outcome=RequiresFullRebuild("layout or box style changed") dirty=4 changed=3 paint=Some("full(AmbiguousPropertyOwner)")
+amazing oracle: retained paint seed fallback: AmbiguousPropertyOwner
+production_trace fixture=opacity-class frames=20 p50_us=44167 p95_us=44670 full_p50_us=3805 full_p95_us=3903 style_calls=0 layout_update_calls=0 layout_full=0 paint_view_calls=0 paint_full=0 uploads=0 dirtied_tiles=0 layer_rounding_pixels=0
+test cmd::render::oracle_trace_tests::incremental_production_mutation_trace ... ok
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=3 style_recalculated=5 layout_dirty=4 layout_full=true paint_changed=0 paint_full=true tile_uploads=12 tiles_dirtied=0
+amazing oracle: frame uploads=12 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+oracle_trace fixture=effects-class frames=20 p50_us=70157 p95_us=71523 full_p50_us=5838 full_p95_us=5890 style_calls=20 layout_update_calls=20 layout_full=20 paint_view_calls=60 paint_full=20 uploads=240 dirtied_tiles=0 layer_rounding_pixels=0
+amazing oracle: style mutations=8 recalculated=7 full_fallback=true
+amazing oracle: layout outcome=RequiresFullRebuild("initial layout") dirty=0 changed=0 paint=None
+amazing oracle: work style_calls=1 layout_calls=1 paint_view_calls=1 style_recalculated=7 layout_dirty=0 layout_full=true paint_changed=0 paint_full=true tile_uploads=8 tiles_dirtied=0
+amazing oracle: frame uploads=8 dirtied_tiles=0
+amazing oracle: compositor/full pixel parity at 512x512; parity_losses=0 full_fallbacks=0
+test cmd::render::oracle_trace_tests::incremental_oracle_mutation_trace ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 90 filtered out; finished in 4.22s
+
+oracle_trace fixture=opacity-class frames=20 p50_us=43300 p95_us=43706 full_p50_us=3702 full_p95_us=3873 style_calls=0 layout_update_calls=0 layout_full=0 paint_view_calls=0 paint_full=0 uploads=0 dirtied_tiles=0 layer_rounding_pixels=0

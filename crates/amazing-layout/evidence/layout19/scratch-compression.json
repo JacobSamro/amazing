@@ -1,0 +1,9 @@
+{
+  "updated": "2026-09-26T12:03:50Z",
+  "scope": "~/amazing/out/layout18-*/*.ppm recursively, layout-owned historical outputs only",
+  "files": 16698,
+  "original_bytes": 24045370470,
+  "compressed_bytes": 137747903,
+  "recovered_bytes": 23907622567,
+  "method": "lossless gzip level 1; original PPM hashes apply after decompression"
+}
