@@ -1,6 +1,6 @@
 //! Style, layout, raster, and audio commands.
 use std::{cell::RefCell, rc::Rc, process::ExitCode, time::Duration};
-use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_text_from_sheets, PagePaint}, gui};
+use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::{execute_inline_scripts, prepare_page_scripts}};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
 use crate::animation_scene::AnimationScene;
