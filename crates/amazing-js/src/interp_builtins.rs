@@ -940,44 +940,6 @@ fn native_array_is_array(
     ))
 }
 
-fn native_array_from(
-    i: &mut Interpreter,
-    _: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
-    if matches!(source, JsValue::Undefined | JsValue::Null) { return Err(Throw::type_error("Array.from requires an object")); }
-    if let Some(callback) = args.get(1).filter(|callback| !matches!(callback, JsValue::Undefined)) {
-        if callable_function(callback).is_none() {
-            return Err(Throw::type_error("Array.from mapFn is not callable"));
-        }
-    }
-    let iterator = i.get_prop(&source, WellKnownSymbol::Iterator.symbol())?;
-    let mut values = if matches!(iterator, JsValue::Undefined | JsValue::Null) {
-        let length = i.get_prop(&source, "length")?;
-        let number = i.to_number(&length)?;
-        let length = if number.is_nan() || number <= 0.0 { 0 }
-            else if !number.is_finite() || number > 1_000_000.0 { return Err(Throw::range_error("Array.from source too large")); }
-            else { number.trunc() as usize };
-        (0..length).map(|index| i.get_prop(&source, index.to_string())).collect::<Result<Vec<_>, _>>()?
-    } else if callable_function(&iterator).is_some() { i.iterate(&source)? }
-    else { return Err(Throw::type_error("Array.from iterator is not callable")); };
-    if let Some(callback) = args.get(1).filter(|callback| !matches!(callback, JsValue::Undefined)) {
-        for (index, value) in values.iter_mut().enumerate() {
-            *value = i.call_value(
-                callback,
-                args.get(2).cloned().unwrap_or(JsValue::Undefined),
-                vec![value.clone(), JsValue::num(index as f64)],
-            )?;
-        }
-    }
-    array_values(i, values)
-}
-
-fn native_array_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    array_values(i, args)
-}
-
 fn native_number_is_nan(
     _: &mut Interpreter,
     _: JsValue,
