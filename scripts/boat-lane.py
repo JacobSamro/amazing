@@ -159,6 +159,9 @@ def healthy(d: dict) -> bool:
 
 def heal(lane: str) -> dict:
     """Restart the lane's sandbox when its lazy filesystem has died."""
+    # The reaper may have stopped it between ensure and the run's lease;
+    # resume it first rather than waiting for a ready state that never comes.
+    ensure(lane, type_of(lane))
     sid = load_map().get(pool_of(lane))
     d = wait_ready(sid)
     if healthy(d):
@@ -194,7 +197,14 @@ def _ensure_locked(lane: str, size: str) -> str:
         m[lane] = sid
         save_map(m)
         print(f"boat-lane: created {sid} for {lane} from {TEMPLATE}", file=sys.stderr)
-    elif d.get("state") in STOPPED:
+    elif d.get("state") in ("stopping", "snapshotting"):
+        # Stopped under us (the reaper); let the stop finish, then resume.
+        for _ in range(60):
+            time.sleep(5)
+            d = info(sid)
+            if d.get("state") not in ("stopping", "snapshotting"):
+                break
+    if d is not None and d.get("state") in STOPPED:
         extra = ("--type", size) if d.get("type") and d.get("type") != size else ()
         boat("resume", sid, "--no-auto-stop", *extra, timeout=300)
         print(f"boat-lane: resumed {sid} for {lane}"
