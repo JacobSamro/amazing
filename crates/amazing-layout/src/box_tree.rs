@@ -973,9 +973,25 @@ fn text_style(
         language: inherited_attribute(dom, owner, "lang").map(str::to_owned),
         features: crate::font_features::from_style(style,
             values::style_length_percentage(style, "letter-spacing", font_size, font_size * 0.6)
-                .and_then(|length| length.resolve(None)).unwrap_or(0.0)),
+                .and_then(|length| length.resolve(None)).unwrap_or(0.0),
+            writing_mode.uses_vertical_metrics()),
         variations: Vec::new(),
-        synthesis: amazing_text::FontSynthesis::default(),
+        synthesis: font_synthesis(style),
+    }
+}
+
+/// CSS Fonts 4 §5.5. `amazing-css` expands the `font-synthesis` shorthand
+/// into `font-synthesis-{weight,style,small-caps,position}`, each computed
+/// to `auto` (default, synthesis permitted) or `none`. `amazing-text::
+/// FontSynthesis` only carries the weight/style bits the shaper acts on;
+/// small-caps/position synthesis is not implemented by the text lane, so
+/// those two longhands are read (not ignored as unsupported) but cannot
+/// change the returned value yet.
+fn font_synthesis(style: &ComputedStyle) -> amazing_text::FontSynthesis {
+    let enabled = |longhand: &str| !style.get(longhand).unwrap_or("auto").eq_ignore_ascii_case("none");
+    amazing_text::FontSynthesis {
+        weight: enabled("font-synthesis-weight"),
+        style: enabled("font-synthesis-style"),
     }
 }
 
