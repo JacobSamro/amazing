@@ -1,0 +1,31 @@
+{
+  "source": "9d13ddc71236a776f3da6e136b72120fdbedf5bb",
+  "base": "d50cd1bf",
+  "platform": "Linux Boat pool-dom isolated lane target",
+  "workspace_pass": 2767,
+  "workspace_skip": 10,
+  "workspace_doctests_pass": 4,
+  "baseline_owned_pass": 572,
+  "baseline_owned_skip": 4,
+  "corpus_files": 482,
+  "before_pass": 8442,
+  "after_pass": 8448,
+  "before_fail": 1019,
+  "after_fail": 1013,
+  "gained_subtests": 6,
+  "lost_subtests": 0,
+  "measured_at": "2026-09-26T13:53:31Z",
+  "tested_source_sha256": {
+    "crates/amazing-bindings/src/event_bindings.rs": "c6ff5da4ab7aa3444248a9e5cda9b3f99280a5a59f74e95b1811537cb79181af",
+    "crates/amazing-bindings/src/host.rs": "359299bf8def76b0c43e1bb88ce3906824a5e251c13122382b59a9ebd7c3e97f",
+    "crates/amazing-bindings/src/interfaces.rs": "149e43356c611794c1ee6248e4614c3c3ee3e926771b74ba8ff720c2e509b8b0",
+    "crates/amazing-bindings/src/invoke.rs": "dd15f13a9218d3ab5b975e20e262e02e686a576129e03d24d6ef9e67f8fc7ba1",
+    "crates/amazing-bindings/src/lib.rs": "3c44cce3afcb029d34af9129e66dc795836ba16b79e121ecdc57e189342abac8",
+    "crates/amazing-bindings/src/tests.rs": "b64feb7759e08cb12e884b302d1a23bb9a21f441600f4bcb595eb25d6915e140",
+    "crates/amazing-dom/src/events.rs": "f9dd562f2aa6dce76967eee8ee52602ee256d15820fb89c146e12d9da7a5b91a",
+    "crates/amazing/src/runtime_binding_host.rs": "b42e3c6078c612294a06daee936462861e40d4d64c36eb343cde8264bdbd8511",
+    "crates/amazing/src/runtime_host_dom_bindings.rs": "3b3ab1d30b0880db8dd360d2c579beb3c962cb1cb1fcec28e54c4280b0fa1f4f",
+    "crates/amazing-bindings/src/navigation_event_bindings.rs": "50527129a89cd542141b1cf1add86f7666f046fab0cc22eb6189ab8dfac56b57",
+    "crates/amazing-bindings/src/tests_navigation_events.rs": "e25ace62bad128391bce90f4d36fcc7026391abcb7a765acc04f94a6c75b7ee3"
+  }
+}
