@@ -82,6 +82,7 @@ fn credit_starvation_and_buffered_parity() {
 
 #[test]
 fn zero_initial_credit_waits_for_explicit_grant() {
+    let _: u64 = amazing_fetch::INITIAL_STREAM_CREDIT;
     let base = HttpUrl::parse("https://example.test/").unwrap();
     let mut service = NetworkService::new(DispatchLimits::default());
     let id = service

@@ -259,6 +259,34 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
     let xhr = path.starts_with("/xhr/resources/");
     let name = path.rsplit('/').next().unwrap_or("");
     let mut headers = vec![header("Content-Type", "text/plain")];
+    // WPT tests such as xhr/responsetype.any.js open "/" and wait for
+    // readyState LOADING, which needs a non-empty body; the real WPT server
+    // returns a directory listing there.
+    if path == "/" {
+        return reply(200, "OK", headers, b"amazing wpt shim root\n");
+    }
+    if fetch && name == "data.json" {
+        return reply(200, "OK", vec![header("Content-Type", "application/json")],
+            b"{\"key\": \"value\"}\n");
+    }
+    if fetch && name == "stash-put.py" {
+        headers.push(header("Access-Control-Allow-Origin", "*"));
+        if request.method == "OPTIONS" {
+            headers.push(header("Access-Control-Allow-Methods", "*"));
+            headers.push(header("Access-Control-Allow-Headers", "*"));
+        } else if let (Some(key), Some(value)) = (request.query("key"), request.query("value")) {
+            state.insert(key, value);
+        }
+        return reply(200, "OK", headers, b"done");
+    }
+    if fetch && name == "stash-take.py" {
+        let body = match request.query("key").and_then(|key| state.remove(&key)) {
+            Some(value) => format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\"")),
+            None => "null".into(),
+        };
+        return reply(200, "OK", vec![header("Content-Type", "application/json"),
+            header("Access-Control-Allow-Origin", "*")], body.as_bytes());
+    }
     if xhr && name == "inspect-headers.py" {
         let filter_value = request.query("filter_value").unwrap_or_default();
         let filter_name = request.query("filter_name").unwrap_or_default();
@@ -407,10 +435,9 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
                     "x-did-preflight",
                     if preflight.is_some() { "1" } else { "0" },
                 ));
-                headers.push(header(
-                    "x-control-request-headers",
-                    preflight.cloned().unwrap_or_default(),
-                ));
+                if let Some(value) = preflight.filter(|value| !value.is_empty()) {
+                    headers.push(header("x-control-request-headers", value));
+                }
                 headers.push(header("x-origin", request.header("origin").unwrap_or("")));
                 reply(200, "OK", headers, b"")
             }
@@ -434,6 +461,9 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
             let mut location = request
                 .query("location")
                 .unwrap_or_else(|| "redirect.py?followed".into());
+            if xhr && location.starts_with("redirect.py") {
+                location.push_str(&format!("&code={status}"));
+            }
             if fetch && request.query("simple").is_none() && !location.is_empty() {
                 location.push(if location.contains('?') { '&' } else { '?' });
                 location.push_str("count=1");
@@ -537,6 +567,54 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
             vec![header("Content-Type", "application/xml")],
             b"<root/>",
         ),
-        _ => reply(404, "Not Found", headers, b"not found"),
+        _ => {
+            // Selected tests also fetch pinned static resources (for example
+            // fetch/api/cors/resources/not-cors-safelisted.json) that have no
+            // handler. Serve those from the pinned WPT checkout when the runner
+            // points at one, so a missing handler does not fail the file.
+            if let Some(body) = static_file(path) {
+                let content_type = match name.rsplit_once('.').map(|(_, ext)| ext) {
+                    Some("json") => "application/json",
+                    Some("js") => "text/javascript",
+                    Some("css") => "text/css",
+                    Some("xml") => "application/xml",
+                    Some("headers" | "txt" | "asis") => "text/plain",
+                    _ => "text/plain",
+                };
+                match headers
+                    .iter_mut()
+                    .find(|(name, _)| name.eq_ignore_ascii_case("Content-Type"))
+                {
+                    Some(existing) => existing.1 = content_type.to_string(),
+                    None => headers.push(header("Content-Type", content_type)),
+                }
+                headers.push(header("Access-Control-Allow-Origin", "*"));
+                return reply(200, "OK", headers, &body);
+            }
+            reply(404, "Not Found", headers, b"not found")
+        }
     }
+}
+/// Read a pinned static WPT resource from `AMAZING_WPT_SHIM_ROOT`, if set.
+fn static_file(path: &str) -> Option<Vec<u8>> {
+    let root = std::path::PathBuf::from(std::env::var_os("AMAZING_WPT_SHIM_ROOT")?);
+    let relative = path.trim_start_matches('/');
+    if relative.is_empty()
+        || relative.contains("..")
+        || relative.contains('\\')
+        || relative.contains('%')
+    {
+        return None;
+    }
+    let canonical = root.join(relative).canonicalize().ok()?;
+    if !canonical.starts_with(&root)
+        || canonical.extension().and_then(|ext| ext.to_str()) == Some("py")
+    {
+        return None;
+    }
+    let metadata = canonical.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {
+        return None;
+    }
+    std::fs::read(canonical).ok()
 }
