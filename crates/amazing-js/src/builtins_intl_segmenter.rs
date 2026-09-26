@@ -1,7 +1,7 @@
 // Intl.Segmenter with Unicode-aware UTF-16 indices.
 
 #[derive(Clone)]
-struct IntlSegmenterState { locale: String, granularity: String }
+struct IntlSegmenterState { locale: String, resolved: String, granularity: String }
 
 #[derive(Clone)]
 struct IntlSegment { text: String, index: usize, end: usize, word_like: bool }
@@ -38,7 +38,8 @@ fn intl_segmenter_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Segmenter options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let granularity = intl_string_option(i, &options, "granularity", &["grapheme", "word", "sentence"], "grapheme")?;
-    intl_register(&object, IntlState::Segmenter(IntlSegmenterState { locale, granularity }));
+    let resolved = intl_resolved_locale(&requested, &locale);
+    intl_register(&object, IntlState::Segmenter(IntlSegmenterState { locale, resolved, granularity }));
     Ok(JsValue::Object(object))
 }
 
@@ -53,7 +54,7 @@ fn intl_segmenter_state(this: &JsValue) -> Result<IntlSegmenterState, Throw> {
 fn intl_segmenter_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_segmenter_state(&this)?;
     let object = i.object_value();
-    i.set_prop(&object, "locale", JsValue::str(state.locale))?;
+    i.set_prop(&object, "locale", JsValue::str(state.resolved.as_str()))?;
     i.set_prop(&object, "granularity", JsValue::str(state.granularity))?;
     Ok(object)
 }

@@ -1,10 +1,10 @@
 // RelativeTimeFormat and ListFormat use generated CLDR phrases and patterns.
 
 #[derive(Clone)]
-struct IntlRelativeState { locale: String, style: String, numeric: String, numbering_system: String }
+struct IntlRelativeState { locale: String, resolved: String, style: String, numeric: String, numbering_system: String }
 
 #[derive(Clone)]
-struct IntlListState { locale: String, style: String, kind: String }
+struct IntlListState { locale: String, resolved: String, style: String, kind: String }
 
 impl Interpreter {
     fn install_intl_relative_and_list(&mut self, namespace: &Obj) {
@@ -53,7 +53,8 @@ fn intl_relative_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     }
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;
     let numeric = intl_string_option(i, &options, "numeric", &["always", "auto"], "always")?;
-    intl_register(&object, IntlState::Relative(IntlRelativeState { locale, style, numeric, numbering_system }));
+    let resolved = intl_resolved_locale(&requested, &locale);
+    intl_register(&object, IntlState::Relative(IntlRelativeState { locale, resolved, style, numeric, numbering_system }));
     Ok(JsValue::Object(object))
 }
 
@@ -137,7 +138,7 @@ fn intl_relative_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<J
 fn intl_relative_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_relative_state(&this)?;
     let object = i.object_value();
-    i.set_prop(&object, "locale", JsValue::str(state.locale))?;
+    i.set_prop(&object, "locale", JsValue::str(state.resolved.as_str()))?;
     i.set_prop(&object, "style", JsValue::str(state.style))?;
     i.set_prop(&object, "numeric", JsValue::str(state.numeric))?;
     i.set_prop(&object, "numberingSystem", JsValue::str(state.numbering_system.as_str()))?;
@@ -158,7 +159,8 @@ fn intl_list_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let kind = intl_string_option(i, &options, "type", &["conjunction", "disjunction", "unit"], "conjunction")?;
     let style = intl_string_option(i, &options, "style", &["long", "short", "narrow"], "long")?;
-    intl_register(&object, IntlState::List(IntlListState { locale, style, kind }));
+    let resolved = intl_resolved_locale(&requested, &locale);
+    intl_register(&object, IntlState::List(IntlListState { locale, resolved, style, kind }));
     Ok(JsValue::Object(object))
 }
 
@@ -256,7 +258,7 @@ fn intl_list_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
 fn intl_list_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_list_state(&this)?;
     let object = i.object_value();
-    i.set_prop(&object, "locale", JsValue::str(state.locale))?;
+    i.set_prop(&object, "locale", JsValue::str(state.resolved.as_str()))?;
     i.set_prop(&object, "type", JsValue::str(state.kind))?;
     i.set_prop(&object, "style", JsValue::str(state.style))?;
     Ok(object)

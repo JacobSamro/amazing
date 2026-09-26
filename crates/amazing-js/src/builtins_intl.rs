@@ -262,6 +262,20 @@ fn intl_lookup(requested: &[String]) -> String {
     "en".to_string()
 }
 
+/// The BCP-47 locale string reported by `resolvedOptions()`. It keeps the
+/// requested region for supported languages and falls back to the default
+/// locale (en-US) when no requested tag matches the data locale.
+fn intl_resolved_locale(requested: &[String], data_locale: &str) -> String {
+    let data_language = data_locale.split('-').next().unwrap_or(data_locale);
+    for tag in requested {
+        let base = tag.split("-u-").next().unwrap_or(tag);
+        if base.split('-').next() == Some(data_language) {
+            return base.to_string();
+        }
+    }
+    "en-US".to_string()
+}
+
 fn intl_array(i: &mut Interpreter, values: impl IntoIterator<Item = JsValue>) -> Result<JsValue, Throw> {
     let mut raw = JsObject::array();
     raw.proto = Some(i.array_proto.clone());
