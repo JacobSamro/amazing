@@ -4,7 +4,7 @@
 //! consumes the flattened command stream, so stacking/effect policy stays
 //! separate from pixels and nested stacking contexts remain atomic.
 
-use amazing_layout::{Flow, LayoutBox};
+use amazing_layout::{Flow, LayoutBox, Rect};
 
 const MAX_DISPLAY_COMMANDS: usize = 1_000_000;
 const MAX_LAYOUT_DEPTH: usize = 256;
@@ -76,6 +76,12 @@ pub(crate) struct GroupEffect {
     pub blend: amazing_css::effects::BlendMode,
     pub isolate: bool,
     pub filter: crate::filter::FilterPlan,
+    /// CSS `backdrop-filter`'s resolved function list. Empty means none.
+    pub backdrop_filter: crate::filter::FilterPlan,
+    /// The border box `backdrop_filter` samples, in the same untransformed
+    /// surface pixel space as this box's own decorations (valid only when
+    /// `backdrop_filter` is non-empty).
+    pub backdrop_bounds: Rect,
 }
 
 impl GroupEffect {
@@ -484,12 +490,21 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         .get("isolation")
         .and_then(amazing_css::effects::parse_isolation)
         .unwrap_or(false);
-    let filter = crate::filter::FilterPlan::from_css(box_.style.get("filter").unwrap_or("none"));
+    let current_color = crate::paint::resolve_text_color(&box_.style);
+    let filter = crate::filter::FilterPlan::from_css(
+        box_.style.get("filter").unwrap_or("none"),
+        current_color,
+    );
+    let backdrop_filter = crate::filter::FilterPlan::from_css(
+        box_.style.get("backdrop-filter").unwrap_or("none"),
+        current_color,
+    );
     if opacity >= 1.0
         && transform.is_none()
         && blend == amazing_css::effects::BlendMode::Normal
         && !isolate
         && filter.is_empty()
+        && backdrop_filter.is_empty()
     {
         return None;
     }
@@ -503,6 +518,8 @@ fn effect_for(box_: &LayoutBox) -> Option<GroupEffect> {
         blend,
         isolate,
         filter,
+        backdrop_filter,
+        backdrop_bounds: border,
     })
 }
 

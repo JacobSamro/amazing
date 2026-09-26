@@ -1170,3 +1170,68 @@ skipped**; separate workspace doctests **4 passed / 0 failed**; `amazing-paint`
 Still outstanding for COMP-15: `backdrop-filter`, blur/drop-shadow filters,
 clip-path basic shapes and mask-image, which need the compositor's
 `EffectOperations` metadata contract and raster transforms. No WPT credit.
+
+## RC-26 — `blur`/`drop-shadow` filters and `backdrop-filter` reference (2026-09-26)
+
+Third COMP-15 paint reference slice, answering the compositor's
+`PaintFilterSource`/`PaintFilterInput` producer-boundary preparation
+(`.agents/compositor/questions.md`, `crates/amazing-compositor/src/paint_filters.rs`
+at fixed source base `431a0a04`): ordered resolved filters, `backdrop_filters`
+and `backdrop_bounds` for an existing non-root effect group.
+
+- `amazing_paint::filter::FilterOp` gains `Blur(std_px)` and
+  `DropShadow { dx, dy, std, color }`; `FilterPlan::from_css` now takes the
+  element's resolved `current_color` (for `drop-shadow()`'s default and
+  explicit `currentcolor`) and parses both functions. Only an already-resolved
+  absolute length (the CSS parser folds `in`/`cm`/`mm`/`q`/`pt`/`pc` into
+  `Px`) is accepted for blur radius/shadow offsets; `em`/`rem`/percentage/
+  viewport-unit arguments are skipped, not guessed, matching the existing
+  color-function policy.
+- `FilterPlan::apply_to_surface` is the new whole-surface entry point: color
+  functions still map every pixel independently, but `blur`/`drop-shadow` read
+  neighboring pixels and can only run this way. `composite_group` now always
+  filters the whole child layer once before its per-destination-pixel
+  transform sampling, instead of calling a per-pixel `apply` inside that loop;
+  nearest-neighbor sampling makes this exactly equivalent for the color-only
+  case and is required for the two spatial functions.
+- Blur is the SVG/CSS Filter Effects three-box-blur Gaussian approximation
+  (box size `d = floor(std * 3 * sqrt(2π) / 4 + 0.5)`), run in premultiplied
+  space with the surface edge clamped outward, and using the spec's exact
+  odd/even pass radii (an even `d` cancels its two-pixel-biased passes with
+  one pass shifted left, one shifted right, then a centered `d+1` pass) so
+  the result stays centered rather than drifting. Drop-shadow tints the
+  source's alpha into the resolved shadow color, blurs that shadow, shifts it
+  by the offset (a shift past the surface edge is discarded, matching this
+  painter's per-surface, not per-halo, filter model), and draws the original
+  content over it.
+- `backdrop-filter` is new on `GroupEffect`/`EffectNode`, with the group's
+  border box as `backdrop_bounds`. `RasterState::begin_group_with_mask` now
+  seeds a group's fresh, otherwise-transparent layer with the *filtered*
+  snapshot of the surface directly behind it (before this box's own
+  decorations are drawn), cropped to that border box; the box's own
+  decorations then paint over that seed exactly as they would over any other
+  backdrop (existing decoration painting already alpha-blends, not
+  overwrites). A box with only `backdrop-filter` (no opacity/transform/blend/
+  filter/isolation) now opens a group, the same filter-only-group policy RC-25
+  established for `filter`.
+
+Focused tests: blur/drop-shadow parsing order and relative-length skipping;
+`drop-shadow()`'s offset/blur/color resolution including bare `currentcolor`
+defaults; a uniform field's interior staying unblurred while a single spike
+spreads into (and stays bounded within) its neighbors; a drop shadow drawn
+offset and behind its source; and three `paint_document` end-to-end tests
+(`backdrop_filter_group_filters_the_snapshot_behind_it`,
+`blur_filter_group_softens_its_own_content_edge_into_its_surrounding_transparency`,
+`drop_shadow_filter_group_draws_its_shadow_behind_its_own_content`). No CSS,
+layout, compositor, driver or lockfile source changed.
+
+Linux gate: workspace nextest **2,754 passed / 0 failed / 10 skipped**;
+workspace doctests **4 passed / 0 failed**; `amazing-paint` **149 passed / 0
+skipped** (up from 142 at RC-25).
+
+Still outstanding for COMP-15: `clip-path` basic shapes/`path()` and
+`mask-image`/`mask-*`, and the reference-space transform contract for
+arbitrary local-space CSS filters under a 3D/perspective transform (this
+slice's filters run in the group's own post-transform raster space, matching
+`PaintFilterSpace::Raster`). No WPT credit is claimed under the Linux-first
+deferral.

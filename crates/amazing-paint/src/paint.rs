@@ -147,7 +147,16 @@ impl RasterState {
             return;
         }
         self.layer_pixels = total;
-        let transparent = Surface::new(self.surface.width, self.surface.height);
+        let mut transparent = Surface::new(self.surface.width, self.surface.height);
+        // `backdrop-filter` reads the content already painted behind this
+        // box's border box, before this box's own decorations are drawn on
+        // top. Seed the fresh group layer with that filtered snapshot so the
+        // box's own (possibly semi-transparent) painting blends over it
+        // exactly as it would blend over any other backdrop.
+        if !effect.backdrop_filter.is_empty() {
+            let filtered = effect.backdrop_filter.apply_to_surface(&self.surface);
+            copy_rect(&filtered, &mut transparent, effect.backdrop_bounds);
+        }
         let parent = std::mem::replace(&mut self.surface, transparent);
         let clips = std::mem::replace(&mut self.clips, vec![ClipRect::viewport(&self.surface)]);
         self.groups.push(RasterGroup {
@@ -185,6 +194,8 @@ impl RasterState {
                     blend: amazing_css::effects::BlendMode::Normal,
                     isolate: false,
                     filter: crate::filter::FilterPlan::default(),
+                    backdrop_filter: crate::filter::FilterPlan::default(),
+                    backdrop_bounds: amazing_layout::Rect::default(),
                 },
                 Some(mask),
             );
@@ -213,6 +224,27 @@ impl RasterState {
     }
 }
 
+fn copy_rect(source: &Surface, destination: &mut Surface, bounds: amazing_layout::Rect) {
+    let round = |v: f32| -> i64 {
+        if v.is_nan() { 0 } else { v.round() as i64 }
+    };
+    let x0 = round(bounds.x).max(0);
+    let y0 = round(bounds.y).max(0);
+    let x1 = round(bounds.x + bounds.w).max(x0);
+    let y1 = round(bounds.y + bounds.h).max(y0);
+    let x0 = x0.min(destination.width as i64) as u32;
+    let y0 = y0.min(destination.height as i64) as u32;
+    let x1 = x1.min(destination.width as i64) as u32;
+    let y1 = y1.min(destination.height as i64) as u32;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            if let Some(pixel) = source.get_pixel(x, y) {
+                destination.set_pixel(x, y, pixel);
+            }
+        }
+    }
+}
+
 fn composite_group(
     destination: &mut Surface,
     source: &Surface,
@@ -224,6 +256,16 @@ fn composite_group(
     let Some(inverse) = matrix.inverse() else {
         return;
     };
+    // `blur`/`drop-shadow` read neighboring pixels, so they must run once
+    // over the whole layer rather than per destination sample; color-only
+    // plans take this same path (a no-op-cost clone plus a pointwise map),
+    // keeping one filter application rule for the group.
+    let filtered = if effect.filter.is_empty() {
+        None
+    } else {
+        Some(effect.filter.apply_to_surface(source))
+    };
+    let source = filtered.as_ref().unwrap_or(source);
     let [clip_x0, clip_y0, clip_x1, clip_y1] = clip.pixels();
     let x0 = clip_x0.max(0).min(destination.width as i64);
     let y0 = clip_y0.max(0).min(destination.height as i64);
@@ -243,7 +285,6 @@ fn composite_group(
             let Some(source_pixel) = source.get_pixel(sx as u32, sy as u32) else {
                 continue;
             };
-            let source_pixel = effect.filter.apply(source_pixel);
             if source_pixel[3] == 0 {
                 continue;
             }
@@ -1441,7 +1482,7 @@ fn fill_rect_clipped(
 
 /// The element's computed `color`, used both for ink and as the meaning of
 /// `currentcolor`. Unparseable values fall back to the CSS initial black.
-fn resolve_text_color(style: &ComputedStyle) -> [u8; 4] {
+pub(crate) fn resolve_text_color(style: &ComputedStyle) -> [u8; 4] {
     match style.get("color").and_then(parse_css_color) {
         Some(c) => c,
         None => FALLBACK_TEXT_COLOR,
@@ -2378,6 +2419,68 @@ mod tests {
         let luma = (0.2126_f32 * 255.0).round() as u8;
         assert_eq!(surface.get_pixel(1, 1), Some([luma, luma, luma, 255]));
         assert_eq!(surface.get_pixel(3, 3), Some([255, 255, 255, 255]));
+    }
+
+    #[test]
+    fn backdrop_filter_group_filters_the_snapshot_behind_it() {
+        // The box itself paints no background, so its own group layer is
+        // seeded only from the backdrop-filtered snapshot of the parent's
+        // red fill within the box's own border box.
+        let mut parent = block(&[("background-color", "red")], 0.0, 0.0, 4.0, 4.0);
+        let child = block(&[("backdrop-filter", "grayscale(1)")], 0.0, 0.0, 2.0, 2.0);
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 4, 4, &FontSource::fallback());
+        let luma = (0.2126_f32 * 255.0).round() as u8;
+        assert_eq!(surface.get_pixel(1, 1), Some([luma, luma, luma, 255]));
+        // Outside the box's border box, the backdrop is untouched.
+        assert_eq!(surface.get_pixel(3, 3), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn blur_filter_group_softens_its_own_content_edge_into_its_surrounding_transparency() {
+        // `blur(1px)`'s three-box-pass support reaches 2px past the box's
+        // own edge; a 4px margin on every side keeps the far corner clear.
+        let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 14.0, 14.0);
+        let child = block(
+            &[("background-color", "black"), ("filter", "blur(1px)")],
+            4.0,
+            4.0,
+            6.0,
+            6.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 14, 14, &FontSource::fallback());
+        assert_eq!(surface.get_pixel(7, 7), Some([0, 0, 0, 255]));
+        let edge = surface.get_pixel(3, 7).expect("just outside the unblurred box");
+        assert!(edge[0] < 255, "blur should darken just outside the box: {edge:?}");
+        assert_eq!(
+            surface.get_pixel(0, 0),
+            Some([255, 255, 255, 255]),
+            "far corner stays untouched"
+        );
+    }
+
+    #[test]
+    fn drop_shadow_filter_group_draws_its_shadow_behind_its_own_content() {
+        let mut parent = block(&[("background-color", "white")], 0.0, 0.0, 8.0, 8.0);
+        let child = block(
+            &[
+                ("background-color", "black"),
+                ("filter", "drop-shadow(2px 0px 0px red)"),
+            ],
+            3.0,
+            3.0,
+            2.0,
+            2.0,
+        );
+        parent.flow = Flow::Blocks(vec![child]);
+        let surface = paint_document(&parent, 8, 8, &FontSource::fallback());
+        // The box itself stays opaque black.
+        assert_eq!(surface.get_pixel(3, 3), Some([0, 0, 0, 255]));
+        // The shadow, offset 2px right with zero blur, shows red just past
+        // the box's own right edge (the box spans x in [3, 5)).
+        assert_eq!(surface.get_pixel(6, 3), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(0, 0), Some([255, 255, 255, 255]));
     }
 
     #[test]
