@@ -101,6 +101,12 @@
       "skipped": 1
     },
     "windows_doctests": 2,
-    "windows_updated_workspace": "pending 6936733c gate"
+    "windows_updated_workspace": {
+      "host": "win-001 (authorized fallback)",
+      "gate_sha": "6936733c01b77e827b5d2aa1805025109329dd0a",
+      "passed": 2469,
+      "skipped": 7,
+      "doctests_passed": 2
+    }
   }
 }
