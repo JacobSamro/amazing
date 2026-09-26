@@ -2883,10 +2883,8 @@ mod tests {
 
         let document_url = format!("http://127.0.0.1:{port}/pages/index.html");
         let options = FetchOptions::default();
-        let dom = amazing_html::parse(
-            "<div style='display:block;height:1200px'></div><img src=../assets/pixel.ppm loading=lazy width=8>",
-        );
-        let css = "body{margin:0}";
+        let dom = amazing_html::parse("<div></div><img src=../assets/pixel.ppm loading=lazy width=8>");
+        let css = "body{margin:0}div{display:block;height:1200px}img{display:block;width:8px}";
         let resources = load_page_resources(&dom, css, &document_url, &options, None);
         assert_eq!(resources.deferred_images.len(), 1, "below-fold image starts deferred");
         assert!(resources.images.is_empty());
@@ -2903,12 +2901,17 @@ mod tests {
                 false,
             )
             .unwrap());
+        assert!(viewport.root_scroll_offset().1 > 0.0, "End scroll moved the root");
+        let loaded = viewport.load_deferred_lazy_images(None, &options);
+        let page = viewport.page.as_ref().expect("retained page");
         assert!(
-            viewport.load_deferred_lazy_images(None, &options),
-            "scrolled lazy image is fetched"
+            loaded,
+            "scrolled lazy image is fetched: offset={:?} deferred={} images={} node={node:?}",
+            viewport.root_scroll_offset(),
+            page.resources.deferred_images.len(),
+            page.resources.images.len(),
         );
         server.join().unwrap();
-        let page = viewport.page.as_ref().expect("retained page");
         assert!(page.resources.deferred_images.is_empty());
         let image = page
             .resources
