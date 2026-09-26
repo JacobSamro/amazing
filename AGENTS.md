@@ -1,5 +1,13 @@
 # AGENTS.md
 
+## Linux-first (2026-09-26, overrides the Windows gate rules below until lifted)
+
+Windows gates are deferred. Every lane's final gate is on Linux, on its own Boat sandbox:
+`scripts/linux-run.sh <lane> -- 'cargo nextest run --workspace --locked --no-fail-fast && cargo test --workspace --locked --doc'`
+plus its corpus (Test262, WPT) before and after. Do not run `scripts/win-run.sh` or win-001 gates
+unless the orchestrator asks. Report Linux gate numbers in status.json and report.md. Merges are
+gated by the integrator on Linux (workspace + sharded Test262 on Boat).
+
 ## Work location policy
 
 **Never build or test on the local macOS machine.** Edit locally, sync to the

@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "pages": [
+    {
+      "page": "pages/news-home.html",
+      "category": "news",
+      "title": "Daily Ledger \u2014 Home"
+    },
+    {
+      "page": "pages/news-article.html",
+      "category": "news",
+      "title": "City council approves transit plan"
+    },
+    {
+      "page": "pages/news-section.html",
+      "category": "news",
+      "title": "World \u2014 Daily Ledger"
+    },
+    {
+      "page": "pages/news-live.html",
+      "category": "news",
+      "title": "Live updates: storm coverage"
+    },
+    {
+      "page": "pages/news-gallery.html",
+      "category": "news",
+      "title": "Photos of the week"
+    },
+    {
+      "page": "pages/news-opinion.html",
+      "category": "news",
+      "title": "Opinion: The case for slower streets"
+    },
+    {
+      "page": "pages/news-search.html",
+      "category": "news",
+      "title": "Search \u2014 Daily Ledger"
+    },
+    {
+      "page": "pages/news-tag.html",
+      "category": "news",
+      "title": "Tag: transit"
+    },
+    {
+      "page": "pages/news-author.html",
+      "category": "news",
+      "title": "A. Reporter \u2014 archive"
+    },
+    {
+      "page": "pages/news-subscribe.html",
+      "category": "news",
+      "title": "Subscribe"
+    },
+    {
+      "page": "pages/docs-index.html",
+      "category": "docs",
+      "title": "Amazing Docs"
+    },
+    {
+      "page": "pages/docs-guide.html",
+      "category": "docs",
+      "title": "Getting started"
+    },
+    {
+      "page": "pages/docs-api.html",
+      "category": "docs",
+      "title": "API reference"
+    },
+    {
+      "page": "pages/docs-reference.html",
+      "category": "docs",
+      "title": "Reference: layout"
+    },
+    {
+      "page": "pages/docs-changelog.html",
+      "category": "docs",
+      "title": "Changelog"
+    },
+    {
+      "page": "pages/docs-faq.html",
+      "category": "docs",
+      "title": "FAQ"
+    },
+    {
+      "page": "pages/docs-search.html",
+      "category": "docs",
+      "title": "Docs search"
+    },
+    {
+      "page": "pages/docs-tutorial.html",
+      "category": "docs",
+      "title": "Tutorial: your first page"
+    },
+    {
+      "page": "pages/docs-migration.html",
+      "category": "docs",
+      "title": "Migration guide"
+    },
+    {
+      "page": "pages/docs-cli.html",
+      "category": "docs",
+      "title": "CLI"
+    },
+    {
+      "page": "pages/wiki-article.html",
+      "category": "wiki",
+      "title": "Browser engine \u2014 Wiki"
+    },
+    {
+      "page": "pages/wiki-talk.html",
+      "category": "wiki",
+      "title": "Talk: Browser engine"
+    },
+    {
+      "page": "pages/wiki-category.html",
+      "category": "wiki",
+      "title": "Category: Engines"
+    },
+    {
+      "page": "pages/wiki-diff.html",
+      "category": "wiki",
+      "title": "Diff: revision 42"
+    },
+    {
+      "page": "pages/wiki-edit.html",
+      "category": "wiki",
+      "title": "Editing Browser engine"
+    },
+    {
+      "page": "pages/wiki-history.html",
+      "category": "wiki",
+      "title": "Revision history"
+    },
+    {
+      "page": "pages/wiki-user.html",
+      "category": "wiki",
+      "title": "User: Editor"
+    },
+    {
+      "page": "pages/wiki-portal.html",
+      "category": "wiki",
+      "title": "Community portal"
+    },
+    {
+      "page": "pages/wiki-file.html",
+      "category": "wiki",
+      "title": "File: Diagram.svg"
+    },
+    {
+      "page": "pages/wiki-template.html",
+      "category": "wiki",
+      "title": "Template: Infobox"
+    },
+    {
+      "page": "pages/shop-home.html",
+      "category": "shop",
+      "title": "Shop \u2014 Home"
+    },
+    {
+      "page": "pages/shop-category.html",
+      "category": "shop",
+      "title": "Category: Mugs"
+    },
+    {
+      "page": "pages/shop-product.html",
+      "category": "shop",
+      "title": "Amazing Mug"
+    },
+    {
+      "page": "pages/shop-cart.html",
+      "category": "shop",
+      "title": "Cart"
+    },
+    {
+      "page": "pages/shop-checkout.html",
+      "category": "shop",
+      "title": "Checkout"
+    },
+    {
+      "page": "pages/shop-search.html",
+      "category": "shop",
+      "title": "Product search"
+    },
+    {
+      "page": "pages/shop-reviews.html",
+      "category": "shop",
+      "title": "All reviews"
+    },
+    {
+      "page": "pages/shop-account.html",
+      "category": "shop",
+      "title": "Account"
+    },
+    {
+      "page": "pages/shop-wishlist.html",
+      "category": "shop",
+      "title": "Wishlist"
+    },
+    {
+      "page": "pages/shop-order.html",
+      "category": "shop",
+      "title": "Order #1007"
+    },
+    {
+      "page": "pages/app-dashboard.html",
+      "category": "app",
+      "title": "Dashboard"
+    },
+    {
+      "page": "pages/app-todos.html",
+      "category": "app",
+      "title": "Todos"
+    },
+    {
+      "page": "pages/app-chat.html",
+      "category": "app",
+      "title": "Chat"
+    },
+    {
+      "page": "pages/app-settings.html",
+      "category": "app",
+      "title": "Settings"
+    },
+    {
+      "page": "pages/app-analytics.html",
+      "category": "app",
+      "title": "Analytics"
+    },
+    {
+      "page": "pages/app-mail.html",
+      "category": "app",
+      "title": "Mail"
+    },
+    {
+      "page": "pages/app-calendar.html",
+      "category": "app",
+      "title": "Calendar"
+    },
+    {
+      "page": "pages/app-notes.html",
+      "category": "app",
+      "title": "Notes"
+    },
+    {
+      "page": "pages/app-kanban.html",
+      "category": "app",
+      "title": "Kanban"
+    },
+    {
+      "page": "pages/app-profile.html",
+      "category": "app",
+      "title": "Profile"
+    },
+    {
+      "page": "pages/news-broken-script.html",
+      "category": "news",
+      "title": "Sponsored \u2014 Daily Ledger"
+    },
+    {
+      "page": "pages/app-lazy-list.html",
+      "category": "app",
+      "title": "Lazy list"
+    }
+  ]
+}
