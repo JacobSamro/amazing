@@ -151,3 +151,17 @@ doctests 4 passed.
 - Seam: `FetchPattern`, `InterceptedRequest`, `FetchContinue`/`FetchFulfill`/
   `FetchDecision`, and `set_fetch_enabled`/`drain_intercepted_requests`/
   `resolve_intercepted_request` plus the two body methods.
+
+## CDP-5 — Emulation domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
+nextest (0 skipped) and 1 doctest; workspace 2746 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+`Emulation.setDeviceMetricsOverride`/`clearDeviceMetricsOverride`,
+`setUserAgentOverride`, `setGeolocationOverride`/`clearGeolocationOverride`,
+`setTimezoneOverride`, `setLocaleOverride`, `setEmulatedMedia`,
+`setScrollbarsHidden`, `setTouchEmulationEnabled`, `setCPUThrottlingRate` and
+`setScriptExecutionDisabled`. New seam types `DeviceMetrics` and `MediaFeature`;
+the seam methods are advisory and default to success. New protocol helpers
+`u64_param`/`bool_param`.

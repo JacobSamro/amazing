@@ -782,3 +782,58 @@ fn page_endpoint_intercepts_fetch_and_serves_bodies() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_applies_emulation_hints() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result(
+        "Emulation.setDeviceMetricsOverride",
+        obj! {
+            "width" => n(390.0),
+            "height" => n(844.0),
+            "deviceScaleFactor" => n(3.0),
+            "mobile" => Json::Bool(true),
+            "screenOrientation" => obj! { "type" => s("portraitPrimary"), "angle" => n(0.0) },
+        },
+    );
+    client.result("Emulation.setUserAgentOverride", obj! { "userAgent" => s("Amazing/Mobile") });
+    client.result("Emulation.setLocaleOverride", obj! { "locale" => s("fr-FR") });
+    client.result("Emulation.setTimezoneOverride", obj! { "timezoneId" => s("Europe/Paris") });
+    client.result(
+        "Emulation.setEmulatedMedia",
+        obj! {
+            "media" => s("print"),
+            "features" => Json::Array(vec![obj! { "name" => s("prefers-color-scheme"), "value" => s("dark") }]),
+        },
+    );
+    client.result(
+        "Emulation.setTouchEmulationEnabled",
+        obj! { "enabled" => Json::Bool(true), "maxTouchPoints" => n(5.0) },
+    );
+    client.result("Emulation.setCPUThrottlingRate", obj! { "rate" => n(4.0) });
+    client.result("Emulation.setScriptExecutionDisabled", obj! { "value" => Json::Bool(true) });
+
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        let metrics = script.device_metrics.as_ref().unwrap();
+        assert_eq!((metrics.width, metrics.height), (390, 844));
+        assert!(metrics.mobile);
+        assert_eq!(metrics.orientation_type.as_deref(), Some("portraitPrimary"));
+        assert_eq!(script.user_agent_override.as_deref(), Some("Amazing/Mobile"));
+        assert_eq!(script.locale_override, Some(Some("fr-FR".to_string())));
+        assert_eq!(script.timezone_override.as_deref(), Some("Europe/Paris"));
+        assert_eq!(script.touch_emulation, Some((true, Some(5))));
+        assert_eq!(script.cpu_throttling_rate, Some(4.0));
+        assert_eq!(script.script_execution_disabled, Some(true));
+    }
+
+    client.result("Emulation.clearDeviceMetricsOverride", empty());
+    assert_eq!(host.script().lock().unwrap().device_metrics, None);
+    client.result("Emulation.clearGeolocationOverride", empty());
+
+    shutdown.store(true, Ordering::Relaxed);
+}

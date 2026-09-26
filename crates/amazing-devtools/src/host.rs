@@ -633,6 +633,31 @@ pub enum FetchDecision {
     Fulfill(FetchFulfill),
 }
 
+/// CDP `Emulation.setDeviceMetricsOverride` inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceMetrics {
+    pub width: u32,
+    pub height: u32,
+    pub device_scale_factor: f64,
+    pub mobile: bool,
+    pub screen_width: Option<u32>,
+    pub screen_height: Option<u32>,
+    pub position_x: Option<i64>,
+    pub position_y: Option<i64>,
+    pub dont_set_visible_size: bool,
+    /// `"portraitPrimary"`, `"portraitSecondary"`, `"landscapePrimary"` or
+    /// `"landscapeSecondary"`.
+    pub orientation_type: Option<String>,
+    pub orientation_angle: Option<i64>,
+}
+
+/// One `Emulation.setEmulatedMedia` feature.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaFeature {
+    pub name: String,
+    pub value: String,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -1015,6 +1040,73 @@ pub trait DevToolsSession: Send {
         _decision: &FetchDecision,
     ) -> Result<(), HostError> {
         Err(HostError::Unsupported)
+    }
+
+    // --- Emulation --------------------------------------------------------
+    //
+    // These are advisory: a driver that does not implement one still succeeds,
+    // because an emulation hint the engine cannot honor must not fail the CDP
+    // command. Implementations apply the override to the engine's own viewport,
+    // UA, locale, media or scheduler.
+    /// Applies a device-metrics override (`Emulation.setDeviceMetricsOverride`).
+    fn set_device_metrics_override(&mut self, _metrics: &DeviceMetrics) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Clears the device-metrics override.
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the user agent string.
+    fn set_user_agent_override(
+        &mut self,
+        _user_agent: &str,
+        _accept_language: Option<&str>,
+        _platform: Option<&str>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides geolocation; `None` clears it.
+    fn set_geolocation_override(
+        &mut self,
+        _position: Option<(f64, f64, f64)>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the time zone.
+    fn set_timezone_override(&mut self, _timezone_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the locale; `None` clears it.
+    fn set_locale_override(&mut self, _locale: Option<&str>) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Emulates a media type and/or features.
+    fn set_emulated_media(
+        &mut self,
+        _media: Option<&str>,
+        _features: &[MediaFeature],
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Hides or shows scrollbars.
+    fn set_scrollbars_hidden(&mut self, _hidden: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables touch emulation.
+    fn set_touch_emulation_enabled(
+        &mut self,
+        _enabled: bool,
+        _max_touch_points: Option<u32>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Throttles the CPU by `rate` (`1.0` is unthrottled).
+    fn set_cpu_throttling_rate(&mut self, _rate: f64) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables script execution.
+    fn set_script_execution_disabled(&mut self, _value: bool) -> Result<(), HostError> {
+        Ok(())
     }
 
     // --- Events -----------------------------------------------------------

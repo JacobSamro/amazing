@@ -10,13 +10,13 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::host::{
-    BoxModel, ConsoleEvent, DevToolsHost, DevToolsSession, EngineNodeId, EvaluateParams,
-    EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo, FrameResourceTree,
-    FrameTree, HostError, HostInfo, InterceptedRequest, KeyEvent, LayoutMetrics, LifecycleEvent,
-    LogEntry, MatchedRule, MediaQuery, MouseEvent, NetworkFinishedEvent, NetworkRequestEvent,
-    NetworkResponseEvent, NodeDescription, PropertyDescriptor, RemoteObject, ResourceContent,
-    ResourceInfo, Screenshot, ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo,
-    TouchEvent, Viewport,
+    BoxModel, ConsoleEvent, DeviceMetrics, DevToolsHost, DevToolsSession, EngineNodeId,
+    EvaluateParams, EvaluateResult, ExceptionDetails, FetchDecision, FetchPattern, FrameInfo,
+    FrameResourceTree, FrameTree, HostError, HostInfo, InterceptedRequest, KeyEvent, LayoutMetrics,
+    LifecycleEvent, LogEntry, MatchedRule, MediaFeature, MediaQuery, MouseEvent,
+    NetworkFinishedEvent, NetworkRequestEvent, NetworkResponseEvent, NodeDescription,
+    PropertyDescriptor, RemoteObject, ResourceContent, ResourceInfo, Screenshot,
+    ScreenshotParams, TargetEvent, TargetEventKind, TargetInfo, TouchEvent, Viewport,
 };
 use crate::json::Json;
 
@@ -72,6 +72,26 @@ pub struct MockScript {
     pub response_bodies: Vec<(String, Vec<u8>, String)>,
     /// Request post data for `getRequestPostData`: (request_id, text).
     pub request_post_data: Vec<(String, String)>,
+    /// Last `Emulation.setDeviceMetricsOverride` value.
+    pub device_metrics: Option<DeviceMetrics>,
+    /// Last `Emulation.setUserAgentOverride` value.
+    pub user_agent_override: Option<String>,
+    /// Last `Emulation.setGeolocationOverride` (`Some(None)` clears it).
+    pub geolocation_override: Option<Option<(f64, f64, f64)>>,
+    /// Last `Emulation.setTimezoneOverride` value.
+    pub timezone_override: Option<String>,
+    /// Last `Emulation.setLocaleOverride` (`Some(None)` clears it).
+    pub locale_override: Option<Option<String>>,
+    /// Last `Emulation.setEmulatedMedia` value.
+    pub emulated_media: Option<(Option<String>, Vec<MediaFeature>)>,
+    /// Last `Emulation.setScrollbarsHidden` value.
+    pub scrollbars_hidden: Option<bool>,
+    /// Last `Emulation.setTouchEmulationEnabled` value.
+    pub touch_emulation: Option<(bool, Option<u32>)>,
+    /// Last `Emulation.setCPUThrottlingRate` value.
+    pub cpu_throttling_rate: Option<f64>,
+    /// Last `Emulation.setScriptExecutionDisabled` value.
+    pub script_execution_disabled: Option<bool>,
     /// Layout metrics returned by `Page.getLayoutMetrics`.
     pub layout_metrics: LayoutMetrics,
     /// Box model returned by `DOM.getBoxModel` / `DOM.getContentQuads`.
@@ -134,6 +154,16 @@ impl Default for MockScript {
             fetch_decisions: Vec::new(),
             response_bodies: Vec::new(),
             request_post_data: Vec::new(),
+            device_metrics: None,
+            user_agent_override: None,
+            geolocation_override: None,
+            timezone_override: None,
+            locale_override: None,
+            emulated_media: None,
+            scrollbars_hidden: None,
+            touch_emulation: None,
+            cpu_throttling_rate: None,
+            script_execution_disabled: None,
             layout_metrics: LayoutMetrics {
                 layout_viewport: Viewport {
                     page_x: 0.0,
@@ -723,6 +753,78 @@ impl DevToolsSession for MockSession {
             .unwrap()
             .fetch_decisions
             .push((request_id.to_string(), decision.clone()));
+        Ok(())
+    }
+
+    fn set_device_metrics_override(&mut self, metrics: &DeviceMetrics) -> Result<(), HostError> {
+        self.script.lock().unwrap().device_metrics = Some(metrics.clone());
+        Ok(())
+    }
+
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        self.script.lock().unwrap().device_metrics = None;
+        Ok(())
+    }
+
+    fn set_user_agent_override(
+        &mut self,
+        user_agent: &str,
+        _accept_language: Option<&str>,
+        _platform: Option<&str>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().user_agent_override = Some(user_agent.to_string());
+        Ok(())
+    }
+
+    fn set_geolocation_override(
+        &mut self,
+        position: Option<(f64, f64, f64)>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().geolocation_override = Some(position);
+        Ok(())
+    }
+
+    fn set_timezone_override(&mut self, timezone_id: &str) -> Result<(), HostError> {
+        self.script.lock().unwrap().timezone_override = Some(timezone_id.to_string());
+        Ok(())
+    }
+
+    fn set_locale_override(&mut self, locale: Option<&str>) -> Result<(), HostError> {
+        self.script.lock().unwrap().locale_override = Some(locale.map(str::to_string));
+        Ok(())
+    }
+
+    fn set_emulated_media(
+        &mut self,
+        media: Option<&str>,
+        features: &[MediaFeature],
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().emulated_media =
+            Some((media.map(str::to_string), features.to_vec()));
+        Ok(())
+    }
+
+    fn set_scrollbars_hidden(&mut self, hidden: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().scrollbars_hidden = Some(hidden);
+        Ok(())
+    }
+
+    fn set_touch_emulation_enabled(
+        &mut self,
+        enabled: bool,
+        max_touch_points: Option<u32>,
+    ) -> Result<(), HostError> {
+        self.script.lock().unwrap().touch_emulation = Some((enabled, max_touch_points));
+        Ok(())
+    }
+
+    fn set_cpu_throttling_rate(&mut self, rate: f64) -> Result<(), HostError> {
+        self.script.lock().unwrap().cpu_throttling_rate = Some(rate);
+        Ok(())
+    }
+
+    fn set_script_execution_disabled(&mut self, value: bool) -> Result<(), HostError> {
+        self.script.lock().unwrap().script_execution_disabled = Some(value);
         Ok(())
     }
 

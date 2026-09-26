@@ -6,6 +6,7 @@
 
 pub mod css;
 pub mod dom;
+pub mod emulation;
 pub mod fetch;
 pub mod input;
 pub mod log;
