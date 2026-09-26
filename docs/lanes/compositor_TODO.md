@@ -412,3 +412,54 @@ cross-lane infrastructure gap in `questions.md` (any lane capturing
 `--real-pages` off a non-Boat host will see this same drift against the
 Boat-captured baselines). Full detail and the control-test method:
 `crates/amazing-shell-gpui/evidence/comp18/shell-frame-time.md`.
+
+### COMP-19 give effect passes the GPUI presenter's direct-tiles fast path
+
+Closed the gap COMP-18 filed: `GpuiPresenter::present`
+(`crates/amazing-shell-gpui/src/compositor_presenter.rs`) set
+`direct_tiles = false` for the whole frame the instant its root pass held
+any `DrawQuad::Pass`, forcing `ReferenceCpuPresenter`'s full CPU recompose
+for any page with a `transform`/`opacity` effect group anywhere on it, even
+though the compositor's own tile cache never rerastered. New `hoist_pass`
+recursively flattens a pass into the direct-tile draw list when it is
+**flatten-safe**: `Normal` blend throughout, no filter/backdrop/mask/
+`local_transform` on any effect node in the chain (`effect_operations_are_
+trivial` -- those need `DrawQuad::Pass`'s own per-pixel/inverse-sampled
+compositing, which absolutely-positioned GPUI tiles cannot replicate), and a
+rect-only clip chain (`clip_chain_is_rect_only` -- a rounded clip's bounding
+box is not the same shape). Opacity combines via `combine_opacity`, the same
+8-bit `quantize_opacity` rounding `amazing_compositor::property`'s private
+`nested_effect_opacity` uses (duplicated locally rather than exported, to
+keep this ticket's edits inside `amazing-shell-gpui`); clips combine via a
+local `intersect_rects`. Not flatten-safe (filters, masks, rounded clips,
+rotated/scaled groups) still falls back exactly as before -- this is a
+strict widening of the safe set, not a change to the fallback itself.
+`direct_tiles`'s initial value changed from `frame.passes.len() == 1` to
+`true`: pass count was never the real constraint, only per-pass safety.
+
+Proof:
+- `shell_viewport_frame_time_trace` (unmodified by this ticket) flips
+  `direct_tiles` from `Some(false)` (all 9 rows, COMP-18) to `Some(true)`
+  (all 9 rows). `retained_call_us` drops ~1400x for `transform`/`opacity`
+  (~27M us -> ~18-19K us) and ~80x for `scroll` (~27-28M us -> ~320-340K
+  us); `build_cache_hits` stayed 8/8 throughout, before and after -- the
+  compositor's tile cache was never the bottleneck, exactly as COMP-18 had
+  already shown. Full before/after tables:
+  `crates/amazing-shell-gpui/evidence/comp19/direct-tiles.md`.
+- Pixel parity against a full repaint, new test `multi_tile_opacity_pass_
+  hoists_onto_the_direct_tile_path`: rebuilds `hoist_pass`'s exact flattened
+  draws as a synthetic single-pass frame (sharing the original's
+  `resources`/`trees`/`tile_lookup`) and asserts `ReferenceCpuPresenter`
+  produces bit-identical pixels from that synthetic frame and from the real,
+  original multi-pass one.
+- `rotated_and_effect_pass_frames_use_exact_fallback` split into
+  `rotated_pass_frame_uses_exact_fallback` (rotation still never
+  flatten-safe, unchanged expectation) and the new hoisting test above.
+
+Measured: `amazing-shell-gpui` **76/76 passed, 0 failed** (was 75; net +1
+test). `amazing-compositor` (no source touched this ticket) **93/93 passed,
+0 failed**, unchanged from COMP-18. Full workspace gate on this ticket's
+merged head (`0bf12a75`, a clean fast-forward from COMP-18's merge, so no
+rebase conflicts): **3362 tests run, 3362 passed, 0 failed, 17 skipped (3
+slow)**, doctests 4 suites/4 passed/0 failed. Zero lost passes. Evidence:
+`crates/amazing-shell-gpui/evidence/comp19/direct-tiles.md`.
