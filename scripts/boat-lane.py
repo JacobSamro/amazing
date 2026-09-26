@@ -118,7 +118,31 @@ def target_of(lane: str) -> str:
 STOPPED = {"archived", "stopped"}
 
 
+# Only sandboxes named "amazing*" (the template's own name) belong to this fleet.
+# Everything else on the account is the user's and is never stopped, resized or
+# deleted from here (2026-09-26).
+MUTATING = {"stop", "resume", "delete", "exec"}
+
+
 def boat(*args: str, timeout: int = 180) -> dict:
+    if args and args[0] in MUTATING and len(args) > 1 and args[1].startswith("bx_"):
+        name = _name_of(args[1])
+        if not name.startswith("amazing"):
+            raise SystemExit(f"boat-lane: refusing `boat {args[0]}` on {args[1]} ({name!r}): not an amazing sandbox")
+    return _boat(*args, timeout=timeout)
+
+
+_NAMES: dict[str, str] = {}
+
+
+def _name_of(sid: str) -> str:
+    if sid not in _NAMES:
+        d = _boat("info", sid)
+        _NAMES[sid] = d.get("sandbox", d).get("name", "") or ""
+    return _NAMES[sid]
+
+
+def _boat(*args: str, timeout: int = 180) -> dict:
     out = subprocess.run(
         [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
     ).stdout

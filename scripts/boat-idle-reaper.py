@@ -143,8 +143,10 @@ def main() -> int:
         wanted = wanted_types()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
-            # Only sandboxes boat-lane.py manages; anything else is the user's.
-            if "keep" in name.lower() or sid in KEEP or sid not in managed_ids():
+            # Only "amazing*" sandboxes boat-lane.py manages; anything else is the user's
+            # (their hand-made "Box <date>" sandboxes above all), never touched.
+            if (not name.startswith("amazing") or "keep" in name.lower() or sid in KEEP
+                    or sid not in managed_ids()):
                 continue
             busy = is_busy(sid)
             if busy is not False:
