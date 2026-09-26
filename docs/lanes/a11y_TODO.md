@@ -30,16 +30,16 @@ available on the build hosts; add one when the WPT corpus lands.
 
 - [x] **A11Y-1** (bulk) — role mapping, accname-1.2, states/properties, pruning,
   bounds, snapshot API, table-driven fixtures. Commit `40148f23`.
-- [ ] **A11Y-2 — relationships and collections.** `aria-owns` reparenting,
+- [x] **A11Y-2 — relationships and collections.** `aria-owns` reparenting,
   `aria-activedescendant`/focus path, `aria-posinset`/`setsize`,
-  `aria-rowindex`/`colindex`/`colspan`/`rowspan`, `aria-level` on tree items,
-  `aria-relevant` set semantics; expose a resolved `activeDescendant` and
-  focus chain on the snapshot.
-- [ ] **A11Y-3 — text content and ranges.** per-node accumulated text with
-  character offsets (AT reading order), `AxNode::text()`; static-text leaf
-  segmentation consistent with inline layout.
-- [ ] **A11Y-4 — live regions and events.** `aria-live`/`aria-atomic`/
-  `aria-relevant` change classification, `aria-busy`; emit a small
-  `AxEvent` stream (`node added/removed/property-changed`) from a tree diff.
-- [ ] **A11Y-5 — driver adoption** (with `integrator-assist`), then a CDP
+  `aria-rowindex`/`colindex`/`colspan`/`rowspan`, `aria-relevant` flags.
+  Commit `1f0eb1f2`.
+- [x] **A11Y-3 — text content and ranges.** reading-order text and character
+  offsets. Commit `e7bccba5`.
+- [x] **A11Y-4 — live regions and events.** live-region resolution, `aria-relevant`
+  gating and an `AxEvent` diff stream. Commit `21316489`.
+- [ ] **A11Y-5 — resolved relationships.** resolve `aria-describedby`/`aria-details`/
+  `aria-errormessage`/`aria-controls`/`aria-flowto`/`aria-owns` id references to
+  tree node ids and expose an `AxTree::relation` accessor.
+- [ ] **A11Y-6 — driver adoption** (with `integrator-assist`), then a CDP
   `Accessibility.getFullAXTree` backing for `devtools`.
