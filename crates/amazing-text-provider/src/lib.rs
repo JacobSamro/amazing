@@ -49,6 +49,11 @@ const MAX_UNICODE_RANGES: usize = 1024;
 const MAX_FONT_TABLES: usize = 256;
 const MAX_FONT_GLYPHS: usize = 60_000;
 const MAX_VARIATION_AXES: usize = 64;
+/// TrueType Collection (.ttc) files bundle multiple fonts sharing table data
+/// (for example large CJK families). We only ever register and rasterize the
+/// collection's first font (index 0), but still bound how many entries the
+/// header may claim before we trust it.
+const MAX_TTC_FONTS: usize = 64;
 const MAX_GLYPH_DIMENSION: u32 = 4096;
 const MAX_GLYPH_BYTES: usize = 64 * 1024 * 1024;
 const MAX_RASTER_CACHE_BYTES: usize = 32 * 1024 * 1024;
@@ -64,6 +69,12 @@ pub enum FontFormat {
     OpenType,
     Woff,
     Woff2,
+    /// A TrueType/OpenType Collection (`ttcf` magic, `.ttc`). We register and
+    /// rasterize only the collection's first font (index 0); `read-fonts`'
+    /// `FontRef::from_index(_, 0)` and swash's `FontRef::from_index` both
+    /// accept the raw collection bytes directly, so no bytes are copied out
+    /// or repackaged.
+    Collection,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1001,7 +1012,7 @@ pub fn decode_web_font_to_sfnt(format: FontFormat, bytes: &[u8]) -> Result<Vec<u
 
 fn decode_font(format: FontFormat, bytes: &[u8]) -> Result<Vec<u8>, TextError> {
     match format {
-        FontFormat::OpenType => Ok(bytes.to_vec()),
+        FontFormat::OpenType | FontFormat::Collection => Ok(bytes.to_vec()),
         FontFormat::Woff => wuff::decompress_woff1_with_custom_z(bytes, &mut |compressed,
                                                                                expected_size|
          -> Result<
@@ -1054,6 +1065,7 @@ fn sniff_font_format(bytes: &[u8]) -> Option<FontFormat> {
         b"wOFF" => Some(FontFormat::Woff),
         b"wOF2" => Some(FontFormat::Woff2),
         b"OTTO" | b"true" | [0, 1, 0, 0] => Some(FontFormat::OpenType),
+        b"ttcf" => Some(FontFormat::Collection),
         _ => None,
     }
 }
@@ -1077,14 +1089,27 @@ fn supported_font_technology(hint: &str) -> bool {
 }
 
 fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
-    if bytes.len() < 12 || sniff_font_format(bytes) != Some(FontFormat::OpenType) {
+    let header_offset = match sniff_font_format(bytes) {
+        Some(FontFormat::OpenType) => 0,
+        // Validate only the collection's first font (index 0, the one we
+        // register and rasterize): find its own sfnt header inside the file
+        // via the TTC header's offset table, then run the same directory
+        // checks against that offset. Table data can be (and for a well
+        // formed collection, is) shared with later fonts in the file; we
+        // never open those, so we never need their directories to validate.
+        Some(FontFormat::Collection) => ttc_font_directory_offset(bytes, 0)?,
+        _ => return Err(TextError::MalformedFont),
+    };
+    if bytes.len() < header_offset.checked_add(12).ok_or(TextError::MalformedFont)? {
         return Err(TextError::MalformedFont);
     }
-    let table_count = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+    let table_count =
+        u16::from_be_bytes([bytes[header_offset + 4], bytes[header_offset + 5]]) as usize;
     if table_count == 0 || table_count > MAX_FONT_TABLES {
         return Err(TextError::ResourceLimit);
     }
-    let directory_end = 12usize
+    let directory_start = header_offset + 12;
+    let directory_end = directory_start
         .checked_add(
             table_count
                 .checked_mul(16)
@@ -1098,7 +1123,7 @@ fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
     let mut ranges = Vec::with_capacity(table_count);
     let mut head = None;
     for index in 0..table_count {
-        let record = 12 + index * 16;
+        let record = directory_start + index * 16;
         let tag = &bytes[record..record + 4];
         if previous_tag.is_some_and(|previous: &[u8]| previous >= tag) {
             return Err(TextError::MalformedFont);
@@ -1140,7 +1165,10 @@ fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
     // Whole-file checksum adjustments are stale in many deployed fonts,
     // including the pinned CSSTest faces. Each table checksum still guards
     // its own contents, and directory bounds and overlaps are checked above.
-    HarfFontRef::new(bytes).map_err(|_| TextError::MalformedFont)?;
+    // `from_index(_, 0)` accepts both a lone sfnt and a collection's first
+    // font, so this one call covers `FontFormat::OpenType` and `::Collection`
+    // alike (`HarfFontRef::new` rejects `ttcf` outright).
+    HarfFontRef::from_index(bytes, 0).map_err(|_| TextError::MalformedFont)?;
     let face = SwashFontRef::from_index(bytes, 0).ok_or(TextError::MalformedFont)?;
     if face.metrics(&[]).glyph_count as usize > MAX_FONT_GLYPHS
         || face.variations().count() > MAX_VARIATION_AXES
@@ -1148,6 +1176,38 @@ fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
         return Err(TextError::ResourceLimit);
     }
     Ok(())
+}
+
+/// Locates font `index`'s own sfnt header inside a `ttcf` buffer via the TTC
+/// header's offset table. Bounds `numFonts` so a hostile header cannot force
+/// an unbounded read.
+fn ttc_font_directory_offset(bytes: &[u8], index: u32) -> Result<usize, TextError> {
+    if bytes.len() < 16 || &bytes[0..4] != b"ttcf" {
+        return Err(TextError::MalformedFont);
+    }
+    let num_fonts = u32::from_be_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    if num_fonts == 0 || num_fonts > MAX_TTC_FONTS {
+        return Err(TextError::ResourceLimit);
+    }
+    let offsets_start = 12usize;
+    let offsets_end = offsets_start
+        .checked_add(num_fonts.checked_mul(4).ok_or(TextError::ResourceLimit)?)
+        .ok_or(TextError::ResourceLimit)?;
+    if offsets_end > bytes.len() {
+        return Err(TextError::MalformedFont);
+    }
+    let entry = offsets_start
+        + (index as usize)
+            .checked_mul(4)
+            .ok_or(TextError::MalformedFont)?;
+    if entry + 4 > offsets_end {
+        return Err(TextError::MalformedFont);
+    }
+    let offset = u32::from_be_bytes(bytes[entry..entry + 4].try_into().unwrap()) as usize;
+    if offset < offsets_end || offset % 4 != 0 {
+        return Err(TextError::MalformedFont);
+    }
+    Ok(offset)
 }
 
 fn sfnt_checksum(bytes: &[u8], zero_adjustment: Option<usize>) -> u32 {
@@ -1800,7 +1860,10 @@ fn shape_range(
     let style = &spans[0].style;
     let metrics = font_metrics(font, style.size)?;
     catch_unwind(AssertUnwindSafe(|| {
-        let face = HarfFontRef::new(&font.sfnt).map_err(|_| TextError::MalformedFont)?;
+        // `from_index(_, 0)` accepts both a lone sfnt and a collection's
+        // first font (`FontFormat::Collection`, registered and validated as
+        // the collection's font 0 in `validate_font_structure`).
+        let face = HarfFontRef::from_index(&font.sfnt, 0).map_err(|_| TextError::MalformedFont)?;
         let shaper_data = ShaperData::new(&face);
         let resolved_variations = font_variations::for_face(font, style);
         let variations = resolved_variations
@@ -2236,6 +2299,30 @@ mod tests {
         synthetic_font_with_feature(mapped, None)
     }
 
+    /// Wraps `synthetic_font(mapped)` as a one-font `ttcf` collection: a TTC
+    /// header (tag, version, numFonts=1, one offset entry) followed by the
+    /// same font bytes, with every table directory offset in the embedded
+    /// font shifted by the header's length so they stay correct once the
+    /// font no longer starts at byte 0 of the file.
+    fn synthetic_ttc(mapped: char) -> Vec<u8> {
+        let mut inner = synthetic_font(mapped);
+        let header_len: u32 = 16; // tag(4) + version(4) + numFonts(4) + offsetTable[1](4)
+        let table_count = u16::from_be_bytes(inner[4..6].try_into().unwrap()) as usize;
+        for index in 0..table_count {
+            let record = 12 + index * 16;
+            let offset = u32::from_be_bytes(inner[record + 8..record + 12].try_into().unwrap());
+            inner[record + 8..record + 12]
+                .copy_from_slice(&(offset + header_len).to_be_bytes());
+        }
+        let mut ttc = Vec::new();
+        ttc.extend_from_slice(b"ttcf");
+        ttc.extend_from_slice(&be32(0x0001_0000)); // major=1, minor=0
+        ttc.extend_from_slice(&be32(1)); // numFonts
+        ttc.extend_from_slice(&be32(header_len)); // offsetTable[0]
+        ttc.extend_from_slice(&inner);
+        ttc
+    }
+
     fn synthetic_font_with_feature(mapped: char, feature: Option<[u8; 4]>) -> Vec<u8> {
         synthetic_font_with_metrics(mapped, feature, 800)
     }
@@ -2663,6 +2750,126 @@ mod tests {
                 })
                 .is_ok()
         );
+    }
+
+    /// TEXT-19: a truncated web font must always fail closed (a clean
+    /// `TextError`, never a panic) regardless of where the cut lands, since
+    /// this is exactly the shape of a network short-read (the live-pages
+    /// corpus's `Io(Error{kind: UnexpectedEof, ...})` failures, see
+    /// `.agents/text/questions.md` and `docs/lanes/text_TODO.md`'s TEXT-19
+    /// section: that error is `amazing-net`'s, raised before the decoder
+    /// ever sees the bytes, not a decoder bug -- this test locks in that a
+    /// synthetic WOFF2-shaped buffer's decode was never the gap). The real
+    /// pinned-WOFF2 counterpart is
+    /// `pinned_wpt_woff2_fails_closed_at_every_truncation_cut` in
+    /// `web_font_decode_tests.rs`.
+    #[test]
+    fn truncated_woff2_fails_closed_at_every_cut_point_never_panics() {
+        let source = synthetic_font('T');
+        for cut_at in [0, 1, 10, 50, 200, source.len() / 2, source.len() - 1] {
+            let truncated = &source[..cut_at.min(source.len())];
+            let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                decode_web_font_to_sfnt(FontFormat::Woff2, truncated)
+            }));
+            assert!(result.is_ok(), "cut={cut_at} panicked");
+            assert!(
+                result.unwrap().is_err(),
+                "cut={cut_at} unexpectedly decoded a non-WOFF2 buffer as WOFF2"
+            );
+        }
+    }
+
+    /// TEXT-19: the Linux system font scan can pick a `.ttc` collection
+    /// (common for CJK families such as Noto Sans CJK); registering one must
+    /// shape and rasterize a real glyph from its first font, not fail or
+    /// pick up garbage from the TTC header/offset table.
+    #[test]
+    fn ttc_collection_registers_shapes_and_rasterizes_its_first_font() {
+        let ttc = synthetic_ttc('T');
+        assert_eq!(sniff_font_format(&ttc), Some(FontFormat::Collection));
+
+        let mut provider = TextProvider::new();
+        let key = provider
+            .register_web_font(WebFont {
+                family: "Collection".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::Collection,
+                bytes: ttc,
+            })
+            .expect("a well-formed one-font ttc registers");
+
+        let style = TextStyle {
+            families: vec!["Collection".into()],
+            size: 16.0,
+            ..TextStyle::default()
+        };
+        let spans = [TextSpan {
+            range: 0..1,
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let shaped = provider
+            .shape(Paragraph {
+                text: "T",
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .expect("shapes through the ttc");
+        assert_eq!(shaped.runs.len(), 1);
+        assert_eq!(shaped.runs[0].font, key);
+        assert_ne!(
+            shaped.runs[0].glyphs[0].id,
+            amazing_text::GlyphId(0),
+            "shaped the .notdef glyph, not 'T'"
+        );
+
+        let raster_key = GlyphCacheKey::new(
+            provider.generation(),
+            key,
+            shaped.runs[0].glyphs[0].id,
+            16.0,
+            0,
+            0,
+        )
+        .unwrap();
+        let image = provider
+            .rasterize(GlyphRasterRequest {
+                key: raster_key,
+                variations: &[],
+                synthesis: shaped.runs[0].synthesis,
+            })
+            .expect("rasterizes without erroring")
+            .expect("a real glyph produces an image");
+        assert!(
+            image.width > 0 && image.height > 0,
+            "empty raster for a real glyph"
+        );
+    }
+
+    /// TEXT-19: the same short-read robustness as
+    /// `truncated_woff2_fails_closed_at_every_cut_point_never_panics`, but
+    /// for a `ttcf` buffer specifically -- a truncated TTC header/offset
+    /// table or a truncated embedded font must not panic or select a
+    /// garbage offset.
+    #[test]
+    fn truncated_ttc_fails_closed_never_panics() {
+        let source = synthetic_ttc('T');
+        for cut_at in [0, 4, 8, 12, 15, 16, 20, 50, source.len() / 2, source.len() - 1] {
+            let truncated = &source[..cut_at.min(source.len())];
+            let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                decode_web_font_to_sfnt(FontFormat::Collection, truncated)
+            }));
+            assert!(result.is_ok(), "cut={cut_at} panicked");
+            assert!(
+                result.unwrap().is_err(),
+                "cut={cut_at} unexpectedly decoded a truncated ttc"
+            );
+        }
     }
 
     #[test]

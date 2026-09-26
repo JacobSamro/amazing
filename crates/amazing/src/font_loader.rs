@@ -533,16 +533,133 @@ fn collect_font_files(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path
 
 #[cfg(not(target_os = "windows"))]
 fn linux_font_roots() -> Vec<std::path::PathBuf> {
-    let mut roots = vec![
+    // fontconfig's own configured directories first -- a system's
+    // `/etc/fonts/conf.d/*.conf` can point at directories the common
+    // defaults below don't cover (custom images, containers, corporate font
+    // installs) -- then the well-known defaults as a fallback/supplement for
+    // systems with no fontconfig config at all (or one this scan can't read).
+    let mut roots = fontconfig_dirs();
+    for default in [
         std::path::PathBuf::from("/usr/share/fonts"),
         std::path::PathBuf::from("/usr/local/share/fonts"),
-    ];
+    ] {
+        if !roots.contains(&default) {
+            roots.push(default);
+        }
+    }
     if let Some(home) = std::env::var_os("HOME") {
         let home = std::path::PathBuf::from(home);
-        roots.push(home.join(".fonts"));
-        roots.push(home.join(".local/share/fonts"));
+        for default in [home.join(".fonts"), home.join(".local/share/fonts")] {
+            if !roots.contains(&default) {
+                roots.push(default);
+            }
+        }
     }
     roots
+}
+
+/// Reads every `<dir>` element out of fontconfig's own config
+/// (`/etc/fonts/fonts.conf` plus `/etc/fonts/conf.d/*.conf`, the standard
+/// layout on Debian/Ubuntu/Fedora and every Boat sandbox base image seen so
+/// far), so the scan follows what fontconfig is actually configured to
+/// search rather than only a hardcoded guess. This is a small hand-rolled
+/// tag scanner, not a general XML parser -- fontconfig's config is simple,
+/// well-formed XML and `<dir>` is the only element this needs -- matching
+/// the existing lightweight-scanner style already used for CSS `@import` in
+/// `import_urls` above, rather than pulling in an XML crate for one element.
+fn fontconfig_dirs() -> Vec<std::path::PathBuf> {
+    let mut sources = vec![std::path::PathBuf::from("/etc/fonts/fonts.conf")];
+    if let Ok(entries) = std::fs::read_dir("/etc/fonts/conf.d") {
+        let mut confs: Vec<_> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("conf"))
+            .collect();
+        confs.sort();
+        sources.extend(confs);
+    }
+    let mut dirs = Vec::new();
+    for source in sources {
+        let Ok(xml) = std::fs::read_to_string(&source) else {
+            continue;
+        };
+        dirs.extend(parse_fontconfig_dir_elements(&xml));
+    }
+    dirs
+}
+
+fn parse_fontconfig_dir_elements(xml: &str) -> Vec<std::path::PathBuf> {
+    let xml = strip_xml_comments(xml);
+    let mut out = Vec::new();
+    let mut rest = xml.as_str();
+    while let Some(start) = rest.find("<dir") {
+        let after_tag_name = &rest[start + 4..];
+        // `<dir>` (no attributes) or `<dir prefix="xdg">`; either way the
+        // opening tag ends at the next `>`, and a self-closing `<dir/>`
+        // (attrs ending in `/`) has no body to scan for.
+        let Some(open_end) = after_tag_name.find('>') else {
+            break;
+        };
+        let attrs = &after_tag_name[..open_end];
+        if attrs.trim_end().ends_with('/') {
+            rest = &after_tag_name[open_end + 1..];
+            continue;
+        }
+        let body = &after_tag_name[open_end + 1..];
+        let Some(close) = body.find("</dir>") else {
+            break;
+        };
+        let content = body[..close].trim();
+        if !content.is_empty()
+            && let Some(path) = resolve_fontconfig_dir(attrs, content)
+        {
+            out.push(path);
+        }
+        rest = &body[close + "</dir>".len()..];
+    }
+    out
+}
+
+/// Removes `<!-- ... -->` comments before the `<dir>` scan runs, so a
+/// commented-out directory (fontconfig's own shipped configs comment out
+/// deprecated entries, e.g. the `~/.fonts` note) is never picked up. An
+/// unterminated comment drops everything after it rather than looping.
+fn strip_xml_comments(xml: &str) -> String {
+    let mut out = String::with_capacity(xml.len());
+    let mut rest = xml;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 4..];
+        match after.find("-->") {
+            Some(end) => rest = &after[end + 3..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Resolves one `<dir>` element's content the way fontconfig does: a
+/// `prefix="xdg"` directory is relative to `$XDG_DATA_HOME` (or
+/// `~/.local/share` when that is unset, XDG's own default), a leading `~`
+/// expands to `$HOME`, and anything else is used as-is (fontconfig's shipped
+/// configs only ever use plain absolute paths beyond those two forms).
+fn resolve_fontconfig_dir(attrs: &str, content: &str) -> Option<std::path::PathBuf> {
+    let xdg = attrs.contains("prefix=\"xdg\"") || attrs.contains("prefix='xdg'");
+    if xdg {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(|home| std::path::PathBuf::from(home).join(".local/share"))
+            })?;
+        return Some(base.join(content));
+    }
+    if let Some(rest) = content.strip_prefix('~') {
+        let home = std::env::var_os("HOME")?;
+        return Some(std::path::PathBuf::from(home).join(rest.trim_start_matches('/')));
+    }
+    Some(std::path::PathBuf::from(content))
 }
 
 /// Picks the best installed file for `bucket` by filename heuristics: known,
@@ -661,6 +778,82 @@ mod tests {
     fn imports_ignore_comments_nested_rules_and_quoted_semicolons() {
         let css = "/* @import 'bad.css'; */ @import url('sub/a.css'); @import \"b.css\" screen; p { content: '@import x.css'; }";
         assert_eq!(import_urls(css), ["sub/a.css", "b.css"]);
+    }
+
+    /// TEXT-19: mirrors the actual `/etc/fonts/fonts.conf` seen on Boat
+    /// sandbox base images -- a plain absolute `<dir>`, an `xdg`-prefixed
+    /// one, a `~`-relative one, a comment that must be ignored, and a
+    /// self-closing element with no body.
+    #[test]
+    fn fontconfig_dir_elements_cover_plain_xdg_and_tilde_forms() {
+        let xml = r#"<?xml version="1.0"?>
+<fontconfig>
+    <dir>/usr/share/fonts</dir>
+    <dir>/usr/local/share/fonts</dir>
+    <dir prefix="xdg">fonts</dir>
+    <!-- <dir>/should/be/ignored</dir> -->
+    <dir>~/.fonts</dir>
+    <cachedir prefix="xdg">fontconfig</cachedir>
+</fontconfig>
+"#;
+        let dirs = parse_fontconfig_dir_elements(xml);
+        let xdg_fonts = resolve_fontconfig_dir(r#"prefix="xdg""#, "fonts");
+        let tilde_fonts = std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".fonts"));
+        let mut expected = vec![
+            std::path::PathBuf::from("/usr/share/fonts"),
+            std::path::PathBuf::from("/usr/local/share/fonts"),
+        ];
+        expected.extend(xdg_fonts);
+        expected.extend(tilde_fonts);
+        assert_eq!(dirs, expected);
+    }
+
+    #[test]
+    fn fontconfig_xdg_dir_prefers_xdg_data_home_over_the_default() {
+        assert_eq!(
+            resolve_fontconfig_dir(r#"prefix="xdg""#, "fonts"),
+            std::env::var_os("XDG_DATA_HOME")
+                .map(std::path::PathBuf::from)
+                .map(|base| base.join("fonts"))
+                .or_else(|| {
+                    std::env::var_os("HOME")
+                        .map(|home| std::path::PathBuf::from(home).join(".local/share/fonts"))
+                })
+        );
+    }
+
+    #[test]
+    fn fontconfig_tilde_dir_expands_against_home() {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+        assert_eq!(
+            resolve_fontconfig_dir("", "~/.fonts"),
+            home.map(|home| home.join(".fonts"))
+        );
+    }
+
+    #[test]
+    fn fontconfig_plain_dir_is_used_verbatim() {
+        assert_eq!(
+            resolve_fontconfig_dir("", "/opt/company-fonts"),
+            Some(std::path::PathBuf::from("/opt/company-fonts"))
+        );
+    }
+
+    /// A hostile or truncated config (unterminated tag, no closing element)
+    /// must stop cleanly rather than loop or panic.
+    #[test]
+    fn fontconfig_comments_are_stripped_including_unterminated() {
+        assert_eq!(strip_xml_comments("a<!-- b -->c"), "ac");
+        assert_eq!(strip_xml_comments("a<!-- unterminated"), "a");
+        assert_eq!(strip_xml_comments("no comments here"), "no comments here");
+    }
+
+    #[test]
+    fn fontconfig_dir_scan_never_panics_on_truncated_markup() {
+        for xml in ["<dir", "<dir>", "<dir>/unterminated", "<dir/>", "<dir ", ""] {
+            let result = std::panic::catch_unwind(|| parse_fontconfig_dir_elements(xml));
+            assert!(result.is_ok(), "panicked on {xml:?}");
+        }
     }
 
     #[test]
