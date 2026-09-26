@@ -19,6 +19,7 @@ moved to a larger type.
 
 Usage:
   boat-lane.py ensure <lane> [--type default]   print "<user@host> <port> <id> <pool>"
+  boat-lane.py heal <lane>                      restart it if its lazy filesystem died; print as ensure
   boat-lane.py stop <lane>
   boat-lane.py list
   boat-lane.py pool-report [--hours 2]
@@ -109,6 +110,38 @@ def wait_ready(sid: str, limit: int = 300) -> dict:
     raise SystemExit(f"boat-lane: {sid} not ready after {limit}s")
 
 
+KEY = os.path.expanduser("~/.ssh/ascii_box_ed25519")
+
+
+def healthy(d: dict) -> bool:
+    """A resumed sandbox serves /home/user from ascii-lazyfs (FUSE). Under load
+    right after a resume that daemon can die, leaving every path failing with
+    "Transport endpoint is not connected" until the sandbox restarts."""
+    host, port = d["sshEndpoint"].rsplit(":", 1)
+    try:
+        r = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+             "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+             "-o", "ConnectTimeout=20", "-i", KEY, "-p", port, f"user@{host}",
+             "stat -c %s ~/.amazing-env >/dev/null && mkdir -p ~/amazing/wt && touch ~/amazing/wt/.probe"],
+            capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
+    return r.returncode == 0
+
+
+def heal(lane: str) -> dict:
+    """Restart the lane's sandbox when its lazy filesystem has died."""
+    sid = load_map().get(pool_of(lane))
+    d = wait_ready(sid)
+    if healthy(d):
+        return d
+    print(f"boat-lane: {sid} filesystem broken (lazyfs); restarting it", file=sys.stderr)
+    boat("stop", sid, timeout=240)
+    boat("resume", sid, "--no-auto-stop", timeout=240)
+    return wait_ready(sid)
+
+
 def ensure(lane: str, size: str) -> dict:
     # Parallel shard runs create sandboxes at once; serialize map updates.
     MAP.parent.mkdir(parents=True, exist_ok=True)
@@ -151,6 +184,11 @@ def main() -> int:
         d = ensure(lane, size)
         host, port = d["sshEndpoint"].rsplit(":", 1)
         print(f"user@{host} {port} {d['id']} {pool_of(lane)}")
+        return 0
+    if cmd == "heal":
+        d = heal(sys.argv[2])
+        host, port = d["sshEndpoint"].rsplit(":", 1)
+        print(f"user@{host} {port} {d['id']} {pool_of(sys.argv[2])}")
         return 0
     if cmd == "stop":
         sid = load_map().get(pool_of(sys.argv[2]))

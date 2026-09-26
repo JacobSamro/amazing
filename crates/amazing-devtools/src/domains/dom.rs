@@ -1,7 +1,7 @@
 //! The `DOM` domain: document tree, queries, serialization and attributes.
 
 use super::{object, remote_object};
-use crate::host::{EngineNodeId, NodeDescription, RemoteObject};
+use crate::host::{BoxModel, EngineNodeId, NodeDescription, Quad, RemoteObject};
 use crate::json::Json;
 use crate::protocol::{CdpError, CdpRequest};
 use crate::session::{DispatchOutcome, SessionState};
@@ -144,8 +144,130 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
                 remote_object(&remote),
             )])))
         }
+        "DOM.setNodeValue" => {
+            let node = require_node(session, request)?;
+            let value = request.string_param("value")?;
+            session
+                .dev
+                .set_node_value(node, value)
+                .map_err(CdpError::from)?;
+            Ok(DispatchOutcome::empty())
+        }
+        "DOM.getBoxModel" => {
+            let node = resolve_node(session, request)?;
+            let model = session.dev.get_box_model(node).map_err(CdpError::from)?;
+            Ok(DispatchOutcome::result(object(vec![(
+                "model",
+                box_model_json(&model),
+            )])))
+        }
+        "DOM.getContentQuads" => {
+            let node = resolve_node(session, request)?;
+            let quads = session
+                .dev
+                .get_content_quads(node)
+                .map_err(CdpError::from)?;
+            let quads: Vec<Json> = quads.iter().map(|model| quad_json(&model.content)).collect();
+            Ok(DispatchOutcome::result(object(vec![(
+                "quads",
+                Json::Array(quads),
+            )])))
+        }
+        "DOM.performSearch" => {
+            let query = request.string_param("query")?;
+            let _include_shadow = request.optional_bool("includeUserAgentShadowDOM", false)?;
+            let found = session.dev.perform_search(query).map_err(CdpError::from)?;
+            let count = found.len();
+            let search_id = session.store_search(found);
+            Ok(DispatchOutcome::result(object(vec![
+                ("searchId", Json::String(search_id)),
+                ("resultCount", Json::number(count as f64)),
+            ])))
+        }
+        "DOM.getSearchResults" => {
+            let search_id = request.string_param("searchId")?;
+            let from = request.optional_u64("fromIndex")?.unwrap_or(0) as usize;
+            let to = request.optional_u64("toIndex")?.unwrap_or(u64::MAX) as usize;
+            let results = session.searches.get(search_id).cloned().unwrap_or_default();
+            let end = to.min(results.len());
+            let start = from.min(end);
+            let ids: Vec<Json> = results[start..end]
+                .iter()
+                .map(|engine| Json::number(session.nodes.id(*engine) as f64))
+                .collect();
+            Ok(DispatchOutcome::result(object(vec![(
+                "nodeIds",
+                Json::Array(ids),
+            )])))
+        }
+        "DOM.discardSearchResults" => {
+            let search_id = request.string_param("searchId")?;
+            session.searches.remove(search_id);
+            Ok(DispatchOutcome::empty())
+        }
+        "DOM.pushNodesByBackendIdsToFrontend" => {
+            let raw = request
+                .params
+                .get("backendNodeIds")
+                .and_then(Json::as_array)
+                .ok_or_else(|| CdpError::invalid_params("backendNodeIds must be an array"))?;
+            let mut backend = Vec::with_capacity(raw.len());
+            for item in raw {
+                backend.push(item.as_u64().ok_or_else(|| {
+                    CdpError::invalid_params("backendNodeIds entries must be integers")
+                })?);
+            }
+            let nodes = session.dev.push_nodes(&backend).map_err(CdpError::from)?;
+            let ids: Vec<Json> = nodes
+                .into_iter()
+                .map(|engine| Json::number(session.nodes.id(engine) as f64))
+                .collect();
+            Ok(DispatchOutcome::result(object(vec![(
+                "nodeIds",
+                Json::Array(ids),
+            )])))
+        }
+        "DOM.getNodeForLocation" => {
+            let x = request.number_param("x")?;
+            let y = request.number_param("y")?;
+            let _shadow = request.optional_bool("includeUserAgentShadowDOM", false)?;
+            let engine = session.dev.node_for_location(x, y).map_err(CdpError::from)?;
+            let node_id = session.nodes.id(engine);
+            let frame_id = session
+                .dev
+                .frame_tree()
+                .map(|tree| tree.frame.id)
+                .unwrap_or_default();
+            Ok(DispatchOutcome::result(object(vec![
+                ("backendNodeId", Json::number(engine.0 as f64)),
+                ("frameId", Json::String(frame_id)),
+                ("nodeId", Json::number(node_id as f64)),
+            ])))
+        }
         other => Err(CdpError::method_not_found(other)),
     }
+}
+
+/// Serializes a quad as CDP's flat `[x1,y1,x2,y2,x3,y3,x4,y4]`.
+fn quad_json(quad: &Quad) -> Json {
+    let mut values = Vec::with_capacity(8);
+    for (x, y) in quad.points {
+        values.push(Json::number(x));
+        values.push(Json::number(y));
+    }
+    Json::Array(values)
+}
+
+/// Serializes a `DOM.BoxModel`.
+fn box_model_json(model: &BoxModel) -> Json {
+    object(vec![
+        ("content", quad_json(&model.content)),
+        ("padding", quad_json(&model.padding)),
+        ("border", quad_json(&model.border)),
+        ("margin", quad_json(&model.margin)),
+        ("width", Json::number(model.width as f64)),
+        ("height", Json::number(model.height as f64)),
+    ])
 }
 
 /// The opaque object handle used by `DOM.resolveNode`.
