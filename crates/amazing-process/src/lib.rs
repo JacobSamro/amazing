@@ -58,6 +58,11 @@ const INTERFACES: &[VersionRange] = &[
         max: 1,
     },
     VersionRange {
+        interface: 15,
+        min: 1,
+        max: 1,
+    },
+    VersionRange {
         interface: 17,
         min: 1,
         max: 1,
@@ -828,6 +833,7 @@ pub struct SandboxPolicy {
 pub mod gpu;
 pub mod gpu_snapshot_wire;
 pub mod history;
+pub mod messaging;
 pub mod network;
 pub mod network_cache;
 pub mod network_hsts;

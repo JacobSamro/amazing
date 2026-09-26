@@ -35,6 +35,10 @@ use runtime_host_storage::StorageRuntime;
 mod runtime_host_net;
 use runtime_host_net::{NetNativeEntry, NetRuntime};
 
+#[path = "runtime_host_messaging.rs"]
+pub(crate) mod runtime_host_messaging;
+use runtime_host_messaging::MessagingOp;
+
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
@@ -52,6 +56,7 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    Messaging(MessagingOp),
     StorageLockSettled(u64, bool),
 }
 
@@ -93,6 +98,7 @@ struct BindingState {
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
+    messaging: Option<runtime_host_messaging::MessagingRealm>,
     net: NetRuntime,
 }
 
@@ -466,6 +472,7 @@ pub(crate) fn install(
         storage: None,
         storage_classes: HashMap::new(),
         storage_inbox: VecDeque::new(),
+        messaging: None,
         net: NetRuntime::new(),
     }));
     let for_dispatch = state.clone();
@@ -494,6 +501,7 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
             NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
     });
@@ -507,6 +515,7 @@ pub(crate) fn install(
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
+    adapter.install_messaging()?;
     adapter.install_canvas()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
