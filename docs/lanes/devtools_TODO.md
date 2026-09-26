@@ -825,3 +825,100 @@ Boundary candidates for a future ticket: real synchronous pause/resume/step
 (js-runtime/js-vm, needs a resumable execution API); per-execution-context
 script identity instead of "last top-level script tagged"; conditional
 breakpoints; `urlRegex` support; HTML-relative script source locations.
+
+## CDP-21 — Network.setCacheDisabled/setExtraHTTPHeaders, Emulation.
+setDeviceMetricsOverride, Input.insertText — done
+
+Coordinator's ticket: the four methods above, each with its own end-to-end
+test.
+
+- Unlike CDP-19/20, the `amazing-devtools` protocol layer was NOT already
+  complete for two of these: `Network.setCacheDisabled` existed only as a
+  dispatch arm that never called any host method, and
+  `Network.setExtraHTTPHeaders` did not exist anywhere in the protocol layer.
+  Added both as new `DevToolsSession` trait methods in `host.rs`
+  (`set_cache_disabled(&mut self, disabled: bool)`,
+  `set_extra_http_headers(&mut self, headers: &[(String, String)])`,
+  both `Ok(())`-by-default) and a new/rewired dispatch arm in
+  `domains/network.rs`. `Emulation.setDeviceMetricsOverride`/
+  `clearDeviceMetricsOverride` and `Input.insertText` already had full
+  protocol-layer wiring from an earlier generic-protocol ticket; this ticket's
+  delta there is entirely the driver.
+- **No real HTTP cache to disable** (confirmed via grep: `amazing-net` has no
+  cache subsystem at all), so `Network.setCacheDisabled`'s real, testable
+  effect is adding `Cache-Control: no-cache`/`Pragma: no-cache` request
+  headers to every future fetch — an honest, wire-observable substitute
+  matching what a real browser also does over the wire.
+  `Network.setExtraHTTPHeaders` is a full replace each call, matching CDP.
+- **Both survive a `Page.navigate` reload**, which is a genuine
+  chicken-and-egg problem: a reload replaces the whole `PageOwner`
+  (`navigate()`'s `*self = reloaded`), and the very first document fetch
+  *of that replacement* needs to already carry the headers. Solved by
+  threading `extra_headers`/`cache_disabled` as explicit parameters into
+  `PageOwner::fetch_and_load` itself, with `navigate()` passing its own
+  current state forward, rather than trying to inject them onto the
+  `PageOwner` after construction.
+- **`Emulation.setDeviceMetricsOverride`'s width/height are read through two
+  new helpers, `PageOwner::effective_width()`/`effective_fixed_height()`**
+  (override when set, else the page's own base width / auto height), and
+  every layout/render call site was switched to go through them:
+  `layout_metrics`, `hit_test_node`, `get_box_model`,
+  `media_environment` (feeds `getComputedStyleForNode`'s media query
+  environment), `capture_screenshot`, `full_ax_tree`. Proven with a real
+  `Page.captureScreenshot` PNG decoded to check its `IHDR` width/height
+  matches the override, and `Page.getLayoutMetrics`' `contentSize.width`
+  before/during/after the override and its clear.
+- `height: 0` (a real, documented CDP value) keeps auto-height rather than
+  fixing it at `0` — matches real Chrome's own "don't override height"
+  convention, and maps directly onto this engine's pre-existing
+  `paint_host_surface(..., fixed_height: Option<u32>, ...)` convention where
+  `None` already meant the same thing.
+- The override does NOT ride along with a reload the same way headers do —
+  there's no "base height" field to bake it into (unlike width). `navigate()`
+  instead captures `override_width`/`override_fixed_height`/
+  `device_scale_factor` before fetching and restores them onto the
+  replacement `PageOwner` afterward.
+- `deviceScaleFactor` is stored; `mobile`/`screenWidth`/`screenHeight`/
+  `positionX`/`positionY`/`dontSetVisibleSize`/orientation are accepted but
+  not applied — this driver's raster path has no separate screen size,
+  window position, or orientation concept to honor them against.
+- **`Input.insertText` reuses real JS bindings instead of reimplementing DOM
+  manipulation in the driver**: synthesizes and runs a small JS snippet
+  (`document.activeElement`, its `value` setter, `new Event('input', {bubbles:
+  true})`, `dispatchEvent`) through the existing `scheduler.run_script`. No
+  caret/selection model, so it always appends at the end; returns
+  `HostError::Unsupported` when nothing focused has a `value` property (e.g.
+  a `contenteditable` element — real rich-text insertion is out of scope).
+- Proof — two new end-to-end WebSocket tests:
+  `end_to_end_network_set_cache_disabled_and_extra_headers_reach_the_wire`
+  (real fixture HTTP server records the raw request head of both the initial
+  navigate and a reload; both `Cache-Control`/`Pragma: no-cache` and the
+  extra header are found on both) and
+  `end_to_end_device_metrics_override_and_insert_text` (layout metrics width
+  before/during/after the override and its clear; screenshot PNG dimensions
+  match the override; insertText appends into a real `<input>` and a real
+  `addEventListener('input', ...)` observes it).
+- **Code-health split**: the CDP-21 additions alone would have pushed
+  `runtime_host_devtools.rs` to 4121 lines, over the project's 4000-line
+  policy. Split its `#[cfg(test)] mod tests { ... }` block out into
+  `runtime_host_devtools_tests.rs` (declared with `#[path = "..."] mod
+  tests;`), matching the `amazing-dom` `*_tests.rs` convention already used
+  elsewhere in the workspace (e.g. `tree.rs`/`tree_tests.rs`). Both files are
+  now under the limit (2694 and 1428 lines) and the module path
+  (`runtime_host_devtools::tests::...`) is unchanged.
+
+Known limitations, newly documented: `setCacheDisabled` has no cache to
+actually disable (headers-only substitute); device metrics override's
+`mobile`/screen/position/orientation fields are accepted but unapplied;
+`insertText` is `<input>`/`<textarea>`-only, no caret/selection model, no
+`contenteditable` support.
+
+Linux gate (Boat `bx_xbhqabax`, per-lane target): workspace nextest 3135
+passed, 0 failed, 14 skipped (up from CDP-20's 3133/0/14 — two new tests,
+zero losses); all workspace doctests passed. Committed as `6611b6da`.
+
+Boundary candidates for a future ticket: a real per-request/per-origin cache
+subsystem in `amazing-net` (would let `setCacheDisabled` mean something
+closer to real Chrome); applying `mobile`/screen/position/orientation from
+`setDeviceMetricsOverride`; caret/selection-aware `insertText` and
+`contenteditable` support.
