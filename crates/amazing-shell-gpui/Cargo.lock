@@ -391,6 +391,7 @@ dependencies = [
  "flate2",
  "harfrust 0.13.2",
  "icu_segmenter",
+ "read-fonts 0.43.2",
  "swash",
  "unicode-bidi",
  "unicode-vo",
@@ -2746,7 +2747,7 @@ checksum = "15ad4d35d36fbab3cbcc5f90043a47f6ea4ab0d67760107d482836f755b90b38"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
- "read-fonts 0.43.3",
+ "read-fonts 0.43.2",
  "smallvec",
 ]
 
@@ -5041,9 +5042,9 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.43.3"
+version = "0.43.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "005c8acf251756c478b0bf402885bfd88a1476020c4c7e6060edc1aa68da38ea"
+checksum = "315132758c032b03a4d3a3ada9289d5608f2ff16c91157888afc8c8e8e9bb209"
 dependencies = [
  "bytemuck",
  "font-types 0.12.5",
