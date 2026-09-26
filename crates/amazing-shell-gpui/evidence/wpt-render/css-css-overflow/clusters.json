@@ -1,0 +1,343 @@
+{
+  "schema": 1,
+  "subdir": "css/css-overflow",
+  "mismatch_count": 256,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 74,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-auto-017.html",
+        "css__css-overflow__line-clamp__line-clamp-with-abspos-001.html",
+        "css__css-overflow__line-clamp__line-clamp-with-abspos-003.html",
+        "css__css-overflow__line-clamp__block-ellipsis-013.html",
+        "css__css-overflow__line-clamp__block-ellipsis-028.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 25,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-013.tentative.html",
+        "css__css-overflow__line-clamp__webkit-line-clamp-016.html",
+        "css__css-overflow__line-clamp__line-clamp-023.tentative.html",
+        "css__css-overflow__line-clamp__line-clamp-auto-037.html",
+        "css__css-overflow__line-clamp__line-clamp-auto-019.tentative.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 18,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-auto-033.html",
+        "css__css-overflow__line-clamp__line-clamp-009.html",
+        "css__css-overflow__line-clamp__line-clamp-with-abspos-021.html",
+        "css__css-overflow__line-clamp__line-clamp-auto-031.tentative.html",
+        "css__css-overflow__line-clamp__line-clamp-with-fixed-pos-016.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 16,
+      "examples": [
+        "css__css-overflow__line-clamp__webkit-line-clamp-034.html",
+        "css__css-overflow__overflow-clip-margin-017.html",
+        "css__css-overflow__overflow-clip-margin-020.html",
+        "css__css-overflow__overflow-auto-scrollbar-gutter-intrinsic-003.html",
+        "css__css-overflow__overflow-clip-margin-019.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 15,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-balance-011.html",
+        "css__css-overflow__line-clamp__block-ellipsis-bidi-004.html",
+        "css__css-overflow__line-clamp__line-clamp-balance-007.html",
+        "css__css-overflow__line-clamp__line-clamp-auto-010.html",
+        "css__css-overflow__line-clamp__line-clamp-balance-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 15,
+      "examples": [
+        "css__css-overflow__line-clamp__block-ellipsis-bidi-002.html",
+        "css__css-overflow__line-clamp__line-clamp-balance-005.html",
+        "css__css-overflow__line-clamp__block-ellipsis-008.html",
+        "css__css-overflow__line-clamp__line-clamp-balance-001.html",
+        "css__css-overflow__line-clamp__line-clamp-balance-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 13,
+      "examples": [
+        "css__css-overflow__line-clamp__webkit-line-clamp-051.html",
+        "css__css-overflow__line-clamp__block-ellipsis-030.html",
+        "css__css-overflow__line-clamp__webkit-line-clamp-053.html",
+        "css__css-overflow__line-clamp__block-ellipsis-002.html",
+        "css__css-overflow__overflow-clip-margin-mul-column-content-box.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less blue than reference",
+      "count": 11,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-with-abspos-022.html",
+        "css__css-overflow__line-clamp__line-clamp-with-fixed-pos-010.html",
+        "css__css-overflow__line-clamp__line-clamp-with-fixed-pos-007.html",
+        "css__css-overflow__line-clamp__line-clamp-with-fixed-pos-013.html",
+        "css__css-overflow__line-clamp__line-clamp-with-fixed-pos-009.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 8,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-011.html",
+        "css__css-overflow__scroll-markers__scroll-buttons-003.html",
+        "css__css-overflow__scroll-markers__scroll-marker-group-001.html",
+        "css__css-overflow__scroll-markers__scroll-marker-counters.html",
+        "css__css-overflow__scroll-markers__scroll-buttons-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 8,
+      "examples": [
+        "css__css-overflow__scroll-markers__scroll-buttons-appearance.html",
+        "css__css-overflow__no-scrollable-overflow-vertical-rl-2.html",
+        "css__css-overflow__scroll-markers__scroll-marker-011.html",
+        "css__css-overflow__scroll-markers__column-scroll-marker-reattach-target-current.html",
+        "css__css-overflow__no-scrollable-overflow-vertical-rl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-overflow__line-clamp__webkit-line-clamp-010.html",
+        "css__css-overflow__line-clamp__webkit-line-clamp-027.html",
+        "css__css-overflow__line-clamp__webkit-line-clamp-008.html",
+        "css__css-overflow__line-clamp__line-clamp-006.html",
+        "css__css-overflow__line-clamp__line-clamp-007.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__overflow-body-propagation-008.html",
+        "css__css-overflow__overflow-body-propagation-007.html",
+        "css__css-overflow__overflow-body-propagation-009.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__line-clamp__webkit-line-clamp-049.html",
+        "css__css-overflow__scroll-markers__scroll-marker-group-011.html",
+        "css__css-overflow__scroll-markers__scroll-marker-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__line-clamp__block-ellipsis-016.html",
+        "css__css-overflow__overflow-clip-transform-001.html",
+        "css__css-overflow__line-clamp__block-ellipsis-034.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-balance-009.html",
+        "css__css-overflow__line-clamp__block-ellipsis-bidi-003.html",
+        "css__css-overflow__line-clamp__block-ellipsis-032.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, lighter than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__scroll-markers__scroll-marker-010.html",
+        "css__css-overflow__scroll-markers__scroll-marker-004.html",
+        "css__css-overflow__scroll-markers__scroll-marker-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-mul-column-border-box.html",
+        "css__css-overflow__scroll-markers__scroll-target-group-004.html",
+        "css__css-overflow__scroll-markers__scroll-target-group-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-overflow__overflow-clipped-transparent-border-clip.html",
+        "css__css-overflow__overflow-clip-margin-004.html",
+        "css__css-overflow__overflow-overlay.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 2,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-015.html",
+        "css__css-overflow__line-clamp__line-clamp-with-text-overflow-string-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-015.html",
+        "css__css-overflow__overflow-clip-margin-013.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-001.html",
+        "css__css-overflow__overflow-clip-margin-visual-box-and-value.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-overflow__line-clamp__block-ellipsis-025.html",
+        "css__css-overflow__line-clamp__line-clamp-auto-041.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-auto-003.tentative.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-visual-box.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__overflow-clip-content-visual-overflow.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__scroll-marker-selection-in-2d.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-border-radius-002.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__scroll-marker-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__block-ellipsis-035.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-auto-046.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__root-scroll-button.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__scroll-marker-group-013.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__block-ellipsis-041.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__line-clamp-auto-009.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__overflow-clip-margin-visual-box-and-value-with-border-radius.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__discard__discard-multicol-003.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__column-scroll-marker-006.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-right, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__line-clamp__webkit-line-clamp-015.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-overflow__scroll-markers__column-scroll-marker-001.html"
+      ]
+    }
+  ]
+}

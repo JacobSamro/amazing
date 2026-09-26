@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "subdir": "css/css-counter-styles",
+  "mismatch_count": 24,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__css-counter-styles__trad-chinese-formal__css3-counter-styles-088.html",
+        "css__css-counter-styles__simp-chinese-informal__css3-counter-styles-073.html",
+        "css__css-counter-styles__simp-chinese-formal__css3-counter-styles-078.html",
+        "css__css-counter-styles__trad-chinese-informal__css3-counter-styles-083.html",
+        "css__css-counter-styles__hebrew__css3-counter-styles-016a.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-counter-styles__hebrew__css3-counter-styles-015.html",
+        "css__css-counter-styles__hebrew__css3-counter-styles-017.html",
+        "css__css-counter-styles__arabic-indic__css3-counter-styles-103.html",
+        "css__css-counter-styles__arabic-indic__css3-counter-styles-101.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-counter-styles__korean-hanja-informal__css3-counter-styles-059.html",
+        "css__css-counter-styles__korean-hanja-formal__css3-counter-styles-064.html",
+        "css__css-counter-styles__korean-hangul-formal__css3-counter-styles-054.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-counter-styles__japanese-informal__counter-japanese-informal-extended.html",
+        "css__css-counter-styles__korean-hanja-informal__counter-korean-hanja-informal-extended.html",
+        "css__css-counter-styles__japanese-formal__counter-japanese-formal-extended.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-counter-styles__hebrew__css3-counter-styles-016.html",
+        "css__css-counter-styles__arabic-indic__css3-counter-styles-102.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-counter-styles__counter-suffix.html",
+        "css__css-counter-styles__counter-style-at-rule__name-case-sensitivity.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-counter-styles__korean-hanja-formal__counter-korean-hanja-formal-extended.html",
+        "css__css-counter-styles__korean-hangul-formal__counter-korean-hangul-formal-extended.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-counter-styles__hebrew__counter-hebrew-nested.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-counter-styles__counter-style-at-rule__broken-symbols.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-counter-styles__ethiopic-numeric__counter-ethiopic-numeric.html"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,411 @@
+{
+  "schema": 1,
+  "subdir": "css/css-break",
+  "mismatch_count": 169,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 26,
+      "examples": [
+        "css__css-break__break-between-avoid-001.html",
+        "css__css-break__break-between-avoid-002.html",
+        "css__css-break__fieldset-007.html",
+        "css__css-break__flexbox__single-line-column-flex-fragmentation-071.html",
+        "css__css-break__flexbox__single-line-column-flex-fragmentation-070d.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 16,
+      "examples": [
+        "css__css-break__flexbox__single-line-column-flex-fragmentation-026.html",
+        "css__css-break__flexbox__multi-line-column-flex-fragmentation-043.html",
+        "css__css-break__monolithic-content-with-forced-break-002.html",
+        "css__css-break__flexbox__multi-line-column-flex-fragmentation-042.html",
+        "css__css-break__table__repeated-section__variable-fragmentainer-size-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 12,
+      "examples": [
+        "css__css-break__table__table-section-paint-vlr-rtl.html",
+        "css__css-break__table__table-fragmentation-003c-print.html",
+        "css__css-break__table__table-row-paint-vrl-rtl.html",
+        "css__css-break__table__table-section-paint-vrl-rtl.html",
+        "css__css-break__table__table-row-paint-vlr-rtl.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, same tone, different shape",
+      "count": 8,
+      "examples": [
+        "css__css-break__widows-orphans-009.html",
+        "css__css-break__widows-001.html",
+        "css__css-break__widows-orphans-018.html",
+        "css__css-break__widows-orphans-016.html",
+        "css__css-break__widows-orphans-008.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-break__flexbox__flex-container-fragmentation-007.tentative.html",
+        "css__css-break__grid__grid-lanes__grid-lanes-container-fragmentation-007.tentative.html",
+        "css__css-break__widows-orphans-023.html",
+        "css__css-break__widows-orphans-020.html",
+        "css__css-break__widows-orphans-021.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-break__box-decoration-break-clone-009.html",
+        "css__css-break__overflowed-block-with-no-room-after-000.html",
+        "css__css-break__tall-float-pushed-to-next-fragmentainer-002.html",
+        "css__css-break__grid__grid-item-oof-013.html",
+        "css__css-break__flexbox__flex-item-content-overflow-001a.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-break__borders-002.html",
+        "css__css-break__out-of-flow-in-multicolumn-014.html",
+        "css__css-break__break-inside-avoid-min-block-size-1.html",
+        "css__css-break__table__sections-and-captions-mixed-order.html",
+        "css__css-break__table__table-grid-paint-vlr-rtl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-break__table__table-collapsed-borders-paint-htb-ltr.html",
+        "css__css-break__float-017.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-093.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-070.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-068.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-break__table__repeated-section__balanced-inner-multicol.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-071.html",
+        "css__css-break__table__repeated-section__fixedpos-in-footer-forced-break-print.html",
+        "css__css-break__box-shadow-005.html",
+        "css__css-break__transform-008.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 5,
+      "examples": [
+        "css__css-break__ruby-003.html",
+        "css__css-break__flexbox__flex-item-content-overflow-002b.html",
+        "css__css-break__block-end-aligned-abspos-with-overflow.html",
+        "css__css-break__flexbox__flex-item-content-overflow-001b.html",
+        "css__css-break__forced-break-at-fragmentainer-start-000.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, bluer than reference",
+      "count": 4,
+      "examples": [
+        "css__css-break__table__table-fragmentation-001b-print.html",
+        "css__css-break__table__table-fragmentation-001d-print.html",
+        "css__css-break__borders-007.html",
+        "css__css-break__borders-006.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-break__table__table-fragmentation-001a-print.html",
+        "css__css-break__table__table-fragmentation-001c-print.html",
+        "css__css-break__table__table-fragmentation-002a-print.html",
+        "css__css-break__table__table-fragmentation-002c-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-095.html",
+        "css__css-break__relpos-inline.html",
+        "css__css-break__table__table-caption-and-cells-fixed-width.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-094.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-break__borders-003.html",
+        "css__css-break__borders-005.html",
+        "css__css-break__fragmented-autowidth-fc-root-beside-floats.html",
+        "css__css-break__borders-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, right, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-082d-print.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-082a-print.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-082c-print.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-082b-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less green than reference",
+      "count": 4,
+      "examples": [
+        "css__css-break__fieldset-004.html",
+        "css__css-break__transform-007.html",
+        "css__css-break__fieldset-002.html",
+        "css__css-break__transform-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-break__flexbox__multi-line-column-flex-fragmentation-059.html",
+        "css__css-break__flexbox__multi-line-column-flex-fragmentation-061.html",
+        "css__css-break__flexbox__multi-line-column-flex-fragmentation-060.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, less blue than reference",
+      "count": 3,
+      "examples": [
+        "css__css-break__box-shadow-004.html",
+        "css__css-break__box-shadow-002.html",
+        "css__css-break__box-shadow-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-break__flexbox__single-line-column-flex-fragmentation-066-print.html",
+        "css__css-break__flexbox__single-line-row-flex-fragmentation-046-print.html",
+        "css__css-break__out-of-flow-in-multicolumn-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-065.html",
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-067.html",
+        "css__css-break__table__table-fragmentation-003b-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-break__flexbox__single-line-row-flex-fragmentation-042-print.html",
+        "css__css-break__table__table-caption-and-cells.html",
+        "css__css-break__fieldset-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__abspos-in-opacity-001.html",
+        "css__css-break__flexbox__single-line-row-flex-fragmentation-027.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__borders-000.html",
+        "css__css-break__borders-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, bluer than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__flexbox__single-line-row-flex-fragmentation-045-print.html",
+        "css__css-break__flexbox__single-line-column-flex-fragmentation-065-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less green than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__abspos-in-opacity-003.html",
+        "css__css-break__abspos-in-opacity-002.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__break-inside-avoid-min-block-size-2.html",
+        "css__css-break__break-inside-avoid-multicol-001-print.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-break__flexbox__flex-container-fragmentation-006.html",
+        "css__css-break__grid__grid-lanes__grid-lanes-container-fragmentation-006.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-063-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-break__transform-009.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__transform-024-print.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__table__repeated-section__text-in-nested-multicol.html"
+      ]
+    },
+    {
+      "signature": "small-region, bottom-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__widows-orphans-012.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-break__root-margin-001-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__fieldset-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__borders-008.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__rounded-clipped-border.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__out-of-flow-in-multicolumn-093.html"
+      ]
+    },
+    {
+      "signature": "small-region, bottom-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-break__widows-orphans-013.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__single-line-row-flex-fragmentation-044.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__flex-fragmented-with-float-descendant-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-076-print.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-075-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, bottom, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-064-print.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__flexbox__multi-line-row-flex-fragmentation-096.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-break__table__table-collapsed-borders-paint-at-boundary.tentative.html"
+      ]
+    },
+    {
+      "signature": "small-region, bottom-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__widows-orphans-011.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-break__underflow-from-next-page-print.html"
+      ]
+    }
+  ]
+}

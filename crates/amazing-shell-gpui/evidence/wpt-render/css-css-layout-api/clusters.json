@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "subdir": "css/css-layout-api",
+  "mismatch_count": 1,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "large-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-layout-api__box-tree-unregistered.https.html"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "subdir": "css/css-box",
+  "mismatch_count": 35,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 11,
+      "examples": [
+        "css__css-box__margin-trim__flex-row-inline-multiline.html",
+        "css__css-box__margin-trim__grid-block-end.html",
+        "css__css-box__margin-trim__flex-inline-trimmed-only.html",
+        "css__css-box__margin-trim__flex-inline-start-trimmed-only.html",
+        "css__css-box__margin-trim__flex-row-orthogonal-item.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 6,
+      "examples": [
+        "css__css-box__margin-trim__block-container-block-002.html",
+        "css__css-box__margin-trim__block-container-block-start-001.html",
+        "css__css-box__margin-trim__block-container-block-end-001.html",
+        "css__css-box__margin-trim__block-container-block-start-002.html",
+        "css__css-box__margin-trim__block-container-block-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-box__margin-trim__block-container-block-end-collapsed-margins.html",
+        "css__css-box__margin-trim__block-container-block-start-self-collapsing-item-larger-block-start.html",
+        "css__css-box__margin-trim__block-container-block-start-self-collapsing-item-has-larger-block-end.html",
+        "css__css-box__margin-trim__block-container-block-end-self-collapsing-item-has-larger-block-start.html",
+        "css__css-box__margin-trim__block-container-block-end-self-collapsing-item-has-larger-block-end.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-box__margin-trim__flex-column-grow.html",
+        "css__css-box__margin-trim__flex-column-inline-multiline.html",
+        "css__css-box__margin-trim__flex-row-grow.html",
+        "css__css-box__margin-trim__flex-row-shrink.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-box__margin-trim__flex-column-shrink.html",
+        "css__css-box__margin-trim__flex-row-block-multiline.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-box__margin-trim__flex-block-trimmed-only.html",
+        "css__css-box__margin-trim__flex-block-start-trimmed-only.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-box__margin-trim__block-container-non-adjoining-item.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-box__margin-trim__flex-block-end-trimmed-only.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-box__margin-trim__flex-column-block-multiline.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-box__margin-trim__flex-trim-all-margins.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-box__margin-trim__block-container-block-start-collapsed-margins.html"
+      ]
+    }
+  ]
+}

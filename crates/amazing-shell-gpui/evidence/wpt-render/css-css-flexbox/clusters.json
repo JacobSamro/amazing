@@ -1,0 +1,364 @@
+{
+  "schema": 1,
+  "subdir": "css/css-flexbox",
+  "mismatch_count": 180,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 37,
+      "examples": [
+        "css__css-flexbox__item-with-max-height-and-scrollbar.html",
+        "css__css-flexbox__align-self-016.html",
+        "css__css-flexbox__justify-content_space-between-003.tentative.html",
+        "css__css-flexbox__grid-flex-item-002.html",
+        "css__css-flexbox__aspect-ratio-intrinsic-size-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 23,
+      "examples": [
+        "css__css-flexbox__alignment__flex-align-baseline-column-vert-rl-rtl-wrap-reverse.html",
+        "css__css-flexbox__balance__balance-001.html",
+        "css__css-flexbox__flex-item-transferred-sizes-padding-border-sizing.html",
+        "css__css-flexbox__flex-item-transferred-sizes-padding-content-sizing.html",
+        "css__css-flexbox__css-flexbox-row-reverse.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 22,
+      "examples": [
+        "css__css-flexbox__flexbox-root-node-001a.html",
+        "css__css-flexbox__flexbox_box-clear.html",
+        "css__css-flexbox__table-as-item-percent-width-cell-001.html",
+        "css__css-flexbox__flexbox-break-request-vert-002a.html",
+        "css__css-flexbox__flexbox-baseline-multi-item-horiz-001a.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 14,
+      "examples": [
+        "css__css-flexbox__fixed-table-layout-with-percentage-width-in-flex-item.html",
+        "css__css-flexbox__abspos__flex-abspos-staticpos-margin-002.html",
+        "css__css-flexbox__balance__balance-min-line-count-003.html",
+        "css__css-flexbox__flex-minimum-height-flex-items-030.html",
+        "css__css-flexbox__abspos__flex-abspos-staticpos-margin-003.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 8,
+      "examples": [
+        "css__css-flexbox__synthesize-vrl-baseline.html",
+        "css__css-flexbox__flex-flow-007.html",
+        "css__css-flexbox__flexbox_margin-left-ex.html",
+        "css__css-flexbox__flexbox-collapsed-item-horiz-001.html",
+        "css__css-flexbox__flexbox_flex-formatting-interop.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, same tone, different shape",
+      "count": 7,
+      "examples": [
+        "css__css-flexbox__flexbox_quirks_body.html",
+        "css__css-flexbox__flexbox_item-clear.html",
+        "css__css-flexbox__flexbox_justifycontent-end.html",
+        "css__css-flexbox__flexbox_justifycontent-left-001.html",
+        "css__css-flexbox__flexbox_justifycontent-start.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 6,
+      "examples": [
+        "css__css-flexbox__flexbox-safe-overflow-position-001.html",
+        "css__css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+        "css__css-flexbox__css-box-justify-content.html",
+        "css__css-flexbox__flexbox-flex-wrap-horiz-002.html",
+        "css__css-flexbox__anonymous-flex-item-004.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, same tone, different shape",
+      "count": 5,
+      "examples": [
+        "css__css-flexbox__flexbox_justifycontent-left-002.html",
+        "css__css-flexbox__flexbox_justifycontent-right-002.html",
+        "css__css-flexbox__flexbox-single-line-clamp-1.html",
+        "css__css-flexbox__flexbox-flex-flow-002.html",
+        "css__css-flexbox__gap-007-lr.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-right, darker than reference",
+      "count": 4,
+      "examples": [
+        "css__css-flexbox__flexbox_stf-table-cell.html",
+        "css__css-flexbox__flexbox_stf-table.html",
+        "css__css-flexbox__flexbox_stf-table-row-group.html",
+        "css__css-flexbox__flexbox_stf-table-row.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, lighter than reference",
+      "count": 4,
+      "examples": [
+        "css__css-flexbox__flexbox_columns-flexitems.html",
+        "css__css-flexbox__flexbox_flex-0-1-N-unitless-basis.html",
+        "css__css-flexbox__flexbox_flex-0-1-1-unitless-basis.html",
+        "css__css-flexbox__select-element-zero-height-002.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-flexbox__flexbox-min-height-auto-001.html",
+        "css__css-flexbox__flexbox-with-pseudo-elements-001.html",
+        "css__css-flexbox__flexbox-flex-wrap-vert-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-flexbox__fieldset-baseline-alignment.html",
+        "css__css-flexbox__flexbox-flex-wrap-vert-002.html",
+        "css__css-flexbox__flexbox-overflow-vert-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 3,
+      "examples": [
+        "css__css-flexbox__flexbox-overflow-horiz-001.html",
+        "css__css-flexbox__abspos__position-absolute-containing-block-002.html",
+        "css__css-flexbox__flex-column-reverse-multiline-item-position.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-flexbox__flexbox_visibility-collapse-line-wrapping.html",
+        "css__css-flexbox__table-as-item-specified-width.html",
+        "css__css-flexbox__gap-collapse.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, redder than reference",
+      "count": 3,
+      "examples": [
+        "css__css-flexbox__flex-direction-row-reverse.html",
+        "css__css-flexbox__gap-010-ltr.html",
+        "css__css-flexbox__select-element-zero-height-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__table-as-item-specified-height.html",
+        "css__css-flexbox__flex-minimum-height-flex-items-029.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__flex-aspect-ratio-content-box-padding-001.html",
+        "css__css-flexbox__percentage-heights-004.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__balance__balance-min-line-count-005.html",
+        "css__css-flexbox__flexbox-column-row-gap-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less blue than reference",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__flexbox_justifycontent-start-rtl.html",
+        "css__css-flexbox__percentage-heights-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__flexbox_order-box.html",
+        "css__css-flexbox__flexbox-definite-sizes-005.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__abspos__flex-abspos-align-self-safe-outer-cb-001.tentative.html",
+        "css__css-flexbox__abspos__flex-abspos-align-self-safe-outer-cb-002.tentative.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, redder than reference",
+      "count": 2,
+      "examples": [
+        "css__css-flexbox__gap-007-rtl.html",
+        "css__css-flexbox__flexbox-column-row-gap-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox-with-pseudo-elements-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox-overflow-horiz-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flex-align-content-center.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox-collapsed-item-baseline-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__multiline-column-max-height.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flex-lines__multi-line-wrap-with-column-reverse.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__balance__balance-complex.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox_visibility-collapse.html"
+      ]
+    },
+    {
+      "signature": "medium-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flex-direction.html"
+      ]
+    },
+    {
+      "signature": "small-region, top, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexible-order.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox_justifycontent-right-001.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__overflow-top-left.html"
+      ]
+    },
+    {
+      "signature": "small-region, right, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__gap-007-rl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox-collapsed-item-horiz-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox-column-row-gap-004.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__multiline-shrink-to-fit.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__percentage-heights-015.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__flexbox_justifycontent-end-rtl.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__multiline-reverse-wrap-baseline.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__percentage-size-subitems-001.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-flexbox__gap-009-ltr.html"
+      ]
+    }
+  ]
+}

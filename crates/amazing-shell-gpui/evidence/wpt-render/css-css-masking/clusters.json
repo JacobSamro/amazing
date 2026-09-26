@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "subdir": "css/css-masking",
+  "mismatch_count": 63,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 31,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-paddingBox-1d.html",
+        "css__css-masking__clip__clip-rect-auto-006.html",
+        "css__css-masking__clip-path__clip-path-polygon-014.html",
+        "css__css-masking__clip__clip-rect-comma-001.html",
+        "css__css-masking__clip-path__clip-path-polygon-011.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 10,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-polygon-005.html",
+        "css__css-masking__clip__clip-negative-values-002.html",
+        "css__css-masking__clip-path__clip-path-polygon-004.html",
+        "css__css-masking__clip__clip-negative-values-001.html",
+        "css__css-masking__mask-image__mask-image-clip-exclude.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, darker than reference",
+      "count": 7,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-xywh-001.html",
+        "css__css-masking__clip-path__clip-path-rect-001.html",
+        "css__css-masking__clip-path__clip-path-xywh-002.html",
+        "css__css-masking__clip-path__clip-path-xywh-003.html",
+        "css__css-masking__clip-path__clip-path-rect-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__css-masking__clip__clip-transform-order.html",
+        "css__css-masking__clip__clip-transform-order-2.html",
+        "css__css-masking__clip-path__clip-path-document-element-will-change.html",
+        "css__css-masking__clip-path__clip-path-document-element.html",
+        "css__css-masking__clip__clip-filter-order.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-circle-farthest-corner.html",
+        "css__css-masking__clip-path__clip-path-fixed-nested.html"
+      ]
+    },
+    {
+      "signature": "large-region, center, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-circle-closest-corner.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-paddingBox-1e.html"
+      ]
+    },
+    {
+      "signature": "large-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__mask-image__mask-under-border-radius.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__mask-image__mask-image-backdrop-filter-with-border-radius.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-blending-offset.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-round-zero-size.html"
+      ]
+    },
+    {
+      "signature": "full-frame, center, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-inset-round-rendering.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-masking__clip-path__clip-path-shape-011.html"
+      ]
+    }
+  ]
+}

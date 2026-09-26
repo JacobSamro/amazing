@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "subdir": "css/css-color-adjust",
+  "mismatch_count": 2,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top, bluer than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color-adjust__rendering__dark-color-scheme__color-scheme-visited-link-initial.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-color-adjust__rendering__dark-color-scheme__color-scheme-rule-cache.html"
+      ]
+    }
+  ]
+}

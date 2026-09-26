@@ -15,15 +15,21 @@ Stdlib only, matching the engine's own zero-dependency policy. Python and
 Rust are both acceptable per the ticket; Python was chosen so lanes can run
 this without an extra crate/build step.
 
+Was serial (one render-wpt subprocess pair at a time); --jobs N runs N
+candidates' render+compare pipelines concurrently on separate threads (each
+subprocess call releases the GIL while waiting), useful for a full-fleet
+sweep across many WPT categories.
+
 Usage:
   wpt_render_compare.py --wpt-root DIR --subdir css/css-backgrounds \\
       --exe PATH/TO/amazing --out OUT_DIR
-      [--width 800] [--height 600] [--timeout 20] [--limit N]
+      [--width 800] [--height 600] [--timeout 20] [--limit N] [--jobs N]
       [--font-set STRING]
 """
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -31,6 +37,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -40,6 +47,13 @@ XML_EXTENSIONS = {".xht", ".xhtml"}
 
 LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.I | re.S)
 SCRIPT_RE = re.compile(r"<script\b", re.I | re.S)
+# Inline event-handler attributes (onload="test()", etc.) run script without
+# a <script> tag; the SHELL-L4 fleet sweep found 3/7168 "eligible" reftests
+# that were actually testharness-style pages invoking `test()`/
+# `getComputedStyle()` this way, misclassified as engine "crash" instead of
+# excluded as "scripted" (renderer exit 1 from a body-load-listener
+# ReferenceError, not a real render failure).
+INLINE_EVENT_HANDLER_RE = re.compile(r"\bon\w+\s*=", re.I)
 TESTHARNESS_RE = re.compile(r"testharness\.js", re.I | re.S)
 FLAGS_META_RE = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']flags[\"']", re.I | re.S)
 EMBEDDED_RESOURCE_RE = re.compile(r"<(?:img|object|iframe|video|audio|canvas|svg)\b", re.I | re.S)
@@ -129,7 +143,7 @@ def classify_candidate(test_path: Path, wpt_root: Path):
         return {"eligible": False, "reason": "xml-reference-mode", "testharness": testharness}
     reference_source = reference_path.read_text(errors="replace")
     combined = source + "\n" + reference_source
-    if SCRIPT_RE.search(combined):
+    if SCRIPT_RE.search(combined) or INLINE_EVENT_HANDLER_RE.search(combined):
         reason = "scripted"
     elif FLAGS_META_RE.search(combined):
         reason = "flagged-environment"
@@ -317,6 +331,61 @@ def invoke_fixed_render(exe: Path, input_path: Path, output_path: Path, width: i
     return {"classification": "rendered", "detail": stdout.strip()}
 
 
+def run_one_test(candidate, exe: Path, wpt_root: Path, run_directory: Path, width: int, height: int, timeout: int):
+    """Renders one reftest pair and classifies it. Pure function of its
+    arguments (own subprocess calls, own test_directory) so callers can run
+    many of these concurrently across threads -- each candidate writes only
+    to its own directory_id subdirectory."""
+    test_id = re.sub(r"[^A-Za-z0-9_.\-]", "__", candidate["path"])
+    directory_id = sha256_hex(test_id)[:16]
+    test_directory = run_directory / directory_id
+    test_directory.mkdir(parents=True, exist_ok=True)
+    test_path = candidate["abs_path"]
+    reference_path = candidate["reference_path"]
+    actual_path = test_directory / "actual.ppm"
+    reference_output_path = test_directory / "reference.ppm"
+    diff_path = test_directory / "diff.ppm"
+
+    actual_run = invoke_fixed_render(
+        exe, test_path, actual_path, width, height, timeout, wpt_root, test_directory / "actual"
+    )
+    if actual_run["classification"] != "rendered":
+        return {
+            "id": test_id,
+            "classification": actual_run["classification"],
+            "detail": actual_run["detail"],
+        }
+    reference_run = invoke_fixed_render(
+        exe, reference_path, reference_output_path, width, height, timeout, wpt_root,
+        test_directory / "reference",
+    )
+    if reference_run["classification"] != "rendered":
+        return {
+            "id": test_id,
+            "classification": reference_run["classification"],
+            "actual_sha256": sha256_file(actual_path),
+            "detail": f"reference: {reference_run['detail']}",
+        }
+    test_source = test_path.read_text(errors="replace")
+    max_difference, total_pixels = fuzzy_limits(test_source)
+    comparison = compare_ppm(actual_path, reference_output_path, diff_path, max_difference, total_pixels)
+    passed = (not comparison["matched"]) if candidate["relation"] == "mismatch" else comparison["matched"]
+    return {
+        "id": test_id,
+        "classification": "pass" if passed else "mismatch",
+        "relation": candidate["relation"],
+        "reference_href": candidate["href"],
+        "differing_pixels": comparison["differing_pixels"],
+        "max_difference": comparison["max_difference"],
+        "allowed_max_difference": max_difference,
+        "allowed_differing_pixels": total_pixels,
+        "actual_sha256": sha256_file(actual_path),
+        "reference_sha256": sha256_file(reference_output_path),
+        "diff_sha256": sha256_file(diff_path),
+        "detail": comparison["detail"],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wpt-root", required=True)
@@ -327,6 +396,11 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=600)
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--limit", type=int, default=0, help="0 = every eligible reftest in the subdir")
+    parser.add_argument(
+        "--jobs", type=int, default=1,
+        help="concurrent test pipelines (each spawns its own render-wpt subprocesses); "
+             "1 = serial (default, matches the original behaviour)",
+    )
     parser.add_argument(
         "--font-set",
         default="Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
@@ -354,60 +428,27 @@ def main() -> int:
     run_directory = out_dir / run_name
     run_directory.mkdir(parents=True, exist_ok=True)
 
-    results = []
-    for candidate in selected:
-        test_id = re.sub(r"[^A-Za-z0-9_.\-]", "__", candidate["path"])
-        directory_id = sha256_hex(test_id)[:16]
-        test_directory = run_directory / directory_id
-        test_directory.mkdir(parents=True, exist_ok=True)
-        test_path = candidate["abs_path"]
-        reference_path = candidate["reference_path"]
-        actual_path = test_directory / "actual.ppm"
-        reference_output_path = test_directory / "reference.ppm"
-        diff_path = test_directory / "diff.ppm"
+    jobs = max(1, args.jobs)
+    results_by_index = {}
+    print_lock = threading.Lock()
 
-        actual_run = invoke_fixed_render(
-            exe, test_path, actual_path, args.width, args.height, args.timeout, wpt_root, test_directory / "actual"
-        )
-        if actual_run["classification"] != "rendered":
-            result = {
-                "id": test_id,
-                "classification": actual_run["classification"],
-                "detail": actual_run["detail"],
-            }
-        else:
-            reference_run = invoke_fixed_render(
-                exe, reference_path, reference_output_path, args.width, args.height, args.timeout, wpt_root,
-                test_directory / "reference",
-            )
-            if reference_run["classification"] != "rendered":
-                result = {
-                    "id": test_id,
-                    "classification": reference_run["classification"],
-                    "actual_sha256": sha256_file(actual_path),
-                    "detail": f"reference: {reference_run['detail']}",
-                }
-            else:
-                test_source = test_path.read_text(errors="replace")
-                max_difference, total_pixels = fuzzy_limits(test_source)
-                comparison = compare_ppm(actual_path, reference_output_path, diff_path, max_difference, total_pixels)
-                passed = (not comparison["matched"]) if candidate["relation"] == "mismatch" else comparison["matched"]
-                result = {
-                    "id": test_id,
-                    "classification": "pass" if passed else "mismatch",
-                    "relation": candidate["relation"],
-                    "reference_href": candidate["href"],
-                    "differing_pixels": comparison["differing_pixels"],
-                    "max_difference": comparison["max_difference"],
-                    "allowed_max_difference": max_difference,
-                    "allowed_differing_pixels": total_pixels,
-                    "actual_sha256": sha256_file(actual_path),
-                    "reference_sha256": sha256_file(reference_output_path),
-                    "diff_sha256": sha256_file(diff_path),
-                    "detail": comparison["detail"],
-                }
-        results.append(result)
-        print(f"{result['classification'].upper():<10} {result['id']}")
+    def run_and_report(index, candidate):
+        result = run_one_test(candidate, exe, wpt_root, run_directory, args.width, args.height, args.timeout)
+        with print_lock:
+            print(f"{result['classification'].upper():<10} {result['id']}")
+        return index, result
+
+    if jobs == 1:
+        for index, candidate in enumerate(selected):
+            _, result = run_and_report(index, candidate)
+            results_by_index[index] = result
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            futures = [pool.submit(run_and_report, index, candidate) for index, candidate in enumerate(selected)]
+            for future in concurrent.futures.as_completed(futures):
+                index, result = future.result()
+                results_by_index[index] = result
+    results = [results_by_index[index] for index in range(len(selected))]
 
     counts = {"pass": 0, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}
     for result in results:

@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "subdir": "css/css-lists",
+  "mismatch_count": 44,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 18,
+      "examples": [
+        "css__css-lists__foo-counter-reversed-006e.html",
+        "css__css-lists__li-value-reversed-006e.html",
+        "css__css-lists__content-property__marker-text-matches-circle.html",
+        "css__css-lists__counter-reset-reversed-list-item-start.html",
+        "css__css-lists__content-property__marker-text-matches-square.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 5,
+      "examples": [
+        "css__css-lists__counter-increment-inside-display-contents.html",
+        "css__css-lists__counter-reset-inside-display-contents.html",
+        "css__css-lists__counter-reset-increment-set-display-none.html",
+        "css__css-lists__counter-reset-reversed-not-list-item.html",
+        "css__css-lists__counter-reset-reversed-list-item.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 5,
+      "examples": [
+        "css__css-lists__counter-invalid.htm",
+        "css__css-lists__counter-reset-reversed-not-list-item-start.html",
+        "css__css-lists__counter-set-001.html",
+        "css__css-lists__list-marker-alignment.html",
+        "css__css-lists__counter-reset-increment-set-display-contents.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 3,
+      "examples": [
+        "css__css-lists__list-style-type-string-005a.html",
+        "css__css-lists__marker-webkit-text-fill-color.html",
+        "css__css-lists__list-style-type-string-005b.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__css-lists__inline-list.html",
+        "css__css-lists__inline-list-marker.html"
+      ]
+    },
+    {
+      "signature": "large-region, top-left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-lists__list-style-type-string-002.html",
+        "css__css-lists__list-style-type-string-003.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-lists__counters-scope-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, center, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-lists__list-marker-symbol-bidi.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-lists__nested-marker.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-lists__inline-block-list.html"
+      ]
+    },
+    {
+      "signature": "small-region, left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-lists__list-and-flex-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__css-lists__list-style-type-decimal-vertical-lr.html"
+      ]
+    },
+    {
+      "signature": "medium-region, bottom-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-lists__list-style-type-string-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-lists__inline-block-list-marker.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-right, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__css-lists__list-style-type-decimal-vertical-rl.html"
+      ]
+    }
+  ]
+}

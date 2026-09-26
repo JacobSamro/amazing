@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "subdir": "css/css-animations",
+  "mismatch_count": 9,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 6,
+      "examples": [
+        "css__css-animations__animation-delay-011.html",
+        "css__css-animations__animation-name-in-shadow-part-outer-match.html",
+        "css__css-animations__transform-animation-under-large-scale.html",
+        "css__css-animations__animation-name-in-shadow-part.html",
+        "css__css-animations__animation-name-in-shadow-part-inner-match.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-animations__animation-important-002.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__css-animations__parsing__animation-name-edge-cases.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less green than reference",
+      "count": 1,
+      "examples": [
+        "css__css-animations__translation-animation-subpixel-offset.html"
+      ]
+    }
+  ]
+}
