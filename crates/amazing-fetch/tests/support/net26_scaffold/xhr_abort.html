@@ -1,0 +1,21 @@
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR abort from headers callback drops later events");
+var xhr = new XMLHttpRequest();
+var events = [];
+xhr.addEventListener("readystatechange", function(e) {
+  events.push("r" + xhr.readyState);
+  if (xhr.readyState === 2) xhr.abort();
+});
+xhr.addEventListener("abort", function(e) { events.push("abort"); });
+xhr.addEventListener("load", function(e) { events.push("load"); });
+xhr.open("GET", "data:text/plain,hello");
+xhr.send();
+setTimeout(function() {
+  assert_equals(events.join(","), "r1,r2,r4,abort");
+  assert_equals(xhr.readyState, 0);
+  t.done();
+  done();
+}, 30);
+</script>

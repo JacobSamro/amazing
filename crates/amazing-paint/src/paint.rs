@@ -703,7 +703,7 @@ fn paint_decorations(
                 surface,
                 &box_.content_box,
                 &svg,
-                ImagePresentation::default(),
+                images.presentation(node),
                 clip,
             );
         }
@@ -1059,7 +1059,7 @@ fn paint_shaped_lines(
                     surface,
                     &rect,
                     &svg,
-                    ImagePresentation::default(),
+                    images.presentation(replaced.node),
                     clip,
                 );
             } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
@@ -1731,7 +1731,7 @@ fn paint_lines(
                     surface,
                     &rect,
                     &svg,
-                    ImagePresentation::default(),
+                    images.presentation(replaced.node),
                     clip,
                 );
             } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {

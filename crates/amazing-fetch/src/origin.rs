@@ -75,7 +75,7 @@ pub enum Site {
     Opaque(u128),
 }
 
-/// Validated Fetch URL for HTTP(S) and data:. Syntax, canonicalization and
+/// Validated Fetch URL for HTTP(S), data:, and about:. Syntax, canonicalization and
 /// origin projection come from amazing-net's ParsedUrl.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpUrl {
@@ -90,7 +90,7 @@ impl HttpUrl {
     }
     /// Adopt an already validated URL without reparsing or losing userinfo.
     pub fn from_parsed(parsed: ParsedUrl) -> Result<Self, FetchError> {
-        if parsed.scheme() == "data" {
+        if matches!(parsed.scheme(), "data" | "about") {
             return Ok(Self {
                 parsed,
                 origin: Origin::opaque(),

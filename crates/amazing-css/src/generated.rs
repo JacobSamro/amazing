@@ -316,7 +316,7 @@ fn resolve_image_url(url: &str, base: Option<&str>) -> String {
     format!("{scheme}://{authority}{normalized}{suffix}")
 }
 
-fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Vec<(String, i32, bool)>> {
+fn parse_counter_ops(css: &str, default: i64, allow_reversed: bool) -> Option<Vec<(String, i64, bool)>> {
     let tokens = compact(&tokenize(css));
     if tokens == [Token::Ident("none".into())] {
         return Some(Vec::new());
@@ -346,10 +346,10 @@ fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Ve
         }
         let (value, explicit) = match tokens.get(i + 1) {
             Some(Token::Number(n))
-                if n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 =>
+                if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 =>
             {
                 i += 1;
-                (*n as i32, true)
+                (*n as i64, true)
             }
             _ => (default, false),
         };
@@ -387,7 +387,7 @@ fn quote_pairs(css: &str) -> Option<Vec<(String, String)>> {
 
 #[derive(Default)]
 struct State {
-    counters: HashMap<String, Vec<i32>>,
+    counters: HashMap<String, Vec<i64>>,
     reversed: HashMap<String, Vec<bool>>,
     counter_styles: crate::counter_styles::CounterStyles,
     quote_depth: usize,
@@ -414,20 +414,20 @@ fn reset_names_counter(style: &crate::ComputedStyle, name: &str) -> bool {
 /// The implicit start of a reversed counter is determined by the increments
 /// in its scope, stopping at the first counter-set. A nested reset obscures
 /// this scope for its subtree.
-fn reversed_initial(dom: &Dom, node: NodeIdx, name: &str, styles: &StyledDom) -> i32 {
+fn reversed_initial(dom: &Dom, node: NodeIdx, name: &str, styles: &StyledDom) -> i64 {
     fn scan_style(
         style: &crate::ComputedStyle,
         name: &str,
         reversed: bool,
-        total: &mut i32,
-        last_step: &mut i32,
+        total: &mut i64,
+        last_step: &mut i64,
     ) -> bool {
         let increments = parse_counter_ops(
             style.get("counter-increment").unwrap_or("none"), 1, false
         ).unwrap_or_default();
         let specified = increments.iter().any(|(counter, _, _)| counter == name);
         let mut increment = increments.iter().filter(|(counter, _, _)| counter == name)
-            .fold(0_i32, |sum, (_, value, _)| sum.saturating_add(*value));
+            .fold(0_i64, |sum, (_, value, _)| sum.saturating_add(*value));
         if name == "list-item" && style.get("display") == Some("list-item") && !specified {
             increment = if reversed { -1 } else { 1 };
         }
@@ -444,7 +444,7 @@ fn reversed_initial(dom: &Dom, node: NodeIdx, name: &str, styles: &StyledDom) ->
     }
     fn scan_node(
         dom: &Dom, node: NodeIdx, root: bool, name: &str, styles: &StyledDom,
-        total: &mut i32, last_step: &mut i32,
+        total: &mut i64, last_step: &mut i64,
     ) -> bool {
         let Some(style) = styles.get(node) else { return false };
         if style.get("display") == Some("none") { return false; }
@@ -463,8 +463,8 @@ fn reversed_initial(dom: &Dom, node: NodeIdx, name: &str, styles: &StyledDom) ->
         }
         false
     }
-    let mut total = 0_i32;
-    let mut last_step = 0_i32;
+    let mut total = 0_i64;
+    let mut last_step = 0_i64;
     scan_node(dom, node, true, name, styles, &mut total, &mut last_step);
     total.saturating_add(last_step)
 }
