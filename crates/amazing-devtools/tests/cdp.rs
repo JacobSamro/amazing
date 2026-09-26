@@ -427,3 +427,182 @@ fn errors_and_protocol_failures_are_reported() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_serves_inspector_read_paths() {
+    let host = Arc::new(MockHost::new());
+    host.script().lock().unwrap().targets[0].url = "https://example.com/".into();
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let document = client.result("DOM.getDocument", obj! { "depth" => n(-1.0) });
+    let root_id = document
+        .get("root")
+        .unwrap()
+        .get("nodeId")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    let found = client.result(
+        "DOM.querySelector",
+        obj! { "nodeId" => n(root_id as f64), "selector" => s("#main") },
+    );
+    let node_id = found.get("nodeId").unwrap().as_u64().unwrap();
+
+    let attributes = client.result("DOM.getAttributes", obj! { "nodeId" => n(node_id as f64) });
+    let attrs = attributes.get("attributes").unwrap().as_array().unwrap();
+    assert!(attrs.iter().any(|value| value.as_str() == Some("main")));
+
+    let model = client.result("DOM.getBoxModel", obj! { "nodeId" => n(node_id as f64) });
+    assert_eq!(
+        model.get("model").unwrap().get("width").unwrap().as_i64(),
+        Some(100)
+    );
+    let quads = client.result("DOM.getContentQuads", obj! { "nodeId" => n(node_id as f64) });
+    assert_eq!(
+        quads.get("quads").unwrap().as_array().unwrap()[0]
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
+
+    let search = client.result("DOM.performSearch", obj! { "query" => s("main") });
+    let search_id = search.get("searchId").unwrap().as_str().unwrap().to_string();
+    assert!(search.get("resultCount").unwrap().as_u64().unwrap() >= 1);
+    let results = client.result(
+        "DOM.getSearchResults",
+        obj! {
+            "searchId" => s(search_id.clone()),
+            "fromIndex" => n(0.0),
+            "toIndex" => n(10.0),
+        },
+    );
+    assert!(!results.get("nodeIds").unwrap().as_array().unwrap().is_empty());
+    client.result("DOM.discardSearchResults", obj! { "searchId" => s(search_id) });
+
+    let pushed = client.result(
+        "DOM.pushNodesByBackendIdsToFrontend",
+        obj! { "backendNodeIds" => Json::Array(vec![n(4.0)]) },
+    );
+    assert_eq!(pushed.get("nodeIds").unwrap().as_array().unwrap().len(), 1);
+
+    client.result(
+        "DOM.setNodeValue",
+        obj! { "nodeId" => n(node_id as f64), "value" => s("changed") },
+    );
+    assert!(host
+        .script()
+        .lock()
+        .unwrap()
+        .node_values
+        .iter()
+        .any(|(_, value)| value == "changed"));
+
+    let sheet = client.result("CSS.getStyleSheetText", obj! { "styleSheetId" => s("sheet-1") });
+    assert_eq!(sheet.get("text").unwrap().as_str(), Some("body { color: red }"));
+    let set = client.result(
+        "CSS.setStyleSheetText",
+        obj! { "styleSheetId" => s("sheet-1"), "text" => s("body { color: blue }") },
+    );
+    assert_eq!(set.get("text").unwrap().as_str(), Some("body { color: blue }"));
+    assert_eq!(
+        host.script().lock().unwrap().style_sheet_text.as_deref(),
+        Some("body { color: blue }")
+    );
+
+    let media = client.result("CSS.getMediaQueries", empty());
+    assert_eq!(
+        media.get("medias").unwrap().as_array().unwrap()[0]
+            .get("text")
+            .unwrap()
+            .as_str(),
+        Some("(min-width: 600px)")
+    );
+
+    let backgrounds = client.result("CSS.getBackgroundColors", obj! { "nodeId" => n(node_id as f64) });
+    let colors = backgrounds.get("colors").unwrap().as_array().unwrap();
+    assert_eq!(colors.len(), 2);
+    assert_eq!(colors[0].as_str(), Some("rgb(255, 255, 255)"));
+    assert_eq!(colors[1], Json::Null);
+
+    let metrics = client.result("Page.getLayoutMetrics", empty());
+    assert_eq!(
+        metrics.get("layoutViewport").unwrap().get("clientWidth").unwrap().as_f64(),
+        Some(800.0)
+    );
+    assert_eq!(
+        metrics.get("contentSize").unwrap().get("height").unwrap().as_f64(),
+        Some(1200.0)
+    );
+
+    let tree = client.result("Page.getResourceTree", empty());
+    assert_eq!(
+        tree.get("frameTree").unwrap().get("resources").unwrap().as_array().unwrap()[0]
+            .get("url")
+            .unwrap()
+            .as_str(),
+        Some("https://example.com/")
+    );
+
+    let content = client.result(
+        "Page.getResourceContent",
+        obj! { "frameId" => s("F1"), "url" => s("https://example.com/") },
+    );
+    assert_eq!(content.get("content").unwrap().as_str(), Some("<html>"));
+    assert_eq!(content.get("base64Encoded").unwrap().as_bool(), Some(false));
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn browser_endpoint_pushes_target_lifecycle_events() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/browser");
+
+    client.result("Target.setDiscoverTargets", obj! { "discover" => Json::Bool(true) });
+    let created = client.wait_event("Target.targetCreated");
+    assert_eq!(
+        created.get("params").unwrap().get("targetInfo").unwrap().get("targetId").unwrap().as_str(),
+        Some("page-1")
+    );
+
+    client.result(
+        "Target.setAutoAttach",
+        obj! { "autoAttach" => Json::Bool(true), "waitForDebuggerOnStart" => Json::Bool(false) },
+    );
+    host.script()
+        .lock()
+        .unwrap()
+        .push_target_created("page-2", "https://two/", "Two");
+    let created = client.wait_event("Target.targetCreated");
+    assert_eq!(
+        created.get("params").unwrap().get("targetInfo").unwrap().get("targetId").unwrap().as_str(),
+        Some("page-2")
+    );
+    let attached = client.wait_event("Target.attachedToTarget");
+    let session = attached
+        .get("params")
+        .unwrap()
+        .get("sessionId")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    let evaluated = client.result_session("Runtime.evaluate", obj! { "expression" => s("1") }, &session);
+    assert_eq!(
+        evaluated.get("result").unwrap().get("value").unwrap().as_f64(),
+        Some(42.0)
+    );
+
+    host.script().lock().unwrap().push_target_destroyed("page-2");
+    client.wait_event("Target.targetDestroyed");
+    let detached = client.wait_event("Target.detachedFromTarget");
+    assert_eq!(
+        detached.get("params").unwrap().get("sessionId").unwrap().as_str(),
+        Some(session.as_str())
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+}

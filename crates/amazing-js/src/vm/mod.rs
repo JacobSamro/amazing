@@ -15,6 +15,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub use compiler::compile;
+#[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
+pub(crate) use compiler::compile_async_body;
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
@@ -927,6 +929,12 @@ impl FunctionCode {
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
     }
 
+    /// Start the resumable body in the environment prepared by AST parameter binding.
+    #[allow(dead_code)] // Consumed by the runtime async bridge in interp.rs.
+    pub(crate) fn call_async_with_env(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
+        self.call_async(i, env)
+    }
+
     fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
         let promise = new_promise(i, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
@@ -997,6 +1005,24 @@ fn async_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     Ok(JsValue::Undefined)
 }
 
+/// Resume a suspended frame with the compiled function's own strictness.
+///
+/// Suspending at `await`/`yield` leaves the interpreter's strict-eval context,
+/// so a continuation that starts from a promise reaction or a native `next`
+/// call would otherwise run the post-suspension body in sloppy mode. The
+/// branch's strictness is fixed at compile time (`CompiledFunction::strict`).
+fn resume_frame_with_strictness(
+    i: &mut Interpreter,
+    code: &FunctionCode,
+    frame: &mut Box<VmFrame>,
+) -> Result<FrameOutcome, Throw> {
+    let previous = i.strict_eval_context;
+    i.strict_eval_context = code.0.strict;
+    let outcome = code.0.program.resume_frame(i, frame, usize::MAX);
+    i.strict_eval_context = previous;
+    outcome
+}
+
 fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind: u8, value: JsValue) -> Result<(), Throw> {
     let (code, mut frame, target, completion) = {
         let mut state = state.borrow_mut();
@@ -1015,7 +1041,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
     let completion = std::mem::replace(&mut i.completion, previous_completion);
     {
         let mut state = state.borrow_mut();
@@ -1192,7 +1218,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
     let completion = std::mem::replace(&mut i.completion, previous_completion);
     let mut state = state.borrow_mut();
     state.executing = false;

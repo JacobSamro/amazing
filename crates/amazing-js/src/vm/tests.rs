@@ -430,6 +430,78 @@ fn async_frame_resumes_from_pending_promise() {
 }
 
 #[test]
+fn compile_async_body_suspends_and_resumes_with_prebound_env() {
+    use crate::ast::StmtKind;
+    use crate::env::{EnvHandle, EnvKind};
+
+    let mut interpreter = Interpreter::new();
+    // The runtime bridge binds parameters and the surrounding script before
+    // compiling only the async body; set up the same global shape here.
+    interpreter
+        .run_script("var resolve; var pending = new Promise(function(r){ resolve = r; }); var log = '';")
+        .unwrap();
+
+    let program = parse_script(
+        "async function work() { log += 'a'; var value = await pending; log += 'b'; return value + 1; }",
+    )
+    .unwrap();
+    let body = match &program.body[0].kind {
+        StmtKind::Function(function) => function.body.clone(),
+        other => panic!("expected function declaration: {other:?}"),
+    };
+
+    let code = compile_async_body(&body, false).unwrap();
+    let env = EnvHandle::new(EnvKind::Function, Some(interpreter.global_env.clone()));
+    env.bind_this(JsValue::Undefined);
+
+    let promise = code.call_async_with_env(&mut interpreter, env).unwrap();
+    // The body suspended at the pending await: only the prefix ran.
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("a")));
+    assert!(matches!(promise, JsValue::Object(_)));
+
+    // Settling the pending promise resumes the suspended frame to completion.
+    interpreter.run_script("resolve(41)").unwrap();
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ab")));
+}
+
+#[test]
+fn async_resume_restores_strict_function_context() {
+    // A strict async body must still run strict after resuming from a
+    // suspended await. The probe observes the interpreter's strict-eval
+    // context, which the branching strictness (`CompiledFunction::strict`)
+    // must impose on the resumed slice, not on the entry slice alone.
+    fn is_strict(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+        Ok(JsValue::Bool(i.strict_eval_context))
+    }
+
+    let mut interpreter = Interpreter::new();
+    let probe = Interpreter::native("__is_strict", is_strict, &interpreter.function_proto);
+    interpreter.global_obj.borrow_mut().set_own("__is_strict", probe);
+
+    let source = "
+        var resolve;
+        var pending = new Promise(function(r) { resolve = r; });
+        var log = '';
+        var receiver = {async method() {
+            'use strict';
+            log += __is_strict();
+            await pending;
+            log += ',' + __is_strict();
+        }};
+        receiver.method();
+        resolve();
+    ";
+    interpreter
+        .run_script_with_backend(source, ExecutionBackend::Bytecode)
+        .unwrap();
+    assert_eq!(
+        interpreter.global_env.resolve("log"),
+        Some(JsValue::str("true,true")),
+        "resumed slice must keep the compiled strictness"
+    );
+}
+
+#[test]
 fn async_await_rejection_runs_catch_and_finally() {
     let mut interpreter = Interpreter::new();
     let source = "
