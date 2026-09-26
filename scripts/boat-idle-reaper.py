@@ -64,6 +64,19 @@ def boat(*args: str, timeout: int = 60) -> dict | None:
 LANE_MAP = Path(__file__).resolve().parent.parent / ".agents" / ".boat-lanes.json"
 
 
+def wanted_types() -> dict[str, str]:
+    """Sandbox id -> the size boat-lane.py's POOL_TYPE wants for it."""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location("boat_lane", Path(__file__).with_name("boat-lane.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        lanes = json.loads(LANE_MAP.read_text())
+    except Exception:
+        return {}
+    return {sid: mod.POOL_TYPE.get(key, "default") for key, sid in lanes.items() if key.startswith("pool-")}
+
+
 def managed_ids() -> set[str]:
     try:
         return set(json.loads(LANE_MAP.read_text()).values())
@@ -127,6 +140,7 @@ def main() -> int:
         if left is not None and left < START_RESERVE:
             limit = args.scarce_idle_minutes
         live = running_sandboxes()
+        wanted = wanted_types()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
             # Only sandboxes boat-lane.py manages; anything else is the user's.
@@ -134,6 +148,16 @@ def main() -> int:
                 continue
             busy = is_busy(sid)
             if busy is not False:
+                idle_since.pop(sid, None)
+                continue
+            # A busy pool never idles long enough to pick up a new size, so a
+            # size change is applied in the first gap between runs: stop it now
+            # and boat-lane.py resumes it at the wanted size.
+            want = wanted.get(sid)
+            if want and sb.get("type") and sb.get("type") != want and is_busy(sid) is False:
+                log(f"RESIZE-STOP {sid} ({sb.get('type')} -> {want} on next resume)")
+                if not args.dry_run:
+                    boat("stop", sid, timeout=120)
                 idle_since.pop(sid, None)
                 continue
             first = idle_since.setdefault(sid, now)
