@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "subdir": "svg/coordinate-systems",
+  "mismatch_count": 1,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "svg__coordinate-systems__viewBox-scaling-text-001.html"
+      ]
+    }
+  ]
+}
