@@ -1470,5 +1470,33 @@ Evidence: Linux (Boat) CSS nextest **322/322**; workspace nextest **2489/2489**
 `crates/amazing-css/evidence/css19-effects-manifest.json`; the valid/invalid
 declaration sets are encoded in `effects.rs` unit tests and
 `tests/css19_effects.rs`, because the DOM CSSOM/`getComputedStyle` path those
-harness files need is not implemented. Windows gate recorded in
-`.agents/css/report.md`.
+harness files need is not implemented. Linux final gate (Boat, lane head
+`4c331292`): CSS crate **322/322**, workspace nextest **2539/2539** (10
+skipped), workspace doctests **2/2**. WPT render sweeps are deferred under the
+Linux-first rule (2026-09-26).
+
+## CSS-15c — i64 counter values and the extended CJK longhand algorithm
+
+Commit `6c90b5e5` (on the lane head `c8bb65e7` after the dev merge). Counter
+values (`counter-reset`, `counter-increment`, `counter-set`, a `reversed()`
+initial value, and the `counters()` history) are now `i64`, so author-specified
+values beyond 32 bits survive to the marker instead of clamping. The Chinese
+longhand styles (`simp-chinese-informal`/`-formal`, `trad-chinese-informal`/
+`-formal`, and the deprecated `cjk-ideographic`) use the CSS Counter Styles 3
+[§7.1.2 extended algorithm](https://drafts.csswg.org/css-counter-styles-3/#extended-range-optional):
+four-digit groups with `万`/`亿`/`万亿` (simplified) or `萬`/`億`/`兆`
+(traditional) markers, a single `零` collapsing runs of zero groups, and the
+informal tens-digit drop, defined over |value| < 10^16. The `japanese-*` and
+`korean-*` longhands stay the §7.1.1 limited-range (-9999..=9999) forms and keep
+their spec `fallback: cjk-decimal`. Values at or beyond 10^16 fall back per the
+counter style (`cjk-decimal` for the CJK longhands, `decimal` otherwise). The
+`counter-trad-chinese-informal-ref.html` reference values through 10^15 and the
+out-of-range fallback are unit-tested in `counter_styles.rs`.
+
+This is the CSS-owned part of the seven remaining counter-styles render
+mismatches: the three Chinese `counter()` cases used values past the old
+limited range. Linux final gate (Boat, lane head `4c331292`): CSS crate
+**322/322**, workspace nextest **2539/2539** (10 skipped), workspace doctests
+**2/2**. The counter-styles WPT render after-run uses the Windows-only
+PowerShell runner, so it is deferred under the Linux-first rule; the formatting
+itself is proven by the spec-reference unit tests above.
