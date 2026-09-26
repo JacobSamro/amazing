@@ -1,0 +1,522 @@
+{
+  "ticket": "JSRT-8 boxed string property collection and assignment strictness",
+  "code_commit": "339338e946bec3074fef2a1c8d05e0975597fb45",
+  "base_integration": "d33ee2f94848016eddcf8bb757627891c9144bc0",
+  "updated": "2026-09-26T10:50:13Z",
+  "state": "corrections under validation; not zero-loss",
+  "validation": {
+    "linux_nextest": {
+      "passed": 330,
+      "skipped": 1,
+      "note": "four uncommitted pending-await regressions excluded; not part of this commit"
+    },
+    "linux_doctests": 1,
+    "windows_workspace": {
+      "passed": 2495,
+      "skipped": 9,
+      "doctests_passed": 2,
+      "exit_code": 0
+    }
+  },
+  "object_selection": {
+    "before_passed_files": 3139,
+    "after_passed_files": 3149,
+    "after_failed_files": 261,
+    "after_timeout_files": 2,
+    "after_unsupported_files": 2
+  },
+  "test262": {
+    "before_files": {
+      "pass": 31537,
+      "fail": 21324,
+      "timeout": 20,
+      "unsupported": 697,
+      "skipped": 294
+    },
+    "after_files": {
+      "pass": 31591,
+      "fail": 21267,
+      "timeout": 25,
+      "unsupported": 695,
+      "skipped": 294
+    },
+    "before_variants": {
+      "pass": 61040,
+      "fail": 40723,
+      "timeout": 39,
+      "unsupported": 1116,
+      "skipped": 0
+    },
+    "after_variants": {
+      "pass": 61126,
+      "fail": 40632,
+      "timeout": 47,
+      "unsupported": 1113,
+      "skipped": 0
+    },
+    "lost_files": [
+      "built-ins/Function/prototype/toString/built-in-function-object.js",
+      "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+      "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+      "language/module-code/export-expname-binding-index.js",
+      "staging/sm/Array/toSpliced-dense.js",
+      "staging/sm/class/strictExecution.js"
+    ],
+    "lost_variants": [
+      {
+        "path": "built-ins/Function/prototype/toString/built-in-function-object.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "built-ins/Function/prototype/toString/built-in-function-object.js",
+        "variant": "strict",
+        "after": {
+          "variant": "strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "built-ins/decodeURI/S15.1.3.1_A2.5_T1.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "built-ins/decodeURIComponent/S15.1.3.2_A2.5_T1.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "language/module-code/export-expname-binding-index.js",
+        "variant": "module",
+        "after": {
+          "variant": "module",
+          "status": "fail",
+          "reason": "runtime:Test262Error",
+          "observed": {
+            "protocol": 2,
+            "phase": "runtime",
+            "error_type": "Test262Error",
+            "detail": "[object]",
+            "unsupported": null
+          }
+        }
+      },
+      {
+        "path": "staging/sm/Array/toSpliced-dense.js",
+        "variant": "strict",
+        "after": {
+          "variant": "strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "variant": "strict",
+        "after": {
+          "variant": "strict",
+          "status": "timeout",
+          "reason": "execution.deadline"
+        }
+      },
+      {
+        "path": "staging/sm/class/strictExecution.js",
+        "variant": "non-strict",
+        "after": {
+          "variant": "non-strict",
+          "status": "fail",
+          "reason": "runtime:Test262Error",
+          "observed": {
+            "protocol": 1,
+            "phase": "runtime",
+            "error_type": "Test262Error",
+            "detail": "Expected a TypeError to be thrown but no exception was thrown at all",
+            "unsupported": null
+          }
+        }
+      }
+    ],
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "classification_sha256": "8dfb56aefdd2946e1db7a7c40fea3c4ecb50d72c83b717958c9f9c72c2e1a6f8",
+    "host_sha256": "3363c463eec9bd6e80bbc8eeb942449e7fb23790187eb1e728a7fc4256b6a112"
+  },
+  "correction": {
+    "code_commit": "27e10b18efe7550f8273f448672bf23f2c1cce71",
+    "linux_workspace": {
+      "passed": 2531,
+      "skipped": 10,
+      "doctests_passed": 2
+    },
+    "files": {
+      "pass": 31622,
+      "fail": 21241,
+      "timeout": 18,
+      "unsupported": 697,
+      "skipped": 294
+    },
+    "variants": {
+      "pass": 61198,
+      "fail": 40568,
+      "timeout": 36,
+      "unsupported": 1116,
+      "skipped": 0
+    },
+    "classification_sha256": "dde1bc4b0ebd435eb9d3ce01c5e2a2c550bfd9f31aea052cf7d24dfa658076ee",
+    "host_sha256": "4ede94da1d37cc72fd2fa71f365f00152bba7a61ed3bb40028001c04b701221f",
+    "lost_files": [
+      "language/eval-code/direct/arrow-fn-a-preceding-parameter-is-named-arguments-arrow-func-declare-arguments-assign-incl-def-param-arrow-arguments.js",
+      "language/eval-code/direct/arrow-fn-a-preceding-parameter-is-named-arguments-arrow-func-declare-arguments-assign.js",
+      "language/eval-code/direct/async-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/async-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/async-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/async-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/async-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/async-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/async-meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/async-meth-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/func-expr-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/func-expr-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/gen-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/gen-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/gen-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/gen-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/gen-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/gen-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/gen-meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/gen-meth-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+      "language/eval-code/direct/meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+      "language/eval-code/direct/meth-a-preceding-parameter-is-named-arguments-declare-arguments.js"
+    ],
+    "lost_variants": [
+      {
+        "path": "language/eval-code/direct/arrow-fn-a-preceding-parameter-is-named-arguments-arrow-func-declare-arguments-assign-incl-def-param-arrow-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/arrow-fn-a-preceding-parameter-is-named-arguments-arrow-func-declare-arguments-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/async-meth-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "$DONE called more than once",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/func-expr-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/func-expr-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-decl-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-expr-named-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-func-expr-nameless-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/gen-meth-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/meth-a-preceding-parameter-is-named-arguments-declare-arguments-and-assign.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/eval-code/direct/meth-a-preceding-parameter-is-named-arguments-declare-arguments.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Expected a SyntaxError to be thrown but no exception was thrown at all",
+          "unsupported": null
+        }
+      }
+    ],
+    "analysis": "All 24 lost variants share direct eval declaring arguments during default parameter evaluation. Fixed locally by retaining parameter lexical protection until initialization ends. Pending-await bridge series will gate the correction."
+  }
+}
