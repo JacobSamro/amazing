@@ -475,6 +475,7 @@ fn local_font_path(lower_name: &str) -> Option<String> {
         | "ui-rounded" => FontBucket::Sans,
         "times new roman" | "times" | "georgia" | "serif" | "ui-serif" => FontBucket::Serif,
         "consolas" | "courier" | "courier new" | "monospace" | "ui-monospace" => FontBucket::Mono,
+        "emoji" => FontBucket::Emoji,
         _ => return None,
     };
     best_linux_font(bucket).map(|path| path.to_string_lossy().into_owned())
@@ -482,17 +483,22 @@ fn local_font_path(lower_name: &str) -> Option<String> {
 
 /// Which generic CSS family a scanned font file stands in for.
 #[cfg(not(target_os = "windows"))]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FontBucket {
     Sans,
     Serif,
     Mono,
+    /// A colour-capable emoji face, registered under the CSS "emoji" generic
+    /// family (font-variant-emoji, UTR #51's forced emoji presentation).
+    Emoji,
 }
 
 #[cfg(not(target_os = "windows"))]
 fn classify_font_file(file_name: &str) -> FontBucket {
     let lower = file_name.to_ascii_lowercase();
-    if lower.contains("mono") {
+    if lower.contains("emoji") {
+        FontBucket::Emoji
+    } else if lower.contains("mono") {
         FontBucket::Mono
     } else if lower.contains("serif") && !lower.contains("sans") {
         FontBucket::Serif
@@ -763,6 +769,7 @@ pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::
     let sans = best_linux_font(FontBucket::Sans);
     let serif = best_linux_font(FontBucket::Serif);
     let mono = best_linux_font(FontBucket::Mono);
+    let emoji = best_linux_font(FontBucket::Emoji);
 
     let mut register_all = |path: Option<std::path::PathBuf>, families: &[&str]| {
         let Some(path) = path.as_deref().and_then(|path| path.to_str()) else {
@@ -789,6 +796,12 @@ pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::
     );
     register_all(serif, &["serif", "ui-serif", "Times", "Times New Roman", "Georgia"]);
     register_all(mono, &["monospace", "ui-monospace", "Courier", "Courier New", "Consolas"]);
+    // font-variant-emoji / UTR #51: a forced emoji presentation
+    // (U+FE0F) needs a colour-capable face to select even when the
+    // author's declared family already maps the base code point. A
+    // missing emoji font is a safe no-op here, same as any other absent
+    // generic face.
+    register_all(emoji, &["emoji"]);
 }
 
 #[cfg(test)]
@@ -841,6 +854,19 @@ mod tests {
                         .map(|home| std::path::PathBuf::from(home).join(".local/share/fonts"))
                 })
         );
+    }
+
+    #[test]
+    fn classify_font_file_recognizes_emoji_before_the_other_buckets() {
+        assert_eq!(classify_font_file("NotoColorEmoji.ttf"), FontBucket::Emoji);
+        assert_eq!(classify_font_file("NotoEmoji-Regular.ttf"), FontBucket::Emoji);
+        // "emoji" wins even for a filename that would otherwise read as
+        // serif/mono, since font-variant-emoji needs a dedicated bucket
+        // rather than falling in with an unrelated text face.
+        assert_eq!(classify_font_file("SerifEmojiMono.ttf"), FontBucket::Emoji);
+        assert_eq!(classify_font_file("DejaVuSans-Bold.ttf"), FontBucket::Sans);
+        assert_eq!(classify_font_file("DejaVuSerif.ttf"), FontBucket::Serif);
+        assert_eq!(classify_font_file("DejaVuSansMono.ttf"), FontBucket::Mono);
     }
 
     #[test]

@@ -164,6 +164,11 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
             (r"C:\Windows\Fonts\segoeui.ttf", "ui-sans-serif"),
             (r"C:\Windows\Fonts\consola.ttf", "ui-monospace"),
             (r"C:\Windows\Fonts\segoeui.ttf", "ui-rounded"),
+            // font-variant-emoji / UTR #51: a forced emoji presentation
+            // (U+FE0F) needs a colour-capable face to select over the
+            // declared family's own monochrome glyph for the base code
+            // point.
+            (r"C:\Windows\Fonts\seguiemj.ttf", "emoji"),
         ] {
             font_loader::register_system_face(provider, path, family, 400, FontSlant::Normal);
         }
