@@ -2560,3 +2560,6 @@ mod tests_event_modifiers;
 
 #[path = "tests_navigation_events.rs"]
 mod tests_navigation_events;
+
+#[path = "tests_event_types.rs"]
+mod tests_event_types;

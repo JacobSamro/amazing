@@ -22,13 +22,12 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
     if matches!(op, O::HashChangeEventConstructor | O::PopStateEventConstructor | O::PageTransitionEventConstructor) {
         let raw = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let event_type = host.to_dom_string(raw)?;
-        let event_type = String::from_utf16(&event_type).map_err(|_| host.type_error("Invalid event type"))?;
         let dictionary = args.get(1);
         if let Some(value) = dictionary.filter(|value| !host.is_nullish(value)) { host.require_object(value)?; }
         let bubbles = member(host, dictionary, "bubbles")?; let bubbles = host.to_boolean(&bubbles);
         let cancelable = member(host, dictionary, "cancelable")?; let cancelable = host.to_boolean(&cancelable);
         let composed = member(host, dictionary, "composed")?; let composed = host.to_boolean(&composed);
-        let mut event = Event::new(event_type, EventInit { bubbles, cancelable, composed }, Duration::ZERO);
+        let mut event = Event::new_utf16(&event_type, EventInit { bubbles, cancelable, composed }, Duration::ZERO);
         event.set_class(class);
         match class {
             EventClass::HashChange => {

@@ -40,11 +40,11 @@ fn release<H: BindingHost>(host: &mut H, data: MessageEventData) {
         host.release_value(root);
     }
 }
-fn create<H: BindingHost>(host: &mut H, kind: String, init: EventInit,
+fn create<H: BindingHost>(host: &mut H, kind: Vec<u16>, init: EventInit,
     payload: MessageEventPayload<H::Value>) -> Result<EventId, H::Error> {
     let data = root(host, payload)?;
     let result = host.with_dom(|dom| Ok(dom.events_mut().create_event(
-        Event::new_message(kind, init, Duration::ZERO, data.clone()))));
+        Event::new_message_utf16(&kind, init, Duration::ZERO, data.clone()))));
     if result.is_err() { release(host, data); }
     result
 }
@@ -52,7 +52,7 @@ fn create<H: BindingHost>(host: &mut H, kind: String, init: EventInit,
 /// Returns false if the event was canceled (message events are non-cancelable).
 pub fn dispatch_message_event<H: BindingHost>(host: &mut H, target: EventTarget,
     kind: &str, payload: MessageEventPayload<H::Value>) -> Result<bool, H::Error> {
-    let event = create(host, kind.into(), EventInit::default(), payload)?;
+    let event = create(host, kind.encode_utf16().collect(), EventInit::default(), payload)?;
     dispatch_created_event(host, target, event)
 }
 pub(crate) fn create_legacy<H: BindingHost>(host: &mut H) -> Result<H::Value, H::Error> {
@@ -87,10 +87,9 @@ fn source<H: BindingHost>(host: &mut H, value: H::Value) -> Result<Option<H::Val
     }
     Ok(Some(value))
 }
-fn type_string<H: BindingHost>(host: &mut H, args: &[H::Value]) -> Result<String, H::Error> {
+fn type_string<H: BindingHost>(host: &mut H, args: &[H::Value]) -> Result<Vec<u16>, H::Error> {
     let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
-    String::from_utf16(&host.to_dom_string(value)?)
-        .map_err(|_| host.type_error("Invalid event type"))
+    host.to_dom_string(value)
 }
 pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value,
     args: &[H::Value]) -> Result<H::Value, H::Error> {
@@ -159,7 +158,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value,
     let ports = ports(host, &ports_value)?;
     let rooted = root(host, MessageEventPayload { data, origin, last_event_id, source, ports })?;
     let previous = host.with_dom(|dom| Ok(dom.events_mut().event_mut(id)
-        .init_message_event(kind, bubbles, cancelable, rooted.clone())));
+        .init_message_event_utf16(&kind, bubbles, cancelable, rooted.clone())));
     match previous {
         Ok(Some(previous)) => release(host, previous),
         Ok(None) => release(host, rooted),

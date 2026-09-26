@@ -155,6 +155,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn event_names_preserve_utf16_through_construction_init_and_listener_lifetime() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            let step = 0;
+            function check(v) { step++; if (!v) throw 'event UTF16 check ' + step; }
+            const names = ['\uD800', '\uDC00', '\uD801', '\uFFFD', '\uD800x\uDC00', '😀'];
+            for (const Constructor of [Event, CustomEvent, UIEvent, FocusEvent, MouseEvent, WheelEvent,
+                KeyboardEvent, CompositionEvent, HashChangeEvent, PopStateEvent, PageTransitionEvent]) {
+                for (const name of names) check(new Constructor(name).type === name);
+            }
+            const target = new EventTarget(), seen = [];
+            function listener(e) { seen.push(e.type); }
+            for (const name of names) target.addEventListener(name, listener);
+            for (const name of names) target.dispatchEvent(new Event(name));
+            check(seen.join('|') === names.join('|'));
+            target.removeEventListener('\uFFFD', listener);
+            seen.length = 0; target.dispatchEvent(new Event('\uD800'));
+            check(seen.length === 1 && seen[0] === '\uD800');
+            target.removeEventListener('\uD800', listener);
+            seen.length = 0; target.dispatchEvent(new Event('\uD800')); check(seen.length === 0);
+            const controller = new AbortController();
+            target.addEventListener('\uD800', listener, {signal: controller.signal});
+            controller.abort(); target.dispatchEvent(new Event('\uD800')); check(seen.length === 0);
+            target.addEventListener('\uD800', listener, {once: true});
+            target.dispatchEvent(new Event('\uD800')); target.dispatchEvent(new Event('\uD800')); check(seen.length === 1);
+            const legacy = document.createEvent('Event');
+            legacy.initEvent('\uD800'); check(legacy.type === '\uD800');
+            legacy.initEvent('\uFFFD'); check(legacy.type === '\uFFFD');
+            const custom = document.createEvent('CustomEvent');
+            custom.initCustomEvent('\uDC00', false, false, {}); check(custom.type === '\uDC00');
+            const message = document.createEvent('MessageEvent');
+            message.initMessageEvent('\uD800'); check(message.type === '\uD800');
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn navigation_events_keep_native_payload_identity_and_legacy_return_value() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
