@@ -138,31 +138,32 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
     use amazing_text::FontSlant;
     use amazing_text_provider::{FontFormat, WebFont};
 
-    for (path, family) in [
-        (r"C:\Windows\Fonts\times.ttf", "serif"),
-        (r"C:\Windows\Fonts\times.ttf", "Times"),
-        (r"C:\Windows\Fonts\times.ttf", "Times New Roman"),
-        (r"C:\Windows\Fonts\arial.ttf", "sans-serif"),
-        (r"C:\Windows\Fonts\arial.ttf", "Arial"),
-        (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
-        (r"C:\Windows\Fonts\consola.ttf", "monospace"),
-    ] {
-        let options = amazing_net::FetchOptions {
-            max_response_bytes: MAX_PAGE_FONT_BYTES,
-            ..amazing_net::FetchOptions::default()
-        };
-        let Ok(response) = amazing_net::fetch(path, &options) else {
-            continue;
-        };
-        let _ = provider.register_web_font(WebFont {
-            family: family.into(),
-            weight: 400,
-            stretch: 100,
-            slant: FontSlant::Normal,
-            format: FontFormat::OpenType,
-            bytes: response.body,
-        });
+    #[cfg(target_os = "windows")]
+    {
+        for (path, family) in [
+            (r"C:\Windows\Fonts\times.ttf", "serif"),
+            (r"C:\Windows\Fonts\times.ttf", "Times"),
+            (r"C:\Windows\Fonts\times.ttf", "Times New Roman"),
+            (r"C:\Windows\Fonts\arial.ttf", "sans-serif"),
+            (r"C:\Windows\Fonts\arial.ttf", "Arial"),
+            (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
+            (r"C:\Windows\Fonts\consola.ttf", "monospace"),
+            (r"C:\Windows\Fonts\consola.ttf", "Consolas"),
+        ] {
+            font_loader::register_system_face(provider, path, family, 400, FontSlant::Normal);
+        }
     }
+
+    // Windows has fixed, well-known font file paths; Linux does not, and this
+    // std-only engine has no fontconfig binding. Without this, generic
+    // families (serif/sans-serif/monospace) and every common named family
+    // (Arial, Times, Courier, ...) resolved to zero registered faces on
+    // Linux, so every glyph rasterized as a full-coverage/.notdef box (see
+    // TEXT-17). Walk the standard font directories instead and classify by
+    // filename, preferring well-known, broadly-hinted families so the
+    // default look is stable across sandboxes with different font sets.
+    #[cfg(not(target_os = "windows"))]
+    font_loader::register_linux_system_faces(provider);
 
     // The pinned WPT render runner sets this root for its child process. The
     // CSSTest faces are installed fonts in upstream tests, not @font-face URLs.

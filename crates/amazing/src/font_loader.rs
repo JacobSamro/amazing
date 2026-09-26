@@ -409,25 +409,230 @@ impl PageFontLoader<'_> {
 
 impl FontFaceLoader for PageFontLoader<'_> {
     fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError> {
-        let file = match name.trim().to_ascii_lowercase().as_str() {
-            "arial" => Some(r"C:\Windows\Fonts\arial.ttf".to_owned()),
-            "times new roman" | "times" => Some(r"C:\Windows\Fonts\times.ttf".to_owned()),
-            "segoe ui" => Some(r"C:\Windows\Fonts\segoeui.ttf".to_owned()),
-            "consolas" => Some(r"C:\Windows\Fonts\consola.ttf".to_owned()),
-            "csshworientationtest" => std::env::var_os("AMAZING_WPT_ROOT").map(|root| {
+        let lower = name.trim().to_ascii_lowercase();
+        if lower == "csshworientationtest" {
+            let file = std::env::var_os("AMAZING_WPT_ROOT").map(|root| {
                 std::path::Path::new(&root)
                     .join("fonts/adobe-fonts/CSSHWOrientationTest.otf")
                     .to_string_lossy()
                     .into_owned()
-            }),
-            _ => None,
-        };
+            });
+            return Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()));
+        }
+        let file = local_font_path(&lower);
         Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()))
     }
 
     fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError> {
         Ok(self.read_url(request.url, request.max_bytes))
     }
+}
+
+/// Resolves `src: local('<name>')` for the handful of well-known family
+/// names a page is likely to request directly. Windows has fixed font file
+/// paths; on Linux (no fontconfig binding in this std-only engine) the same
+/// generic-family scan used for the UA default faces stands in.
+#[cfg(target_os = "windows")]
+fn local_font_path(lower_name: &str) -> Option<String> {
+    match lower_name {
+        "arial" => Some(r"C:\Windows\Fonts\arial.ttf".to_owned()),
+        "times new roman" | "times" => Some(r"C:\Windows\Fonts\times.ttf".to_owned()),
+        "segoe ui" => Some(r"C:\Windows\Fonts\segoeui.ttf".to_owned()),
+        "consolas" => Some(r"C:\Windows\Fonts\consola.ttf".to_owned()),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn local_font_path(lower_name: &str) -> Option<String> {
+    let bucket = match lower_name {
+        "arial" | "helvetica" | "sans-serif" | "system-ui" | "segoe ui" => FontBucket::Sans,
+        "times new roman" | "times" | "georgia" | "serif" => FontBucket::Serif,
+        "consolas" | "courier" | "courier new" | "monospace" => FontBucket::Mono,
+        _ => return None,
+    };
+    best_linux_font(bucket).map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Which generic CSS family a scanned font file stands in for.
+#[cfg(not(target_os = "windows"))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FontBucket {
+    Sans,
+    Serif,
+    Mono,
+}
+
+#[cfg(not(target_os = "windows"))]
+fn classify_font_file(file_name: &str) -> FontBucket {
+    let lower = file_name.to_ascii_lowercase();
+    if lower.contains("mono") {
+        FontBucket::Mono
+    } else if lower.contains("serif") && !lower.contains("sans") {
+        FontBucket::Serif
+    } else {
+        FontBucket::Sans
+    }
+}
+
+/// Collects font files under `dir`, bounded in both depth and count so a
+/// sandbox with an unexpectedly large or deeply nested font tree cannot make
+/// page load hang or exhaust memory.
+#[cfg(not(target_os = "windows"))]
+fn collect_font_files(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path::PathBuf>) {
+    const MAX_DEPTH: u32 = 8;
+    const MAX_FILES: usize = 4096;
+    if depth > MAX_DEPTH || out.len() >= MAX_FILES {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if file_type.is_dir() {
+            collect_font_files(&path, depth + 1, out);
+        } else if file_type.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| {
+                    ext.eq_ignore_ascii_case("ttf")
+                        || ext.eq_ignore_ascii_case("otf")
+                        || ext.eq_ignore_ascii_case("ttc")
+                })
+        {
+            out.push(path);
+        }
+        if out.len() >= MAX_FILES {
+            return;
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn linux_font_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = vec![
+        std::path::PathBuf::from("/usr/share/fonts"),
+        std::path::PathBuf::from("/usr/local/share/fonts"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = std::path::PathBuf::from(home);
+        roots.push(home.join(".fonts"));
+        roots.push(home.join(".local/share/fonts"));
+    }
+    roots
+}
+
+/// Picks the best installed file for `bucket` by filename heuristics: known,
+/// broadly hinted families first (so the default look is stable across
+/// sandboxes with different font packages installed), then plain regular
+/// weights over bold/italic/condensed variants, then a stable tie-break.
+#[cfg(not(target_os = "windows"))]
+fn best_linux_font(bucket: FontBucket) -> Option<std::path::PathBuf> {
+    const PREFERRED: [&str; 5] = ["dejavu", "liberation", "noto", "freefont", "free"];
+
+    let mut candidates = Vec::new();
+    for root in &linux_font_roots() {
+        collect_font_files(root, 0, &mut candidates);
+    }
+
+    let mut best: Option<(std::path::PathBuf, i32)> = None;
+    for path in candidates {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if classify_font_file(name) != bucket {
+            continue;
+        }
+        let lower = name.to_ascii_lowercase();
+        let mut score = 0i32;
+        if let Some(rank) = PREFERRED.iter().position(|family| lower.contains(family)) {
+            score += (PREFERRED.len() - rank) as i32 * 100;
+        }
+        if lower.contains("italic") || lower.contains("oblique") {
+            score -= 20;
+        }
+        if lower.contains("bold") || lower.contains("black") || lower.contains("heavy") {
+            score -= 10;
+        }
+        if lower.contains("condensed")
+            || lower.contains("narrow")
+            || lower.contains("light")
+            || lower.contains("thin")
+            || lower.contains("extralight")
+        {
+            score -= 5;
+        }
+        if lower.contains("regular") || !(lower.contains('-') || lower.contains('_')) {
+            score += 5;
+        }
+        let better = match &best {
+            Some((_, best_score)) => score > *best_score,
+            None => true,
+        };
+        if better {
+            best = Some((path, score));
+        }
+    }
+    best.map(|(path, _)| path)
+}
+
+pub(super) fn register_system_face(
+    provider: &mut amazing_text_provider::TextProvider,
+    path: &str,
+    family: &str,
+    weight: u16,
+    slant: amazing_text::FontSlant,
+) {
+    use amazing_text_provider::{FontFormat, WebFont};
+
+    let options = amazing_net::FetchOptions {
+        max_response_bytes: super::MAX_PAGE_FONT_BYTES,
+        ..amazing_net::FetchOptions::default()
+    };
+    let Ok(response) = amazing_net::fetch(path, &options) else {
+        return;
+    };
+    let _ = provider.register_web_font(WebFont {
+        family: family.into(),
+        weight,
+        stretch: 100,
+        slant,
+        format: FontFormat::OpenType,
+        bytes: response.body,
+    });
+}
+
+/// Registers a default face for each generic CSS family, plus a handful of
+/// common named families (Arial, Times, Courier, ...) that pages request
+/// directly, by scanning the standard Linux font directories. This engine
+/// has no fontconfig binding, so without this every generic and named family
+/// resolves to zero faces on Linux and every glyph falls back to a
+/// full-coverage box (TEXT-17).
+#[cfg(not(target_os = "windows"))]
+pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::TextProvider) {
+    use amazing_text::FontSlant;
+
+    let sans = best_linux_font(FontBucket::Sans);
+    let serif = best_linux_font(FontBucket::Serif);
+    let mono = best_linux_font(FontBucket::Mono);
+
+    let mut register_all = |path: Option<std::path::PathBuf>, families: &[&str]| {
+        let Some(path) = path.as_deref().and_then(|path| path.to_str()) else {
+            return;
+        };
+        for family in families {
+            register_system_face(provider, path, family, 400, FontSlant::Normal);
+        }
+    };
+
+    register_all(sans, &["sans-serif", "system-ui", "Arial", "Helvetica"]);
+    register_all(serif, &["serif", "Times", "Times New Roman", "Georgia"]);
+    register_all(mono, &["monospace", "Courier", "Courier New", "Consolas"]);
 }
 
 #[cfg(test)]
