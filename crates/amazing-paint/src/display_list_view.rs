@@ -642,9 +642,10 @@ impl<'a> DisplayListView<'a> {
         }
         for index in items.clone() {
             let command = &self.commands[self.item_commands[index]];
-            if !matches!(command, PaintCommand::PaintDecorations(..))
-                && !matches!(command, PaintCommand::PaintContent(box_) if box_.lines.iter().all(|line| line.replaced.is_empty()))
-            {
+            if !matches!(
+                command,
+                PaintCommand::PaintDecorations(..) | PaintCommand::PaintContent(..)
+            ) {
                 return Err(RawRasterError::UnseparableItem(index));
             }
         }
