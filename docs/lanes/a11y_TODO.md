@@ -59,10 +59,66 @@ available on the build hosts; add one when the WPT corpus lands.
   render`/`amazing layout` use, backing the new `amazing a11y-tree
   <page.html> [width]` CLI subcommand and a test against
   `tests/real-pages/pages/app-analytics.html`. Commit `20b7c5f8`.
+- [x] **A11Y-7 — accname/role WPT conformance.** `scripts/ensure-wpt.sh` (added
+  to `dev` after A11Y-5) provisions the pinned WPT checkout, so
+  `crates/amazing-a11y/tests/wpt_conformance.rs` (new; `#[ignore]`d behind
+  `AMAZING_WPT_ROOT`) reimplements `aria-utils.js`'s three declarative
+  verifiers (`verifyLabelsBySelector`, `verifyRolesBySelector`,
+  `verifyGenericRolesBySelector`) directly against `build_document`, since the
+  real WPT files drive through `test_driver.get_computed_label`/`_role`
+  (WebDriver + a platform AT this engine doesn't have) — see the module doc
+  comment. Selection: `accname/name/*.html` (15 files) + `wai-aria/role/*.html`
+  (23 files). Before: 179 subtest failures. Engine fixes, biggest clusters
+  first:
+  - `role.rs`: case-insensitive `role=""` token matching; `form`/`region`
+    require an author name to be valid in the fallback chain (else skip to the
+    next token); `directory` (deprecated) computes as `list`; `img`/`image`
+    synonyms both compute `"image"`; new tentative `sectionheader`/
+    `sectionfooter` roles.
+  - `tree.rs`: `ignorable()` no longer flattens a node with an explicit (even
+    invalid/unrecognized) `role` attribute — conflict resolution reassigns the
+    role, it never removes the node.
+  - `accname.rs` (the bulk of the work): `flatten()` was collapsing NBSP as
+    whitespace (`char::is_whitespace` includes it; accname's own whitespace
+    set does not) and text/generated-content fragments were flattened
+    per-fragment then rejoined with a forced separator, which invented spaces
+    with no source whitespace and, backwards, lost genuine boundary
+    whitespace (a `content: " before "` pad, a text node's own trailing
+    space). Fixed by pushing fragments raw and concatenating directly, with
+    exactly one `flatten` at the end. Also added: `text-transform` applied to
+    text nodes; `::marker` content; a `display:block`/`inline-block`/…
+    word-boundary rule; embedded-control value substitution for a `<label>`'s
+    own traversal (scoped away from the specific control whose name is being
+    computed, so a text field doesn't fold its own value into its own name);
+    `visibility:hidden` tunnels through to a `visibility:visible` descendant
+    (mirrors `tree.rs`'s `Decision::Promote`) without leaking the excluded
+    node's own direct text; the `aria-labelledby`/`describedby` note that a
+    hidden *referenced* target exposes its *entire* subtree unconditionally;
+    a self-referencing `aria-labelledby` id (`aria-labelledby="self other"`)
+    resolves via steps 2D-2G instead of being dropped or infinite-looping.
+    Also fixed a latent pre-existing bug in `own_name` (pre-pushing a node
+    into `visited` before calling `compute_name` on it, which always tripped
+    the immediate "already visited" guard and returned empty — dormant until
+    A11Y-7's fixture coverage reached a nested element with its own
+    `aria-label`).
+  - Two residuals, documented as exceptions in the test file rather than
+    fixed: `comp_name_from_content_alt_counter_invalidation.html` needs a
+    running JS engine (a CSSOM stylesheet mutation after load) this crate has
+    no way to execute; one `comp_name_from_content.html` subtest needs a
+    second, non-cloned "referenced anywhere in this computation" node set
+    (today's `visited` is a per-branch ancestor-chain guard, cloned at each
+    recursive step, which cannot see a sibling branch's reference) — a real
+    architectural gap, not a one-line fix, for one WPT subtest.
+  After: 690 passed, 0 failed, 8 logged exceptions (4 spec-acknowledged
+  ambiguous `.tentative.html` cases + the 2 residuals above, each hit twice
+  in the log), 4 unsupported files (3 pre-existing WebDriver-driven role
+  files + the 1 script-dependent accname file). Crate: 95 passed, 1 skipped
+  (release-profile-gated), 1 doctest. Workspace gate (run twice, stable):
+  2914 passed, 0 failed, 11 skipped; all doctests green. Commit TBD.
 
 ## WPT corpus status
 
-No `accname/` or `html-aam/` WPT checkout exists on the Linux sandbox as of
-A11Y-5 (checked `find / -iname '*wpt*'`; only `wpt-html`, `wpt-render`,
-`wpt-replaced-content`, `wpt-integrator-assist` are present). This lane
-continues to gate on its own table-driven fixtures until one is added.
+`scripts/ensure-wpt.sh` (landed on `dev` after A11Y-5) provisions the pinned
+WPT checkout at `~/corpora/wpt` on a Linux sandbox; A11Y-7 used it for the
+`accname/name/` and `wai-aria/role/` selections above. No `html-aam/`
+selection has been added yet.
