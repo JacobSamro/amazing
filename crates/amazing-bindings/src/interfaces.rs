@@ -1,3 +1,4 @@
+use amazing_dom::legacy_document::LegacyColor as LC;
 use crate::host::{
     BindingHost, FormAttribute as F, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
 };
@@ -117,9 +118,11 @@ const CUSTOM_EVENT: &[Member] = &[
 const UI_EVENT: &[Member] = &[
     getter("view", O::EventExtra("view")),
     getter("detail", O::EventExtra("detail")),
+    getter("which", O::EventExtra("which")),
 ];
 const FOCUS_EVENT: &[Member] = &[getter("relatedTarget", O::EventExtra("relatedTarget"))];
 const MOUSE_EVENT: &[Member] = &[
+    method("getModifierState", O::MouseGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -137,8 +140,10 @@ const WHEEL_EVENT: &[Member] = &[
     getter("deltaY", O::EventExtra("deltaY")),
     getter("deltaZ", O::EventExtra("deltaZ")),
     getter("deltaMode", O::EventExtra("deltaMode")),
+    getter("momentum", O::EventExtra("momentum")),
 ];
 const KEYBOARD_EVENT: &[Member] = &[
+    method("getModifierState", O::KeyboardGetModifierState, 1),
     getter("ctrlKey", O::EventExtra("ctrlKey")),
     getter("shiftKey", O::EventExtra("shiftKey")),
     getter("altKey", O::EventExtra("altKey")),
@@ -150,7 +155,6 @@ const KEYBOARD_EVENT: &[Member] = &[
     getter("isComposing", O::EventExtra("isComposing")),
     getter("charCode", O::EventExtra("charCode")),
     getter("keyCode", O::EventExtra("keyCode")),
-    getter("which", O::EventExtra("which")),
 ];
 const MESSAGE_EVENT: &[Member] = &[
     getter("data", O::MessageEventGet("data")),
@@ -219,6 +223,14 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("fgColor", O::DocumentLegacyColorGet(LC::Text)), setter("fgColor", O::DocumentLegacyColorSet(LC::Text)),
+    getter("bgColor", O::DocumentLegacyColorGet(LC::Background)), setter("bgColor", O::DocumentLegacyColorSet(LC::Background)),
+    getter("linkColor", O::DocumentLegacyColorGet(LC::Link)), setter("linkColor", O::DocumentLegacyColorSet(LC::Link)),
+    getter("vlinkColor", O::DocumentLegacyColorGet(LC::VisitedLink)), setter("vlinkColor", O::DocumentLegacyColorSet(LC::VisitedLink)),
+    getter("alinkColor", O::DocumentLegacyColorGet(LC::ActiveLink)), setter("alinkColor", O::DocumentLegacyColorSet(LC::ActiveLink)),
+    method("clear", O::DocumentLegacyNoop, 0),
+    method("captureEvents", O::DocumentLegacyNoop, 0),
+    method("releaseEvents", O::DocumentLegacyNoop, 0),
     method("moveBefore", O::MoveBefore, 2),
     getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
@@ -228,6 +240,7 @@ const DOCUMENT: &[Member] = &[
     getter("documentElement", O::DocumentElement),
     getter("doctype", O::DocumentDoctype),
     getter("readyState", O::DocumentReadyState),
+    getter("defaultView", O::DocumentDefaultView),
     getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
     getter("characterSet", O::DocumentCharacterSet),
     getter("charset", O::DocumentCharacterSet), getter("inputEncoding", O::DocumentCharacterSet),
@@ -239,6 +252,8 @@ const DOCUMENT: &[Member] = &[
     method("adoptNode", O::DocumentAdoptNode, 1),
     method("importNode", O::DocumentImportNode, 1),
     getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
+    getter("embeds", O::DocumentEmbeds), getter("plugins", O::DocumentEmbeds),
+    getter("anchors", O::DocumentAnchors), getter("applets", O::DocumentApplets),
     getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
     getter("activeElement", O::DocumentActiveElement),
     method("hasFocus", O::DocumentHasFocus, 0),
@@ -547,7 +562,15 @@ const TEXT: &[Member] = &[
     getter("wholeText", O::TextWholeText),
     method("splitText", O::TextSplit, 1),
 ];
+const HTML_BODY: &[Member] = &[
+    getter("text", O::BodyLegacyColorGet(LC::Text)), setter("text", O::BodyLegacyColorSet(LC::Text)),
+    getter("bgColor", O::BodyLegacyColorGet(LC::Background)), setter("bgColor", O::BodyLegacyColorSet(LC::Background)),
+    getter("link", O::BodyLegacyColorGet(LC::Link)), setter("link", O::BodyLegacyColorSet(LC::Link)),
+    getter("vLink", O::BodyLegacyColorGet(LC::VisitedLink)), setter("vLink", O::BodyLegacyColorSet(LC::VisitedLink)),
+    getter("aLink", O::BodyLegacyColorGet(LC::ActiveLink)), setter("aLink", O::BodyLegacyColorSet(LC::ActiveLink)),
+];
 const HTML_ELEMENT: &[Member] = &[
+    getter("dataset", O::ElementDataset),
     method("focus", O::ElementFocus, 0),
     method("blur", O::ElementBlur, 0),
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
@@ -592,7 +615,7 @@ const INPUT: &[Member] = &[
     form_get("accept", F::Accept), form_set("accept", F::Accept),
     form_get("alpha", F::Alpha), form_set("alpha", F::Alpha),
     form_get("alt", F::Alt), form_set("alt", F::Alt),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("formAction", F::FormAction), form_set("formAction", F::FormAction),
     form_get("formEnctype", F::FormEnctype), form_set("formEnctype", F::FormEnctype),
@@ -623,10 +646,12 @@ const INPUT: &[Member] = &[
     getter("defaultChecked", O::InputDefaultChecked), setter("defaultChecked", O::InputSetDefaultChecked),
     getter("valueAsNumber", O::InputValueAsNumber), setter("valueAsNumber", O::InputSetValueAsNumber),
     getter("valueAsDate", O::InputValueAsDate), setter("valueAsDate", O::InputSetValueAsDate),
+    method("stepUp", O::InputStepUp, 0), method("stepDown", O::InputStepDown, 0),
     getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
@@ -635,7 +660,7 @@ const INPUT: &[Member] = &[
 const FORM: &[Member] = &[
     form_get("acceptCharset", F::AcceptCharset), form_set("acceptCharset", F::AcceptCharset),
     form_get("action", F::Action), form_set("action", F::Action),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("enctype", F::Enctype), form_set("enctype", F::Enctype),
     form_get("encoding", F::Encoding), form_set("encoding", F::Encoding),
     form_get("method", F::Method), form_set("method", F::Method),
@@ -645,6 +670,7 @@ const FORM: &[Member] = &[
     form_get("rel", F::Rel), form_set("rel", F::Rel),
     form_get("relList", F::RelList), form_set("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
+    method("submit", O::FormSubmit, 0), method("requestSubmit", O::FormRequestSubmit, 0),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
 ];
@@ -658,6 +684,8 @@ const FORM_CONTROL: &[Member] = &[
 ];
 const OUTPUT: &[Member] = &[
     getter("htmlFor", O::OutputHtmlFor), setter("htmlFor", O::OutputSetHtmlFor),
+    getter("value", O::OutputValue), setter("value", O::OutputSetValue),
+    getter("defaultValue", O::OutputDefaultValue), setter("defaultValue", O::OutputSetDefaultValue),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
@@ -684,7 +712,7 @@ const BUTTON: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const TEXTAREA: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("cols", F::Cols), form_set("cols", F::Cols),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
@@ -702,13 +730,14 @@ const TEXTAREA: &[Member] = &[
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const SELECT: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
     form_get("name", F::Name), form_set("name", F::Name),
     form_get("required", F::Required), form_set("required", F::Required),
@@ -716,8 +745,11 @@ const SELECT: &[Member] = &[
     getter("form", O::FormControlForm), getter("value", O::SelectValue), setter("value", O::SelectSetValue),
     getter("selectedIndex", O::SelectSelectedIndex), setter("selectedIndex", O::SelectSetSelectedIndex),
     getter("options", O::SelectOptions), getter("length", O::SelectLength),
+    setter("length", O::SelectSetLength),
+    getter("selectedOptions", O::SelectSelectedOptions),
     getter("multiple", O::SelectMultiple), setter("multiple", O::SelectSetMultiple),
     method("add", O::SelectAdd, 1), method("remove", O::SelectRemove, 0),
+    method("item", O::SelectItem, 1), method("namedItem", O::SelectNamedItem, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
@@ -730,6 +762,7 @@ const OPTION: &[Member] = &[
     getter("selected", O::OptionSelected), setter("selected", O::OptionSetSelected),
     getter("defaultSelected", O::OptionDefaultSelected), setter("defaultSelected", O::OptionSetDefaultSelected),
     getter("text", O::OptionText), setter("text", O::OptionSetText),
+    getter("index", O::OptionIndex),
 ];
 const OPTGROUP: &[Member] = &[
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
@@ -737,6 +770,21 @@ const OPTGROUP: &[Member] = &[
 ];
 const LABEL: &[Member] = &[
     form_get("htmlFor", F::HtmlFor), form_set("htmlFor", F::HtmlFor),
+    getter("form", O::LabelForm), getter("control", O::LabelControl),
+];
+const OBJ: &[Member] = &[getter("form", O::FormControlForm)];
+const PROGRESS: &[Member] = &[
+    getter("value", O::ProgressValue), setter("value", O::ProgressSetValue),
+    getter("max", O::ProgressMax), setter("max", O::ProgressSetMax),
+    getter("position", O::ProgressPosition),
+];
+const METER: &[Member] = &[
+    getter("value", O::MeterValue), setter("value", O::MeterSetValue),
+    getter("min", O::MeterMin), setter("min", O::MeterSetMin),
+    getter("max", O::MeterMax), setter("max", O::MeterSetMax),
+    getter("low", O::MeterLow), setter("low", O::MeterSetLow),
+    getter("high", O::MeterHigh), setter("high", O::MeterSetHigh),
+    getter("optimum", O::MeterOptimum), setter("optimum", O::MeterSetOptimum),
 ];
 const VALIDITY: &[Member] = &[
     getter("valueMissing", O::ValidityValueMissing), getter("typeMismatch", O::ValidityTypeMismatch),
@@ -803,7 +851,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
     D { interface: I::Blob, name: "Blob", parent: None, constructor: Some(O::BlobConstructor), members: BLOB },
     D { interface: I::File, name: "File", parent: Some(I::Blob), constructor: Some(O::FileConstructor), members: FILE },
-    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataConstructor), members: FORM_DATA },
+    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataFormConstructor), members: FORM_DATA },
     D {
         interface: I::EventTarget,
         name: "EventTarget",
@@ -858,7 +906,31 @@ pub static INTERFACES: &[D] = &[
     },
     D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
     D { interface: I::SVGElement, name: "SVGElement", parent: Some(I::Element), constructor: None,
-        members: &[method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::MathMLElement, name: "MathMLElement", parent: Some(I::Element), constructor: None,
+        members: &[getter("dataset", O::ElementDataset), method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
+    D { interface: I::HTMLDirectoryElement, name: "HTMLDirectoryElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("compact", O::DirectoryCompact), setter("compact", O::DirectoryCompactSet)
+    ] },
+    D { interface: I::HTMLFontElement, name: "HTMLFontElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("color", O::FontColor), setter("color", O::FontColorSet),
+        getter("face", O::FontFace), setter("face", O::FontFaceSet),
+        getter("size", O::FontSize), setter("size", O::FontSizeSet)
+    ] },
+    D { interface: I::HTMLFrameElement, name: "HTMLFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("name", O::FrameName), setter("name", O::FrameNameSet),
+        getter("scrolling", O::FrameScrolling), setter("scrolling", O::FrameScrollingSet),
+        getter("src", O::FrameSrc), setter("src", O::FrameSrcSet),
+        getter("frameBorder", O::FrameBorder), setter("frameBorder", O::FrameBorderSet),
+        getter("longDesc", O::FrameLongDesc), setter("longDesc", O::FrameLongDescSet),
+        getter("noResize", O::FrameNoResize), setter("noResize", O::FrameNoResizeSet),
+        getter("marginHeight", O::FrameMarginHeight), setter("marginHeight", O::FrameMarginHeightSet),
+        getter("marginWidth", O::FrameMarginWidth), setter("marginWidth", O::FrameMarginWidthSet)
+    ] },
+    D { interface: I::HTMLFrameSetElement, name: "HTMLFrameSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("cols", O::FrameSetCols), setter("cols", O::FrameSetColsSet),
+        getter("rows", O::FrameSetRows), setter("rows", O::FrameSetRowsSet)
+    ] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -867,7 +939,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: LINK },
     D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: META },
     D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: HTML_BODY },
     D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -903,8 +975,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
-    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: PROGRESS },
+    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: METER },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLVideoElement, name: "HTMLVideoElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
     D { interface: I::HTMLAudioElement, name: "HTMLAudioElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
@@ -916,7 +988,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: IFRAME },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: OBJ },
     D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDetailsElement, name: "HTMLDetailsElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDialogElement, name: "HTMLDialogElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -977,8 +1049,16 @@ pub static INTERFACES: &[D] = &[
         interface: I::ProcessingInstruction,
         name: "ProcessingInstruction",
         parent: Some(I::CharacterData),
-        constructor: None,
-        members: &[getter("target", O::ProcessingInstructionTarget)],
+        constructor: Some(O::ProcessingInstructionConstructor),
+        members: &[getter("target", O::ProcessingInstructionTarget),
+            method("hasAttributes", O::PiHasAttributes, 0),
+            method("getAttributeNames", O::PiGetAttributeNames, 0),
+            method("getAttribute", O::PiGetAttribute, 1),
+            method("setAttribute", O::PiSetAttribute, 2),
+            method("removeAttribute", O::PiRemoveAttribute, 1),
+            method("toggleAttribute", O::PiToggleAttribute, 1),
+            method("hasAttribute", O::PiHasAttribute, 1),
+        ],
     },
     D {
         interface: I::AbstractRange,
@@ -1001,6 +1081,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::RangeConstructor),
         members: RANGE,
     },
+    D { interface: I::DOMStringMap, name: "DOMStringMap", parent: None, constructor: None, members: &[] },
     D { interface: I::Selection, name: "Selection", parent: None, constructor: None, members: SELECTION },
     D {
         interface: I::DOMImplementation,
@@ -1153,6 +1234,10 @@ pub fn html_element_interface(local: &str) -> I {
         "script" => I::HTMLScriptElement,
         "template" => I::HTMLTemplateElement,
         "slot" => I::HTMLSlotElement,
+        "dir" => I::HTMLDirectoryElement,
+        "font" => I::HTMLFontElement,
+        "frame" => I::HTMLFrameElement,
+        "frameset" => I::HTMLFrameSetElement,
         "iframe" => I::HTMLIFrameElement,
         "embed" => I::HTMLEmbedElement,
         "object" => I::HTMLObjectElement,
@@ -1230,6 +1315,13 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         named_getter: Some(O::OptionsNamedGetter), named_setter: None, named_deleter: None,
         override_builtins: false, unenumerable_names: true,
     })?;
+    host.define_legacy_platform_object(InterfaceBrand::SELECTED_OPTIONS, LegacyPlatformHooks {
+        supported_index_count: O::SelectedOptionsSupportedIndexCount,
+        supported_names: None,
+        indexed_getter: O::SelectedOptionsIndexedGetter, indexed_setter: None,
+        named_getter: Some(O::SelectedOptionsNamedGetter), named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
     host.define_legacy_platform_object(InterfaceBrand::RADIO_NODE_LIST, LegacyPlatformHooks {
         supported_index_count: O::RadioNodeListSupportedIndexCount,
         supported_names: None,
@@ -1257,6 +1349,12 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,
         named_setter: None, named_deleter: None, override_builtins: false,
         unenumerable_names: false,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::DOM_STRING_MAP, LegacyPlatformHooks {
+        supported_index_count: O::DatasetIndexCount, supported_names: Some(O::DatasetSupportedNames),
+        indexed_getter: O::DatasetIndexedGet, indexed_setter: None,
+        named_getter: Some(O::DatasetGet), named_setter: Some(O::DatasetSet), named_deleter: Some(O::DatasetDelete),
+        override_builtins: true, unenumerable_names: false,
     })?;
     host.define_iterable(I::NodeList, IterableKind::Values)?;
     host.define_iterable(I::DOMTokenList, IterableKind::Values)?;

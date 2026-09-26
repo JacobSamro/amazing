@@ -636,6 +636,24 @@ mod tests {
     }
 
     #[test]
+    fn object_subclass_allocates_without_mutating_the_argument() {
+        let mut i = Interpreter::new();
+        i.run_script(r#"
+            var source = {value: 1};
+            class Derived extends Object {}
+            var result = new Derived(source);
+            console.log(result === source, result.value, result instanceof Derived);
+            console.log(Object.getPrototypeOf(source) === Object.prototype);
+            console.log(Object(source) === source, new Object(source) === source);
+            var descriptor = Object.getOwnPropertyDescriptor(Object, 'prototype');
+            console.log(Object.length, descriptor.writable, descriptor.configurable);
+            console.log(Object.keys(Error.prototype).length, Object.keys(Promise).length);
+        "#).unwrap();
+        assert_eq!(i.output.borrow().as_slice(), ["false undefined true", "true", "true true",
+            "1 false false", "0 0"]);
+    }
+
+    #[test]
     fn class_expressions_are_strict_and_restore_the_outer_context() {
         let mut i = Interpreter::new();
         i.run_script(r#"

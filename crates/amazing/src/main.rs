@@ -13,6 +13,7 @@ mod navigator;
 mod page;
 mod render_oracle;
 mod runtime_binding_host;
+mod runtime_host_a11y;
 mod runtime_host_ipc;
 mod runtime_host_replaced_content;
 #[cfg(test)]
@@ -131,6 +132,7 @@ fn main() -> ExitCode {
         Some("run") => cmd::js::cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd::js::cmd_domrun(&args[2..]),
         Some("wpt-harness" | "wpt-harness-worker") => cmd::wpt_harness::run(&args[1..]),
+        Some("a11y-tree") => runtime_host_a11y::cmd_a11y_tree(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");

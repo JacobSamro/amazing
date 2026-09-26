@@ -58,6 +58,7 @@ impl Interpreter {
     }
 
     fn define_own_property(&mut self, target: &Obj, key: &PropertyKey, descriptor: &JsValue) -> Result<bool, Throw> {
+        if let Some(result) = self.window_proxy_define(target, key, descriptor) { return result; }
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             let JsValue::Object(fields) = descriptor else { return Err(Throw::type_error("property descriptor must be an object")); };
             return namespace_define_allowed(self, target, key, fields);
@@ -181,6 +182,7 @@ impl Interpreter {
     }
 
     fn set_with_receiver(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, receiver: JsValue) -> Result<bool, Throw> {
+        if let Some(result) = self.window_proxy_set(target, key, value.clone(), receiver.clone()) { return result; }
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Ok(false);
         }
@@ -202,6 +204,7 @@ impl Interpreter {
         }
         let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
+            if let Some(result) = self.window_proxy_set(&object, key, value.clone(), receiver.clone()) { return result; }
             let property = if let Some(name) = key.as_string() {
                 // Legacy named properties belong to the collection itself.
                 // They do not prevent an ordinary receiver from shadowing one.
@@ -220,7 +223,9 @@ impl Interpreter {
             cursor = object.borrow().proto.clone();
         }
         let JsValue::Object(receiver_object) = receiver else { return Ok(false); };
-        let existing = receiver_object.borrow().own_prop(key).cloned();
+        let existing = match self.window_proxy_own_property(&receiver_object, key) {
+            Some(result) => result?, None => receiver_object.borrow().own_prop(key).cloned(),
+        };
         if let Some(property) = &existing {
             if property.getter.is_some() || property.setter.is_some() || !property.writable { return Ok(false); }
         } else if !receiver_object.borrow().extensible { return Ok(false); }

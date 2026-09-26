@@ -751,6 +751,124 @@ mod tests {
         assert!(state_wire::decode(&state_wire::encode(&invalid).unwrap()).is_err());
     }
 
+    // Deterministic mutation fuzzing for `state_wire::decode`: a cross-process
+    // messaging payload or a restored history.state is untrusted-peer input
+    // (see `messaging_deliver`'s malformed-payload -> `messageerror` path in
+    // `runtime_host_messaging.rs`), so the wire decoder must never panic on
+    // arbitrary bytes, only ever return `Ok` or `Err`. This mirrors
+    // `ipc-fuzz`'s mutate/xorshift approach for the amazing-process wire
+    // surface, reimplemented here because `state_wire` lives in this
+    // lane-owned driver file and cannot depend on the `amazing-process` bin.
+    fn xorshift(state: &mut u64) -> u64 {
+        let mut x = *state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *state = x;
+        x
+    }
+
+    fn mutate(input: &[u8], state: &mut u64) -> Vec<u8> {
+        let mut bytes = input.to_vec();
+        let ops = 1 + (xorshift(state) % 4);
+        for _ in 0..ops {
+            if bytes.is_empty() {
+                bytes.push((xorshift(state) & 0xff) as u8);
+                continue;
+            }
+            match xorshift(state) % 4 {
+                0 => {
+                    let i = (xorshift(state) as usize) % bytes.len();
+                    bytes[i] = (xorshift(state) & 0xff) as u8;
+                }
+                1 => {
+                    let i = (xorshift(state) as usize) % (bytes.len() + 1);
+                    bytes.insert(i, (xorshift(state) & 0xff) as u8);
+                }
+                2 => {
+                    let i = (xorshift(state) as usize) % bytes.len();
+                    bytes.remove(i);
+                }
+                _ => {
+                    let i = (xorshift(state) as usize) % bytes.len();
+                    let j = (xorshift(state) as usize) % bytes.len();
+                    bytes.swap(i, j);
+                }
+            }
+        }
+        bytes
+    }
+
+    fn seed_corpus() -> Vec<Vec<u8>> {
+        let mut seeds = vec![
+            state_wire::encode(&SerializedValue {
+                root: SerializedAtom::Undefined,
+                nodes: Vec::new(),
+            })
+            .unwrap(),
+            state_wire::encode(&SerializedValue {
+                root: SerializedAtom::Reference(0),
+                nodes: vec![SerializedNode::Object {
+                    properties: vec![("self".encode_utf16().collect(), SerializedAtom::Reference(0))],
+                }],
+            })
+            .unwrap(),
+            state_wire::encode(&SerializedValue {
+                root: SerializedAtom::Reference(0),
+                nodes: vec![SerializedNode::Map(vec![(
+                    SerializedAtom::String("k".encode_utf16().collect()),
+                    SerializedAtom::BigInt {
+                        negative: false,
+                        limbs: vec![1, 2, 3],
+                    },
+                )])],
+            })
+            .unwrap(),
+            state_wire::encode(&SerializedValue {
+                root: SerializedAtom::Reference(0),
+                nodes: vec![SerializedNode::ArrayBufferView {
+                    buffer: 0,
+                    byte_offset: 0,
+                    byte_length: Some(4),
+                    kind: Some("Uint8Array".into()),
+                }],
+            })
+            .unwrap(),
+        ];
+        seeds.push(Vec::new());
+        seeds.push(vec![0xff; 3]);
+        seeds
+    }
+
+    #[test]
+    fn structured_clone_decode_never_panics_under_mutation() {
+        let corpus = seed_corpus();
+        let mut state = 0x9e3779b97f4a7c15u64;
+        let mut oks = 0usize;
+        let mut errs = 0usize;
+        for i in 0..100_000u32 {
+            let seed = &corpus[(i as usize) % corpus.len()];
+            let bytes = mutate(seed, &mut state);
+            match state_wire::decode(&bytes) {
+                Ok(_) => oks += 1,
+                Err(_) => errs += 1,
+            }
+        }
+        // Both buckets should be reachable: pure noise mostly errors, but
+        // shallow single-byte mutations of small seeds often stay valid.
+        assert!(oks > 0, "no mutated input decoded successfully");
+        assert!(errs > 0, "no mutated input was rejected");
+    }
+
+    #[test]
+    fn structured_clone_decode_never_panics_on_random_bytes() {
+        let mut state = 0xdeadbeefcafef00du64;
+        for len in 0..2_000usize {
+            let bytes: Vec<u8> = (0..len).map(|_| (xorshift(&mut state) & 0xff) as u8).collect();
+            let _ = state_wire::decode(&bytes);
+        }
+    }
+
     #[test]
     fn one_tab_restores_same_and_cross_document_scroll() {
         let mut navigator = Navigator::new(7);

@@ -147,7 +147,7 @@ pub(crate) fn request_fields(
     let mut headers = vec![
         (
             b":method".to_vec(),
-            options.method.to_ascii_uppercase().into_bytes(),
+            crate::headers::normalize_method(&options.method).into_bytes(),
         ),
         (b":scheme".to_vec(), url.scheme().as_bytes().to_vec()),
         (b":authority".to_vec(), url.host_and_port().into_bytes()),

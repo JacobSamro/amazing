@@ -548,6 +548,7 @@ impl Dom {
         )
     }
     pub(crate) fn store_character_data(&mut self, node: NodeIdx, value: Vec<u16>) {
+        self.nodes[node.0 as usize].processing_instruction_attributes = None;
         let string = String::from_utf16_lossy(&value);
         self.nodes[node.0 as usize].character_data_units = if String::from_utf16(&value).is_err() {
             Some(value)

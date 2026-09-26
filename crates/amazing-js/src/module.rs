@@ -243,36 +243,31 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         root_interpreter: &mut Interpreter,
     ) -> Result<ModuleNamespace, ModuleFailure> {
         let mut instances = HashMap::new();
+        let realm_global = root_interpreter.global_env.clone();
         // All environments and function declarations exist before any module
         // evaluates. A dependency cycle can therefore read hoisted functions
         // and observes TDZ for lexical declarations.
         for (record_id, record) in &self.records {
             let (program, default_binding) = module_program(record);
-            let mut interpreter = if record_id == id {
-                None
-            } else {
-                Some(Interpreter::new())
-            };
-            let engine = interpreter.as_mut().unwrap_or(root_interpreter);
-            let module_env = EnvHandle::new(EnvKind::Global, Some(engine.global_env.clone()));
+            let engine = &mut *root_interpreter;
+            let module_env = EnvHandle::new(EnvKind::Module, Some(realm_global.clone()));
             module_env.bind_this(JsValue::Undefined);
-            engine.global_env = module_env.clone();
             let mut meta = JsObject::ordinary();
             meta.proto = Some(engine.object_proto.clone());
             module_env
                 .declare_lexical("\0import.meta", JsValue::object(meta), false)
                 .map_err(ModuleFailure::runtime)?;
             predeclare_lexical(&module_env, &program).map_err(ModuleFailure::runtime)?;
-            engine
-                .prepare_module(&program)
-                .map_err(ModuleFailure::runtime)?;
+            let previous = std::mem::replace(&mut engine.global_env, module_env.clone());
+            let prepared = engine.prepare_module(&program);
+            engine.global_env = previous;
+            prepared.map_err(ModuleFailure::runtime)?;
             let mut object = JsObject::ordinary();
             object.proto = None;
             object.extensible = false;
             instances.insert(
                 record_id.clone(),
                 ModuleInstance {
-                    interpreter,
                     env: module_env,
                     program,
                     default_binding,
@@ -374,10 +369,10 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             self.evaluate_instance(dependency, root, instances)?;
         }
         let instance = instances.get_mut(id).unwrap();
-        let engine = instance.interpreter.as_mut().unwrap_or(root);
-        engine
-            .run_program(&instance.program)
-            .map_err(ModuleFailure::runtime)?;
+        let previous = std::mem::replace(&mut root.global_env, instance.env.clone());
+        let evaluated = root.run_program(&instance.program);
+        root.global_env = previous;
+        evaluated.map_err(ModuleFailure::runtime)?;
         instance.state = ModuleState::Evaluated;
         Ok(())
     }
@@ -531,7 +526,6 @@ enum ModuleState {
 }
 
 struct ModuleInstance {
-    interpreter: Option<Interpreter>,
     env: EnvHandle,
     program: Program,
     default_binding: Option<String>,

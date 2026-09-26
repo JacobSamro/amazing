@@ -148,3 +148,109 @@ Zero regressions. Fixed files: `with-options/null-transfer`,
 conformance gaps are logged as cross-lane requests in `questions.md` (Date
 `valueOf`/`getTime`, DOMException, element event-handler content attributes,
 `__defineGetter__`), plus an `@@iterator` helper request.
+
+## IPC-11e — transfer ports, sequence conversion, bounded drain (code `53884517`)
+
+Base `aef9d5be`; original gate ran on a pooled Boat sandbox at merged head
+`7eb81e02`, **before per-lane `CARGO_TARGET_DIR`s landed** (`86c44031`), so
+that run could have linked another lane's stale artifacts. Re-gated below on
+the corrected per-lane target dir.
+
+**Landed.** `Window.postMessage` delivers the wrapped transfer ports on the
+`MessageEvent` instead of an always-empty array. Transfer lists use WebIDL
+`sequence<object>` conversion (`Array.isArray`): a primitive or a plain
+array-like object is a `TypeError`. `messaging_drain` delivers only the
+messages queued when the checkpoint began, so a handler that posts again cannot
+starve timers or the event loop.
+
+**Re-gate (2026-09-26), merged head `1c481bf0`**, Boat `pool-sys` sandbox
+`bx_cxad649k`, per-lane `CARGO_TARGET_DIR=/home/user/amazing/targets/ipc`:
+
+| Command | Result |
+| --- | --- |
+| `cargo nextest run --workspace --locked --no-fail-fast` | **2806/2806 passed**, 10 skipped, exit 0 |
+| `cargo test --workspace --locked --doc` | all doctests passed, exit 0 |
+
+Confirmed green on the corrected per-lane target dir; state set to done with
+this SHA (see IPC-11f below for the two extra tests that bring the workspace
+total to 2808 after that ticket).
+
+**WPT `webmessaging/`** (95 `.html`, `c2a2fce6`), `9744fd00` → `4aa97770`
+(IPC-11d) → `53884517` (IPC-11e):
+
+| Level | pass | fail | timeout | error |
+| --- | --- | --- | --- | --- |
+| files before | 27 | 29 | 11 | 28 |
+| files after 11d | 33 | 24 | 10 | 28 |
+| files after 11e | 38 | 19 | 10 | 28 |
+| subtests before | 51 | 54 | 0 | 0 |
+| subtests after 11d | 58 | 48 | 0 | 0 |
+| subtests after 11e | 64 | 42 | 0 | 0 |
+
+11e fixed `MessageEvent/onmessage/postMessage` infinite loop, `with-options/
+message-channel-transferable`, `with-ports/025` (`1 as ports`), `/026`
+(`{length:1}`), `/027` (both subtests). Zero regressions. Raw JSON:
+[ipc-11e-webmessaging/](ipc-11e-webmessaging/). Cumulative 11d+11e: files
+27→38 pass, subtests 51→64 pass.
+
+Re-measured on the pinned selection at the IPC-11f head (below) with a
+committed runner (`docs/lanes/ipc-webmessaging-run.py`, since the pooled
+sandbox's WPT sparse-checkout had gone stale under concurrent lane use — see
+IPC-11f): files 38 pass / 19 fail / 13 timeout / 25 error (same 38 passes, same
+64 passing subtests; the 3-file shift among fail/timeout/error tracks
+`messageerror.html`'s harness path, which now runs to completion instead of
+one file previously misclassified). Zero lost passes either way.
+
+## IPC-11f — malformed messaging payload fires `messageerror`, structured-clone decode fuzzing
+
+**Landed.** `messaging_deliver` no longer propagates `Throw` when a peer's
+wire payload fails `state_wire::decode` or `structured_deserialize`; per HTML,
+a malformed message now fires `messageerror` at the target instead of
+aborting the scheduler's checkpoint turn (a cross-process peer can send
+arbitrary bytes, so one bad message must not stop every other queued message
+or timer). `messaging_dispatch`/`messaging_dispatch_error` share the
+port/channel/window delivery paths, parameterised by event `kind`
+(`"message"` vs `"messageerror"`). New test:
+`malformed_payload_fires_messageerror_not_message` (`runtime_host_messaging.rs`),
+using a `#[cfg(test)]` `RuntimeBindings::queue_raw_message` hook and a matching
+`DriverScheduler::test_bindings()` accessor (`js_scheduler.rs`, both
+test-only).
+
+**Structured-clone wire fuzzing.** `state_wire::decode` (the `SerializedValue`
+wire codec `navigator.rs` uses for both `history.state` and messaging
+payloads) had no fuzz coverage of its own — `ipc-fuzz` lives in
+`amazing-process` and cannot depend on this driver-owned module. Added two
+tests in `navigator.rs`: a deterministic xorshift mutation fuzzer seeded from
+five valid encodings (empty root, a self-referencing cycle, a BigInt-keyed
+`Map`, a typed-array view, degenerate empty/garbage seeds) run for 100,000
+mutated cases, plus 2,000 pure-random byte strings of increasing length up to
+2,000 bytes. Both assert `decode` returns `Ok`/`Err` and never panics.
+
+**Linux workspace gate**, same sandbox/target dir as the IPC-11e re-gate,
+merged head `1c481bf0` plus this commit:
+
+| Command | Result |
+| --- | --- |
+| `cargo nextest run --workspace --locked --no-fail-fast` | **2808/2808 passed**, 10 skipped, exit 0 |
+| `cargo test --workspace --locked --doc` | all doctests passed, exit 0 |
+
+Both new tests run in well under a second (`structured_clone_decode_never_panics_under_mutation`,
+`structured_clone_decode_never_panics_on_random_bytes`); zero panics, zero
+regressions elsewhere.
+
+WPT `webmessaging/` re-measured at this head with `docs/lanes/ipc-webmessaging-run.py`
+(no pre-filtering; every file is handed to `amazing wpt-harness` and classified
+by its own verdict): **38 pass / 19 fail / 13 timeout / 25 error** of 95, same
+38 file passes and 64 subtest passes as IPC-11e. Raw per-file JSON on the
+sandbox under `~/amazing/out/ipc/webmessaging/` (not copied back — ephemeral
+sandbox scratch per AGENTS.md's disk-hygiene note; the counts above are the
+durable evidence).
+
+**Cross-lane note.** The pooled Boat sandbox's `~/corpora/wpt` sparse
+checkout lost `common/` (56 files reduced to 3, 3,477 lines of `git status`
+deletions) partway through this session, almost certainly another lane's
+concurrent WPT run rewriting the sparse-checkout list on the same `pool-sys`
+sandbox (the documented drift). Recovered with `git sparse-checkout reapply &&
+git checkout -- .`; logged nothing further since a working fix was in hand,
+but any lane hitting inexplicable `os error 2` / "resource escapes root" on a
+pooled sandbox should check `git -C ~/corpora/wpt status --short` first.

@@ -110,10 +110,12 @@ pub fn supported_index_count<H: BindingHost>(
     host: &mut H, operation: O, receiver: &H::Value,
 ) -> Result<u32, H::Error> {
     match operation {
-        O::FormCollectionSupportedIndexCount | O::OptionsSupportedIndexCount | O::RadioNodeListSupportedIndexCount =>
+        O::FormCollectionSupportedIndexCount | O::OptionsSupportedIndexCount | O::RadioNodeListSupportedIndexCount
+        | O::SelectedOptionsSupportedIndexCount =>
             crate::form_bindings::supported_index_count(host, operation, receiver),
         O::HTMLCollectionSupportedIndexCount | O::NodeListSupportedIndexCount =>
             crate::collections::supported_index_count(host, operation, receiver),
+        O::DatasetIndexCount => crate::dataset_bindings::supported_index_count(host, receiver),
         O::TokenListSupportedIndexCount => crate::tokenlist::supported_index_count(host, receiver),
         O::NamedNodeMapSupportedIndexCount => crate::attr_bindings::supported_index_count(host, receiver),
         _ => Err(host.type_error("Expected a supported index count hook")),
@@ -124,7 +126,9 @@ pub fn supported_index_count<H: BindingHost>(
 pub fn supported_names<H: BindingHost>(
     host: &mut H, operation: O, receiver: &H::Value,
 ) -> Result<Vec<Vec<u16>>, H::Error> {
-    if operation == O::NamedNodeMapSupportedNames {
+    if operation == O::DatasetSupportedNames {
+        crate::dataset_bindings::supported_names(host, receiver)
+    } else if operation == O::NamedNodeMapSupportedNames {
         crate::attr_bindings::supported_names(host, receiver)
     } else if crate::form_bindings::handles_supported_names(operation) {
         crate::form_bindings::supported_names(host, operation, receiver)
@@ -195,8 +199,14 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::abort_bindings::handles(operation) {
         return crate::abort_bindings::invoke(host, operation, receiver, args);
     }
+    if crate::legacy_document_bindings::handles(operation) {
+        return crate::legacy_document_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::document_bindings::handles(operation) {
         return crate::document_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::processing_instruction_bindings::handles(operation) {
+        return crate::processing_instruction_bindings::invoke(host, operation, receiver, args);
     }
     if crate::element_reflection::handles(operation) {
         return crate::element_reflection::invoke(host, operation, receiver, args);
@@ -233,6 +243,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     if crate::dom_exception::handles(operation) {
         return crate::dom_exception::invoke(host, operation, receiver, args);
+    }
+    if crate::dataset_bindings::handles(operation) {
+        return crate::dataset_bindings::invoke(host, operation, receiver, args);
     }
     if crate::attr_bindings::handles(operation) {
         return crate::attr_bindings::invoke(host, operation, receiver, args);

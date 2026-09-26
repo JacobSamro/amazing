@@ -6,12 +6,16 @@ use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 pub struct ControlState {
     value: Option<Vec<u16>>,
     dirty_value: bool,
+    user_edited: bool,
     checked: Option<bool>,
     dirty_checked: bool,
     selected: Option<bool>,
     dirty_selected: bool,
     custom_error: Vec<u16>,
     selection: Option<(u32, u32, SelectionDirection)>,
+    last_type: Option<&'static str>,
+    constructing_entry_list: bool,
+    firing_submission_events: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SelectionDirection {
@@ -91,6 +95,88 @@ fn valid_number(value: &str) -> Option<f64> {
     }
     let n: f64 = value.parse().ok()?;
     n.is_finite().then_some(n)
+}
+/// Parse a finite decimal into `(mantissa, decimal_exponent)` so that the value
+/// equals `mantissa * 10^exp`. Accepts an optional sign, fraction and exponent.
+fn parse_decimal(value: &str) -> Option<(i128, i32)> {
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    let mut negative = false;
+    match bytes.first() {
+        Some(b'+') => i += 1,
+        Some(b'-') => { negative = true; i += 1; }
+        _ => {}
+    }
+    let mut mantissa: i128 = 0;
+    let mut fraction: i32 = 0;
+    let mut saw_digit = false;
+    while let Some(&c) = bytes.get(i) {
+        if c.is_ascii_digit() {
+            mantissa = mantissa.checked_mul(10)?.checked_add((c - b'0') as i128)?;
+            saw_digit = true;
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    if bytes.get(i) == Some(&b'.') {
+        i += 1;
+        while let Some(&c) = bytes.get(i) {
+            if c.is_ascii_digit() {
+                mantissa = mantissa.checked_mul(10)?.checked_add((c - b'0') as i128)?;
+                fraction += 1;
+                saw_digit = true;
+                i += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    if !saw_digit { return None; }
+    let mut exp: i32 = -fraction;
+    if matches!(bytes.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        let mut sign = 1i32;
+        match bytes.get(i) {
+            Some(b'+') => i += 1,
+            Some(b'-') => { sign = -1; i += 1; }
+            _ => {}
+        }
+        let mut digits = 0i32;
+        while let Some(&c) = bytes.get(i) {
+            if c.is_ascii_digit() {
+                digits = digits.checked_mul(10)?.checked_add((c - b'0') as i32)?;
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        exp = exp.checked_add(sign.checked_mul(digits)?)?;
+    }
+    if i != bytes.len() { return None; }
+    Some((if negative { -mantissa } else { mantissa }, exp))
+}
+/// Whether `(value - base)` is an exact integral multiple of `step`, computed on
+/// the decimal representations so tiny steps do not lose the fractional part to
+/// binary floating point. Returns `None` when the inputs are not finite decimals
+/// or would overflow the scaled integer arithmetic.
+fn exact_integral_multiple(value: &str, base: &str, step: &str) -> Option<bool> {
+    let (vm, ve) = parse_decimal(value)?;
+    let (bm, be) = parse_decimal(base)?;
+    let (sm, se) = parse_decimal(step)?;
+    if sm == 0 { return None; }
+    let e = ve.min(be);
+    let scale_v = 10i128.checked_pow(u32::try_from(ve - e).ok()?)?;
+    let scale_b = 10i128.checked_pow(u32::try_from(be - e).ok()?)?;
+    let mut numerator = vm.checked_mul(scale_v)?.checked_sub(bm.checked_mul(scale_b)?)?;
+    let mut denominator = sm;
+    let shift = e.checked_sub(se)?;
+    if shift >= 0 {
+        numerator = numerator.checked_mul(10i128.checked_pow(u32::try_from(shift).ok()?)?)?;
+    } else {
+        denominator = denominator.checked_mul(10i128.checked_pow(u32::try_from(-shift).ok()?)?)?;
+    }
+    Some(numerator % denominator == 0)
 }
 fn days_from_civil(mut year: i64, month: i64, day: i64) -> i64 {
     year -= i64::from(month <= 2);
@@ -262,6 +348,17 @@ fn date_shape(value: &str, kind: &str) -> bool {
         _ => false,
     }
 }
+fn value_mode_for_type(kind: &str) -> ValueMode {
+    match kind {
+        "hidden" | "submit" | "image" | "reset" | "button" => ValueMode::Default,
+        "checkbox" | "radio" => ValueMode::DefaultOn,
+        "file" => ValueMode::Filename,
+        _ => ValueMode::Value,
+    }
+}
+fn selects_text(kind: &str) -> bool {
+    matches!(kind, "text" | "search" | "tel" | "url" | "password")
+}
 pub fn sanitize_input(
     kind: &str,
     value: &[u16],
@@ -359,6 +456,17 @@ impl Dom {
     }
     pub(crate) fn clone_form_state(&mut self, from: NodeIdx, to: NodeIdx) {
         if let Some(state) = self.form_state(from).cloned() {
+            // HTML cloning steps propagate the live value, checkedness and
+            // selectedness (and their dirty flags). Per-element runtime state
+            // that is not cloned: the text selection, custom validity message,
+            // user-edited flag, cached type transition and event guards.
+            let mut state = state;
+            state.selection = None;
+            state.custom_error = Vec::new();
+            state.user_edited = false;
+            state.last_type = None;
+            state.constructing_entry_list = false;
+            state.firing_submission_events = false;
             *self.form_state_mut(to) = state;
         }
     }
@@ -427,12 +535,7 @@ impl Dom {
             .unwrap_or("text"))
     }
     pub fn input_value_mode(&self, node: NodeIdx) -> Result<ValueMode, DomError> {
-        Ok(match self.input_type(node)? {
-            "hidden" | "submit" | "image" | "reset" | "button" => ValueMode::Default,
-            "checkbox" | "radio" => ValueMode::DefaultOn,
-            "file" => ValueMode::Filename,
-            _ => ValueMode::Value,
-        })
+        Ok(value_mode_for_type(self.input_type(node)?))
     }
     pub fn input_value(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         let kind = self.input_type(node)?;
@@ -455,15 +558,27 @@ impl Dom {
         })
     }
     pub fn set_input_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
+        let kind = self.input_type(node)?;
+        let text = selects_text(&kind);
+        self.form_state_mut(node).last_type = Some(kind);
         match self.input_value_mode(node)? {
             ValueMode::Default | ValueMode::DefaultOn => {
                 if !self.has(node, "value") {
                     self.set_attribute(node, "value", "")?;
                 }
+                let changed =
+                    self.attribute_utf16(node, "value").as_deref() != Some(value.as_slice());
+                let len = value.len() as u32;
                 let attr = self
                     .get_attribute_node(node, None, "value")
                     .ok_or(DomError::InvalidStateError)?;
-                self.set_attr_value(attr, value)
+                self.set_attr_value(attr, value)?;
+                // Setting a changed text value moves the cursor to the end.
+                if changed && text {
+                    self.form_state_mut(node).selection =
+                        Some((len, len, SelectionDirection::None));
+                }
+                Ok(())
             }
             ValueMode::Filename if !value.is_empty() => Err(DomError::InvalidStateError),
             ValueMode::Filename => Ok(()),
@@ -476,10 +591,17 @@ impl Dom {
                     self.attr(node, "max"),
                     self.attr(node, "step"),
                 );
+                let changed = self.input_value(node)? != sanitized;
+                let len = sanitized.len() as u32;
                 let state = self.form_state_mut(node);
                 state.value = Some(sanitized);
                 state.dirty_value = true;
-                state.selection = None;
+                state.user_edited = false;
+                // Setting a text control's value moves the text entry cursor to
+                // the end; setting it to the same value leaves the cursor alone.
+                if changed && text {
+                    state.selection = Some((len, len, SelectionDirection::None));
+                }
                 self.record_render_full(node, "input value state");
                 Ok(())
             }
@@ -510,6 +632,53 @@ impl Dom {
         }
         let value = temporal_string(kind, number).ok_or(DomError::TypeError)?;
         self.set_input_value(node, units(&value))
+    }
+    pub fn step_input(&mut self, node: NodeIdx, count: i32) -> Result<(), DomError> {
+        let kind = self.input_type(node)?;
+        if !matches!(kind, "number" | "range" | "date" | "month" | "week" | "time" | "datetime-local")
+            || self.attr(node, "step") == Some("any")
+        {
+            return Err(DomError::InvalidStateError);
+        }
+        let scale = match kind {
+            "date" => 86_400_000.,
+            "week" => 604_800_000.,
+            "time" | "datetime-local" => 1000.,
+            _ => 1.,
+        };
+        let default_step = if matches!(kind, "time" | "datetime-local") { 60. } else { 1. };
+        let step = self.attr(node, "step").and_then(valid_number)
+            .filter(|value| *value > 0.).unwrap_or(default_step) * scale;
+        let minimum = self.attr(node, "min").and_then(|value| temporal_number(kind, value));
+        let maximum = self.attr(node, "max").and_then(|value| temporal_number(kind, value));
+        let base = minimum.or_else(|| self.attr(node, "value")
+            .and_then(|value| temporal_number(kind, value)))
+            .unwrap_or(if kind == "week" { -259_200_000. } else { 0. });
+        let current = self.input_value_as_number(node)?;
+        if current.is_finite()
+            && ((count < 0 && minimum.is_some_and(|minimum| current < minimum))
+                || (count > 0 && maximum.is_some_and(|maximum| current > maximum))) {
+            return Ok(());
+        }
+        let mut result = if current.is_finite() {
+            let quotient = (current - base) / step;
+            if count > 0 && (quotient - quotient.ceil()).abs() > 1e-9 {
+                base + (quotient.ceil() + f64::from(count - 1)) * step
+            } else if count < 0 && (quotient - quotient.floor()).abs() > 1e-9 {
+                base + (quotient.floor() + f64::from(count + 1)) * step
+            } else {
+                current + f64::from(count) * step
+            }
+        } else {
+            base + f64::from(count) * step
+        };
+        if let Some(minimum) = minimum {
+            if result < minimum { result = minimum; }
+        }
+        if let Some(maximum) = maximum {
+            if result > maximum { result = maximum; }
+        }
+        self.set_input_value_as_number(node, result)
     }
     pub fn input_value_as_date_ms(&self, node: NodeIdx) -> Result<Option<f64>, DomError> {
         let kind = self.input_type(node)?;
@@ -579,6 +748,66 @@ impl Dom {
         if !self.html_tag(node, "input") {
             return;
         }
+        if name == "type" {
+            let new_type = self.input_type(node).unwrap_or("text");
+            let previous = self.form_state(node).and_then(|state| state.last_type);
+            if let Some(previous) = previous.filter(|previous| *previous != new_type) {
+                let previous_state = self.form_state(node).cloned().unwrap_or_default();
+                let old_mode = value_mode_for_type(previous);
+                let new_mode = value_mode_for_type(new_type);
+                // The transfer source is the live value only when dirty,
+                // otherwise the content attribute. The old IDL value is that
+                // source sanitized for the *previous* type (the type attribute
+                // has already changed by the time this handler runs).
+                let source = match old_mode {
+                    ValueMode::Value if previous_state.dirty_value => previous_state
+                        .value
+                        .clone()
+                        .unwrap_or_default(),
+                    ValueMode::Value => self.attribute_utf16(node, "value").unwrap_or_default(),
+                    ValueMode::DefaultOn => self.attribute_utf16(node, "value")
+                        .unwrap_or_else(|| units("on")),
+                    ValueMode::Default => self.attribute_utf16(node, "value").unwrap_or_default(),
+                    ValueMode::Filename => Vec::new(),
+                };
+                let old_value = if old_mode == ValueMode::Value {
+                    sanitize_input(previous, &source, self.attr(node, "min"),
+                        self.attr(node, "max"), self.attr(node, "step"))
+                } else {
+                    source.clone()
+                };
+                if old_mode == ValueMode::Value
+                    && matches!(new_mode, ValueMode::Default | ValueMode::DefaultOn)
+                    && self.attribute_utf16(node, "value").is_none()
+                    && !old_value.is_empty()
+                {
+                    // Only materialize the default-mode value when there is a
+                    // non-empty value to carry over; otherwise a checkbox/radio
+                    // keeps its absent value attribute and reports "on".
+                    let value = String::from_utf16_lossy(&old_value);
+                    let _ = self.set_attribute(node, "value", &value);
+                }
+                let new_value = if new_mode == ValueMode::Value {
+                    Some(sanitize_input(new_type, &source, self.attr(node, "min"),
+                        self.attr(node, "max"), self.attr(node, "step")))
+                } else { None };
+                let new_text = selects_text(new_type);
+                let shortened = old_value != new_value.clone().unwrap_or_default();
+                let end = new_value.as_deref().map_or(0, <[u16]>::len) as u32;
+                let state = self.form_state_mut(node);
+                state.value = new_value;
+                if new_text && !selects_text(previous) {
+                    state.selection = Some((0, 0, SelectionDirection::None));
+                } else if !new_text {
+                    state.selection = None;
+                } else if shortened {
+                    // Correcting a shortened text value moves the cursor to the
+                    // end of the new value.
+                    state.selection = Some((end, end, SelectionDirection::None));
+                }
+            }
+            self.form_state_mut(node).last_type = Some(new_type);
+        }
         if name == "checked" {
             if let Some(state) = self
                 .form_states
@@ -642,7 +871,9 @@ impl Dom {
             return None;
         }
         if let Some(id) = self.attr(node, "form") {
-            if self.is_connected(node) {
+            // An empty form attribute value can never match a form ID, so the
+            // control has no form owner (no ancestor fallback while connected).
+            if !id.is_empty() && self.is_connected(node) {
                 let document = self.owner_document(node)?;
                 let first = self
                     .tree_order(document)
@@ -652,6 +883,10 @@ impl Dom {
                     return first;
                 }
             }
+            // Connected controls use the explicit ID, including a missing or
+            // empty ID. In a detached subtree, reset association uses the
+            // nearest ancestor form until insertion into a document.
+            if self.is_connected(node) { return None; }
         }
         let mut parent = self.get(node).parent;
         while let Some(current) = parent {
@@ -661,6 +896,39 @@ impl Dom {
             parent = self.get(current).parent;
         }
         None
+    }
+    /// Whether a node may be the labeled control of a label.
+    fn labelable(&self, node: NodeIdx) -> bool {
+        if self.html_tag(node, "input") {
+            return self.input_type(node).ok() != Some("hidden");
+        }
+        ["button", "meter", "output", "progress", "select", "textarea"]
+            .iter()
+            .any(|tag| self.html_tag(node, tag))
+    }
+    /// The labeled control of a `label`: the element with the `for` ID, or the
+    /// first labelable descendant when there is no usable `for` attribute.
+    pub fn label_control(&self, label: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
+        self.require_tag(label, &["label"])?;
+        if let Some(for_id) = self.attr(label, "for") {
+            if !for_id.is_empty() {
+                let root = self.root(label);
+                return Ok(self.tree_order(root).into_iter().find(|candidate| {
+                    *candidate != label
+                        && self.attr(*candidate, "id") == Some(for_id)
+                        && self.labelable(*candidate)
+                }));
+            }
+        }
+        Ok(self
+            .tree_order(label)
+            .into_iter()
+            .skip(1)
+            .find(|candidate| self.labelable(*candidate)))
+    }
+    /// The form owner of a label's labeled control, if any.
+    pub fn label_form(&self, label: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
+        Ok(self.label_control(label)?.and_then(|control| self.form_owner(control)))
     }
     pub fn form_controls(&self, form: NodeIdx) -> Result<Vec<NodeIdx>, DomError> {
         self.require_tag(form, &["form"])?;
@@ -674,6 +942,8 @@ impl Dom {
             .into_iter()
             .filter(|node| {
                 self.form_owner(*node) == Some(form)
+                    && !(self.html_tag(*node, "input")
+                        && self.input_type(*node).ok() == Some("image"))
                     && [
                         "input", "button", "select", "textarea", "fieldset", "output", "object",
                     ]
@@ -681,6 +951,34 @@ impl Dom {
                     .any(|tag| self.html_tag(*node, tag))
             })
             .collect())
+    }
+    pub fn form_entry_list_construction_started(&self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        Ok(self.form_state(form).is_some_and(|state| state.constructing_entry_list))
+    }
+    pub fn begin_form_entry_list(&mut self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        let state = self.form_state_mut(form);
+        if state.constructing_entry_list { return Ok(false); }
+        state.constructing_entry_list = true;
+        Ok(true)
+    }
+    pub fn end_form_entry_list(&mut self, form: NodeIdx) -> Result<(), DomError> {
+        self.require_tag(form, &["form"])?;
+        self.form_state_mut(form).constructing_entry_list = false;
+        Ok(())
+    }
+    pub fn begin_form_submission_events(&mut self, form: NodeIdx) -> Result<bool, DomError> {
+        self.require_tag(form, &["form"])?;
+        let state = self.form_state_mut(form);
+        if state.firing_submission_events { return Ok(false); }
+        state.firing_submission_events = true;
+        Ok(true)
+    }
+    pub fn end_form_submission_events(&mut self, form: NodeIdx) -> Result<(), DomError> {
+        self.require_tag(form, &["form"])?;
+        self.form_state_mut(form).firing_submission_events = false;
+        Ok(())
     }
     pub fn radio_list(&mut self, form: NodeIdx, name: Vec<u16>) -> Result<usize, DomError> {
         self.require_tag(form, &["form"])?;
@@ -725,26 +1023,58 @@ impl Dom {
     }
     pub fn set_textarea_value(&mut self, node: NodeIdx, value: Vec<u16>) -> Result<(), DomError> {
         self.require_tag(node, &["textarea"])?;
+        let normalized = normalize_newlines(&value);
+        let changed = self.textarea_value(node)? != normalized;
+        let len = normalized.len() as u32;
         let state = self.form_state_mut(node);
         state.value = Some(value);
         state.dirty_value = true;
+        state.user_edited = false;
+        // A changed value moves the cursor to the end (HTML "set the value").
+        if changed {
+            state.selection = Some((len, len, SelectionDirection::None));
+        }
         self.record_render_full(node, "textarea value state");
         Ok(())
     }
     pub fn option_text(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.require_tag(node, &["option"])?;
-        let text: Vec<u16> = self
-            .tree_order(node)
-            .into_iter()
-            .skip(1)
-            .filter_map(|child| self.character_data_utf16(child))
-            .flatten()
-            .collect();
-        let compact = String::from_utf16_lossy(&text)
+        let mut text = String::new();
+        for child in self.children(node) {
+            self.collect_option_text(child, &mut text);
+        }
+        let compact = text
             .split_ascii_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
         Ok(units(&compact))
+    }
+    /// Option text is descendant Text data only, skipping script/style subtrees
+    /// and non-text character data (comments, processing instructions).
+    fn collect_option_text(&self, node: NodeIdx, out: &mut String) {
+        // HTML and SVG script elements are excluded from option text; MathML and
+        // null-namespace script elements are ordinary content.
+        let name = self.local_name(node);
+        let namespace = self.namespace(node);
+        let excluded_script = name == Some("script")
+            && matches!(namespace, Some(Namespace::Html) | Some(Namespace::Svg));
+        let excluded_style = name == Some("style") && namespace == Some(Namespace::Html);
+        if excluded_script || excluded_style {
+            return;
+        }
+        match &self.get(node).kind {
+            NodeKind::Text { .. } => {
+                if let Some(data) = self.character_data_utf16(node) {
+                    out.push_str(&String::from_utf16_lossy(&data));
+                }
+            }
+            NodeKind::Element { .. } => {
+                for child in self.children(node) {
+                    self.collect_option_text(child, out);
+                }
+            }
+            _ => {}
+        }
     }
     pub fn option_value(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.require_tag(node, &["option"])?;
@@ -752,6 +1082,20 @@ impl Dom {
             return Ok(value);
         }
         self.option_text(node)
+    }
+    /// The index of an option in its parent select's list of options, or 0.
+    pub fn option_index(&self, node: NodeIdx) -> Result<i32, DomError> {
+        self.require_tag(node, &["option"])?;
+        if let Some(parent) = self.get(node).parent {
+            if self.html_tag(parent, "select") {
+                let options = self.select_options(parent)?;
+                return Ok(options
+                    .iter()
+                    .position(|option| *option == node)
+                    .map_or(0, |index| index as i32));
+            }
+        }
+        Ok(0)
     }
     fn raw_option_selected(&self, node: NodeIdx) -> bool {
         self.form_state(node)
@@ -785,6 +1129,26 @@ impl Dom {
             .filter(|n| self.html_tag(*n, "option"))
             .collect())
     }
+    /// The option elements currently selected, in tree order. A single select
+    /// is represented by the option at `selectedIndex`, which falls back to the
+    /// first non-disabled option when nothing carries selectedness; a multiple
+    /// select is every option whose selectedness is true.
+    pub fn selected_options(&self, select: NodeIdx) -> Result<Vec<NodeIdx>, DomError> {
+        self.require_tag(select, &["select"])?;
+        let options = self.select_options(select)?;
+        if self.has(select, "multiple") {
+            return Ok(options
+                .into_iter()
+                .filter(|option| self.raw_option_selected(*option))
+                .collect());
+        }
+        let index = self.selected_index(select)?;
+        Ok(usize::try_from(index)
+            .ok()
+            .and_then(|index| options.get(index).copied())
+            .into_iter()
+            .collect())
+    }
     pub fn selected_index(&self, select: NodeIdx) -> Result<i32, DomError> {
         let options = self.select_options(select)?;
         let selected = if self.has(select, "multiple") {
@@ -803,6 +1167,15 @@ impl Dom {
                 .position(|n| !self.has(*n, "disabled"))
                 .map_or(-1, |n| n as i32))
         }
+    }
+    /// Set an option's selectedness without marking it dirty, so later
+    /// `selected` content-attribute changes still update the selected IDL value.
+    pub fn set_option_selectedness(&mut self, option: NodeIdx, selected: bool) -> Result<(), DomError> {
+        self.require_tag(option, &["option"])?;
+        let old_selected = self.option_selected(option)?;
+        self.form_state_mut(option).selected = Some(selected);
+        self.record_render_state(option, "selected", old_selected, selected);
+        Ok(())
     }
     pub fn set_option_selected(&mut self, option: NodeIdx, selected: bool) -> Result<(), DomError> {
         self.require_tag(option, &["option"])?;
@@ -864,11 +1237,9 @@ impl Dom {
         } else {
             self.textarea_value(node)?.len()
         } as u32;
-        Ok(self.form_state(node).and_then(|s| s.selection).unwrap_or((
-            len,
-            len,
-            SelectionDirection::None,
-        )))
+        Ok(self.form_state(node).and_then(|s| s.selection)
+            .map(|(start, end, direction)| (start.min(len), end.min(len), direction))
+            .unwrap_or((0, 0, SelectionDirection::None)))
     }
     pub fn set_selection(
         &mut self,
@@ -890,6 +1261,52 @@ impl Dom {
             Some((start.min(end).min(len), end.min(len), direction));
         self.record_render_full(node, "selection state");
         Ok(())
+    }
+    pub fn set_range_text(
+        &mut self,
+        node: NodeIdx,
+        replacement: Vec<u16>,
+        range: Option<(u32, u32)>,
+        mode: &str,
+    ) -> Result<(), DomError> {
+        let (old_start, old_end, old_direction) = self.selection(node)?;
+        let (start, end) = range.unwrap_or((old_start, old_end));
+        if start > end {
+            return Err(DomError::IndexSizeError);
+        }
+        let mut value = if self.html_tag(node, "input") {
+            self.input_value(node)?
+        } else {
+            self.textarea_value(node)?
+        };
+        let start = start.min(value.len() as u32) as usize;
+        let end = end.min(value.len() as u32) as usize;
+        let old_length = end - start;
+        let new_length = replacement.len();
+        value.splice(start..end, replacement);
+        if self.html_tag(node, "input") {
+            self.set_input_value(node, value)?;
+        } else {
+            self.set_textarea_value(node, value)?;
+        }
+        let (selection_start, selection_end, direction) = match mode {
+            "select" => (start as u32, (start + new_length) as u32, SelectionDirection::None),
+            "start" => (start as u32, start as u32, SelectionDirection::None),
+            "end" => ((start + new_length) as u32, (start + new_length) as u32, SelectionDirection::None),
+            _ => {
+                let adjust = |position: u32| {
+                    if position as usize > end {
+                        (position as i64 + new_length as i64 - old_length as i64).max(0) as u32
+                    } else if position as usize > start {
+                        (start + new_length) as u32
+                    } else {
+                        position
+                    }
+                };
+                (adjust(old_start), adjust(old_end), old_direction)
+            }
+        };
+        self.set_selection(node, selection_start, selection_end, direction)
     }
     pub fn selection_applicable(&self, node: NodeIdx) -> Result<bool, DomError> {
         self.require_tag(node, &["input", "textarea"])?;
@@ -979,11 +1396,13 @@ impl Dom {
     pub fn validity(
         &self,
         node: NodeIdx,
-        pattern_matches: impl FnOnce(&str, &str) -> Option<bool>,
+        pattern_matches: impl Fn(&str, &str) -> Option<bool>,
     ) -> Result<ValidityState, DomError> {
-        if !self.will_validate(node)? {
-            return Ok(ValidityState::default());
-        }
+        // Most validity states are computed regardless of whether the control is
+        // a candidate for constraint validation; disabled/readonly only gate the
+        // mutability-dependent states (value missing). The candidate check still
+        // governs `willValidate` and `checkValidity`/`reportValidity`.
+        let mutable = self.will_validate(node)?;
         let mut v = ValidityState::default();
         let kind = if self.html_tag(node, "input") {
             self.input_type(node)?
@@ -1003,10 +1422,22 @@ impl Dom {
         v.custom_error = self
             .form_state(node)
             .is_some_and(|state| !state.custom_error.is_empty());
-        v.value_missing = if kind == "checkbox" {
+        // Only controls with a value mode gate valueMissing on mutability; for
+        // checkbox/radio/file/select the missing condition is checked even when
+        // the control is disabled or readonly.
+        let mutability_gated = !matches!(kind, "checkbox" | "radio" | "file")
+            && !self.html_tag(node, "select");
+        v.value_missing = if mutability_gated && !mutable {
+            false
+        } else if kind == "checkbox" {
             self.has(node, "required") && !self.input_checked(node)?
         } else if kind == "radio" {
             let name = self.attr(node, "name").unwrap_or("");
+            // A radio button with no name is not part of any radio button
+            // group, so the required constraint cannot be violated.
+            if name.is_empty() {
+                false
+            } else {
             let owner = self.form_owner(node);
             let root = self.root(node);
             let group: Vec<_> = (0..self.node_count())
@@ -1023,6 +1454,7 @@ impl Dom {
                 && !group
                     .iter()
                     .any(|peer| self.input_checked(*peer).unwrap_or(false))
+            }
         } else if self.html_tag(node, "select") && self.has(node, "required") {
             let options = self.select_options(node)?;
             let index = self.selected_index(node)?;
@@ -1082,7 +1514,9 @@ impl Dom {
                 }
             }
             let length = value.len();
-            if self.form_state(node).is_some_and(|state| state.dirty_value) {
+            // Length constraints apply only after a user edit. Setting `.value`
+            // from script makes it dirty but is not interactive editing.
+            if self.form_state(node).is_some_and(|state| state.user_edited) {
                 v.too_long = self
                     .attr(node, "maxlength")
                     .and_then(|v| v.parse::<usize>().ok())
@@ -1105,6 +1539,19 @@ impl Dom {
                         .and_then(|v| temporal_number(kind, v));
                     v.range_underflow = min.is_some_and(|min| n < min);
                     v.range_overflow = max.is_some_and(|max| n > max);
+                    // `time` is cyclic: a range whose minimum is after its
+                    // maximum wraps around midnight, so a value is outside the
+                    // range (suffering both underflow and overflow) only when it
+                    // is less than the minimum and greater than the maximum.
+                    if kind == "time" {
+                        if let (Some(min), Some(max)) = (min, max) {
+                            if min > max {
+                                let outside = n < min && n > max;
+                                v.range_underflow = outside;
+                                v.range_overflow = outside;
+                            }
+                        }
+                    }
                     if self.attr(node, "step") != Some("any") {
                         let scale = match kind {
                             "date" => 86_400_000.,
@@ -1132,6 +1579,19 @@ impl Dom {
                         v.step_mismatch =
                             ((n - base) / step - ((n - base) / step).round()).abs() > 1e-8;
                     }
+                }
+            }
+            // Number-like controls use an exact decimal multiple test so very
+            // small steps keep the fractional part that binary division loses.
+            if matches!(kind, "number" | "range") && self.attr(node, "step") != Some("any") {
+                let step = self.attr(node, "step")
+                    .filter(|v| valid_number(v).is_some_and(|n| n > 0.))
+                    .unwrap_or("1");
+                let base = self.attr(node, "min")
+                    .or_else(|| self.attr(node, "value"))
+                    .unwrap_or("0");
+                if let Some(integral) = exact_integral_multiple(&s, base, step) {
+                    v.step_mismatch = !integral;
                 }
             }
         }
@@ -1172,6 +1632,8 @@ mod tests {
         dom.set_input_value(input, units("script")).unwrap();
         dom.set_attribute(input, "value", "default").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("script"));
+        // Switching to the default-on mode resets the dirty flag, so a present
+        // value content attribute governs the checkbox value.
         dom.set_attribute(input, "type", "checkbox").unwrap();
         assert_eq!(dom.input_value(input).unwrap(), units("default"));
         dom.remove_attribute(input, "value").unwrap();
@@ -1276,7 +1738,7 @@ mod tests {
         assert!(dom.input_checked(b).unwrap());
     }
     #[test]
-    fn form_owner_uses_first_matching_id_then_ancestor_fallback() {
+    fn form_owner_uses_first_matching_id_without_ancestor_fallback() {
         let mut dom = Dom::new();
         let blocker = dom.create_element(NodeIdx(0), "div");
         dom.set_attribute(blocker, "id", "target").unwrap();
@@ -1284,12 +1746,78 @@ mod tests {
         dom.set_attribute(form, "id", "target").unwrap();
         let input = dom.create_element(form, "input");
         dom.set_attribute(input, "form", "target").unwrap();
-        assert_eq!(dom.form_owner(input), Some(form));
+        assert_eq!(dom.form_owner(input), None);
         dom.detach(input);
         assert_eq!(dom.form_owner(input), None);
         dom.pre_insert(input, form, None).unwrap();
         dom.set_attribute(blocker, "id", "other").unwrap();
         assert_eq!(dom.form_owner(input), Some(form));
+        dom.set_attribute(input, "form", "missing").unwrap();
+        assert_eq!(dom.form_owner(input), None);
+        dom.remove_attribute(input, "form").unwrap();
+        assert_eq!(dom.form_owner(input), Some(form));
+        let detached_form = dom.create_element(NodeIdx(0), "form");
+        dom.detach(detached_form);
+        let detached_input = dom.create_element(detached_form, "input");
+        dom.set_attribute(detached_input, "form", "missing").unwrap();
+        assert_eq!(dom.form_owner(detached_input), Some(detached_form));
+    }
+    #[test]
+    fn set_range_text_uses_utf16_offsets_and_preserves_selection() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_input_value(input, units("a😀bc")).unwrap();
+        dom.set_selection(input, 3, 5, SelectionDirection::Forward).unwrap();
+        dom.set_range_text(input, units("Z"), Some((1, 3)), "preserve").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("aZbc"));
+        assert_eq!(dom.selection(input).unwrap(), (2, 4, SelectionDirection::Forward));
+        assert_eq!(dom.set_range_text(input, units(""), Some((3, 2)), "select"),
+            Err(DomError::IndexSizeError));
+    }
+    #[test]
+    fn step_input_obeys_step_base_and_rejects_non_steppable_controls() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "number").unwrap();
+        dom.set_attribute(input, "min", "0.5").unwrap();
+        dom.set_attribute(input, "step", "2").unwrap();
+        dom.set_input_value(input, units("1")).unwrap();
+        dom.step_input(input, 1).unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("2.5"));
+        dom.step_input(input, -1).unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("0.5"));
+        dom.set_attribute(input, "type", "text").unwrap();
+        assert_eq!(dom.step_input(input, 1), Err(DomError::InvalidStateError));
+    }
+    #[test]
+    fn input_type_changes_transfer_value_and_selection_state() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "hidden").unwrap();
+        dom.set_input_value(input, units("  a\rb  ")).unwrap();
+        dom.set_attribute(input, "type", "text").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), units("  ab  "));
+        assert_eq!(dom.selection(input).unwrap(), (0, 0, SelectionDirection::None));
+        dom.set_selection(input, 1, 3, SelectionDirection::Backward).unwrap();
+        dom.set_attribute(input, "type", "search").unwrap();
+        assert_eq!(dom.selection(input).unwrap(), (1, 3, SelectionDirection::Backward));
+        dom.set_attribute(input, "type", "file").unwrap();
+        assert_eq!(dom.input_value(input).unwrap(), Vec::<u16>::new());
+    }
+    #[test]
+    fn form_construction_and_submission_flags_block_reentry() {
+        let mut dom = Dom::new();
+        let form = dom.create_element(NodeIdx(0), "form");
+        assert!(dom.begin_form_entry_list(form).unwrap());
+        assert!(!dom.begin_form_entry_list(form).unwrap());
+        assert!(dom.form_entry_list_construction_started(form).unwrap());
+        dom.end_form_entry_list(form).unwrap();
+        assert!(dom.begin_form_entry_list(form).unwrap());
+        dom.end_form_entry_list(form).unwrap();
+        assert!(dom.begin_form_submission_events(form).unwrap());
+        assert!(!dom.begin_form_submission_events(form).unwrap());
+        dom.end_form_submission_events(form).unwrap();
+        assert!(dom.begin_form_submission_events(form).unwrap());
     }
     #[test]
     fn reparenting_a_checked_radio_reconciles_its_new_group() {
@@ -1327,6 +1855,28 @@ mod tests {
         assert_eq!(dom.selected_index(select).unwrap(), 0);
     }
     #[test]
+    fn label_control_and_empty_form_attribute() {
+        let mut dom = Dom::new();
+        let form = dom.create_element(NodeIdx(0), "form");
+        let input = dom.create_element(form, "input");
+        dom.set_attribute(input, "id", "field").unwrap();
+        let label = dom.create_element(form, "label");
+        dom.set_attribute(label, "for", "field").unwrap();
+        assert_eq!(dom.label_control(label).unwrap(), Some(input));
+        assert_eq!(dom.label_form(label).unwrap(), Some(form));
+        // A label with no `for` targets its first labelable descendant.
+        let nested = dom.create_element(form, "label");
+        let inner = dom.create_element(nested, "textarea");
+        assert_eq!(dom.label_control(nested).unwrap(), Some(inner));
+        assert_eq!(dom.label_form(nested).unwrap(), Some(form));
+        // An empty form attribute never matches a form with an empty id.
+        let loose = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(loose, "form", "").unwrap();
+        dom.set_attribute(form, "id", "").unwrap();
+        assert!(dom.is_connected(loose));
+        assert_eq!(dom.form_owner(loose), None);
+    }
+    #[test]
     fn validation_flags_and_custom_error() {
         let mut dom = Dom::new();
         let input = dom.create_element(NodeIdx(0), "input");
@@ -1344,7 +1894,31 @@ mod tests {
         assert!(dom.validity(input, |_, _| None).unwrap().custom_error);
         dom.set_attribute(input, "disabled", "").unwrap();
         assert!(!dom.will_validate(input).unwrap());
-        assert!(dom.validity(input, |_, _| None).unwrap().valid());
+        // Disabling bars the element from constraint validation (willValidate
+        // false) but does not clear already-set flags: step mismatch and custom
+        // error remain observable through validity.
+        let validity = dom.validity(input, |_, _| None).unwrap();
+        assert!(validity.step_mismatch);
+        assert!(validity.custom_error);
+        assert!(!validity.valid());
+    }
+    #[test]
+    fn exact_decimal_step_mismatch_for_number_inputs() {
+        let mut dom = Dom::new();
+        let input = dom.create_element(NodeIdx(0), "input");
+        dom.set_attribute(input, "type", "number").unwrap();
+        // 17 is not an integral multiple of 3e-15; binary division would lose it.
+        dom.set_attribute(input, "step", "3e-15").unwrap();
+        dom.set_input_value(input, units("17")).unwrap();
+        assert!(dom.validity(input, |_, _| None).unwrap().step_mismatch);
+        // -12345678.9 is an integral multiple of 1e-12.
+        dom.set_attribute(input, "step", "1e-12").unwrap();
+        dom.set_input_value(input, units("-12345678.9")).unwrap();
+        assert!(!dom.validity(input, |_, _| None).unwrap().step_mismatch);
+        // 3.6 is an integral multiple of 0.003.
+        dom.set_attribute(input, "step", "0.003").unwrap();
+        dom.set_input_value(input, units("3.6")).unwrap();
+        assert!(!dom.validity(input, |_, _| None).unwrap().step_mismatch);
     }
     // WPT html/semantics/forms/constraints/form-validation-validity-valueMissing.html
     // and form-validation-willValidate.html at pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12.
