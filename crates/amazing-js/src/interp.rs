@@ -1165,7 +1165,7 @@ impl Interpreter {
                 // `Runtime.evaluate` call is exactly this) would be
                 // invisible to a line breakpoint.
                 if let Some(hook) = self.debug_hook.clone() {
-                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+                    hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
                 }
                 self.completion = self.eval_expr(e, &env)?;
                 continue;
@@ -1299,7 +1299,7 @@ impl Interpreter {
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         if let Some(hook) = self.debug_hook.clone() {
-            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line);
+            hook.borrow_mut().on_statement(&self.current_script_id, &self.current_script_url, s.span.start.line, self.depth);
         }
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),

@@ -1186,19 +1186,41 @@ fn end_to_end_debugger_domain_scripts_breakpoints_and_pause() {
         "resume should have cleared the pending pause: {more:?}"
     );
 
-    // stepInto/evaluateOnCallFrame genuinely have no suspended state to
-    // act on with this driver (nothing is ever truly blocked — see the
-    // module's "Known limitations") and stay `Unsupported`.
-    let step = client.raw("Debugger.stepInto", Json::Object(Vec::new()));
-    assert!(step.get("error").is_some(), "{step}");
-    let eval_on_frame = client.raw(
+    // stepInto (CDP-23): real, in the same after-the-fact sense as
+    // Debugger.pause — arms `StepMode::Any`, so the very next statement
+    // that runs, at any depth, reports a pause.
+    client.result("Debugger.stepInto", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "9;");
+    let stepped: Vec<Json> = more
+        .iter()
+        .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+        .cloned()
+        .collect();
+    assert_eq!(stepped.len(), 1, "{more:?}");
+
+    // evaluateOnCallFrame (CDP-23): real evaluation, delegated to the
+    // page's global realm through the only call frame id this driver ever
+    // mints ("cf0"); an unknown id is a genuine NotFound.
+    let eval_on_frame = client.result(
         "Debugger.evaluateOnCallFrame",
         Json::Object(vec![
             ("callFrameId".into(), Json::String("cf0".into())),
+            ("expression".into(), Json::String("1 + 2".into())),
+        ]),
+    );
+    assert_eq!(
+        eval_on_frame.get("result").and_then(|result| result.get("value")).and_then(Json::as_f64),
+        Some(3.0),
+        "{eval_on_frame}"
+    );
+    let unknown_frame = client.raw(
+        "Debugger.evaluateOnCallFrame",
+        Json::Object(vec![
+            ("callFrameId".into(), Json::String("cf99".into())),
             ("expression".into(), Json::String("1".into())),
         ]),
     );
-    assert!(eval_on_frame.get("error").is_some(), "{eval_on_frame}");
+    assert!(unknown_frame.get("error").is_some(), "{unknown_frame}");
 
     // Page.captureScreenshot (CDP-17, exercised here as CDP-20's ticket
     // names it alongside the Debugger domain).
@@ -1428,11 +1450,15 @@ fn end_to_end_device_metrics_override_and_insert_text() {
 }
 
 /// CDP-22: `Debugger.stepOver` and a real `scopeChain` on paused frames.
-/// `stepOver` shares `Debugger.pause`'s exact one-shot mechanism (see
-/// `PageOwner::debugger_step_over`'s doc comment for why this driver cannot
-/// tell them apart), and the paused event's `scopeChain` carries a real,
-/// live `"global"` scope object — `Runtime.getProperties` on it reflects
-/// genuine `globalThis` state set just before the pause, not a snapshot.
+/// At this test's own call depth (0, every statement here is top-level) a
+/// depth-based `stepOver` (CDP-23) and the CDP-22 one-shot-flag
+/// approximation it replaced are indistinguishable — both fire on the next
+/// top-level statement — so this test still stands unmodified; see
+/// `end_to_end_debugger_depth_based_stepping_and_conditional_breakpoints`
+/// below for the depth-sensitive cases CDP-23 actually changes. The paused
+/// event's `scopeChain` carries a real, live `"global"` scope object —
+/// `Runtime.getProperties` on it reflects genuine `globalThis` state set
+/// just before the pause, not a snapshot.
 #[test]
 fn end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals() {
     let host = spawn_test_host(
@@ -1516,6 +1542,146 @@ fn end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals() {
         !more.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")),
         "resume should have cleared the pending step: {more:?}"
     );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-23: real depth-based `stepOut` (distinct from the trivial
+/// "next-statement" behavior `stepInto`/`Debugger.pause` share), plus
+/// `setBreakpointByUrl`'s `condition`.
+///
+/// `stepOver`/`stepOut`'s reference depth is `last_paused_depth` — the depth
+/// recorded at the most recent pause (see `PageOwner::step_reference_depth`'s
+/// doc comment) — and every `Runtime.evaluate` call is its own fresh
+/// top-level script, so its *first* statement is always observed at depth 0
+/// (there is no way for a client of this driver to arm a step and have the
+/// very next statement it sees already be mid-call; entering a call is what
+/// *increments* depth, and that only happens after the hook already fired
+/// for the statement making the call). That makes `Over`/`Out` behave
+/// identically to `Any` for a reference depth of 0 or more once execution is
+/// back at depth 0 or shallower — the meaningful, honestly-testable
+/// distinction this test proves instead is `StepMode::Out`'s depth-0
+/// reference case: stepping out of the top-level frame is not a thing that
+/// can ever happen (there is nothing shallower than depth 0), so it must
+/// never fire, unlike `stepInto`/`pause`'s `Any`, which always fires on the
+/// next statement regardless of depth.
+#[test]
+fn end_to_end_debugger_depth_based_step_out_and_conditional_breakpoints() {
+    // `level1`'s body statement is deliberately on its own line (line 3,
+    // 1-based; CDP `lineNumber: 2`), distinct from every later `Runtime.
+    // evaluate` call site: a call statement's own line is relative to
+    // *that* evaluate call's freshly parsed text (always line 1 there), so
+    // sharing a line number with the body would make a breakpoint on that
+    // line match both the call site and the body statement by (url, line)
+    // alone (a real, separately-documented driver limitation — see the
+    // module's "Known limitations" and CDP-20's own test) — this test wants
+    // exactly one match per call, to isolate the depth/condition behavior
+    // it is actually proving.
+    let host = spawn_test_host(
+        "http://example.test/step2.html",
+        "<title>Step2</title><body><script>\nfunction level1() {\n  var inner1 = 1;\n}\n</script></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    client.result("Debugger.enable", Json::Object(Vec::new()));
+
+    let evaluate_and_collect = |client: &mut Client, expression: &str| -> Vec<Json> {
+        let (_, mut more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String(expression.into()))]),
+        );
+        let (_, nudge) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("0;".into()))]),
+        );
+        more.extend(nudge);
+        more
+    };
+    let paused_events = |events: &[Json]| -> Vec<Json> {
+        events.iter().filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")).cloned().collect()
+    };
+
+    // With no prior pause, the reference depth defaults to 0: `stepOut`
+    // arms `Out(0)`, which requires `depth < 0` — never true for a `u32` —
+    // so three ordinary top-level statements produce no pause at all. This
+    // is the behavior that actually distinguishes `stepOut` from
+    // `stepInto`/`pause`'s `Any`, which the next block proves fires
+    // unconditionally in the exact same setting.
+    client.result("Debugger.stepOut", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "1;\n2;\n3;");
+    assert!(paused_events(&more).is_empty(), "stepOut from the top-level frame should never fire: {more:?}");
+
+    client.result("Debugger.stepInto", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "4;\n5;");
+    assert_eq!(paused_events(&more).len(), 1, "stepInto should fire on the very next statement regardless of depth: {more:?}");
+
+    // Establish a real depth-1 reference: a breakpoint on `level1`'s own
+    // (only) statement, hit while actually running inside that call.
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("false".into())),
+        ]),
+    );
+    let false_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    assert!(paused_events(&more).is_empty(), "a false condition should suppress the breakpoint entirely: {more:?}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(false_cond_id))]));
+
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("1 === 1".into())),
+        ]),
+    );
+    let true_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    let hit = paused_events(&more);
+    assert_eq!(hit.len(), 1, "a true condition should let the breakpoint fire: {more:?}");
+    let hit_params = hit[0].get("params").expect("params");
+    assert_eq!(
+        hit_params.get("hitBreakpoints").and_then(Json::as_array).and_then(|hits| hits.first()).and_then(Json::as_str),
+        Some(true_cond_id.as_str()),
+        "{hit_params}"
+    );
+    assert_eq!(hit_params.get("reason").and_then(Json::as_str), Some("Breakpoint"), "{hit_params}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(true_cond_id))]));
+
+    // An erroring condition counts as false, same as a literal `false` —
+    // the breakpoint is suppressed, not treated as an unconditional hit and
+    // not surfaced as a driver error either.
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("throw new Error('boom')".into())),
+        ]),
+    );
+    let error_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    assert!(paused_events(&more).is_empty(), "an erroring condition should count as false: {more:?}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(error_cond_id))]));
+
+    // That true-condition hit above ran with `level1`'s body at depth 1
+    // (see `drain_debugger_paused`, which sets `last_paused_depth` for
+    // every queued pause, breakpoint or forced), so a `stepOut` armed now
+    // has reference depth 1: `Out(1)` requires `depth < 1`, which the very
+    // next top-level statement (depth 0) satisfies — proving the reference
+    // depth genuinely came from that pause, not a stale default of 0.
+    client.result("Debugger.stepOut", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "6;");
+    assert_eq!(paused_events(&more).len(), 1, "stepOut with a depth-1 reference should fire once back at depth 0: {more:?}");
 
     shutdown.store(true, Ordering::Relaxed);
     let _ = join.join();
