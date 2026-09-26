@@ -69,7 +69,15 @@ else
 fi
 
 # Bulk transfer on its own connection; never the shared master.
-scp -q -o ControlPath=none "$TAR" "$HOST:wt-$LANE.tar" 2>&1 | grep -v -i -E 'post-quantum|store now|pq\.html'
+# Retry a dropped upload, and never gate a tree that did not arrive: on
+# 2026-09-26 a lost connection after ~10 minutes let the gate run on a stale tree.
+up=1
+for attempt in 1 2 3; do
+  if scp -q -o ControlPath=none -o ServerAliveInterval=15 -o ConnectTimeout=20 "$TAR" "$HOST:wt-$LANE.tar" 2>&1 \
+      | grep -v -i -E 'post-quantum|store now|pq\.html'; [ "${PIPESTATUS[0]}" -eq 0 ]; then up=0; break; fi
+  echo "win-run[$LANE]: upload attempt $attempt failed; retrying" >&2; sleep $((attempt * 15))
+done
+[ "$up" -eq 0 ] || { echo "win-run[$LANE]: upload to $HOST failed 3 times; not gating" >&2; exit 3; }
 
 PS=$(LANE="$LANE" CMD="$CMD" python3 -c "
 import base64, os
