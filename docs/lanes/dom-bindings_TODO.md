@@ -1726,3 +1726,13 @@ Exact-source Windows gate (`8cb9e5cb`, win-001 fallback): owned nextest **495 pa
 Linux iteration: owned 492 passed/2 skipped, doctests 0. Pinned WPT c2a2fce69e5c2509d9dc28440ec8b42532e5c293, isolated 120-second deadline/fresh storage: Node-compareDocumentPosition **1444/1444**, fieldset disabled-001 **5/5**, HTMLCollection-as-prototype **1/2** (JS owner notified), disabled-003 **0/2** (dynamic disabling of an already-focused descendant remains). These are Linux diagnostics, not Windows conformance gates.
 
 Next DOM-B cluster: StaticRange required dictionary members and conversion order; historical pinned constructor case is 16/17. CSS and HTML can consume the merged focus-state APIs now.
+
+## DOM-B StaticRange dictionary conversion — 2026-09-26
+
+Implementation `1d507ddb`; merged fixed gate source `ae17e533` incorporates local dev `fba3b71b` and the compositor/JS-owner fixes. StaticRange now rejects missing and explicit-undefined required offsets, reads/converts members in WebIDL lexicographic order, and preserves null-to-zero numeric conversion. Native binding coverage checks all four required members, null dictionaries, read order, and null offsets. Sources: [DOM StaticRange](https://dom.spec.whatwg.org/#interface-staticrange), [WebIDL dictionary conversion](https://webidl.spec.whatwg.org/#es-dictionary).
+
+Windows final gate through win-run's win-001 fallback: owned nextest **496/496** (4 skipped), owned doctests **0**, workspace nextest **2,464/2,464** (7 skipped), workspace doctests **2/2**; command exit **0**. No remaining compositor failures on this combined source. Linux native iteration passed **309/309**, owned doctests **0**.
+
+Pinned WPT c2a2fce69e5c2509d9dc28440ec8b42532e5c293 targeted Linux iteration, 800×600, 120-second deadline, fresh storage per invocation: StaticRange-constructor **16/17→17/17** (baseline is the historical DOM-B3 sweep); HTMLCollection-as-prototype **1/2→2/2** after the JS-owner fix joined dev. The earlier isolated Node-compareDocumentPosition run passed **1444/1444**, closing the reproduced timeout concern without claiming a full-corpus zero-loss gate. Raw targeted records and Windows totals: `crates/amazing-bindings/evidence/staticrange-20260926.json`.
+
+Remaining DOM-B work: Range bulk-operation fixtures still have timeout clusters; cross-realm traversal requires iframe/realm host support; tentative OpaqueRange APIs are unimplemented. Dynamic disabling of an already-focused fieldset descendant remains a focus follow-up (disabled-003: 0/2 in Linux diagnostics). No push.
