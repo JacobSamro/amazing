@@ -13,6 +13,7 @@ use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
 use crate::value::{DerivedConstructor, Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 thread_local! {
@@ -33,7 +34,7 @@ fn take_registers(count: usize) -> Vec<JsValue> {
 
 pub use compiler::compile;
 #[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
-pub(crate) use compiler::compile_async_body;
+pub(crate) use compiler::{compile_async_body, compile_async_generator_body, compile_generator_body};
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
@@ -80,6 +81,12 @@ struct ClassMethodCode {
     key: KeyOperand,
     kind: crate::ast::MethodKind,
     code: FunctionCode,
+    // A `static` method/accessor installs on the constructor itself (with
+    // the constructor as its [[HomeObject]], for `super` inside it), not on
+    // `prototype` -- this was never read before JSVM-7 found it (every
+    // method compiled as if it were an instance member; `class C { static
+    // m(){} }`'s `C.m` was `undefined` under the VM). See `MakeClass`.
+    is_static: bool,
 }
 
 /// A compiled class's super-class expression, plus whether the constructor
@@ -289,6 +296,33 @@ pub struct GeneratorState {
     executing: bool,
     completion: JsValue,
     async_promise: Option<Obj>,
+    // Async generators only: a FIFO of outstanding `.next()`/`.return()`/
+    // `.throw()` calls. Unlike a plain async function (one call, one backing
+    // promise) or a plain generator (synchronous, one call in flight by
+    // construction), a consumer may call an async generator's methods again
+    // before a prior call's promise has settled -- e.g. while the body is
+    // mid-`await`. Each request carries its own promise (`target`); requests
+    // are drained one at a time as the previous one's step completes.
+    queue: VecDeque<AsyncGeneratorRequest>,
+    // Async generators only: true while `frame` is suspended at an `await`
+    // (as opposed to idle, suspended at a `yield` and ready for the next
+    // queued request). `executing` alone cannot tell the two apart: it is
+    // false in both cases between microtasks. Without this, `drain` would
+    // wrongly feed a newly queued request's resume value into a frame that
+    // is actually still waiting on the awaited promise's own reaction --
+    // that reaction (`async_generator_step_fulfilled`/`_rejected`) is the
+    // only thing allowed to resume the frame while this is true, and it
+    // clears it before doing so.
+    awaiting: bool,
+}
+
+/// One queued `.next(value)`/`.return(value)`/`.throw(value)` call on an async
+/// generator. `kind` matches `generator_resume`'s convention: 0=next,
+/// 1=return, 2=throw. `target` is that call's own promise.
+struct AsyncGeneratorRequest {
+    kind: u8,
+    value: JsValue,
+    target: Obj,
 }
 
 impl std::fmt::Debug for GeneratorState {
@@ -296,6 +330,7 @@ impl std::fmt::Debug for GeneratorState {
         f.debug_struct("GeneratorState")
             .field("started", &self.started)
             .field("executing", &self.executing)
+            .field("queued", &self.queue.len())
             .finish()
     }
 }
@@ -831,9 +866,22 @@ impl Program {
                             let key = method.key.resolve(&registers)?;
                             let value = method.code.instantiate(i, &env);
                             let JsValue::Object(function) = &value else { unreachable!() };
-                            function.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
+                            // A `static` method/accessor is a property of the
+                            // constructor itself, with the constructor (not
+                            // the prototype) as its [[HomeObject]] -- matching
+                            // the tree walker's `eval_class_inner`. Getting
+                            // this wrong left every VM-compiled static method
+                            // undefined on the constructor (JSVM-7 found it
+                            // while isolating the generator/async-generator
+                            // Test262 delta: this pre-existing gap was masked
+                            // whenever a static method's own class also hit
+                            // some other, unrelated fallback trigger, but a
+                            // class with only a static method compiled clean
+                            // and silently dropped it).
+                            let target = if method.is_static { callable } else { &prototype };
+                            function.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
                             if matches!(method.kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
-                                let mut property = prototype.borrow().own_prop(&key).cloned()
+                                let mut property = target.borrow().own_prop(&key).cloned()
                                     .unwrap_or(Property {
                                         value: JsValue::Undefined, writable: false,
                                         enumerable: false, configurable: true,
@@ -844,10 +892,10 @@ impl Program {
                                 } else {
                                     property.setter = Some(value.clone());
                                 }
-                                prototype.borrow_mut().define(&key, property)
+                                target.borrow_mut().define(&key, property)
                                     .map_err(|_| Throw::type_error("could not define class accessor"))?;
                             } else {
-                                prototype.borrow_mut().define(&key, Property {
+                                target.borrow_mut().define(&key, Property {
                                     value,
                                     writable: true,
                                     enumerable: false,
@@ -1084,16 +1132,34 @@ impl FunctionCode {
         }
         // `JsObject::function` already defines `name` and `length` with the
         // spec descriptors; do not overwrite them here.
-        if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
+        // A plain (non-generator) async function/method has no `.prototype`
+        // at all, matching the tree walker -- but a generator does, sync or
+        // async, since `new.target`-less `.next()`/`.return()`/`.throw()`
+        // live there. Narrow the original `!self.0.is_async` exclusion so it
+        // only drops the async-non-generator case.
+        if !self.0.is_arrow && !self.0.is_method && !(self.0.is_async && !self.0.is_generator) {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
                 let mut methods = JsObject::ordinary();
                 methods.proto = Some(i.object_proto.clone());
-                methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
-                methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
-                methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
-                methods.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+                if self.0.is_async {
+                    methods.set_own("next", Interpreter::native("next", async_generator_next, &i.function_proto));
+                    methods.set_own("return", Interpreter::native("return", async_generator_return, &i.function_proto));
+                    methods.set_own("throw", Interpreter::native("throw", async_generator_throw, &i.function_proto));
+                    methods.set_own(
+                        WellKnownSymbol::AsyncIterator.symbol(),
+                        Interpreter::native("[Symbol.asyncIterator]", async_generator_async_iterator, &i.function_proto),
+                    );
+                } else {
+                    methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
+                    methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
+                    methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
+                    methods.set_own(
+                        WellKnownSymbol::Iterator.symbol(),
+                        Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto),
+                    );
+                }
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
@@ -1234,18 +1300,7 @@ impl FunctionCode {
             env.declare_var("arguments", arguments)?;
         }
         if self.0.is_generator {
-            let mut object = JsObject::ordinary();
-            object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
-            object.exotic = crate::value::Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
-                code: self.clone(),
-                env,
-                frame: None,
-                started: false,
-                executing: false,
-                completion: JsValue::Undefined,
-                async_promise: None,
-            })));
-            return Ok(JsValue::object(object));
+            return Ok(self.start_generator_with_env(i, env, generator_proto));
         }
         if self.0.is_async {
             return self.call_async(i, env);
@@ -1272,6 +1327,42 @@ impl FunctionCode {
         self.call_async(i, env)
     }
 
+    /// Start a resumable generator/async-generator body in the environment
+    /// prepared by AST parameter binding -- the generator/async-generator
+    /// half of the runtime bridge (mirrors `call_async_with_env`). `self`
+    /// must be code compiled with `is_generator: true` (via
+    /// `compile_generator_body`/`compile_async_generator_body`); whether the
+    /// returned object drives synchronously (`.next()` returning a result
+    /// directly) or asynchronously (`.next()` returning a Promise) follows
+    /// `self`'s own `is_async` flag, exactly as it does for a VM-instantiated
+    /// generator function. `generator_proto` is typically the enclosing
+    /// function object's own `.prototype` (as built by `instantiate`, whose
+    /// `methods` sub-object supplies `next`/`return`/`throw`/the iterator
+    /// symbol); `None` falls back to `Object.prototype`, matching `call()`'s
+    /// own default when no such prototype exists.
+    #[allow(dead_code)] // Consumed by the runtime generator bridge in interp.rs.
+    pub(crate) fn start_generator_with_env(
+        &self,
+        i: &Interpreter,
+        env: EnvHandle,
+        generator_proto: Option<Obj>,
+    ) -> JsValue {
+        let mut object = JsObject::ordinary();
+        object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
+        object.exotic = Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
+            code: self.clone(),
+            env,
+            frame: None,
+            started: false,
+            executing: false,
+            completion: JsValue::Undefined,
+            async_promise: None,
+            queue: VecDeque::new(),
+            awaiting: false,
+        })));
+        JsValue::object(object)
+    }
+
     fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
         let promise = new_promise(i, PromiseFate::Pending);
         let JsValue::Object(target) = &promise else { unreachable!() };
@@ -1290,6 +1381,8 @@ impl FunctionCode {
             executing: false,
             completion: JsValue::Undefined,
             async_promise: Some(target.clone()),
+            queue: VecDeque::new(),
+            awaiting: false,
         }));
         async_continue(i, state, 0, JsValue::Undefined)?;
         Ok(promise)
@@ -1570,6 +1663,241 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         Ok(FrameOutcome::Awaited(_)) => unreachable!("generator awaited"),
         Err(error) => Err(error),
     }
+}
+
+// --- Async generators ---------------------------------------------------
+//
+// An async generator combines a generator's suspend points (`yield`/`yield*`)
+// with an async function's (`await`), and unlike either alone, its methods
+// must never run its body synchronously to completion nor reject the caller
+// for calling `.next()` again before a previous call's promise settled --
+// each call gets its own promise, queued and drained in order. The driver
+// below is `generator_resume` (synchronous yield-only) and `async_continue`
+// (promise-settling await-only) fused: `async_generator_run` resumes the one
+// underlying VM frame exactly like each of those does, then, on the frame's
+// outcome, either settles the current request's promise and drains the next
+// queued one (`Yielded`/`Completed`/`Err`) or chains an await continuation
+// that re-enters this same function when the awaited value settles
+// (`Awaited`) -- so a body can suspend at `await` and `yield` in any order.
+
+fn async_generator_enqueue(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
+    let state = generator_state(this)?;
+    let promise = new_promise(i, PromiseFate::Pending);
+    let JsValue::Object(target) = &promise else { unreachable!() };
+    state.borrow_mut().queue.push_back(AsyncGeneratorRequest { kind, value, target: target.clone() });
+    async_generator_drain(i, state)?;
+    Ok(promise)
+}
+
+fn async_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
+}
+
+fn async_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
+}
+
+fn async_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
+}
+
+fn async_generator_async_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_state(this.clone())?;
+    Ok(this)
+}
+
+/// Settle a queued request's promise without ever touching a VM frame --
+/// mirrors `generator_resume`'s two frame-less early exits: a `.return()`/
+/// `.throw()` before the body has ever run, and any call once the body has
+/// already run to completion.
+fn async_generator_settle_without_frame(
+    i: &mut Interpreter,
+    request: AsyncGeneratorRequest,
+) -> Result<(), Throw> {
+    match request.kind {
+        2 => settle_promise(&request.target, PromiseFate::Rejected(request.value), i),
+        _ => {
+            let done = request.kind == 1;
+            let value = if done { request.value } else { JsValue::Undefined };
+            settle_promise(&request.target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)
+        }
+    }
+}
+
+/// Pop and process queued requests one at a time until the queue empties or
+/// the generator is already mid-step (a later call to this same function,
+/// from that step's own continuation, will resume draining).
+fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>) -> Result<(), Throw> {
+    loop {
+        // Busy mid-step (actively running bytecode) or mid-`await` (frame
+        // suspended, waiting on a promise reaction to resume it): either
+        // way, nothing queued can run yet. The reaction/step that clears
+        // this drains again itself once it settles.
+        if state.borrow().executing || state.borrow().awaiting {
+            return Ok(());
+        }
+        let Some(request) = ({ state.borrow_mut().queue.pop_front() }) else {
+            return Ok(());
+        };
+        // A return/throw before the body has ever run, per spec, completes
+        // the generator directly without running any of its code.
+        if !state.borrow().started && request.kind != 0 {
+            state.borrow_mut().started = true;
+            async_generator_settle_without_frame(i, request)?;
+            continue;
+        }
+        // The body already ran to completion on an earlier request.
+        if state.borrow().started && state.borrow().frame.is_none() {
+            async_generator_settle_without_frame(i, request)?;
+            continue;
+        }
+        if !state.borrow().started {
+            let (code, env) = {
+                let s = state.borrow();
+                (s.code.clone(), s.env.clone())
+            };
+            state.borrow_mut().started = true;
+            match code.0.program.start_frame(i, env, DEFAULT_INSTRUCTION_LIMIT) {
+                Ok(frame) => state.borrow_mut().frame = Some(frame),
+                Err(Throw(error)) => {
+                    settle_promise(&request.target, PromiseFate::Rejected(error), i)?;
+                    continue;
+                }
+            }
+        }
+        let target = request.target.clone();
+        let kind = request.kind;
+        let value = request.value;
+        return async_generator_run(i, state, target, kind, value);
+    }
+}
+
+/// Feed one resume value into the generator's single suspended VM frame and
+/// run it until its next suspension or completion, settling `target`
+/// (the current request's promise) and continuing to drain the queue.
+fn async_generator_run(
+    i: &mut Interpreter,
+    state: Rc<RefCell<GeneratorState>>,
+    target: Obj,
+    kind: u8,
+    value: JsValue,
+) -> Result<(), Throw> {
+    let (code, mut frame, completion) = {
+        let mut s = state.borrow_mut();
+        let frame = s.frame.take().expect("async generator frame missing at resume");
+        s.executing = true;
+        s.awaiting = false;
+        (s.code.clone(), frame, s.completion.clone())
+    };
+    if let Some(dst) = frame.yield_dst.take() {
+        if frame.delegate.is_some() {
+            frame.delegate_input = Some((kind, value));
+        } else {
+            match kind {
+                0 => frame.registers[dst] = value,
+                1 => frame.pending_resume = Some(Abrupt::Return(value)),
+                _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+            }
+        }
+    } else if let Some(dst) = frame.await_dst.take() {
+        match kind {
+            0 => frame.registers[dst] = value,
+            _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+        }
+    }
+    let previous_completion = std::mem::replace(&mut i.completion, completion);
+    let outcome = resume_frame_with_strictness(i, &code, &mut frame);
+    let completion = std::mem::replace(&mut i.completion, previous_completion);
+    {
+        let mut s = state.borrow_mut();
+        s.executing = false;
+        s.completion = completion;
+        s.awaiting = matches!(&outcome, Ok(FrameOutcome::Awaited(_)));
+        if matches!(&outcome, Ok(FrameOutcome::Awaited(_)) | Ok(FrameOutcome::Yielded(_))) {
+            s.frame = Some(frame);
+        }
+    }
+    match outcome {
+        Ok(FrameOutcome::Yielded(value)) => {
+            settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, false)), i)?;
+            async_generator_drain(i, state)
+        }
+        Ok(FrameOutcome::Completed(value)) => {
+            settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)?;
+            async_generator_drain(i, state)
+        }
+        Ok(FrameOutcome::Awaited(value)) => {
+            let awaited = async_resolve_value(i, value);
+            let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
+            let rejected = async_generator_step_handler(i, state, target, true);
+            let then = i.get_prop(&awaited, "then")?;
+            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+            Ok(())
+        }
+        Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
+        Err(Throw(error)) => {
+            settle_promise(&target, PromiseFate::Rejected(error), i)?;
+            async_generator_drain(i, state)
+        }
+    }
+}
+
+/// Build the fulfilled/rejected reaction callback for an async generator's
+/// in-flight `await`, mirroring `async_handler` -- but an async generator's
+/// continuation must resume with both the shared `state` (as `async_handler`
+/// carries) and the *specific request's* promise (`target`), since each
+/// queued call has its own, unlike a plain async function's single backing
+/// promise. Both are stashed as env-declared internal slots on the callback's
+/// own closure, read back by `async_generator_step_state`.
+fn async_generator_step_handler(i: &Interpreter, state: Rc<RefCell<GeneratorState>>, target: Obj, reject: bool) -> JsValue {
+    let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
+    let mut holder = JsObject::ordinary();
+    holder.exotic = Exotic::Generator(state);
+    let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
+    let _ = env.declare_var("[[VmAsyncGeneratorTarget]]", JsValue::Object(target));
+    let mut function = JsObject::function(JsFunction {
+        name: if reject { "asyncGeneratorStepRejected" } else { "asyncGeneratorStepFulfilled" }.into(),
+        params: vec![],
+        body: FunctionBody::Native(if reject { async_generator_step_rejected } else { async_generator_step_fulfilled }),
+        is_arrow: false,
+        is_async: false,
+        is_generator: false,
+        env,
+        home: None,
+        proto_for_new: None,
+    });
+    function.proto = Some(i.function_proto.clone());
+    JsValue::object(function)
+}
+
+fn async_generator_step_state(i: &Interpreter) -> Result<(Rc<RefCell<GeneratorState>>, Obj), Throw> {
+    let native = i.native_stack.last().ok_or_else(|| Throw::type_error("missing async generator callback"))?;
+    let env = native.borrow().func.as_ref().unwrap().env.clone();
+    let JsValue::Object(holder) = env.resolve("[[VmAsyncState]]")
+        .ok_or_else(|| Throw::type_error("missing async generator frame"))? else {
+        return Err(Throw::type_error("invalid async generator frame"));
+    };
+    let state = match &holder.borrow().exotic {
+        Exotic::Generator(state) => state.clone(),
+        _ => return Err(Throw::type_error("invalid async generator frame")),
+    };
+    let JsValue::Object(target) = env.resolve("[[VmAsyncGeneratorTarget]]")
+        .ok_or_else(|| Throw::type_error("missing async generator target"))? else {
+        return Err(Throw::type_error("invalid async generator target"));
+    };
+    Ok((state, target))
+}
+
+fn async_generator_step_fulfilled(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    async_generator_run(i, state, target, 0, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_generator_step_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    async_generator_run(i, state, target, 2, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
 }
 
 fn consume(fuel: &mut usize) -> Result<(), Throw> {
