@@ -40,7 +40,7 @@ def fetch(path, revision, root):
     return local
 
 
-def reftest_link(test_path):
+def reftest_link(test_path, test_rel):
     with open(test_path, "r", encoding="utf-8", errors="replace") as handle:
         source = handle.read()
     for tag in re.findall(r"(?is)<link\b[^>]*>", source):
@@ -59,7 +59,7 @@ def reftest_link(test_path):
         href_value = re.split(r"[?#]", href_value, maxsplit=1)[0]
         from urllib.parse import unquote
         href_value = unquote(href_value)
-        base = "" if href_value.startswith("/") else os.path.dirname(test_path) + "/"
+        base = "" if href_value.startswith("/") else os.path.dirname(test_rel) + "/"
         resolved = os.path.normpath(base + href_value.lstrip("/"))
         return relation, resolved
     return None
@@ -185,7 +185,7 @@ def main():
             counts["unsupported"] += 1
             results.append({"id": case_id, "classification": "unsupported", "detail": str(exc)})
             continue
-        link = reftest_link(test_path)
+        link = reftest_link(test_path, test_rel)
         if link is None:
             counts["unsupported"] += 1
             results.append({"id": case_id, "classification": "unsupported", "detail": "no local match/mismatch link"})

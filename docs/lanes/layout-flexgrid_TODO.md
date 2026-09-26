@@ -63,3 +63,102 @@ is the Linux twin of `scripts/run-render-wpt.ps1`: same manifest schema,
 reftest/fuzzy handling and pass/mismatch classification, fetching pinned
 test/reference files from `raw.githubusercontent.com`. Windows remains deferred;
 Linux numbers are the gate until lifted.
+
+### LFG-1 result (done)
+
+Linux full selection, `$OUT/lfg-flexgrid/report.json`, source `d7621074`:
+
+| Selection | Before | After |
+| --- | --- | --- |
+| flex/grid (1,446) | 614 pass / 832 mismatch | **688 pass / 758 mismatch** (+74) |
+| LAYOUT-18 loss cases (6) | 6 pass | **5 pass** (the 6th needs CSS `stretch`) |
+| collapsed-tracks group (24) | 0 | **24 exact** |
+
+The five flex/grid regressions from the adopted LAYOUT-18 base all render
+exactly; the sixth loss is a CSS-owned `stretch` parsing gap. Crate gate
+`cargo nextest run -p amazing-layout` green.
+
+## LFG-2 — absolute-positioned grid items (in progress)
+
+`css-grid/abspos` is the second-largest family (88 mismatches; ~40 are the
+`grid-abspos-staticpos-*` reftests). Two spec rules share the same geometry:
+
+- **Static position (§10.2):** the spec text says an abspos grid child's static
+  position is the container's content edges, but the pinned WPT references and
+  both engines place it in the child's **grid area** when the axis has a definite
+  `grid-placement`. Implemented by keeping resolved track geometry on the grid
+  container (`GridTracks` in `grid.rs`), plumbing it through `block.rs` onto
+  `LayoutBox::grid_tracks`, and letting `position.rs::grid_child_static_anchor`
+  align within the area rect (content edges remain the fallback for unplaced
+  children).
+- **Containing block (§10.1):** when the grid container generates the abspos
+  containing block, each child resolves insets and percentages against its grid
+  area (`grid_area_containing_block`), padding box for an auto-placed axis. This
+  drives `positioned-grid-items-*` and the `descendant-static-position` cases.
+
+Covers self-alignment (start/center/end/self-start/self-end) and RTL; vertical
+writing mode axis mapping and `last baseline` remain.
+
+### LFG-2 progress (2026-09-26)
+
+Two bugs blocked almost all of the abspos/grid-area work above from ever
+taking effect, both fixed in this pass:
+
+- **`grid-area` cascade override.** `grid-area` is not a registered CSS
+  property (the cascade never expands it into the four longhand
+  `grid-*-start`/`-end` properties the way it does `grid-column`/`grid-row`),
+  but an unrecognized declared value still survives verbatim in the computed
+  style. `parse_placement`'s `grid-area` fallback added a `row_base`/`col_base`
+  from it, but the unconditional longhand-override checks right after it always
+  fired too — `grid-column-start` etc. are real registered properties whose
+  *initial* value is the string `"auto"`, so `style.get("grid-column-start")`
+  is `Some("auto")` even when the author only ever wrote `grid-area`, clobbering
+  the just-computed base. Fixed by skipping the longhand checks whenever
+  `grid-area` is present (`crates/amazing-layout/src/grid.rs::parse_placement`).
+  A second, unrelated bug in the same area: the crate test's `#first`/`#unplaced`
+  selectors (plain `#id`) had *lower* specificity than the sibling
+  `#grid>div` rule (id+type beats id alone), so the universal rule's
+  `grid-area` always won — a test-authoring bug, fixed by matching
+  specificity (`#grid>div#first`).
+- **Shrink-to-fit width for unconstrained abspos children.** CSS2.1 §10.3.7 /
+  css-position-3 §3.5.1: when `left`, `right` and `width` are all auto, the
+  used width is shrink-to-fit (`min(max(min-content, available), max-content)`),
+  not the whole containing block. `prepare_stretch` only handled the
+  "insets both set → stretch" case; with neither inset set (the common case
+  for a grid item's static position) the box fell through to `layout_child`
+  treating the given containing width as its own auto width, over-stretching
+  every unconstrained abspos grid child to its full track/grid-area size.
+  Fixed by adding the shrink-to-fit branch, reusing `flex::min_content_width`/
+  `max_content_width` (`crates/amazing-layout/src/position.rs::prepare_stretch`).
+
+Also added: `GridTracks::reverse_x`/`reverse_y` record when Grid Lanes
+`fill-reverse` packs the waterfall (auto-placed) axis from the far edge; an
+out-of-flow descendant's static position on that axis (no real tracks exist
+there, so `GridTracks::area()` returns `None`) is now mirrored the same way
+real items are, instead of anchoring to the near content edge
+(`css/css-grid/grid-lanes/abspos/*-oof-fill-reverse-*` and
+`css/css-grid/grid-lanes/tentative/item-placement/*-out-of-flow-*`).
+
+Measured on Linux (source `3e101baa` + this series), release binary,
+`run-render-sweep-linux.py`:
+
+| Selection | Before (`6db18c89`, pre-LFG-1) | After |
+| --- | --- | --- |
+| flex/grid (1,446) | 614 pass / 832 mismatch | **698 pass / 748 mismatch** (+84) |
+| `css-grid/abspos` (113, static-position + self-alignment + RTL) | ~25 pass / 88 mismatch (clusters.txt) | **32 pass / 81 mismatch** (+7) |
+| LFG-1 loss-repair set (6) | — | **5 pass / 1 mismatch** (the 6th is CSS-owned: `stretch` keyword parsing, `.agents/layout/questions.md`) |
+| collapsed-tracks group (24) | 0 | **24 exact** |
+
+Remaining `css-grid/abspos` mismatches cluster into: vertical-writing-mode /
+orthogonal-container axis mapping (31 of 81 — not yet attempted, flagged
+above), `last baseline` self-alignment (12 of 81 — not yet attempted), and a
+general bucket (41 of 81, e.g. `positioned-grid-items-*`,
+`descendant-static-position-*`) that likely shares more of the same root
+causes as the two bugs above; not fully triaged this pass.
+
+Crate gate: `cargo nextest run -p amazing-layout --locked` 303/303 (1 skipped
+timing test), doctests 0/0. Workspace gate:
+`cargo nextest run --workspace --locked` 2,752/2,752 (10 skipped), workspace
+doctests 4/4. Both green on the lane's Linux sandbox (Linux-first, AGENTS.md).
+
+

@@ -373,6 +373,7 @@ fn layout_block_in_context(
     }
 
     // --- children ------------------------------------------------------
+    let mut grid_tracks: Option<crate::grid::GridTracks> = None;
     let mut content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
             content_end: crate::flex::layout_flex(
@@ -381,8 +382,8 @@ fn layout_block_in_context(
             trailing: CollapsedMargin::default(),
             trailing_clearance: false,
         },
-        Flow::Grid(children) => StackResult {
-            content_end: if crate::grid::is_grid_lanes(&b.style) {
+        Flow::Grid(children) => {
+            let (content_end, tracks) = if crate::grid::is_grid_lanes(&b.style) {
                 crate::grid::layout_grid_lanes(
                     children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
                 )
@@ -391,9 +392,13 @@ fn layout_block_in_context(
                     children, &b.style, b.grid_subgrid.as_ref(), font_px,
                     content_x, content_y, content_w, def_h, fonts,
                 )
-            },
-            trailing: CollapsedMargin::default(),
-            trailing_clearance: false,
+            };
+            grid_tracks = Some(tracks);
+            StackResult {
+                content_end,
+                trailing: CollapsedMargin::default(),
+                trailing_clearance: false,
+            }
         },
         Flow::Blocks(children) if !children.is_empty() => stack_blocks(
             children, content_x, content_y, content_w, ctx, fonts, floats, text,
@@ -429,6 +434,7 @@ fn layout_block_in_context(
         _ => StackResult::default(),
     };
 
+    b.grid_tracks = grid_tracks;
     b.float_context = floats.clone();
     if let Some(text) = text {
         b.content_box = Rect {

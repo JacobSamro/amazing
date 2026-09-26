@@ -752,11 +752,60 @@ fn resolve_named_line(
 /// Resolved placement of one item: 1-based start lines (None = needs auto
 /// placement) and spans ≥ 1.
 #[derive(Debug, Clone, Copy, Default)]
-struct Placement {
-    row: Option<u32>,
-    row_span: u32,
-    col: Option<u32>,
-    col_span: u32,
+pub(crate) struct Placement {
+    pub(crate) row: Option<u32>,
+    pub(crate) row_span: u32,
+    pub(crate) col: Option<u32>,
+    pub(crate) col_span: u32,
+}
+
+/// Resolved grid geometry after track sizing, kept on the grid container so an
+/// absolutely-positioned child's static position can use its grid area
+/// (css-grid-1 §9.2) rather than the container's content edges. Positions are
+/// absolute border-edge coordinates; sizes are track extents including any
+/// collapsed `auto-fit` tracks (stored as `0.0`).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GridTracks {
+    pub(crate) col_positions: Vec<f32>,
+    pub(crate) col_sizes: Vec<f32>,
+    pub(crate) row_positions: Vec<f32>,
+    pub(crate) row_sizes: Vec<f32>,
+    pub(crate) col_line_names: HashMap<String, Vec<i32>>,
+    pub(crate) row_line_names: HashMap<String, Vec<i32>>,
+    /// Grid Lanes `fill-reverse`: the waterfall (auto-placed) axis packs from
+    /// the far edge inward and every box on that axis is mirrored after
+    /// layout. Neither axis has real tracks in the waterfall direction, so an
+    /// out-of-flow descendant's auto static position on that axis (`area()`
+    /// returns `None`) must be mirrored the same way real items are, rather
+    /// than anchored to the near content edge.
+    pub(crate) reverse_x: bool,
+    pub(crate) reverse_y: bool,
+}
+
+impl GridTracks {
+    /// The grid area rectangle for `style`'s `grid-row`/`grid-column`, if that
+    /// axis has a definite placement and resolved tracks. `None` per axis
+    /// means the caller falls back to the container's content edges.
+    pub(crate) fn area(&self, style: &ComputedStyle) -> (Option<(f32, f32)>, Option<(f32, f32)>) {
+        let p = parse_placement(style, self.col_sizes.len(), self.row_sizes.len(),
+            &self.col_line_names, &self.row_line_names);
+        let span = |start: Option<u32>, span: u32, positions: &[f32], sizes: &[f32]| {
+            let start = start?;
+            let index = start.saturating_sub(1) as usize;
+            let end = (index + (span.max(1) as usize)).min(positions.len());
+            if index >= positions.len() || end <= index {
+                return None;
+            }
+            let left = positions[index];
+            let right = (index..end).map(|i| positions[i] + sizes[i])
+                .fold(f32::NEG_INFINITY, f32::max);
+            Some((left, (right - left).max(0.0)))
+        };
+        (
+            span(p.col, p.col_span, &self.col_positions, &self.col_sizes),
+            span(p.row, p.row_span, &self.row_positions, &self.row_sizes),
+        )
+    }
 }
 
 /// Combines a start/end slot pair into a definite start + span. Negative
@@ -803,26 +852,51 @@ fn parse_placement(
     col_names: &HashMap<String, Vec<i32>>,
     row_names: &HashMap<String, Vec<i32>>,
 ) -> Placement {
+    // `grid-area` is not registered in CSS yet (the cascade never expands it
+    // into the four longhands the way it does `grid-column`/`grid-row`), but
+    // an unrecognized declared value still survives verbatim in the computed
+    // style. Expand its `row / column / row / column` shorthand here. Once
+    // present, it must be authoritative: `grid-column-start` etc. are real
+    // registered properties whose *initial* value is also the string "auto",
+    // so `style.get(s_prop)` is `Some("auto")` even when the author only ever
+    // wrote `grid-area` — there is no way from here to tell that apart from
+    // an explicit `grid-column-start: auto` override. Skipping the longhand
+    // checks whenever `grid-area` is present avoids that false override.
+    let grid_area = style.get("grid-area").filter(|value| !value.trim().is_empty());
+    let (row_base, col_base) = match grid_area {
+        Some(value) => {
+            let parts: Vec<&str> = value.split('/').map(str::trim).collect();
+            let row_start = parts[0];
+            let col_start = parts.get(1).copied().unwrap_or(parts[0]);
+            let row_end = parts.get(2).copied().unwrap_or(row_start);
+            let col_end = parts.get(3).copied().unwrap_or(col_start);
+            ((row_start, row_end), (col_start, col_end))
+        }
+        None => (("auto", "auto"), ("auto", "auto")),
+    };
     let side = |shorthand: &str,
                 s_prop: &str,
                 e_prop: &str,
+                base: (&str, &str),
                 expl: usize,
                 names: &HashMap<String, Vec<i32>>| {
-        let mut start = LineSpec::AUTO;
-        let mut end = LineSpec::AUTO;
-        if let Some(v) = style.get(shorthand) {
-            let parts: Vec<&str> = v.split('/').collect();
-            start = parse_line_slot(parts.first().copied().unwrap_or("auto"), names, expl);
-            end = match parts.get(1) {
-                Some(e) => parse_line_slot(e, names, expl),
-                None => LineSpec::AUTO,
-            };
-        }
-        if let Some(v) = style.get(s_prop) {
-            start = parse_line_slot(v, names, expl);
-        }
-        if let Some(v) = style.get(e_prop) {
-            end = parse_line_slot(v, names, expl);
+        let mut start = parse_line_slot(base.0, names, expl);
+        let mut end = parse_line_slot(base.1, names, expl);
+        if grid_area.is_none() {
+            if let Some(v) = style.get(shorthand) {
+                let parts: Vec<&str> = v.split('/').collect();
+                start = parse_line_slot(parts.first().copied().unwrap_or("auto"), names, expl);
+                end = match parts.get(1) {
+                    Some(e) => parse_line_slot(e, names, expl),
+                    None => LineSpec::AUTO,
+                };
+            }
+            if let Some(v) = style.get(s_prop) {
+                start = parse_line_slot(v, names, expl);
+            }
+            if let Some(v) = style.get(e_prop) {
+                end = parse_line_slot(v, names, expl);
+            }
         }
         combine_slots(start, end, expl)
     };
@@ -830,6 +904,7 @@ fn parse_placement(
         "grid-column",
         "grid-column-start",
         "grid-column-end",
+        col_base,
         explicit_cols,
         col_names,
     );
@@ -837,6 +912,7 @@ fn parse_placement(
         "grid-row",
         "grid-row-start",
         "grid-row-end",
+        row_base,
         explicit_rows,
         row_names,
     );
@@ -1420,7 +1496,7 @@ pub fn layout_grid(
     fonts: &FontSource,
 ) -> f32 {
     layout_grid_with_context(items, container, None, font_px, content_x, content_y,
-        content_w, definite_height, fonts)
+        content_w, definite_height, fonts).0
 }
 
 pub(crate) fn layout_grid_with_context(
@@ -1433,7 +1509,7 @@ pub(crate) fn layout_grid_with_context(
     content_w: f32,
     definite_height: Option<f32>,
     fonts: &FontSource,
-) -> f32 {
+) -> (f32, GridTracks) {
     let spec = GridSpec::of(container, context, font_px, content_w, definite_height);
 
     // --- 1. placement ---------------------------------------------------
@@ -1466,7 +1542,7 @@ pub(crate) fn layout_grid_with_context(
             .collect();
         // Transposed: the minor axis of the swapped space is the ROW axis.
         let Some(transposed) = place_row_flow(&swapped, spec.flow_dense, spec.rows.len()) else {
-            return 0.0;
+            return (0.0, GridTracks::default());
         };
         transposed
             .into_iter()
@@ -1480,7 +1556,7 @@ pub(crate) fn layout_grid_with_context(
     } else {
         // Row flow wraps auto items across the COLUMN axis.
         let Some(row_flow) = place_row_flow(&ordered_raw, spec.flow_dense, spec.cols.len()) else {
-            return 0.0;
+            return (0.0, GridTracks::default());
         };
         row_flow
             .into_iter()
@@ -1529,7 +1605,7 @@ pub(crate) fn layout_grid_with_context(
         || n_cols.checked_mul(n_rows).is_none_or(|cells| cells > MAX_OCCUPIED_CELLS)
     {
         // No explicit tracks and nothing placed: degenerate grid.
-        return 0.0;
+        return (0.0, GridTracks::default());
     }
     let col_kinds = track_vector(&spec.cols, &spec.auto_cols, n_cols);
     let row_kinds = track_vector(&spec.rows, &spec.auto_rows, n_rows);
@@ -1761,7 +1837,16 @@ pub(crate) fn layout_grid_with_context(
         crate::flex::translate(it, bx - it.border_box.x, by - it.border_box.y);
     }
 
-    content_height
+    let tracks = GridTracks {
+        col_positions: col_pos,
+        col_sizes,
+        row_positions: row_pos,
+        row_sizes,
+        col_line_names: spec.col_line_names,
+        row_line_names: spec.row_line_names,
+        ..GridTracks::default()
+    };
+    (content_height, tracks)
 }
 
 /// Per-item `-self` override (`justify-self` / `align-self`); None when
@@ -1854,13 +1939,13 @@ pub(crate) fn layout_grid_lanes(
     content_w: f32,
     definite_height: Option<f32>,
     fonts: &FontSource,
-) -> f32 {
+) -> (f32, GridTracks) {
     let spec = GridSpec::of(container, None, font_px, content_w, definite_height);
     let fill_reverse = container.get("grid-lanes-direction")
         .is_some_and(|value| value.split_whitespace().any(|token| token.eq_ignore_ascii_case("fill-reverse")));
     let row_lanes = spec.cols.is_empty() && !spec.rows.is_empty();
     if row_lanes {
-        let height = layout_row_lanes(items, &spec, content_x, content_y, content_w,
+        let (height, mut tracks) = layout_row_lanes(items, &spec, content_x, content_y, content_w,
             definite_height, font_px, container, fonts);
         if fill_reverse {
             for item in items.iter_mut() {
@@ -1868,14 +1953,17 @@ pub(crate) fn layout_grid_lanes(
                 crate::flex::translate(item, mirrored - item.border_box.x, 0.0);
             }
         }
-        return height;
+        tracks.col_line_names = spec.col_line_names;
+        tracks.row_line_names = spec.row_line_names;
+        tracks.reverse_x = fill_reverse;
+        return (height, tracks);
     }
     let raw = items.iter().map(|it| parse_placement(&it.style, spec.cols.len(),
         spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
     let tracks = raw.iter().map(|p| p.col.map_or(p.col_span as usize,
         |start| (start + p.col_span - 1) as usize))
         .fold(spec.cols.len().max(1), usize::max);
-    if tracks > MAX_GRID_TRACKS { return 0.0; }
+    if tracks > MAX_GRID_TRACKS { return (0.0, GridTracks::default()); }
     let kinds = track_vector(&spec.cols, &spec.auto_cols, tracks);
     let mut contributions = Vec::new();
     for (it, p) in items.iter().zip(&raw) {
@@ -1956,7 +2044,16 @@ pub(crate) fn layout_grid_lanes(
             crate::flex::translate(item, 0.0, mirrored - item.border_box.y);
         }
     }
-    natural_height
+    (natural_height, GridTracks {
+        col_positions: positions,
+        col_sizes: sizes,
+        row_positions: Vec::new(),
+        row_sizes: Vec::new(),
+        col_line_names: spec.col_line_names,
+        row_line_names: spec.row_line_names,
+        reverse_x: false,
+        reverse_y: fill_reverse,
+    })
 }
 
 fn layout_row_lanes(
@@ -1969,13 +2066,13 @@ fn layout_row_lanes(
     font_px: f32,
     container: &ComputedStyle,
     fonts: &FontSource,
-) -> f32 {
+) -> (f32, GridTracks) {
     let raw = items.iter().map(|it| parse_placement(&it.style, spec.cols.len(),
         spec.rows.len(), &spec.col_line_names, &spec.row_line_names)).collect::<Vec<_>>();
     let tracks = raw.iter().map(|p| p.row.map_or(p.row_span as usize,
         |start| (start + p.row_span - 1) as usize))
         .fold(spec.rows.len().max(1), usize::max);
-    if tracks > MAX_GRID_TRACKS { return 0.0; }
+    if tracks > MAX_GRID_TRACKS { return (0.0, GridTracks::default()); }
     let kinds = track_vector(&spec.rows, &spec.auto_rows, tracks);
     let mut contributions = Vec::new();
     for (it, p) in items.iter_mut().zip(&raw) {
@@ -2052,7 +2149,15 @@ fn layout_row_lanes(
             }
         }
     }
-    natural_height
+    (natural_height, GridTracks {
+        col_positions: Vec::new(),
+        col_sizes: Vec::new(),
+        row_positions: positions,
+        row_sizes: sizes,
+        col_line_names: HashMap::new(),
+        row_line_names: HashMap::new(),
+        ..GridTracks::default()
+    })
 }
 
 // ---------------------------------------------------------------------------
