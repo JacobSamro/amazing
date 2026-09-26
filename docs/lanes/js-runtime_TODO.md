@@ -660,3 +660,53 @@ missing Proxy support, and property-based primitive slot storage remain separate
 Next: synchronous Array.from/of construction, mapping and iterator-close order;
 then Array.fromAsync suspension and proper private primitive slots with owner
 coordination for stdlib/binary/structured-clone callers.
+
+## JSRT-13 synchronous Array factories (completed, 2026-09-26)
+
+Array.from/of construct through the generic constructor path: they invoke the
+receiver (or bound newTarget) with the specified argument list rather than
+always allocating an ordinary Array. Array.from caches the iterator's `next`
+method once and steps it lazily, so a mapper function observes live mutation
+of the source between steps. Mapper and own-data-property-definition errors
+close the iterator while preserving the original error as the thrown value;
+failures from the iterator's own `next`/`done`/`value` steps propagate without
+an extra `IteratorClose`. Both factories create own data properties (never
+invoking an inherited setter) and finish with the spec-required throwing
+`Set` of `length`. Array-like (non-iterable) input still boxes a primitive
+receiver and reads live indices at each step.
+
+On fixed base 6683ceaa, Linux workspace: 2,825 tests passed (10 skipped) in
+65.852 seconds, plus four doctests. The raw single `--jobs 4` full pinned
+Test262 sweep at the 60s deadline moved 33,092 → 33,112 passing files
+(64,030 → 64,070 variants), but recorded 4 lost variants across two
+`staging/sm` files unrelated to Array.from/of:
+`staging/sm/TypedArray/sort_modifications.js` (timeout, both variants) and
+`staging/sm/regress/regress-610026.js` (host.abnormal-exit, exit -9, both
+variants).
+
+Diagnosis (both retained, not silently reclassified): direct single-process
+probes of both frozen before/after hosts show `regress-610026.js` completes
+in ~4.5s using ~3.9GB RSS on both binaries in isolation — no timeout, no
+abnormal exit — so the exit -9 under the full sweep is this sandbox's OOM
+killer reacting to several `--jobs 4-8` concurrent Test262 workers competing
+for the 8GB box, not a fault introduced by this change. `sort_modifications.js`
+completes in ~49-54s wall time on both hosts in isolation (11 TypedArray
+constructors x 5 size classes x 3 sorts each), leaving only 6-11s of margin
+under the pinned 60s deadline in both old and new code; it is a pre-existing
+marginal/flaky timing case on this hardware (the same file caused JSRT-9's
+one documented timing loss). A complete recheck of both directories
+(`staging/sm/TypedArray/`, 96 files, and `staging/sm/regress/`, 106 files)
+with both frozen hosts at the identical 60s deadline but `--jobs 1`
+(serialized, no concurrent workers) lost zero variants. Substituting those
+202 directory records into the raw sweep (the JSRT-9 combined-measurement
+method) gives 33,092 → 33,114 passing files (64,030 → 64,074 variants),
+zero lost passes; this is a combined measurement, not a claim that the
+original single `--jobs 4` sweep itself had zero lost variants.
+`built-ins/Array` gained 19 files (2,931 → 2,950), `staging/sm/Array` gained
+3. Evidence, including the raw 4-loss comparison and the directory-recheck
+numbers, is retained in full at
+`docs/lanes/js-runtime_array_factories_evidence.json`.
+
+Not implemented: Proxy support and Array.fromAsync suspension for pending
+input remain separate areas (Array.fromAsync's synchronous-iterable path was
+already covered by JSRT-8).
