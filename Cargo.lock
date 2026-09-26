@@ -80,6 +80,7 @@ dependencies = [
 name = "amazing"
 version = "0.0.1"
 dependencies = [
+ "amazing-a11y",
  "amazing-bindings",
  "amazing-canvas",
  "amazing-common",
