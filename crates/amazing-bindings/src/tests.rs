@@ -43,6 +43,7 @@ struct Host {
     constants: Vec<(&'static str, u16)>,
     interface_constants: Vec<(Interface, &'static str, u32)>,
     conversions: Vec<&'static str>,
+    property_reads: Vec<String>,
     arena_borrowed: bool,
     callbacks: Vec<Option<V>>,
     calls: Vec<u64>,
@@ -138,6 +139,7 @@ impl BindingHost for Host {
     }
     fn get_property(&mut self, object: &V, name: &str) -> Result<V, String> {
         assert!(!self.arena_borrowed);
+        self.property_reads.push(name.to_owned());
         match object {
             V::Dictionary(entries) => Ok(entries.iter().find(|(key, _)| *key == name)
                 .map_or(V::Undefined, |(_, value)| value.clone())),
@@ -2451,4 +2453,34 @@ fn blob_file_form_data_and_font_set_bindings_use_native_models() {
     assert_eq!(call(&mut h, O::FontFaceSetStatus, fonts.clone(), &[]), str_value("loaded"));
     let ready = call(&mut h, O::FontFaceSetReady, fonts.clone(), &[]);
     assert_eq!(call(&mut h, O::FontFaceSetReady, fonts, &[]), ready);
+}
+
+
+#[test]
+fn static_range_requires_all_members_and_converts_in_dictionary_order() {
+    let mut h = Host::default();
+    let entries = vec![
+        ("startContainer", V::Node(NodeIdx(0))), ("startOffset", V::Number(0.)),
+        ("endContainer", V::Node(NodeIdx(0))), ("endOffset", V::Number(0.)),
+    ];
+    for missing in 0..entries.len() {
+        for explicit_undefined in [false, true] {
+            let mut init = entries.clone();
+            if explicit_undefined { init[missing].1 = V::Undefined; }
+            else { init.remove(missing); }
+            assert!(invoke(&mut h, O::StaticRangeConstructor, V::Undefined,
+                &[V::Dictionary(init)]).is_err(), "{}", entries[missing].0);
+        }
+    }
+    for init in [V::Null, V::Undefined] {
+        assert!(invoke(&mut h, O::StaticRangeConstructor, V::Undefined, &[init]).is_err());
+    }
+    h.property_reads.clear();
+    call(&mut h, O::StaticRangeConstructor, V::Undefined, &[V::Dictionary(entries.clone())]);
+    assert_eq!(h.property_reads, ["endContainer", "endOffset", "startContainer", "startOffset"]);
+    // null is a present numeric member and converts to zero, unlike undefined.
+    let mut init = entries;
+    init[1].1 = V::Null;
+    init[3].1 = V::Null;
+    call(&mut h, O::StaticRangeConstructor, V::Undefined, &[V::Dictionary(init)]);
 }

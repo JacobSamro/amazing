@@ -3,16 +3,135 @@
 use amazing_js::Interpreter;
 use amazing_js::value::{FunctionBody, JsFunction, JsObject, JsValue, NativeFn, Obj, Throw};
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 const REVISION: &str = "c2a2fce69e5c2509d9dc28440ec8b42532e5c293";
 const OUTPUT_LIMIT: u64 = 16 * 1024 * 1024;
+const FIXTURE_LIMIT: usize = 16 * 1024 * 1024;
 thread_local! { static COMPLETE: Cell<bool> = const { Cell::new(false) }; }
+
+struct FixtureServer {
+    origin: String,
+    stop: Arc<AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
+impl FixtureServer {
+    fn start(root: PathBuf, generated: Option<(String, Vec<u8>)>) -> Result<Self, String> {
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let origin = format!(
+            "http://{}",
+            listener.local_addr().map_err(|error| error.to_string())?
+        );
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let worker = std::thread::spawn(move || {
+            let mut connections: Vec<std::thread::JoinHandle<()>> = Vec::new();
+            while !worker_stop.load(Ordering::Acquire) {
+                let mut index = 0;
+                while index < connections.len() {
+                    if connections[index].is_finished() {
+                        let finished = connections.swap_remove(index);
+                        let _ = finished.join();
+                    } else {
+                        index += 1;
+                    }
+                }
+                match listener.accept() {
+                    Ok((stream, _)) if connections.len() < 64 => {
+                        let root = root.clone();
+                        let generated = generated.clone();
+                        connections.push(std::thread::spawn(move || {
+                            serve_fixture(stream, &root, generated.as_ref());
+                        }));
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                    Err(_) => break,
+                }
+            }
+            for connection in connections {
+                let _ = connection.join();
+            }
+        });
+        Ok(Self {
+            origin,
+            stop,
+            worker: Some(worker),
+        })
+    }
+
+    fn url(&self, relative: &str) -> String {
+        format!("{}/{}", self.origin, relative.trim_start_matches('/'))
+    }
+}
+
+impl Drop for FixtureServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+fn serve_fixture(mut stream: TcpStream, root: &Path, generated: Option<&(String, Vec<u8>)>) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
+    let mut request = Vec::new();
+    while !request.ends_with(b"\r\n\r\n") && request.len() < 16384 {
+        let mut byte = [0];
+        if stream.read_exact(&mut byte).is_err() {
+            return;
+        }
+        request.push(byte[0]);
+    }
+    let path = String::from_utf8_lossy(&request)
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("GET "))
+        .and_then(|line| line.split_once(' '))
+        .map(|(path, _)| path.to_owned());
+    let body = path.as_deref().and_then(|path| {
+        let name = path.split(['?', '#']).next()?.strip_prefix('/')?;
+        if name.contains('%') || name.contains('\\') || name.split('/').any(|part| part == "..") {
+            return None;
+        }
+        if let Some((generated_name, bytes)) = generated
+            && name == generated_name.trim_start_matches('/')
+        {
+            return Some(bytes.clone());
+        }
+        let file = root.join(name).canonicalize().ok()?;
+        if !file.starts_with(root) || file.metadata().ok()?.len() > FIXTURE_LIMIT as u64 {
+            return None;
+        }
+        std::fs::read(file).ok()
+    });
+    let (status, bytes) = match body {
+        Some(bytes) if bytes.len() <= FIXTURE_LIMIT => ("200 OK", bytes),
+        _ => ("404 Not Found", Vec::new()),
+    };
+    let _ = write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        bytes.len()
+    );
+    let _ = stream.write_all(&bytes);
+}
 
 fn quote(value: &str) -> String {
     let mut s = String::from("\"");
@@ -296,9 +415,18 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
 fn any_window_wrapper(js: &str, test: &str) -> Result<String, String> {
     let mut metadata = Vec::new();
     for line in js.lines() {
-        let Some(rest) = line.strip_prefix("//").and_then(|s| s.trim_start().strip_prefix("META:")) else { break };
-        let Some((key, value)) = rest.trim_start().split_once('=') else { break };
-        if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') { break }
+        let Some(rest) = line
+            .strip_prefix("//")
+            .and_then(|s| s.trim_start().strip_prefix("META:"))
+        else {
+            break;
+        };
+        let Some((key, value)) = rest.trim_start().split_once('=') else {
+            break;
+        };
+        if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            break;
+        }
         metadata.push((key, value));
     }
     if let Some((_, globals)) = metadata.iter().find(|(key, _)| *key == "global") {
@@ -312,14 +440,22 @@ fn any_window_wrapper(js: &str, test: &str) -> Result<String, String> {
     let mut scripts = String::new();
     for (key, value) in metadata {
         match key {
-            "timeout" if value == "long" => meta.push_str("<meta name=\"timeout\" content=\"long\">\n"),
+            "timeout" if value == "long" => {
+                meta.push_str("<meta name=\"timeout\" content=\"long\">\n")
+            }
             "title" => meta.push_str(&format!("<title>{}</title>\n", text_escape(value))),
-            "script" => scripts.push_str(&format!("<script src=\"{}\"></script>\n", attr_escape(value))),
+            "script" => scripts.push_str(&format!(
+                "<script src=\"{}\"></script>\n",
+                attr_escape(value)
+            )),
             _ => {}
         }
     }
     let path = format!("/{}", test.trim_start_matches('/'));
-    Ok(format!("<!doctype html>\n<meta charset=utf-8>\n{meta}<script>\nself.GLOBAL = {{\n  isWindow: function() {{ return true; }},\n  isWorker: function() {{ return false; }},\n  isShadowRealm: function() {{ return false; }},\n}};\n</script>\n<script src=\"/resources/testharness.js\"></script>\n<script src=\"/resources/testharnessreport.js\"></script>\n{scripts}<div id=log></div>\n<script src=\"{}\"></script>\n", attr_escape(&path)))
+    Ok(format!(
+        "<!doctype html>\n<meta charset=utf-8>\n{meta}<script>\nself.GLOBAL = {{\n  isWindow: function() {{ return true; }},\n  isWorker: function() {{ return false; }},\n  isShadowRealm: function() {{ return false; }},\n}};\n</script>\n<script src=\"/resources/testharness.js\"></script>\n<script src=\"/resources/testharnessreport.js\"></script>\n{scripts}<div id=log></div>\n<script src=\"{}\"></script>\n",
+        attr_escape(&path)
+    ))
 }
 fn collect_scripts(
     dom: &amazing_dom::Dom,
@@ -350,11 +486,108 @@ fn collect_scripts(
     }
     Ok(())
 }
+
+fn resolve_page_url(base: &str, value: &str) -> Result<String, String> {
+    let base = amazing_net::Url::parse(base).map_err(|error| error.to_string())?;
+    amazing_net::resolve(value, &base)
+        .map(|url| url.to_string())
+        .map_err(|error| error.to_string())
+}
+
+fn fetch_page(
+    navigator: &mut crate::navigator::Navigator,
+    url: &str,
+    record: bool,
+    target: Option<usize>,
+) -> Result<crate::navigator::NavigationResult<Vec<u8>>, String> {
+    let use_process = crate::runtime_host_ipc::enabled();
+    navigator.navigate(url, record, target, 0, move |url, process_body| {
+        if use_process {
+            Ok(process_body.to_vec())
+        } else {
+            let response = amazing_net::fetch(url, &amazing_net::FetchOptions::default())
+                .map_err(|error| format!("fixture navigation: {error}"))?;
+            Ok(response.body)
+        }
+    })
+}
+
+fn fixture_file(root: &Path, fixture: &FixtureServer, url: &str) -> Result<PathBuf, String> {
+    let relative = url
+        .strip_prefix(&fixture.origin)
+        .and_then(|path| path.strip_prefix('/'))
+        .ok_or_else(|| format!("unsupported: navigation left fixture origin: {url}"))?;
+    local_file(
+        root,
+        root,
+        relative.split(['?', '#']).next().unwrap_or(relative),
+    )
+}
+
+fn collect_iframes(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    frames: &mut Vec<(u32, String)>,
+) {
+    if dom.name(node) == Some("iframe")
+        && let Some(src) = dom
+            .attrs_of(node)
+            .unwrap_or(&[])
+            .iter()
+            .find(|(name, _)| name == "src")
+            .map(|(_, value)| value)
+    {
+        frames.push((node.0, src.clone()));
+    }
+    for child in dom.children(node) {
+        collect_iframes(dom, child, frames);
+    }
+}
+
+fn service_iframes(
+    host: &Rc<RefCell<crate::BrowserDomHost>>,
+    scheduler: &mut crate::js_scheduler::DriverScheduler,
+    navigator: &mut crate::navigator::Navigator,
+    page_url: &str,
+    loaded: &mut BTreeMap<u32, (u64, String)>,
+) -> Result<(), String> {
+    let mut iframes = Vec::new();
+    collect_iframes(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut iframes);
+    for (node, src) in iframes {
+        if src.is_empty()
+            || src == "about:blank"
+            || loaded.get(&node).is_some_and(|(_, old)| old == &src)
+        {
+            continue;
+        }
+        let child_url = resolve_page_url(page_url, &src)?;
+        let child = match loaded.get(&node) {
+            Some((id, _)) => *id,
+            None => navigator.create_child(1)?,
+        };
+        let use_process = crate::runtime_host_ipc::enabled();
+        navigator.navigate_child(child, &child_url, |url, process_body| {
+            if use_process {
+                Ok(process_body.to_vec())
+            } else {
+                amazing_net::fetch(url, &amazing_net::FetchOptions::default())
+                    .map(|response| response.body)
+                    .map_err(|error| format!("iframe navigation: {error}"))
+            }
+        })?;
+        loaded.insert(node, (child, src));
+        scheduler
+            .dispatch_dom_event(node, "load")
+            .map_err(|error| error.describe())?;
+    }
+    Ok(())
+}
+
 fn execute(options: &Options) -> Result<(), String> {
     COMPLETE.set(false);
     let root = options.root.canonicalize().map_err(|e| e.to_string())?;
     let file = local_file(&root, &root, &options.test)?;
-    let html = match file.extension().and_then(|s| s.to_str()) {
+    let expected_html = match file.extension().and_then(|s| s.to_str()) {
         Some("html") => source(&root, &file, options.scaffold)?,
         Some("js") if !options.scaffold && options.test.ends_with(".any.js") => {
             let js = source(&root, &file, false)?;
@@ -362,16 +595,64 @@ fn execute(options: &Options) -> Result<(), String> {
         }
         _ => return Err("unsupported: classic-script .html or window .any.js tests only".into()),
     };
+    let generated = options
+        .test
+        .ends_with(".any.js")
+        .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
+    let fixture = FixtureServer::start(root.clone(), generated)?;
+    let url = fixture.url(&options.test);
+    let mut navigator = crate::navigator::Navigator::new(1);
+    let page = fetch_page(&mut navigator, &url, true, None)?;
+    if page.rendered != expected_html.as_bytes() {
+        return Err("fixture navigation differed from pinned page bytes".into());
+    }
+    execute_page(
+        options,
+        &root,
+        file,
+        expected_html,
+        page.url,
+        &fixture,
+        &mut navigator,
+        page.history_state,
+        0,
+    )
+}
+
+fn execute_page(
+    options: &Options,
+    root: &Path,
+    file: PathBuf,
+    html: String,
+    url: String,
+    fixture: &FixtureServer,
+    navigator: &mut crate::navigator::Navigator,
+    history_state: Option<amazing_js::SerializedValue>,
+    depth: usize,
+) -> Result<(), String> {
+    if depth >= 32 {
+        return Err("unsupported: navigation depth limit".into());
+    }
     let host = Rc::new(RefCell::new(crate::BrowserDomHost {
         dom: amazing_html::parse(&html),
         native_forwarded: false,
     }));
     let mut scripts = Vec::new();
     collect_scripts(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut scripts)?;
-    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
-        .map_err(|error| error.describe())?;
-    scheduler.js.set_viewport_size(options.width, options.height);
-    scheduler.set_location_url(format!("http://web-platform.test/{}", options.test));
+    let mut scheduler =
+        crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+            .map_err(|error| error.describe())?;
+    scheduler
+        .js
+        .set_viewport_size(options.width, options.height);
+    scheduler.set_location_url(&url);
+    if let Some(state) = history_state {
+        let value = scheduler
+            .js
+            .structured_deserialize(&state)
+            .map_err(|e| e.describe())?;
+        scheduler.js.set_history_state(value);
+    }
     // This runner reads a UTF-8 HTML source directly as its top-level page.
     scheduler.set_document_metadata("UTF-8", "text/html", "");
     let refresh_images = |scheduler: &mut crate::js_scheduler::DriverScheduler| -> Result<(), String> {
@@ -384,8 +665,14 @@ fn execute(options: &Options) -> Result<(), String> {
     refresh_images(&mut scheduler)?;
     // The engine's browser-global identity also supplies the standard self alias.
     let global = JsValue::Object(scheduler.js.global_obj.clone());
-    scheduler.js.global_obj.borrow_mut().set_own("self", global.clone());
-    scheduler.js.global_env
+    scheduler
+        .js
+        .global_obj
+        .borrow_mut()
+        .set_own("self", global.clone());
+    scheduler
+        .js
+        .global_env
         .declare_var("self", global)
         .map_err(|e| e.describe())?;
     // Native DOM listener methods currently require an explicit receiver.
@@ -397,7 +684,8 @@ fn execute(options: &Options) -> Result<(), String> {
     let mut handlers = Vec::new();
     crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
     for (node, event, body) in handlers {
-        scheduler.install_inline_handler(node, &event, &body)
+        scheduler
+            .install_inline_handler(node, &event, &body)
             .map_err(|e| e.describe())?;
     }
     let harness_path = root
@@ -429,7 +717,8 @@ fn execute(options: &Options) -> Result<(), String> {
             }
             None => (script.body, "inline script".into(), false),
         };
-        scheduler.run_script(&text)
+        scheduler
+            .run_script(&text)
             .map_err(|e| format!("{label}: {}", e.describe()))?;
         if harness {
             if installed {
@@ -444,16 +733,112 @@ fn execute(options: &Options) -> Result<(), String> {
         return Err("no harness script loaded".into());
     }
     refresh_images(&mut scheduler)?;
+    let mut loaded_iframes = BTreeMap::new();
+    service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
     for event in ["DOMContentLoaded", "load"] {
-        scheduler.dispatch_dom_event(0, event).map_err(|e| e.describe())?;
+        scheduler
+            .dispatch_dom_event(0, event)
+            .map_err(|e| e.describe())?;
     }
     use amazing_js::DomHost;
     let body = host.borrow_mut().query_selector("body");
     if let Some(body) = body {
-        scheduler.dispatch_dom_event(body, "load")
+        scheduler
+            .dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
     while !COMPLETE.get() {
+        service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
+        if let Some((next, replace, state)) = scheduler.js.take_history_update() {
+            let next = resolve_page_url(navigator.current_url().unwrap_or(&url), &next)?;
+            let serialized = scheduler
+                .js
+                .structured_serialize(&state)
+                .map_err(|e| e.describe())?;
+            navigator.same_document(next.clone(), replace, Some(serialized), 0)?;
+            scheduler.set_location_url(&next);
+            scheduler.js.set_history_length(navigator.history_length());
+            scheduler.js.set_history_state(state);
+        }
+        if let Some(delta) = scheduler.js.take_history_delta() {
+            if delta == 0 {
+                let current = navigator
+                    .current_url()
+                    .ok_or("reload has no page")?
+                    .to_owned();
+                let page = fetch_page(navigator, &current, false, None)?;
+                let file = fixture_file(root, fixture, &page.url)?;
+                let html = source(root, &file, options.scaffold)?;
+                if page.rendered != html.as_bytes() {
+                    return Err("fixture reload differed from pinned page bytes".into());
+                }
+                return execute_page(
+                    options,
+                    root,
+                    file,
+                    html,
+                    page.url,
+                    fixture,
+                    navigator,
+                    page.history_state,
+                    depth + 1,
+                );
+            } else if let Some((target, target_url)) = navigator
+                .target(delta)
+                .map(|(target, url)| (target, url.to_owned()))
+            {
+                if navigator.same_document_target(target) {
+                    let (restored_url, _, state) = navigator.traverse_same_document(target, 0)?;
+                    scheduler.set_location_url(restored_url);
+                    scheduler.js.set_history_length(navigator.history_length());
+                    let value = state
+                        .as_ref()
+                        .map(|state| scheduler.js.structured_deserialize(state))
+                        .transpose()
+                        .map_err(|e| e.describe())?
+                        .unwrap_or(JsValue::Null);
+                    scheduler.js.set_history_state(value);
+                } else {
+                    let page = fetch_page(navigator, &target_url, false, Some(target))?;
+                    let file = fixture_file(root, fixture, &page.url)?;
+                    let html = source(root, &file, options.scaffold)?;
+                    if page.rendered != html.as_bytes() {
+                        return Err("fixture traversal differed from pinned page bytes".into());
+                    }
+                    return execute_page(
+                        options,
+                        root,
+                        file,
+                        html,
+                        page.url,
+                        fixture,
+                        navigator,
+                        page.history_state,
+                        depth + 1,
+                    );
+                }
+            }
+        }
+        if let Some(next) = scheduler.js.take_navigation() {
+            let next = resolve_page_url(navigator.current_url().unwrap_or(&url), &next)?;
+            let page = fetch_page(navigator, &next, true, None)?;
+            let file = fixture_file(root, fixture, &page.url)?;
+            let html = source(root, &file, options.scaffold)?;
+            if page.rendered != html.as_bytes() {
+                return Err("fixture navigation differed from pinned page bytes".into());
+            }
+            return execute_page(
+                options,
+                root,
+                file,
+                html,
+                page.url,
+                fixture,
+                navigator,
+                page.history_state,
+                depth + 1,
+            );
+        }
         scheduler.pump_now(true).map_err(|e| e.describe())?;
         std::thread::sleep(Duration::from_millis(1));
     }
@@ -475,13 +860,22 @@ fn supervise(options: &Options, args: &[String], report: &mut Report) -> Result<
         }
         report.verified = true;
     }
-    let mut child = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+    let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+    command
         .arg("wpt-harness-worker")
         .args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .stderr(Stdio::null());
+    if std::env::var_os("AMAZING_HTTP_CACHE_DIR").is_none() {
+        let root = std::env::var_os("AMAZING_STORAGE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        command.env(
+            "AMAZING_HTTP_CACHE_DIR",
+            root.join(format!("wpt-http-cache-{}", std::process::id())),
+        );
+    }
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
     let stdout = child.stdout.take().unwrap();
     let (sender, receiver) = mpsc::channel();
     let reader = std::thread::spawn(move || {
@@ -599,7 +993,10 @@ mod any_window_tests {
 
     #[test]
     fn any_window_wrapper_obeys_upstream_global_selection() {
-        assert!(any_window_wrapper("// META: global=worker\n", "url/worker.any.js")
-            .unwrap_err().contains("excludes window"));
+        assert!(
+            any_window_wrapper("// META: global=worker\n", "url/worker.any.js")
+                .unwrap_err()
+                .contains("excludes window")
+        );
     }
 }
