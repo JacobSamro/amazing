@@ -139,6 +139,12 @@ libvpx 1.16, nextest, the pinned Test262). Related lanes share one sandbox (`POO
 serializes their compiles ("Blocking waiting for file lock" means another lane is building; it is
 normal). `scripts/boat-idle-reaper.py` stops a sandbox after 5 idle minutes; the next run resumes
 it in seconds. `scripts/boat-lane.py pool-report` shows busy and overlap per pool.
+**Linux desktop and WPT (2026-09-26).** Sandboxes are Ubuntu 24.04 with a GNOME desktop, no
+GPU; Mesa software Vulkan (llvmpipe), Xvfb, xdotool and ImageMagick are in the template.
+`scripts/linux-shell-capture.sh <lane> -- [shell args]` builds the GPUI shell, runs it on a virtual
+display and copies a window PNG plus metadata to `.agents/<lane>/captures/`. The pinned WPT
+(`c2a2fce`) is at `~/corpora/wpt`; on an older sandbox run `bash scripts/ensure-wpt.sh` first.
+Linux pixel results are reported as Linux numbers.
 **Lanes never run `boat` commands directly** (no `boat snapshot`, `boat new`, `boat stop`,
 `boat data-retention`, `boat billing`, ...): the account, its templates and its retention
 settings belong to the orchestrator. Use `scripts/linux-run.sh` only; report Boat problems in
