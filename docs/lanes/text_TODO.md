@@ -354,6 +354,57 @@ survives the line edge, and `line_breaks` emits the correct Emergency/Anywhere
 opportunities. The residual failure is layout break selection / float
 shrink-to-fit.
 
+## TEXT-15: automatic opsz variation axis
+
+CSS Fonts 4 section 7.2's `font-optical-sizing: auto` (the initial and default
+value) sets the `opsz` variation axis to the used font size unless an explicit
+`font-variation-settings` value overrides it. `font_variations::for_face` now
+pushes an `opsz` axis from `TextStyle.size` before the author-face
+`wght`/`wdth`/`ital`/`slnt` axes; the existing explicit-override loop still lets
+an author `font-variation-settings` `opsz` win. A face with no registered
+`opsz` axis silently ignores the coordinate, the same as the existing
+`wght`/`wdth` behavior for non-variable faces. Unlike the width/oblique
+contract in TEXT-8, this needed no `TextStyle` field and no layout handoff:
+`auto` is the initial value, so the common case is a provider-only change.
+`font-optical-sizing: none` remains unimplemented — no field distinguishes it
+from `auto` yet, and adding one would require a layout literal update in
+`amazing-layout/src/box_tree.rs::text_style` (which constructs `TextStyle` as
+a full field literal, not `..Default::default()`), so it stays deferred rather
+than landed as a half-wired field. Commit `a0f68c06` on `bbb0267a`.
+
+No pinned WPT `font-optical-sizing` fixture exists in this lane's frozen
+selections and the Boat sandbox still has no WPT checkout (per TEXT-14's
+filed gap), so the gate is four focused synthetic unit tests against
+`font_variations::for_face` directly: automatic tracking of `TextStyle.size`
+with no author face, tracking across size changes, an explicit
+`font-variation-settings` `opsz` overriding the automatic value with no
+duplicate axis entry, and `opsz` coexisting with an author-face `wght` axis.
+Provider/text crate nextest: 68/68 (1 skipped) before, 72/72 (1 skipped)
+after, zero losses. Doctests green. Workspace nextest on the merged head
+(`dev` fast-forwarded past TEXT-14 by 76 commits, none touching the text
+crates): 2,806 passed, 10 skipped, 0 failed; workspace doctests green.
+
+Re-audited TEXT-14's second candidate, the `font-variant-caps`/`-numeric`/
+`-position`/`-east-asian` GSUB feature contract: on inspection this needs
+little to no new text-owned code. Explicit OpenType feature tags already
+reach HarfRust generically through the existing `TextStyle.features` vector
+(the same seam TEXT-14 used for `kern`/`vkrn`), so mapping each CSS keyword
+(`small-caps` to `smcp`, `all-small-caps` to `smcp`+`c2sc`, `oldstyle-nums` to
+`onum`, `super`/`sub` to `sups`/`subs`, etc.) to feature tags is CSS/layout
+work into that same vector, per the precedent TEXT-12 already established for
+`font-kerning`. The one genuinely provider-owned piece is CSS Fonts 4 section
+6's synthesis fallback: when a requested feature (chiefly `smcp` for
+small-caps) is unsupported by the selected face and `font-synthesis` allows
+it, the UA may synthesize the effect (glyph substitution plus scaling for
+small-caps; baseline shift plus scaling for super/subscript). That is real
+raster-level work comparable in size to the existing synthetic bold/oblique
+path, not a quick follow-on to opsz. `amazing_text::FontSynthesis` currently
+has only `weight`/`style` bools and layout constructs it with
+`FontSynthesis::default()` (not a full literal), so adding `small_caps`/
+`position` fields would be safe for layout's build, but landing the fields
+without the synthesis behavior they gate would be a half-wired contract.
+Proposed as the next ticket rather than started here.
+
 
 
 ## TEXT-14: axis-correct kerning features
@@ -392,3 +443,185 @@ layout-owned per the TEXT-7..13 routes, and the PUA/emoji cases are environment
 ones. The lane has asked the orchestrator for its next ticket, proposing
 `font-optical-sizing: auto` (`opsz`) and a `font-variant-caps/-numeric/-position`
 feature contract as provider-local candidates.
+
+## TEXT-16: small-caps and super/subscript synthesis fallback
+
+CSS Fonts 4 section 6: when the selected face has no `smcp`/`c2sc`/`sups`/
+`subs` GSUB feature and `font-synthesis` allows it, the UA may synthesize the
+effect. `amazing_text::FontSynthesis` gains `small_caps`/`position` bools
+(default `true`, matching `font-synthesis`'s initial value `weight style
+small-caps position`) alongside the existing `weight`/`style`. `resolve_synthesis`
+leaves both false — it only compares `FontAttributes` (weight/stretch/slant),
+which has no GSUB visibility — so the provider resolves them separately, per
+glyph cluster, in `shape_range`.
+
+New module `crates/amazing-text-provider/src/font_variant_synthesis.rs`:
+`FaceFeatureSupport::probe` parses the selected face's GSUB feature list once
+per `shape_range` call (via the `read-fonts` crate, pinned to the exact
+version `harfrust` already depends on transitively, giving `TableProvider::
+gsub()`/`cmap()` on the same `harfrust::FontRef`); `feature_on` checks the
+already-built `Feature` list for a requested tag; `for_cluster` is a pure
+decision function (needs_smcp/c2sc/sups/subs booleans, an injectable
+uppercase-glyph-lookup closure, and the cluster's representative character)
+that is unit-tested directly with fake closures, no real font bytes needed.
+
+`shape_range` wires it in: an originally-lowercase letter requesting `smcp`
+gets its shaped glyph id substituted to the face's cmap-mapped uppercase
+glyph (skipped, not guessed, if the face has no such glyph); an
+already-uppercase letter under `c2sc`, or any glyph under `sups`/`subs`,
+keeps its shaped id. Superscript/subscript get a shape-time baseline offset
+(+0.33em / -0.14em, added to `offset_y`) so rasterization only needs a
+uniform outline scale. `ShapedRun`s now split on synthesis equality as well
+as source span, so one run with mixed original case gets separate runs per
+distinct needed synthesis. `rasterize_font_glyph` composes the small-caps
+(0.72) and position (0.66) scales with the existing oblique skew via
+`zeno::Transform::then`/`then_scale`, identical output to before when only
+`style` applies (verified by the retained oblique/bold tests).
+
+The exact scale factors and em shifts are approximations the same way the
+existing bold stroke width and -14 degree oblique skew already are; CSS does
+not mandate synthesis metrics.
+
+Not implemented: `pcap`/`c2pc` (petite-caps) and `titl` (titling-caps) reach
+HarfRust generically through the same `TextStyle.features` vector already
+(no text-owned change needed, same as TEXT-14's kerning conclusion), but have
+no synthesis fallback — CSS Fonts 4 does not mandate one for them, unlike
+small-caps/position. `unicase` has no associated GSUB tag or synthesis path
+and was out of the coordinator's requested scope.
+
+Gate: 11 new unit tests in `font_variant_synthesis` (substitution, the
+no-uppercase-glyph fallback, `c2sc`/`smcp` case gating, digits/punctuation
+untouched, super/sub direction and scale, combinations) plus 6 in `lib.rs`
+(raster transform mirroring the existing bold/oblique tests; the full
+`shape()` path through a new two-glyph synthetic font with real cmap bytes,
+including the small-caps-policy-disabled case). Crate nextest 72/72 ->
+89/89 (1 skipped), zero losses, doctests green. Workspace nextest 2882
+passed/10 skipped/0 failed, workspace doctests 4/0, on merged dev + TEXT-15.
+No pinned WPT `font-variant-caps`/`-position` fixture exists in this lane's
+frozen selections, and the Boat sandbox still has no WPT checkout (TEXT-14's
+filed gap, unchanged), so this gates on unit tests per the fallback
+instruction. Commit `628ec199`.
+
+The CSS/layout keyword-to-feature mapping needed to actually exercise this
+from real pages — computed `font-variant-caps`/`font-variant-position` into
+`TextStyle.features`, and computed `font-synthesis`'s new `small-caps`/
+`position` keywords into `TextStyle.synthesis` — is routed in
+`.agents/css/questions.md` and `.agents/layout/questions.md`; the CSS side of
+the audit found no CSS-owned gap (both properties are already parsed and
+computed as plain keyword strings), and the layout side ties into the
+already-open `font-synthesis` wiring request from TEXT-13.
+
+## TEXT-17: Linux glyph rendering was a solid box for every character
+
+Root cause: `register_system_text_faces` in `crates/amazing/src/page.rs` (and
+`FontFaceLoader::load_local` in `crates/amazing/src/font_loader.rs`, for
+`src: local(...)`) hardcoded Windows-only `C:\Windows\Fonts\*.ttf` paths for
+the generic families (`serif`/`sans-serif`/`monospace`/`system-ui`) and named
+families (`Arial`, `Times`, `Consolas`, ...). `amazing_net::fetch` on those
+paths fails on Linux, so every one of those `continue`s silently: zero font
+faces were ever registered, for any family, on Linux. Pages that rely on the
+UA default (`body { font-family: serif }`, the common case — `docs-index.html`
+in the real-pages corpus declares no `font-family` at all) then resolved to
+no usable face, and the engine's no-face fallback path painted every glyph as
+a full-coverage box instead of an outline (visible in
+`amazing-shell-gpui/evidence/linux/shell-docs-index.png`: chrome text, drawn
+by GPUI, was fine; every engine-rendered glyph was a filled rectangle).
+
+Headless reproduction first, per instruction: `amazing render
+tests/real-pages/pages/docs-index.html out.bmp 960` on the Boat sandbox,
+converted to PNG and inspected — confirmed the same solid-box rendering
+headless, isolating the bug to the engine's paint/font pipeline rather than
+anything GPUI-specific.
+
+Fix, in `crates/amazing/src/font_loader.rs` (text's outright file — kept the
+`page.rs` diff to only the already-granted `register_system_text_faces`
+function body, which now dispatches on `cfg(target_os = "windows")` and
+otherwise calls into `font_loader`): a bounded scan of the standard Linux
+font directories (`/usr/share/fonts`, `/usr/local/share/fonts`,
+`$HOME/.fonts`, `$HOME/.local/share/fonts`; depth <= 8, <= 4096 files) with
+filename-only classification into sans/serif/mono buckets (`serif` in the
+name and not `sans` -> serif; `mono` in the name -> mono; else sans), scored
+to prefer well-known, broadly-hinted families (DejaVu > Liberation > Noto >
+Freefont/Free) and plain regular weights over bold/italic/condensed
+variants, deterministic tie-break. The winning file per bucket is registered
+under the generic family plus a handful of common named aliases pages
+request directly (sans -> `sans-serif`/`system-ui`/`Arial`/`Helvetica`, serif
+-> `serif`/`Times`/`Times New Roman`/`Georgia`, mono ->
+`monospace`/`Courier`/`Courier New`/`Consolas`). `load_local` gets the same
+treatment for `src: local(...)` lookups via a small alias table into the same
+three buckets. No new dependency: pure `std::fs` scan, no fontconfig binding.
+
+On the Boat sandbox (Ubuntu 24.04, `pool-layout`), this resolves to DejaVu
+Sans/Serif/Sans Mono (97 font files present: DejaVu, Liberation, Lato, Noto,
+URW base35, Droid, FontAwesome). Headless re-render of the same page: PNG
+grew from 2,791 bytes (solid boxes) to 62,527 bytes (real antialiased glyph
+outlines); visually confirmed by reading both PNGs.
+
+Regression test: `glyphs_render_as_outlines_not_solid_boxes` in
+`crates/amazing/src/driver_tests.rs` renders `<div style="font-size:120px">
+OOO</div>` with no explicit `font-family` (exercising the same UA-default
+path as docs-index.html) through `cmd::render::render_surface`, finds the
+tight bounding box of dark pixels, and asserts foreground coverage within
+that box is under 85% — a real "O" has a light interior counter, a
+full-coverage box does not. Verified both directions: fails at 100.0% dark
+coverage with `register_linux_system_faces` temporarily disabled, passes at
+the real (much lower) coverage with the fix in place.
+
+`scripts/linux-shell-capture.sh` failed on this pooled sandbox for an
+unrelated reason (`amazing-shell-gpui/Cargo.lock` "cannot update the lock
+file because --locked was passed" — a stale lockfile issue on the shared
+sandbox, not Xvfb-related); per the coordinator's stated fallback, the
+headless render PNG is the proof, saved at
+`.agents/text/captures/text17-glyphs-headless.png` (+ `.json` metadata).
+
+Gate: crate tests `amazing-text`/`amazing-text-provider`/`amazing` 340/340
+(6 skipped), including the new regression test, and the real-pages corpus
+harness (`amazing::real_pages`) green. Workspace nextest 2993/2993 (11
+skipped), workspace doctests green. Commit: see `.agents/text/status.json`.
+
+## TEXT-18: pinned css-fonts pixel selections, first Linux measurement
+
+WPT was unavailable on the Boat sandbox through TEXT-14/15/16 (filed gap in
+`.agents/text/questions.md`), so those tickets gated on unit tests or a
+hand-rolled focused subset. `scripts/ensure-wpt.sh` now provisions the pinned
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` checkout on the sandbox, so this
+ticket runs the lane's four pinned manifests there for the first time:
+`text1-fonts-manifest.json` (15), `text2-font-face-manifest.json` (8),
+`text5-vertical-manifest.json` (7), `text12-expanded-manifest.json` (40).
+
+New comparator `crates/amazing-text-provider/evidence/text18-render-wpt.py`,
+a Python port of `scripts/run-render-wpt.ps1`'s comparison (exact PPM diff,
+`<meta name=fuzzy>` tolerance, `mismatch`-relation inversion) that runs
+`amazing render-wpt <page> <out.ppm> 800 600` with `AMAZING_WPT_ROOT` set to
+the checkout — the same driver command and viewport the Windows harness
+uses, so the numbers are directly comparable, just measured on Linux instead
+of win-001. Each selection was run twice back to back with identical counts
+and per-test actual/reference/diff SHA-256 (stable).
+
+Results at `bbd741b6` (TEXT-17, on this branch):
+- fonts (15): **14 pass / 1 mismatch** — matches TEXT-13's win-001 number
+  exactly; the one mismatch is `font-unicode-PUA-primary-font`, the
+  environment-owned PUA-coverage case.
+- font-face (8): **4 pass / 4 mismatch** — matches the TEXT-12/13 win-001
+  number (retained both tickets); the four `matching__*` mismatches are the
+  pre-existing `@font-face` descriptor-matching gap, the four `variations__*`
+  cases pass.
+- vertical (7): **5 pass / 2 mismatch** — matches TEXT-12's win-001 number;
+  both mismatches are layout-owned per the existing TEXT-7..13 routing.
+- expanded (40): **40 pass / 0 mismatch** — up from TEXT-13's win-001 38/40;
+  the two prior mismatches (`font-kerning-02` and the `font-size-adjust`
+  area) are gone, consistent with TEXT-14's kerning-axis fix landing after
+  TEXT-13 was measured. First Linux run of this selection.
+
+Total: 63 pass / 7 mismatch / 0 error / 0 timeout / 0 unsupported / 0 crash
+across 70 cases. Every number either matches or improves on the last
+Windows measurement — zero regressions crossing platforms. Before TEXT-17's
+fix this corpus would have rendered as full-coverage boxes throughout
+(register_system_text_faces registered no face for any family on Linux), so
+these are the first *meaningful* Linux numbers for it. Evidence:
+`crates/amazing-text-provider/evidence/text18-gate-summary.json` and the four
+`text18-*-linux.json` result files.
+
+Gate (same run as TEXT-17, no further code change): crate nextest 340/340 (6
+skipped), workspace nextest 2993/2993 (11 skipped, `--locked --no-fail-fast`),
+workspace doctests green (`--locked --doc`).

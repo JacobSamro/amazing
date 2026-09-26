@@ -187,6 +187,20 @@ pub struct EffectNode {
     pub blend: amazing_css::effects::BlendMode,
     /// `isolation: isolate` opened the group even without opacity/transform/blend.
     pub isolate: bool,
+    /// Bounded, resolved CSS `filter` function list (ordered) applied to the
+    /// group layer, including blur/drop-shadow.
+    pub filter: crate::filter::FilterPlan,
+    /// Bounded, resolved CSS `backdrop-filter` function list (ordered),
+    /// applied to a snapshot of this box's border-box backdrop before its
+    /// own content is drawn. Empty means none.
+    pub backdrop_filter: crate::filter::FilterPlan,
+    /// The border box `backdrop_filter` samples, in untransformed document
+    /// paint coordinates (meaningful only when `backdrop_filter` is
+    /// non-empty).
+    pub backdrop_bounds: PaintBounds,
+    /// Resolved CSS `clip-path` (`inset()`/`circle()`/`ellipse()` only;
+    /// `polygon()`, `path()`, `url()` and a bare `<geometry-box>` are `None`).
+    pub clip: Option<crate::clip::ClipMask>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -342,6 +356,10 @@ impl<'a> DisplayListView<'a> {
                 opacity: 1.0,
                 blend: amazing_css::effects::BlendMode::Normal,
                 isolate: false,
+                filter: crate::filter::FilterPlan::default(),
+                backdrop_filter: crate::filter::FilterPlan::default(),
+                backdrop_bounds: PaintBounds::viewport(width, height),
+                clip: None,
             }],
             scrolls: vec![
                 ScrollNode {
@@ -391,6 +409,10 @@ impl<'a> DisplayListView<'a> {
                         opacity: group.opacity,
                         blend: group.blend,
                         isolate: group.isolate,
+                        filter: group.filter,
+                        backdrop_filter: group.backdrop_filter,
+                        backdrop_bounds: PaintBounds::from_layout(group.backdrop_bounds),
+                        clip: group.clip,
                     });
                     state.effect = next;
                     if group.transform != Affine::IDENTITY {

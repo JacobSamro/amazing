@@ -13,6 +13,8 @@ mod navigator;
 mod page;
 mod render_oracle;
 mod runtime_binding_host;
+mod runtime_host_a11y;
+mod runtime_host_devtools;
 mod runtime_host_ipc;
 mod runtime_host_replaced_content;
 #[cfg(test)]
@@ -131,12 +133,45 @@ fn main() -> ExitCode {
         Some("run") => cmd::js::cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd::js::cmd_domrun(&args[2..]),
         Some("wpt-harness" | "wpt-harness-worker") => cmd::wpt_harness::run(&args[1..]),
+        Some("a11y-tree") => runtime_host_a11y::cmd_a11y_tree(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
+        Some("devtools") => cmd_devtools(&args[2..]),
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]|devtools <url> [listen-addr]]"
             );
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `amazing devtools <url> [listen-addr]` — serve CDP for one fetched page in
+/// the foreground until killed. `listen-addr` defaults to Chrome's
+/// conventional `127.0.0.1:9222`.
+fn cmd_devtools(args: &[String]) -> ExitCode {
+    let url = match args.first() {
+        Some(url) => url.as_str(),
+        None => {
+            eprintln!("usage: amazing devtools <url> [listen-addr]");
+            return ExitCode::FAILURE;
+        }
+    };
+    let addr = args.get(1).map(String::as_str).unwrap_or("127.0.0.1:9222");
+    match runtime_host_devtools::spawn_devtools_server(url, addr) {
+        Ok(handle) => {
+            println!("DEVTOOLS_URL http://{}/json/version", handle.addr);
+            println!("DEVTOOLS_BROWSER_ID {}", handle.browser_id);
+            match handle.wait() {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("amazing devtools: {error}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("amazing devtools: {error}");
             ExitCode::FAILURE
         }
     }

@@ -320,6 +320,18 @@ pub(super) struct PageFontLoader<'a> {
     pub stylesheet_url: &'a str,
     pub document_url: &'a str,
     pub warnings: Vec<String>,
+    /// Per-page cache of resolved-URL -> fetch result, shared across every
+    /// `@font-face` rule on the page. A real page routinely declares several
+    /// icon-font families (e.g. "Font Awesome 5/6 Free/Brands" plus a plain
+    /// "FontAwesome" alias) whose `src:` lists repeat the exact same URL; each
+    /// distinct call used to pay its own network round trip (up to the 20s
+    /// `fetch_cors` deadline below) even when an earlier rule already fetched
+    /// -- or already failed to fetch -- that same URL. See IA-LIVE-2: this was
+    /// most of the 279s render time on docs.rs/serde (12 duplicate fetches of
+    /// 4 distinct FontAwesome URLs, each timing out against an unreachable
+    /// host, plus 5 unique webfont URLs -- 17 sequential fetch attempts for 9
+    /// distinct URLs).
+    pub cache: &'a mut std::collections::HashMap<String, Result<Vec<u8>, String>>,
 }
 
 pub(super) fn font_source_label(source: &str) -> String {
@@ -335,10 +347,16 @@ pub(super) fn font_source_label(source: &str) -> String {
 impl PageFontLoader<'_> {
     fn read_url(&mut self, source: &str, max_bytes: usize) -> Option<Vec<u8>> {
         let resolved = super::resolve_font_url(self.stylesheet_url, source);
-        let result = if resolved.starts_with("http://") || resolved.starts_with("https://") {
-            self.fetch_cors(source, max_bytes)
+        let result = if let Some(cached) = self.cache.get(&resolved) {
+            cached.clone()
         } else {
-            super::load_resource(&resolved, max_bytes)
+            let fetched = if resolved.starts_with("http://") || resolved.starts_with("https://") {
+                self.fetch_cors(source, max_bytes)
+            } else {
+                super::load_resource(&resolved, max_bytes)
+            };
+            self.cache.insert(resolved.clone(), fetched.clone());
+            fetched
         };
         match result {
             Ok(bytes) => Some(bytes),
@@ -409,25 +427,230 @@ impl PageFontLoader<'_> {
 
 impl FontFaceLoader for PageFontLoader<'_> {
     fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError> {
-        let file = match name.trim().to_ascii_lowercase().as_str() {
-            "arial" => Some(r"C:\Windows\Fonts\arial.ttf".to_owned()),
-            "times new roman" | "times" => Some(r"C:\Windows\Fonts\times.ttf".to_owned()),
-            "segoe ui" => Some(r"C:\Windows\Fonts\segoeui.ttf".to_owned()),
-            "consolas" => Some(r"C:\Windows\Fonts\consola.ttf".to_owned()),
-            "csshworientationtest" => std::env::var_os("AMAZING_WPT_ROOT").map(|root| {
+        let lower = name.trim().to_ascii_lowercase();
+        if lower == "csshworientationtest" {
+            let file = std::env::var_os("AMAZING_WPT_ROOT").map(|root| {
                 std::path::Path::new(&root)
                     .join("fonts/adobe-fonts/CSSHWOrientationTest.otf")
                     .to_string_lossy()
                     .into_owned()
-            }),
-            _ => None,
-        };
+            });
+            return Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()));
+        }
+        let file = local_font_path(&lower);
         Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()))
     }
 
     fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError> {
         Ok(self.read_url(request.url, request.max_bytes))
     }
+}
+
+/// Resolves `src: local('<name>')` for the handful of well-known family
+/// names a page is likely to request directly. Windows has fixed font file
+/// paths; on Linux (no fontconfig binding in this std-only engine) the same
+/// generic-family scan used for the UA default faces stands in.
+#[cfg(target_os = "windows")]
+fn local_font_path(lower_name: &str) -> Option<String> {
+    match lower_name {
+        "arial" => Some(r"C:\Windows\Fonts\arial.ttf".to_owned()),
+        "times new roman" | "times" => Some(r"C:\Windows\Fonts\times.ttf".to_owned()),
+        "segoe ui" => Some(r"C:\Windows\Fonts\segoeui.ttf".to_owned()),
+        "consolas" => Some(r"C:\Windows\Fonts\consola.ttf".to_owned()),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn local_font_path(lower_name: &str) -> Option<String> {
+    let bucket = match lower_name {
+        "arial" | "helvetica" | "sans-serif" | "system-ui" | "segoe ui" => FontBucket::Sans,
+        "times new roman" | "times" | "georgia" | "serif" => FontBucket::Serif,
+        "consolas" | "courier" | "courier new" | "monospace" => FontBucket::Mono,
+        _ => return None,
+    };
+    best_linux_font(bucket).map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Which generic CSS family a scanned font file stands in for.
+#[cfg(not(target_os = "windows"))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FontBucket {
+    Sans,
+    Serif,
+    Mono,
+}
+
+#[cfg(not(target_os = "windows"))]
+fn classify_font_file(file_name: &str) -> FontBucket {
+    let lower = file_name.to_ascii_lowercase();
+    if lower.contains("mono") {
+        FontBucket::Mono
+    } else if lower.contains("serif") && !lower.contains("sans") {
+        FontBucket::Serif
+    } else {
+        FontBucket::Sans
+    }
+}
+
+/// Collects font files under `dir`, bounded in both depth and count so a
+/// sandbox with an unexpectedly large or deeply nested font tree cannot make
+/// page load hang or exhaust memory.
+#[cfg(not(target_os = "windows"))]
+fn collect_font_files(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path::PathBuf>) {
+    const MAX_DEPTH: u32 = 8;
+    const MAX_FILES: usize = 4096;
+    if depth > MAX_DEPTH || out.len() >= MAX_FILES {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if file_type.is_dir() {
+            collect_font_files(&path, depth + 1, out);
+        } else if file_type.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| {
+                    ext.eq_ignore_ascii_case("ttf")
+                        || ext.eq_ignore_ascii_case("otf")
+                        || ext.eq_ignore_ascii_case("ttc")
+                })
+        {
+            out.push(path);
+        }
+        if out.len() >= MAX_FILES {
+            return;
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn linux_font_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = vec![
+        std::path::PathBuf::from("/usr/share/fonts"),
+        std::path::PathBuf::from("/usr/local/share/fonts"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = std::path::PathBuf::from(home);
+        roots.push(home.join(".fonts"));
+        roots.push(home.join(".local/share/fonts"));
+    }
+    roots
+}
+
+/// Picks the best installed file for `bucket` by filename heuristics: known,
+/// broadly hinted families first (so the default look is stable across
+/// sandboxes with different font packages installed), then plain regular
+/// weights over bold/italic/condensed variants, then a stable tie-break.
+#[cfg(not(target_os = "windows"))]
+fn best_linux_font(bucket: FontBucket) -> Option<std::path::PathBuf> {
+    const PREFERRED: [&str; 5] = ["dejavu", "liberation", "noto", "freefont", "free"];
+
+    let mut candidates = Vec::new();
+    for root in &linux_font_roots() {
+        collect_font_files(root, 0, &mut candidates);
+    }
+
+    let mut best: Option<(std::path::PathBuf, i32)> = None;
+    for path in candidates {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if classify_font_file(name) != bucket {
+            continue;
+        }
+        let lower = name.to_ascii_lowercase();
+        let mut score = 0i32;
+        if let Some(rank) = PREFERRED.iter().position(|family| lower.contains(family)) {
+            score += (PREFERRED.len() - rank) as i32 * 100;
+        }
+        if lower.contains("italic") || lower.contains("oblique") {
+            score -= 20;
+        }
+        if lower.contains("bold") || lower.contains("black") || lower.contains("heavy") {
+            score -= 10;
+        }
+        if lower.contains("condensed")
+            || lower.contains("narrow")
+            || lower.contains("light")
+            || lower.contains("thin")
+            || lower.contains("extralight")
+        {
+            score -= 5;
+        }
+        if lower.contains("regular") || !(lower.contains('-') || lower.contains('_')) {
+            score += 5;
+        }
+        let better = match &best {
+            Some((_, best_score)) => score > *best_score,
+            None => true,
+        };
+        if better {
+            best = Some((path, score));
+        }
+    }
+    best.map(|(path, _)| path)
+}
+
+pub(super) fn register_system_face(
+    provider: &mut amazing_text_provider::TextProvider,
+    path: &str,
+    family: &str,
+    weight: u16,
+    slant: amazing_text::FontSlant,
+) {
+    use amazing_text_provider::{FontFormat, WebFont};
+
+    let options = amazing_net::FetchOptions {
+        max_response_bytes: super::MAX_PAGE_FONT_BYTES,
+        ..amazing_net::FetchOptions::default()
+    };
+    let Ok(response) = amazing_net::fetch(path, &options) else {
+        return;
+    };
+    let _ = provider.register_web_font(WebFont {
+        family: family.into(),
+        weight,
+        stretch: 100,
+        slant,
+        format: FontFormat::OpenType,
+        bytes: response.body,
+    });
+}
+
+/// Registers a default face for each generic CSS family, plus a handful of
+/// common named families (Arial, Times, Courier, ...) that pages request
+/// directly, by scanning the standard Linux font directories. This engine
+/// has no fontconfig binding, so without this every generic and named family
+/// resolves to zero faces on Linux and every glyph falls back to a
+/// full-coverage box (TEXT-17).
+#[cfg(not(target_os = "windows"))]
+pub(super) fn register_linux_system_faces(provider: &mut amazing_text_provider::TextProvider) {
+    use amazing_text::FontSlant;
+
+    let sans = best_linux_font(FontBucket::Sans);
+    let serif = best_linux_font(FontBucket::Serif);
+    let mono = best_linux_font(FontBucket::Mono);
+
+    let mut register_all = |path: Option<std::path::PathBuf>, families: &[&str]| {
+        let Some(path) = path.as_deref().and_then(|path| path.to_str()) else {
+            return;
+        };
+        for family in families {
+            register_system_face(provider, path, family, 400, FontSlant::Normal);
+        }
+    };
+
+    register_all(sans, &["sans-serif", "system-ui", "Arial", "Helvetica"]);
+    register_all(serif, &["serif", "Times", "Times New Roman", "Georgia"]);
+    register_all(mono, &["monospace", "Courier", "Courier New", "Consolas"]);
 }
 
 #[cfg(test)]
@@ -533,10 +756,12 @@ mod tests {
         });
         let base = format!("http://{address}/css/site.css");
         let document = format!("http://{address}/index.html");
+        let mut cache = std::collections::HashMap::new();
         let mut loader = PageFontLoader {
             stylesheet_url: &base,
             document_url: &document,
             warnings: Vec::new(),
+            cache: &mut cache,
         };
         let bytes = loader
             .load_url(FontFetchRequest {
@@ -551,6 +776,69 @@ mod tests {
             Some(b"font".as_slice()),
             "{:?}",
             loader.warnings
+        );
+    }
+
+    /// IA-LIVE-2: real pages (docs.rs, plenty of icon-font stylesheets)
+    /// declare several `@font-face` rules — e.g. "Font Awesome 5 Free",
+    /// "Font Awesome 6 Free" and a plain "FontAwesome" alias — whose `src:`
+    /// lists repeat the exact same URL. A second `load_url` for a URL
+    /// already resolved this page must reuse the cached result instead of
+    /// opening another connection; each duplicate used to pay its own up-to-
+    /// 20s `fetch_cors` deadline.
+    #[test]
+    fn http_font_source_is_only_fetched_once_per_page_even_when_reused_by_multiple_font_face_rules() {
+        use std::io::{Read, Write};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_hits = hits.clone();
+        let server = std::thread::spawn(move || {
+            // A correctly deduped loader connects at most once; give any
+            // second connection a short window to show up before we stop
+            // listening and let the test assert on the count.
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut socket, _)) => {
+                        server_hits.fetch_add(1, Ordering::SeqCst);
+                        let mut request = [0u8; 4096];
+                        let mut count = 0;
+                        while !request[..count].windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                            match socket.read(&mut request[count..]) {
+                                Ok(read) if read > 0 => count += read,
+                                _ => break,
+                            }
+                        }
+                        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 4\r\nConnection: close\r\n\r\nfont");
+                    }
+                    Err(_) => std::thread::sleep(Duration::from_millis(5)),
+                }
+            }
+        });
+        let base = format!("http://{address}/css/site.css");
+        let document = format!("http://{address}/index.html");
+        let mut cache = std::collections::HashMap::new();
+        let mut loader = PageFontLoader {
+            stylesheet_url: &base,
+            document_url: &document,
+            warnings: Vec::new(),
+            cache: &mut cache,
+        };
+        let request = || FontFetchRequest { url: "font.ttf", cors_mode: true, max_bytes: 4 };
+        let first = loader.load_url(request()).unwrap();
+        let second = loader.load_url(request()).unwrap();
+        server.join().unwrap();
+        assert_eq!(first.as_deref(), Some(b"font".as_slice()), "{:?}", loader.warnings);
+        assert_eq!(second, first, "second call should return the cached bytes");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "second load_url for the same URL must not open a new connection"
         );
     }
 }

@@ -68,6 +68,7 @@ struct CalcParser<'a> {
     input: &'a str,
     pos: usize,
     units: FontRelativeUnits,
+    size_basis: Option<LengthPercentage>,
 }
 
 /// Used font-relative unit sizes for the element and the document root.
@@ -88,7 +89,7 @@ pub(crate) struct FontRelativeUnits {
 }
 
 impl FontRelativeUnits {
-    fn legacy(em: f32, ch: f32) -> Self {
+    pub(crate) fn legacy(em: f32, ch: f32) -> Self {
         Self {
             em,
             ch,
@@ -206,6 +207,12 @@ impl<'a> CalcParser<'a> {
 
     fn atom(&mut self) -> Option<CalcValue> {
         self.skip_ws();
+        if self.input[self.pos..].get(..4).is_some_and(|s| s.eq_ignore_ascii_case("size"))
+            && !self.input.as_bytes().get(self.pos + 4).is_some_and(u8::is_ascii_alphabetic)
+        {
+            self.pos += 4;
+            return Some(CalcValue::Length(self.size_basis?));
+        }
         if self.eat(b'(') {
             let value = self.sum()?;
             return self.eat(b')').then_some(value);
@@ -214,6 +221,44 @@ impl<'a> CalcParser<'a> {
             self.pos += 5;
             let value = self.sum()?;
             return self.eat(b')').then_some(value);
+        }
+        if self.input[self.pos..].get(..4).is_some_and(|s| s.eq_ignore_ascii_case("max("))
+            || self.input[self.pos..].get(..4).is_some_and(|s| s.eq_ignore_ascii_case("min("))
+        {
+            let maximum = self.input[self.pos..].get(..4).is_some_and(|s| s.eq_ignore_ascii_case("max("));
+            self.pos += 4;
+            let mut result = self.sum()?;
+            while self.eat(b',') {
+                let next = self.sum()?;
+                result = compare_calc_values(result, next, maximum)?;
+            }
+            return self.eat(b')').then_some(result);
+        }
+        if self.input[self.pos..].get(..10).is_some_and(|s| s.eq_ignore_ascii_case("calc-size(")) {
+            self.pos += 10;
+            self.skip_ws();
+            let start = self.pos;
+            let mut depth = 0;
+            while let Some(&byte) = self.input.as_bytes().get(self.pos) {
+                match byte {
+                    b'(' => depth += 1,
+                    b')' if depth > 0 => depth -= 1,
+                    b',' if depth == 0 => break,
+                    _ => {},
+                }
+                self.pos += 1;
+            }
+            let basis = self.input[start..self.pos].trim();
+            if !self.eat(b',') { return None; }
+            let previous = self.size_basis;
+            self.size_basis = if basis.eq_ignore_ascii_case("any") {
+                None
+            } else {
+                parse_length_percentage_with_units(basis, self.units).or(previous)
+            };
+            let result = self.sum();
+            self.size_basis = previous;
+            return self.eat(b')').then_some(result?);
         }
         let start = self.pos;
         if matches!(self.input.as_bytes().get(self.pos), Some(b'+' | b'-')) {
@@ -259,6 +304,16 @@ impl<'a> CalcParser<'a> {
     }
 }
 
+fn compare_calc_values(left: CalcValue, right: CalcValue, maximum: bool) -> Option<CalcValue> {
+    let (a, b) = match (left, right) {
+        (CalcValue::Number(a), CalcValue::Number(b)) => return Some(CalcValue::Number(if maximum { a.max(b) } else { a.min(b) })),
+        (CalcValue::Length(a), CalcValue::Length(b)) => (a, b),
+        _ => return None,
+    };
+    if a.has_percentage != b.has_percentage || a.percentage != b.percentage { return None; }
+    Some(CalcValue::Length(if (a.px >= b.px) == maximum { a } else { b }))
+}
+
 fn scale(value: LengthPercentage, factor: f32) -> LengthPercentage {
     LengthPercentage { px: value.px * factor, percentage: value.percentage * factor, has_percentage: value.has_percentage }
 }
@@ -272,7 +327,7 @@ pub fn parse_length_percentage(s: &str, em: f32, ch: f32) -> Option<LengthPercen
 pub(crate) fn parse_length_percentage_with_units(
     s: &str, units: FontRelativeUnits,
 ) -> Option<LengthPercentage> {
-    let mut parser = CalcParser { input: s.trim(), pos: 0, units };
+    let mut parser = CalcParser { input: s.trim(), pos: 0, units, size_basis: None };
     let value = parser.sum()?;
     parser.skip_ws();
     if parser.pos != parser.input.len() { return None; }
@@ -328,6 +383,51 @@ pub(crate) fn used_length_percentage_with_units(
     let mut length = parse_length_percentage_with_units(source, units.divided_by(zoom))?;
     length.px = style.scale_used_length(length.px as f64) as f32;
     Some(length)
+}
+
+/// Resolve an intrinsic `calc-size()` after layout has determined the used
+/// size of its keyword basis. The expression keeps percentage resolution
+/// separate from the intrinsic basis, as required for indefinite sizes.
+pub(crate) fn used_calc_size_with_basis(
+    style: &ComputedStyle, source: &str, units: FontRelativeUnits,
+    basis: f32, percent_basis: Option<f32>,
+) -> Option<f32> {
+    let zoom = style.effective_zoom() as f32;
+    let mut parser = CalcParser {
+        input: source.trim(), pos: 0, units: units.divided_by(zoom),
+        size_basis: Some(LengthPercentage { px: basis / zoom, percentage: 0.0, has_percentage: false }),
+    };
+    let value = parser.sum()?;
+    parser.skip_ws();
+    if parser.pos != parser.input.len() { return None; }
+    let CalcValue::Length(mut length) = value else { return None; };
+    length.px = style.scale_used_length(length.px as f64) as f32;
+    length.resolve(percent_basis).filter(|value| value.is_finite())
+}
+
+pub(crate) fn calc_size_basis(source: &str) -> Option<&str> {
+    let source = source.trim();
+    if !source.get(..10)?.eq_ignore_ascii_case("calc-size(") { return None; }
+    let mut depth = 0;
+    for (index, byte) in source[10..].bytes().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' if depth > 0 => depth -= 1,
+            b',' if depth == 0 => return Some(source[10..10 + index].trim()),
+            _ => {},
+        }
+    }
+    None
+}
+
+pub(crate) fn preferred_aspect_ratio(style: &ComputedStyle) -> Option<f32> {
+    let source = style.get("aspect-ratio")?.trim();
+    let ratio = source.strip_prefix("auto ").unwrap_or(source);
+    let (numerator, denominator) = ratio.split_once('/')?;
+    let numerator: f32 = numerator.trim().parse().ok()?;
+    let denominator: f32 = denominator.trim().parse().ok()?;
+    (numerator.is_finite() && denominator.is_finite() && numerator > 0.0 && denominator > 0.0)
+        .then_some(numerator / denominator)
 }
 
 pub(crate) fn parse_used_maybe_len(
@@ -797,6 +897,15 @@ mod tests {
         assert_eq!(parse_len("16ch", 32.0, 100.0), Some(307.2));
         assert_eq!(parse_len("bogus", 16.0, 100.0), None);
         assert_eq!(parse_len("14", 16.0, 100.0), None); // bare nonzero number
+    }
+
+    #[test]
+    fn used_size_math_handles_resolved_attr_and_definite_calc_size() {
+        assert_eq!(parse_len("max(200px)", 16.0, 300.0), Some(200.0));
+        assert_eq!(parse_len("min(220px, 200px)", 16.0, 300.0), Some(200.0));
+        assert_eq!(parse_len("calc-size(40px, size + 20px)", 16.0, 300.0), Some(60.0));
+        assert_eq!(parse_len("calc-size(any, 10px + 50%)", 16.0, 300.0), Some(160.0));
+        assert_eq!(parse_len("calc-size(any, size + 10px)", 16.0, 300.0), None);
     }
 
     #[test]

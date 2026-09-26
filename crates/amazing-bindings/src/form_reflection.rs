@@ -141,7 +141,7 @@ pub(crate) fn invoke<H: BindingHost + UrlReflection>(host: &mut H, op: O,
                 .unwrap_or_else(|| if form { "on".encode_utf16().collect() } else { units.to_vec() });
             host.string(&result)
         }
-        Kind::String if attribute == A::Label && value.as_ref().is_none_or(Vec::is_empty) => {
+        Kind::String if attribute == A::Label && value.is_none() => {
             let text = host.with_dom(|dom| if dom.local_name(node) == Some("option") {
                 dom.option_text(node)
             } else { Ok(Vec::new()) })?;

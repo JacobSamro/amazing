@@ -450,3 +450,74 @@ fn malformed_page_font_warns_without_advancing_font_generation() {
     assert!(text.warnings.iter().any(|warning| warning.contains("broken.woff2")));
     let _ = std::fs::remove_dir_all(directory);
 }
+
+/// TEXT-17 regression: on Linux, `register_system_text_faces` used to
+/// register nothing for the generic families (Windows-only hardcoded
+/// `C:\Windows\Fonts\...` paths), so headless rendering of ordinary text
+/// with no `font-family` fell back to a full-coverage/`.notdef` box for
+/// every glyph — every engine-rendered character painted as a solid filled
+/// rectangle (see `docs/lanes/text_TODO.md`). This renders text that relies
+/// entirely on the UA default (`body { font-family: serif }`), the same
+/// path `docs-index.html` in the real-pages corpus hits, and asserts the
+/// painted glyphs are real outlines: a run of "OOO" has a light interior
+/// counter in each letter, so a tight bounding box around the dark pixels
+/// must be mostly *background*, not mostly foreground. A solid-box render
+/// fills that bounding box almost completely.
+#[test]
+fn glyphs_render_as_outlines_not_solid_boxes() {
+    let html = br#"<!doctype html><html><body style="margin:0;background:#ffffff">
+        <div style="margin:0;padding:0;color:#000000;font-size:120px;line-height:1;">OOO</div>
+        </body></html>"#;
+    let surface = crate::cmd::render::render_surface(
+        "text17-glyph-coverage-test.html",
+        html,
+        400.0,
+        Some(200),
+        "",
+    )
+    .expect("headless render of a plain text fixture must succeed");
+
+    let is_dark = |pixel: [u8; 4]| {
+        let [r, g, b, a] = pixel;
+        a > 128 && (r as u32 + g as u32 + b as u32) < 3 * 128
+    };
+
+    let mut min_x = surface.width;
+    let mut max_x = 0u32;
+    let mut min_y = surface.height;
+    let mut max_y = 0u32;
+    let mut dark_count = 0u64;
+    for y in 0..surface.height {
+        for x in 0..surface.width {
+            if surface.get_pixel(x, y).is_some_and(is_dark) {
+                dark_count += 1;
+                min_x = min_x.min(x);
+                max_x = max_x.max(x);
+                min_y = min_y.min(y);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+
+    assert!(
+        dark_count > 0,
+        "expected \"OOO\" to paint some foreground pixels; text-face registration \
+         (register_system_text_faces / register_linux_system_faces) likely failed to \
+         find any usable face for the default family"
+    );
+    let bbox_width = (max_x - min_x + 1) as u64;
+    let bbox_height = (max_y - min_y + 1) as u64;
+    assert!(
+        bbox_width > 20 && bbox_height > 20,
+        "glyph bounding box {bbox_width}x{bbox_height} is too small for 120px text"
+    );
+    let bbox_area = bbox_width * bbox_height;
+    let coverage = dark_count as f64 / bbox_area as f64;
+    assert!(
+        coverage < 0.85,
+        "glyph bounding box is {:.1}% dark ({dark_count}/{bbox_area} px) — \"OOO\" should \
+         have light interior counters; a coverage this high means every glyph painted as a \
+         solid full-coverage box (TEXT-17) instead of a real outline",
+        coverage * 100.0
+    );
+}

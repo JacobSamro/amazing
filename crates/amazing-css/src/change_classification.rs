@@ -51,6 +51,7 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "box-shadow" |
         "clip-rule" |
         "color" |
+        "color-scheme" |
         "cursor" |
         "fill" |
         "fill-opacity" |
@@ -209,6 +210,11 @@ pub fn classify_style_property(name: &str) -> Option<StyleChangeKind> {
         "animation-timeline" |
         "animation-timing-function" |
         "border-collapse" |
+        // Not evaluated (no size-container-query matching yet), but a real
+        // change establishes/removes a query container and containment, so
+        // it is conservatively a full rebuild rather than a narrower kind.
+        "container-name" |
+        "container-type" |
         "content" |
         "counter-increment" |
         "counter-reset" |
@@ -252,7 +258,7 @@ mod tests {
                 StyleChangeKind::None => panic!("registered property classified None: {name}"),
             }] += 1;
         }
-        assert_eq!(counts, [16, 39, 125, 29]);
+        assert_eq!(counts, [16, 40, 125, 31]);
         assert_eq!(classify_style_property("not-a-property"), None);
     }
 }

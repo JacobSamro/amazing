@@ -823,11 +823,11 @@ impl ReferenceCpuPresenter {
                             .filter(|op| !op.backdrop_filters.is_empty())
                             .map(|op| {
                                 let bounds = op.backdrop_bounds.expect("validated backdrop bounds");
-                                let mut backdrop = super::effect_pixels::backdrop_filters(
-                                    &out,
-                                    &op.backdrop_filters,
-                                    bounds,
-                                );
+                                let mut backdrop = if let Some((_, plan)) = op.painter_filters {
+                                    plan.apply_to_surface(&out)
+                                } else {
+                                    super::effect_pixels::backdrop_filters(&out, &op.backdrop_filters, bounds)
+                                };
                                 for y in 0..out.height {
                                     for x in 0..out.width {
                                         if !bounds.contains(x as f32 + 0.5, y as f32 + 0.5) {
@@ -841,7 +841,11 @@ impl ReferenceCpuPresenter {
                         self.draw_pass(frame, q.pass_id, depth + 1, initial)?;
                     let mut mode = EffectBlend::from(q.blend);
                     if let Some(operations) = operations {
-                        sub = super::effect_pixels::filters(&sub, &operations.filters);
+                        sub = if let Some((plan, _)) = operations.painter_filters {
+                            plan.apply_to_surface(&sub)
+                        } else {
+                            super::effect_pixels::filters(&sub, &operations.filters)
+                        };
                         super::effect_clip::apply_masks(&mut sub, operations);
                         if !operations.filters.is_empty() || !operations.backdrop_filters.is_empty()
                         {

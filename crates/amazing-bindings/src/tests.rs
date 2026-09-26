@@ -1689,7 +1689,9 @@ fn forced_token_toggle_without_a_change_queues_no_attribute_mutation() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 10);
+    // 11: the merge of HTML-26's SELECTED_OPTIONS legacy hook with dev's
+    // DOM_STRING_MAP legacy hook (dataset) adds one each over the prior 9.
+    assert_eq!(h.legacy.len(), 11);
     assert!(h.legacy.iter().any(|(brand, hooks)| *brand == InterfaceBrand::NAMED_NODE_MAP
         && hooks.indexed_getter == O::NamedNodeMapItem
         && hooks.named_getter == Some(O::NamedNodeMapGetNamedItem)

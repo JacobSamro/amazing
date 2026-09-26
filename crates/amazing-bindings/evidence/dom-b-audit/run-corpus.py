@@ -11,6 +11,17 @@ import tempfile
 
 REVISION = 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293'
 DIRECTORIES = ['dom/nodes', 'dom/traversal', 'dom/events', 'dom/collections']
+
+def sparse_checkout(root, mode, paths):
+    """`git sparse-checkout set/add`, but never on a checkout this script did
+    not create itself. `root` below is always a private clone freshly made
+    under $OUT; guard anyway in case it is ever pointed at a shared checkout
+    such as ~/corpora/wpt on a pooled Boat sandbox -- narrowing that shared
+    tree hid other lanes' directories on 2026-09-26. See scripts/ensure-wpt.sh."""
+    if root.resolve() == (Path.home() / 'corpora' / 'wpt').resolve():
+        return
+    subprocess.run(['git', '-C', str(root), 'sparse-checkout', mode, *paths], check=True)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('label')
 parser.add_argument('source')
@@ -30,13 +41,13 @@ root = Path(os.environ['OUT']) / 'dom-b-audit-wpt'
 if not (root / '.git').exists():
     subprocess.run(['git', 'init', str(root)], check=True)
     subprocess.run(['git', '-C', str(root), 'remote', 'add', 'origin', 'https://github.com/web-platform-tests/wpt.git'], check=True)
-    subprocess.run(['git', '-C', str(root), 'sparse-checkout', 'set', 'resources', 'common', *DIRECTORIES], check=True)
+    sparse_checkout(root, 'set', ['resources', 'common', *DIRECTORIES])
 if not (root / DIRECTORIES[0]).exists():
     subprocess.run(['git', '-C', str(root), 'fetch', '--depth=1', '--filter=blob:none', 'origin', REVISION], check=True)
     subprocess.run(['git', '-C', str(root), 'checkout', '--detach', REVISION], check=True)
 assert subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() == REVISION
 # Extend an existing lane-local sparse clone when a new whole area is selected.
-subprocess.run(['git', '-C', str(root), 'sparse-checkout', 'add', 'resources', 'common', *DIRECTORIES], check=True)
+sparse_checkout(root, 'add', ['resources', 'common', *DIRECTORIES])
 assert all((root / directory).is_dir() for directory in DIRECTORIES), 'missing selected corpus directory'
 selection = []
 excluded = []

@@ -1862,7 +1862,7 @@ mod tests {
         );
         assert_eq!(
             styles.generated_content(p, PseudoElement::After).unwrap().runs,
-            vec![crate::generated::ContentRun::Image("linear-gradient(red,blue)".into())]
+            vec![crate::generated::ContentRun::Image("linear-gradient(red, blue)".into())]
         );
     }
 

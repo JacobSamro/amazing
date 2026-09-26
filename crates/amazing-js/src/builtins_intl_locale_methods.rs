@@ -56,7 +56,9 @@ fn intl_date_to_locale_string(i: &mut Interpreter, this: JsValue, args: Vec<JsVa
     let locales = args.first().cloned().unwrap_or(JsValue::Undefined);
     let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let options = if options.is_undefined() {
-        let options = i.object_value();
+        // ECMA-402 builds default options with a null prototype, so inherited
+        // Object.prototype properties must not leak into the formatter.
+        let options = JsValue::object(JsObject::ordinary());
         match name.as_str() {
             "toLocaleDateString" => i.set_prop(&options, "dateStyle", JsValue::str("short"))?,
             "toLocaleTimeString" => i.set_prop(&options, "timeStyle", JsValue::str("medium"))?,

@@ -618,7 +618,7 @@ const INPUT: &[Member] = &[
     form_get("accept", F::Accept), form_set("accept", F::Accept),
     form_get("alpha", F::Alpha), form_set("alpha", F::Alpha),
     form_get("alt", F::Alt), form_set("alt", F::Alt),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("formAction", F::FormAction), form_set("formAction", F::FormAction),
     form_get("formEnctype", F::FormEnctype), form_set("formEnctype", F::FormEnctype),
@@ -650,10 +650,12 @@ const INPUT: &[Member] = &[
     getter("defaultChecked", O::InputDefaultChecked), setter("defaultChecked", O::InputSetDefaultChecked),
     getter("valueAsNumber", O::InputValueAsNumber), setter("valueAsNumber", O::InputSetValueAsNumber),
     getter("valueAsDate", O::InputValueAsDate), setter("valueAsDate", O::InputSetValueAsDate),
+    method("stepUp", O::InputStepUp, 0), method("stepDown", O::InputStepDown, 0),
     getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
@@ -662,7 +664,7 @@ const INPUT: &[Member] = &[
 const FORM: &[Member] = &[
     form_get("acceptCharset", F::AcceptCharset), form_set("acceptCharset", F::AcceptCharset),
     form_get("action", F::Action), form_set("action", F::Action),
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("enctype", F::Enctype), form_set("enctype", F::Enctype),
     form_get("encoding", F::Encoding), form_set("encoding", F::Encoding),
     form_get("method", F::Method), form_set("method", F::Method),
@@ -672,6 +674,7 @@ const FORM: &[Member] = &[
     form_get("rel", F::Rel), form_set("rel", F::Rel),
     form_get("relList", F::RelList), form_set("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
+    method("submit", O::FormSubmit, 0), method("requestSubmit", O::FormRequestSubmit, 0),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
 ];
@@ -685,6 +688,8 @@ const FORM_CONTROL: &[Member] = &[
 ];
 const OUTPUT: &[Member] = &[
     getter("htmlFor", O::OutputHtmlFor), setter("htmlFor", O::OutputSetHtmlFor),
+    getter("value", O::OutputValue), setter("value", O::OutputSetValue),
+    getter("defaultValue", O::OutputDefaultValue), setter("defaultValue", O::OutputSetDefaultValue),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
@@ -711,7 +716,7 @@ const BUTTON: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const TEXTAREA: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("cols", F::Cols), form_set("cols", F::Cols),
     form_get("dirName", F::DirName), form_set("dirName", F::DirName),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
@@ -729,13 +734,14 @@ const TEXTAREA: &[Member] = &[
     getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
     getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
     method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    method("setRangeText", O::InputSetRangeText, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const SELECT: &[Member] = &[
-    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    getter("autocomplete", O::FormAutocompleteGet), setter("autocomplete", O::FormAutocompleteSet),
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
     form_get("name", F::Name), form_set("name", F::Name),
     form_get("required", F::Required), form_set("required", F::Required),
@@ -743,8 +749,11 @@ const SELECT: &[Member] = &[
     getter("form", O::FormControlForm), getter("value", O::SelectValue), setter("value", O::SelectSetValue),
     getter("selectedIndex", O::SelectSelectedIndex), setter("selectedIndex", O::SelectSetSelectedIndex),
     getter("options", O::SelectOptions), getter("length", O::SelectLength),
+    setter("length", O::SelectSetLength),
+    getter("selectedOptions", O::SelectSelectedOptions),
     getter("multiple", O::SelectMultiple), setter("multiple", O::SelectSetMultiple),
     method("add", O::SelectAdd, 1), method("remove", O::SelectRemove, 0),
+    method("item", O::SelectItem, 1), method("namedItem", O::SelectNamedItem, 1),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
@@ -757,6 +766,7 @@ const OPTION: &[Member] = &[
     getter("selected", O::OptionSelected), setter("selected", O::OptionSetSelected),
     getter("defaultSelected", O::OptionDefaultSelected), setter("defaultSelected", O::OptionSetDefaultSelected),
     getter("text", O::OptionText), setter("text", O::OptionSetText),
+    getter("index", O::OptionIndex),
 ];
 const OPTGROUP: &[Member] = &[
     form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
@@ -764,6 +774,21 @@ const OPTGROUP: &[Member] = &[
 ];
 const LABEL: &[Member] = &[
     form_get("htmlFor", F::HtmlFor), form_set("htmlFor", F::HtmlFor),
+    getter("form", O::LabelForm), getter("control", O::LabelControl),
+];
+const OBJ: &[Member] = &[getter("form", O::FormControlForm)];
+const PROGRESS: &[Member] = &[
+    getter("value", O::ProgressValue), setter("value", O::ProgressSetValue),
+    getter("max", O::ProgressMax), setter("max", O::ProgressSetMax),
+    getter("position", O::ProgressPosition),
+];
+const METER: &[Member] = &[
+    getter("value", O::MeterValue), setter("value", O::MeterSetValue),
+    getter("min", O::MeterMin), setter("min", O::MeterSetMin),
+    getter("max", O::MeterMax), setter("max", O::MeterSetMax),
+    getter("low", O::MeterLow), setter("low", O::MeterSetLow),
+    getter("high", O::MeterHigh), setter("high", O::MeterSetHigh),
+    getter("optimum", O::MeterOptimum), setter("optimum", O::MeterSetOptimum),
 ];
 const VALIDITY: &[Member] = &[
     getter("valueMissing", O::ValidityValueMissing), getter("typeMismatch", O::ValidityTypeMismatch),
@@ -948,7 +973,10 @@ const LEGACY_OBJECT_EXTRA: &[Member] = &[
     getter("useMap", O::LegacyReflectGet(I::HTMLObjectElement, "usemap", LR::String)), setter("useMap", O::LegacyReflectSet(I::HTMLObjectElement, "usemap", LR::String)),
     getter("border", O::LegacyReflectGet(I::HTMLObjectElement, "border", LR::LegacyString)), setter("border", O::LegacyReflectSet(I::HTMLObjectElement, "border", LR::LegacyString)),
 ];
-const LEGACY_OBJECT: [Member; (EMPTY_LEGACY_BASE).len() + LEGACY_OBJECT_EXTRA.len()] = with_legacy_members(EMPTY_LEGACY_BASE, LEGACY_OBJECT_EXTRA);
+// `OBJ` gained a `form` getter (form-associated custom element work) after
+// this legacy-attribute set was first written; base on it, not on the empty
+// legacy base, so a merge with that upstream change keeps both.
+const LEGACY_OBJECT: [Member; (OBJ).len() + LEGACY_OBJECT_EXTRA.len()] = with_legacy_members(OBJ, LEGACY_OBJECT_EXTRA);
 const LEGACY_OLIST_EXTRA: &[Member] = &[
     getter("compact", O::LegacyReflectGet(I::HTMLOListElement, "compact", LR::Boolean)), setter("compact", O::LegacyReflectSet(I::HTMLOListElement, "compact", LR::Boolean)),
 ];
@@ -1034,7 +1062,7 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
     D { interface: I::Blob, name: "Blob", parent: None, constructor: Some(O::BlobConstructor), members: BLOB },
     D { interface: I::File, name: "File", parent: Some(I::Blob), constructor: Some(O::FileConstructor), members: FILE },
-    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataConstructor), members: FORM_DATA },
+    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataFormConstructor), members: FORM_DATA },
     D {
         interface: I::EventTarget,
         name: "EventTarget",
@@ -1158,8 +1186,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_LEGEND },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
-    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: PROGRESS },
+    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: METER },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLVideoElement, name: "HTMLVideoElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
     D { interface: I::HTMLAudioElement, name: "HTMLAudioElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
@@ -1515,6 +1543,13 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         supported_names: Some(O::OptionsSupportedNames),
         indexed_getter: O::OptionsIndexedGetter, indexed_setter: Some(O::OptionsIndexedSetter),
         named_getter: Some(O::OptionsNamedGetter), named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::SELECTED_OPTIONS, LegacyPlatformHooks {
+        supported_index_count: O::SelectedOptionsSupportedIndexCount,
+        supported_names: None,
+        indexed_getter: O::SelectedOptionsIndexedGetter, indexed_setter: None,
+        named_getter: Some(O::SelectedOptionsNamedGetter), named_setter: None, named_deleter: None,
         override_builtins: false, unenumerable_names: true,
     })?;
     host.define_legacy_platform_object(InterfaceBrand::RADIO_NODE_LIST, LegacyPlatformHooks {

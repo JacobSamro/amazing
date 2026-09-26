@@ -119,6 +119,22 @@ impl RuntimeBindings {
     }
 }
 
+#[cfg(test)]
+impl RuntimeBindings {
+    /// Test hook: enqueue a raw wire payload as if a peer had sent it.
+    pub(crate) fn queue_raw_message(&self, target: DeliveryTarget, payload: Vec<u8>) {
+        let mut state = self.state.borrow_mut();
+        if let Some(realm) = state.messaging.as_mut() {
+            realm.inbox.push_back(QueuedMessage {
+                target,
+                payload,
+                origin: String::new(),
+                ports: Vec::new(),
+            });
+        }
+    }
+}
+
 impl RuntimeBindingHost<'_> {
     fn messaging_ensure(&mut self) -> Result<(), Throw> {
         if self.state.borrow().messaging.is_some() {
@@ -267,6 +283,12 @@ impl RuntimeBindingHost<'_> {
         if self.js.binding_is_nullish(&transfer) {
             return Ok((Vec::new(), Vec::new()));
         }
+        // WebIDL `sequence<object>` conversion: only a real sequence is
+        // accepted. A primitive or a plain array-like object (the pre-WebIDL
+        // postMessage convention) is a TypeError, not an empty transfer list.
+        if !self.messaging_is_array(&transfer)? {
+            return Err(Throw::type_error("transfer must be a sequence of objects"));
+        }
         let length = match self.js.binding_get_property(&transfer, "length")? {
             JsValue::Num(n) if n.is_finite() && n > 0.0 => n as usize,
             _ => 0,
@@ -282,6 +304,24 @@ impl RuntimeBindingHost<'_> {
             }
         }
         Ok((transferables, ports))
+    }
+
+    /// `Array.isArray(value)`, used for the WebIDL `sequence<object>` transfer
+    /// conversion. A full iterable check needs an exposed `@@iterator`; this
+    /// accepts every actual array (including subclasses) and rejects the
+    /// array-like objects the old postMessage convention allowed.
+    fn messaging_is_array(&mut self, value: &JsValue) -> Result<bool, Throw> {
+        if !matches!(value, JsValue::Object(_)) {
+            return Ok(false);
+        }
+        let global = self.js.binding_global_object();
+        let array = self.js.binding_get_property(&global, "Array")?;
+        let is_array = self.js.binding_get_property(&array, "isArray")?;
+        if !self.js.binding_is_callable(&is_array) {
+            return Ok(false);
+        }
+        let result = self.js.binding_call(&is_array, array, vec![value.clone()])?;
+        Ok(matches!(result, JsValue::Bool(true)))
     }
 
     fn messaging_port_id(&self, value: &JsValue) -> Option<PortId> {
@@ -350,13 +390,25 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_drain(&mut self) -> Result<(), Throw> {
-        loop {
+        // Deliver only the messages already queued when the checkpoint began.
+        // A handler that posts again queues the delivery for the next
+        // checkpoint rather than extending this one, so a self-posting loop
+        // (for example `onmessage` replying to itself) cannot starve timers or
+        // the rest of the event loop.
+        let ready = {
+            let state = self.state.borrow();
+            state
+                .messaging
+                .as_ref()
+                .map_or(0, |realm| realm.inbox.len())
+        };
+        for _ in 0..ready {
             let message = {
                 let mut state = self.state.borrow_mut();
-                let Some(realm) = state.messaging.as_mut() else {
-                    return Ok(());
-                };
-                realm.inbox.pop_front()
+                match state.messaging.as_mut() {
+                    Some(realm) => realm.inbox.pop_front(),
+                    None => break,
+                }
             };
             let Some(message) = message else {
                 break;
@@ -367,20 +419,66 @@ impl RuntimeBindingHost<'_> {
     }
 
     fn messaging_deliver(&mut self, message: QueuedMessage) -> Result<(), Throw> {
-        let serialized = state_wire::decode(&message.payload).map_err(Throw::type_error)?;
-        let data = self.js.structured_deserialize(&serialized)?;
-        let ports = self.messaging_wrap_ports(&message.target, &message.ports);
         let origin = message.origin.clone();
-        match message.target.clone() {
+        let target = message.target.clone();
+        let data = match state_wire::decode(&message.payload) {
+            Ok(serialized) => self.js.structured_deserialize(&serialized).ok(),
+            Err(_) => None,
+        };
+        match data {
+            Some(data) => {
+                let ports = self.messaging_wrap_ports(&target, &message.ports);
+                self.messaging_dispatch(target, data, &origin, ports)
+            }
+            // A malformed or unserializable payload must not abort the
+            // event-loop turn: a peer process can send arbitrary bytes. Per
+            // HTML, fire `messageerror` at the target and keep going.
+            None => self.messaging_dispatch_error(target, &origin),
+        }
+    }
+
+    fn messaging_dispatch(
+        &mut self,
+        target: DeliveryTarget,
+        data: JsValue,
+        origin: &str,
+        ports: JsValue,
+    ) -> Result<(), Throw> {
+        match target {
             DeliveryTarget::Port(id) => {
-                let event = self.messaging_make_event(data, &origin, ports)?;
-                self.messaging_dispatch_port(id, event)
+                let event = self.messaging_make_event("message", data, origin, ports)?;
+                self.messaging_dispatch_port("message", id, event)
             }
             DeliveryTarget::ChannelSlot(slot) => {
-                let event = self.messaging_make_event(data, &origin, ports)?;
-                self.messaging_dispatch_channel(slot, event)
+                let event = self.messaging_make_event("message", data, origin, ports)?;
+                self.messaging_dispatch_channel("message", slot, event)
             }
-            DeliveryTarget::Window => self.messaging_dispatch_window(data, &origin),
+            DeliveryTarget::Window => {
+                self.messaging_dispatch_window("message", data, origin, ports)
+            }
+        }
+    }
+
+    fn messaging_dispatch_error(
+        &mut self,
+        target: DeliveryTarget,
+        origin: &str,
+    ) -> Result<(), Throw> {
+        let ports = self.js.binding_create_array(Vec::new())?;
+        match target {
+            DeliveryTarget::Port(id) => {
+                let event =
+                    self.messaging_make_event("messageerror", JsValue::Null, origin, ports)?;
+                self.messaging_dispatch_port("messageerror", id, event)
+            }
+            DeliveryTarget::ChannelSlot(slot) => {
+                let event =
+                    self.messaging_make_event("messageerror", JsValue::Null, origin, ports)?;
+                self.messaging_dispatch_channel("messageerror", slot, event)
+            }
+            DeliveryTarget::Window => {
+                self.messaging_dispatch_window("messageerror", JsValue::Null, origin, ports)
+            }
         }
     }
 
@@ -417,6 +515,7 @@ impl RuntimeBindingHost<'_> {
 
     fn messaging_make_event(
         &mut self,
+        kind: &str,
         data: JsValue,
         origin: &str,
         ports: JsValue,
@@ -427,7 +526,7 @@ impl RuntimeBindingHost<'_> {
         let event = self.js.binding_create_object(Some(&prototype))?;
         let flags = BindingPropertyFlags::METHOD;
         self.js
-            .binding_define_data_property(&event, "type", JsValue::str("message"), flags)?;
+            .binding_define_data_property(&event, "type", JsValue::str(kind), flags)?;
         self.js
             .binding_define_data_property(&event, "data", data, flags)?;
         self.js
@@ -447,7 +546,12 @@ impl RuntimeBindingHost<'_> {
         Ok(event)
     }
 
-    fn messaging_dispatch_port(&mut self, id: PortId, event: JsValue) -> Result<(), Throw> {
+    fn messaging_dispatch_port(
+        &mut self,
+        kind: &str,
+        id: PortId,
+        event: JsValue,
+    ) -> Result<(), Throw> {
         let (slot, this) = {
             let state = self.state.borrow();
             let Some(realm) = state.messaging.as_ref() else {
@@ -460,10 +564,15 @@ impl RuntimeBindingHost<'_> {
             (slot, this)
         };
         let Some(this) = this else { return Ok(()) };
-        self.messaging_fire(slot, "message", this, event)
+        self.messaging_fire(slot, kind, this, event)
     }
 
-    fn messaging_dispatch_channel(&mut self, slot: usize, event: JsValue) -> Result<(), Throw> {
+    fn messaging_dispatch_channel(
+        &mut self,
+        kind: &str,
+        slot: usize,
+        event: JsValue,
+    ) -> Result<(), Throw> {
         let this = {
             let state = self.state.borrow();
             let Some(realm) = state.messaging.as_ref() else {
@@ -472,19 +581,30 @@ impl RuntimeBindingHost<'_> {
             realm.globals.get(&format!("{KIND_CHANNEL}:{slot}")).cloned()
         };
         let Some(this) = this else { return Ok(()) };
-        self.messaging_fire(slot, "message", this, event)
+        self.messaging_fire(slot, kind, this, event)
     }
 
-    fn messaging_dispatch_window(&mut self, data: JsValue, origin: &str) -> Result<(), Throw> {
+    fn messaging_dispatch_window(
+        &mut self,
+        kind: &str,
+        data: JsValue,
+        origin: &str,
+        ports: JsValue,
+    ) -> Result<(), Throw> {
         let window = self.js.binding_global_object();
         let flags = BindingPropertyFlags::METHOD;
         let event = invoke(
             self,
             Operation::EventConstructor,
             JsValue::Undefined,
-            &[JsValue::str("message")],
+            &[JsValue::str(kind)],
         )?;
-        let ports = self.js.binding_create_array(Vec::new())?;
+        // `MessageEvent.ports` is always a sequence, never `undefined`.
+        let ports = if matches!(ports, JsValue::Undefined) {
+            self.js.binding_create_array(Vec::new())?
+        } else {
+            ports
+        };
         self.js
             .binding_define_data_property(&event, "data", data, flags)?;
         self.js.binding_define_data_property(
@@ -496,7 +616,7 @@ impl RuntimeBindingHost<'_> {
         self.js
             .binding_define_data_property(&event, "ports", ports, flags)?;
         invoke(self, Operation::DispatchEvent, window.clone(), &[event.clone()])?;
-        let handler = self.messaging_window_handler("message");
+        let handler = self.messaging_window_handler(kind);
         if self.js.binding_is_callable(&handler) {
             let _ = self.js.binding_call(&handler, window, vec![event]);
         }
@@ -1498,6 +1618,102 @@ mod tests {
         assert_eq!(
             scheduler
                 .run_script("got !== null && got.v === 9")
+                .unwrap(),
+            JsValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn window_post_message_carries_transferred_ports() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var mc = new MessageChannel();
+                var got = -1;
+                var allPorts = false;
+                onmessage = function(e) {
+                    got = e.ports.length;
+                    allPorts = e.ports[0] instanceof MessagePort
+                        && e.ports[1] instanceof MessagePort;
+                };
+                postMessage("payload", "*", [mc.port1, mc.port2]);
+            "#,
+        );
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(
+            scheduler
+                .run_script("got === 2 && allPorts === true")
+                .unwrap(),
+            JsValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn post_message_rejects_non_sequence_transfer() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var thrown = [];
+                function attempt(value) {
+                    try { postMessage("", "*", value); thrown.push("no"); }
+                    catch (e) { thrown.push(e.name); }
+                }
+                attempt(1);
+                attempt({length: 1});
+                attempt("ab");
+            "#,
+        );
+        assert_eq!(
+            scheduler.run_script("thrown.join(',')").unwrap(),
+            JsValue::str("TypeError,TypeError,TypeError")
+        );
+    }
+
+    #[test]
+    fn malformed_payload_fires_messageerror_not_message() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var got = 0, errored = 0;
+                onmessage = function() { got++; };
+                onmessageerror = function(e) { errored += (e.type === "messageerror"); };
+            "#,
+        );
+        scheduler
+            .test_bindings()
+            .queue_raw_message(DeliveryTarget::Window, vec![0xff, 0x00, 0x01]);
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(
+            scheduler
+                .run_script("got === 0 && errored === 1")
+                .unwrap(),
+            JsValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn a_self_posting_handler_does_not_starve_the_checkpoint() {
+        let mut scheduler = scheduler();
+        run(
+            &mut scheduler,
+            r#"
+                var count = 0;
+                var mc = new MessageChannel();
+                mc.port1.addEventListener("message", function() { count++; });
+                mc.port1.addEventListener("message", function() {
+                    mc.port2.postMessage(0);
+                });
+                mc.port1.start();
+                mc.port2.postMessage(0);
+            "#,
+        );
+        scheduler.pump_now(true).unwrap();
+        assert_eq!(
+            scheduler
+                .run_script("count >= 1 && count < 100")
                 .unwrap(),
             JsValue::Bool(true)
         );

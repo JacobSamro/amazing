@@ -1532,3 +1532,367 @@ max(attr(data-test type(<length>)))`), was already implemented by CSS-15.
 Linux final gate (Boat sandbox, lane head `9bb410cd`): CSS crate **323/323**
 (adds `values::tests::calc_size_is_preserved_for_layout`), workspace nextest
 **2540/2540** (10 skipped), workspace doctests **2/2**, zero failures.
+
+## CSS-21 — CSS Color 5 relative color syntax
+
+Commit `1cf7076c`. `rgb()`/`rgba()`, `hsl()`/`hsla()`, `hwb()`, `lab()`,
+`lch()`, `oklab()`, and `oklch()` accept
+`fn(from <color> <channel> <channel> <channel> [ / <alpha> ])`. Channel tokens
+are the function's keywords (`r g b`, `h s l`, `h w b`, `l a b`, `l c h`),
+plain numbers or percentages on the channel's scale, `none`, and `calc()`
+arithmetic over keywords and numbers. `alpha` is the alpha keyword; an omitted
+alpha keeps the source color's alpha. Sources are any parseable CSS color.
+`color_advanced.rs` gains reverse source-channel conversions (HSL, HWB, Lab,
+OKLab and the LCH builders) plus a shared `hwb_rgb`; `ExprEval` evaluates
+channel `calc()` with keywords bound and handles the tokenizer's bare
+sign-ident spellings.
+
+A `currentcolor` source is retained by the computed-value seam:
+`ComputedStyle` stores the relative source and re-resolves it against the
+element's own `color`, so an explicitly inherited relative color re-binds on
+the child. `ComputedValue::Unparsed` preserves `rgb(from currentcolor ...)`
+until that seam; `color()` relative keeps the previous identity handling there.
+
+Boundaries (not claimed): `none` channels resolve to zero rather than
+propagating a missing component. General `color(from <color> <space> ...)`
+per-space channel references are CSS-22 below.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `fd96655b` containing
+`1cf7076c`, clean worktree): CSS crate **325/325**, workspace nextest
+**2736/2736** (10 skipped), workspace doctests **4/4**, zero failures.
+Tests: `color::tests::relative_color_syntax_resolves_channel_keywords` and
+`values::tests::relative_currentcolor_rebinds_on_inheritance`.
+
+## CSS-22 — `color(from <color> <space> ...)` relative forms across spaces
+
+Commit `92a647fe`. Extends CSS-21's relative-color seam to `color()`:
+`color_advanced.rs::relative_color_space` converts the source into the
+target predefined RGB or XYZ space (`srgb`, `srgb-linear`, `display-p3`,
+`display-p3-linear`, `a98-rgb`, `prophoto-rgb`, `rec2020`, `xyz`/`xyz-d65`,
+`xyz-d50`) via new reverse conversions (`rgba_to_color_space`), then the
+channel keywords (`r g b`, or `x y z` for XYZ) and `calc()` resolve in that
+space through the existing `color_space_rgba` builder shared with the
+absolute-form parser. A `currentcolor` source resolves through the same
+generic textual-substitution seam as the other relative-color functions
+(`resolve_currentcolor_relative` in computed.rs is function-name agnostic),
+so `color(from currentcolor <space> ...)` now covers every space and
+arbitrary channel math, not just the identity `r g b` copy CSS-21 special-
+cased (`relative_currentcolor_identity` stays as an unreachable-in-practice
+fallback for that one shape).
+
+Bug found and fixed while wiring the reverse path: `XYZ_TO_A98` was a stray
+Bradford-like matrix (not `A98_TO_XYZ`'s inverse), so `color(from <color>
+a98-rgb r g b)` round-trips diverged by dozens of levels per channel. Fixed
+by computing and hardcoding the correct inverse.
+
+Boundary: `unsupported_color_spaces_preserve_the_existing_cascade_winner` in
+`tests/typed_compute.rs` now exercises a custom-ident space
+(`--custom-space`), since `xyz` moved from unsupported to supported.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `852a342d`): CSS
+crate **326/326**, workspace nextest **2737/2737** (10 skipped), doctests
+**4/4**, zero failures. Tests: `color::tests::relative_color_syntax_resolves_channel_keywords`
+(extended) and `values::tests::relative_currentcolor_color_space_rebinds_on_inheritance`.
+
+## CSS-23 — `light-dark()`/`color-scheme`, and hover/pointer/aspect-ratio media features
+
+Commit `316c413d`. Prioritized ahead of the previously queued item because
+dark-mode CSS and touch/mouse-responsive media queries are what real pages
+actually use.
+
+- `color-scheme` (CSS Color Adjustment 1 §2): registered as an inherited
+  property, initial `normal`, grammar `normal | [light | dark]{1,2} &&
+  only?` validated in `values.rs`.
+- `light-dark(<color>, <color>)` (CSS Color 5 §4.1) is accepted on
+  `color`/`background-color`/border-`*`-color (the same properties CSS-21's
+  relative-color seam covers) when each branch is `currentcolor` or an
+  already-parseable `<color>`. `ComputedStyle::resolve_light_dark` runs
+  after inheritance and after `resolve_relative_colors`: the used scheme is
+  the element's own computed `color-scheme` when it names exactly one of
+  `light`/`dark`; otherwise (`normal`, or both listed) it falls back to
+  `MediaEnvironment::prefers_color_scheme`. A `currentcolor` branch
+  substitutes the element's own resolved `color`, resolving `color` itself
+  first so other properties can reference it.
+- Invalid `light-dark()`/`color-scheme` values are dropped before cascade
+  like any other invalid declaration on a known property
+  (`computed::expand_declaration`'s existing early-validity filter) — the
+  earlier valid declaration for that property wins outright (its literal
+  text; plain named colors are not normalized to hex, only the functional
+  seams write hex). This differs from the *guaranteed-invalid-after-`var()`*
+  policy (`compute_normal_value`'s later check), which falls back to
+  initial/inherited instead — the two existing tests
+  (`typed_compute::invalid_supported_color_after_var_defaults_without_reviving_prior_winner`
+  and the new `css23_light_dark::invalid_light_dark_does_not_displace_the_cascade_winner`)
+  cover both policies.
+- Media Queries 4 `hover`/`any-hover`/`pointer`/`any-pointer` (new
+  `HoverCapability`/`PointerCapability` enums on `MediaEnvironment`,
+  desktop-mouse defaults `hover`/`fine`) and `aspect-ratio`/`min-`/`max-
+  aspect-ratio`, evaluated through the existing public
+  `evaluate_media_query`/`MediaQueryList` API — the same seam
+  `.agents/css/questions.md` already told IA-REAL-PAGES is ready for
+  `window.matchMedia`.
+- `change_classification.rs` classifies `color-scheme` `PaintOnly`
+  alongside `color`/`cursor`/`visibility`.
+
+Boundary (not claimed): `light-dark()` is only recognized as the direct
+value of the four color properties above (matching CSS-21's scope), not
+inside gradients, `box-shadow`, or SVG `fill`/`stroke`. `color-scheme`'s
+`only` restricts to the engine's own choice among the listed schemes but
+does not yet feed a UA form-control/scrollbar palette (no such rendering
+exists yet). Custom-ident color-scheme names (forward-compat per spec) are
+not accepted, only `light`/`dark`.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `316c413d`): CSS
+crate **335/335**, workspace nextest **2746/2746** (10 skipped), doctests
+**4/4**, zero failures. WPT CSS reftest sweeps and all render gates remain
+deferred under Linux-first (2026-09-26).
+
+## CSS-24 — Color 5 `none`-propagation, color-mix() expansion, calc-size() nesting (base `5b923bf7`)
+
+Commit `2ef1d3b2`. The queued Color 5 work from CSS-23's report, done as one
+area: `none`-channel missing-component propagation through absolute colors
+and `color-mix()` interpolation, expanded `color-mix()` space/hue-method
+coverage, and `calc-size()` nesting.
+
+- **`none` in absolute color functions** (CSS Color 4 §4.4): previously
+  supported only in the relative-color forms (`rgb(from ... )` etc, CSS-21).
+  Now also accepted directly in `rgb()`/`rgba()` (modern space syntax only —
+  the legacy comma syntax predates `none` and does not accept it), `hsl()`,
+  `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, and the predefined
+  `color()` function, via shared helpers (`channel_or_none`/`alpha_or_none`
+  in `color.rs`; `none_component`/`is_none` plus the existing `hue`/`alpha`
+  in `color_advanced.rs`).
+- **`color-mix()` missing-component propagation** (CSS Color 4 §13): a
+  channel missing (`none`) in exactly one operand now takes the other
+  operand's value directly rather than being averaged in as a literal 0.
+  Alpha follows the same substitution rule for its own value, but rgb/polar
+  channels that are *not* themselves missing still mix by the normal
+  premultiplied weighted average.
+  - This needed `none_mask` (which detects whether an operand is written
+    literally in the mix's own space, so a `none` there means *that*
+    channel is missing) to recognize `rgb()`/`rgba()` (as `srgb`) and
+    `color(<space> ...)` (as `srgb`/`srgb-linear`/`xyz`/`xyz-d65`/`xyz-d50`,
+    with `xyz`/`xyz-d65` treated as aliases) — it previously matched only
+    the six polar/lab-family function names (`hsl`/`hwb`/`lab`/`lch`/
+    `oklab`/`oklch`) and silently gave every other space's `none` the
+    established none-is-0 treatment instead of propagating it.
+  - It also needed the premultiplication weights (`w1`/`w2`) to use each
+    operand's *effective* alpha — substituted from the other operand's
+    alpha when its own is missing — rather than the literal 0 the parser
+    stores for a `none` alpha; using the raw 0 zeroed out that operand's
+    contribution to every other channel instead of leaving it unaffected
+    by the missing alpha specifically.
+- **`color-mix()` expanded interpolation spaces**: `lab`, `oklab`, `xyz`,
+  `xyz-d65`, `xyz-d50`, `hsl`, `hwb`, `oklch` (previously only `srgb`,
+  `srgb-linear`, `lch`), plus the `shorter | longer | increasing |
+  decreasing hue` interpolation methods (§12.2, `shorter` default) via a new
+  `HueMethod` enum and `mix_hue`/`parse_mix_method`. The achromatic/moot
+  test for a polar operand's hue is space-specific: `hwb`'s is
+  `white + black >= 100%`, not "chroma channel near zero" — `hwb(_, 0%,
+  0%)` is fully chromatic, not achromatic.
+- **`calc-size()` nesting** (CSS Values 5 §11): now parses inside
+  `min()`/`max()`/`clamp()`, not just at the top level or as its own basis
+  argument. `math.rs` extracts `calc_size_body` (the shared
+  basis-comma-calc-sum-closeparen logic) out of `calc_size_function`, and
+  `atom()`'s generic `Token::Function` branch special-cases `calc-size`
+  before the shared `self.expression()` path, since a `<calc-size-basis>`
+  can start with a bare keyword (`auto`, `any`, ...) that `expression()`
+  cannot parse.
+- New test file `tests/css24_color5_gaps.rs` (12 tests): absolute-`none`
+  coverage per function family, missing-component propagation (rgb
+  channels, alpha, hue), the expanded-space round-trip invariant (mixing a
+  color with itself in every newly supported space reproduces it exactly),
+  the hsl circular-hue-path check (red/blue mixes through magenta, not a
+  desaturated middle), all four hue-interpolation methods, the hwb
+  achromatic distinction, and `calc-size()` nesting through the cascade. Two
+  channel-level comparisons use a ±1 byte tolerance (`assert_close`) since
+  they compare two independently-rounded computation paths (a full
+  `color-mix()` against a directly-parsed literal reference), not the same
+  code path twice.
+
+Boundary (not claimed): missing-component propagation for `color-mix()`
+only recognizes an operand as "written in the mix's own space" when it is a
+*literal* same-space color function (not `from`-relative, not a different
+space, not a custom property reference) — cross-space operands and any
+operand that isn't a direct literal keep the established none-is-0
+treatment, matching the scope `none_mask`'s doc comment states. `display-p3`
+and the other gamma-encoded predefined spaces are not added to
+`color-mix()`'s interpolation-space list (CSS Color 4 doesn't require them
+for mixing — only the listed rectangular/polar set — and no page-real-world
+priority was found for adding them speculatively).
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `2ef1d3b2`): CSS
+crate **335 → 347**, workspace nextest **2906/2906** (10 skipped), doctests
+**ok** across all 31 doc-tested crates, zero failures. Sandbox disk hit 0 GB
+free mid-gate (other lanes sharing the pool's caches); resolved by purging
+this lane's own `debug/incremental` plus the pool-shared
+`target/debug/incremental` — both are cargo-rebuildable caches, not
+committed work, per the same disk-hygiene principle AGENTS.md states for
+win-001. WPT CSS reftest sweeps and all render gates remain deferred under
+Linux-first (2026-09-26).
+
+## CSS-25 — Linux WPT parsing/computed-value runner (base `5b923bf7`)
+
+Commit `e58765a8`. WPT on Linux without render sweeps: a runner for the
+pinned WPT parse/computed-value testharness selections, driving
+`amazing-css` directly (no browser, no JS engine), plus the biggest
+failure clusters it surfaced.
+
+- **The runner**: `crates/amazing-css/examples/wpt_conformance.rs`. WPT's
+  `css/support/parsing-testcommon.js` and `computed-testcommon.js` give
+  every `*-valid.html`/`*-invalid.html`/`*-computed.html` file a small,
+  regular shape — top-level calls to `test_valid_value(property, value[,
+  serialized])`, `test_invalid_value(property, value)`, and
+  `test_computed_value(property, specified, computed)`, almost always with
+  plain quoted-string arguments. The runner statically extracts those call
+  sites (a small parenthesis/quote-aware scanner, not a JS parser — see its
+  own doc comment for the exact grammar it walks) and checks them against:
+  - valid/invalid: the new `pub fn values::parses(property, value) ->
+    bool` (a thin wrapper over the crate-internal `parse`, exposed
+    read-only for this runner; cascade code keeps using `parse` directly).
+  - computed: a lone `div { property: specified }` through `compute()`,
+    comparing `ComputedStyle::get(property)` textually against the
+    expected serialization.
+  Usage: `WPT_ROOT=~/corpora/wpt cargo run -p amazing-css --example
+  wpt_conformance [selection...]`; defaults to css-color, css-values,
+  css-cascade, css-conditional.
+- **Selections and file-shape reality**: the ticket named css-color,
+  css-values, css-cascade, mediaqueries and css-conditional. Only the first,
+  second, third and fifth have files in the `test_valid_value`/
+  `test_invalid_value`/`test_computed_value` shape (57 files, 360 extracted
+  assertions total at the pinned `c2a2fce` WPT revision). `css/mediaqueries`
+  has none — its parsing tests use a per-file `test_parsing(query, expected)`
+  pattern against `matchMedia(query).media`'s CSSOM canonical serialization
+  (e.g. `"(color"` normalizes to `"(color)"`, an unparseable query to
+  `"not all"`), which `MediaQueryList` does not implement (it stores each
+  comma-separated query as trimmed source text, not a canonical
+  re-serialization) — a distinct, real gap, but a different shape of work
+  than this runner covers; not attempted here.
+- **Known measurement limits** (see the runner's own doc comment): a
+  property this crate has no grammar for falls through to
+  `ComputedValue::Unparsed`, which accepts anything, so `values::parses`
+  reports it valid regardless of content — an honest "cannot yet reject
+  this" signal, not a scoring bug. Computed-value comparison is exact
+  string equality; this crate mostly retains the cascade winner's literal
+  (lightly canonicalized) text rather than always re-serializing to the CSS
+  Color 4/Values 5 computed forms WPT expects, so a computed failure can be
+  either a real bug or this known model gap (the fixes below narrow that
+  gap; the remainder in "Deferred" is the gap). Assertions made through a
+  per-file local JS wrapper function (not a direct call to the three
+  helpers) are not extracted, so counts are a lower bound per file.
+- **Measured**: **160/360 before any fix → 203/360 after**, zero
+  regressions on the amazing-css test suite (335 → 347 → still 347 across
+  this ticket's fixes).
+
+Three real bugs found and fixed, biggest cluster first:
+
+- **`syntax::serialize()` never inserted a space after a comma** inside a
+  function's argument list: `min(calc-size(auto,size + 20px),300px)`
+  instead of the CSS-canonical `min(calc-size(auto, size + 20px), 300px)`.
+  This is why nearly every multi-argument computed value across css-values
+  and css-color was failing on purely cosmetic grounds — `clamp()`,
+  `color-mix()`, `container`, `random-item()`, `rgba()`, `translate()`, all
+  of them. Fixed engine-wide: `Token::Comma` now always serializes as `", "`
+  (comma, one space, regardless of the source's own spacing), matching
+  every browser's canonical serialization. Updated the handful of existing
+  tests that had hardcoded the old (wrong) spacing in `cascade.rs`,
+  `computed.rs`, `parser.rs`, `syntax.rs`'s own tests, and two integration
+  tests. This also fixed one test in `crates/amazing/` (outside this lane's
+  paths) that depended on the old spacing; filed for integrator-assist in
+  `.agents/css/questions.md` with the exact one-line fix.
+- **`opacity`/`fill-opacity` only accepted a bare `<number>`**, silently
+  dropping every percentage, `calc()`, `min()`, `max()`, `clamp()` value to
+  the initial value `1` (invalid declarations don't override the cascade
+  winner, and there was none, so it fell back to initial) — CSS Color 4
+  §4.5's `<alpha-value>` is `<number> | <percentage>`, with the usual
+  `calc()` math (CSS Values 4 §10). Added `values::alpha_value`, a small
+  immediate recursive-descent evaluator (`+ - * /`, nested `calc()`/`min()`/
+  `max()`/`clamp()`): the percentage basis for an alpha value is always
+  exactly 1 (100% = 1), a *fixed* basis unlike a length's containing-block-
+  dependent one, so unlike `crate::math` (grammar validation only, deferred
+  resolution) this can and does evaluate to a concrete `f64` immediately.
+  `clamp(MIN, VAL, MAX)` follows the CSS Values 4 §10.6 formula exactly
+  (`max(MIN, min(VAL, MAX))`, not a naive `VAL.clamp(MIN, MAX)` — when
+  `MIN > MAX` the result is `MIN`, and Rust's own `f64::clamp` panics on
+  that input). One tokenizer quirk worth remembering elsewhere: a
+  standalone `-` or `+` lexes as a one-character `Token::Ident`, not
+  `Token::Delim`, per CSS Syntax 3's "would start an identifier" rule
+  (`calc(1 - 1)`'s middle token is `Ident("-")`) — `is_op()` matches both
+  forms. Fixed 20+ opacity valid/computed cases.
+- **`all` (CSS Cascade 3 §7.4) had no grammar at all** — any value "parsed"
+  via the generic accept-anything `Unparsed` fallback every property this
+  crate doesn't otherwise model falls into, so every css-cascade
+  invalid-value test failed (`all: auto`/`none`/`filter`/two keywords all
+  wrongly "parsed"). Given its own arm: only the CSS-wide keywords
+  (`initial | inherit | unset | revert | revert-layer`). Fixed css-cascade
+  from 3/10 to 10/10.
+- **`container`/`container-name`/`container-type`** (CSS Containment 3):
+  not evaluated (no size-container-query matching exists in this engine),
+  but now validated (`container-name`: `none | <custom-ident>+`;
+  `container-type`: `normal | [ [ size | inline-size ] || scroll-state ]`;
+  `container` shorthand: `<container-name> [ / <container-type> ]?`) and
+  `container-name`/`container-type` given `PROPERTIES` metadata (initial
+  `none`/`normal`, not inherited) so `initial`/`inherit`/`unset` resolve
+  instead of dropping the declaration entirely (previously `style.get()`
+  returned `None` for those three cases). Classified `Rebuild` in
+  `change_classification.rs` (a real change establishes/removes a query
+  container and containment, conservatively the broadest kind). The
+  `container` shorthand itself is stored as its own pass-through
+  declaration (this crate's shorthands other than the CSS-13-era ones
+  aren't independently re-derived from their longhands on read; that's a
+  broader existing architecture point, not new to this ticket) so its own
+  `initial`/`inherit`/`unset` cases are unchanged. Fixed 4 of
+  css-conditional's 12 container-related computed failures.
+
+Boundary (deliberately not fixed here, with the reason):
+
+- **`alpha()`** (CSS Color 5's relative-alpha function, e.g. `alpha(from red
+  / 0.5)`): entirely unimplemented (falls through to the generic
+  cascade-preserved-text path, so it "parses" as inert text but never
+  computes a color). All 3 `alpha-color-*.html` files (roughly 70
+  assertions) fail on this. Bleeding-edge, effectively unused on real pages
+  today; deferred rather than building a whole new relative-color function
+  for a corpus-measurement ticket.
+- **`random-item()`** (CSS Values 5, similarly brand-new/experimental):
+  unimplemented; `random-item-invalid.html`/`random-item-computed.html`
+  account for roughly 27 of the remaining css-values failures. Same
+  rationale as `alpha()`.
+- **`calc()` `infinity`/`NaN` arithmetic** for `width` et al.
+  (`calc-infinity-nan-computed.html`, ~15 failures): this crate's general
+  `crate::math` calc validator doesn't carry IEEE-754 infinity/NaN through
+  arithmetic to a used-value clamp; a real but narrower gap than the three
+  fixed above.
+- **Relative-color channel keywords (`r`/`g`/`b`/...) used inside a
+  `calc()`/`clamp()`/`min()`/`max()` that is itself an argument to
+  `rgb(from ... clamp(r, 30, 300) g b)`**: the relative-color grammar
+  doesn't thread channel-keyword substitution through nested math the way
+  `alpha()`'s calc-with-`alpha`-keyword case already does (`clamp-color-
+  computed.html`, ~15 failures, mostly overlapping with the comma-spacing
+  fix for the ones that don't need channel substitution).
+- **`container` shorthand serialization nuances**: slash-spacing
+  normalization (`foo /inline-size` → `foo / inline-size`) and
+  `container-type`'s canonical keyword order (`scroll-state size` → `size
+  scroll-state`) both need dedicated shorthand-serialization logic (this
+  crate generally serializes the cascade winner's tokenized text, not a
+  per-shorthand canonical re-derivation), disconnected from any actual
+  container-query *evaluation* capability. ~6 failures.
+
+Linux gate (Boat sandbox `bx_cp5jbn5z`, lane head `e58765a8`): CSS crate
+**347/347** (no regressions from any of the above), workspace nextest
+**2905/2906** (10 skipped) — the one failure,
+`runtime_binding_host::compositor::property_scene_tests::css13_attribute_delta_updates_bound_nodes_without_recompute`
+in `crates/amazing/src/runtime_host_compositor.rs` (outside this lane's
+paths), is a hardcoded string literal that depended on the old (wrong)
+comma-serialization convention; filed for integrator-assist with the exact
+one-line fix. Doctests **ok** across all 31 doc-tested crates. WPT
+mediaqueries `matchMedia` canonical serialization, and every item under
+"Boundary" above, are candidates for the next CSS-25-style pass.
+
+## Next
+
+The five deferred items above, roughly in real-page-impact order:
+`calc()` infinity/NaN, relative-color channel keywords inside nested
+`calc()`/`clamp()`, `container` shorthand serialization, then `alpha()` and
+`random-item()` (both genuinely rare on real pages today). Also: `mediaqueries`'
+`matchMedia().media` canonical serialization, a distinct shape of work this
+ticket's runner doesn't cover.
