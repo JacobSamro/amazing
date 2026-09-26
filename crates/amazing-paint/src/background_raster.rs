@@ -148,11 +148,39 @@ pub(super) fn paint(
     };
     // First declared image is topmost; the color was already painted beneath all.
     for layer in plan.layers.iter().rev() {
-        let Some(image) = layer
-            .url
-            .as_deref()
-            .and_then(|url| images.background_image(node, url))
-        else {
+        let origin = area(b, layer.origin);
+        let painting = area(b, layer.clip);
+        if origin.width <= 0.0 || origin.height <= 0.0 {
+            continue;
+        }
+        // A gradient has no intrinsic dimensions: `auto` resolves to the
+        // positioning area and the raster is produced at its used size. A URL
+        // layer keeps the provider's decoded pixels and its natural size.
+        let gradient_image;
+        let tile;
+        let image: &amazing_media::Image = if let Some(gradient) = layer.gradient.as_deref() {
+            let natural = (
+                origin.width.max(1.0).ceil() as u32,
+                origin.height.max(1.0).ceil() as u32,
+            );
+            let (w, h) = dimensions(layer.size, origin, natural, b.font_size);
+            if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
+                continue;
+            }
+            let (rw, rh) = (w.ceil().max(1.0) as u32, h.ceil().max(1.0) as u32);
+            let Some(rastered) = crate::gradient::raster(gradient, rw, rh, b.font_size) else {
+                continue;
+            };
+            tile = (rw as f64, rh as f64);
+            gradient_image = rastered;
+            &gradient_image
+        } else if let Some(url) = layer.url.as_deref() {
+            let Some(resolved) = images.background_image(node, url) else {
+                continue;
+            };
+            tile = (resolved.width as f64, resolved.height as f64);
+            resolved
+        } else {
             continue;
         };
         let Some(expected) = (image.width as usize)
@@ -164,13 +192,11 @@ pub(super) fn paint(
         if image.width == 0 || image.height == 0 || image.pixels.len() != expected {
             continue;
         }
-        let origin = area(b, layer.origin);
-        let painting = area(b, layer.clip);
-        if origin.width <= 0.0 || origin.height <= 0.0 {
-            continue;
-        }
-        let (mut w, mut h) =
-            dimensions(layer.size, origin, (image.width, image.height), b.font_size);
+        let (mut w, mut h) = if layer.gradient.is_some() {
+            tile
+        } else {
+            dimensions(layer.size, origin, (image.width, image.height), b.font_size)
+        };
         if !w.is_finite() || !h.is_finite() || w <= 0.0 || h <= 0.0 {
             continue;
         }

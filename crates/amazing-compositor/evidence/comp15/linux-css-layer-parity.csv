@@ -1,0 +1,4 @@
+fixture,mode,items,chunks,layers,promoted,squashed,exact,layer_rounding,losses
+warning: function `cyclic` is never used
+  --> crates/amazing-css/src/counter_styles.rs:36:4
+   |
