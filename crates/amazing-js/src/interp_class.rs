@@ -111,7 +111,7 @@ impl Interpreter {
     fn class_method(&self, method: &ast::ClassMethod, env: &EnvHandle, home: &Obj,
         key: &ClassFieldKey) -> JsValue
     {
-        let value = self.method_value(method, env);
+        let value = self.method_value(method, env, true);
         let JsValue::Object(function) = &value else { unreachable!() };
         let name = match key {
             ClassFieldKey::Public(key) => match key {
@@ -145,7 +145,7 @@ impl Interpreter {
         value
     }
 
-    fn define_class_method(&mut self, target: &JsValue, key: &PropertyKey,
+    pub(super) fn define_class_method(&mut self, target: &JsValue, key: &PropertyKey,
         kind: ast::MethodKind, value: JsValue) -> Result<(), Throw>
     {
         let JsValue::Object(object) = target else { unreachable!() };
@@ -257,7 +257,7 @@ impl Interpreter {
             _ => None,
         });
         let value = if let Some(method) = constructor {
-            self.method_value(method, &class_env)
+            self.method_value(method, &class_env, true)
         } else {
             self.make_function(&ast::FunctionItem {
                 name: class.name.clone(), params: Vec::new(),

@@ -170,6 +170,15 @@ impl Compiler {
         if class.super_class.is_some() {
             return Err(self.error(span, "derived class"));
         }
+        // Reject the whole program before execution when class elements need
+        // the shared class evaluator; never silently drop fields or static work.
+        if class.members.iter().any(|member| match member {
+            ast::ClassMember::Method(method) => method.is_static
+                || matches!(method.key, ast::PropKey::Private(_)),
+            _ => true,
+        }) {
+            return Err(self.error(span, "class fields, static or private elements"));
+        }
         let constructor = class.members.iter().find_map(|member| match member {
             ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
             _ => None,

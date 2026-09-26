@@ -657,26 +657,21 @@ impl Program {
                         callable.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
                         for method in &class.methods {
                             let key = method.key.resolve(&registers)?;
-                            let value = method.code.instantiate(i, &env);
+                            let mut value = method.code.instantiate(i, &env);
+                            let name = match &key {
+                                PropertyKey::String(name) => name.to_utf8_lossy(),
+                                PropertyKey::Symbol(symbol) => symbol.descriptive_string(),
+                            };
+                            let name = match method.kind {
+                                crate::ast::MethodKind::Get => format!("get {name}"),
+                                crate::ast::MethodKind::Set => format!("set {name}"),
+                                _ => name,
+                            };
+                            i.infer_function_name(&mut value, &name);
                             let JsValue::Object(function) = &value else { unreachable!() };
                             function.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
-                            if matches!(method.kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
-                                let mut property = prototype.borrow().own_prop(&key).cloned()
-                                    .unwrap_or(Property {
-                                        value: JsValue::Undefined, writable: false,
-                                        enumerable: false, configurable: true,
-                                        getter: None, setter: None,
-                                    });
-                                if method.kind == crate::ast::MethodKind::Get {
-                                    property.getter = Some(value.clone());
-                                } else {
-                                    property.setter = Some(value.clone());
-                                }
-                                prototype.borrow_mut().define(&key, property)
-                                    .map_err(|_| Throw::type_error("could not define class accessor"))?;
-                            } else {
-                                i.set_prop(&JsValue::Object(prototype.clone()), &key, value)?;
-                            }
+                            i.define_class_method(&JsValue::Object(prototype.clone()), &key,
+                                method.kind, value)?;
                         }
                         registers[*dst] = constructor;
                     }

@@ -202,6 +202,8 @@ fn bindings_branches_loops_and_completion_match() {
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A extends Object {}",
+        "changed = 1; class A { x=7; }",
+        "changed = 1; class A { static method() {} }",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
@@ -699,4 +701,20 @@ fn rank_test262_first_blockers() {
             .concat()
     });
     std::fs::write(output, rows).unwrap();
+}
+
+#[test]
+fn merged_class_accessors_and_arrow_arguments() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for source in [
+            "class C { get x() { return this.value; } set x(v) { this.value=v; } } var a=Object.getOwnPropertyDescriptor(C.prototype,'x'); var b=Object.getOwnPropertyDescriptor(C.prototype,'x'); var c=new C(); c.x=7; a.get===b.get && a.set===b.set && a.get.name==='get x' && a.set.length===1 && c.x===7",
+            "class C { method() {} } Object.getOwnPropertyDescriptor(C.prototype,'method').enumerable===false && C.prototype.method.name==='method'",
+            "function f(value) { return (({x}={x:3}) => arguments[0]+x)(); } f(7)===10",
+        ] {
+            let mut interpreter = Interpreter::new();
+            let result = interpreter.run_script_with_backend(source, backend)
+                .unwrap_or_else(|error| panic!("{backend:?}: {source}: {}", error.describe()));
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}: {source}");
+        }
+    }
 }
