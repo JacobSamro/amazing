@@ -315,12 +315,14 @@ impl<'a> DisplayListView<'a> {
         let commands = build_display_list(root);
         let mut containing_blocks = HashMap::new();
         collect_containing_blocks(root, PaintBounds::viewport(width, height), &mut containing_blocks);
+        let root_owner = root.node.and_then(|node| generation(node)
+            .map(|generation| PaintNodeKey { node, generation }));
         let mut view = Self {
             commands,
             item_commands: Vec::new(),
             items: Vec::new(),
             node_generations: HashMap::new(),
-            ambiguous_generation: false,
+            ambiguous_generation: root.node.is_some() && root_owner.is_none(),
             transforms: vec![TransformNode {
                 parent: 0,
                 owner: None,
@@ -335,20 +337,33 @@ impl<'a> DisplayListView<'a> {
                 owner: None,
                 opacity: 1.0,
             }],
-            scrolls: vec![ScrollNode {
-                parent: 0,
-                owner: None,
-                bounds: PaintBounds::viewport(width, height),
-                contents: scrollable_extent(root, PaintBounds::viewport(width, height)),
-                initial_offset: offset_for(root, scroll_offset),
-            }],
+            scrolls: vec![
+                ScrollNode {
+                    parent: 0,
+                    owner: None,
+                    bounds: PaintBounds::viewport(width, height),
+                    contents: PaintBounds::viewport(width, height),
+                    initial_offset: (0.0, 0.0),
+                },
+                // The layout viewport scrolls the document even when no element
+                // has an explicit CSS overflow declaration. The layout root is
+                // the body (or html when body is absent), so its overflow is
+                // represented here rather than as a second element scroller.
+                ScrollNode {
+                    parent: 0,
+                    owner: root_owner,
+                    bounds: PaintBounds::viewport(width, height),
+                    contents: scrollable_extent(root, PaintBounds::viewport(width, height), true),
+                    initial_offset: offset_for(root, scroll_offset),
+                },
+            ],
             width,
             height,
             text,
             images,
             controls,
         };
-        let mut state = PropertyState::default();
+        let mut state = PropertyState { scroll: 1, ..PropertyState::default() };
         let mut group_stack = Vec::new();
         let mut clip_stack = Vec::new();
         let mut ordinals = HashMap::new();
@@ -384,20 +399,24 @@ impl<'a> DisplayListView<'a> {
                 }
                 PaintCommand::PushOverflowClip(box_) => {
                     clip_stack.push(state);
-                    let bounds = clip_bounds(box_, width, height);
+                    let bounds = if std::ptr::eq(*box_, root) {
+                        PaintBounds::viewport(width, height)
+                    } else {
+                        clip_bounds(box_, width, height)
+                    };
                     let next = view.clips.len() as u32;
                     view.clips.push(ClipNode {
                         parent: state.clip,
                         bounds,
                     });
                     state.clip = next;
-                    if is_scroller(box_) {
+                    if is_scroller(box_) && !std::ptr::eq(*box_, root) {
                         let next = view.scrolls.len() as u32;
                         view.scrolls.push(ScrollNode {
                             parent: state.scroll,
                             owner: box_.node.and_then(|node| generation(node).map(|generation| PaintNodeKey { node, generation })),
                             bounds,
-                            contents: scrollable_extent(box_, bounds),
+                            contents: scrollable_extent(box_, bounds, false),
                             initial_offset: offset_for(box_, scroll_offset),
                         });
                         state.scroll = next;
@@ -700,13 +719,18 @@ fn collect_containing_blocks(
     }
 }
 
-fn scrollable_extent(box_: &LayoutBox, port: PaintBounds) -> PaintBounds {
-    fn include(box_: &LayoutBox, bounds: &mut PaintBounds, depth: usize) {
+fn scrollable_extent(box_: &LayoutBox, port: PaintBounds, stop_at_clips: bool) -> PaintBounds {
+    fn include(box_: &LayoutBox, bounds: &mut PaintBounds, depth: usize, stop_at_clips: bool) {
         if depth > 256 { return; }
         let own = PaintBounds::from_layout(box_.border_box);
         if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite)
             && own.width >= 0.0 && own.height >= 0.0 {
             *bounds = bounds.union(own);
+        }
+        if stop_at_clips && depth > 0 && ["overflow", "overflow-x", "overflow-y"]
+            .into_iter().filter_map(|name| box_.style.get(name))
+            .any(|value| !value.eq_ignore_ascii_case("visible")) {
+            return;
         }
         for line in &box_.lines {
             let own = PaintBounds { x: box_.content_box.x, y: line.y_top, width: box_.content_box.w, height: line.height };
@@ -721,14 +745,14 @@ fn scrollable_extent(box_: &LayoutBox, port: PaintBounds) -> PaintBounds {
             }
         }
         if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &box_.flow {
-            for child in children { if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1); } }
+            for child in children { if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1, stop_at_clips); } }
         }
         for child in &box_.positioned {
-            if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1); }
+            if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1, stop_at_clips); }
         }
     }
     let mut result = port;
-    include(box_, &mut result, 0);
+    include(box_, &mut result, 0, stop_at_clips);
     result
 }
 

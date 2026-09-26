@@ -154,11 +154,9 @@ impl Interpreter {
             configurable: true, getter: None, setter: None,
         });
         if matches!(kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-            let JsValue::Object(function) = value else { unreachable!() };
-            let function = function.borrow().func.clone().expect("class method function");
             descriptor.writable = false;
-            if kind == ast::MethodKind::Get { descriptor.getter = Some(Box::new(function)); }
-            else { descriptor.setter = Some(Box::new(function)); }
+            if kind == ast::MethodKind::Get { descriptor.getter = Some(value); }
+            else { descriptor.setter = Some(value); }
         } else {
             descriptor = Property {
                 value, writable: true, enumerable: false, configurable: true,

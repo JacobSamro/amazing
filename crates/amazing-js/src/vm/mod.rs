@@ -172,6 +172,7 @@ struct CompiledFunction {
     is_arrow: bool,
     is_generator: bool,
     is_async: bool,
+    strict: bool,
     is_method: bool,
 }
 
@@ -468,7 +469,6 @@ impl Program {
                         let JsValue::Object(callable) = &method else { unreachable!() };
                         callable.borrow_mut().func.as_mut().unwrap().home = Some(target.clone());
                         if matches!(kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
-                            let function = callable.borrow().func.clone().unwrap();
                             let mut property = target.borrow().own_prop(&key).cloned()
                                 .filter(|property| property.getter.is_some() || property.setter.is_some())
                                 .unwrap_or(Property {
@@ -477,9 +477,9 @@ impl Program {
                                     getter: None, setter: None,
                                 });
                             if *kind == crate::ast::MethodKind::Get {
-                                property.getter = Some(Box::new(function));
+                                property.getter = Some(method.clone());
                             } else {
-                                property.setter = Some(Box::new(function));
+                                property.setter = Some(method.clone());
                             }
                             target.borrow_mut().define(&key, property)
                                 .map_err(|_| Throw::type_error("could not define object accessor"))?;
@@ -661,7 +661,6 @@ impl Program {
                             let JsValue::Object(function) = &value else { unreachable!() };
                             function.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
                             if matches!(method.kind, crate::ast::MethodKind::Get | crate::ast::MethodKind::Set) {
-                                let body = function.borrow().func.clone().unwrap();
                                 let mut property = prototype.borrow().own_prop(&key).cloned()
                                     .unwrap_or(Property {
                                         value: JsValue::Undefined, writable: false,
@@ -669,9 +668,9 @@ impl Program {
                                         getter: None, setter: None,
                                     });
                                 if method.kind == crate::ast::MethodKind::Get {
-                                    property.getter = Some(Box::new(body));
+                                    property.getter = Some(value.clone());
                                 } else {
-                                    property.setter = Some(Box::new(body));
+                                    property.setter = Some(value.clone());
                                 }
                                 prototype.borrow_mut().define(&key, property)
                                     .map_err(|_| Throw::type_error("could not define class accessor"))?;
@@ -943,7 +942,16 @@ impl FunctionCode {
             home: None,
             proto_for_new: None,
         });
-        object.proto = Some(i.function_proto.clone());
+        object.proto = Some(if self.0.is_async && self.0.is_generator {
+            i.async_generator_function_proto.clone()
+        } else if self.0.is_async {
+            i.async_function_proto.clone()
+        } else if self.0.is_generator {
+            i.generator_function_proto.clone()
+        } else {
+            i.function_proto.clone()
+        });
+        object.strict_function = self.0.strict;
         let handle = Obj(Rc::new(RefCell::new(object)));
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
@@ -996,7 +1004,7 @@ impl FunctionCode {
         };
         let env = EnvHandle::new(EnvKind::Function, Some(parent));
         env.bind_this(bound_this);
-        i.bind_params(&env, &self.0.params, args)?;
+        i.bind_params(&env, &self.0.params, args, is_arrow)?;
         if self.0.is_generator {
             // Parameter defaults can replace the function's prototype.
             let generator_proto = generator_function.and_then(|function|

@@ -159,7 +159,16 @@ def scan(seen: set[str]) -> list[str]:
                         events.append(f"ERROR    {lane} idle after provider error '{marker}' -- resend to resume")
                     break
 
-        m = MODEL_RE.search(raw)
+        if tmuxctl.OC_FOOTER in raw:
+            # OpenCode lane: the mode line names the model.
+            if tmuxctl.AGENT_MODEL_LABEL not in raw:
+                key = digest(f"model:{lane}:oc")
+                if key not in seen:
+                    remember(seen, key)
+                    events.append(f"MODEL    {lane} not running {tmuxctl.AGENT_MODEL_LABEL}")
+            m = None
+        else:
+            m = MODEL_RE.search(raw)
         if m:
             running = f"{m.group(1)} {m.group(2)}".lower()
             expected = f"{tmuxctl.AGENT_MODEL} {tmuxctl.AGENT_EFFORT}"

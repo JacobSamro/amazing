@@ -388,6 +388,21 @@ impl EnvHandle {
     pub fn kind(&self) -> EnvKind {
         self.0.borrow().kind
     }
+
+    /// Variable declarations in sloppy direct eval target the nearest var environment.
+    pub fn var_scope(&self) -> EnvHandle {
+        let mut current = self.clone();
+        loop {
+            let (kind, parent) = {
+                let env = current.0.borrow();
+                (env.kind, env.parent.clone())
+            };
+            if matches!(kind, EnvKind::Global | EnvKind::Function | EnvKind::Arrow) {
+                return current;
+            }
+            current = parent.expect("block environment has a parent");
+        }
+    }
 }
 
 #[cfg(test)]
