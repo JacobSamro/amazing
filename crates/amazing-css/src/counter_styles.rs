@@ -415,6 +415,7 @@ fn predefined_representation(number: i32, style: &str) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn format_counter(number: i32, style: &str) -> String {
     let style = style.to_ascii_lowercase();
     predefined_representation(number, &style)

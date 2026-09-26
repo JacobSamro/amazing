@@ -710,6 +710,7 @@ fn collect_compound(compound: &Compound, effect: InvalidationSet, index: &mut Fe
                     Pseudo::Hover => Some("hover"),
                     Pseudo::Active => Some("active"),
                     Pseudo::Focus => Some("focus"),
+                    Pseudo::FocusVisible => Some("focus-visible"),
                     Pseudo::FocusWithin => Some("focus-within"),
                     Pseudo::Enabled => Some("enabled"),
                     Pseudo::Disabled => Some("disabled"),
