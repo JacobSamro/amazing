@@ -660,7 +660,13 @@ impl FetchHost for RuntimeBindingHost<'_> {
     fn fetch_header_iterator(&mut self, source: Rc<RefCell<FetchObject>>,
         kind: HeaderIterationKind) -> Result<JsValue, Throw> {
         if self.state.borrow().net.fetch_header_iterator_prototype.is_none() {
-            let prototype = self.js.binding_create_object(None)?;
+            // The iterator prototype must chain to %IteratorPrototype%, which
+            // WPT's `checkIteratorProperties` verifies through
+            // Object.getPrototypeOf(Object.getPrototypeOf(iterator)).
+            let iterator_base = self.js.run_script(
+                "Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()))",
+            )?;
+            let prototype = self.js.binding_create_object(Some(&iterator_base))?;
             let next = self.native("next", 0, NativeEntry::Net(NetNativeEntry::Operation(FetchOperation::HeaderIteratorNext)), HostCallPolicy::CallOnly);
             self.js.binding_define_data_property(&prototype, "next", next,
                 BindingPropertyFlags { writable: true, enumerable: true, configurable: true })?;

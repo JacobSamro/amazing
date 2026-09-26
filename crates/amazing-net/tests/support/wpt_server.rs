@@ -561,6 +561,51 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
             vec![header("Content-Type", "application/xml")],
             b"<root/>",
         ),
-        _ => reply(404, "Not Found", headers, b"not found"),
+        _ => {
+            // Selected tests also fetch pinned static resources (for example
+            // fetch/api/cors/resources/not-cors-safelisted.json) that have no
+            // handler. Serve those from the pinned WPT checkout when the runner
+            // points at one, so a missing handler does not fail the file.
+            if let Some(body) = static_file(path) {
+                let content_type = match name.rsplit_once('.').map(|(_, ext)| ext) {
+                    Some("json") => "application/json",
+                    Some("js") => "text/javascript",
+                    Some("css") => "text/css",
+                    Some("xml") => "application/xml",
+                    Some("headers" | "txt" | "asis") => "text/plain",
+                    _ => "text/plain",
+                };
+                headers.push(header("Access-Control-Allow-Origin", "*"));
+                return reply(200, "OK", {
+                    let mut with_type = vec![header("Content-Type", content_type)];
+                    with_type.extend(headers);
+                    with_type
+                }, &body);
+            }
+            reply(404, "Not Found", headers, b"not found")
+        }
     }
+}
+/// Read a pinned static WPT resource from `AMAZING_WPT_SHIM_ROOT`, if set.
+fn static_file(path: &str) -> Option<Vec<u8>> {
+    let root = std::path::PathBuf::from(std::env::var_os("AMAZING_WPT_SHIM_ROOT")?);
+    let relative = path.trim_start_matches('/');
+    if relative.is_empty()
+        || relative.contains("..")
+        || relative.contains('\\')
+        || relative.contains('%')
+    {
+        return None;
+    }
+    let canonical = root.join(relative).canonicalize().ok()?;
+    if !canonical.starts_with(&root)
+        || canonical.extension().and_then(|ext| ext.to_str()) == Some("py")
+    {
+        return None;
+    }
+    let metadata = canonical.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {
+        return None;
+    }
+    std::fs::read(canonical).ok()
 }

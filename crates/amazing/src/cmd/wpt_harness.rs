@@ -78,6 +78,19 @@ impl FixtureServer {
     fn url(&self, relative: &str) -> String {
         format!("{}/{}", self.origin, relative.trim_start_matches('/'))
     }
+
+    /// A fixture handle that serves nothing itself. The pinned fetch/api and
+    /// xhr tests run against the std-only WPT resource shim selected through
+    /// `AMAZING_WPT_SHIM_ADDR`, which the transport routes by WPT host, so the
+    /// document URL must stay on `web-platform.test`. Nested navigation still
+    /// needs an origin to strip, which is all this handle provides.
+    fn origin_only(origin: &str) -> Self {
+        Self {
+            origin: origin.to_string(),
+            stop: Arc::new(AtomicBool::new(true)),
+            worker: None,
+        }
+    }
 }
 
 impl Drop for FixtureServer {
@@ -611,26 +624,38 @@ fn execute(options: &Options) -> Result<(), String> {
         }
         _ => return Err("unsupported: classic-script .html/.htm or window .any.js/.window.js tests only".into()),
     };
-    let generated = options
-        .test
-        .ends_with(".any.js")
-        .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
-    let fixture = FixtureServer::start(root.clone(), generated)?;
-    let url = fixture.url(&options.test);
     let mut navigator = crate::navigator::Navigator::new(1);
-    let page = fetch_page(&mut navigator, &url, true, None)?;
-    if page.rendered != expected_html.as_bytes() {
-        return Err("fixture navigation differed from pinned page bytes".into());
-    }
+    let shim_selected = !options.scaffold && std::env::var_os("AMAZING_WPT_SHIM_ADDR").is_some();
+    let (fixture, url, history_state) = if shim_selected {
+        // Pinned fetch/api and xhr resource requests must resolve to the
+        // `web-platform.test` origins the std-only shim answers, not to the
+        // loopback fixture server, so the document URL stays on that host.
+        (
+            FixtureServer::origin_only("http://web-platform.test"),
+            format!("http://web-platform.test/{}", options.test),
+            None,
+        )
+    } else {
+        let generated =
+            (options.test.ends_with(".any.js") || options.test.ends_with(".window.js"))
+                .then(|| (options.test.clone(), expected_html.as_bytes().to_vec()));
+        let fixture = FixtureServer::start(root.clone(), generated)?;
+        let url = fixture.url(&options.test);
+        let page = fetch_page(&mut navigator, &url, true, None)?;
+        if page.rendered != expected_html.as_bytes() {
+            return Err("fixture navigation differed from pinned page bytes".into());
+        }
+        (fixture, page.url, page.history_state)
+    };
     execute_page(
         options,
         &root,
         file,
         expected_html,
-        page.url,
+        url,
         &fixture,
         &mut navigator,
-        page.history_state,
+        history_state,
         0,
     )
 }
