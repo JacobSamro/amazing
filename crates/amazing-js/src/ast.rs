@@ -509,6 +509,8 @@ pub struct TemplateLit {
     pub quasis_utf16: Vec<Vec<u16>>,
     /// Raw source spelling of each quasi as UTF-16 code units.
     pub raw_quasis_utf16: Vec<Vec<u16>>,
+    /// False denotes an undefined cooked entry in a tagged template object.
+    pub cooked_valid: Vec<bool>,
     pub exprs: Vec<Expr>,
 }
 

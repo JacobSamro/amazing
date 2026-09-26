@@ -40,7 +40,7 @@ impl Parser {
             return Err(self.err("expression statements cannot begin with `let [`"));
         }
         if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_))
-            && !(self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0) {
+            && !(matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield)) && !self.strict_script && self.in_generator == 0) {
             return Err(self.err("escaped reserved word"));
         }
         let kind = match &self.cur().kind {
@@ -68,7 +68,8 @@ impl Parser {
             }
             TokenKind::Ident(name) if name == "await" && self.word("await")
                 && matches!(self.nth(1).kind, TokenKind::Ident(ref next) if next == "using")
-                && !self.nth(1).newline_before => {
+                && !self.nth(1).newline_before && !self.nth(2).newline_before
+                && matches!(self.nth(2).kind, TokenKind::Ident(_)) => {
                 let decl = self.parse_using_decl(true, false)?;
                 self.semicolon()?;
                 StmtKind::Var(decl)
@@ -80,7 +81,7 @@ impl Parser {
             }
             TokenKind::Ident(name) if name == "async" && self.word("async") && self.nth_is_function(1) => {
                 self.bump(); // `async`
-                let mut f = self.parse_function_rest(true)?;
+                let mut f = self.parse_function_rest(true, true)?;
                 f.is_async = true;
                 if f.name.is_none() {
                     return Err(self.err_at(start, "function declarations must have a name"));
@@ -88,7 +89,7 @@ impl Parser {
                 StmtKind::Function(Box::new(f))
             }
             TokenKind::Keyword(crate::tokens::Keyword::Function) => {
-                let f = self.parse_function_rest(false)?;
+                let f = self.parse_function_rest(false, true)?;
                 if f.name.is_none() {
                     return Err(self.err_at(start, "function declarations must have a name"));
                 }
@@ -154,7 +155,7 @@ impl Parser {
                 // Labeled statement: `name :` (colon on any line? Spec
                 // requires the colon to follow; keep it simple and accept).
                 if (matches!(self.cur().kind, TokenKind::Ident(_))
-                    || self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0)
+                    || matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield)) && !self.strict_script && self.in_generator == 0)
                     && self.nth_punct(1, Punct::Colon)
                 {
                     if self.word("await") && self.in_async > 0 {
@@ -192,7 +193,7 @@ impl Parser {
     /// bracket/brace forms get a dedicated diagnostic).
     pub(super) fn let_starts_decl(&self) -> bool {
         matches!(self.nth(1).kind, TokenKind::Ident(_))
-            || self.in_generator > 0 && matches!(self.nth(1).kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
+            || matches!(self.nth(1).kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
             || matches!(self.nth(1).kind, TokenKind::Punct(Punct::Lbrace))
             || matches!(self.nth(1).kind, TokenKind::Punct(Punct::LBracket))
                 && !self.nth(1).newline_before
@@ -400,7 +401,24 @@ impl Parser {
         Ok(Stmt::new(StmtKind::Block(block), span))
     }
 
+    pub(super) fn parse_function_block(&mut self) -> Result<Block, SyntaxError> {
+        let saved_strict = self.strict_script;
+        let result = self.parse_block_contents(true);
+        self.strict_script = saved_strict;
+        let block = result?;
+        if saved_strict || has_use_strict(&block) {
+            if let Some(at) = self.tokens.borrow().legacy_escape_in(block.span) {
+                return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
+            }
+        }
+        Ok(block)
+    }
+
     pub(super) fn parse_block(&mut self) -> Result<Block, SyntaxError> {
+        self.parse_block_contents(false)
+    }
+
+    fn parse_block_contents(&mut self, mut directives: bool) -> Result<Block, SyntaxError> {
         let start = self.expect_punct(Punct::Lbrace)?;
         self.block_depth += 1;
         let mut body = Vec::new();
@@ -408,7 +426,15 @@ impl Parser {
             if self.at_eof() {
                 return Err(self.err("unterminated block: expected `}`"));
             }
-            body.push(self.parse_stmt()?);
+            let statement = self.parse_stmt()?;
+            if directives {
+                match directive_string(&statement) {
+                    Some("use strict") => self.strict_script = true,
+                    Some(_) => {},
+                    None => directives = false,
+                }
+            }
+            body.push(statement);
         }
         self.bump(); // }
         self.block_depth -= 1;
@@ -565,8 +591,13 @@ impl Parser {
             return self.parse_for_c_style(Some(ForInit::Decl(Box::new(decl))));
         }
         // Expression head: `for (x in y)` / `for (x of y)` / C-style.
+        let unescaped_async_head = self.word("async");
         let expr = self.parse_expression_no_in(true)?;
         if self.at_kw(crate::tokens::Keyword::In) || self.word("of") {
+            if !for_await && unescaped_async_head && self.word("of")
+                && matches!(&expr.kind, ExprKind::Ident(id) if id.name == "async") {
+                return Err(self.err_at(expr.span.start, "async cannot be a for-of assignment target"));
+            }
             if matches!(expr.kind, ExprKind::Assign { .. }) {
                 return Err(self.err_at(expr.span.start, "for-in/of assignment head needs a target"));
             }
@@ -868,7 +899,7 @@ impl Parser {
             }
             ExprKind::Paren(inner) | ExprKind::Spread(inner) => self.validate_strict_expression(inner)?,
             ExprKind::Unary { op: UnOp::Delete, operand }
-                if matches!(operand.kind, ExprKind::Ident(_)) => {
+                if is_identifier_reference(operand) => {
                 return Err(self.err_at(expr.span.start, "cannot delete an identifier in strict mode"));
             }
             ExprKind::Sequence(items) => {
@@ -925,6 +956,7 @@ impl Parser {
                         StmtKind::Var(decl) if decl.kind != VarKind::Var => decl.decls.iter()
                             .flat_map(|item| binding_names(&item.binding)).collect::<Vec<_>>(),
                         StmtKind::Class(class) => class.name.iter().collect(),
+                        StmtKind::Function(function) => function.name.iter().collect(),
                         _ => Vec::new(),
                     };
                     if let Some(name) = lexical.into_iter().find(|name| names.contains(name.name.as_str())) {
@@ -1017,7 +1049,9 @@ impl Parser {
 
     /// Label reference after break/continue: an identifier on the same line.
     pub(super) fn opt_label_ref(&mut self) -> Result<Option<Ident>, SyntaxError> {
-        if matches!(self.cur().kind, TokenKind::Ident(_)) && !self.cur().newline_before {
+        if (matches!(self.cur().kind, TokenKind::Ident(_))
+            || matches!(self.cur().kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
+                && !self.strict_script && self.in_generator == 0) && !self.cur().newline_before {
             Ok(Some(self.expect_ident()?))
         } else {
             Ok(None)
@@ -1036,7 +1070,9 @@ impl Parser {
         // further `ident :` pairs and see whether a loop keyword follows.
         let mut probe = 0usize;
         let is_loop = loop {
-            if matches!(self.nth(probe).kind, TokenKind::Ident(_))
+            if (matches!(self.nth(probe).kind, TokenKind::Ident(_))
+                || matches!(self.nth(probe).kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
+                    && !self.strict_script && self.in_generator == 0)
                 && self.nth_punct(probe + 1, Punct::Colon)
             {
                 probe += 2;
@@ -1071,6 +1107,7 @@ impl Parser {
     /// Does the current token plausibly start an expression? Used by the
     /// restricted-production checks (`return`/`yield` operand suppression).
     pub(super) fn starts_expression(&self) -> bool {
+        if self.cur().template_continuation { return false; }
         match &self.cur().kind {
             TokenKind::Punct(Punct::Slash | Punct::SlashEq)
             | TokenKind::RegExp { .. }
