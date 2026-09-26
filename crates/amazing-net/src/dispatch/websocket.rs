@@ -58,6 +58,13 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         self.websockets.len()
     }
 
+    /// Drop a connection that never reached `Open` (e.g. a JS-level `close()`
+    /// called while CONNECTING) without sending a close frame. The owned
+    /// transport, if any, is dropped, which closes the underlying socket.
+    pub fn forget_websocket(&mut self, id: WebSocketId) -> bool {
+        self.websockets.remove(&id).is_some()
+    }
+
     pub fn open_websocket(
         &mut self,
         input: &str,

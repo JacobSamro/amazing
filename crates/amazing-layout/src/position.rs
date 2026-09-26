@@ -117,6 +117,12 @@ fn position_subtree(
         | PositionKind::Sticky => own_padding_box,
         PositionKind::Static => inherited_positioned_cb,
     };
+    // Grid §10.1: when this grid container generates the abspos containing
+    // block, each child's containing block is its grid area (padding box for
+    // an auto-placed axis).
+    let grid_generates_cb = matches!(box_.display, crate::Display::Grid)
+        && matches!(position_kind(box_),
+            PositionKind::Relative | PositionKind::Absolute | PositionKind::Fixed);
 
     // Capture normal-flow static slots before relative offsets move siblings.
     let anchors: Vec<StaticAnchor> = box_
@@ -179,6 +185,8 @@ fn position_subtree(
         }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
             viewport
+        } else if grid_generates_cb {
+            grid_area_containing_block(box_, child, descendant_positioned_cb)
         } else {
             descendant_positioned_cb
         };
@@ -198,7 +206,8 @@ fn position_subtree(
         );
         child.margin = specified_margins;
         let static_anchor = if matches!(box_.display, crate::Display::Grid) {
-            let (x, y) = grid_child_static_anchor(box_, child, specified_margins);
+            let (x, y) =
+                grid_child_static_anchor(box_, child, specified_margins, grid_generates_cb);
             StaticAnchor {
                 x: x - specified_margins.left.unwrap_or(0.0),
                 y: y - specified_margins.top.unwrap_or(0.0),
@@ -420,6 +429,9 @@ fn prepare_sizes(
 
 // CSS lengths stored in ComputedStyle are unzoomed; geometry is already in
 // used coordinates. Do not apply the effective zoom a second time on relayout.
+
+// CSS lengths stored in ComputedStyle are unzoomed; geometry is already in
+// used coordinates. Do not apply the effective zoom a second time on relayout.
 fn set_used_length(box_: &mut LayoutBox, property: &str, value: f32) {
     let css_px = value / box_.style.effective_zoom() as f32;
     box_.style.set(property, &format!("{css_px}px"));
@@ -532,16 +544,48 @@ enum StaticAlign {
     End,
 }
 
+fn grid_area_containing_block(
+    parent: &LayoutBox,
+    child: &LayoutBox,
+    fallback: ContainingBlock,
+) -> ContainingBlock {
+    let Some(tracks) = parent.grid_tracks.as_ref() else {
+        return fallback;
+    };
+    let (col, row) = tracks.area(&child.style);
+    ContainingBlock {
+        rect: Rect {
+            x: col.map_or(fallback.rect.x, |(x, _)| x),
+            w: col.map_or(fallback.rect.w, |(_, w)| w),
+            y: row.map_or(fallback.rect.y, |(y, _)| y),
+            h: row.map_or(fallback.rect.h, |(_, h)| h),
+        },
+        rtl: fallback.rtl,
+    }
+}
+
 fn grid_child_static_anchor(
     parent: &LayoutBox,
     child: &LayoutBox,
     margins: values::SidesM,
+    use_grid_area: bool,
 ) -> (f32, f32) {
-    // Grid 1 §9.2: static position uses the grid container's content edges,
-    // independent of grid-placement properties and the abspos containing block.
-    let parent_rtl = parent
-        .style
-        .get("direction")
+    // The static position of an abspos child of a grid container is its grid
+    // area when that axis has a definite `grid-placement` AND the grid
+    // container is the one generating the child's abspos containing block
+    // (i.e. it is itself positioned, like `grid_generates_cb`); the
+    // container's content edges otherwise. A `position: static` grid
+    // container does NOT establish a containing block per CSS2.1 (grid does
+    // not get flexbox's unconditional special case), so its grid-placement
+    // is irrelevant to an abspos descendant's static position/alignment
+    // container in that case — confirmed by the pinned WPT
+    // `grid-abspos-staticpos-justify-self-{002,rtl-003}` references, which
+    // align entirely within the container's content box while grid-area
+    // places the item away from it. (Both engines and the pinned WPT reflect
+    // the grid area when the container IS the containing block; the
+    // content-edge rule is the Grid 1 fallback otherwise/for unplaced
+    // children.)
+    let parent_rtl = parent.style.get("direction")
         .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
     let child_rtl = child
         .style
@@ -555,34 +599,41 @@ fn grid_child_static_anchor(
             .or_else(|| parent.style.get(items_property))
             .unwrap_or("normal")
     };
-    let horizontal = static_align(
-        choice("justify-self", "justify-items"),
-        parent_rtl,
-        child_rtl,
-        true,
+    let horizontal = static_align(choice("justify-self", "justify-items"), parent_rtl, child_rtl, true);
+    let vertical = static_align(choice("align-self", "align-items"), parent_rtl, child_rtl, false);
+    let (col_area, row_area) = if use_grid_area {
+        parent.grid_tracks.as_ref()
+            .map(|tracks| tracks.area(&child.style))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+    let (cx, cw) = col_area.unwrap_or((parent.content_box.x, parent.content_box.w));
+    let (cy, ch) = row_area.unwrap_or((parent.content_box.y, parent.content_box.h));
+    let mut x = aligned_border_start(
+        cx, cw, child.border_box.w,
+        margins.left.unwrap_or(0.0), margins.right.unwrap_or(0.0), horizontal,
     );
-    let vertical = static_align(
-        choice("align-self", "align-items"),
-        parent_rtl,
-        child_rtl,
-        false,
+    let mut y = aligned_border_start(
+        cy, ch, child.border_box.h,
+        margins.top.unwrap_or(0.0), margins.bottom.unwrap_or(0.0), vertical,
     );
-    let x = aligned_border_start(
-        parent.content_box.x,
-        parent.content_box.w,
-        child.border_box.w,
-        margins.left.unwrap_or(0.0),
-        margins.right.unwrap_or(0.0),
-        horizontal,
-    );
-    let y = aligned_border_start(
-        parent.content_box.y,
-        parent.content_box.h,
-        child.border_box.h,
-        margins.top.unwrap_or(0.0),
-        margins.bottom.unwrap_or(0.0),
-        vertical,
-    );
+    // Grid Lanes `fill-reverse`: neither axis has real tracks in the
+    // waterfall direction (`area()` returns `None` there), so an unplaced
+    // out-of-flow child's static position on that axis defaulted to the near
+    // content edge above. Mirror it the same way real items are mirrored
+    // after layout (css-grid-3 draft, open issue on the exact rule; this
+    // matches the pinned WPT reference renders).
+    if use_grid_area {
+        if let Some(tracks) = parent.grid_tracks.as_ref() {
+            if col_area.is_none() && tracks.reverse_x {
+                x = cx + cw - (x - cx) - child.border_box.w;
+            }
+            if row_area.is_none() && tracks.reverse_y {
+                y = cy + ch - (y - cy) - child.border_box.h;
+            }
+        }
+    }
     (x, y)
 }
 
@@ -820,13 +871,25 @@ mod tests {
     }
 
     #[test]
-    fn grid_child_static_position_uses_content_box_self_alignment() {
+    fn grid_abspos_static_position_uses_grid_area_only_when_positioned() {
+        // A `position: static` grid container does not generate the abspos
+        // containing block (CSS2.1 §10.1; grid does not get flexbox's
+        // unconditional special case), so grid-placement is irrelevant to an
+        // abspos descendant's static position/alignment container in that
+        // case: it aligns within the full content box instead. Confirmed by
+        // the pinned WPT `grid-abspos-staticpos-justify-self-002`/`-rtl-003`
+        // references, which use plain content-box alignment for exactly this
+        // static case. Only `position: relative` (etc.) uses the grid area.
         for position in ["static", "relative"] {
             let (dom, root) = layout(
-                "<body><div id=grid><div id=auto></div><div id=start></div><div id=end></div><div id=self_start></div><div id=safe></div></div></body>",
+                "<body><div id=grid><div id=auto></div><div id=start></div><div id=end></div><div id=self_start></div><div id=safe></div><div id=first></div><div id=unplaced></div></div></body>",
                 &format!(
-                    "body{{margin:0}} #grid{{display:grid;position:{position};width:100px;height:60px;padding:3px 5px;justify-items:center;align-items:center}} \
-                     #grid>div{{position:absolute;width:20px;height:10px;grid-area:2 / 2 / 3 / 3}} \
+                    "body{{margin:0}} #grid{{display:grid;position:{position};width:100px;height:60px; \
+                     grid-template-columns:3px 20px 3px;grid-template-rows:2px 30px 2px; \
+                     justify-items:center;align-items:center}} \
+                     #grid>div{{position:absolute;width:8px;height:6px;grid-area:2 / 2 / 3 / 3}} \
+                     #grid>div#first{{grid-area:1 / 1 / 2 / 2;justify-self:start;align-self:start}} \
+                     #grid>div#unplaced{{grid-area:auto;justify-self:center;align-self:center}} \
                      #start{{justify-self:normal;align-self:start}} #end{{justify-self:end;align-self:end}} \
                      #self_start{{direction:rtl;justify-self:self-start;align-self:start}} \
                      #safe{{justify-self:safe end;align-self:safe center}}"
@@ -837,23 +900,77 @@ mod tests {
             let grid = find_id(&root, &dom, "grid").unwrap();
             let x = grid.content_box.x;
             let y = grid.content_box.y;
-            let auto = find_id(&root, &dom, "auto").unwrap();
-            close(auto.border_box.x, x + 40.0);
-            close(auto.border_box.y, y + 25.0);
-            let start = find_id(&root, &dom, "start").unwrap();
-            close(start.border_box.x, x);
-            close(start.border_box.y, y);
-            let end = find_id(&root, &dom, "end").unwrap();
-            close(end.border_box.x, x + 80.0);
-            close(end.border_box.y, y + 50.0);
-            close(
-                find_id(&root, &dom, "self_start").unwrap().border_box.x,
-                x + 80.0,
-            );
-            let safe = find_id(&root, &dom, "safe").unwrap();
-            close(safe.border_box.x, x);
-            close(safe.border_box.y, y);
+            if position == "relative" {
+                // Grid area 2/2 is x[3,23) y[2,32): center, start, end, self-start.
+                let auto = find_id(&root, &dom, "auto").unwrap();
+                close(auto.border_box.x, x + 9.0);
+                close(auto.border_box.y, y + 14.0);
+                let start = find_id(&root, &dom, "start").unwrap();
+                close(start.border_box.x, x + 3.0);
+                close(start.border_box.y, y + 2.0);
+                let end = find_id(&root, &dom, "end").unwrap();
+                close(end.border_box.x, x + 15.0);
+                close(end.border_box.y, y + 26.0);
+                close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 15.0);
+                let safe = find_id(&root, &dom, "safe").unwrap();
+                close(safe.border_box.x, x + 3.0);
+                close(safe.border_box.y, y + 2.0);
+                // Area 1/1 is x[0,3) y[0,2): start alignment clips to its origin.
+                let first = find_id(&root, &dom, "first").unwrap();
+                close(first.border_box.x, x);
+                close(first.border_box.y, y);
+            } else {
+                // Full content box is 100x60: center, start, end, self-start
+                // (RTL child -> end).
+                let auto = find_id(&root, &dom, "auto").unwrap();
+                close(auto.border_box.x, x + 46.0);
+                close(auto.border_box.y, y + 27.0);
+                let start = find_id(&root, &dom, "start").unwrap();
+                close(start.border_box.x, x);
+                close(start.border_box.y, y);
+                let end = find_id(&root, &dom, "end").unwrap();
+                close(end.border_box.x, x + 92.0);
+                close(end.border_box.y, y + 54.0);
+                close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 92.0);
+                let safe = find_id(&root, &dom, "safe").unwrap();
+                close(safe.border_box.x, x);
+                close(safe.border_box.y, y);
+                let first = find_id(&root, &dom, "first").unwrap();
+                close(first.border_box.x, x);
+                close(first.border_box.y, y);
+            }
+            // An unplaced abspos child keeps the content-edge static position
+            // regardless of the container's own position value.
+            let unplaced = find_id(&root, &dom, "unplaced").unwrap();
+            close(unplaced.border_box.x, x + (grid.content_box.w - 8.0) / 2.0);
+            close(unplaced.border_box.y, y + (grid.content_box.h - 6.0) / 2.0);
         }
+    }
+
+    /// css/css-grid/grid-lanes/abspos/column-grid-lanes-oof-fill-reverse-001.html
+    /// (pinned WPT `c2a2fce6`): three 40px items in a single `column
+    /// fill-reverse` lane (natural height 140px) end up mirrored — item 1
+    /// last (visually at the bottom), item 3 first (top). An out-of-flow
+    /// descendant with `top`/`bottom` auto has no grid placement, so its
+    /// static position falls back to the container's near content edge on
+    /// the waterfall (row) axis; that fallback must be mirrored the same way
+    /// real items are, landing flush with the far (bottom) edge, matching
+    /// the WPT reference (`top: 120px` for a 20px-tall box in a 140px lane).
+    #[test]
+    fn grid_lanes_fill_reverse_mirrors_oof_static_position_on_waterfall_axis() {
+        let (dom, root) = layout(
+            "<body><div id=lanes><item>1</item><item>2</item><item>3</item><div id=oof></div></div></body>",
+            "body{margin:0} #lanes{display:grid-lanes;grid-lanes-direction:column fill-reverse; \
+             grid-template-columns:80px;gap:10px;width:200px;position:relative} \
+             item{display:block;height:40px} \
+             #oof{position:absolute;width:20px;height:20px;left:0px}",
+            800.0,
+            600.0,
+        );
+        let lanes = find_id(&root, &dom, "lanes").unwrap();
+        let oof = find_id(&root, &dom, "oof").unwrap();
+        close(lanes.content_box.h, 140.0);
+        close(oof.border_box.y, lanes.content_box.y + 120.0);
     }
 
     #[test]

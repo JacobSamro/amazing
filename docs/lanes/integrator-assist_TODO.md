@@ -944,3 +944,86 @@ Triage (routed to the owning lanes' worktree `questions.md`):
 
 Driver-owned: the lenient headless path and the corpus harness; no driver crash
 was found. Ordinary `render` and the strict reftest path keep abort-on-error.
+
+## IA-LIVE-PAGES — live public-site headless corpus (2026-09-26)
+
+Finished a prior agent's wip on `tests/live-pages/` (40 real public URLs;
+`probe.js` surveys ~70 Window/interface globals) and
+`crates/amazing/tests/live_pages.rs`. Fixed a real cross-lane hazard in both
+this and the IA-REAL-PAGES harness: pooled Boat sandboxes share
+`~/amazing/target`, so another lane's mid-run `cargo build -p amazing` can
+swap `CARGO_BIN_EXE_amazing` under a running corpus loop; both harnesses now
+copy the binary into a private per-run path before looping.
+
+Result (Linux Boat, viewport 1024, 40 URLs): 0 crashes/panics; 37/40 `ok`, 1
+stale-fixture 404 (fixed), 2 timeouts at the 150s cap on very JS-heavy real
+sites (`docs.rs/serde`, `vuejs.org`). Full per-page/API/error/warning tables
+regenerate via the command in the test's own doc comment (not checked in;
+public-web evidence goes stale).
+
+Driver-owned fixes: the binary-pinning bug above. Investigated two
+aggregated warning clusters by reproducing them directly instead of guessing
+from counts, and root-caused both to lower crates (not driver bugs): a CSS
+`unicode-range` tokenizer/serializer round-trip bug (`amazing-css`) and a
+sfnt/WOFF2 decode short-read (`amazing-text-provider`); filed with exact
+repro to `.agents/css/questions.md` and `.agents/text/questions.md`. Plus
+three js-lang regex/module findings from real shipped JS and a 17-API
+confirmed-missing list to dom-bindings (see `.agents/<lane>/questions.md`).
+
+Mid-ticket, a storage-reported cross-lane regression (real-timer hangs
+through `wpt_harness.rs`'s `pump_now`) was relayed here; checked it against
+this head (workspace nextest clean, 2747/11 skipped/0 failed) and against
+this harness's own code path (`pump_at`, render-hook-disabled per
+IA-FRAME-PHASES) and found neither implicated — filed as negative evidence
+to `.agents/storage/questions.md`. Did not touch the render hook or task
+queue ordering.
+
+## IA-A11Y-ADOPT / IA-DEVTOOLS-ADOPT — accessibility tree and DevTools host seam (2026-09-26)
+
+Adopted two crates the a11y and devtools lanes had asked the driver to wire
+up, in the same series as IA-LIVE-PAGES.
+
+**`amazing axtree <page.html|url> [viewport_width]`**
+(`crates/amazing/src/cmd/axtree.rs`): fetches/parses a page exactly like
+`render`/`render-page`, resolves real author stylesheets via
+`page::collect_author_css` (inline `<style>` *and* `<link rel=stylesheet>`,
+not just the a11y crate's own inline-only convenience entry), computes
+style+layout with the fallback text system and `NoReplacedElements` (same
+limitation as `amazing_a11y::build_document`), and prints
+`amazing_a11y::build(&dom,&styled,&layout).snapshot().dump()`. No changes
+needed in `amazing-a11y` — the crate anticipated this seam (`SchemaSnapshot::
+dump()` doc comment: "used by tests and the CLI").
+
+**`amazing devtools <url> [listen-addr]`**
+(`crates/amazing/src/runtime_host_devtools.rs`): implements `DevToolsHost`/
+`DevToolsSession` over a real fetched page — `Page.navigate`,
+`Page.getFrameTree`, `Page.getLayoutMetrics`, `Runtime.evaluate` — and owns a
+`CdpServer::bind(...)` on a background thread, per the devtools lane's exact
+request in `.agents/integrator-assist/questions.md`. Key design point: the
+session type is `Arc<Mutex<PageState>>` over a *plain* `amazing_dom::Dom`
+(no `Rc<RefCell<BrowserDomHost>>`), because `DevToolsSession: Send` and `Rc`
+is never `Send` for any `T` — the real `DriverScheduler`/JS interpreter (which
+*is* `Rc`-based, per the single-threaded-execution locked decision) is built
+fresh inside each `evaluate()` call instead of stored on the session, so it
+never crosses the host→connection-thread boundary. Consequence, documented
+rather than hidden: `Runtime.evaluate` gets a fresh JS realm per call — DOM
+mutations persist across calls (plain owned data), JS globals do not. A
+persistent realm needs a dedicated JS thread the session talks to over a
+channel; noted as a follow-up, not attempted here.
+`Page.captureScreenshot` stays the crate default (`Unsupported`): no
+PNG/JPEG/WebP encoder exists in this driver yet, only BMP. DOM/CSS/Input
+domains are left for the next slice, consistent with the crate's own
+"adopt domains one at a time" design (every `DevToolsSession` method
+defaults to `Unsupported`).
+
+Both are additive dependencies (`amazing-a11y`, `amazing-devtools`, each
+already std-only) in `crates/amazing/Cargo.toml`; `Cargo.lock` updated to
+match. Smoke-tested against real pages/URLs (a real `<button>`/`<p>` tree;
+`/json/version` and `/json/list` served correctly for `https://example.com/`
+over a bound TCP port), plus 5 new unit/integration tests in
+`runtime_host_devtools.rs`.
+
+Gate (Linux Boat, head `134ccaf6` plus this series): `-p amazing` nextest 224
+passed/5 skipped (no lib doctests — `amazing` is bin-only); workspace nextest
+2747 passed/11 skipped/0 failed (85.5s); workspace doctests 4 passed/0
+failed. Zero losses.

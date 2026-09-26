@@ -8,21 +8,52 @@ pub(crate) struct PageScript {
     pub(crate) body: String,
 }
 
+/// A `<script>` is classic JavaScript only when its `type` is absent, empty, or
+/// a JavaScript MIME type. Data blocks (`application/ld+json`, `text/template`,
+/// `importmap`, ...) must never execute, and modules are not supported here, so
+/// both are skipped instead of being parsed as classic scripts. Executing a
+/// data block or a module as classic JS produced spurious parse errors on real
+/// pages.
+fn is_classic_javascript_type(raw: Option<&str>) -> bool {
+    let Some(raw) = raw else { return true };
+    let value = raw.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    value.is_empty()
+        || matches!(
+            value.as_str(),
+            "text/javascript"
+                | "application/javascript"
+                | "application/ecmascript"
+                | "text/ecmascript"
+                | "application/x-javascript"
+                | "text/x-javascript"
+                | "text/jscript"
+                | "text/livescript"
+        )
+}
+
 pub(crate) fn collect_script_text(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
     scripts: &mut Vec<PageScript>,
 ) {
     if dom.name(node) == Some("script") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let script_type = attrs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("type"))
+            .map(|(_, value)| value.as_str());
+        if !is_classic_javascript_type(script_type) {
+            return;
+        }
         let mut source = String::new();
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
                 source.push_str(data);
             }
         }
-        let src = dom
-            .attrs_of(node)
-            .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+        let src = attrs
+            .iter()
+            .find(|(name, _)| name == "src")
             .map(|(_, value)| value.clone());
         if src.is_some() || !source.trim().is_empty() {
             scripts.push(PageScript { src, body: source });
@@ -59,15 +90,28 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     Ok(())
 }
 
+/// Result of the lenient real-page script pass: the collected failures plus the
+/// console lines produced by the optional API probe script.
+pub(crate) struct LenientScriptResult {
+    pub(crate) errors: Vec<String>,
+    pub(crate) probe: Vec<String>,
+}
+
 /// Real-page headless path: run every script, handler and the bounded event
 /// loop, but collect each failure instead of aborting at the first one. The
 /// page still paints, and the caller reports the errors. The reftest path keeps
 /// the strict `prepare_page_scripts`, where a thrown script is never a pass.
+///
+/// When `probe` is supplied it runs in the same interpreter after the page's
+/// scripts, events and event-loop steps; only its console output is returned in
+/// `probe`, so a live corpus can report missing globals per page.
 pub(crate) fn execute_page_scripts_lenient(
     host: &Rc<RefCell<BrowserDomHost>>,
     page: &str,
-) -> Vec<String> {
+    probe: Option<&str>,
+) -> LenientScriptResult {
     let mut errors = Vec::new();
+    let mut probe_lines = Vec::new();
     let (scripts, handlers) = {
         let host_ref = host.borrow();
         let mut scripts = Vec::new();
@@ -76,13 +120,16 @@ pub(crate) fn execute_page_scripts_lenient(
         collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
         (scripts, handlers)
     };
-    if scripts.is_empty() && handlers.is_empty() {
-        return errors;
+    if scripts.is_empty() && handlers.is_empty() && probe.is_none() {
+        return LenientScriptResult { errors, probe: probe_lines };
     }
     let mut scheduler = match crate::js_scheduler::DriverScheduler::new(
         host.clone(), crate::js_scheduler::JS_CAPACITY) {
         Ok(scheduler) => scheduler,
-        Err(error) => { errors.push(format!("scheduler init: {}", error.describe())); return errors; }
+        Err(error) => {
+            errors.push(format!("scheduler init: {}", error.describe()));
+            return LenientScriptResult { errors, probe: probe_lines };
+        }
     };
     scheduler.set_location_url(page);
     for (node, event, body) in handlers {
@@ -129,7 +176,15 @@ pub(crate) fn execute_page_scripts_lenient(
             Err(error) => { errors.push(format!("page event loop: {}", error.describe())); break; }
         }
     }
-    errors
+    if let Some(source) = probe {
+        let before = scheduler.js.output.borrow().len();
+        if let Err(error) = scheduler.run_script(source) {
+            errors.push(format!("probe script: {}", error.describe()));
+        }
+        let output = scheduler.js.output.borrow();
+        probe_lines.extend(output.iter().skip(before).cloned());
+    }
+    LenientScriptResult { errors, probe: probe_lines }
 }
 
 /// Starts the page's script and event-loop lifetime. WPT keeps this scheduler
@@ -396,5 +451,28 @@ mod tests {
         assert_eq!(wpt_root_relative_url("https://example.org/page", "/common/helper.js", &root), None);
         assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), "/C:/outside.js", &root), Some("about:invalid#blocked-wpt-resource".into()));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_classic_javascript_script_types_execute() {
+        assert!(is_classic_javascript_type(None));
+        assert!(is_classic_javascript_type(Some("")));
+        assert!(is_classic_javascript_type(Some("text/javascript")));
+        assert!(is_classic_javascript_type(Some("TEXT/JavaScript; charset=utf-8")));
+        assert!(is_classic_javascript_type(Some("application/javascript")));
+        for data in [
+            "module",
+            "application/ld+json",
+            "application/json",
+            "text/template",
+            "importmap",
+            "text/html",
+            "speculationrules",
+        ] {
+            assert!(
+                !is_classic_javascript_type(Some(data)),
+                "{data} must not run as classic JS"
+            );
+        }
     }
 }

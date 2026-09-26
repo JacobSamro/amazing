@@ -158,7 +158,14 @@ fn real_pages_corpus_renders_without_crashes() {
 
     let out_dir = std::env::temp_dir().join(format!("amazing-real-pages-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).expect("create output dir");
-    let binary = env!("CARGO_BIN_EXE_amazing");
+    // Pooled sandboxes share the target dir across lanes, so another lane's
+    // `cargo build -p amazing` can replace CARGO_BIN_EXE_amazing mid-run. Run a
+    // private copy of the binary so the whole corpus uses the built code.
+    let source_binary = env!("CARGO_BIN_EXE_amazing");
+    let stable_binary = out_dir.join(if cfg!(windows) { "amazing-real.exe" } else { "amazing-real" });
+    std::fs::copy(source_binary, &stable_binary)
+        .unwrap_or_else(|error| panic!("copy {source_binary}: {error}"));
+    let binary = stable_binary.to_str().expect("binary path is UTF-8");
     let timeout = Duration::from_secs(30);
 
     let mut rows = Vec::new();

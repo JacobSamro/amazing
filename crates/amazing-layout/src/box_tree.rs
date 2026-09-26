@@ -983,15 +983,14 @@ fn text_style(
 /// CSS Fonts 4 §5.5. `amazing-css` expands the `font-synthesis` shorthand
 /// into `font-synthesis-{weight,style,small-caps,position}`, each computed
 /// to `auto` (default, synthesis permitted) or `none`. `amazing-text::
-/// FontSynthesis` only carries the weight/style bits the shaper acts on;
-/// small-caps/position synthesis is not implemented by the text lane, so
-/// those two longhands are read (not ignored as unsupported) but cannot
-/// change the returned value yet.
+/// FontSynthesis` carries all four bits the shaper acts on.
 fn font_synthesis(style: &ComputedStyle) -> amazing_text::FontSynthesis {
     let enabled = |longhand: &str| !style.get(longhand).unwrap_or("auto").eq_ignore_ascii_case("none");
     amazing_text::FontSynthesis {
         weight: enabled("font-synthesis-weight"),
         style: enabled("font-synthesis-style"),
+        small_caps: enabled("font-synthesis-small-caps"),
+        position: enabled("font-synthesis-position"),
     }
 }
 
