@@ -1335,3 +1335,48 @@ integrator explicitly accepts the owner-tagged loss.
 Rules: [Flex cross-start](https://www.w3.org/TR/css-flexbox-1/#flex-wrap-property),
 [Grid Lanes auto-fit](https://www.w3.org/TR/css-grid-3/#repeat-auto-fit),
 [positioned available space](https://www.w3.org/TR/css-position-3/#abspos-layout).
+
+### LAYOUT-18 Linux final gate and fleet handoff
+
+The 2026-09-26 Linux-first rule supersedes the Windows final-gate requirement.
+At fixed candidate `9d89433c` (repair `012f017a`), Boat sandbox `bx_cp5jbn5z`
+passed **2,542 workspace tests**, **10 skipped**, and **two doctests**. The
+layout crate passed **302 tests**, one timing diagnostic skipped, zero
+doctests. The ignored production/oracle mutation diagnostics both passed;
+article production p95 was **38.400 ms**, with all 20 frames taking full
+layout. This does not meet the 20 ms target.
+
+On the same Boat host, pinned WPT revision and 800×600 viewport, baseline
+`6db18c89` versus candidate `9d89433c` measured:
+
+| Selection | Before passes | After passes | Gains | Losses |
+| --- | ---: | ---: | ---: | ---: |
+| Full flex/grid (1,446) | 631 | 688 | 65 | 8 |
+| Retained (449) | 279 | 280 | 5 | 4 |
+| Routed values (17) | 4 | 7 | 3 | 0 |
+
+Every final report has zero error, timeout, unsupported and crash cases.
+The initial sparse-checkout and trailing-URL-space harness failures are
+preserved separately and excluded from these counts. The Python Linux runner
+uses the same first reftest link, fuzzy limits and P6 pixel comparison as the
+Windows runner; remote self-checks validate those rules. Executable/manifest
+hashes and full source SHAs are in `evidence/layout18/linux-source-lock.json`.
+
+**Not merge-ready:** there are nine unique lost passes. Eight are Grid Lanes
+fill-reverse alignment (three also occur in retained), now owned by the new
+`layout-flexgrid` lane. The ninth is the CSS sizing parser rejecting stretch,
+previously masked by a blank viewport-unit reference. IDs, owner mapping and
+before/after reports are in `linux-loss-owners.json` and the paired
+`linux-*-comparison.json` files. Questions contain the exact dependency and
+fill-reverse alignment diagnosis. Raw losses remain visible.
+
+The fleet split gives flex*/grid* to `layout-flexgrid`; its adoption
+`d7621074` is byte-identical to this lane's repaired source. Integrate the
+shared source once; this lane retains block/inline/table/position/floats and
+shared box_tree/values ownership. No further flex/grid edits originate here.
+
+Historical Windows baseline (614 passes) differs from Linux (631): 21 cases
+pass only on Linux, four only on Windows. This is recorded for investigation
+in `linux-windows-baseline-comparison.json`, not treated as interchangeable
+platform evidence. Windows work is canceled/deferred. Its failed partial
+source tree requires a verified refresh before future use.

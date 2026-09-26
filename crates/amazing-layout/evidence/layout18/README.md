@@ -44,3 +44,27 @@ reproductions. CSS must still accept sizing stretch keywords before the
 retained upstream case can exercise the new layout handler.
 The first repair Windows upload failed; its log is retained and no Windows
 repair gate is claimed. See the lane decision map for remaining work.
+
+## Authoritative Linux gate (policy changed 2026-09-26)
+
+`linux-source-lock.json` identifies baseline 6db18c89 and candidate 9d89433c,
+executables, manifests, viewport and WPT revision. Complete final reports are
+`linux-{flex-grid,retained,css-values}-{before,after}.json`; their comparison
+files retain all IDs and hash changes. Counts: 631->688 / 1446 (65 gains,
+8 losses), 279->280 / 449 (5 gains, 4 losses), 4->7 / 17 (3 gains, no losses).
+Nine unique losses remain: eight routed to layout-flexgrid, one to CSS.
+`linux-loss-owners.json` is the owner map. Do not declare zero losses.
+
+`linux-final-workspace.log`: 2542 passed, 10 skipped, two doctests.
+`linux-loss-repair.log`: layout 302 passed, one skipped, zero doctests.
+`linux-retained-values-timing.log`: complete retained/values plus two passing
+ignored mutation diagnostics; article production p95 38.400 ms.
+The Windows transfer failure and initial incomplete Linux selections are
+historical diagnostics, not final gate reports.
+
+Run `prepare-linux-corpus.sh`, `validate-linux-runner.py`, then `render-linux.py`
+on the lane's Boat sandbox through `scripts/linux-run.sh`. The runner requires
+an exact pinned Git checkout, retains raw images/logs, and emits compact JSON.
+No builds or tests ran locally. `linux-windows-baseline-comparison.json`
+records the observed platform difference; Linux and Windows counts are not
+interchangeable.
