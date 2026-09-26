@@ -1602,3 +1602,30 @@ ReadableStream and connection-close semantics; `headers-basic` custom iterator
 needs generators; `cors-basic` different-protocol/port cases need HTTPS
 origins; `xhr/responsetype.any.js` and `headers-no-cors` need confirming.
 Routed in `.agents/net/questions.md`.
+
+### NET-26 final Linux gate
+
+Windows is deferred by the Linux-first rule (AGENTS.md 2026-09-26). Final head
+`38efd307`, the merge of local `dev` `4518bea7` (Linux-first AGENTS.md). The
+`runtime_binding_host.rs` conflict between net's `NetRuntime` field and dev's
+`messaging: MessagingRealm` field was resolved additively. Dev drift since the
+NET-26 base touched no net-owned crate.
+
+Gate on Boat sandbox `bx_cxad649k` via `scripts/linux-run.sh net`:
+`cargo nextest run --workspace --locked --no-fail-fast` then
+`cargo test --workspace --locked --doc`.
+
+| Gate | Result |
+|---|---:|
+| Workspace nextest | 2531 passed / 0 failed / 10 skipped |
+| Workspace doctests | 2 passed / 0 failed |
+| Lane net crates | 445 passed / 0 failed |
+| Lane + `amazing-bindings` + `amazing` | 728 passed / 0 failed / 4 skipped |
+
+Pinned 38-file `fetch/api` + `xhr` selection at `c2a2fce`, same selection before
+and after: **14/38 files and 290 subtests before → 33/38 files and 552 passing
+subtests after** (34 fail, 2 timeout, 0 error, 0 unsupported). The after value is
+identical to the pre-merge run, consistent with no net-owned drift. Residuals
+remain cross-lane: the js-runtime realm-hop promise adoption, js-vm generators,
+harness HTTPS origins for `cors-basic`, and dom-bindings' inert Document for
+`responseXML`. NET-26 ends at this binding/runner boundary.
