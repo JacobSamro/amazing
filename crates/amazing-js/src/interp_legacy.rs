@@ -149,10 +149,16 @@ impl Interpreter {
             return Ok(ordinary);
         };
         if let Some(index) = array_index(&key) {
-            if index < (hooks.supported_index_count)(handle)? {
+            return if index < (hooks.supported_index_count)(handle)? {
                 let value = (hooks.indexed_getter)(self, handle, index)?;
-                return Ok(Some(property(value, hooks.indexed_setter.is_some(), true)));
-            }
+                Ok(Some(property(value, hooks.indexed_setter.is_some(), true)))
+            } else {
+                // WebIDL: an array-index-shaped key that is not a supported
+                // property index is never treated as a named property
+                // either -- it falls straight through to ordinary own-property
+                // storage (an expando defined past the "live" range).
+                Ok(object.borrow().own_prop(&key).cloned())
+            };
         }
         if !ignore_named && hooks.named_getter.is_some() && self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) {
             let value = (hooks.named_getter.as_ref().unwrap())(self, handle, key.units())?;
@@ -170,9 +176,13 @@ impl Interpreter {
             if let Some(result) = self.proxy_has(&object, &PropertyKey::String(key.clone())) { return result; }
             if let Some((handle, hooks)) = self.legacy_for(&object) {
                 if let Some(index) = array_index(&key) {
+                    // WebIDL: an array-index-shaped key is never a named
+                    // property, supported index or not -- do not fall
+                    // through to the named check below.
                     if index < (hooks.supported_index_count)(handle)? { return Ok(true); }
+                } else if self.supported_name(&hooks, handle, &key)? && self.named_visible(&object, &key, &hooks) {
+                    return Ok(true);
                 }
-                if self.supported_name(&hooks, handle, &key)? && self.named_visible(&object, &key, &hooks) { return Ok(true); }
             }
             if object.borrow().own_prop(&key).is_some() { return Ok(true); }
             cursor = object.borrow().proto.clone();
@@ -187,8 +197,14 @@ impl Interpreter {
         }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
         if let Some(index) = array_index(&key) {
+            // WebIDL [[Set]] for an indexed property is gated on whether the
+            // interface HAS an indexed setter at all, not on whether this
+            // particular index is currently a "supported" one -- the setter
+            // itself decides (e.g. a setter that grows the collection by one
+            // when index == current length). Without any setter, this falls
+            // through to an ordinary [[Set]] (a plain expando).
             if let Some(setter) = hooks.indexed_setter { setter(self, handle, index, value)?; return Ok(true); }
-            return Err(Throw::type_error("indexed property has no setter"));
+            return Ok(false);
         }
         if let Some(setter) = hooks.named_setter {
             setter(self, handle, key.units(), value)?;
@@ -204,8 +220,14 @@ impl Interpreter {
         }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
         if let Some(index) = array_index(&key) {
+            // Same gating as legacy_set: [[DefineOwnProperty]] on an array
+            // index is decided by whether an indexed setter exists at all,
+            // not by "supported_index_count" -- the setter may legitimately
+            // accept indices beyond the currently reported range (growth).
+            // A non-data descriptor is always rejected outright, matching
+            // WebIDL's "invalid descriptor for indexed property" case.
             if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("indexed property requires a data descriptor")); }
-            let Some(setter) = hooks.indexed_setter else { return Err(Throw::type_error("indexed property has no setter")); };
+            let Some(setter) = hooks.indexed_setter else { return Ok(false); };
             setter(self, handle, index, prop.value.clone())?;
             return Ok(true);
         }
@@ -230,7 +252,17 @@ impl Interpreter {
             return self.binding_with_realm(realm, |i| i.legacy_delete(object, key));
         }
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(None); };
-        if let Some(index) = array_index(&key) { return Ok(Some(index >= (hooks.supported_index_count)(handle)?)); }
+        if let Some(index) = array_index(&key) {
+            return if index < (hooks.supported_index_count)(handle)? {
+                // A supported index is a non-configurable indexed property
+                // by default: [[Delete]] fails.
+                Ok(Some(false))
+            } else {
+                // Not a supported index: falls through to an ordinary
+                // [[Delete]] of any expando actually stored there.
+                Ok(None)
+            };
+        }
         if self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) {
             return match hooks.named_deleter { Some(deleter) => deleter(self, handle, key.units()).map(Some), None => Ok(Some(false)) };
         }
@@ -465,7 +497,11 @@ mod tests {
         assert_eq!(i.legacy_own_keys(o, true).unwrap(), vec!["0", "1"]);
         assert_eq!(i.legacy_delete(o, "0").unwrap(), Some(false));
         assert_eq!(i.legacy_delete(o, "item").unwrap(), Some(false));
-        assert!(i.binding_set_property(&object, "8", JsValue::num(1.0)).is_err());
+        // Index 8 is out of the fixture's supported range (0/1) and there is
+        // no indexed setter at all, so this falls through to an ordinary
+        // [[Set]] -- a plain expando -- rather than throwing.
+        i.binding_set_property(&object, "8", JsValue::num(1.0)).unwrap();
+        assert_eq!(i.binding_get_property(&object, "8").unwrap(), JsValue::num(1.0));
         i.binding_set_property(&object, "item", JsValue::num(7.0)).unwrap();
         assert_eq!(i.binding_get_property(&object, "item").unwrap(), JsValue::num(7.0));
         let (mut i, object, prototype, _, _) = fixture(true, false);
