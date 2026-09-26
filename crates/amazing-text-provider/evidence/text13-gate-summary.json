@@ -6,7 +6,7 @@
   "host": "win-001",
   "renderer": "target/text/debug/amazing.exe",
   "base_commit": "0d6b60b0",
-  "note": "Fresh sweep on current dev 0d6b60b0 after LAYOUT-14 exact stretch/oblique values, CSS font-kerning registration and layout font feature/letter-spacing mapping landed. Compares with the TEXT-12 retained classifications.",
+  "note": "Fresh sweep on current dev (LAYOUT-14 exact stretch/oblique values and font-relative metrics, CSS font-kerning, layout font feature/letter-spacing mapping landed). Compares with the TEXT-12 retained classifications.",
   "selections": {
     "font-face": {
       "before_file": "text12-font-face-after.json",
@@ -29,6 +29,37 @@
       },
       "classification_changes": [],
       "gains": [],
+      "losses": []
+    },
+    "font-selection": {
+      "before_file": "text12-fonts-after.json",
+      "after_file": "text13-font15-before.json",
+      "before_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 1,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-fonts__first-available-font-002.html",
+          "from": "mismatch",
+          "to": "pass"
+        }
+      ],
+      "gains": [
+        "css-fonts__first-available-font-002.html"
+      ],
       "losses": []
     },
     "flow": {
@@ -163,11 +194,15 @@
     },
     {
       "owner": "layout",
-      "finding": "font-size-adjust-zero-2 needs layout to use TextSystem::adjusted_font_size"
+      "finding": "font-size-adjust-zero-2 needs layout to use TextSystem::adjusted_font_size; treat zero used size as empty text"
     },
     {
       "owner": "layout",
       "finding": "overflow-wrap-shaping-001 and line-break-shaping-001 break placement / float shrink-to-fit"
+    },
+    {
+      "owner": "primary/driver",
+      "finding": "font-unicode-PUA-primary-font is the environment-owned installed Arial/Times fixture case (0 differing pixels)"
     }
   ]
 }

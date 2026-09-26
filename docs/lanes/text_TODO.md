@@ -325,7 +325,12 @@ adopts it by computing each element's used size and passing it as
 
 The same ticket re-measured the pinned selections on current dev `0d6b60b0`,
 after LAYOUT-14 exact stretch/oblique values, CSS font-kerning and layout letter
-spacing/feature mapping landed. The expanded 40-case selection moved 34 pass /
+spacing/feature mapping landed. The retained 15-case font selection moved
+**13 pass / 2 mismatch → 14 pass / 1 mismatch**
+(`first-available-font-002` gained once layout adopted `font_relative_metrics`);
+the only remaining failure is the environment-owned
+`font-unicode-PUA-primary-font` (0 differing pixels, installed Arial/Times
+fixture). The expanded 40-case selection moved 34 pass /
 5 mismatch / 1 crash to **38 pass / 2 mismatch / 0 crash**. Gains:
 `font-feature-resolution-001`, `font-feature-resolution-002`,
 `font-kerning-01`, `font-kerning-04`, and the `font-variant-ligatures` crash
