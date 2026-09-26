@@ -102,3 +102,38 @@ pass / 26 fail, 0 timeouts, zero lost passes. Residual clusters (Array
 join/toString cycle protection routed to js-runtime; partial `idbindex_get(Key)`/
 `idbcursor_{update,delete}_objectstore` improvements; a few unchanged
 pre-existing fails) are listed in `crates/amazing-storage/evidence/store7/README.md`.
+
+## IA-REAL-2: storage opened eagerly at realm init, corrupt store failed every page load
+
+`install_storage_interfaces()` eagerly allocated `indexedDB`/`caches`/
+`navigator.storage`/`.locks`/`.storageBuckets` for every realm, and
+`storage_allocate` unconditionally opened the on-disk store as its first step
+— so a stale/corrupt on-disk store failed page load for every single page,
+before any script ran. Fixed by (1) converting those five singletons to lazy
+getter accessors (`storage_singleton()`, dispatched through a `"!singleton"`
+sentinel member, mirroring the existing `localStorage`/`sessionStorage` lazy
+pattern) so storage opens only on first use, and (2) making
+`amazing-storage`'s `DiskStore::open` quarantine an unreadable checkpoint/log
+aside (timestamped suffix, logged once) and start fresh instead of returning
+`Error::Corrupt`, plus a new on-disk format version stamp (`format` file,
+`AMSTFMT1`) so a store from an unrecognized future/old version is quarantined
+the same way. Workspace nextest 3289 pass / 0 fail / 15 skipped, doctests 4/0,
+including `amazing::real_pages::real_pages_corpus_renders_without_crashes` —
+the exact 52-real-page repro, now passing.
+
+## STORE-9: widened IndexedDB selection to 54 files, largest residual clusters fixed
+
+Widened the pinned selection with `idbobjectstore_*`/`idbtransaction_*`/
+`idbkeyrange*` files. Fixed `getAllRecords()` (new `IDBRecord` interface —
+its `key`/`primaryKey`/`value` had to be real inherited getters, not own
+properties copied down by `materialize_accessors`, to satisfy WPT's
+`assert_idl_attribute`; also unblocks `getAll`/`getAllKeys`'s
+`IDBGetAllOptions` dictionary argument), a `count: 0` semantics bug (means "no
+limit", not "zero results"), two SIGABRT crashes from cyclic-array IndexedDB
+keys, deleted-store/deleted-index wrong-exception-type mapping, an
+`IDBKeyRange` open-flag bug, and `delete(range)` doing nothing. 54-file
+selection: 258 pass / 123 fail → 359 pass / 38 fail, 0 timeouts, zero lost
+passes (verified file-by-file). Residual clusters (an `amazing-js`
+structured-clone/transfer bug filed for js-runtime/dom-bindings; cursor
+stale-source checks; a few unchanged pre-existing fails) are listed in
+`crates/amazing-storage/evidence/store9/README.md`.
