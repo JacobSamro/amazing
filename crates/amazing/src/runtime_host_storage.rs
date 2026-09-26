@@ -1946,4 +1946,68 @@ mod storage_binding_tests {
         assert_eq!(scheduler.run_script("log.join('|')").unwrap(),
             JsValue::str("members-survive-close|1:items|ok"));
     }
+
+    // STORE-7 triage: IndexedDB/idbcursor-direction.any.js opens five independent,
+    // uniquely-named databases synchronously (one per `cursor_direction(...)` call) before
+    // any task runs, each with its own upgradeneeded/success/cursor flow. All five report
+    // "Object store not found" against the current dev tree. Reproduces the minimal shape
+    // (two concurrent independent opens) directly against the driver to see whether the
+    // failure is a real concurrent-open bug or specific to the harness/support.js plumbing.
+    #[test]
+    fn indexeddb_concurrent_independent_opens_each_see_their_own_store() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            function openone(name,tag){ \
+                var open=indexedDB.open(name,1); \
+                open.onupgradeneeded=function(){ \
+                    var os=open.result.createObjectStore('test'); \
+                    os.add('data','key'); \
+                }; \
+                open.onerror=function(){log.push(tag+':open-error:'+open.error.name)}; \
+                open.onsuccess=function(){ \
+                    var db=open.result; \
+                    try { \
+                        var rq=db.transaction('test','readonly').objectStore('test').openCursor(); \
+                        rq.onsuccess=function(e){ \
+                            var cursor=e.target.result; \
+                            log.push(tag+':'+(cursor?cursor.value:'no-cursor')); \
+                        }; \
+                        rq.onerror=function(){log.push(tag+':cursor-error:'+rq.error.name)}; \
+                    } catch (e) { log.push(tag+':throw:'+e.name); } \
+                }; \
+            } \
+            openone('concurrent-a','a'); \
+            openone('concurrent-b','b');").unwrap();
+        for step in 1..30 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        let mut log=scheduler.run_script("log.slice().sort().join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe()));
+        if log==JsValue::Undefined { log=JsValue::str(""); }
+        assert_eq!(log,JsValue::str("a:data|b:data"));
+    }
+
+    // STORE-7 triage: WPT's IndexedDB/resources/support.js `createdb_for_multiple_tests`
+    // helper installs a *custom* accessor for "onupgradeneeded"/"onsuccess"/etc. on each
+    // IDBOpenDBRequest via `__defineSetter__`, wrapping every assignment in an
+    // addEventListener call and flipping a `manually_handled` flag that a separately
+    // pre-registered "fail if nothing handled this event" listener checks. This only works
+    // if our engine's property SET for "on"+event on a native IDBOpenDBRequest first
+    // consults the *object's own* JS-defined accessor (installed via defineProperty/
+    // __defineSetter__) instead of going straight to storage_idb_invoke's native
+    // `handlers` map. Several pinned WPT files fail with "assert_unreached: unexpected
+    // open.<event> event", which is exactly the symptom of the manually_handled flag never
+    // getting set -- i.e. the custom setter never running.
+    #[test]
+    fn indexeddb_open_request_on_event_setter_honors_own_defined_accessor() {
+        let mut scheduler=scheduler();
+        scheduler.run_script("var log=[]; \
+            var open=indexedDB.open('on-event-setter-override',1); \
+            var seen=false; \
+            Object.defineProperty(open,'onupgradeneeded',{set:function(h){ \
+                seen=true; \
+                open.addEventListener('upgradeneeded',h); \
+            }}); \
+            open.onupgradeneeded=function(){log.push('own-accessor-ran:'+seen);open.result.createObjectStore('s');};").unwrap();
+        for step in 1..20 { scheduler.pump_at(Duration::from_millis(step*10),false).unwrap(); }
+        assert_eq!(scheduler.run_script("log.join('|')").unwrap_or_else(|error|panic!("read log: {}",error.describe())),
+            JsValue::str("own-accessor-ran:true"));
+    }
 }
