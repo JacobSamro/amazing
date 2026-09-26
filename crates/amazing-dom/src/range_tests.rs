@@ -537,3 +537,18 @@ fn select_collapse_and_set_after_variants() {
     d.range_collapse(r, true).unwrap();
     assert_eq!(d.range(r).unwrap().end, P::new(root, 0));
 }
+
+#[test]
+fn cloning_document_preserves_metadata_and_document_kind() {
+    let mut dom = Dom::new();
+    let source = dom.create_document();
+    let metadata = crate::document_surface::DocumentMetadata {
+        url: "about:blank".into(), content_type: "application/xml".into(),
+        character_set: "UTF-8".into(),
+    };
+    dom.set_document_metadata(source, metadata.clone()).unwrap();
+    dom.set_document_ready_state(source, crate::document_surface::ReadyState::Complete).unwrap();
+    let clone = dom.clone_node(source, true).unwrap();
+    assert_eq!(dom.document_metadata(clone).unwrap(), Some(&metadata));
+    assert_eq!(dom.document_ready_state(clone).unwrap(), crate::document_surface::ReadyState::Complete);
+}
