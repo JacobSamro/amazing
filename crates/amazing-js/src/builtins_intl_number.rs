@@ -248,6 +248,12 @@ fn intl_number_bound_format(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
     if let Some(JsValue::BigInt(bigint)) = args.first() {
         return Ok(JsValue::str(intl_format_bigint(&state, &bigint.to_radix_string(10))));
     }
+    if let Some(JsValue::Str(_)) = args.first() {
+        let text = i.to_string(args.first().unwrap())?;
+        if let Some(parts) = intl_format_decimal_string(&state, &text) {
+            return Ok(JsValue::str(parts.into_iter().map(|(_, value)| value).collect::<String>()));
+        }
+    }
     let number = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
     Ok(JsValue::str(intl_format_number(&state, number).0))
 }
@@ -290,6 +296,12 @@ fn intl_number_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsV
     let state = intl_number_state(&this)?;
     if let Some(JsValue::BigInt(bigint)) = args.first() {
         return intl_parts_array(i, vec![("integer", intl_format_bigint(&state, &bigint.to_radix_string(10)))]);
+    }
+    if let Some(JsValue::Str(_)) = args.first() {
+        let text = i.to_string(args.first().unwrap())?;
+        if let Some(parts) = intl_format_decimal_string(&state, &text) {
+            return intl_parts_array(i, parts);
+        }
     }
     let number = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
     let (_, parts) = intl_format_number(&state, number);
@@ -468,6 +480,100 @@ fn intl_unit_pattern_parts(text: &str, unit_name: &str) -> Vec<(&'static str, St
         parts.push(("literal", text.to_string()));
     }
     parts
+}
+
+/// Exact decimal formatting for String arguments (ECMA-402 ToIntlMathematicalValue).
+/// Returns `None` for shapes the f64 path must handle (non-decimal strings,
+/// currency/unit/percent styles, significant digits, increments, other notations).
+fn intl_format_decimal_string(state: &IntlNumberState, text: &str) -> Option<Vec<(&'static str, String)>> {
+    if state.style != "decimal" || state.notation != "standard"
+        || state.min_significant.is_some() || state.max_significant.is_some()
+        || state.rounding_increment != 1
+    {
+        return None;
+    }
+    let (negative, body) = if let Some(rest) = text.strip_prefix('-') { (true, rest) }
+        else if let Some(rest) = text.strip_prefix('+') { (false, rest) } else { (false, text) };
+    if body.is_empty() || body.matches('.').count() > 1 { return None; }
+    let (whole, fraction) = body.split_once('.').unwrap_or((body, ""));
+    if whole.is_empty() && fraction.is_empty() { return None; }
+    if !whole.bytes().all(|byte| byte.is_ascii_digit()) || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let mut whole_digits: Vec<u8> = whole.bytes().map(|byte| byte - b'0').collect();
+    if whole_digits.is_empty() { whole_digits.push(0); }
+    let mut fraction_digits: Vec<u8> = fraction.bytes().map(|byte| byte - b'0').collect();
+    if fraction_digits.len() > state.max_fraction {
+        let keep = state.max_fraction;
+        let next = fraction_digits[keep];
+        let rest_nonzero = fraction_digits[keep + 1..].iter().any(|digit| *digit != 0);
+        let last_odd = keep > 0 && fraction_digits[keep - 1] % 2 == 1;
+        let round_up = match state.rounding_mode.as_str() {
+            "trunc" | "floor" => false,
+            "halfTrunc" => next > 5,
+            "halfEven" => next > 5 || (next == 5 && (rest_nonzero || last_odd)),
+            _ => next >= 5,
+        };
+        fraction_digits.truncate(keep);
+        if round_up {
+            let mut carry = true;
+            for digit in fraction_digits.iter_mut().rev() {
+                if *digit == 9 { *digit = 0; } else { *digit += 1; carry = false; break; }
+            }
+            if carry {
+                for digit in whole_digits.iter_mut().rev() {
+                    if *digit == 9 { *digit = 0; } else { *digit += 1; carry = false; break; }
+                }
+                if carry { whole_digits.insert(0, 1); }
+            }
+        }
+    }
+    while fraction_digits.len() < state.min_fraction { fraction_digits.push(0); }
+    while fraction_digits.len() > state.min_fraction && fraction_digits.last() == Some(&0) {
+        fraction_digits.pop();
+    }
+    let whole_text: String = whole_digits.iter().map(|digit| (b'0' + *digit) as char).collect();
+    let fraction_text: String = fraction_digits.iter().map(|digit| (b'0' + *digit) as char).collect();
+    let data = intl_data(&state.locale);
+    let mut parts: Vec<(&'static str, String)> = Vec::new();
+    let rounded_zero = whole_digits.iter().all(|digit| *digit == 0) && fraction_digits.iter().all(|digit| *digit == 0);
+    let sign = match state.sign_display.as_str() {
+        "never" => None,
+        "always" => Some(if negative { ("minusSign", data.minus) } else { ("plusSign", data.plus) }),
+        "exceptZero" if rounded_zero => None,
+        "exceptZero" => Some(if negative { ("minusSign", data.minus) } else { ("plusSign", data.plus) }),
+        "negative" if rounded_zero => None,
+        _ if negative => Some(("minusSign", data.minus)),
+        _ => None,
+    };
+    if let Some((kind, value)) = sign { parts.push((kind, value.to_string())); }
+    let padded = format!("{:0>width$}", whole_text, width = state.min_integer);
+    let grouped = state.use_grouping != "false" && padded.len() >= 4
+        && (state.use_grouping != "min2" || padded.len() >= 5);
+    if grouped {
+        let indian = data.decimal_pattern.contains("#,##,##");
+        let mut groups = Vec::new();
+        let mut rest = padded.as_str();
+        let mut size = 3;
+        while rest.len() > size {
+            groups.push(rest[rest.len() - size..].to_string());
+            rest = &rest[..rest.len() - size];
+            if indian { size = 2; }
+        }
+        groups.push(rest.to_string());
+        groups.reverse();
+        for (index, group) in groups.into_iter().enumerate() {
+            if index > 0 { parts.push(("group", data.group.to_string())); }
+            parts.push(("integer", intl_localize_digits(&group, &state.numbering_system)));
+        }
+    } else {
+        parts.push(("integer", intl_localize_digits(&padded, &state.numbering_system)));
+    }
+    if !fraction_text.is_empty() {
+        parts.push(("decimal", data.decimal.to_string()));
+        parts.push(("fraction", intl_localize_digits(&fraction_text, &state.numbering_system)));
+    }
+    Some(parts)
 }
 
 /// Compact notation scale and suffix for the largest generated magnitude that
@@ -814,6 +920,14 @@ mod intl_number_tests {
         assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'narrow'}).format(987)"), "987km/h");
         assert_eq!(eval("new Intl.NumberFormat('en',{style:'unit',unit:'kilometer-per-hour',unitDisplay:'long'}).format(987)"), "987 kilometers per hour");
         assert_eq!(eval("new Intl.NumberFormat('de',{style:'unit',unit:'kilometer-per-hour'}).format(987)"), "987 km/h");
+    }
+
+    #[test]
+    fn string_arguments_keep_exact_decimal_precision() {
+        assert_eq!(eval("let nf=new Intl.NumberFormat('en-US',{maximumFractionDigits:20}); nf.format('1.0000000000000001')"), "1.0000000000000001");
+        assert_eq!(eval("new Intl.NumberFormat('en-US').format('987654321987654321')"), "987,654,321,987,654,321");
+        assert_eq!(eval("new Intl.NumberFormat('en-US').format('42')"), "42");
+        assert_eq!(eval("new Intl.NumberFormat('en-US').format('foo')"), "NaN");
     }
 
     #[test]
