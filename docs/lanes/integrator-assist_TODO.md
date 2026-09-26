@@ -1124,3 +1124,96 @@ Gate (Linux Boat, `dev` head `99df2b68` plus this series): `-p amazing`
 nextest 257 passed/6 skipped; workspace nextest 3021 passed/12 skipped/0
 failed (71.7s); workspace doctests all passed (0 failures, `amazing_js`/
 `amazing_html` included). Zero losses.
+
+## IA-LIVE-3 (2026-09-26)
+
+Took the 17 "missing on 100% of live pages" APIs filed in IA-LIVE-2 and
+checked `.agents/dom-bindings/questions.md`: none of them had been picked up
+there yet (dom-bindings' queue was WebSocket/IPC/event-handler-attribute work,
+no overlap). Implemented the driver-owned subset — window/navigator/
+document-level host APIs whose *value* comes from the driver, as opposed to
+WebIDL interface scaffolding — in a new lane-owned file,
+`crates/amazing/src/runtime_host_integrator_assist.rs` (this ticket's entire
+footprint beyond a handful of one-line hooks in the shared
+`runtime_binding_host.rs`, per the driver-adapter-per-lane rule):
+
+- `navigator.userAgent/language/languages/platform/onLine/cookieEnabled/
+  appVersion/hardwareConcurrency` — real driver/OS values (`std::env::consts::
+  OS` mapped to Win32/MacIntel/Linux x86_64).
+- `performance.now()`/`performance.timeOrigin` — a real per-page
+  `Instant`-based clock (`IaRuntime::created_at`), not a stub.
+- `window.matchMedia(query)` — evaluates the query against the driver's real
+  per-page viewport by reusing `amazing_css::MediaQueryList::parse`/
+  `.evaluate(&MediaEnvironment)` (no new CSS media-query grammar). Wired the
+  real viewport through: `cmd_render_page` (`real_pages.rs`) already has
+  `width`/`fixed_height` in scope, so it now passes `(width, viewport_height)`
+  into `execute_page_scripts_lenient` (`cmd/js.rs`, new 4th parameter) which
+  calls the new `DriverScheduler::set_viewport` (`js_scheduler.rs`, one
+  additive method, same shape as the existing `set_location_url` — did not
+  touch the render-hook/event-loop code storage is working on there) ->
+  `RuntimeBindings::set_viewport` -> `BindingState.integrator_assist`. Falls
+  back to `MediaEnvironment::default()`'s viewport when no `fixed_height` is
+  given. `addListener`/`addEventListener`/`removeListener`/
+  `removeEventListener` on the returned object are defensive no-ops (nothing
+  ever fires a `change` event yet) so page code that defensively registers a
+  listener doesn't throw; a live-updating `MediaQueryList` interface is left
+  to dom-bindings.
+- `window.requestIdleCallback`/`cancelIdleCallback` — reuses the existing
+  `Interpreter::schedule_timer`/`cancel_timer` driver timer queue; the
+  callback receives an `IdleDeadline`-shaped object (`timeRemaining()`
+  always 0, `didTimeout` always `false` — this driver has no real idle
+  detection, so it never claims a timeout it can't back up).
+- Explicitly NOT attempted (left to dom-bindings, per the ticket): a live
+  `MediaQueryList` interface with real `change` events, a real `IdleDeadline`
+  interface/type, `PerformanceObserver`/marks/measures/entries.
+
+**Bug found and fixed while gating:** the first `RequestIdleCallback` cut
+defaulted its timer delay to 1ms when no `timeout` option was given. The
+timer queue backing it (`amazing-js/src/interp.rs`) compares against a real
+`Instant::now()`, not a simulated clock, so a nonzero real delay makes firing
+depend on genuine wall-clock progress between scheduling and the next pump —
+exactly the flake this codebase's own convention avoids elsewhere
+(`AbortSignal.timeout(0)` in `js_scheduler.rs` uses delay 0 for the same
+reason). It passed once on a slower/contended sandbox, then failed
+deterministically (5/5 reruns, isolated) on a fresh, faster one. Changed the
+default to `0` (fire as soon as the loop is next pumped, matching the
+existing convention); reran the specific test 5/5 clean before and after the
+full workspace gate.
+
+Real-pages corpus (52 pages), before -> after this ticket (Linux Boat,
+`cargo test -p amazing --locked --test real_pages -- --nocapture`, code
+before/after compared via `git stash`/`stash pop` on the same sandbox): 4 ->
+3 page-level errors, 3 -> 2 fallback pages. `app-dashboard.html`'s `page
+script: ReferenceError: matchMedia is not defined` is gone entirely (0 errors,
+0 fallbacks on that page now). The remaining 3 errors (`app-chat.html`
+"Invalid document URL", `app-kanban.html`/`app-mail.html` "value is not
+callable") are unrelated to this ticket's APIs.
+
+Live corpus (40 URLs, `cargo test -p amazing --locked --test live_pages --
+--ignored --nocapture`, 2315s): none of `matchMedia`, `navigator.clipboard`,
+`getComputedStyle`, `requestIdleCallback`, `cancelIdleCallback`, or
+`WebSocket` — all part of the originally filed 17-API list — appear in the
+after-run's top-20 missing-API table any more (0/36 missing, down from
+100/100% before this ticket, per the same table this ticket's filing was
+based on). The after-run's top-20 is now entirely interface-level APIs
+(`MediaQueryList`, `IntersectionObserver`, `Element.prototype.animate`,
+`ResizeObserver`, `PerformanceObserver`, `Permissions`, `Notification`,
+`EventSource`, `CSS`, `RTCPeerConnection`, `SharedWorker`, `TextEncoder`/
+`TextDecoder`, `URLPattern`, `WebAssembly`, `WebGLRenderingContext`, `Worker`,
+`XMLSerializer`, `AudioContext`, `OffscreenCanvas`) — all correctly out of
+this driver-owned ticket's scope.
+
+**Infra note:** a background gate run duplicated itself when a "rerun"
+request landed before the first attempt was actually stopped, leaving two
+identical `cargo nextest run --workspace` invocations serialized against
+each other on the same lock (both then reported empty output, which does not
+mean success). Caught by checking `ps` directly against the claimed
+completion before trusting it, rather than committing on an unverified
+"finished" report.
+
+Gate (Linux Boat, Boat sandbox `bx_e3cjmk4g`/pool-ia, this series):
+`-p amazing` nextest: `request_idle_callback_runs_the_callback_with_an_idle_
+deadline_shape` + the other 4 new tests, 5/5 clean reruns after the fix.
+Workspace nextest: 3053 passed/13 skipped/0 failed (64.1s) -- up from
+3052 passed/1 failed before the fix (zero losses, one flake resolved).
+Workspace doctests: all passed (0 failures).

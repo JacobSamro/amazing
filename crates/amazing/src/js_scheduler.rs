@@ -72,6 +72,13 @@ impl DriverScheduler {
             let _ = self.js.binding_set_realm_origin(realm, &parsed.origin().serialize());
         }
     }
+    /// IA-LIVE-3: the driver's real viewport, for `window.matchMedia` to
+    /// evaluate size-based media features against (`runtime_host_
+    /// integrator_assist.rs`). Same shape as `set_location_url` above — both
+    /// tell the interpreter something only the driver knows.
+    pub(crate) fn set_viewport(&mut self, width: f32, height: f32) {
+        self.bindings.set_viewport(width, height);
+    }
     pub(crate) fn set_frame_resource_resolver(&mut self,
         resolver: Rc<dyn Fn(&str) -> Option<String>>) {
         self.bindings.set_frame_resource_resolver(resolver);
