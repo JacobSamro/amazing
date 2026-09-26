@@ -922,3 +922,94 @@ subsystem in `amazing-net` (would let `setCacheDisabled` mean something
 closer to real Chrome); applying `mobile`/screen/position/orientation from
 `setDeviceMetricsOverride`; caret/selection-aware `insertText` and
 `contenteditable` support.
+
+## CDP-22 — Debugger.stepOver + real scopeChain, Runtime.callFunctionOn/
+getProperties completeness — done
+
+Coordinator's ticket (base `dev` at `47355c3c`, per the fallback list since
+no CDP-22 ticket was pre-listed in this TODO): "Debugger: setBreakpointByUrl,
+pause/resume/stepOver, and scopeChain on paused frames, using the exec_stmt
+debug hook from CDP-20. Runtime.callFunctionOn / getProperties
+completeness."
+
+- `setBreakpointByUrl`/`pause`/`resume` already shipped in CDP-20; this
+  ticket's actual delta is `stepOver` and `scopeChain`, plus the two Runtime
+  completeness items. No `amazing-js` changes were needed anywhere in this
+  ticket — everything builds on the `exec_stmt` debug hook and object-
+  registry machinery CDP-18/20 already added.
+- **`Debugger.stepOver`**: [`DebugHook::on_statement`] reports only
+  `(script_id, url, line)`, with no call-stack depth, so this driver has no
+  way to distinguish "the next statement in this same frame" from "the next
+  statement anywhere". Rather than fake a distinction it can't make,
+  `stepOver` arms the exact same one-shot flag `debugger_pause` does — an
+  honest simplification, documented as such, not a silently-approximated
+  feature. `stepInto`/`stepOut` are untouched, still `Unsupported` (no
+  suspended call stack for either to act on).
+- **Real `scopeChain`**: added `host::Scope` (`{ scope_type, object:
+  RemoteObject }`) and a `scope_chain: Vec<Scope>` field on `host::CallFrame`
+  (previously hardcoded to an empty array in `domains/debugger.rs`'s
+  `call_frame_json`). `DriverDebugHook::on_statement` still can't build one
+  itself — it only has plain `Rc<RefCell<_>>` cells shared with `PageOwner`,
+  no interpreter/object-registry access (see that struct's own doc comment on
+  why). `PageOwner::drain_debugger_paused` fills it in afterward: a single
+  `"global"` scope, its `object` minted through the exact same
+  `remote_object` registration `Runtime.evaluate` uses, so
+  `Runtime.getProperties` on it reflects genuine live `globalThis` state, not
+  a snapshot frozen at pause time. No per-frame local/closure scope is
+  offered — this engine's tree-walking interpreter has no reified per-call
+  environment record reachable from outside a running call.
+- **`Runtime.evaluate`/`callFunctionOn`'s `returnByValue: true`**: accepted
+  (the field exists on both param structs) but silently ignored before this
+  ticket — every object result got an `objectId` reference regardless. New
+  `PageOwner::remote_object_by_value` serializes a plain object/array
+  structurally instead (own *enumerable* properties through getters,
+  `Array.isArray`-detected element order for arrays via the same
+  `run_script`+`binding_call` idiom `callFunctionOn` already uses to invoke
+  a function against a live value), depth-capped at 5 rather than
+  cycle-tracked (no pointer-identity check for `JsValue::Object`'s `Rc`) —
+  an honest safety net for a self-referential object, not a full
+  structured-clone. `BigInt`/`Symbol` inside a by-value result are nulled,
+  matching the existing "can't carry either verbatim" limitation.
+- **`Runtime.getProperties`'s `ownProperties: false`**: previously behaved
+  exactly like `true` (own-only) regardless of the flag. There is no
+  `[[Prototype]]` accessor in `amazing-js`'s own binding surface for an
+  arbitrary object (`interp_bindings.rs` only has
+  `binding_object_prototype`/`binding_set_global_prototype`, both for the
+  *global* object's own prototype specifically), so `PageOwner::
+  get_properties` reuses real JS (`Object.getPrototypeOf`) through the same
+  idiom, walking up to 20 levels (a safety net against a corrupted/cyclic
+  chain, not a real spec limit) and tagging each inherited property
+  `is_own: false`.
+- Proof — two new end-to-end WebSocket tests:
+  `end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals`
+  (`stepOver` forces a real `Debugger.paused`; its `scopeChain` has one
+  `"global"` scope whose object's real `objectId` resolves through
+  `Runtime.getProperties` to a value set on `globalThis` moments before the
+  pause; `Debugger.resume` clears a still-pending step the same way it
+  clears a pending pause) and
+  `end_to_end_runtime_return_by_value_and_inherited_properties`
+  (`returnByValue` on both `evaluate` and `callFunctionOn` serializes a
+  nested array/object with no `objectId`; `getProperties(ownProperties:
+  false)` on an `Object.create`-based object sees both its own property and
+  the prototype's, tagged `isOwn` correctly, while `ownProperties: true`
+  still sees only its own).
+- Infra note (not this ticket's own work, recorded for the next lane that
+  hits it): `scripts/linux-run.sh` briefly auto-routed lanes to a new
+  `k-test`/`worker-2` host with a ~10 KB/s Mac uplink (an hour to sync a lane
+  tree) before the coordinator restored routing to venus-001/003; the fix
+  needed no lane-side action beyond rerunning the same command.
+
+Linux gate (venus-001, per the coordinator's routing note): workspace
+nextest 3275 passed, 0 failed, 15 skipped (up from CDP-21's 3135 — other
+lanes' merges plus this ticket's two new tests, zero losses); all workspace
+doctests passed. Crate-scoped `amazing` `runtime_host_devtools` tests: 20/20
+(0 failed), up from 18. `amazing-devtools` crate tests (unit + `tests/cdp.rs`
+MockHost suite): 96 + 19 passed, 0 failed. Committed as `6ea92a02`.
+
+Boundary candidates for a future ticket: call-stack depth in the debug hook
+(would let `stepOver`/`stepInto`/`stepOut` actually differ, and let
+`scopeChain` offer real per-frame local/closure scopes instead of only
+`"global"`); a `[[Prototype]]` accessor in `amazing-js`'s own binding surface
+(would let the prototype-chain walk skip the `Object.getPrototypeOf`
+round-trip); cycle detection for `remote_object_by_value` instead of a depth
+cap.
