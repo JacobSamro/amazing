@@ -1,7 +1,7 @@
 // Intl.Segmenter with Unicode-aware UTF-16 indices.
 
 #[derive(Clone)]
-struct IntlSegmenterState { locale: String, granularity: String }
+struct IntlSegmenterState { locale: String, resolved: String, granularity: String }
 
 #[derive(Clone)]
 struct IntlSegment { text: String, index: usize, end: usize, word_like: bool }
@@ -30,14 +30,16 @@ impl Interpreter {
 }
 
 fn intl_segmenter_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("Segmenter requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("Segmenter requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("Segmenter requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Segmenter options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let granularity = intl_string_option(i, &options, "granularity", &["grapheme", "word", "sentence"], "grapheme")?;
-    intl_register(&object, IntlState::Segmenter(IntlSegmenterState { locale, granularity }));
+    let resolved = intl_resolved_locale(&requested, &locale);
+    intl_register(&object, IntlState::Segmenter(IntlSegmenterState { locale, resolved, granularity }));
     Ok(JsValue::Object(object))
 }
 
@@ -52,7 +54,7 @@ fn intl_segmenter_state(this: &JsValue) -> Result<IntlSegmenterState, Throw> {
 fn intl_segmenter_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_segmenter_state(&this)?;
     let object = i.object_value();
-    i.set_prop(&object, "locale", JsValue::str(state.locale))?;
+    i.set_prop(&object, "locale", JsValue::str(state.resolved.as_str()))?;
     i.set_prop(&object, "granularity", JsValue::str(state.granularity))?;
     Ok(object)
 }
@@ -145,9 +147,12 @@ fn intl_segments_containing(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     let Some(IntlState::Segments(state)) = intl_state(object) else {
         return Err(Throw::type_error("incompatible Segments receiver"));
     };
-    let index = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
-    if !index.is_finite() || index < 0.0 { return Ok(JsValue::Undefined); }
-    let Some(piece) = state.pieces.iter().find(|piece| piece.index <= index as usize && (index as usize) < piece.end) else {
+    let number = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
+    // ToInteger: NaN and signed zero become +0, other values truncate toward zero.
+    let index = if number.is_nan() { 0.0 } else { number.trunc() };
+    if index < 0.0 { return Ok(JsValue::Undefined); }
+    let index = index as usize;
+    let Some(piece) = state.pieces.iter().find(|piece| piece.index <= index && index < piece.end) else {
         return Ok(JsValue::Undefined);
     };
     intl_segment_record(i, piece, &state.input, state.granularity == "word")

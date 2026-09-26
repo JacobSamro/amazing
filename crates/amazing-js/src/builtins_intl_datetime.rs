@@ -38,6 +38,11 @@ fn intl_date_state(this: &JsValue) -> Result<IntlDateState, Throw> {
     }
 }
 
+fn intl_now_milliseconds() -> f64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as f64).unwrap_or(0.0)
+}
+
 fn intl_timezone(text: &str) -> Result<String, Throw> {
     tz_canonicalize(text).ok_or_else(|| Throw::range_error("invalid time zone"))
 }
@@ -69,14 +74,24 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
         .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
-    let calendar_option = intl_string_option(i, &options, "calendar", &[], "gregory")?;
-    if !(3..=8).contains(&calendar_option.len())
-        || !calendar_option.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+    let calendar_option = i.get_prop(&options, "calendar")?;
+    let calendar_option = if calendar_option.is_undefined() {
+        requested.first().and_then(|tag| intl_unicode_keyword(tag, "ca")).unwrap_or_else(|| "gregory".into())
+    } else {
+        i.to_string(&calendar_option)?
+    };
+    if calendar_option.split('-').any(|part| !(3..=8).contains(&part.len())
+        || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
         return Err(Throw::range_error("invalid calendar"));
     }
     // A well-formed but unavailable calendar falls back to the locale default.
-    let calendar = if calendar_option == "gregorian" { "gregory".into() }
-        else if calendar_option == "iso8601" { calendar_option } else { "gregory".into() };
+    let canonical_calendar = calendar_option.to_ascii_lowercase();
+    let canonical_calendar = match canonical_calendar.as_str() {
+        "gregorian" => "gregory", "islamicc" => "islamic-civil",
+        "ethiopic-amete-alem" => "ethioaa", other => other,
+    };
+    let calendar = if INTL_KNOWN_CALENDARS.contains(&canonical_calendar) { canonical_calendar.to_string() }
+        else { "gregory".into() };
     let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
     if !(3..=8).contains(&numbering_system.len())
         || !numbering_system.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
@@ -88,9 +103,9 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let time_style = intl_optional_string(i, &options, "timeStyle", &["full", "long", "medium", "short"])?;
     let weekday = intl_optional_string(i, &options, "weekday", &["narrow", "short", "long"])?;
     let era = intl_optional_string(i, &options, "era", &["narrow", "short", "long"])?;
-    let year = intl_optional_string(i, &options, "year", &["2-digit", "numeric"])?;
-    let month = intl_optional_string(i, &options, "month", &["2-digit", "numeric", "narrow", "short", "long"])?;
-    let day = intl_optional_string(i, &options, "day", &["2-digit", "numeric"])?;
+    let mut year = intl_optional_string(i, &options, "year", &["2-digit", "numeric"])?;
+    let mut month = intl_optional_string(i, &options, "month", &["2-digit", "numeric", "narrow", "short", "long"])?;
+    let mut day = intl_optional_string(i, &options, "day", &["2-digit", "numeric"])?;
     let day_period = intl_optional_string(i, &options, "dayPeriod", &["narrow", "short", "long"])?;
     let hour = intl_optional_string(i, &options, "hour", &["2-digit", "numeric"])?;
     let minute = intl_optional_string(i, &options, "minute", &["2-digit", "numeric"])?;
@@ -108,24 +123,37 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     {
         return Err(Throw::type_error("dateStyle/timeStyle conflicts with components"));
     }
+    if date_style.is_none() && time_style.is_none()
+        && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
+            hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().all(|field| field.is_none())
+        && fractional_second_digits.is_none() {
+        year = Some("numeric".into());
+        month = Some("numeric".into());
+        day = Some("numeric".into());
+    }
     let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
     let hour12 = i.get_prop(&options, "hour12")?;
+    let extension_cycle = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
+        .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
     let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
     let hour_cycle = if !hour12.is_undefined() {
-        if hour12.to_boolean() { "h12" } else { "h23" }.to_string()
-    } else { hour_cycle_option.unwrap_or_else(|| default_cycle.into()) };
+        if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string()
+    } else { hour_cycle_option.or(extension_cycle).unwrap_or_else(|| default_cycle.into()) };
     let state = IntlDateState {
         locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
         second, fractional_second_digits, time_zone_name, hour_cycle,
     };
-    let object = if let JsValue::Object(object) = this { object } else {
-        let intl = i.global_env.resolve("Intl").unwrap();
-        let constructor = i.get_prop(&intl, "DateTimeFormat")?;
-        let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
-        let mut raw = JsObject::ordinary();
-        raw.proto = Some(proto);
-        Obj(Rc::new(RefCell::new(raw)))
+    let object = match this {
+        JsValue::Object(object) if i.current_new_target().is_some() => object,
+        _ => {
+            let intl = i.global_env.resolve("Intl").unwrap();
+            let constructor = i.get_prop(&intl, "DateTimeFormat")?;
+            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+            let mut raw = JsObject::ordinary();
+            raw.proto = Some(proto);
+            Obj(Rc::new(RefCell::new(raw)))
+        }
     };
     intl_register(&object, IntlState::DateTime(state));
     Ok(JsValue::Object(object))
@@ -221,17 +249,24 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
     if let Some(minute) = &state.minute {
         if !time.is_empty() { time.push(':'); }
-        time.push_str(if minute == "2-digit" { "mm" } else { "m" });
+        // ECMA-402 keeps minute and second two-digit whenever they are part of
+        // a time pattern, regardless of the requested "numeric" width.
+        time.push_str("mm");
+        let _ = minute;
     }
     if let Some(second) = &state.second {
         if !time.is_empty() { time.push(':'); }
-        time.push_str(if second == "2-digit" { "ss" } else { "s" });
+        time.push_str("ss");
+        let _ = second;
     }
     if let Some(digits) = state.fractional_second_digits {
         time.push('.');
         time.push_str(&"S".repeat(digits));
     }
-    if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
+    if state.day_period.is_some() {
+        if !time.is_empty() { time.push(' '); }
+        time.push('B');
+    } else if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
         time.push_str(" a");
     }
     if !date.is_empty() && !time.is_empty() { format!("{date}, {time}") }
@@ -284,7 +319,12 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
             'm' => ("minute", if count == 2 { format!("{:02}", date.minute) } else { date.minute.to_string() }),
             's' => ("second", if count == 2 { format!("{:02}", date.second) } else { date.second.to_string() }),
             'S' => ("fractionalSecond", format!("{:03}", date.millisecond)[..count.min(3)].to_string()),
-            'a' | 'b' | 'B' => ("dayPeriod", if date.hour < 12 { data.am.to_string() } else { data.pm.to_string() }),
+            'a' | 'b' => ("dayPeriod", if date.hour < 12 { data.am.to_string() } else { data.pm.to_string() }),
+            'B' => ("dayPeriod", match state.day_period.as_deref() {
+                Some("narrow") => data.day_period_narrow[date.hour as usize],
+                Some("short") => data.day_period_short[date.hour as usize],
+                _ => data.day_period_long[date.hour as usize],
+            }.to_string()),
             'G' => ("era", if date.year > 0 { "AD".into() } else { "BC".into() }),
             'z' | 'Z' | 'O' | 'v' | 'V' | 'X' | 'x' => ("timeZoneName", if offset_seconds == 0 {
                 "UTC".into()
@@ -303,19 +343,23 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
 }
 
 fn intl_date_value(i: &mut Interpreter, value: Option<&JsValue>) -> Result<f64, Throw> {
-    match value {
+    let milliseconds = match value {
         Some(JsValue::Object(object)) if object.borrow().get_own("[[DateValue]]").is_some() => {
             let stored = object.borrow().get_own("[[DateValue]]").unwrap();
-            i.to_number(&stored)
+            i.to_number(&stored)?
         }
-        Some(value) => i.to_number(value),
-        None => Ok(0.0),
-    }
+        Some(JsValue::Undefined) | None => intl_now_milliseconds(),
+        Some(value) => i.to_number(value)?,
+    };
+    // PartitionDateTimePattern applies TimeClip: non-finite values are a
+    // RangeError, finite values are truncated toward zero.
+    if !milliseconds.is_finite() { return Err(Throw::range_error("invalid time value")); }
+    Ok(milliseconds.trunc())
 }
 
 fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_date_state(&this)?;
-    let function = Interpreter::native("format", intl_date_bound_format, &i.function_proto);
+    let function = Interpreter::native_arity("", intl_date_bound_format, &i.function_proto, 1);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
@@ -342,20 +386,56 @@ fn intl_date_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsVal
 
 fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_date_state(&this)?;
-    if args.len() < 2 { return Err(Throw::type_error("formatRange requires two dates")); }
+    if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
+        return Err(Throw::type_error("formatRange requires two dates"));
+    }
     let start = intl_date_value(i, args.first())?;
     let end = intl_date_value(i, args.get(1))?;
     if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
-    let format = |value| intl_render_date(&state, value).into_iter().map(|(_, text)| text).collect::<String>();
-    let left = format(start);
-    let right = format(end);
-    Ok(JsValue::str(if left == right { left } else { format!("{left} – {right}") }))
+    let parts = intl_date_range_parts(&state, start, end);
+    Ok(JsValue::str(parts.iter().map(|(_, value, _)| value.as_str()).collect::<String>()))
 }
 
 fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let value = intl_date_format_range(i, this, args)?;
-    let value = i.to_string(&value)?;
-    intl_parts_array(i, vec![("literal", value)])
+    let state = intl_date_state(&this)?;
+    if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
+        return Err(Throw::type_error("formatRangeToParts requires two dates"));
+    }
+    let start = intl_date_value(i, args.first())?;
+    let end = intl_date_value(i, args.get(1))?;
+    if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
+    let mut values = Vec::new();
+    for (kind, value, source) in intl_date_range_parts(&state, start, end) {
+        let part = i.object_value();
+        i.set_prop(&part, "type", JsValue::str(kind))?;
+        i.set_prop(&part, "value", JsValue::str(value))?;
+        i.set_prop(&part, "source", JsValue::str(source))?;
+        values.push(part);
+    }
+    intl_array(i, values)
+}
+
+fn intl_date_range_parts(state: &IntlDateState, start: f64, end: f64) -> Vec<(&'static str, String, &'static str)> {
+    let left = intl_render_date(state, start);
+    let right = intl_render_date(state, end);
+    if left == right {
+        return left.into_iter().map(|(kind, value)| (kind, value, "shared")).collect();
+    }
+    let textual_month = ["long", "short", "narrow"].contains(&state.month.as_deref().unwrap_or(""));
+    let mut prefix = 0;
+    let mut suffix = 0;
+    if textual_month {
+        while prefix < left.len().min(right.len()) && left[prefix] == right[prefix] { prefix += 1; }
+        while suffix < left.len().min(right.len()) - prefix
+            && left[left.len() - suffix - 1] == right[right.len() - suffix - 1] { suffix += 1; }
+    }
+    let mut parts = Vec::new();
+    parts.extend(left[..prefix].iter().cloned().map(|(kind, value)| (kind, value, "shared")));
+    parts.extend(left[prefix..left.len() - suffix].iter().cloned().map(|(kind, value)| (kind, value, "startRange")));
+    parts.push(("literal", " – ".into(), "shared"));
+    parts.extend(right[prefix..right.len() - suffix].iter().cloned().map(|(kind, value)| (kind, value, "endRange")));
+    parts.extend(left[left.len() - suffix..].iter().cloned().map(|(kind, value)| (kind, value, "shared")));
+    parts
 }
 
 fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -364,9 +444,13 @@ fn intl_date_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue
     for (key, value) in [
         ("locale", &state.locale), ("calendar", &state.calendar),
         ("numberingSystem", &state.numbering_system), ("timeZone", &state.time_zone),
-        ("hourCycle", &state.hour_cycle),
     ] { i.set_prop(&object, key, JsValue::str(value))?; }
-    i.set_prop(&object, "hour12", JsValue::Bool(["h11", "h12"].contains(&state.hour_cycle.as_str())))?;
+    // hourCycle and hour12 are only part of the resolved options when the
+    // requested pattern actually contains a time component.
+    if state.hour.is_some() || state.time_style.is_some() {
+        i.set_prop(&object, "hourCycle", JsValue::str(state.hour_cycle.as_str()))?;
+        i.set_prop(&object, "hour12", JsValue::Bool(["h11", "h12"].contains(&state.hour_cycle.as_str())))?;
+    }
     for (key, value) in [
         ("dateStyle", &state.date_style), ("timeStyle", &state.time_style),
         ("weekday", &state.weekday), ("era", &state.era), ("year", &state.year),
@@ -398,5 +482,12 @@ mod intl_date_tests {
         let mut i = Interpreter::new();
         let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',hourCycle:'h23'}); d.format(1710053940000)+'|'+d.format(1710054000000)").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "1:59|3:00");
+    }
+
+    #[test]
+    fn range_parts_mark_shared_and_distinct_fields() {
+        let mut i = Interpreter::new();
+        let value = i.run_script("let d=new Intl.DateTimeFormat('en',{timeZone:'UTC',year:'numeric',month:'short',day:'numeric'}); d.formatRangeToParts(1546473600000,1546646400000).map(p=>p.type+':'+p.source).join('|')").unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "month:shared|literal:shared|day:startRange|literal:shared|day:endRange|literal:shared|year:shared");
     }
 }

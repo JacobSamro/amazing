@@ -1226,30 +1226,15 @@ fn native_is_extensible(
 }
 
 fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    if let JsValue::Object(object) = &this {
-        let value = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
-        object
-            .borrow_mut()
-            .define("[[DateValue]]", symbol_data(JsValue::Num(value), true, true)).unwrap();
-        Ok(this)
-    } else {
-        Ok(JsValue::str(""))
-    }
+    intl_date_construct(i, this, args)
 }
 
 fn native_date_to_string(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
-    _: Vec<JsValue>,
+    args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    if let JsValue::Object(object) = this {
-        if object.borrow().get_own("[[DateValue]]").is_some() {
-            return Ok(JsValue::str(
-                "Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)",
-            ));
-        }
-    }
-    Ok(JsValue::str("Invalid Date"))
+    intl_date_to_string_method(i, this, args)
 }
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

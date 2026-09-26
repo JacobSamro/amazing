@@ -24,7 +24,19 @@ impl Interpreter {
 }
 
 fn intl_collator_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("Collator requires new")); };
+    // Intl.Collator is callable without new; the this-value is ignored and a
+    // fresh instance is created with the correct prototype.
+    let object = match this {
+        JsValue::Object(object) if i.current_new_target().is_some() => object,
+        _ => {
+            let intl = i.global_env.resolve("Intl").unwrap();
+            let constructor = i.get_prop(&intl, "Collator")?;
+            let JsValue::Object(proto) = i.get_prop(&constructor, "prototype")? else { unreachable!() };
+            let mut raw = JsObject::ordinary();
+            raw.proto = Some(proto);
+            Obj(Rc::new(RefCell::new(raw)))
+        }
+    };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let mut locale = intl_lookup(&requested);
     let extension = requested.iter().find(|tag| {
@@ -76,7 +88,7 @@ fn intl_collator_state(this: &JsValue) -> Result<IntlCollatorState, Throw> {
 
 fn intl_collator_compare_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_collator_state(&this)?;
-    let function = Interpreter::native("compare", intl_collator_bound_compare, &i.function_proto);
+    let function = Interpreter::native_arity("", intl_collator_bound_compare, &i.function_proto, 2);
     let JsValue::Object(object) = &function else { unreachable!() };
     object.borrow_mut().constructible = false;
     object.borrow_mut().delete_own("prototype");
@@ -103,12 +115,15 @@ fn intl_collator_bound_compare(i: &mut Interpreter, _: JsValue, args: Vec<JsValu
 fn intl_collator_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_collator_state(&this)?;
     let object = i.object_value();
+    // ECMA-402 16.3.5 order: locale, usage, sensitivity, ignorePunctuation,
+    // collation, numeric, caseFirst.
     for (key, value) in [
         ("locale", state.locale), ("usage", state.usage), ("sensitivity", state.sensitivity),
-        ("collation", state.collation), ("caseFirst", state.case_first),
     ] { i.set_prop(&object, key, JsValue::str(value))?; }
-    i.set_prop(&object, "numeric", JsValue::Bool(state.numeric))?;
     i.set_prop(&object, "ignorePunctuation", JsValue::Bool(state.ignore_punctuation))?;
+    i.set_prop(&object, "collation", JsValue::str(state.collation))?;
+    i.set_prop(&object, "numeric", JsValue::Bool(state.numeric))?;
+    i.set_prop(&object, "caseFirst", JsValue::str(state.case_first))?;
     Ok(object)
 }
 

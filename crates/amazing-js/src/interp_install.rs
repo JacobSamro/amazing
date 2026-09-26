@@ -2,6 +2,9 @@
 
 impl Interpreter {
     fn native(name: &str, f: crate::value::NativeFn, proto: &Obj) -> JsValue {
+        Self::native_arity(name, f, proto, 0)
+    }
+    pub(crate) fn native_arity(name: &str, f: crate::value::NativeFn, proto: &Obj, arity: usize) -> JsValue {
         let mut o = JsObject::function(JsFunction {
             name: name.into(),
             params: Vec::new(),
@@ -15,13 +18,17 @@ impl Interpreter {
         });
         o.proto = Some(proto.clone());
         let handle = Obj(Rc::new(RefCell::new(o)));
+        // JsObject::function seeds "name" then "length"; built-in functions
+        // must expose "length" before "name" in property order.
+        let _ = handle.borrow_mut().delete_own("name");
+        let _ = handle.borrow_mut().delete_own("length");
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
         handle.borrow_mut().define("prototype", Property {
             value: JsValue::Object(prototype), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
         }).unwrap();
+        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(arity as f64), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(0.0), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
@@ -251,6 +258,7 @@ impl Interpreter {
                 .borrow_mut()
                 .set_own("prototype", JsValue::Object(self.date_proto.clone()));
         }
+        self.install_date_engine(&date_ctor);
         self.define_global("Date", date_ctor);
         let json = self.object_value();
         let _ = self.set_prop(
@@ -342,6 +350,9 @@ impl Interpreter {
             ("map", native_array_map as crate::value::NativeFn),
             ("filter", native_array_filter as crate::value::NativeFn),
             ("some", native_array_some as crate::value::NativeFn),
+            ("find", native_array_find as crate::value::NativeFn),
+            ("every", native_array_every as crate::value::NativeFn),
+            ("sort", native_array_sort as crate::value::NativeFn),
             ("forEach", native_array_for_each as crate::value::NativeFn),
             ("reduce", native_array_reduce as crate::value::NativeFn),
             ("slice", native_array_slice as crate::value::NativeFn),

@@ -3951,6 +3951,7 @@ include!("builtins_intl.rs");
 include!("builtins_intl_number.rs");
 include!("builtins_intl_plural.rs");
 include!("builtins_intl_datetime.rs");
+include!("builtins_intl_date_support.rs");
 include!("builtins_intl_relative_list.rs");
 include!("builtins_intl_collator.rs");
 include!("builtins_intl_segmenter.rs");
