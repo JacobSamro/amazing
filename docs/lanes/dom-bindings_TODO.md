@@ -1736,3 +1736,15 @@ Windows final gate through win-run's win-001 fallback: owned nextest **496/496**
 Pinned WPT c2a2fce69e5c2509d9dc28440ec8b42532e5c293 targeted Linux iteration, 800×600, 120-second deadline, fresh storage per invocation: StaticRange-constructor **16/17→17/17** (baseline is the historical DOM-B3 sweep); HTMLCollection-as-prototype **1/2→2/2** after the JS-owner fix joined dev. The earlier isolated Node-compareDocumentPosition run passed **1444/1444**, closing the reproduced timeout concern without claiming a full-corpus zero-loss gate. Raw targeted records and Windows totals: `crates/amazing-bindings/evidence/staticrange-20260926.json`.
 
 Remaining DOM-B work: Range bulk-operation fixtures still have timeout clusters; cross-realm traversal requires iframe/realm host support; tentative OpaqueRange APIs are unimplemented. Dynamic disabling of an already-focused fieldset descendant remains a focus follow-up (disabled-003: 0/2 in Linux diagnostics). No push.
+
+## Queued: IPC-11 MessageEvent and messaging EventTargets
+
+Order: after the DOM-B Range bulk-operation timeout cluster.
+
+Add `EventClass::Message` in amazing-dom and the MessageEvent interface in amazing-bindings: constructor, data, origin, lastEventId, source, ports, and legacy initMessageEvent. MessagePort and BroadcastChannel inherit the common EventTarget methods and use the DOM listener registry.
+
+Planned seam (not implemented yet): generalize the Window adapter pattern with optional `BindingHost::external_event_target_slot(value) -> Option<u64>` and `external_event_target_value(slot) -> Option<Value>` hooks, defaulting to None. The host validates wrapper identity/realm/liveness, assigns a stable slot from the common DOM external-target allocation domain, and maps the slot back to the canonical messaging wrapper. Existing Window/AbortSignal mappings remain supported. EventTarget receiver conversion and target/currentTarget wrapping use these hooks; ports/channels keep their own brands without a duplicate listener list.
+
+Expose a typed trusted message-delivery helper in amazing-bindings so IPC can supply data, origin, lastEventId, source and ports and dispatch through the same native registry. DOM stores only native message metadata and opaque retained-value handles; bindings/host own JS value rooting and cleanup. IPC retains transport, structured clone/transfer, inbox scheduling and lifecycle ownership. Publish exact helper signatures with the implementation; these names are the proposed adapter contract, not callable APIs yet.
+
+Exit checks: native/binding coverage of constructor defaults/conversions, legacy initialization, retained payload identity, target/currentTarget identity, and shared capture/once/passive/removal/dispatch behavior; pinned messaging WPT selection; Windows owned/workspace nextest and doctests.
