@@ -283,7 +283,26 @@ fn crc32(data: &[u8]) -> u32 {
 }
 const LOG_MAGIC: &[u8; 8] = b"AMSTLOG1";
 const SNAP_MAGIC: &[u8; 8] = b"AMSTSN01";
+const FORMAT_MAGIC: &[u8; 8] = b"AMSTFMT1";
+/// On-disk format version. Bump this whenever the log or checkpoint byte
+/// layout changes incompatibly; an on-disk store stamped with any other
+/// version is treated the same as a corrupt store (quarantined, not opened).
+const FORMAT_VERSION: u32 = 1;
 const MAX_RECORD: usize = 64 * 1024 * 1024;
+fn read_format_version(path: &Path) -> Result<u32> {
+    let data = fs::read(path)?;
+    if data.len() != 12 || &data[..8] != FORMAT_MAGIC {
+        return Err(Error::Corrupt);
+    }
+    Ok(u32::from_le_bytes(data[8..12].try_into().map_err(|_| Error::Corrupt)?))
+}
+fn write_format_version(path: &Path) -> Result<()> {
+    let mut data = Vec::with_capacity(12);
+    data.extend_from_slice(FORMAT_MAGIC);
+    data.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
+    fs::write(path, data)?;
+    Ok(())
+}
 fn read_checkpoint(path: &Path) -> Result<(u64, BTreeMap<EntryKey, Vec<u8>>)> {
     let data = fs::read(path)?;
     if data.len() < 24 || &data[..8] != SNAP_MAGIC {
@@ -324,9 +343,60 @@ pub struct DiskStore {
     quota_id: u64,
 }
 impl DiskStore {
+    /// Open the store at `path`, never failing the caller because the on-disk
+    /// data is unreadable. A store that fails to parse (torn/corrupt log or
+    /// checkpoint) or carries an unrecognized format version is quarantined
+    /// -- moved aside with a timestamped suffix, logged once -- and a fresh,
+    /// empty store is opened in its place. A browser must never fail to load
+    /// a page because its local storage on disk is stale or damaged.
     pub fn open(path: impl AsRef<Path>, default_limit: u64) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
+        match Self::try_open(&path, default_limit) {
+            Ok(store) => Ok(store),
+            Err(Error::Corrupt) => {
+                Self::quarantine(&path)?;
+                Self::try_open(&path, default_limit)
+            }
+            Err(e) => Err(e),
+        }
+    }
+    /// Move an unreadable store directory aside so a fresh one can be
+    /// created in its place. A no-op if nothing is there yet.
+    fn quarantine(path: &Path) -> Result<()> {
+        if !path.exists() {
+            return Ok(());
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("store")
+            .to_string();
+        let quarantined = path.with_file_name(format!("{name}.corrupt-{stamp}"));
+        fs::rename(path, &quarantined)?;
+        eprintln!(
+            "amazing-storage: {} was corrupt or an unrecognized format version; \
+             quarantined to {} and starting a fresh store",
+            path.display(),
+            quarantined.display()
+        );
+        Ok(())
+    }
+    fn try_open(path: &Path, default_limit: u64) -> Result<Self> {
+        let path = path.to_path_buf();
         fs::create_dir_all(&path)?;
+        let format_path = path.join("format");
+        if format_path.exists() {
+            let version = read_format_version(&format_path)?;
+            if version != FORMAT_VERSION {
+                return Err(Error::Corrupt);
+            }
+        } else {
+            write_format_version(&format_path)?;
+        }
         let mut memory = MemoryStore::new(default_limit);
         let mut generation = 0;
         let mut saw_checkpoint = false;

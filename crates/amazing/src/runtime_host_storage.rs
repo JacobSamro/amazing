@@ -292,12 +292,20 @@ impl RuntimeBindingHost<'_> {
             let getter=self.native(name,0,NativeEntry::Storage(SI::Storage,name,SM::Getter),HostCallPolicy::CallOnly);
             self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
-        for (name,interface,object) in [
-            ("indexedDB",SI::IDBFactory,StorageObject::Factory{bucket:"default".into()}),
-            ("caches",SI::CacheStorage,StorageObject::CacheStorage{bucket:"default".into()}),
+        // IA-REAL-2: `indexedDB`/`caches`/`navigator.storage`/`.locks`/`.storageBuckets` used
+        // to be allocated eagerly here, and `storage_allocate` unconditionally opens the
+        // on-disk store as its first step. That made every single page load pay disk I/O
+        // for storage before any script ran, and made a stale/corrupt on-disk store fail
+        // page load entirely rather than just the storage APIs a page happens to touch.
+        // These five singletons are installed as getters instead (mirroring the existing
+        // localStorage/sessionStorage lazy pattern below) so the store opens lazily, on
+        // first actual use.
+        for (name,interface) in [
+            ("indexedDB",SI::IDBFactory),
+            ("caches",SI::CacheStorage),
         ] {
-            let wrapper=self.storage_allocate(interface,object)?;
-            self.define_data_property(&global,name,wrapper,true,true,true)?;
+            let getter=self.native(name,0,NativeEntry::Storage(interface,"!singleton",SM::Getter),HostCallPolicy::CallOnly);
+            self.define_accessor_property(&global,name,Some(getter),None,true,true)?;
         }
         let navigator=self.js.binding_get_property(&global,"navigator")?;
         let navigator=if matches!(navigator,JsValue::Object(_)){navigator}else{
@@ -305,14 +313,35 @@ impl RuntimeBindingHost<'_> {
             self.define_data_property(&global,"navigator",value.clone(),true,false,true)?;
             value
         };
-        let manager=self.storage_allocate(SI::StorageManager,StorageObject::Manager)?;
-        self.define_data_property(&navigator,"storage",manager,true,true,true)?;
-        let locks=self.storage_allocate(SI::LockManager,StorageObject::LockManager)?;
-        self.define_data_property(&navigator,"locks",locks,true,true,true)?;
-        let buckets=self.storage_allocate(SI::StorageBucketManager,StorageObject::BucketManager)?;
-        self.define_data_property(&navigator,"storageBuckets",buckets,true,true,true)?;
+        for (name,interface) in [
+            ("storage",SI::StorageManager),
+            ("locks",SI::LockManager),
+            ("storageBuckets",SI::StorageBucketManager),
+        ] {
+            let getter=self.native(name,0,NativeEntry::Storage(interface,"!singleton",SM::Getter),HostCallPolicy::CallOnly);
+            self.define_accessor_property(&navigator,name,Some(getter),None,true,true)?;
+        }
         self.install_storage_legacy();
         Ok(())
+    }
+    /// Lazily open storage and allocate (or reuse) the one wrapper object for a
+    /// per-realm storage singleton (IDBFactory/CacheStorage/StorageManager/
+    /// LockManager/StorageBucketManager), on first access rather than at
+    /// realm/document init (IA-REAL-2).
+    fn storage_singleton(&mut self,interface:SI)->Result<JsValue,Throw>{
+        self.storage_ensure()?;
+        let object=match interface {
+            SI::IDBFactory=>StorageObject::Factory{bucket:"default".into()},
+            SI::CacheStorage=>StorageObject::CacheStorage{bucket:"default".into()},
+            SI::StorageManager=>StorageObject::Manager,
+            SI::LockManager=>StorageObject::LockManager,
+            SI::StorageBucketManager=>StorageObject::BucketManager,
+            _=>return Err(Throw::type_error("Not a storage singleton")),
+        };
+        let existing={let state=self.state.borrow();let storage=state.storage.as_ref().unwrap();
+            storage.objects.iter().position(|o|std::mem::discriminant(o)==std::mem::discriminant(&object))};
+        if let Some(slot)=existing{return self.storage_wrapper(slot)}
+        self.storage_allocate(interface,object)
     }
     fn storage_profile_path() -> std::path::PathBuf {
         if let Some(path)=std::env::var_os("AMAZING_STORAGE_DIR") {return path.into()}
@@ -585,6 +614,9 @@ impl RuntimeBindingHost<'_> {
         });
     }
     pub(super) fn storage_invoke(&mut self,interface:SI,member:&'static str,kind:SM,this:JsValue,args:&[JsValue])->Result<JsValue,Throw>{
+        if member=="!singleton" {
+            return self.storage_singleton(interface);
+        }
         match interface {
             SI::Storage=>self.storage_area_invoke(member,kind,this,args),
             SI::IDBFactory=>self.storage_factory_invoke(member,this,args),
@@ -1793,6 +1825,38 @@ mod storage_binding_tests {
         source.run_script("localStorage.setItem('last','value')").unwrap();
         peer.pump_at(Duration::from_millis(5),false).unwrap();
         assert_eq!(peer.run_script("events.length").unwrap(),JsValue::num(4.0));
+    }
+
+    #[test]
+    fn page_load_and_first_storage_use_survive_a_corrupt_on_disk_store() {
+        // IA-REAL-2: install_storage_interfaces() used to eagerly open every
+        // on-disk store (web/idb/cache/manager/buckets) during realm init, so
+        // a corrupt or unrecognized-format store on disk made every page fail
+        // before any script ran ("TypeError: IndexedDB open: Corrupt"), even
+        // for a page that never touches storage. Storage now opens lazily on
+        // first indexedDB/caches/navigator.storage use, and a corrupt or
+        // unknown-version store is quarantined instead of failing.
+        let shared=SharedTestStorage::new();
+        let idb_dir=shared._root.path.join("idb");
+        std::fs::create_dir_all(&idb_dir).unwrap();
+        // A checkpoint file that exists but fails to parse: `saw_checkpoint`
+        // true and `generation` stuck at 0, the exact condition that used to
+        // make `DiskStore::open` return `Error::Corrupt`.
+        std::fs::write(idb_dir.join("checkpoint.0"),b"not a real checkpoint").unwrap();
+        // Page (realm) init must succeed even though the on-disk IndexedDB
+        // store next to it is corrupt: init no longer touches storage at all.
+        let mut scheduler=scheduler();
+        // First actual use of indexedDB must still work, against a fresh store.
+        scheduler.run_script("var result='pending'; var request=indexedDB.open('after-quarantine',1); request.onupgradeneeded=function(){request.result.createObjectStore('items')}; request.onsuccess=function(){result='ok'}; request.onerror=function(){result='error: '+request.error.name};").unwrap();
+        for step in 1..15 {
+            scheduler.pump_at(Duration::from_millis(step*10),false).unwrap_or_else(|error|panic!("pump: {}",error.describe()));
+            if scheduler.run_script("result").unwrap()!=JsValue::str("pending") {break}
+        }
+        assert_eq!(scheduler.run_script("result").unwrap(),JsValue::str("ok"));
+        let quarantined=std::fs::read_dir(&shared._root.path).unwrap()
+            .filter_map(|entry|entry.ok())
+            .any(|entry|entry.file_name().to_string_lossy().starts_with("idb.corrupt-"));
+        assert!(quarantined,"expected the corrupt idb store to be quarantined aside, not left in place or deleted");
     }
 
     #[test]
