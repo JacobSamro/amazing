@@ -256,3 +256,67 @@ SharedArrayBuffer cases remain measured failures.
 
 IPC and storage integration signatures were posted in their lane questions.
 The exact-commit Windows workspace gate is recorded in the lane report.
+
+## JSS-next String core semantics
+
+Fixed base: local `dev` `a0105c17` (`lane/js-stdlib` head `712927c0`). Pinned
+Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, full-input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`.
+
+Spec-exact String core methods that blocked the String directory:
+`split` (`@@split` dispatch, `ToUint32(limit)` ordering, RegExp split via the
+internal engine, string `SplitMatch`, empty-separator/source cases), `matchAll`
+(RegExp match records with empty-match advance, `@@matchAll` dispatch, IsRegExp
+and global validation before `ToString(this)`), `replaceAll` (proper
+`IsRegExp(@@match)`, flags/global checks before `ToString(this)`, `@@replace`
+dispatch), `replace` (`@@replace` dispatch for object search values only, `$`
+substitution, callback `(match, offset, string)`), `includes`/`startsWith`/
+`endsWith` (position/endPosition clamping, IsRegExp TypeError), `charAt`/
+`charCodeAt`/`codePointAt` (out-of-range results), `trim` (full ECMAScript
+WhiteSpace+LineTerminator set), String exotic objects (own `length` and
+per-code-unit index properties) and `Object.prototype.toString` boxed tags.
+
+| built-ins/String | Pass | Fail | Unsupported |
+| --- | ---: | ---: | ---: |
+| Base | 1,154 | 178 | 9 |
+| After | 1,278 | 54 | 9 |
+
+At `(path, variant)` granularity, **248 variants newly pass and zero previously
+passing variants are lost**. Final selection classification SHA-256 is
+`8779bf57d4b600afa1aab51064e2839d3222b500210898732101dceb7d4d75f1`. Linux
+`amazing-js` nextest passed 317/317 with one skipped; its doctest passed 1/1.
+Remaining failures are tagged templates (`String.raw` tag), RegExp engine gaps
+(Unicode property escapes, named captures, `d` flag), Unicode normalization
+tables, `String.prototype[Symbol.iterator]` receiver checking (in
+`interp_symbol.rs`, outside this lane's grant) and global-variable shadowing in
+`String(this)`.
+
+## JSS-next Temporal annotation and Instant coercion
+
+ISO string annotations for `Instant` and `ZonedDateTime` are now validated
+syntactically while remaining semantically opaque for `Instant`: multiple time
+zone annotations, repeated critical calendar annotations, uppercase unknown
+keys, critical unknown annotations, offset annotations with seconds, and
+trailing junk are RangeErrors, but `Instant` accepts and ignores any zone or
+calendar name. `ToTemporalInstant` accepts a `ZonedDateTime` instance and
+coerces other objects through `ToString`. `Instant.prototype.round` rejects
+day/week/year/month units. `Duration.prototype.round` accepts year/month units
+for an exactly blank duration and keeps the relativeTo requirement otherwise.
+
+| built-ins/Temporal | Pass | Fail |
+| --- | ---: | ---: |
+| Base | 3,698 | 905 |
+| After | 3,745 | 858 |
+
+At `(path, variant)` granularity, **94 variants newly pass and zero previously
+passing variants are lost**; `built-ins/String` is unchanged at 1,278/1,341 with
+zero losses. Final selection classification SHA-256 is
+`a6e0af52a317083041bcc7ffa2b98d8037054472cbfeac19c72fba43be2bd905`.
+
+The largest remaining Temporal blocker is the absent `Proxy` (about 250 failing
+variants, 125 files); it is `js-runtime`'s and recorded in this lane's
+`questions.md`, along with tagged templates, RegExp engine gaps and
+`String.prototype[Symbol.iterator]`. The rest are calendar/time-zone arithmetic
+beyond the ISO surface and shared engine semantics, all left visible as
+measured failures.
+
