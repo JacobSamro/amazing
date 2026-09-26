@@ -1,6 +1,8 @@
 //! Isolated, phase-aware Test262 process host. Protocol is documented in scripts/test262.py.
 use amazing_js::value::{FunctionBody, JsFunction, JsObject, JsValue, NativeFn, Property, Throw};
 use amazing_js::{Interpreter, parse_script};
+use amazing_js::interp::RealmHandle;
+use std::collections::HashMap;
 use std::{
     cell::RefCell,
     io::{self, Read},
@@ -8,7 +10,7 @@ use std::{
 
 thread_local! {
     static UNSUPPORTED: RefCell<Option<String>> = const { RefCell::new(None) };
-    static STRING: RefCell<Option<JsValue>> = const { RefCell::new(None) };
+    static STRING: RefCell<HashMap<RealmHandle, JsValue>> = RefCell::new(HashMap::new());
     static ASYNC_DONE: RefCell<Option<Result<(), String>>> = const { RefCell::new(None) };
 }
 
@@ -71,8 +73,13 @@ fn unsupported(name: &str) -> Result<JsValue, Throw> {
         "unsupported Test262 host operation: {name}"
     )))
 }
-fn realm(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    unsupported("host.createRealm")
+fn realm(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let global = i.binding_create_object(None)?;
+    let realm = i.binding_create_realm(global)?;
+    i.binding_with_realm(realm, |i| {
+        install(i);
+        i.binding_get_property(&i.binding_global_object(), "$262")
+    })
 }
 fn detach(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     i.binding_detach_array_buffer(args.first().unwrap_or(&JsValue::Undefined))?;
@@ -89,7 +96,7 @@ fn abstract_module(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<J
 }
 fn coerce(i: &mut Interpreter, v: JsValue) -> Result<String, Throw> {
     let string = STRING
-        .with(|s| s.borrow().clone())
+        .with(|s| s.borrow().get(&i.binding_current_realm()).cloned())
         .expect("captured String intrinsic");
     match i.call_value(&string, JsValue::Undefined, vec![v])? {
         JsValue::Str(s) => Ok(s.to_string()),
@@ -98,7 +105,7 @@ fn coerce(i: &mut Interpreter, v: JsValue) -> Result<String, Throw> {
 }
 fn eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = coerce(i, args.first().cloned().unwrap_or(JsValue::Undefined))?;
-    i.run_script(&source)
+    i.binding_eval_in_realm(i.binding_current_realm(), &source)
 }
 fn print(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     // Prefix and JSON-escape output so test text cannot impersonate a result frame.
@@ -115,7 +122,7 @@ fn print(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue,
     Ok(JsValue::Undefined)
 }
 fn install(i: &mut Interpreter) {
-    STRING.with(|s| *s.borrow_mut() = i.global_env.resolve("String"));
+    STRING.with(|s| { s.borrow_mut().insert(i.binding_current_realm(), i.global_env.resolve("String").unwrap()); });
     let mut host = JsObject::ordinary();
     host.proto = Some(i.object_proto.clone());
     put(&mut host, "global", JsValue::Object(i.global_obj.clone()));
@@ -345,7 +352,7 @@ const CAPABILITIES: Capabilities = Capabilities {
     module: true,
     asynchronous: true,
     can_block: false,
-    create_realm: false,
+    create_realm: true,
     detach_array_buffer: true,
     gc: false,
     agent: false,
