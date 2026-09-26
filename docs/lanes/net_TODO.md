@@ -1629,3 +1629,36 @@ identical to the pre-merge run, consistent with no net-owned drift. Residuals
 remain cross-lane: the js-runtime realm-hop promise adoption, js-vm generators,
 harness HTTPS origins for `cors-basic`, and dom-bindings' inert Document for
 `responseXML`. NET-26 ends at this binding/runner boundary.
+
+## NET-31 — synchronous XHR dispatcher isolation
+
+Fixed base `f517ff0a` (merge of local dev `11c43c04`). A synchronous XHR runs on
+the JS thread and must block the event loop, but the driver previously drove the
+shared `NetworkService` dispatcher inside its blocking loop. `Dispatcher::step`
+advances every in-flight connection, so the sync loop consumed and discarded the
+replies of pending asynchronous XHRs and fetches; any page mixing a sync XHR with
+an in-flight async request could leave the async one hung.
+
+`runtime_host_net::fetch_xhr_execute` now creates a private `Dispatcher` (same
+`StdResolver`, so the pinned WPT shim host routing still applies) for the
+blocking request, so asynchronous traffic keeps its events on the shared
+service. Regression test
+`crates/amazing/src/runtime_host_net.rs::tests::synchronous_xhr_keeps_pending_async_xhr_reply`
+starts an async `/slow` XHR, blocks on a `/fast` sync XHR while the async reply is
+due, and asserts the async request completes.
+
+Gate on the pooled Boat sandbox (`scripts/linux-run.sh net`), one call: workspace
+nextest **2704 passed / 0 failed / 10 skipped**, workspace doctests **4 passed /
+0 failed**, and the pinned 38-file `fetch/api` + `xhr` selection at `c2a2fce`:
+
+| Metric | Base (before) | After |
+|---|---:|---:|
+| Files pass | 33 / 38 | 34 / 38 |
+| Subtests pass | 552 | 573 |
+| Subtests fail | 34 | 34 |
+| Timeouts | 2 | 1 |
+
+`xhr/responsetype.any.js` changed from timeout after 29 subtests to **pass with
+50 subtests**. The remaining four non-passing files are the unchanged cross-lane
+residuals (js-runtime promise realm, js-vm generators, harness HTTPS origins,
+dom-bindings inert Document). NET-31 ends at this driver-isolation boundary.
