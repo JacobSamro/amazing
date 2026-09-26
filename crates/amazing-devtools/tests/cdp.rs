@@ -903,3 +903,64 @@ fn page_endpoint_highlights_via_overlay() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_reports_performance_and_security() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    let metrics = client.result("Performance.getMetrics", empty());
+    assert_eq!(
+        metrics.get("metrics").unwrap().as_array().unwrap()[0]
+            .get("name")
+            .unwrap()
+            .as_str(),
+        Some("Frames")
+    );
+
+    host.script()
+        .lock()
+        .unwrap()
+        .set_current_security_state(amazing_devtools::host::SecurityState {
+            security_state: "secure".into(),
+            scheme_is_cryptographic: true,
+            explanations: vec!["trusted".into()],
+            insecure_content_status: "neutral".into(),
+        });
+    client.result("Security.enable", empty());
+    let enabled = client.wait_event("Security.securityStateChanged");
+    assert_eq!(
+        enabled.get("params").unwrap().get("securityState").unwrap().as_str(),
+        Some("secure")
+    );
+
+    host.script()
+        .lock()
+        .unwrap()
+        .push_security_state(amazing_devtools::host::SecurityState {
+            security_state: "insecure".into(),
+            scheme_is_cryptographic: false,
+            explanations: Vec::new(),
+            insecure_content_status: "blocked".into(),
+        });
+    let changed = client.wait_event("Security.securityStateChanged");
+    assert_eq!(
+        changed.get("params").unwrap().get("securityState").unwrap().as_str(),
+        Some("insecure")
+    );
+
+    client.result("Security.setIgnoreCertificateErrors", obj! { "ignore" => Json::Bool(true) });
+    client.result(
+        "Security.handleCertificateError",
+        obj! { "eventId" => n(3.0), "action" => n(1.0) },
+    );
+
+    let script = host.script();
+    let script = script.lock().unwrap();
+    assert_eq!(script.ignore_certificate_errors, Some(true));
+    assert_eq!(script.certificate_errors, [(3, 1)]);
+    drop(script);
+
+    shutdown.store(true, Ordering::Relaxed);
+}

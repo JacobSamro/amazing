@@ -51,6 +51,7 @@ pub struct EnabledDomains {
     pub network: bool,
     pub log: bool,
     pub fetch: bool,
+    pub security: bool,
 }
 
 /// Maps engine node identity to per-session CDP node ids.
@@ -158,6 +159,11 @@ impl SessionState {
                 events.push(domains::fetch::request_paused(&item));
             }
         }
+        if enabled.security {
+            for state in self.dev.drain_security_states() {
+                events.push(domains::security::state_changed(&state));
+            }
+        }
         events
     }
 }
@@ -177,6 +183,8 @@ pub fn dispatch(session: &mut SessionState, request: &CdpRequest) -> Result<Disp
         "Input" => domains::input::dispatch(session, request),
         "Emulation" => domains::emulation::dispatch(session, request),
         "Overlay" => domains::overlay::dispatch(session, request),
+        "Performance" => domains::performance::dispatch(session, request),
+        "Security" => domains::security::dispatch(session, request),
         "Network" => domains::network::dispatch(session, request),
         "Log" => domains::log::dispatch(session, request),
         "Fetch" => domains::fetch::dispatch(session, request),

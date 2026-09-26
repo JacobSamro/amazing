@@ -683,6 +683,29 @@ pub struct HighlightConfig {
     pub show_extension_lines: bool,
 }
 
+/// CDP `Security.securityStateChanged` data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SecurityState {
+    /// `"unknown"`, `"neutral"`, `"insecure"`, `"secure"`, `"info"`,
+    /// `"insecure-broken"` or `"warning"`.
+    pub security_state: String,
+    pub scheme_is_cryptographic: bool,
+    pub explanations: Vec<String>,
+    /// `"unknown"`, `"blocked"`, `"allowed"` or `"info"`.
+    pub insecure_content_status: String,
+}
+
+impl Default for SecurityState {
+    fn default() -> Self {
+        Self {
+            security_state: "unknown".into(),
+            scheme_is_cryptographic: false,
+            explanations: Vec::new(),
+            insecure_content_status: "unknown".into(),
+        }
+    }
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -1166,6 +1189,31 @@ pub trait DevToolsSession: Send {
     }
     /// Clears the current highlight.
     fn hide_highlight(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+
+    // --- Performance ------------------------------------------------------
+    /// Named metric counters and gauges (`Performance.getMetrics`).
+    fn performance_metrics(&mut self) -> Result<Vec<(String, f64)>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Security ---------------------------------------------------------
+    /// The current security state of the target.
+    fn security_state(&mut self) -> Result<SecurityState, HostError> {
+        Ok(SecurityState::default())
+    }
+    /// Security-state changes since the last poll
+    /// (`Security.securityStateChanged`).
+    fn drain_security_states(&mut self) -> Vec<SecurityState> {
+        Vec::new()
+    }
+    /// Whether certificate errors are ignored.
+    fn set_ignore_certificate_errors(&mut self, _ignore: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Resolves a certificate error (`eventId` plus the CDP action code).
+    fn handle_certificate_error(&mut self, _event_id: i64, _action: i32) -> Result<(), HostError> {
         Ok(())
     }
 
