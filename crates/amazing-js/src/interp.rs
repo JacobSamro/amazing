@@ -2633,7 +2633,8 @@ impl Interpreter {
             } else { v };
             self.bind_pattern_mode(&p.binding, v, None, e)?;
         }
-        if is_arrow { return Ok(()); }
+        for name in &names { e.finish_parameter_initialization(name); }
+        if is_arrow || names.contains("arguments") { return Ok(()); }
         let argument_count = args.len();
         let a = self.object_value();
         for (i, v) in args.into_iter().enumerate() {

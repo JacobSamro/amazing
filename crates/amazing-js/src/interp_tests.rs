@@ -623,6 +623,9 @@ mod tests {
             console.log(((value) => { var value; return value; })(8));
             function defaults(a = 5, b = a) { var a; return a + b; }
             console.log(defaults(undefined));
+            try { (function(arguments, p = eval('var arguments')) {})(); }
+            catch (error) { console.log(error.name); }
+            console.log((function(arguments) { var arguments; return arguments; })(9));
             var later = 'outer';
             try { (function(a = later, later = 1) {} )(); }
             catch (error) { console.log(error.name); }
@@ -630,7 +633,7 @@ mod tests {
             catch (error) { console.log(error.name); }
         "#).unwrap();
         assert_eq!(i.output.borrow().as_slice(),
-            ["database-test:2", "outer", "7", "2", "7", "8", "10",
+            ["database-test:2", "outer", "7", "2", "7", "8", "10", "SyntaxError", "9",
              "ReferenceError", "ReferenceError"]);
     }
 

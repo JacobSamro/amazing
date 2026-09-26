@@ -268,8 +268,15 @@ impl EnvHandle {
         let mut binding = cell.0.borrow_mut();
         binding.value = value;
         binding.initialized = true;
-        binding.lexical = false;
         Ok(())
+    }
+
+    /// Keep parameter names protected from eval var declarations while defaults
+    /// are evaluated, then allow body var declarations to reuse their cells.
+    pub(crate) fn finish_parameter_initialization(&self, name: &str) {
+        if let Some(cell) = self.0.borrow().vars.get(name) {
+            cell.0.borrow_mut().lexical = false;
+        }
     }
 
     /// `let`/`const` declaration.
