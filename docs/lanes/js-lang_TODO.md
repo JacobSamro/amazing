@@ -1477,3 +1477,18 @@ it is not an isolated count of new HTML API cases.
 [Interface](js-lang_JS14-interface.md) · [Evidence](js-lang_JS14-evidence.json).
 Next: Annex B decimal/octal and identity escapes, legacy class-range fallbacks,
 and quantified lookahead/group boundaries; then Unicode property escape tables.
+
+## JS-15 — Annex B RegExp grammar
+
+Source `bcdd8fa0` implements decimal backreference versus legacy octal selection,
+incomplete hex and control escapes, identity escapes, legacy class-range unions,
+and quantified lookahead with noncapturing-group Atom boundaries. Capture counts
+include forward references and exclude escaped parentheses and class contents.
+
+Linux: **2,753 workspace passed / 10 skipped**, **372 owned passed / 1 skipped**,
+**4 doctests** (1 owned). Full pinned Test262: **40,132 → 40,146 files**,
+**77,958 → 77,986 variants**, **zero lost passes**. All 14 file gains belong to
+the targeted RegExp grammar area. [Evidence](js-lang_JS15-evidence.json).
+
+Next: Unicode property escapes, exact aliases, categories/scripts/extensions,
+and Unicode mode complement/case-fold semantics.
