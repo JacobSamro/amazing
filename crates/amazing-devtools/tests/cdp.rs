@@ -663,3 +663,177 @@ fn page_endpoint_dispatches_input_and_hit_tests() {
 
     shutdown.store(true, Ordering::Relaxed);
 }
+
+#[test]
+fn page_endpoint_intercepts_fetch_and_serves_bodies() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    host.script()
+        .lock()
+        .unwrap()
+        .set_response_body("r1", b"hello".to_vec(), "text/plain");
+    let body = client.result("Network.getResponseBody", obj! { "requestId" => s("r1") });
+    assert_eq!(body.get("body").unwrap().as_str(), Some("hello"));
+    assert_eq!(body.get("base64Encoded").unwrap().as_bool(), Some(false));
+
+    host.script()
+        .lock()
+        .unwrap()
+        .set_response_body("r2", vec![0xff, 0x00], "application/octet-stream");
+    let binary = client.result("Network.getResponseBody", obj! { "requestId" => s("r2") });
+    assert_eq!(
+        binary.get("body").unwrap().as_str(),
+        Some(amazing_devtools::base64::encode(&[0xff, 0x00]).as_str())
+    );
+    assert_eq!(binary.get("base64Encoded").unwrap().as_bool(), Some(true));
+
+    host.script()
+        .lock()
+        .unwrap()
+        .set_request_post_data("r1", "a=1&b=2");
+    let post = client.result("Network.getRequestPostData", obj! { "requestId" => s("r1") });
+    assert_eq!(post.get("postData").unwrap().as_str(), Some("a=1&b=2"));
+
+    client.result(
+        "Fetch.enable",
+        obj! {
+            "patterns" => Json::Array(vec![obj! { "urlPattern" => s("*"), "requestStage" => s("Request") }]),
+            "handleAuthRequests" => Json::Bool(false),
+        },
+    );
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        assert!(script.fetch_enabled);
+        assert_eq!(script.fetch_patterns.len(), 1);
+    }
+
+    let template = amazing_devtools::host::InterceptedRequest {
+        request_id: "f1".into(),
+        url: "https://example.com/api".into(),
+        method: "POST".into(),
+        headers: vec![("content-type".into(), "application/json".into())],
+        post_data: Some("{}".into()),
+        resource_type: "Fetch".into(),
+        frame_id: "F1".into(),
+        network_id: Some("r1".into()),
+        stage: "Request".into(),
+    };
+    host.script().lock().unwrap().push_intercepted(template.clone());
+    let paused = client.wait_event("Fetch.requestPaused");
+    assert_eq!(
+        paused.get("params").unwrap().get("requestId").unwrap().as_str(),
+        Some("f1")
+    );
+    assert_eq!(
+        paused.get("params").unwrap().get("networkId").unwrap().as_str(),
+        Some("r1")
+    );
+    client.result("Fetch.continueRequest", obj! { "requestId" => s("f1") });
+
+    host.script().lock().unwrap().push_intercepted(amazing_devtools::host::InterceptedRequest {
+        request_id: "f2".into(),
+        ..template.clone()
+    });
+    client.wait_event("Fetch.requestPaused");
+    client.result(
+        "Fetch.fulfillRequest",
+        obj! {
+            "requestId" => s("f2"),
+            "responseCode" => n(201.0),
+            "responsePhrase" => s("Created"),
+            "responseHeaders" => Json::Array(vec![obj! { "name" => s("x-a"), "value" => s("b") }]),
+            "body" => s("aGk="),
+        },
+    );
+
+    host.script().lock().unwrap().push_intercepted(amazing_devtools::host::InterceptedRequest {
+        request_id: "f3".into(),
+        ..template
+    });
+    client.wait_event("Fetch.requestPaused");
+    client.result(
+        "Fetch.failRequest",
+        obj! { "requestId" => s("f3"), "errorReason" => s("Aborted") },
+    );
+
+    let script = host.script();
+    let script = script.lock().unwrap();
+    assert_eq!(script.fetch_decisions.len(), 3);
+    match &script.fetch_decisions[0].1 {
+        amazing_devtools::host::FetchDecision::Continue(_) => {}
+        other => panic!("expected continue, got {other:?}"),
+    }
+    match &script.fetch_decisions[1].1 {
+        amazing_devtools::host::FetchDecision::Fulfill(fulfill) => {
+            assert_eq!(fulfill.response_code, 201);
+            assert_eq!(fulfill.body, b"hi");
+            assert_eq!(fulfill.headers, [("x-a".to_string(), "b".to_string())]);
+        }
+        other => panic!("expected fulfill, got {other:?}"),
+    }
+    match &script.fetch_decisions[2].1 {
+        amazing_devtools::host::FetchDecision::Fail(reason) => assert_eq!(reason, "Aborted"),
+        other => panic!("expected fail, got {other:?}"),
+    }
+    drop(script);
+
+    shutdown.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn page_endpoint_applies_emulation_hints() {
+    let host = Arc::new(MockHost::new());
+    let (addr, shutdown) = server(Arc::clone(&host));
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    client.result(
+        "Emulation.setDeviceMetricsOverride",
+        obj! {
+            "width" => n(390.0),
+            "height" => n(844.0),
+            "deviceScaleFactor" => n(3.0),
+            "mobile" => Json::Bool(true),
+            "screenOrientation" => obj! { "type" => s("portraitPrimary"), "angle" => n(0.0) },
+        },
+    );
+    client.result("Emulation.setUserAgentOverride", obj! { "userAgent" => s("Amazing/Mobile") });
+    client.result("Emulation.setLocaleOverride", obj! { "locale" => s("fr-FR") });
+    client.result("Emulation.setTimezoneOverride", obj! { "timezoneId" => s("Europe/Paris") });
+    client.result(
+        "Emulation.setEmulatedMedia",
+        obj! {
+            "media" => s("print"),
+            "features" => Json::Array(vec![obj! { "name" => s("prefers-color-scheme"), "value" => s("dark") }]),
+        },
+    );
+    client.result(
+        "Emulation.setTouchEmulationEnabled",
+        obj! { "enabled" => Json::Bool(true), "maxTouchPoints" => n(5.0) },
+    );
+    client.result("Emulation.setCPUThrottlingRate", obj! { "rate" => n(4.0) });
+    client.result("Emulation.setScriptExecutionDisabled", obj! { "value" => Json::Bool(true) });
+
+    {
+        let script = host.script();
+        let script = script.lock().unwrap();
+        let metrics = script.device_metrics.as_ref().unwrap();
+        assert_eq!((metrics.width, metrics.height), (390, 844));
+        assert!(metrics.mobile);
+        assert_eq!(metrics.orientation_type.as_deref(), Some("portraitPrimary"));
+        assert_eq!(script.user_agent_override.as_deref(), Some("Amazing/Mobile"));
+        assert_eq!(script.locale_override, Some(Some("fr-FR".to_string())));
+        assert_eq!(script.timezone_override.as_deref(), Some("Europe/Paris"));
+        assert_eq!(script.touch_emulation, Some((true, Some(5))));
+        assert_eq!(script.cpu_throttling_rate, Some(4.0));
+        assert_eq!(script.script_execution_disabled, Some(true));
+    }
+
+    client.result("Emulation.clearDeviceMetricsOverride", empty());
+    assert_eq!(host.script().lock().unwrap().device_metrics, None);
+    client.result("Emulation.clearGeolocationOverride", empty());
+
+    shutdown.store(true, Ordering::Relaxed);
+}

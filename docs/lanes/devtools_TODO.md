@@ -125,8 +125,9 @@ scriptable target events (`push_target_created`/`push_target_destroyed`).
 
 ## CDP-3 — Input domain and DOM hit testing — done
 
-Linux gate on Boat `bx_xbhqabax`: `amazing-devtools` 72/72 nextest (0 skipped)
-and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped, doctests 4 passed.
+Source `f4c33c86`. Linux gate on Boat `bx_xbhqabax`: `amazing-devtools` 72/72
+nextest (0 skipped) and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped,
+doctests 4 passed.
 
 - `Input`: `setIgnoreInputEvents`, `dispatchMouseEvent`, `dispatchKeyEvent`,
   `dispatchTouchEvent`, `insertText`. New seam types `MouseEvent`, `KeyEvent`,
@@ -136,3 +137,31 @@ and 1 doctest; workspace 2706 passed, 0 failed, 10 skipped, doctests 4 passed.
   `DevToolsSession::node_for_location` and returns the node id, backend node id
   and frame id.
 - `MockHost` records every input event and returns a configurable `hit_test`.
+
+## CDP-4 — Fetch interception and Network response bodies — done
+
+Source `11e58a00`. Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 74/74
+nextest (0 skipped) and 1 doctest; workspace 2736 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+- `Network.getResponseBody` (text or base64) and `Network.getRequestPostData`.
+- `Fetch` domain: `enable` (with `RequestPattern` parsing), `disable`,
+  `continueRequest`, `failRequest`, `fulfillRequest` (base64 body) and
+  `getResponseBody`; `Fetch.requestPaused` events drained from the engine.
+- Seam: `FetchPattern`, `InterceptedRequest`, `FetchContinue`/`FetchFulfill`/
+  `FetchDecision`, and `set_fetch_enabled`/`drain_intercepted_requests`/
+  `resolve_intercepted_request` plus the two body methods.
+
+## CDP-5 — Emulation domain — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing-devtools` 77/77
+nextest (0 skipped) and 1 doctest; workspace 2746 passed, 0 failed, 10 skipped,
+doctests 4 passed.
+
+`Emulation.setDeviceMetricsOverride`/`clearDeviceMetricsOverride`,
+`setUserAgentOverride`, `setGeolocationOverride`/`clearGeolocationOverride`,
+`setTimezoneOverride`, `setLocaleOverride`, `setEmulatedMedia`,
+`setScrollbarsHidden`, `setTouchEmulationEnabled`, `setCPUThrottlingRate` and
+`setScriptExecutionDisabled`. New seam types `DeviceMetrics` and `MediaFeature`;
+the seam methods are advisory and default to success. New protocol helpers
+`u64_param`/`bool_param`.

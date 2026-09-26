@@ -10,7 +10,8 @@
 //! * [`protocol`] — CDP's JSON-RPC request/response/event framing, including
 //!   flattened `sessionId` routing.
 //! * [`session`] and [`domains`] — the state machine for the `Target`, `Page`,
-//!   `Runtime`, `DOM`, `CSS`, `Network`, `Log` and `Input` domains.
+//!   `Runtime`, `DOM`, `CSS`, `Network`, `Log`, `Input`, `Fetch` and
+//!   `Emulation` domains.
 //! * [`host`] — the seam the driver implements: [`host::DevToolsHost`] and
 //!   [`host::DevToolsSession`]. Every method is optional and defaults to
 //!   "unsupported", so domains can be adopted one at a time.

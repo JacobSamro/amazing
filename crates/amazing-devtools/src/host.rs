@@ -580,6 +580,84 @@ pub struct TouchEvent {
     pub timestamp: f64,
 }
 
+/// One CDP `Fetch.RequestPattern`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchPattern {
+    /// Wildcard URL pattern (`*` and `?`); `None` or `"*"` matches everything.
+    pub url_pattern: Option<String>,
+    /// `"Document"`, `"Stylesheet"`, `"Image"`, `"XHR"`, `"Fetch"`, ...
+    pub resource_type: Option<String>,
+    /// `"Request"` (default) or `"Response"`.
+    pub request_stage: Option<String>,
+}
+
+/// A request the engine paused for Fetch interception.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterceptedRequest {
+    pub request_id: String,
+    pub url: String,
+    pub method: String,
+    pub headers: Vec<(String, String)>,
+    pub post_data: Option<String>,
+    pub resource_type: String,
+    pub frame_id: String,
+    /// The matching `Network.*` request id, when available.
+    pub network_id: Option<String>,
+    /// `"Request"` or `"Response"`.
+    pub stage: String,
+}
+
+/// A `Fetch.continueRequest` decision.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FetchContinue {
+    pub url: Option<String>,
+    pub method: Option<String>,
+    pub headers: Option<Vec<(String, String)>>,
+    pub post_data: Option<String>,
+}
+
+/// A `Fetch.fulfillRequest` decision.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FetchFulfill {
+    pub response_code: u16,
+    pub response_phrase: Option<String>,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+/// What the client decided for a paused Fetch request.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FetchDecision {
+    Continue(FetchContinue),
+    Fail(String),
+    Fulfill(FetchFulfill),
+}
+
+/// CDP `Emulation.setDeviceMetricsOverride` inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceMetrics {
+    pub width: u32,
+    pub height: u32,
+    pub device_scale_factor: f64,
+    pub mobile: bool,
+    pub screen_width: Option<u32>,
+    pub screen_height: Option<u32>,
+    pub position_x: Option<i64>,
+    pub position_y: Option<i64>,
+    pub dont_set_visible_size: bool,
+    /// `"portraitPrimary"`, `"portraitSecondary"`, `"landscapePrimary"` or
+    /// `"landscapeSecondary"`.
+    pub orientation_type: Option<String>,
+    pub orientation_angle: Option<i64>,
+}
+
+/// One `Emulation.setEmulatedMedia` feature.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaFeature {
+    pub name: String,
+    pub value: String,
+}
+
 /// CDP `Page.ResourceType`. Stored as a string so the driver can report any
 /// resource kind without this crate enumerating them.
 #[derive(Clone, Debug, PartialEq)]
@@ -924,6 +1002,111 @@ pub trait DevToolsSession: Send {
     /// Inserts text as if typed (`Input.insertText`).
     fn insert_text(&mut self, _text: &str) -> Result<(), HostError> {
         Err(HostError::Unsupported)
+    }
+
+    // --- Network ----------------------------------------------------------
+    /// The decoded body of a finished response (`Network.getResponseBody` /
+    /// `Fetch.getResponseBody`). `Ok(None)` means the body is gone or opaque.
+    fn get_response_body(
+        &mut self,
+        _request_id: &str,
+    ) -> Result<Option<ResourceContent>, HostError> {
+        Err(HostError::Unsupported)
+    }
+    /// The posted body of a request (`Network.getRequestPostData`).
+    fn get_request_post_data(&mut self, _request_id: &str) -> Result<Option<String>, HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Fetch ------------------------------------------------------------
+    /// Enables/disables request interception for the given patterns.
+    fn set_fetch_enabled(
+        &mut self,
+        _enabled: bool,
+        _patterns: &[FetchPattern],
+        _handle_auth: bool,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Requests the engine has paused and is waiting for a decision on. Must
+    /// not block; default is no requests.
+    fn drain_intercepted_requests(&mut self) -> Vec<InterceptedRequest> {
+        Vec::new()
+    }
+    /// Applies the client's decision to a paused request, unblocking it.
+    fn resolve_intercepted_request(
+        &mut self,
+        _request_id: &str,
+        _decision: &FetchDecision,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported)
+    }
+
+    // --- Emulation --------------------------------------------------------
+    //
+    // These are advisory: a driver that does not implement one still succeeds,
+    // because an emulation hint the engine cannot honor must not fail the CDP
+    // command. Implementations apply the override to the engine's own viewport,
+    // UA, locale, media or scheduler.
+    /// Applies a device-metrics override (`Emulation.setDeviceMetricsOverride`).
+    fn set_device_metrics_override(&mut self, _metrics: &DeviceMetrics) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Clears the device-metrics override.
+    fn clear_device_metrics_override(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the user agent string.
+    fn set_user_agent_override(
+        &mut self,
+        _user_agent: &str,
+        _accept_language: Option<&str>,
+        _platform: Option<&str>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides geolocation; `None` clears it.
+    fn set_geolocation_override(
+        &mut self,
+        _position: Option<(f64, f64, f64)>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the time zone.
+    fn set_timezone_override(&mut self, _timezone_id: &str) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Overrides the locale; `None` clears it.
+    fn set_locale_override(&mut self, _locale: Option<&str>) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Emulates a media type and/or features.
+    fn set_emulated_media(
+        &mut self,
+        _media: Option<&str>,
+        _features: &[MediaFeature],
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Hides or shows scrollbars.
+    fn set_scrollbars_hidden(&mut self, _hidden: bool) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables touch emulation.
+    fn set_touch_emulation_enabled(
+        &mut self,
+        _enabled: bool,
+        _max_touch_points: Option<u32>,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Throttles the CPU by `rate` (`1.0` is unthrottled).
+    fn set_cpu_throttling_rate(&mut self, _rate: f64) -> Result<(), HostError> {
+        Ok(())
+    }
+    /// Enables or disables script execution.
+    fn set_script_execution_disabled(&mut self, _value: bool) -> Result<(), HostError> {
+        Ok(())
     }
 
     // --- Events -----------------------------------------------------------
