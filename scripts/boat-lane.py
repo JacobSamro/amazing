@@ -61,6 +61,7 @@ POOLS = {
     "pool-paint": ["replaced-content", "compositor"],
     "pool-sys": ["net", "ipc", "storage"],
     "pool-new": ["wasm", "a11y", "devtools"],
+    "pool-desktop": ["shell"],
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 
