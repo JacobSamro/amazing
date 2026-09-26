@@ -577,7 +577,7 @@ fn std_epoch_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     if !option.is_undefined() && !option.is_object() {
         return Err(Throw::type_error("Temporal options must be an object"));
     }
-    let (digits, minute_only, step, mode) = std_temporal_string_precision(i, &option)?;
+    let (digits, minute_only, step, mode) = std_temporal_string_precision(i, &option, true)?;
     let calendar = std_temporal_option_string(i, &option, "calendarName")?
         .unwrap_or_else(|| "auto".to_string());
     let offset = std_temporal_option_string(i, &option, "offset")?

@@ -774,4 +774,110 @@ iso-range.js` (1 known-remaining edge case -- a combined date+time ISO
 range check at nanosecond precision that `std_temporal_validate` doesn't
 do today, low value for its investigation cost).
 
+## JSS-duration: Duration total/toString/round/compare/add/subtract rounding, formatting and range-check bugs
+
+Fixed base: `fdda620f` (dev, with JSS-total merged).
+
+Four separate bugs, found by triaging the ~136-file cluster the previous
+round surveyed but didn't start.
+
+**`Duration.prototype.toString()` had no real formatting algorithm.** The
+old `std_temporal_duration_text` ignored `smallestUnit`/`fractionalSecondDigits`/
+`roundingMode` entirely and used an approximate "show seconds" heuristic.
+Replaced with `std_temporal_duration_to_string`, implementing
+`TemporalDurationToString`'s two mechanisms: (A) when a precision was
+explicitly requested (`step.is_some()`), sum exactly the fields at rank
+`balance_rank..=9` (nanoseconds) -- `balance_rank` is the highest-ranked
+nonzero field, clamped to at least "day" (years/months/weeks can't
+redistribute without a `relativeTo`, confirmed by `round-cross-unit-
+boundary.js`'s 1Y11M30D23:59:59.999999999 rounding up into 31D, never into
+the months) -- round that sum to the requested increment/mode, then re-split
+starting at `balance_rank` only; everything coarser is left untouched
+(confirmed by `fractionalseconddigits-number.js`, where weeks/days stay put
+while only the seconds fraction rounds, and by the "no balancing if
+smallest unit is largest unit" case, where a bare `seconds` field rounds
+past 60 without promoting into minutes). (B) Otherwise, only a mandatory
+ns -> us -> ms -> seconds overflow cascade runs; minutes/hours/days are
+never touched. Also fixed `std_temporal_string_precision`'s
+`fractionalSecondDigits` reader: it rejected any non-integer Number instead
+of flooring it (`GetStringOrNumberOption` step 3.b), and called `ToNumber`
+unconditionally instead of dispatching on the *actual* type of the option
+value (only a primitive Number takes the `ToNumber` branch; boolean, null,
+bigint, object and Symbol all go through `ToString` instead, confirmed by
+`fractionalseconddigits-wrong-type.js`). Gained an `allow_minute: bool`
+parameter (Duration's `smallestUnit` excludes "minute"/"hour", unlike
+`PlainTime`/`Instant`/`ZonedDateTime`). Last fix: `Duration.prototype.
+toString` doesn't have a `calendarName` option at all (a Duration carries
+no calendar) -- `std_temporal_to_string` was still reading it for every
+kind including Duration, an observable-order bug caught by
+`order-of-operations.js`.
+
+**The Duration validity check had the wrong bounds for the day-through-
+nanosecond fields.** `std_temporal_validate` capped `days` together with
+years/months/weeks at 2^32-1, and hours-through-nanoseconds each
+individually at 2^53-1. Both are wrong: days is unrelated to the calendar
+fields and has no fixed cap of its own (`Duration/max.js`'s "max days" case
+is ~1.04e11 days, nowhere near 2^32); the real constraint (`IsValidDuration`)
+is that the *exact total* of days..nanoseconds, expressed in seconds, must
+fit the float64-safe-integer range (with up to .999999999 of a further
+second, since nanosecond precision is kept exactly) -- confirmed by
+`Duration/out-of-range.js`'s thresholds being derived from
+`ceil(2**53-1 / unit-in-seconds)`, not from each field's own magnitude.
+Added that total-nanoseconds bound (`STD_TEMPORAL_DURATION_MAX_NS`)
+alongside (not instead of -- reverting the per-field cap regressed 2
+already-passing tests, `round/out-of-range-when-converting-from-normalized-
+duration.js`, where the ENTIRE span collapses into a single requested
+`largestUnit` and that one surviving field must independently be
+representable even though the total-in-seconds is still in range) the
+existing per-field cap on hours..nanoseconds, with `days` now excluded from
+both caps and governed by the total only.
+
+**`Duration.prototype.add`/`subtract` neither rejected calendar units nor
+ever balanced the result.** Per `AddDurations`, a nonzero year/month/week on
+*either* operand always throws (there's no `relativeTo` to redistribute
+through) -- unconditionally, regardless of whether the raw sum would still
+be in range; the old code only checked calendar units as a fallback *after*
+attempting the addition, so e.g. `new Temporal.Duration(1).add(blank)`
+silently succeeded instead of throwing (`no-calendar-units.js`). Separately,
+the day-through-nanosecond result was only ever rebalanced (nanosecond-exact
+sum, re-split from a computed largest rank) as an out-of-range *fallback* --
+never unconditionally -- so e.g. adding a duration to itself where
+milliseconds overflowed past 1000 came back with `milliseconds: 1000`
+instead of carrying into seconds, even though the raw per-field sum was
+itself safe-integer-range (`basic.js`'s "balancing positive" case,
+`balance-negative-result.js`). Rewrote the Duration arm of
+`std_temporal_add_values` to always throw on any calendar unit first, then
+always fully rebalance via exact nanosecond total (the surviving largest
+rank is the coarser -- i.e. smaller rank number -- of the two operands' own
+largest nonzero field, clamped to at least "day"), then validate.
+
+`built-ins/Temporal`: **8,086 -> 8,218 pass variants (+132), zero lost**,
+diffed by (path, variant) against a fresh `js-stdlib-duration-baseline.jsonl`
+taken at this round's start. `Duration.prototype.toString`: 0 failing files
+remaining (was ~25). `Duration.prototype.add`/`subtract`: 6+6 failing files
+remaining each (was 13+12) -- all in the float64-representable-integer /
+precision-exact-mathematical-values / result-out-of-range sub-cluster, which
+requires replicating `BalanceDuration`'s literal float64 (ℝ(𝔽(x))) rounding
+at specific intermediate steps rather than exact bigint math (confirmed by
+`add/float64-representable-integer.js`'s explicit "should not use more
+precise internal representation than the spec prescribes" assertion) --
+not attempted this round, pre-existing failures, not regressions.
+`Duration.from`/`compare`: `argument-duration-max.js`/`-out-of-range.js` and
+`Duration/max.js`/`out-of-range.js` fixed by the validate-bounds fix above.
+Workspace and doctest gate: see `report.md` for this round's numbers.
+
+Remaining Temporal clusters, none started or only partially covered this
+round (largest first): `Duration.prototype.round`/`total`'s `relativeTo`
+handling (~21+29 files -- mostly `ZonedDateTime`-as-`relativeTo` property-
+bag read-order and offset/timezone-string edge cases, e.g.
+`relativeto-propertybag-timezone-string-datetime.js`, plus a handful of
+`order-of-operations.js`/`options-read-before-algorithmic-validation.js`
+tests requiring the full `GetTemporalRelativeToOption`+`ToRelativeTemporalObject`
+Proxy-observable read order for a `ZonedDateTime`-shaped bag -- not
+triaged in depth, likely substantial); `Duration.compare`'s remaining ~11
+files (same `relativeTo` family); `PlainDate`/`PlainDateTime.prototype.
+{since,until}` (~76 files, untouched -- no time remained after Duration);
+the float64-exact-precision sub-cluster in `add`/`subtract`/`from`/`compare`
+noted above (~6 files each).
+
 
