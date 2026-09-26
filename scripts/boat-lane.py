@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import subprocess
@@ -67,12 +68,24 @@ def wait_ready(sid: str, limit: int = 300) -> dict:
     while time.time() < deadline:
         d = info(sid)
         if d.get("state") in READY and d.get("sshEndpoint"):
+            if d.get("machineProvider") != "baremetal":
+                print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
+                      "(2-4x slower than bare metal)", file=sys.stderr)
             return d
         time.sleep(3)
     raise SystemExit(f"boat-lane: {sid} not ready after {limit}s")
 
 
 def ensure(lane: str, size: str) -> dict:
+    # Parallel shard runs create sandboxes at once; serialize map updates.
+    MAP.parent.mkdir(parents=True, exist_ok=True)
+    with open(MAP.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        sid = _ensure_locked(lane, size)
+    return wait_ready(sid)
+
+
+def _ensure_locked(lane: str, size: str) -> str:
     m = load_map()
     sid = m.get(lane)
     d = None
@@ -91,11 +104,7 @@ def ensure(lane: str, size: str) -> dict:
     elif d.get("state") in STOPPED:
         boat("resume", sid, "--no-auto-stop")
         print(f"boat-lane: resumed {sid} for {lane}", file=sys.stderr)
-    d = wait_ready(sid)
-    if d.get("machineProvider") != "baremetal":
-        print(f"boat-lane: WARNING {sid} for {lane} runs on {d.get('machineProvider')} "
-              "(2-4x slower than bare metal)", file=sys.stderr)
-    return d
+    return sid
 
 
 def main() -> int:
