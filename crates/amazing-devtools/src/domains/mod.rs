@@ -6,6 +6,7 @@
 
 pub mod css;
 pub mod dom;
+pub mod input;
 pub mod log;
 pub mod network;
 pub mod page;

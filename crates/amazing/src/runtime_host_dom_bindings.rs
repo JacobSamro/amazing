@@ -83,6 +83,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dom_exception_uses_inherited_accessors_and_native_error_identity() {
+        let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
+        let mut js = Interpreter::new_with_external_scheduler(32).unwrap();
+        js.set_dom_host(host.clone());
+        let _bindings = super::super::install(&mut js, host).unwrap();
+        let result = js.run_script(r#"
+            function check(value) { if (!value) throw new Error('DOMException conformance'); }
+            const e = new DOMException(undefined, undefined);
+            check(e.name === 'Error' && e.message === '' && e.code === 0);
+            check(e instanceof DOMException && e instanceof Error);
+            check(Object.getPrototypeOf(DOMException.prototype) === Error.prototype);
+            check(Object.getPrototypeOf(DOMException) === Function.prototype);
+            check(DOMException.length === 0);
+            for (const name of ['name', 'message', 'code']) {
+                check(!e.hasOwnProperty(name));
+                const desc = Object.getOwnPropertyDescriptor(DOMException.prototype, name);
+                check(typeof desc.get === 'function' && desc.set === undefined);
+                check(desc.enumerable && desc.configurable);
+                let rejected = false;
+                try { desc.get.call({}); } catch (error) { rejected = error instanceof TypeError; }
+                check(rejected);
+            }
+            for (const name of Object.keys(DOMException)) {
+                if (!name.endsWith('_ERR')) continue;
+                for (const object of [DOMException, DOMException.prototype]) {
+                    const desc = Object.getOwnPropertyDescriptor(object, name);
+                    check(!desc.writable && desc.enumerable && !desc.configurable);
+                }
+            }
+            const named = new DOMException('message', 'NotSupportedError');
+            check(named.toString() === 'NotSupportedError: message' && named.code === 9);
+            Object.defineProperty(named, 'name', {value: 'other'});
+            check(named.code === 9 && named.toString() === 'other: message');
+            let caught = false;
+            try { document.createElement(''); }
+            catch (error) { caught = error instanceof DOMException && error.name === 'InvalidCharacterError' && error.code === 5; }
+            check(caught);
+            true;
+        "#).unwrap();
+        assert!(matches!(result, JsValue::Bool(true)));
+    }
+
+    #[test]
     fn native_message_event_preserves_identity_and_freezes_ports_without_user_code() {
         let host = Rc::new(RefCell::new(BrowserDomHost { dom: Dom::new(), native_forwarded: false }));
         let mut js = Interpreter::new_with_external_scheduler(32).unwrap();

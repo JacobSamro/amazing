@@ -127,6 +127,33 @@ impl CdpRequest {
                 .ok_or_else(|| CdpError::invalid_params(format!("parameter '{name}' must be a u64"))),
         }
     }
+
+    /// An optional finite number parameter.
+    pub fn optional_f64(&self, name: &str) -> Result<Option<f64>, CdpError> {
+        match self.params.get(name) {
+            None | Some(Json::Null) => Ok(None),
+            Some(Json::Number(n)) if n.is_finite() => Ok(Some(*n)),
+            Some(_) => Err(CdpError::invalid_params(format!(
+                "parameter '{name}' must be a number"
+            ))),
+        }
+    }
+
+    /// A required finite number parameter.
+    pub fn number_param(&self, name: &str) -> Result<f64, CdpError> {
+        self.optional_f64(name)?
+            .ok_or_else(|| CdpError::invalid_params(format!("missing number parameter '{name}'")))
+    }
+
+    /// An optional signed integer parameter.
+    pub fn optional_i64(&self, name: &str) -> Result<Option<i64>, CdpError> {
+        match self.params.get(name) {
+            None | Some(Json::Null) => Ok(None),
+            Some(value) => value.as_i64().map(Some).ok_or_else(|| {
+                CdpError::invalid_params(format!("parameter '{name}' must be an integer"))
+            }),
+        }
+    }
 }
 
 /// A CDP error payload.
