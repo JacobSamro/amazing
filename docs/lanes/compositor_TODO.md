@@ -105,3 +105,48 @@ scroll events; replaced-content resolves the effects-scroller owned snapshot's
 support remains deferred by the recorded project decision, and interactive
 window proof still requires an active win-001 session. No new compositor-owned
 ticket is listed in the current brief after COMP-14.
+
+## COMP-15 — composited effects (active)
+
+Move CSS filter (blur, drop-shadow and color filters), backdrop-filter,
+mix-blend-mode/isolation, clip-path basic shapes/path and mask-image onto
+retained compositor effect nodes. Use the full painter as reference.
+Effect-only filter/blend changes must animate without rebuilding paint.
+Promote will-change transform/opacity, animations, 3D transforms, video/canvas
+and fixed/sticky; squash compatible layers to bound layer count.
+
+Exit: fixtures for every effect with exact pixels or only recorded one-channel
+layer rounding under ADR 0010; effect-only frames with no paint rebuild;
+measured layer counts for IA oracle pages. Iterate remotely on Linux in bulk,
+then run one Windows crate/workspace nextest and doctest gate plus parity
+evidence. GPUI screenshot proof remains pending and nonblocking.
+
+### COMP-15 native implementation boundary
+
+The retained compositor now owns typed effect operations, nested passes,
+filter/blend sampling, clip/path/mask coverage, backdrop scopes, and bounded
+layer promotion/squashing. Filter animation can reserve its endpoint halo
+before raster and use source-free cached frames thereafter. See
+`crates/amazing-compositor/EFFECTS.md` for the producer contract and limits.
+
+Boat iteration: 75/75 compositor tests, 0 doctests; IA reflow, effects-scroller
+and article have 1/4/1 layers and zero pixel losses against the existing painter.
+These are Linux iteration numbers, not the Windows gate. Four CSS fixture
+pages are staged in `crates/amazing-compositor/fixtures/comp15/`.
+
+Remaining completion criteria: replaced-content must supply full-painter
+effects and raw effect metadata (the current painter only exports opacity);
+CSS owns registration/classification; IA owns scheduler adoption; IPC owns the
+additive EffectsFrameSnapshot V2 wire format. Arbitrarily transformed CSS
+effect groups need reference-space metadata before import. Native API tests
+do not establish full CSS effect parity, so COMP-15 is not marked done.
+
+### COMP-15 Windows native gate
+
+`661ebb62` on fixed base `f5f97c39`: win-001 compositor **75/75**, 0 skipped,
+**0 doctests**; workspace **2495/2495**, 9 skipped, **2/2 doctests**. The IA
+reflow/effects-scroller/article have **1/4/1 layers**, each **262144 exact
+pixels, 0 layer-rounding, 0 losses**. Evidence is committed under
+`crates/amazing-compositor/evidence/comp15/`. The native compositor area is
+gated; full COMP-15 remains open for the CSS/painter/driver adoption and the
+new effect-fixture parity criterion described above.

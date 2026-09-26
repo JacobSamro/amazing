@@ -19,6 +19,11 @@ pub enum StorageInterface {
     IDBVersionChangeEvent,
     CacheStorage,
     Cache,
+    StorageManager,
+    StorageBucketManager,
+    StorageBucket,
+    LockManager,
+    Lock,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -102,5 +107,22 @@ pub const INTERFACES: &[Interface] = &[
     Interface { kind: StorageInterface::Cache, name: "Cache", parent: None, members: &[
         method("match", 1), method("matchAll", 0), method("add", 1), method("addAll", 1),
         method("put", 2), method("delete", 1), method("keys", 0),
+    ]},
+    Interface { kind: StorageInterface::StorageManager, name: "StorageManager", parent: None, members: &[
+        method("estimate", 0), method("persist", 0), method("persisted", 0),
+    ]},
+    Interface { kind: StorageInterface::StorageBucketManager, name: "StorageBucketManager", parent: None, members: &[
+        method("open", 1), method("delete", 1), method("keys", 0),
+    ]},
+    Interface { kind: StorageInterface::StorageBucket, name: "StorageBucket", parent: None, members: &[
+        getter("name"), getter("indexedDB"), getter("caches"),
+        method("persist", 0), method("persisted", 0), method("estimate", 0),
+        method("durability", 0), method("setExpires", 1), method("expires", 0),
+    ]},
+    Interface { kind: StorageInterface::LockManager, name: "LockManager", parent: None, members: &[
+        method("request", 2), method("query", 0),
+    ]},
+    Interface { kind: StorageInterface::Lock, name: "Lock", parent: None, members: &[
+        getter("name"), getter("mode"),
     ]},
 ];

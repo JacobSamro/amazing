@@ -3,7 +3,21 @@
 //! view without this crate depending on layout or changing the full-paint path.
 #![forbid(unsafe_code)]
 mod animation;
+mod effect_animation;
+#[cfg(test)]
+mod effect_tests;
+mod effects;
 mod frame;
+pub use effect_animation::*;
+mod effect_padding;
+mod effect_snapshot;
+pub use effect_snapshot::*;
+mod layer_policy;
+pub use layer_policy::*;
+mod effect_clip;
+mod effect_pixels;
+pub use effect_clip::ClipPathSegment;
+pub use effects::*;
 mod hit;
 mod paint_delta;
 mod paint_view;
@@ -39,6 +53,8 @@ impl CompositingReasons {
     pub const FIXED: Self = Self(16);
     pub const SCROLLER: Self = Self(32);
     pub const OVERLAP: Self = Self(64);
+    pub const CANVAS: Self = Self(128);
+    pub const STICKY: Self = Self(256);
     pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
@@ -99,32 +115,53 @@ pub struct Layer {
 /// Pending-layer grouping preserves list order. Direct reasons isolate chunks;
 /// overlap with a differing property state promotes the later layer.
 pub fn layerize(trees: &PropertyTrees, chunks: &[PaintChunk]) -> Vec<Layer> {
+    layerize_with_limit(trees, chunks, usize::MAX).expect("unlimited layer diagnostics")
+}
+fn layerize_with_limit(
+    trees: &PropertyTrees,
+    chunks: &[PaintChunk],
+    limit: usize,
+) -> Result<Vec<Layer>, SceneError> {
     let mut layers: Vec<Layer> = Vec::new();
     for (i, c) in chunks.iter().enumerate() {
         if c.bounds.empty() || c.items.is_empty() {
             continue;
         }
-        let mut reasons = c.reasons;
+        let mut reasons = c
+            .reasons
+            .union(layer_policy::inferred_reasons(trees, c.state));
+        if let Some(last) = layers.last_mut() {
+            // Never cross a different property state, a display-list gap, or
+            // an independently updated video/canvas resource.
+            let separate = CompositingReasons::VIDEO.union(CompositingReasons::CANVAS);
+            if last.state == c.state
+                && !last.reasons.contains(separate)
+                && !reasons.contains(separate)
+                && chunks[*last.chunks.last().unwrap()].items.end == c.items.start
+            {
+                last.chunks.push(i);
+                last.bounds = last.bounds.union(c.bounds);
+                last.reasons = last.reasons.union(reasons);
+                continue;
+            }
+        }
+        if layers.len() >= limit {
+            return Err(SceneError::TooManyLayers);
+        }
+        let current_world = trees.matrix(c.state).and_then(|m| m.map_bounds(c.bounds));
         for prior in &layers {
+            if prior.state == c.state {
+                continue;
+            }
             let prior_world = trees
                 .matrix(prior.state)
                 .and_then(|m| m.map_bounds(prior.bounds));
-            let current_world = trees.matrix(c.state).and_then(|m| m.map_bounds(c.bounds));
-            if prior.state != c.state
-                && prior_world
-                    .zip(current_world)
-                    .is_some_and(|(a, b)| a.intersects(b))
+            if prior_world
+                .zip(current_world)
+                .is_some_and(|(a, b)| a.intersects(b))
             {
                 reasons = reasons.union(CompositingReasons::OVERLAP);
-            }
-        }
-        if !reasons.direct() && !reasons.contains(CompositingReasons::OVERLAP) {
-            if let Some(last) = layers.last_mut() {
-                if last.state == c.state && !last.reasons.direct() {
-                    last.chunks.push(i);
-                    last.bounds = last.bounds.union(c.bounds);
-                    continue;
-                }
+                break;
             }
         }
         layers.push(Layer {
@@ -134,7 +171,7 @@ pub fn layerize(trees: &PropertyTrees, chunks: &[PaintChunk]) -> Vec<Layer> {
             reasons,
         });
     }
-    layers
+    Ok(layers)
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SceneError {
@@ -143,6 +180,7 @@ pub enum SceneError {
     UnorderedRanges,
     NonFiniteBounds,
     TooManyTiles,
+    TooManyLayers,
     MissingCachedTile,
 }
 impl std::fmt::Display for SceneError {
@@ -187,6 +225,7 @@ pub struct Compositor {
     tile_clock: u64,
     raster_epoch: u64,
     scroll_generation: u64,
+    reserved_effect_halos: HashMap<EffectId, f32>,
     free_tile_surfaces: Vec<Surface>,
     last_frame: FrameStats,
     previous_frame: Option<Surface>,
@@ -248,7 +287,7 @@ impl Compositor {
                 return Err(SceneError::InvalidState);
             }
         }
-        let layers = layerize(&trees, &chunks);
+        let layers = layerize_with_limit(&trees, &chunks, MAX_COMPOSITOR_LAYERS)?;
         Ok(Self {
             trees,
             chunks,
@@ -261,6 +300,7 @@ impl Compositor {
             tile_clock: 0,
             raster_epoch: 0,
             scroll_generation: 0,
+            reserved_effect_halos: HashMap::new(),
             free_tile_surfaces: Vec::new(),
             last_frame: FrameStats::default(),
             previous_frame: None,

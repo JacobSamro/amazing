@@ -32,6 +32,13 @@ use amazing_js::{
 #[path = "runtime_host_storage.rs"]
 mod runtime_host_storage;
 use runtime_host_storage::StorageRuntime;
+#[path = "runtime_host_net.rs"]
+mod runtime_host_net;
+use runtime_host_net::{NetNativeEntry, NetRuntime};
+
+#[path = "runtime_host_messaging.rs"]
+pub(crate) mod runtime_host_messaging;
+use runtime_host_messaging::MessagingOp;
 
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
@@ -46,6 +53,7 @@ mod dom_bindings;
 enum NativeEntry {
     Canvas(CanvasTarget, Member),
     Operation(Operation),
+    Net(NetNativeEntry),
     IllegalConstructor,
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
@@ -54,6 +62,8 @@ enum NativeEntry {
     IFrameSrcGet,
     IFrameSrcSet,
     OptionConstructor,
+    Messaging(MessagingOp),
+    StorageLockSettled(u64, bool),
 }
 
 enum WebObject {
@@ -88,6 +98,7 @@ struct BindingState {
     document_content_type: Option<String>,
     document_referrer: Option<String>,
     web_objects: Vec<WebObject>,
+    web_object_handles: HashMap<usize, usize>,
     font_sets: HashMap<NodeIdx, u64>,
     window_event_target_slot: u64,
     storage: Option<StorageRuntime>,
@@ -95,6 +106,8 @@ struct BindingState {
     storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
     frames: html::FrameRuntime,
     pending_form_selection_events: Vec<NodeIdx>,
+    messaging: Option<runtime_host_messaging::MessagingRealm>,
+    net: NetRuntime,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -466,6 +479,7 @@ pub(crate) fn install(
         document_content_type: None,
         document_referrer: None,
         web_objects: Vec::new(),
+        web_object_handles: HashMap::new(),
         font_sets: HashMap::new(),
         window_event_target_slot,
         storage: None,
@@ -473,6 +487,8 @@ pub(crate) fn install(
         storage_inbox: VecDeque::new(),
         frames: html::FrameRuntime::default(),
         pending_form_selection_events: Vec::new(),
+        messaging: None,
+        net: NetRuntime::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -489,6 +505,7 @@ pub(crate) fn install(
         match entry {
             NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
             NativeEntry::Operation(operation) => adapter.invoke_operation_with_html_hooks(operation, this, &args),
+            NativeEntry::Net(entry) => adapter.invoke_net(entry, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -503,6 +520,8 @@ pub(crate) fn install(
             NativeEntry::IFrameSrcGet => adapter.iframe_src_get(this),
             NativeEntry::IFrameSrcSet => adapter.iframe_src_set(this, &args),
             NativeEntry::OptionConstructor => adapter.option_constructor(&args),
+            NativeEntry::Messaging(op) => adapter.messaging_invoke(op, this, &args),
+            NativeEntry::StorageLockSettled(id,success) => adapter.storage_lock_settled(id,success,&args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -515,6 +534,7 @@ pub(crate) fn install(
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
     adapter.install_storage_interfaces()?;
+    adapter.install_messaging()?;
     adapter.install_canvas()?;
     adapter.install_iframe_members()?;
     adapter.install_html_form_globals()?;
@@ -540,6 +560,7 @@ pub(crate) fn install(
     fresh.declare_lexical("localStorage",local_storage,false)?;
     fresh.declare_lexical("sessionStorage",session_storage,false)?;
     adapter.js.global_env = fresh;
+    adapter.install_net()?;
     adapter
         .js
         .global_obj
@@ -557,7 +578,11 @@ impl RuntimeBindingHost<'_> {
             slot
         };
         let arena = self.state.borrow().arena;
-        self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)
+        let value = self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)?;
+        if let JsValue::Object(object) = &value {
+            self.state.borrow_mut().web_object_handles.insert(Rc::as_ptr(&object.0) as usize, slot as usize);
+        }
+        Ok(value)
     }
     fn web_slot(&self, value: &JsValue, brand: InterfaceBrand) -> Result<usize, Throw> {
         let key = self.platform_object(value, brand)

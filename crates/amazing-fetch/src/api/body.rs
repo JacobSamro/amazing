@@ -19,6 +19,7 @@ pub enum BodyInput {
     UrlSearchParams(Vec<(Vec<u16>, Vec<u16>)>),
     FormData(FormData),
     Blob(Blob),
+    Document { bytes: Vec<u8>, content_type: String },
     Stream(Box<dyn PullBody>),
 }
 impl BodyInput {
@@ -95,6 +96,8 @@ impl ApiBody {
                 };
                 (blob.bytes, None, true, mime)
             }
+            BodyInput::Document { bytes, content_type } =>
+                (bytes, None, true, Some(content_type)),
             BodyInput::Stream(stream) => (Vec::new(), Some(stream), false, None),
         };
         if bytes.len() > MAX_API_BODY_BYTES {
