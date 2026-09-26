@@ -81,12 +81,11 @@ impl Interpreter {
         ] {
             let getter = Self::native(getter_name, getter, &self.function_proto);
             let setter = Self::native(setter_name, setter, &self.function_proto);
-            let JsValue::Object(getter) = getter else { unreachable!() };
-            let JsValue::Object(setter) = setter else { unreachable!() };
+            // Accessors store the callable object itself (JSRT callable identity).
             base.borrow_mut().define(key, Property {
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
-                getter: getter.borrow().func.clone().map(Box::new),
-                setter: setter.borrow().func.clone().map(Box::new),
+                getter: Some(getter),
+                setter: Some(setter),
             }).unwrap();
         }
         base.borrow_mut().define(WellKnownSymbol::Iterator.symbol(),
