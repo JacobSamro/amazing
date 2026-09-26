@@ -649,3 +649,168 @@ Two stable baseline rounds measured **313 pass / 11 fail / 20 unsupported / 3 cr
 HTML-21 retention stayed **489 / 11 / 0 / 1**, HTML-22 improved **303 / 11 / 75 / 0** to **305 / 9 / 75 / 0** with two foreign-fragment gains, and HTML-23 stayed **355 / 11 / 7 / 0**. Full per-case classifications, raw hashes and transition tables are under `evidence/html24/`.
 
 Final fixed-base win-002 gate: `amazing-html` nextest **162/162**, separate doctest **1/1**; workspace nextest **2,149/2,149 with 5 skipped**, separate doctests **2/2**. The 64-file source/fixture/lock audit matched before and after. Two Windows after rounds for the new and all three retention selections matched Linux per-case classifications and raw hashes.
+
+## HTML-17 add-on — processing-instruction expectation conflict
+
+The current WHATWG HTML tag-open state parses a valid `<?target ...?>` as a processing instruction. The pinned upstream WPT tree fixture `html/syntax/parsing/resources/processing-instructions.dat` at revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12` expects that behavior. A single tag-open change to emit bogus comments moved 81 previously passing cases to fail (75 expected PI trees and six incomplete-input cases); the full and minimal edits produced the same per-case output hash. The change was discarded, and the upstream fixture was left intact.
+
+Pinned `dom/nodes/MutationObserver-characterData.html` at WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` expects the older bogus-comment data `?processing data?` in one subtest. Its 22/23 result is a known stale expectation relative to the current HTML parser; dom-bindings was notified. XML parsing continues to use XML processing instructions.
+
+## HTML-25 — iframe child documents, first host slice
+
+After merging local dev `e84d6a40` at `be054956` (including NET-30 `04f01ee`), the driver now loads connected iframes through `NetworkService::start_child_navigation`, which applies frame-ancestors and X-Frame-Options checks. The pinned WPT runner resolves local fixtures while retaining the logical child URL and checking their embedding headers. MIME selects HTML or XML/XHTML parsing; parsed children are imported as separate Documents in the shared DOM arena. Same-origin `contentDocument`, `src` reflection, child document then iframe load events, and an IPC-10 child-navigation callback are installed in `runtime_host_html.rs`. A loopback test proves successful XML loading and XFO denial through the production fetch route on Linux and Windows. Child realms and stable `contentWindow` identity await JSRT-9's agreed WindowProxy/realm API.
+
+At pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, Linux baseline `Document-createElement.html` was **49/147** and `Document-createElementNS.html` **85/596** subtests passed. After this slice they are **49/147** and **255/596**. The complete 314-file `dom/nodes/` selection rose from **2,171 pass / 984 fail** to **2,344 pass / 823 fail**; exact named comparison found **171 fail-to-pass and zero pass losses**. The after JSONL SHA-256 is `e06f66d491608c54405dfcfe96b2bc9cfe5c1fbc43fa784504a541a01caca0d3` on Linux. The Windows after sweep recorded the same 3,167 named subtest statuses, SHA-256 `450a5fa09e89e477fa8a1f410e5d0e0861a365c41c3fcb81b078f1f96637c02a`. Under the WPT runner's 10-second worker deadline, Windows classified `Document-createElementNS.html` as a file timeout after recording all 596 subtests; a diagnostic 20-second deadline completed it at about 10.6 seconds with the same **255/341** subtest split. The default deadline remains the reported Windows file status.
+
+Final win-002 workspace nextest and separate doctests passed on the merged source. The two requested WPT files and the 314-file selection were measured with the pinned unmodified test sources on win-001; the only Windows/Linux classification difference was the file timeout above. The HTML-17 processing-instruction behavior and pinned fixture remain unchanged.
+
+## HTML-26 — form submission, constraint validation and form element interfaces
+
+At pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the HTML lane
+swept the whole `html/semantics/forms/` selection (468 files, 54 runner-
+unsupported) as a code-area ticket. The supporting slices landed with the
+forms code: all `constraints/form-validation-*` files now pass
+(`validity-valid` 35, `patternMismatch` 85, `rangeOverflow` 49,
+`rangeUnderflow` 47, `valueMissing` 78, `stepMismatch` 28, `tooLong`/`tooShort`
+63 each, `typeMismatch` 11, `customError` 8, `checkValidity`/`reportValidity`
+130 each); `the-meter-element/meter` 50, `meter-leading-plus-sign` 12, and
+`form-control-infrastructure/form_attribute` 100 all pass. Constraint flags
+are computed regardless of disabled/readonly status (only `valueMissing` is
+mutability-gated for value-mode controls), a radio without a name is never
+missing, `time` reversed ranges wrap midnight, and number-like step multiples
+are checked exactly on the decimal representation.
+
+This is a ported pinned-source sweep, not unmodified WPT harness credit. Two
+engine gaps outside this lane bound the remaining async files:
+`await` on a pending promise does not suspend in the tree-walking interpreter
+(js-runtime), and `Date` has no prototype methods, blocking `valueAsDate`.
+
+The fixed-base full `html/semantics/forms/` sweep (468 selected files, 54
+runner-unsupported) moved from **1,526 pass / 1,717 fail** subtests and 69
+passing files to **2,853 pass / 987 fail** and 116 passing files: **+1,327
+passing subtests, zero pass losses** by named comparison against the baseline.
+File statuses: pass 116, fail 258, timeout 18, error 22, unsupported 54. The
+raw final JSONL SHA-256 is
+`52297889a7836d548d001cdfe020facc202a917549decd023f7e8d9f16b29e82`. Some of
+the earlier full-checkout registrations (`select-event`, submit/requestSubmit,
+`valueAsDate`) are dominated by the two engine gaps above; they are classified
+as such rather than hidden.
+
+### HTML-26 closeout — select/option interfaces and text-selection fixes
+
+Further supporting slices landed after the sweep above:
+`HTMLSelectElement.selectedOptions` as a live `HTMLCollection`, `item`/
+`namedItem`/`length` setter, `HTMLOutputElement.value`/`defaultValue`,
+option `text`/`label`/`index`/constructor selectedness (excluding HTML/SVG
+script and non-text option content), and text-control selection: a text
+control's default selection is `(0,0)`, and the value setter moves the entry
+cursor to the end only when the value actually changes.
+
+Re-measuring the same fixed 468-file selection at this head gives **3,076
+pass / 673 fail** subtests, 127 passing files (0 / 254 / 26 / 29 / 54
+timeout/error/unsupported breakdown adjusted accordingly): **+223 further
+subtests** over the 2,853/987 figure above. Named comparison against the
+original 1,526/1,717 baseline found **989 fail-to-pass and one fail-to-timeout
+regression** (`the-input-element/checkable-active-onblur-with-click.html`,
+subtest "Wait for load": 1 pass/6 fail before, full-file timeout now). That
+regression is not attributable to this lane's own commits — it is already
+present immediately after a `dev` merge that lands between two forms-only
+commits and before either of the two text-selection fixes above, isolated by
+re-running the frozen selection at each intermediate commit. The merged
+range includes DOM-B DOMException work, CDP-3 Input domain, NET-31
+synchronous-XHR isolation, RC-20 gradients, and IA-FRAME-PHASES' render-hook
+change to event-loop frame timing; none of the non-render-hook diffs touch
+`:active`/tab-focus/pointer-action code, so IA-FRAME-PHASES is the leading
+suspect, but the exact cause was not isolated further given it is one
+`test_driver.Actions()`-based subtest of 3,076 gained. Filed for cross-lane
+awareness rather than fixed in this lane. Before/after jsonl: `before`
+(baseline) and `sel2` (this head) in `.agents/html/`.
+
+Full workspace `cargo nextest run --workspace --locked --no-fail-fast` and
+`cargo test --workspace --locked --doc` both green on this head (see
+`status.json`/`report.md` for the exact counts). HTML-26 is done.
+
+## HTML-25 part 2 — iframe child realms, contentWindow, script evaluation
+
+Merged local `dev` at `5b5c3b0d` (js-runtime JSRT-9..12 same-agent realms,
+`4a4ff21b`+, now included) as `79cd56cc`, resolving one `InterfaceBrand`
+numeric collision (HTML-26's `SELECTED_OPTIONS` and dev's `DOM_STRING_MAP`
+both claimed index 37; kept ours at 37, moved dev's to 38) and one stale
+legacy-hook count assertion in `amazing-bindings/src/tests.rs` (9 base hooks
++ our `SELECTED_OPTIONS` + dev's `DOM_STRING_MAP` = 11, was hardcoded 10).
+Neither is HTML-owned; both are one-line merge-integration fixes, not new
+behavior, matching the existing "fix merge brace" precedent from HTML-26.
+
+HTML-25's first slice (child navigation, same-origin `contentDocument`, load
+ordering) shipped without a real per-iframe realm; this ticket adds one using
+exactly the JSRT-9 contract from `docs/lanes/js-runtime_TODO.md` ("JSRT-9
+same-agent realms"): `binding_create_realm`/`binding_create_window_proxy`/
+`binding_with_realm`/`binding_retarget_window_proxy`/`binding_set_realm_origin`.
+
+- **`contentWindow`** (`runtime_host_html.rs`): a new accessor on
+  `HTMLIFrameElement`. On each committed navigation (`setup_iframe_window`,
+  called from `DriverScheduler::dispatch_pending_iframe_loads` before the
+  child's `DOMContentLoaded`/`load`), the iframe gets its own same-agent
+  realm and a stable `WindowProxy`: the first navigation creates the proxy,
+  every later one calls `binding_retarget_window_proxy` so
+  `frame.contentWindow` keeps identity (`===`) across re-navigation while its
+  target realm — and thus its `Object`/`Array`/every other intrinsic — is
+  fresh, matching the spec. Unlike `contentDocument`, `contentWindow` is not
+  nulled cross-origin (only null before the realm exists); cross-origin
+  property access is left to the WindowProxy's own origin check.
+- **Origin policy**: `DriverScheduler::set_location_url` now also calls
+  `binding_set_realm_origin` for the top realm, from the navigated URL's
+  serialized origin (previously never set, so it defaulted to `""`, which
+  would have made every child realm reject as cross-origin the moment
+  `setup_iframe_window` gave it a real origin string). Child realms get the
+  same treatment from the resolved child document URL.
+- **Script evaluation**: classic inline `<script>` elements in the child
+  document (`collect_classic_inline_scripts`; `src`/`type="module"` scripts
+  are not fetched or run, same limitation the top-level WPT harness already
+  has for module/async/defer) run inside the child's realm via
+  `binding_with_realm` + `run_script`, after binding `document` there. The
+  child's `document` global is wrapped once, in the **caller's** (top) realm
+  context, before entering the child realm — `wrap_node`'s host-object
+  identity cache is per-realm, and `contentDocument` is always read from the
+  top realm, so this is what keeps `frame.contentWindow.document ===
+  frame.contentDocument`. Both the lexical `document` binding and a
+  `document` **property** on the child global object are set (mirroring the
+  top realm's own `install()`, which does both), so `contentWindow.document`
+  property access and the child script's bare `document` identifier agree.
+- **Scope not attempted**: DOM/Element/other WebIDL prototypes are **not**
+  duplicated per realm — a child realm's `document`/`Element`/etc. objects
+  share the same prototype objects as the top realm (arena-shared
+  `BindingState.interfaces`), so `frame.contentWindow.Object !==
+  window.Object` holds (separate JS intrinsics per realm, correct) but
+  `frame.contentWindow.Document !== window.Document`-style DOM constructor
+  separation does not. Storage, messaging, canvas and net bindings are not
+  installed into child realms. `window`-level event dispatch (`resize`,
+  `scroll`, focus-follows-window) still targets the single arena-wide window
+  event-target slot, unchanged from before this ticket — a real second
+  `Window` event target per browsing context needs a DOM-owned change, not
+  attempted here. `srcdoc` and external-script iframe navigation are
+  unaffected (already out of scope from HTML-25 part 1).
+- New focused regression:
+  `iframe_content_window_runs_scripts_and_keeps_identity_across_navigation`
+  covers: non-null `contentWindow`, the child script's `window.x` global
+  landing on `contentWindow`, distinct intrinsics from the parent, document
+  identity between `contentWindow.document` and `contentDocument`, proxy
+  identity held across `frame.src` re-navigation, and the retargeted realm's
+  fresh globals replacing the old ones.
+
+Linux gate on this head: `amazing` crate nextest **240/240 passed, 5
+skipped**; full workspace `cargo nextest run --workspace --locked
+--no-fail-fast` **2,872/2,872 passed, 11 skipped**; workspace `cargo test
+--workspace --locked --doc` **4/4 passed, 0 failed** (no `amazing`-crate
+doctest target).
+
+`dom/nodes/Document-createElement.html` and `-createElementNS.html`
+(HTML-25's report named these as blocked on exactly this API) were
+re-measured before and after this ticket's diff, both at fixed base
+`79cd56cc`: **49/147** and **206/390 (pass/fail of 596)** subtests,
+identical on both sides — zero change, zero losses. `dev`'s drift since
+HTML-25's original report (255/596 at the time) already moved this file to
+206/596 before this ticket started; these two files' remaining failures are
+not the `contentWindow`-shaped ones HTML-25 flagged, so adding
+`contentWindow` did not move them. Left for a dom-bindings/next-html
+triage pass with the exact per-subtest diff, not chased further here.

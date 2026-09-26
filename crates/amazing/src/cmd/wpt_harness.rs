@@ -788,6 +788,9 @@ fn execute_page(
             .dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
+    // WPT runs against a deterministic 60 Hz virtual display. Each completed
+    // turn gets one rendering opportunity, including a stable rAF timestamp.
+    let mut frame = 0_u64;
     while !COMPLETE.get() {
         service_iframes(&host, &mut scheduler, navigator, &url, &mut loaded_iframes)?;
         if let Some((next, replace, state)) = scheduler.js.take_history_update() {
@@ -880,8 +883,9 @@ fn execute_page(
                 depth + 1,
             );
         }
-        scheduler.pump_now(true).map_err(|e| e.describe())?;
-        std::thread::sleep(Duration::from_millis(1));
+        scheduler.pump_at(Duration::from_micros(frame.saturating_mul(16_667)), true)
+            .map_err(|e| e.describe())?;
+        frame = frame.saturating_add(1);
     }
     Ok(())
 }

@@ -80,6 +80,15 @@ impl Parser {
             _ => return false,
         }
         if !matches!(self.eat(), Some(Token::OpenParen)) { return false; }
+        self.calc_size_body()
+    }
+
+    /// `<calc-size-basis> , <calc-sum> )`, assuming the `calc-size(` function
+    /// token and its opening paren are already consumed — shared by the
+    /// top-level `calc_size_function` and a `calc-size()` nested inside
+    /// `min()`/`max()`/`clamp()` (CSS Values 5 §11: nesting is allowed since
+    /// `calc-size()` is itself a `<calc-sum>` production).
+    fn calc_size_body(&mut self) -> bool {
         let Some(any) = self.calc_size_basis() else { return false; };
         if !matches!(self.eat(), Some(Token::Comma)) { return false; }
         let saved = self.allow_size;
@@ -136,6 +145,13 @@ impl Parser {
             Token::Function(name) => {
                 if !matches!(self.eat()?, Token::OpenParen) { return None; }
                 let name = name.to_ascii_lowercase();
+                if name == "calc-size" {
+                    // `<calc-size-basis>` starts with a bare keyword (`auto`,
+                    // `any`, ...) that `expression()` below cannot parse, so
+                    // dispatch before it rather than through the shared
+                    // `first = self.expression()?` path every other function uses.
+                    return self.calc_size_body().then_some(Kind::Length);
+                }
                 let first = self.expression()?;
                 let kind = match name.as_str() {
                     "calc" => first,

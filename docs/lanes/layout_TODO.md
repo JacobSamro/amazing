@@ -1264,3 +1264,24 @@ the Linux iteration host after caching the prior geometry snapshot; the same
 diagnostic measured **14.766 ms p95** on win-002. ADR 0010's
 20 ms target measures the complete Windows article mutation-to-frame path;
 that target remains for coordinator and paint-adapter integration to prove.
+
+## LAYOUT-18 — paused checkpoint
+
+On fixed local `dev` `6db18c89`, the pinned WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` yielded 518 eligible
+static flexbox and 928 eligible static grid reftests. The 17 routed CSS Values
+cases had a current-dev baseline of 4 passes and 13 mismatches. Layout WIP
+adds used-size `max()`/`min()` and `calc-size()` handling where the intrinsic
+basis is available, auto-height relative offset resolution, flex wrap-reverse,
+and grid-lanes fill-reverse. Linux `amazing-layout` nextest and doctests pass
+(290 tests, one ignored; zero doctests). The full directory baseline is still
+being collected; no candidate Windows render or final win-002 gate has run.
+
+CSS must preserve `calc-size()` in computed min/max sizing and resolve typed
+`attr()` inside math before those layout handlers can pass the corresponding
+WPT. Exact requests are in `.agents/css/questions.md`. On RESUME, use the
+pinned baseline under `crates/amazing-layout/evidence/layout18/`, rank grid
+and flexbox by their completed failure counts, continue directory fixes, then
+run the candidate win-001 render sweep and win-002 crate/workspace gate. The
+integrator-assist article-width oracle command ran successfully on win-002,
+but its p95 output needs recapture in durable evidence before a final report.

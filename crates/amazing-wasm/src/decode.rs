@@ -427,8 +427,12 @@ pub fn decode_instr(r: &mut Reader<'_>) -> Result<Instr> {
 }
 
 fn decode_reserved_memory(r: &mut Reader<'_>, make: Instr) -> Result<Instr> {
-    let idx = r.var_u32()?;
-    if idx != 0 {
+    // `memory.size`/`memory.grow`'s operand is a single fixed byte 0x00, not
+    // a general LEB128 `u32` — a multi-byte encoding of 0 (`0x80 0x00`, ...)
+    // must be rejected too, so this reads exactly one raw byte rather than
+    // `var_u32`.
+    let b = r.u8_raw("integer")?;
+    if b != 0 {
         return Err(WasmError::malformed("zero byte expected"));
     }
     Ok(make)

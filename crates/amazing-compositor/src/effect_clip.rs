@@ -155,10 +155,15 @@ impl EffectMask {
 pub(crate) fn apply_masks(surface: &mut Surface, operations: &EffectOperations) {
     for y in 0..surface.height {
         for x in 0..surface.width {
+            // A single center-point sample, not `EffectClip::coverage`'s 4x4
+            // supersampling: the reference painter's `RoundedRect::contains`
+            // mask test in `composite_group` is a hard per-pixel boolean with
+            // no antialiasing, and a real-painter-imported `clip_path` must
+            // reproduce that pixel-exact edge rather than a smoother one.
             let coverage = operations
                 .clip_path
                 .as_ref()
-                .map_or(1., |c| c.coverage(x, y))
+                .map_or(1., |c| if c.contains(x as f32 + 0.5, y as f32 + 0.5) { 1. } else { 0. })
                 * operations.mask.as_ref().map_or(1., |m| m.coverage(x, y));
             let i = ((y * surface.width + x) * 4 + 3) as usize;
             surface.pixels[i] = (f32::from(surface.pixels[i]) * coverage).round() as u8;

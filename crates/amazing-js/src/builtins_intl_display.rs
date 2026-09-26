@@ -2,7 +2,7 @@
 
 #[derive(Clone)]
 struct IntlDisplayState {
-    locale: String, kind: String, style: String, fallback: String, language_display: String,
+    locale: String, resolved: String, kind: String, style: String, fallback: String, language_display: String,
 }
 
 impl Interpreter {
@@ -23,7 +23,8 @@ impl Interpreter {
 }
 
 fn intl_display_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let JsValue::Object(object) = this else { return Err(Throw::type_error("DisplayNames requires new")); };
+    if i.current_new_target().is_none() { return Err(Throw::type_error("DisplayNames requires new")); }
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("DisplayNames requires an object")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let Some(options) = args.get(1).filter(|value| !value.is_undefined()) else {
@@ -40,8 +41,9 @@ fn intl_display_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     }
     let fallback = intl_string_option(i, options, "fallback", &["code", "none"], "code")?;
     let language_display = intl_string_option(i, options, "languageDisplay", &["dialect", "standard"], "dialect")?;
+    let resolved = intl_resolved_locale(&requested, &locale);
     intl_register(&object, IntlState::DisplayNames(IntlDisplayState {
-        locale, kind, style, fallback, language_display,
+        locale, resolved, kind, style, fallback, language_display,
     }));
     Ok(JsValue::Object(object))
 }
@@ -72,6 +74,15 @@ fn intl_display_of(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Re
     let data = INTL_DISPLAY_DATA.iter().find(|(locale, _)| *locale == state.locale).map(|(_, data)| *data)
         .unwrap_or(INTL_DISPLAY_DATA[0].1);
     let mut name = data.iter().find(|entry| entry.kind == state.kind && entry.code == code).map(|entry| entry.name.to_string());
+    if name.is_none() && state.kind == "calendar" {
+        // The generated calendar-name table keys some entries by their CLDR
+        // "type" attribute rather than the BCP47 -u-ca- subtag AvailableCalendars
+        // reports (ethioaa/gregory); look those up under their table alias too.
+        let alias = match code.as_str() { "ethioaa" => "ethiopic-amete-alem", "gregory" => "gregorian", _ => "" };
+        if !alias.is_empty() {
+            name = data.iter().find(|entry| entry.kind == "calendar" && entry.code == alias).map(|entry| entry.name.to_string());
+        }
+    }
     if state.kind == "currency" {
         let index = INTL_NUMBER_DATA.iter().position(|data| data.locale == state.locale).unwrap_or(0);
         name = INTL_CURRENCY_DATA.iter().find(|entry| entry.code == code).map(|entry| entry.names[index].to_string());
@@ -84,7 +95,7 @@ fn intl_display_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVa
     let state = intl_display_state(&this)?;
     let object = i.object_value();
     for (key, value) in [
-        ("locale", state.locale), ("style", state.style), ("type", state.kind),
+        ("locale", state.resolved), ("style", state.style), ("type", state.kind),
         ("fallback", state.fallback), ("languageDisplay", state.language_display),
     ] { i.set_prop(&object, key, JsValue::str(value))?; }
     Ok(object)

@@ -93,6 +93,9 @@ pub struct EffectMask {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EffectOperations {
     pub filters: Vec<FilterOperation>,
+    /// Imported painter programs retain its pixel-kernel choices. The resolved
+    /// operation lists must match; changing them requires resolving a new plan.
+    pub painter_filters: Option<(amazing_paint::filter::FilterPlan, amazing_paint::filter::FilterPlan)>,
     pub backdrop_filters: Vec<FilterOperation>,
     /// Border-box clipping of the filtered backdrop, before foreground draw.
     pub backdrop_bounds: Option<Rect>,
@@ -135,6 +138,12 @@ impl FilterOperation {
 }
 impl EffectOperations {
     pub fn validate(&self) -> Result<(), EffectError> {
+        if self.painter_filters.is_some_and(|(filter, backdrop)|
+            filter.ops().map(super::paint_filters::import_filter).collect::<Vec<_>>() != self.filters
+            || backdrop.ops().map(super::paint_filters::import_filter).collect::<Vec<_>>() != self.backdrop_filters)
+        {
+            return Err(EffectError::UnresolvedFilter);
+        }
         if self.filters.len() + self.backdrop_filters.len() > MAX_EFFECT_FILTERS {
             return Err(EffectError::LimitExceeded);
         }

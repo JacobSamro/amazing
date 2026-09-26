@@ -65,6 +65,20 @@ POOLS = {
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
 
+# Machine size per pool (default: 4 vCPU/8 GB; large: 8 vCPU/16 GB at 2x rate).
+# The JS pools and layout compile the biggest crates and run Test262 or the
+# layout corpora, so they get large (2026-09-26). A running sandbox of the
+# wrong size switches on its next resume (the idle reaper stops it first).
+POOL_TYPE = {
+    "pool-js-a": "large", "pool-js-vm": "large", "pool-js-b": "large",
+    "pool-js-date": "large", "pool-js-lib": "large", "pool-layout": "large",
+    "pool-dom": "large",  # 76% busy, 41% overlap across three lanes (2026-09-26)
+}
+
+
+def type_of(lane: str) -> str:
+    return POOL_TYPE.get(pool_of(lane), "default")
+
 
 def pool_of(lane: str) -> str:
     return POOL_OF.get(lane, lane)
@@ -111,11 +125,23 @@ def save_map(m: dict) -> None:
     MAP.write_text(json.dumps(m, indent=2) + "\n")
 
 
+def endpoint(d: dict) -> str | None:
+    """host:port for ssh. Bare-metal sandboxes publish sshEndpoint; Hetzner ones
+    publish none but answer on their IPv4 address, port 22 (2026-09-26)."""
+    if d.get("sshEndpoint"):
+        return d["sshEndpoint"]
+    ip = d.get("ip") or ""
+    if ip and ":" not in ip:
+        return f"{ip}:22"
+    return None
+
+
 def wait_ready(sid: str, limit: int = 300) -> dict:
     deadline = time.time() + limit
     while time.time() < deadline:
         d = info(sid)
-        if d.get("state") in READY and d.get("sshEndpoint"):
+        if d.get("state") in READY and endpoint(d):
+            d["sshEndpoint"] = endpoint(d)
             if d.get("machineProvider") != "baremetal":
                 print(f"boat-lane: WARNING {sid} runs on {d.get('machineProvider')} "
                       "(2-4x slower than bare metal)", file=sys.stderr)
@@ -146,13 +172,16 @@ def healthy(d: dict) -> bool:
 
 def heal(lane: str) -> dict:
     """Restart the lane's sandbox when its lazy filesystem has died."""
+    # The reaper may have stopped it between ensure and the run's lease;
+    # resume it first rather than waiting for a ready state that never comes.
+    ensure(lane, type_of(lane))
     sid = load_map().get(pool_of(lane))
     d = wait_ready(sid)
     if healthy(d):
         return d
     print(f"boat-lane: {sid} filesystem broken (lazyfs); restarting it", file=sys.stderr)
     boat("stop", sid, timeout=240)
-    boat("resume", sid, "--no-auto-stop", timeout=240)
+    boat("resume", sid, "--no-auto-stop", "--type", type_of(lane), timeout=300)
     return wait_ready(sid)
 
 
@@ -181,9 +210,18 @@ def _ensure_locked(lane: str, size: str) -> str:
         m[lane] = sid
         save_map(m)
         print(f"boat-lane: created {sid} for {lane} from {TEMPLATE}", file=sys.stderr)
-    elif d.get("state") in STOPPED:
-        boat("resume", sid, "--no-auto-stop")
-        print(f"boat-lane: resumed {sid} for {lane}", file=sys.stderr)
+    elif d.get("state") in ("stopping", "snapshotting"):
+        # Stopped under us (the reaper); let the stop finish, then resume.
+        for _ in range(60):
+            time.sleep(5)
+            d = info(sid)
+            if d.get("state") not in ("stopping", "snapshotting"):
+                break
+    if d is not None and d.get("state") in STOPPED:
+        extra = ("--type", size) if d.get("type") and d.get("type") != size else ()
+        boat("resume", sid, "--no-auto-stop", *extra, timeout=300)
+        print(f"boat-lane: resumed {sid} for {lane}"
+              + (f" as {size} (was {d.get('type')})" if extra else ""), file=sys.stderr)
     return sid
 
 
@@ -194,7 +232,7 @@ def main() -> int:
     cmd = sys.argv[1]
     if cmd == "ensure":
         lane = sys.argv[2]
-        size = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--type" else "default"
+        size = sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--type" else type_of(lane)
         d = ensure(lane, size)
         host, port = d["sshEndpoint"].rsplit(":", 1)
         print(f"user@{host} {port} {d['id']} {pool_of(lane)} {target_of(lane)}")

@@ -5,7 +5,7 @@ use amazing_text::FallbackTextSystem;
 fn input(effect: EffectId) -> PaintFilterInput {
     PaintFilterInput {
         effect, space: PaintFilterSpace::Raster, filters: vec![],
-        backdrop_filters: vec![], backdrop_bounds: None,
+        backdrop_filters: vec![], backdrop_bounds: None, clip_path: None,
     }
 }
 
@@ -71,6 +71,27 @@ fn backdrop_import_clips_to_resolved_border_box_and_reuses_tiles() {
     assert_eq!(actual.get_pixel(2,2), Some([20,40,60,255]));
     let cached = source.build_cached_frame(&mut compositor,64,64).unwrap();
     assert_eq!(presenter.present(&cached).unwrap(), actual);
+}
+
+#[test]
+fn manual_clip_input_imports_and_renders_the_shape() {
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div></div></body>",
+        "body{margin:0;background:rgb(20,40,60)}div{width:32px;height:32px;isolation:isolate;background:rgb(200,100,50)}",
+        64., &text);
+    let view = DisplayListView::new(&root,64,64,&text,&NoImages,&NoControls);
+    let id = EffectId(view.effects().len()-1);
+    let mut item = input(id);
+    item.clip_path = Some(EffectClip::Inset { rect: Rect::new(0.,0.,16.,32.), radii: [0.;4] });
+    let source = PaintViewSource::with_filters(&view,&vec![item]).unwrap();
+    let mut compositor = source.compositor(64,64).unwrap();
+    let ops = compositor.trees().effect_operations(id).unwrap();
+    assert!(ops.clip_path.is_some());
+    let frame = source.build_frame(&mut compositor,64,64).unwrap();
+    let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+    assert_eq!(actual.get_pixel(8,8), Some([200,100,50,255]), "inside the clipped half");
+    assert_eq!(actual.get_pixel(24,8), Some([20,40,60,255]), "outside the clipped half");
 }
 
 #[test]

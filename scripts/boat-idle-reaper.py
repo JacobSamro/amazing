@@ -21,19 +21,24 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import os
 import subprocess
 import time
 from datetime import datetime, timezone
 
 BOAT = os.path.expanduser("~/.ascii/bin/boat")
+# Sandboxes the user runs by hand; never stop them.
+KEEP = {"bx_rg6jga8q", "bx_p3hj37uf", "bx_9czp5hbk"}
 LIVE_STATES = {"provisioned", "cloning", "ready", "idle", "running"}
 LOAD_BUSY = 0.3
 PROBE = (
     "cut -d' ' -f1 /proc/loadavg; "
-    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
-    # linux-run.sh leases (removed when its command exits; stale after 3 h).
-    "find ~/.amazing-busy -type f -mmin -180 2>/dev/null | wc -l"
+    "pgrep -xc 'cargo|rustc|cargo-nextest|test262_host|amazing|amazing-shell|wpt_render_compare|cc|c\\+\\+|ld|ld.lld|clang|gcc' || true; "
+    # linux-run.sh leases (removed when its command exits). A run killed with
+    # its ssh session can leave one behind, so they count for 60 min only;
+    # long runs stay visible through the build/test process check above.
+    "find ~/.amazing-busy -type f -mmin -60 2>/dev/null | wc -l"
 )
 
 
@@ -45,12 +50,25 @@ def log(msg: str) -> None:
 def boat(*args: str, timeout: int = 60) -> dict | None:
     try:
         out = subprocess.run(
-            [BOAT, *args, "--json"], capture_output=True, text=True, timeout=timeout
+            # --json goes right after the subcommand: after `exec <id> <cmd>`
+            # it would be passed to the remote command, the probe would fail,
+            # and every sandbox would count as busy (never stopped, 2026-09-26).
+            [BOAT, args[0], "--json", *args[1:]], capture_output=True, text=True, timeout=timeout
         ).stdout
     except subprocess.TimeoutExpired:
         return None
     lines = [l for l in out.splitlines() if l.startswith("{")]
     return json.loads(lines[-1]) if lines else None
+
+
+LANE_MAP = Path(__file__).resolve().parent.parent / ".agents" / ".boat-lanes.json"
+
+
+def managed_ids() -> set[str]:
+    try:
+        return set(json.loads(LANE_MAP.read_text()).values())
+    except (OSError, ValueError):
+        return set()
 
 
 def running_sandboxes() -> list[dict]:
@@ -75,20 +93,27 @@ def is_busy(sandbox_id: str) -> bool | None:
 START_RESERVE = 15  # keep this many hourly starts free for lanes and Test262 shards
 
 
+START_RESERVE_DAY = 40  # Boat allows 200 starts a day; a refused resume blocks a lane
+
+
 def starts_left_this_hour() -> int | None:
+    """Hourly starts left, or 0 when the daily allowance is nearly spent."""
     status = boat("billing", "status") or {}
     try:
-        return int(status["limits"]["starts"]["hour"]["remaining"])
+        starts = status["limits"]["starts"]
+        if int(starts["day"]["remaining"]) < START_RESERVE_DAY:
+            return 0
+        return int(starts["hour"]["remaining"])
     except (KeyError, TypeError, ValueError):
         return None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--idle-minutes", type=float, default=5)
+    ap.add_argument("--idle-minutes", type=float, default=15)
     # Every resume counts against Boat's 60 starts per hour. When few are left,
     # stopping early just forces a resume that may be refused, so wait longer.
-    ap.add_argument("--scarce-idle-minutes", type=float, default=15)
+    ap.add_argument("--scarce-idle-minutes", type=float, default=20)
     ap.add_argument("--poll", type=int, default=60)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -104,7 +129,8 @@ def main() -> int:
         live = running_sandboxes()
         for sb in live:
             sid, name = sb["id"], sb.get("name", "")
-            if "keep" in name.lower():
+            # Only sandboxes boat-lane.py manages; anything else is the user's.
+            if "keep" in name.lower() or sid in KEEP or sid not in managed_ids():
                 continue
             busy = is_busy(sid)
             if busy is not False:

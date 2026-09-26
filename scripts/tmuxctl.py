@@ -168,6 +168,18 @@ LANE_PATHS = {
 # Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
 # exception the orchestrator deliberately made. Remove one when its ticket lands.
 LANE_GRANTS = {
+    # WASM-2b: the WebAssembly JS API lives in its own amazing-js file, plus the
+    # dependency line and one install line where builtins are installed.
+    "wasm": ["crates/amazing-js/src/builtins_wasm", "crates/amazing-js/Cargo.toml",
+             "crates/amazing-js/src/interp_builtins.rs", "Cargo.lock"],
+    # LFG-2: abspos grid children need the positioned-layout path; shared with
+    # the layout lane, so both merge dev before touching it (2026-09-26).
+    "layout-flexgrid": ["crates/amazing-layout/src/position.rs",
+                        "crates/amazing-layout/src/block.rs",
+                        "crates/amazing-layout/src/lib.rs"],
+    # CDP-16: the real DevTools host on a live page (one mod + one dispatch line in main.rs).
+    "devtools": ["crates/amazing/src/runtime_host_devtools.rs", "crates/amazing/src/main.rs",
+                 "crates/amazing/Cargo.toml"],
     # DOM-1 needs a subcommand entry point; the integrator still owns main.rs
     # beyond the single dispatch line, and is splitting it separately.
     "dom-bindings": ["crates/amazing/src/cmd/", "crates/amazing/src/main.rs"],
@@ -1072,7 +1084,8 @@ def cmd_digest(args) -> int:
     problems: list[str] = []
     for lane in reg:
         session = resolve(lane)
-        raw = capture_live(session)
+        # Sub-agent lanes (no tmux session) report through files only.
+        raw = capture_live(session) if session else ""
         tmux_state = state_of(raw)
         ctx = context_pct(raw)
         st = read_status(lane)

@@ -109,6 +109,7 @@ pub fn resolve_css_effect_delta(
     for (property, value) in changes {
         match property.as_str() {
             "filter" | "backdrop-filter" => {
+                out.painter_filters = None;
                 let list = css::parse_filter_list(value).ok_or(CssEffectError::InvalidSyntax)?;
                 let filters = resolve_css_filters(&list, current_color, &mut resolve_length)?;
                 if property == "filter" {
