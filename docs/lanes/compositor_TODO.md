@@ -160,3 +160,13 @@ Boat iteration: **76/76**, **0 doctests**. Windows gate remains pending: the
 fixed-commit archive upload lost connection before the gate; no new Windows
 result is claimed. Full CSS-effect parity still depends on painter reference
 effects and metadata, plus CSS/driver adoption.
+
+### COMP-15 Linux-first final gate
+
+Final source `642ffc69` (halo fix `5196e881`, dev base `4518bea7`): Boat
+**2526/2526 workspace tests**, **10 skipped**, **2/2 doctests**; compositor
+**76/76**, **0 doctests**. Before `27de5230` and after corpora both have
+**1/4/1 layers**, **262144 exact pixels per page**, zero rounding/losses.
+Evidence: `crates/amazing-compositor/evidence/comp15/linux.md`. Native recovery
+is complete and ready to merge. Windows is deferred and no longer a blocker.
+Full COMP-15 remains pending painter reference effects/metadata and adoption.
