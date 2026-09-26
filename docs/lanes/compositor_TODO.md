@@ -179,7 +179,7 @@ All 17 CSS blend values map, including new premultiplied plus-lighter. The
 driver refuses effect deltas before committing accompanying opacity or cached
 style while painter metadata is unavailable.
 
-Linux final on fixed base `4c5e877f`: **2723/2723 workspace**, **10 skipped**,
+Isolated-target Linux final on source `3c6295d7`: **2741/2741 workspace**, **10 skipped**,
 **4/4 doctests**; compositor **82/82**, **0 doctests**. Four curated fixture files:
 **37 resolved values, 14 explicit fallbacks, 0 failures**. IA before/after remains
 **1/4/1 layers**, **262144 exact pixels/page**, **0 losses**. Details:
@@ -190,3 +190,28 @@ effects/reference spaces and measuring the four fixtures against independent
 full paint. The current painter exposes opacity only, so full COMP-15 and
 unmodified WPT effect conformance remain open; no additional owned ticket is
 listed in the brief.
+
+### COMP-15 pooled-target incident revalidation
+
+Merged `86c44031` via dev and cold-built in
+`/home/user/amazing/targets/compositor`. Authoritative gate on `3c6295d7`:
+**2741 passed, 10 skipped**, **4 doctests**, compositor **82 passed**.
+Both corpora reran: **37 resolved/14 fallback/0 failures**, IA exact with
+**0 losses**. Earlier pooled 2723/620 results are superseded; timestamp refresh
+was not an isolation guarantee. Implementation `7e6601ea` is ready again.
+Next painter import remains blocked on opacity-only EffectNode metadata.
+
+### COMP-15 RC-24 paint blend/isolation adoption
+
+Imported painter EffectNode blend/isolate into retained EffectOperations using
+the same effect IDs, preserving opacity and ancestry. All 17 modes covered
+across 85 full-painter/cached-frame cases: **53/85 → 83/85**, **30 gains,
+0 lost passes**. Two explicit painter differences remain: color-burn integer
+rounding and translucent plus-lighter; **1152 loss pixels**, **0 unexpected
+differences**. These are routed to replaced-content; no zero-loss claim.
+
+Linux isolated final: **2765 workspace passed**, **10 skipped**, **4 doctests**;
+compositor **83 passed**. Existing IA pages remain exact and four CSS value
+fixtures unchanged. Evidence: `crates/amazing-compositor/evidence/comp15/paint-blends.md`.
+This importer item is complete. Filters/backdrop-filter/clip-path/mask await the
+later paint metadata slice; no other newly unblocked item is listed.
