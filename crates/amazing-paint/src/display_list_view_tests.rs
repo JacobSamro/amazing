@@ -225,6 +225,33 @@ fn document_viewport_is_a_root_scroll_node_without_css_overflow() {
     assert_eq!(propagated.scrolls().len(), 2, "body overflow uses the viewport scroller");
 }
 #[test]
+fn effects_scroller_property_owners_stay_unique_across_reopened_clips() {
+    // A stacking context re-opens its inherited overflow clips, so the same
+    // scroll container can open a clip twice. Both scopes must resolve to one
+    // compositor scroll node or retained property binding is ambiguous.
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='fixed'>Fixed</div><section class='scroller'><div class='moving'>Move</div><div class='fade'>Fade</div><p>Overflow content</p><p>More overflow content</p></section></body>",
+        "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}",
+        512.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::with_node_generations(
+        &root, 512, 512, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| Some(7),
+    );
+    let owners = view.property_owner_mapping().expect("unique property owners");
+    // Viewport scroll plus exactly one section scroll node.
+    assert_eq!(owners.scrolls.len(), 2);
+    assert_eq!(view.effects().len(), 2, "viewport root plus the fade group");
+    // Every scroll node beyond the synthetic root has a distinct owner.
+    let mut seen = std::collections::HashSet::new();
+    for node in view.scrolls().iter().skip(1) {
+        assert!(seen.insert(node.owner), "duplicate scroll owner {:?}", node.owner);
+    }
+}
+
+#[test]
 fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {
     let root = amazing_layout::layout_document_with_text(
         "<body><div class='box'></div></body>",

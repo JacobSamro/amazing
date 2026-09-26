@@ -152,6 +152,14 @@ const KEYBOARD_EVENT: &[Member] = &[
     getter("keyCode", O::EventExtra("keyCode")),
     getter("which", O::EventExtra("which")),
 ];
+const MESSAGE_EVENT: &[Member] = &[
+    getter("data", O::MessageEventGet("data")),
+    getter("origin", O::MessageEventGet("origin")),
+    getter("lastEventId", O::MessageEventGet("lastEventId")),
+    getter("source", O::MessageEventGet("source")),
+    getter("ports", O::MessageEventGet("ports")),
+    method("initMessageEvent", O::MessageEventInit, 1),
+];
 const COMPOSITION_EVENT: &[Member] = &[getter("data", O::EventExtra("data"))];
 const MUTATION_OBSERVER: &[Member] = &[
     method("observe", O::MutationObserve, 2),
@@ -1058,6 +1066,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::WheelEventConstructor), members: WHEEL_EVENT },
     D { interface: I::KeyboardEvent, name: "KeyboardEvent", parent: Some(I::UIEvent),
         constructor: Some(O::KeyboardEventConstructor), members: KEYBOARD_EVENT },
+    D { interface: I::MessageEvent, name: "MessageEvent", parent: Some(I::Event),
+        constructor: Some(O::MessageEventConstructor), members: MESSAGE_EVENT },
     D { interface: I::CompositionEvent, name: "CompositionEvent", parent: Some(I::UIEvent),
         constructor: Some(O::CompositionEventConstructor), members: COMPOSITION_EVENT },
     D {
