@@ -13,6 +13,10 @@ pub enum ContrastPreference { #[default] NoPreference, More, Less, Custom }
 pub struct MediaEnvironment {
     pub viewport_width_px: f32,
     pub viewport_height_px: f32,
+    /// When absent, the corresponding viewport variant uses the layout viewport.
+    pub small_viewport_px: Option<(f32, f32)>,
+    pub large_viewport_px: Option<(f32, f32)>,
+    pub dynamic_viewport_px: Option<(f32, f32)>,
     pub device_pixel_ratio: f32,
     pub media_type: MediaType,
     pub prefers_color_scheme: ColorScheme,
@@ -24,11 +28,40 @@ pub struct MediaEnvironment {
 }
 impl Default for MediaEnvironment {
     fn default() -> Self {
-        Self { viewport_width_px: 1280.0, viewport_height_px: 720.0,
+        Self { viewport_width_px: 800.0, viewport_height_px: 600.0,
+            small_viewport_px: None, large_viewport_px: None, dynamic_viewport_px: None,
             device_pixel_ratio: 1.0, media_type: MediaType::Screen,
             prefers_color_scheme: ColorScheme::Light, prefers_reduced_motion: false,
             prefers_contrast: ContrastPreference::NoPreference,
             prefers_reduced_transparency: false, prefers_reduced_data: false, forced_colors: false }
+    }
+}
+
+impl MediaEnvironment {
+    /// CSS Values 4 viewport unit basis, in CSS px per one unit.
+    pub(crate) fn viewport_unit_px(&self, unit: &str) -> Option<f64> {
+        let unit = unit.to_ascii_lowercase();
+        let (width, height, axis) = if let Some(axis) = unit.strip_prefix("sv") {
+            let (width, height) = self.small_viewport_px.unwrap_or((self.viewport_width_px, self.viewport_height_px));
+            (width, height, axis)
+        } else if let Some(axis) = unit.strip_prefix("lv") {
+            let (width, height) = self.large_viewport_px.unwrap_or((self.viewport_width_px, self.viewport_height_px));
+            (width, height, axis)
+        } else if let Some(axis) = unit.strip_prefix("dv") {
+            let (width, height) = self.dynamic_viewport_px.unwrap_or((self.viewport_width_px, self.viewport_height_px));
+            (width, height, axis)
+        } else {
+            (self.viewport_width_px, self.viewport_height_px, unit.as_str())
+        };
+        if !width.is_finite() || !height.is_finite() || width < 0.0 || height < 0.0 { return None; }
+        let basis = match axis {
+            "vw" | "w" => width,
+            "vh" | "h" => height,
+            "vmin" | "min" => width.min(height),
+            "vmax" | "max" => width.max(height),
+            _ => return None,
+        };
+        Some(f64::from(basis) / 100.0)
     }
 }
 
@@ -210,6 +243,18 @@ fn length_px(input: &str, env: &MediaEnvironment) -> Option<f32> {
             RelativeUnit::Vh => env.viewport_height_px as f64 / 100.0,
             RelativeUnit::Vmin => env.viewport_width_px.min(env.viewport_height_px) as f64 / 100.0,
             RelativeUnit::Vmax => env.viewport_width_px.max(env.viewport_height_px) as f64 / 100.0,
+            RelativeUnit::Svw => env.viewport_unit_px("svw")?,
+            RelativeUnit::Svh => env.viewport_unit_px("svh")?,
+            RelativeUnit::Svmin => env.viewport_unit_px("svmin")?,
+            RelativeUnit::Svmax => env.viewport_unit_px("svmax")?,
+            RelativeUnit::Lvw => env.viewport_unit_px("lvw")?,
+            RelativeUnit::Lvh => env.viewport_unit_px("lvh")?,
+            RelativeUnit::Lvmin => env.viewport_unit_px("lvmin")?,
+            RelativeUnit::Lvmax => env.viewport_unit_px("lvmax")?,
+            RelativeUnit::Dvw => env.viewport_unit_px("dvw")?,
+            RelativeUnit::Dvh => env.viewport_unit_px("dvh")?,
+            RelativeUnit::Dvmin => env.viewport_unit_px("dvmin")?,
+            RelativeUnit::Dvmax => env.viewport_unit_px("dvmax")?,
             RelativeUnit::Rem | RelativeUnit::Em => 16.0,
             RelativeUnit::Ex | RelativeUnit::Ch | RelativeUnit::Ic | RelativeUnit::Cap |
             RelativeUnit::Lh | RelativeUnit::Rch | RelativeUnit::Ric | RelativeUnit::Rex |

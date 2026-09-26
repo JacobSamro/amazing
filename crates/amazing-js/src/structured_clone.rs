@@ -326,38 +326,6 @@ impl Interpreter {
     }
 
     fn install_structured_clone(&mut self) {
-        // The structured-clone Error family includes EvalError. The shared
-        // Error installer does not yet install that constructor.
-        let eval_error = Self::native("EvalError", native_error, &self.function_proto);
-        if let JsValue::Object(function) = &eval_error {
-            if let Some(JsValue::Object(prototype)) = function.borrow().get_own("prototype") {
-                prototype.borrow_mut().proto = self
-                    .global_env
-                    .resolve("Error")
-                    .and_then(|error| {
-                        if let JsValue::Object(object) = error {
-                            object.borrow().get_own("prototype")
-                        } else {
-                            None
-                        }
-                    })
-                    .and_then(|value| {
-                        if let JsValue::Object(object) = value {
-                            Some(object)
-                        } else {
-                            None
-                        }
-                    });
-                prototype
-                    .borrow_mut()
-                    .set_own("name", JsValue::str("EvalError"));
-                prototype.borrow_mut().set_own("message", JsValue::str(""));
-                prototype
-                    .borrow_mut()
-                    .set_own("constructor", eval_error.clone());
-            }
-        }
-        self.define_global("EvalError", eval_error);
         let function = Self::native(
             "structuredClone",
             native_structured_clone,

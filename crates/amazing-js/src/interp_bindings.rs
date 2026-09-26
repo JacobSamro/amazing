@@ -65,6 +65,23 @@ impl Interpreter {
         JsValue::Object(self.global_obj.clone())
     }
 
+    /// Make Window inherit binding-installed EventTarget methods without
+    /// exposing the runtime's global object representation to the host.
+    pub fn binding_set_global_prototype(&mut self, prototype: &JsValue) -> Result<(), Throw> {
+        let JsValue::Object(prototype) = prototype else {
+            return Err(Throw::type_error("global prototype must be an object"));
+        };
+        let mut cursor = Some(prototype.clone());
+        while let Some(object) = cursor {
+            if Rc::ptr_eq(&object.0, &self.global_obj.0) {
+                return Err(Throw::type_error("cyclic global prototype"));
+            }
+            cursor = object.borrow().proto.clone();
+        }
+        self.global_obj.borrow_mut().proto = Some(prototype.clone());
+        Ok(())
+    }
+
     /// Register WebIDL [PutForwards] on an interface prototype or global
     /// object. The mapping is private runtime state and applies to inherited
     /// receivers even when a legacy wrapper has an own read-only data property.
@@ -257,10 +274,9 @@ impl Interpreter {
         enumerable: bool,
         configurable: bool,
     ) -> Result<(), Throw> {
-        fn callable(value: Option<&JsValue>) -> Result<Option<Box<JsFunction>>, Throw> {
+        fn callable(value: Option<&JsValue>) -> Result<Option<JsValue>, Throw> {
             value.map(|value| match value {
-                JsValue::Object(object) => object.borrow().func.clone()
-                    .map(Box::new).ok_or_else(|| Throw::type_error("accessor is not callable")),
+                JsValue::Object(object) if object.borrow().func.is_some() => Ok(value.clone()),
                 _ => Err(Throw::type_error("accessor is not callable")),
             }).transpose()
         }
@@ -320,8 +336,7 @@ impl Interpreter {
                     let descriptor = prototype.borrow().own_prop(name).cloned();
                     if let Some(descriptor) = descriptor {
                         if let Some(setter) = descriptor.setter {
-                            let callable = JsValue::object(JsObject::function(*setter));
-                            self.call_value(&callable, object.clone(), vec![value])?;
+                            self.call_value(&setter, object.clone(), vec![value])?;
                             return Ok(());
                         }
                         if descriptor.getter.is_some() || !descriptor.writable {
@@ -558,6 +573,49 @@ mod tests {
         ).unwrap();
         assert_eq!(upgraded, wrapper);
         assert_eq!(interpreter.binding_host_handle(&upgraded, 9), Some(handle));
+    }
+
+    #[test]
+    fn host_constructor_subclasses_use_new_target_prototype() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut interpreter = Interpreter::new();
+            let handle = HostHandle { arena: 1, slot: 43, generation: 0, brand: 10 };
+            let constructor = interpreter.binding_create_native_function(
+                HostFunctionId(43), "Event", 2, HostCallPolicy::ConstructOnly,
+            );
+            let event_prototype = interpreter.binding_get_property(&constructor, "prototype").unwrap();
+            let wrapper = interpreter.binding_wrap_host(handle, &event_prototype).unwrap();
+            let prototype_for_host = event_prototype.clone();
+            interpreter.set_host_native_dispatcher(Rc::new(move |runtime, id, _, _, new_target| {
+                assert_eq!(id, HostFunctionId(43));
+                assert!(new_target.is_some());
+                runtime.binding_wrap_host(handle, &prototype_for_host)
+            }));
+            interpreter.binding_define_data_property(
+                &interpreter.binding_global_object(), "Event", constructor,
+                BindingPropertyFlags::METHOD,
+            ).unwrap();
+            interpreter.run_script("class Sub extends Event { constructor(name, props) { super(name, props); } }").unwrap();
+            let result = interpreter.run_script_with_backend(
+                "var event = new Sub('x', {}); event instanceof Sub && event instanceof Event && Object.getPrototypeOf(event) === Sub.prototype",
+                backend,
+            ).unwrap_or_else(|error| panic!("{backend:?}: {}", error.describe()));
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}");
+            assert_eq!(interpreter.binding_host_handle(&wrapper, 10), Some(handle));
+        }
+    }
+
+    #[test]
+    fn global_object_inherits_host_event_target_methods() {
+        let mut interpreter = Interpreter::new();
+        let old_prototype = interpreter.binding_object_prototype();
+        let event_target_prototype = interpreter.binding_create_object(Some(&old_prototype)).unwrap();
+        interpreter.binding_define_data_property(
+            &event_target_prototype, "addEventListener", JsValue::num(7.0),
+            BindingPropertyFlags::METHOD,
+        ).unwrap();
+        interpreter.binding_set_global_prototype(&event_target_prototype).unwrap();
+        assert_eq!(interpreter.run_script("globalThis.addEventListener").unwrap(), JsValue::num(7.0));
     }
 
     #[test]

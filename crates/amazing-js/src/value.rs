@@ -547,9 +547,9 @@ pub struct Property {
     pub writable: bool,
     pub enumerable: bool,
     pub configurable: bool,
-    /// Getter/setter payloads reserved for accessor properties.
-    pub getter: Option<Box<JsFunction>>,
-    pub setter: Option<Box<JsFunction>>,
+    /// Original callable objects retain strictness, identity, and private slots.
+    pub getter: Option<JsValue>,
+    pub setter: Option<JsValue>,
 }
 
 impl Property {
@@ -773,7 +773,7 @@ pub enum PromiseFate {
 /// One queued `then` reaction: callback + resolution capability placeholder.
 #[derive(Debug, Clone)]
 pub struct PendingReaction {
-    pub handler: Option<JsFunction>,
+    pub handler: Option<JsValue>,
     /// Which promise the reaction settles (chained .then result).
     pub capability: Obj,
     /// `true` when this is the reject path of a `then(on_ful, on_rej)` pair.
@@ -803,6 +803,10 @@ pub struct JsObject {
     pub(crate) host_identity: Option<HostIdentity>,
     /// Annex B [[IsHTMLDDA]] internal slot, used by IsLooselyEqual.
     pub(crate) is_html_dda: bool,
+    /// Strictness captured when an ECMAScript function is created.
+    pub(crate) strict_function: bool,
+    /// Promise capability captured by a native resolve or reject function.
+    pub(crate) promise_target: Option<Obj>,
 }
 
 impl Default for JsObject {
@@ -826,6 +830,8 @@ impl JsObject {
             lexical_new_target: None,
             host_identity: None,
             is_html_dda: false,
+            strict_function: false,
+            promise_target: None,
         }
     }
 
@@ -840,7 +846,7 @@ impl JsObject {
                 value: JsValue::num(0.0),
                 writable: true,
                 enumerable: false,
-                configurable: true,
+                configurable: false,
                 getter: None,
                 setter: None,
             },
@@ -858,6 +864,15 @@ impl JsObject {
 
     pub fn function(func: JsFunction) -> JsObject {
         let mut o = Self::ordinary();
+        let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
+        o.define("name", Property {
+            value: JsValue::str(&func.name), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
+        o.define("length", Property {
+            value: JsValue::num(length as f64), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
         o.func = Some(func);
         o
     }

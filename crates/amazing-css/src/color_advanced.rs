@@ -187,6 +187,8 @@ pub(super) fn lab(inner: &str) -> Option<[u8; 4]> {
     let lightness = percentage(&values[0]).or_else(|| finite(&values[0]))?.clamp(0.0, 100.0);
     let lab_a = percentage(&values[1]).map(|value| value * 1.25).or_else(|| finite(&values[1]))?;
     let lab_b = percentage(&values[2]).map(|value| value * 1.25).or_else(|| finite(&values[2]))?;
+    if lightness == 0.0 { return Some([0, 0, 0, alpha]); }
+    if lightness == 100.0 { return Some([255, 255, 255, alpha]); }
     Some(lab_color(lightness, lab_a, lab_b, alpha))
 }
 
@@ -196,6 +198,8 @@ pub(super) fn lch(inner: &str) -> Option<[u8; 4]> {
     let chroma = percentage(&values[1]).map(|value| value * 1.5)
         .or_else(|| finite(&values[1]))?.max(0.0);
     let angle = hue(&values[2])? * PI / 180.0;
+    if lightness == 0.0 { return Some([0, 0, 0, alpha]); }
+    if lightness == 100.0 { return Some([255, 255, 255, alpha]); }
     Some(lab_color(lightness, chroma * angle.cos(), chroma * angle.sin(), alpha))
 }
 
@@ -244,6 +248,8 @@ pub(super) fn oklab(inner: &str) -> Option<[u8; 4]> {
         ok_component(&values[1], 0.4)?,
         ok_component(&values[2], 0.4)?,
     ];
+    if lab[0] <= 1e-6 { return Some([0, 0, 0, a]); }
+    if lab[0] == 1.0 { return Some([255, 255, 255, a]); }
     Some(rgba(xyz_to_srgb(oklab_xyz(lab)), a))
 }
 
@@ -252,6 +258,8 @@ pub(super) fn oklch(inner: &str) -> Option<[u8; 4]> {
     let lightness = ok_component(&values[0], 1.0)?.clamp(0.0, 1.0);
     let chroma = ok_component(&values[1], 0.4)?.max(0.0);
     let angle = hue(&values[2])? * PI / 180.0;
+    if lightness <= 1e-6 { return Some([0, 0, 0, a]); }
+    if lightness == 1.0 { return Some([255, 255, 255, a]); }
     let lab = [lightness, chroma * angle.cos(), chroma * angle.sin()];
     Some(rgba(xyz_to_srgb(oklab_xyz(lab)), a))
 }

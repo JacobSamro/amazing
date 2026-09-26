@@ -147,14 +147,15 @@ fn property_owners_bind_to_one_dom_generation_or_require_rebuild() {
     let owners = view.property_owner_mapping().expect("unique property owners");
     assert_eq!(owners.transforms.len(), 1);
     assert_eq!(owners.effects.len(), 1);
-    assert_eq!(owners.scrolls.len(), 1);
+    assert_eq!(owners.scrolls.len(), 2);
     let owner = *owners.transforms.keys().next().unwrap();
     assert_eq!(owner.generation, 7);
     assert_eq!(owners.effects.get(&owner), Some(&1));
-    assert_eq!(owners.scrolls.get(&owner), Some(&1));
+    assert_eq!(owners.scrolls.get(&owner), Some(&2));
     assert_eq!(view.transforms()[1].owner, Some(owner));
     assert_eq!(view.effects()[1].owner, Some(owner));
-    assert_eq!(view.scrolls()[1].owner, Some(owner));
+    assert_eq!(view.scrolls()[1].owner.unwrap().node, root.node.unwrap());
+    assert_eq!(view.scrolls()[2].owner, Some(owner));
 
     let missing = DisplayListView::new(
         &root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls,
@@ -175,7 +176,7 @@ fn content_bounds_scroll_extent_and_sticky_constraints_are_local() {
     );
     let text = FallbackTextSystem::new();
     let view = DisplayListView::new(&root, 120, 120, &text, &crate::paint::NoImages, &crate::controls::NoControls);
-    let scroll = view.scrolls().iter().skip(1).next().expect("scroller");
+    let scroll = &view.scrolls()[2];
     assert_eq!(scroll.initial_offset, (0.0, 0.0));
     assert!(scroll.contents.width > scroll.bounds.width);
     assert!(scroll.contents.height > scroll.bounds.height);
@@ -191,6 +192,37 @@ fn content_bounds_scroll_extent_and_sticky_constraints_are_local() {
         &|_| false, &|_| Some((3.0, 7.0)),
     );
     assert!(offsets.scrolls().iter().skip(1).all(|node| node.initial_offset == (3.0, 7.0)));
+}
+
+#[test]
+fn document_viewport_is_a_root_scroll_node_without_css_overflow() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div style='height:200px;background:red'></div></body>",
+        "body{margin:0}", 80.0, &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::with_node_generations(
+        &root, 80, 60, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| Some(9),
+    );
+    assert_eq!(view.scrolls().len(), 2);
+    assert_eq!(view.scrolls()[1].parent, 0);
+    assert_eq!(view.scrolls()[1].owner.unwrap().node, root.node.unwrap());
+    assert_eq!(view.scrolls()[1].bounds.height, 60.0);
+    assert!(view.scrolls()[1].contents.height >= 200.0);
+    assert!(view.items().iter().all(|item| item.properties.scroll == 1));
+    let owners = view.property_owner_mapping().unwrap();
+    assert_eq!(owners.scrolls.get(&view.scrolls()[1].owner.unwrap()), Some(&1));
+
+    let body_overflow = amazing_layout::layout_document_with_text(
+        "<body><div style='height:200px'></div></body>",
+        "body{margin:0;overflow:scroll}", 80.0, &text,
+    );
+    let propagated = DisplayListView::with_node_generations(
+        &body_overflow, 80, 60, &text, &crate::paint::NoImages,
+        &crate::controls::NoControls, &|_| Some(9),
+    );
+    assert_eq!(propagated.scrolls().len(), 2, "body overflow uses the viewport scroller");
 }
 #[test]
 fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {

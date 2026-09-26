@@ -16,9 +16,10 @@ impl Interpreter {
         o.proto = Some(proto.clone());
         let handle = Obj(Rc::new(RefCell::new(o)));
         let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
-        handle
-            .borrow_mut()
-            .set_own("prototype", JsValue::Object(prototype));
+        handle.borrow_mut().define("prototype", Property {
+            value: JsValue::Object(prototype), writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
         let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(0.0), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
@@ -89,15 +90,20 @@ impl Interpreter {
             prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
             prototype.set_own("constructor", error_constructor.clone());
         }
-        self.define_global("Error", error_constructor);
+        self.define_global("Error", error_constructor.clone());
         for (name, native) in [
+            ("EvalError", native_eval_error as crate::value::NativeFn),
             ("TypeError", native_type_error as crate::value::NativeFn),
             ("RangeError", native_range_error as crate::value::NativeFn),
             ("ReferenceError", native_reference_error as crate::value::NativeFn),
             ("SyntaxError", native_syntax_error as crate::value::NativeFn),
+            ("URIError", native_uri_error as crate::value::NativeFn),
         ] {
             let constructor = Self::native(name, native, &self.function_proto);
             if let JsValue::Object(function) = &constructor {
+                if let JsValue::Object(error_function) = &error_constructor {
+                    function.borrow_mut().proto = Some(error_function.clone());
+                }
                 if let Some(JsValue::Object(prototype)) = function.borrow().get_own("prototype") {
                     let mut prototype = prototype.borrow_mut();
                     prototype.proto = Some(error_prototype.clone());
@@ -119,15 +125,19 @@ impl Interpreter {
                 .set_own("prototype", JsValue::Object(self.function_proto.clone()));
         }
         self.define_global("Function", function_ctor);
+        if let Some(constructor) = self.global_env.resolve("Function") {
+            self.function_proto.borrow_mut().define("constructor", symbol_data(constructor, true, true)).unwrap();
+        }
         let has_own_property = symbol_method(self, "hasOwnProperty", native_has_own_property);
         symbol_method_length(&has_own_property, 1);
-        self.object_proto.borrow_mut().set_own("hasOwnProperty", has_own_property);
+        self.object_proto.borrow_mut().define("hasOwnProperty", symbol_data(has_own_property, true, true)).unwrap();
         let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
         symbol_method_length(&property_is_enumerable, 1);
-        self.object_proto.borrow_mut().set_own("propertyIsEnumerable", property_is_enumerable);
+        self.object_proto.borrow_mut().define("propertyIsEnumerable", symbol_data(property_is_enumerable, true, true)).unwrap();
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));
+            self.object_proto.borrow_mut().define("constructor", symbol_data(object_ctor.clone(), true, true)).unwrap();
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
                 "keys",
@@ -188,6 +198,7 @@ impl Interpreter {
                 );
             }
         }
+        self.install_object_extra(&object_ctor);
         self.define_global("Object", object_ctor);
         let reflect = self.object_value();
         if let JsValue::Object(object) = &reflect {
@@ -211,6 +222,7 @@ impl Interpreter {
             Self::native("Array", native_array, &self.function_proto),
         );
         if let Some(array) = self.global_env.resolve("Array") {
+            self.array_proto.borrow_mut().define("constructor", symbol_data(array.clone(), true, true)).unwrap();
             let _ = self.set_prop(
                 &array,
                 "prototype",
@@ -266,6 +278,8 @@ impl Interpreter {
         );
         let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
         if let JsValue::Object(o) = &promise_ctor {
+            let _ = self.set_prop(&promise_ctor, "prototype", JsValue::Object(self.promise_proto.clone()));
+            self.promise_proto.borrow_mut().define("constructor", symbol_data(promise_ctor.clone(), true, true)).unwrap();
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
                 "resolve",
@@ -308,27 +322,17 @@ impl Interpreter {
             Self::native("toString", native_date_to_string, &self.function_proto),
         );
         let object_to_string = symbol_method(self, "toString", native_object_to_string);
-        let _ = self.set_prop(
-            &JsValue::Object(self.object_proto.clone()),
-            "toString",
-            object_to_string,
-        );
+        self.object_proto.borrow_mut().define("toString", symbol_data(object_to_string, true, true)).unwrap();
         let object_value_of = symbol_method(self, "valueOf", native_object_value_of);
-        let _ = self.set_prop(
-            &JsValue::Object(self.object_proto.clone()),
-            "valueOf",
-            object_value_of,
-        );
-        for (name, function) in [
-            ("call", native_function_call as crate::value::NativeFn),
-            ("apply", native_function_apply as crate::value::NativeFn),
-            ("bind", native_function_bind as crate::value::NativeFn),
+        self.object_proto.borrow_mut().define("valueOf", symbol_data(object_value_of, true, true)).unwrap();
+        for (name, function, length) in [
+            ("call", native_function_call as crate::value::NativeFn, 1),
+            ("apply", native_function_apply as crate::value::NativeFn, 2),
+            ("bind", native_function_bind as crate::value::NativeFn, 1),
         ] {
-            let _ = self.set_prop(
-                &JsValue::Object(self.function_proto.clone()),
-                name,
-                Self::native(name, function, &self.function_proto),
-            );
+            let method = symbol_method(self, name, function);
+            symbol_method_length(&method, length);
+            self.function_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
         for (n, f) in [
             ("toString", native_array_to_string as crate::value::NativeFn),
@@ -349,12 +353,10 @@ impl Interpreter {
             ("includes", native_array_includes as crate::value::NativeFn),
             ("indexOf", native_array_index_of as crate::value::NativeFn),
         ] {
-            let _ = self.set_prop(
-                &JsValue::Object(self.array_proto.clone()),
-                n,
-                Self::native(n, f, &self.function_proto),
-            );
+            let method = symbol_method(self, n, f);
+            self.array_proto.borrow_mut().define(n, symbol_data(method, true, true)).unwrap();
         }
+        self.install_array_extra();
         for (n, f) in [
             ("then", native_promise_then as crate::value::NativeFn),
             ("catch", native_promise_catch as crate::value::NativeFn),
@@ -473,25 +475,8 @@ impl Interpreter {
         }
         self.define_global("String", string_ctor);
         let boolean_ctor = Self::native("Boolean", native_boolean, &self.function_proto);
-        if let JsValue::Object(object) = &boolean_ctor {
-            let _ = object.borrow_mut().define("prototype", Property {
-                value: JsValue::Object(self.boolean_proto.clone()), writable: false,
-                enumerable: false, configurable: false, getter: None, setter: None,
-            });
-        }
-        let _ = self.boolean_proto.borrow_mut().define("constructor", Property {
-            value: boolean_ctor.clone(), writable: true, enumerable: false,
-            configurable: true, getter: None, setter: None,
-        });
-        for (name, native) in [
-            ("toString", native_boolean_to_string as crate::value::NativeFn),
-            ("valueOf", native_boolean_value_of as crate::value::NativeFn),
-        ] {
-            let _ = self.boolean_proto.borrow_mut().define(name, Property {
-                value: symbol_method(self, name, native), writable: true,
-                enumerable: false, configurable: true, getter: None, setter: None,
-            });
-        }
+
+        self.install_boolean_extra(&boolean_ctor);
         self.define_global("Boolean", boolean_ctor);
         self.define_global(
             "isNaN",
@@ -526,7 +511,11 @@ impl Interpreter {
         self.install_intl_builtins();
     }
     fn define_global(&self, n: &str, v: JsValue) {
-        self.global_obj.borrow_mut().set_own(n, v.clone());
+        let constant = matches!(n, "undefined" | "NaN" | "Infinity");
+        let _ = self.global_obj.borrow_mut().define(n, Property {
+            value: v.clone(), writable: !constant, enumerable: false,
+            configurable: !constant, getter: None, setter: None,
+        });
         let _ = self.global_env.declare_var(n, v);
     }
 }
