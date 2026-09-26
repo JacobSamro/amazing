@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Render, RenderImage, SharedString,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, ScrollWheelEvent, ParentElement, Render, RenderImage, SharedString,
     Styled, Window, WindowBounds, WindowControlArea, WindowOptions, actions, canvas, div, img,
     prelude::*, px, rgb, size,
 };
@@ -27,6 +27,7 @@ use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate};
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use session_state::BrowserSession;
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
+use amazing_compositor::{ScrollAxis, ScrollInput, ScrollKey};
 
 const STRIP: u32 = 0xd5dae2;
 const STRIP_HOVER: u32 = 0xc6ccd6;
@@ -513,12 +514,45 @@ impl BrowserShell {
         cx.notify();
     }
 
+    fn scroll_active_viewport(&mut self, input: ScrollInput, cx: &mut Context<Self>) -> bool {
+        let pointer_input = matches!(input,
+            ScrollInput::Wheel { .. } | ScrollInput::Trackpad { .. } | ScrollInput::TouchPan { .. });
+        let blocking = pointer_input && self.page_runtimes.get(self.active)
+            .and_then(Option::as_ref)
+            .is_some_and(PageRuntime::has_blocking_scroll_listener);
+        let Some(viewport) = self.tabs[self.active].viewport.as_ref() else { return false };
+        match viewport.scroll_input(input, blocking) {
+            Ok(true) => { cx.notify(); true },
+            Ok(false) | Err(_) => false,
+        }
+    }
+
     fn on_shell_key_down(
         &mut self,
         event: &KeyDownEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.page_input.is_none() {
+            let key = match event.keystroke.key.as_str() {
+                "up" => Some(ScrollKey::ArrowUp),
+                "down" => Some(ScrollKey::ArrowDown),
+                "left" => Some(ScrollKey::ArrowLeft),
+                "right" => Some(ScrollKey::ArrowRight),
+                "pageup" => Some(ScrollKey::PageUp),
+                "pagedown" | "space" => Some(ScrollKey::PageDown),
+                "home" => Some(ScrollKey::Home),
+                "end" => Some(ScrollKey::End),
+                _ => None,
+            };
+            if let Some((node, key)) = key.and_then(|key|
+                self.tabs[self.active].viewport.as_ref()?.root_scroll_id().map(|node| (node, key))) {
+                if self.scroll_active_viewport(ScrollInput::Keyboard { node, key }, cx) {
+                    cx.stop_propagation();
+                }
+            }
+            return;
+        }
         let Some(input) = self.page_input.as_mut() else {
             return;
         };
@@ -1869,9 +1903,9 @@ impl BrowserShell {
                         .p_3()
                         .child(
                             div()
-                                .id("engine-viewport-scroll")
+                                .id("engine-viewport-clip")
                                 .size_full()
-                                .overflow_y_scroll()
+                                .overflow_hidden()
                                 .rounded_md()
                                 .border_1()
                                 .border_color(rgb(BORDER))
@@ -1883,7 +1917,8 @@ impl BrowserShell {
                                         .w(px(viewport.width as f32))
                                         .h(px(viewport.height as f32))
                                         .child(match &viewport.compositor {
-                                            Some(scene) => scene.borrow().frame().element(),
+                                            Some(scene) => viewport.scroll_element()
+                                                .unwrap_or_else(|| scene.borrow().frame().element()),
                                             None => img(viewport.image.clone())
                                                 .w(px(viewport.width as f32))
                                                 .h(px(viewport.height as f32))
@@ -1893,6 +1928,10 @@ impl BrowserShell {
                                             canvas(
                                                 |bounds, _, _| bounds,
                                                 move |bounds, _, window, _| {
+                                                    let wheel_entity = entity.clone();
+                                                    let drag_entity = entity.clone();
+                                                    let wheel_bounds = bounds.clone();
+                                                    let drag_bounds = bounds.clone();
                                                     let entity = entity.clone();
                                                     window.on_mouse_event(move |event: &MouseDownEvent, _, _, app| {
                                                         if event.button != MouseButton::Left
@@ -1905,10 +1944,22 @@ impl BrowserShell {
                                                             let Some(viewport) = this.tabs[this.active].viewport.as_ref() else {
                                                                 return;
                                                             };
+                                                            let local_x = (event.position.x - bounds.origin.x).as_f32();
+                                                            if local_x >= bounds.size.width.as_f32() - 12. {
+                                                                if let Some(node) = viewport.root_scroll_id() {
+                                                                    let fraction = ((event.position.y - bounds.origin.y).as_f32()
+                                                                        / bounds.size.height.as_f32()).clamp(0., 1.);
+                                                                    this.scroll_active_viewport(ScrollInput::ScrollbarDrag {
+                                                                        node, axis: ScrollAxis::Vertical, fraction,
+                                                                    }, cx);
+                                                                }
+                                                                return;
+                                                            }
                                                             let scale = viewport.width as f32
                                                                 / bounds.size.width.as_f32();
-                                                            let x = (event.position.x - bounds.origin.x).as_f32() * scale;
-                                                            let y = (event.position.y - bounds.origin.y).as_f32() * scale;
+                                                            let (scroll_x, scroll_y) = viewport.root_scroll_offset();
+                                                            let x = (event.position.x - bounds.origin.x).as_f32() * scale + scroll_x;
+                                                            let y = (event.position.y - bounds.origin.y).as_f32() * scale + scroll_y;
                                                             let link = viewport
                                                                 .link_hit_at(x, y)
                                                                 .map(|(node, target)| {
@@ -1952,18 +2003,64 @@ impl BrowserShell {
                                                             cx.notify();
                                                         });
                                                     });
+                                                    window.on_mouse_event(move |event: &ScrollWheelEvent, _, window, app| {
+                                                        if !wheel_bounds.contains(&event.position) { return; }
+                                                        let delta = event.delta.pixel_delta(window.line_height());
+                                                        wheel_entity.update(app, |this, cx| {
+                                                            let Some(viewport) = this.tabs[this.active].viewport.as_ref() else { return; };
+                                                            let x = (event.position.x - wheel_bounds.origin.x).as_f32()
+                                                                * viewport.width as f32 / wheel_bounds.size.width.as_f32();
+                                                            let y = (event.position.y - wheel_bounds.origin.y).as_f32()
+                                                                * viewport.height as f32 / wheel_bounds.size.height.as_f32();
+                                                            let delta = (-delta.x.as_f32(), -delta.y.as_f32());
+                                                            let input = if event.delta.precise() {
+                                                                ScrollInput::Trackpad { x, y, delta }
+                                                            } else {
+                                                                ScrollInput::Wheel { x, y, delta }
+                                                            };
+                                                            if this.scroll_active_viewport(input, cx) { cx.stop_propagation(); }
+                                                        });
+                                                    });
+                                                    window.on_mouse_event(move |event: &MouseMoveEvent, _, _, app| {
+                                                        if event.pressed_button != Some(MouseButton::Left)
+                                                            || !drag_bounds.contains(&event.position)
+                                                            || (event.position.x - drag_bounds.origin.x).as_f32()
+                                                                < drag_bounds.size.width.as_f32() - 12. { return; }
+                                                        drag_entity.update(app, |this, cx| {
+                                                            let Some(viewport) = this.tabs[this.active].viewport.as_ref() else { return; };
+                                                            let Some(node) = viewport.root_scroll_id() else { return; };
+                                                            let fraction = ((event.position.y - drag_bounds.origin.y).as_f32()
+                                                                / drag_bounds.size.height.as_f32()).clamp(0., 1.);
+                                                            this.scroll_active_viewport(ScrollInput::ScrollbarDrag {
+                                                                node, axis: ScrollAxis::Vertical, fraction,
+                                                            }, cx);
+                                                        });
+                                                    });
                                                 },
                                             )
                                             .absolute()
                                             .inset_0(),
                                         )
-                                        .when_some(page_input.clone(), |surface, input| {
-                                            let (x, y, width, height) = input.rect;
+                                        .when_some(viewport.root_scroll_thumb(), |surface, (top, size)| {
                                             surface.child(
                                                 div()
                                                     .absolute()
-                                                    .left(gpui::relative(x / viewport.width as f32))
-                                                    .top(gpui::relative(y / viewport.height as f32))
+                                                    .right_0()
+                                                    .top(gpui::relative(top))
+                                                    .w(px(8.0))
+                                                    .h(gpui::relative(size))
+                                                    .rounded_md()
+                                                    .bg(rgb(0x8a95a5)),
+                                            )
+                                        })
+                                        .when_some(page_input.clone(), |surface, input| {
+                                            let (x, y, width, height) = input.rect;
+                                            let (scroll_x, scroll_y) = viewport.root_scroll_offset();
+                                            surface.child(
+                                                div()
+                                                    .absolute()
+                                                    .left(gpui::relative((x - scroll_x) / viewport.width as f32))
+                                                    .top(gpui::relative((y - scroll_y) / viewport.height as f32))
                                                     .w(gpui::relative(width / viewport.width as f32))
                                                     .h(gpui::relative(height / viewport.height as f32))
                                                     .flex()

@@ -444,6 +444,15 @@ mod tests {
     }
 
     #[test]
+    fn inherited_collection_name_can_be_shadowed_by_ordinary_object() {
+        let (mut i, collection, _, _, names) = fixture(false, false);
+        names.borrow_mut().push("named".into());
+        i.binding_define_data_property(&i.binding_global_object(), "collection", collection,
+            BindingPropertyFlags::METHOD).unwrap();
+        assert_eq!(i.run_script("var child = Object.create(collection); child.named = 'foo'; Object.hasOwn(child, 'named') && child.named === 'foo' && collection.named === 'named'").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
     fn iterator_and_for_each_read_live_indices() {
         let (mut i, object, prototype, values, _) = fixture(false, false);
         i.binding_define_iterable(7, &prototype).unwrap();
