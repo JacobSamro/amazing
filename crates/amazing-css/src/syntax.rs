@@ -502,7 +502,13 @@ pub fn serialize(tokens: &[Token]) -> String {
             },
             Token::Colon => out.push(':'),
             Token::Semicolon => out.push(';'),
-            Token::Comma => out.push(','),
+            // Canonical CSS serialization always separates a function's or a
+            // comma-separated list's items with ", " (comma, then exactly one
+            // space), regardless of the source's own whitespace -- dropped
+            // entirely ("a,b"), doubled ("a  ,  b"), or on the wrong side
+            // ("a ,b"). `glue_before` still suppresses any space *before* the
+            // comma from the surrounding whitespace-rendering logic below.
+            Token::Comma => out.push_str(", "),
             Token::OpenCurly => out.push('{'),
             Token::CloseCurly => out.push('}'),
             Token::OpenParen => out.push('('),
@@ -624,7 +630,7 @@ mod tests {
     #[test]
     fn serialize_roundtrip_values() {
         let toks = tokenize("10px solid rgba( 0 , 0 , 0 , .5 )");
-        assert_eq!(serialize(&toks), "10px solid rgba(0,0,0,.5)");
+        assert_eq!(serialize(&toks), "10px solid rgba(0, 0, 0, .5)");
         let toks = tokenize("\"hello world\"");
         assert_eq!(serialize(&toks), "\"hello world\"");
     }
