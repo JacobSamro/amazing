@@ -282,6 +282,7 @@ dependencies = [
  "amazing-image",
  "amazing-ipc",
  "amazing-ipc-platform",
+ "amazing-js",
  "amazing-layout",
  "amazing-media",
  "amazing-net",

@@ -351,6 +351,12 @@ impl MessageRouter {
     pub fn owner_of(&self, port: PortId) -> Option<ClientId> {
         self.ports.get(&port).map(|state| state.owner)
     }
+    /// The other end of an entangled pair, so a caller can look up who a
+    /// message (and any ports handed over with it) is actually being
+    /// delivered to.
+    pub fn peer_of(&self, port: PortId) -> Option<PortId> {
+        self.ports.get(&port).map(|state| state.peer)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +457,12 @@ impl MessagingService for MessagingEndpoint {
     }
     fn post_port(&self, request: PortPost) -> Result<Option<MessageDelivery>, IpcError> {
         let mut router = self.router.lock().unwrap();
-        let peer_owner = router.owner_of(request.port);
+        // Ports named in `transfer` move to whoever this message is being
+        // delivered to -- the owner of `request.port`'s entangled peer, not
+        // the owner of `request.port` itself (that's just the sender).
+        let peer_owner = router
+            .peer_of(request.port)
+            .and_then(|peer| router.owner_of(peer));
         let delivery = router
             .post(request.port, request.client, request.payload.0)
             .map_err(ipc)?;
@@ -615,5 +626,75 @@ mod tests {
                 .unwrap(),
             pair.b
         );
+    }
+
+    /// Regression for the IPC-11c follow-up: `post_port`'s `transfer` list
+    /// must hand ports to the message's *recipient* (the owner of the
+    /// entangled peer), not back to the sender. It used to compute
+    /// `owner_of(request.port)`, which is always the caller itself (`post`
+    /// requires the caller to own that port), so `transfer` silently
+    /// no-opped every bundled port back to its current owner.
+    #[test]
+    fn post_port_transfers_bundled_ports_to_the_message_recipient_not_the_sender() {
+        use crate::protocol::{MessagingClient, MessagingProxy, PortPost, PortStart};
+        let (a, b) = amazing_ipc::memory_pair();
+        let browser = Connection::new(a);
+        let renderer = Connection::new(b);
+        let mut router = MessageRouter::new();
+        // Bootstrap: client 1 owns both ends of channel x; the browser hands
+        // the peer to client 2 directly (a window.postMessage-style initial
+        // port handoff isn't its own wire op yet -- see docs/lanes, IPC-11c
+        // follow-ups). Everything after this line goes over the wire.
+        let (x1, x2) = router.create_pair(1).unwrap();
+        router.transfer(x2, 1, 2).unwrap();
+        router.start(x2, 2).unwrap();
+        serve_messaging(&browser, router);
+        let proxy = MessagingProxy::new(renderer, std::time::Duration::from_secs(2));
+
+        // Client 1 creates a fresh, unrelated pair and hands its far end
+        // (`pair.b`) to whoever is on the other side of `x1` -- client 2 --
+        // by bundling it into a message posted on `x1`.
+        let pair = proxy.create_ports(MessagingClient { client: 1 }).unwrap();
+        let delivery = proxy
+            .post_port(PortPost {
+                client: 1,
+                port: x1,
+                payload: ByteBuf(b"here is a port".to_vec()),
+                transfer: vec![pair.b],
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(delivery.port, x2);
+
+        // The transferred port now belongs to client 2: starting it as
+        // client 2 succeeds and it carries no message queued under the old
+        // owner (proving it actually moved, not just became postable).
+        assert!(proxy
+            .start_port(PortStart {
+                client: 2,
+                port: pair.b,
+            })
+            .unwrap()
+            .is_empty());
+        // Client 2 can now use its newly received port to reach client 1's
+        // `pair.a`, proving the entangled channel is live under the new
+        // owner rather than the sender having quietly kept both ends.
+        assert!(proxy
+            .post_port(PortPost {
+                client: 2,
+                port: pair.b,
+                payload: ByteBuf(b"thanks for the port".to_vec()),
+                transfer: Vec::new(),
+            })
+            .unwrap()
+            .is_none()); // pair.a hasn't started yet; queued.
+        let flushed = proxy
+            .start_port(PortStart {
+                client: 1,
+                port: pair.a,
+            })
+            .unwrap();
+        assert_eq!(flushed.len(), 1);
+        assert_eq!(flushed[0].payload.0, b"thanks for the port");
     }
 }
