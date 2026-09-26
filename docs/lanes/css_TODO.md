@@ -1562,3 +1562,96 @@ Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `fd96655b` containing
 **2736/2736** (10 skipped), workspace doctests **4/4**, zero failures.
 Tests: `color::tests::relative_color_syntax_resolves_channel_keywords` and
 `values::tests::relative_currentcolor_rebinds_on_inheritance`.
+
+## CSS-22 — `color(from <color> <space> ...)` relative forms across spaces
+
+Commit `92a647fe`. Extends CSS-21's relative-color seam to `color()`:
+`color_advanced.rs::relative_color_space` converts the source into the
+target predefined RGB or XYZ space (`srgb`, `srgb-linear`, `display-p3`,
+`display-p3-linear`, `a98-rgb`, `prophoto-rgb`, `rec2020`, `xyz`/`xyz-d65`,
+`xyz-d50`) via new reverse conversions (`rgba_to_color_space`), then the
+channel keywords (`r g b`, or `x y z` for XYZ) and `calc()` resolve in that
+space through the existing `color_space_rgba` builder shared with the
+absolute-form parser. A `currentcolor` source resolves through the same
+generic textual-substitution seam as the other relative-color functions
+(`resolve_currentcolor_relative` in computed.rs is function-name agnostic),
+so `color(from currentcolor <space> ...)` now covers every space and
+arbitrary channel math, not just the identity `r g b` copy CSS-21 special-
+cased (`relative_currentcolor_identity` stays as an unreachable-in-practice
+fallback for that one shape).
+
+Bug found and fixed while wiring the reverse path: `XYZ_TO_A98` was a stray
+Bradford-like matrix (not `A98_TO_XYZ`'s inverse), so `color(from <color>
+a98-rgb r g b)` round-trips diverged by dozens of levels per channel. Fixed
+by computing and hardcoding the correct inverse.
+
+Boundary: `unsupported_color_spaces_preserve_the_existing_cascade_winner` in
+`tests/typed_compute.rs` now exercises a custom-ident space
+(`--custom-space`), since `xyz` moved from unsupported to supported.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `852a342d`): CSS
+crate **326/326**, workspace nextest **2737/2737** (10 skipped), doctests
+**4/4**, zero failures. Tests: `color::tests::relative_color_syntax_resolves_channel_keywords`
+(extended) and `values::tests::relative_currentcolor_color_space_rebinds_on_inheritance`.
+
+## CSS-23 — `light-dark()`/`color-scheme`, and hover/pointer/aspect-ratio media features
+
+Commit `316c413d`. Prioritized ahead of the previously queued item because
+dark-mode CSS and touch/mouse-responsive media queries are what real pages
+actually use.
+
+- `color-scheme` (CSS Color Adjustment 1 §2): registered as an inherited
+  property, initial `normal`, grammar `normal | [light | dark]{1,2} &&
+  only?` validated in `values.rs`.
+- `light-dark(<color>, <color>)` (CSS Color 5 §4.1) is accepted on
+  `color`/`background-color`/border-`*`-color (the same properties CSS-21's
+  relative-color seam covers) when each branch is `currentcolor` or an
+  already-parseable `<color>`. `ComputedStyle::resolve_light_dark` runs
+  after inheritance and after `resolve_relative_colors`: the used scheme is
+  the element's own computed `color-scheme` when it names exactly one of
+  `light`/`dark`; otherwise (`normal`, or both listed) it falls back to
+  `MediaEnvironment::prefers_color_scheme`. A `currentcolor` branch
+  substitutes the element's own resolved `color`, resolving `color` itself
+  first so other properties can reference it.
+- Invalid `light-dark()`/`color-scheme` values are dropped before cascade
+  like any other invalid declaration on a known property
+  (`computed::expand_declaration`'s existing early-validity filter) — the
+  earlier valid declaration for that property wins outright (its literal
+  text; plain named colors are not normalized to hex, only the functional
+  seams write hex). This differs from the *guaranteed-invalid-after-`var()`*
+  policy (`compute_normal_value`'s later check), which falls back to
+  initial/inherited instead — the two existing tests
+  (`typed_compute::invalid_supported_color_after_var_defaults_without_reviving_prior_winner`
+  and the new `css23_light_dark::invalid_light_dark_does_not_displace_the_cascade_winner`)
+  cover both policies.
+- Media Queries 4 `hover`/`any-hover`/`pointer`/`any-pointer` (new
+  `HoverCapability`/`PointerCapability` enums on `MediaEnvironment`,
+  desktop-mouse defaults `hover`/`fine`) and `aspect-ratio`/`min-`/`max-
+  aspect-ratio`, evaluated through the existing public
+  `evaluate_media_query`/`MediaQueryList` API — the same seam
+  `.agents/css/questions.md` already told IA-REAL-PAGES is ready for
+  `window.matchMedia`.
+- `change_classification.rs` classifies `color-scheme` `PaintOnly`
+  alongside `color`/`cursor`/`visibility`.
+
+Boundary (not claimed): `light-dark()` is only recognized as the direct
+value of the four color properties above (matching CSS-21's scope), not
+inside gradients, `box-shadow`, or SVG `fill`/`stroke`. `color-scheme`'s
+`only` restricts to the engine's own choice among the listed schemes but
+does not yet feed a UA form-control/scrollbar palette (no such rendering
+exists yet). Custom-ident color-scheme names (forward-compat per spec) are
+not accepted, only `light`/`dark`.
+
+Linux final gate (Boat sandbox `bx_cp5jbn5z`, lane head `316c413d`): CSS
+crate **335/335**, workspace nextest **2746/2746** (10 skipped), doctests
+**4/4**, zero failures. WPT CSS reftest sweeps and all render gates remain
+deferred under Linux-first (2026-09-26).
+
+## Next
+
+The remaining CSS Color 5 relative-color refinement (`none`-channel missing-
+component propagation instead of resolving to zero) and `calc-size()` nesting
+inside other math functions, per the prior report's queue; then CSS-15's
+queued bulk `css/` WPT sweep triage continues to be the largest single
+source of measured corpus movement once WPT render sweeps come back online
+off Linux-first.
