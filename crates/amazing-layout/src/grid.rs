@@ -539,7 +539,7 @@ enum ItemAlign {
 }
 
 fn parse_pack(v: Option<&str>) -> Pack {
-    match v.map(str::trim) {
+    match v.map(crate::flex::strip_overflow_position) {
         Some(v) if v.eq_ignore_ascii_case("end") || v.eq_ignore_ascii_case("flex-end") => Pack::End,
         Some(v) if v.eq_ignore_ascii_case("center") => Pack::Center,
         Some(v) if v.eq_ignore_ascii_case("space-between") => Pack::SpaceBetween,
@@ -553,7 +553,7 @@ fn parse_pack(v: Option<&str>) -> Pack {
 }
 
 fn parse_item_align(v: Option<&str>) -> ItemAlign {
-    match v.map(str::trim) {
+    match v.map(crate::flex::strip_overflow_position) {
         Some(v) if v.eq_ignore_ascii_case("start") || v.eq_ignore_ascii_case("flex-start") => {
             ItemAlign::Start
         }
@@ -1014,7 +1014,9 @@ fn place_row_flow(
     // auto-placed span (so wide items always get columns to fit into).
     let mut limit = expl_minor.max(1);
     for p in specs {
-        if p.row.is_none() && p.col.is_none() {
+        if let Some(col) = p.col {
+            limit = limit.max(col.saturating_add(p.col_span).saturating_sub(1) as usize);
+        } else if p.row.is_none() {
             limit = limit.max(p.col_span as usize);
         }
     }
@@ -1023,44 +1025,59 @@ fn place_row_flow(
     }
 
     let mut occ = Occupancy::default();
-    let mut out = Vec::with_capacity(specs.len());
+    let mut out = vec![None; specs.len()];
     let (mut cur_r, mut cur_c) = (1u32, 1u32);
     let mut work = 0usize;
 
-    for p in specs {
+    // Grid 1 §8.5: definite placements occupy cells before auto placement,
+    // regardless of their order among the items. Overlapping definite areas
+    // are valid; Occupancy records their union.
+    for (index, p) in specs.iter().enumerate() {
+        if let (Some(r), Some(c)) = (p.row, p.col) {
+            let rs = p.row_span.max(1);
+            let cs = p.col_span.max(1);
+            if !occ.put(r, c, rs, cs, &mut work) {
+                return None;
+            }
+            out[index] = Some((r, rs, c, cs));
+        }
+    }
+
+    // Items locked to a row precede the fully automatic pass. Sparse packing
+    // advances only within the same locked row; it does not move the later
+    // auto-placement cursor.
+    let mut row_ends = HashMap::<u32, u32>::new();
+    for (index, p) in specs.iter().enumerate() {
+        let (Some(r), None) = (p.row, p.col) else { continue };
+        let rs = p.row_span.max(1);
+        let cs = p.col_span.max(1);
+        let mut c = if dense { 1 } else { row_ends.get(&r).copied().unwrap_or(1) };
+        loop {
+            match occ.fits(r, c, rs, cs, &mut work)? {
+                true => break,
+                false => c = c.checked_add(1)?,
+            }
+        }
+        if !occ.put(r, c, rs, cs, &mut work) {
+            return None;
+        }
+        out[index] = Some((r, rs, c, cs));
+        if !dense {
+            row_ends.insert(r, c.checked_add(cs)?);
+        }
+        limit = limit.max(c.saturating_add(cs).saturating_sub(1) as usize);
+    }
+
+    // The final pass follows order-modified document order. Definite-column
+    // items move the cursor in sparse mode; fully auto items search from it.
+    for (index, p) in specs.iter().enumerate() {
+        if out[index].is_some() {
+            continue;
+        }
         let rs = p.row_span.max(1);
         let cs = p.col_span.max(1);
         match (p.row, p.col) {
-            (Some(r), Some(c)) => {
-                if !occ.put(r, c, rs, cs, &mut work) {
-                    return None;
-                }
-                out.push((r, rs, c, cs));
-            }
-            // Definite row, auto column: slide right within the locked row.
-            (Some(r), None) => {
-                let mut c = if dense {
-                    1
-                } else {
-                    if 1 < cur_c {
-                        cur_r = cur_r.checked_add(1)?; // sparse monotonicity bookkeeping
-                    }
-                    1
-                };
-                loop {
-                    match occ.fits(r, c, rs, cs, &mut work)? {
-                        true => break,
-                        false => c = c.checked_add(1)?,
-                    }
-                }
-                if !occ.put(r, c, rs, cs, &mut work) {
-                    return None;
-                }
-                out.push((r, rs, c, cs));
-                if !dense {
-                    cur_c = c.checked_add(cs)?;
-                }
-            }
+            (Some(_), _) => unreachable!(),
             // Definite column, auto row: slide down within the locked col.
             (None, Some(c)) => {
                 if !dense && c < cur_c {
@@ -1076,7 +1093,7 @@ fn place_row_flow(
                 if !occ.put(r, c, rs, cs, &mut work) {
                     return None;
                 }
-                out.push((r, rs, c, cs));
+                out[index] = Some((r, rs, c, cs));
                 if !dense {
                     cur_r = r; // cursor resumes at the item's row start
                     cur_c = c.checked_add(cs)?;
@@ -1116,7 +1133,7 @@ fn place_row_flow(
                 if !occ.put(r, c, rs, cs, &mut work) {
                     return None;
                 }
-                out.push((r, rs, c, cs));
+                out[index] = Some((r, rs, c, cs));
                 if !dense {
                     cur_r = r;
                     cur_c = c.checked_add(cs)?;
@@ -1124,7 +1141,7 @@ fn place_row_flow(
             }
         }
     }
-    Some(out)
+    out.into_iter().collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1508,9 +1525,13 @@ pub(crate) fn layout_grid_with_context(
             )
         })
         .collect();
-    let mut placed: Vec<Placement> = if spec.flow_column {
+    let mut order = (0..items.len()).collect::<Vec<_>>();
+    order.sort_by_key(|&index| items[index].style.get("order")
+        .and_then(|value| value.parse::<i32>().ok()).unwrap_or(0));
+    let ordered_raw = order.iter().map(|&index| raw[index]).collect::<Vec<_>>();
+    let placed_in_order: Vec<Placement> = if spec.flow_column {
         // Run the row algorithm on transposed specs, transpose back.
-        let swapped: Vec<Placement> = raw
+        let swapped: Vec<Placement> = ordered_raw
             .iter()
             .map(|p| Placement {
                 row: p.col,
@@ -1534,7 +1555,7 @@ pub(crate) fn layout_grid_with_context(
             .collect()
     } else {
         // Row flow wraps auto items across the COLUMN axis.
-        let Some(row_flow) = place_row_flow(&raw, spec.flow_dense, spec.cols.len()) else {
+        let Some(row_flow) = place_row_flow(&ordered_raw, spec.flow_dense, spec.cols.len()) else {
             return 0.0;
         };
         row_flow
@@ -1547,6 +1568,10 @@ pub(crate) fn layout_grid_with_context(
             })
             .collect()
     };
+    let mut placed = vec![Placement::default(); items.len()];
+    for (index, placement) in order.into_iter().zip(placed_in_order) {
+        placed[index] = placement;
+    }
 
     // A subgridded axis has exactly the parent's covered tracks. Placement
     // lines outside that local explicit grid are clamped, never extended by
@@ -2049,7 +2074,18 @@ pub(crate) fn layout_grid_lanes(
             *position = stack + advance;
         }
     }
-    (running.into_iter().fold(0.0, f32::max) - spec.row_gap).max(0.0)
+    let natural_height = (running.into_iter().fold(0.0, f32::max) - spec.row_gap).max(0.0);
+    if let Some(height) = definite_height {
+        // Grid Lanes 3 §6.3 has one stacking-range alignment subject. Align
+        // the entire waterfall, never distribute free space between its items.
+        let (lead, _) = pack_pair(spec.align_content, height - natural_height, 1);
+        if lead != 0.0 {
+            for item in items {
+                crate::flex::translate(item, 0.0, lead);
+            }
+        }
+    }
+    natural_height
 }
 
 fn layout_row_lanes(
@@ -2132,6 +2168,15 @@ fn layout_row_lanes(
             + margin.right.unwrap_or(0.0)).max(0.0);
         for position in &mut running[start..start + span] {
             *position = stack + outer_width + spec.col_gap;
+        }
+    }
+    if !spec.rtl {
+        let natural_width = (running.into_iter().fold(0.0, f32::max) - spec.col_gap).max(0.0);
+        let (lead, _) = pack_pair(spec.justify_content, content_w - natural_width, 1);
+        if lead != 0.0 {
+            for item in items {
+                crate::flex::translate(item, lead, 0.0);
+            }
         }
     }
     natural_height
@@ -2335,10 +2380,40 @@ mod tests {
             340.0,
             None,
         );
-        // Row 2 is implicit (auto): sized by the items' 40px heights.
-        assert!(rect_eq(items[2].border_box, 0.0, 40.0, 100.0, 40.0));
-        // Implicit columns 3 (30px) and 4 (10px) precede item d's cell.
-        assert!(rect_eq(items[3].border_box, 330.0, 40.0, 10.0, 40.0));
+        // A definite position at column 4 grows the implicit grid before
+        // auto-placement, so the third auto item can use implicit column 3.
+        assert!(rect_eq(items[2].border_box, 300.0, 0.0, 30.0, 40.0));
+        assert!(rect_eq(items[3].border_box, 330.0, 0.0, 10.0, 40.0));
+    }
+
+    #[test]
+    fn definite_items_and_locked_rows_precede_auto_placement() {
+        let specs = [
+            Placement { row: None, row_span: 1, col: None, col_span: 1 },
+            Placement { row: Some(1), row_span: 1, col: None, col_span: 1 },
+            Placement { row: Some(1), row_span: 1, col: Some(1), col_span: 1 },
+        ];
+        assert_eq!(
+            place_row_flow(&specs, false, 3),
+            Some(vec![(1, 1, 3, 1), (1, 1, 2, 1), (1, 1, 1, 1)])
+        );
+    }
+
+    #[test]
+    fn grid_order_changes_auto_placement_without_changing_item_storage() {
+        let mut items = grid_fixture(3, "grid-template-columns:20px 20px 20px", "height:10px");
+        items[0].style.set("order", "2");
+        items[1].style.set("order", "-1");
+        lay(&mut items, &cs(&[("grid-template-columns", "20px 20px 20px")]), 60.0, None);
+        assert!(rect_eq(items[1].border_box, 0.0, 0.0, 20.0, 10.0));
+        assert!(rect_eq(items[2].border_box, 20.0, 0.0, 20.0, 10.0));
+        assert!(rect_eq(items[0].border_box, 40.0, 0.0, 20.0, 10.0));
+    }
+
+    #[test]
+    fn grid_safe_alignment_keeps_its_requested_position() {
+        assert_eq!(parse_pack(Some("safe end")), Pack::End);
+        assert_eq!(parse_item_align(Some("safe center")), ItemAlign::Center);
     }
 
     #[test]
@@ -2701,6 +2776,18 @@ mod tests {
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 50.0, 30.0));
         assert!(rect_eq(items[1].border_box, 60.0, 0.0, 50.0, 10.0));
         assert!(rect_eq(items[2].border_box, 60.0, 15.0, 50.0, 10.0));
+    }
+
+    #[test]
+    fn grid_lanes_align_content_moves_the_whole_stacking_range() {
+        let root = crate::layout_document(
+            "<body><div></div><div></div></body>",
+            "body{display:grid-lanes;margin:0;height:100px;grid-template-columns:50px 50px;align-content:end}body>div{height:10px}",
+            100.0, &FontSource::fallback(),
+        );
+        let Flow::Grid(items) = &root.flow else { panic!("lanes missing") };
+        assert!(rect_eq(items[0].border_box, 0.0, 90.0, 50.0, 10.0));
+        assert!(rect_eq(items[1].border_box, 50.0, 90.0, 50.0, 10.0));
     }
 
     #[test]

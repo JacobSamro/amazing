@@ -51,10 +51,12 @@ pub mod selectors;
 mod svg_presentation;
 pub mod syntax;
 pub mod values;
+mod viewport_units;
 
 pub use cascade::{
     ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
-    compute_with_animations, AnimatedOrigin, AnimatedStyleValue, AnimatedValues,
+    compute_with_animations, compute_with_animations_and_environment, compute_with_environment,
+    AnimatedOrigin, AnimatedStyleValue, AnimatedValues,
     compute_element_paint_style,
     recompute_roots, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
 };

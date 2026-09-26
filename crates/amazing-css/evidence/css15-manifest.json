@@ -1,0 +1,975 @@
+﻿{
+    "schema":  1,
+    "revision":  "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+    "selection":  {
+                      "kind":  "sha256-path-stratified",
+                      "per_category":  80
+                  },
+    "sparse_paths":  [
+                         "css/selectors",
+                         "css/css-values",
+                         "css/css-color"
+                     ],
+    "tests":  [
+                  {
+                      "id":  "selectors__has-style-sharing-002.html",
+                      "test":  "css/selectors/has-style-sharing-002.html"
+                  },
+                  {
+                      "id":  "selectors__dir-style-03a.html",
+                      "test":  "css/selectors/dir-style-03a.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-no-space-after-of.html",
+                      "test":  "css/selectors/nth-child-of-no-space-after-of.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-016.html",
+                      "test":  "css/selectors/selectors-4/lang-016.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-022.html",
+                      "test":  "css/selectors/selectors-4/lang-022.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-tagname.html",
+                      "test":  "css/selectors/nth-child-of-tagname.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-002.html",
+                      "test":  "css/selectors/selectors-4/lang-002.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-complex-selector.html",
+                      "test":  "css/selectors/nth-last-child-of-complex-selector.html"
+                  },
+                  {
+                      "id":  "selectors__floating-first-letter-05d0.html",
+                      "test":  "css/selectors/floating-first-letter-05d0.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-006.html",
+                      "test":  "css/selectors/selectors-4/lang-006.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-000.html",
+                      "test":  "css/selectors/selectors-4/lang-000.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-complex-selector-many-children-2.html",
+                      "test":  "css/selectors/nth-child-of-complex-selector-many-children-2.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-004.html",
+                      "test":  "css/selectors/has-style-sharing-004.html"
+                  },
+                  {
+                      "id":  "selectors__first-line-bidi-001.html",
+                      "test":  "css/selectors/first-line-bidi-001.html"
+                  },
+                  {
+                      "id":  "selectors__text-emphasis-visited-inheritance.html",
+                      "test":  "css/selectors/text-emphasis-visited-inheritance.html"
+                  },
+                  {
+                      "id":  "selectors__dir-style-02a.html",
+                      "test":  "css/selectors/dir-style-02a.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-classname.html",
+                      "test":  "css/selectors/nth-last-child-of-classname.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-018.html",
+                      "test":  "css/selectors/selectors-4/lang-018.html"
+                  },
+                  {
+                      "id":  "selectors__is-where-pseudo-elements.html",
+                      "test":  "css/selectors/is-where-pseudo-elements.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-005.html",
+                      "test":  "css/selectors/selectors-4/lang-005.html"
+                  },
+                  {
+                      "id":  "selectors__dir-style-01a.html",
+                      "test":  "css/selectors/dir-style-01a.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-019.html",
+                      "test":  "css/selectors/selectors-4/lang-019.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-024.html",
+                      "test":  "css/selectors/selectors-4/lang-024.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-style-sharing-1.html",
+                      "test":  "css/selectors/nth-last-child-of-style-sharing-1.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-specificity-1.html",
+                      "test":  "css/selectors/nth-last-child-specificity-1.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-003.html",
+                      "test":  "css/selectors/selectors-4/lang-003.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-specificity-1.html",
+                      "test":  "css/selectors/nth-child-specificity-1.html"
+                  },
+                  {
+                      "id":  "selectors__text-fill-color-visited-inheritance.html",
+                      "test":  "css/selectors/text-fill-color-visited-inheritance.html"
+                  },
+                  {
+                      "id":  "selectors__child-indexed-no-parent.html",
+                      "test":  "css/selectors/child-indexed-no-parent.html"
+                  },
+                  {
+                      "id":  "selectors__floating-first-letter-feff.html",
+                      "test":  "css/selectors/floating-first-letter-feff.html"
+                  },
+                  {
+                      "id":  "selectors__selector-required.html",
+                      "test":  "css/selectors/selector-required.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-020.html",
+                      "test":  "css/selectors/selectors-4/lang-020.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-009.html",
+                      "test":  "css/selectors/selectors-4/lang-009.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__details-open-pseudo-001.html",
+                      "test":  "css/selectors/selectors-4/details-open-pseudo-001.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-attr-many.html",
+                      "test":  "css/selectors/selectors-attr-many.html"
+                  },
+                  {
+                      "id":  "selectors__not-links.html",
+                      "test":  "css/selectors/not-links.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-specificity-2.html",
+                      "test":  "css/selectors/nth-child-specificity-2.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-nesting.html",
+                      "test":  "css/selectors/nth-last-child-of-nesting.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-complex-selector-many-children.html",
+                      "test":  "css/selectors/nth-child-of-complex-selector-many-children.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-compound-selector.html",
+                      "test":  "css/selectors/nth-child-of-compound-selector.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-007.html",
+                      "test":  "css/selectors/has-style-sharing-007.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-014.html",
+                      "test":  "css/selectors/selectors-4/lang-014.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-001.html",
+                      "test":  "css/selectors/has-style-sharing-001.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-012.html",
+                      "test":  "css/selectors/selectors-4/lang-012.html"
+                  },
+                  {
+                      "id":  "selectors__first-letter-flag-001.html",
+                      "test":  "css/selectors/first-letter-flag-001.html"
+                  },
+                  {
+                      "id":  "selectors__is-where-visited.html",
+                      "test":  "css/selectors/is-where-visited.html"
+                  },
+                  {
+                      "id":  "selectors__dir-selector-white-space-001.html",
+                      "test":  "css/selectors/dir-selector-white-space-001.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-nesting.html",
+                      "test":  "css/selectors/nth-child-of-nesting.html"
+                  },
+                  {
+                      "id":  "selectors__has-visited.html",
+                      "test":  "css/selectors/has-visited.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-and-nth-last-child.html",
+                      "test":  "css/selectors/nth-child-and-nth-last-child.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-tagname.html",
+                      "test":  "css/selectors/nth-last-child-of-tagname.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-025.html",
+                      "test":  "css/selectors/selectors-4/lang-025.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-015.html",
+                      "test":  "css/selectors/selectors-4/lang-015.html"
+                  },
+                  {
+                      "id":  "selectors__text-stroke-color-visited-inheritance.html",
+                      "test":  "css/selectors/text-stroke-color-visited-inheritance.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-003.html",
+                      "test":  "css/selectors/has-style-sharing-003.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-no-space-after-of.html",
+                      "test":  "css/selectors/nth-last-child-of-no-space-after-of.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-style-sharing-2.html",
+                      "test":  "css/selectors/nth-last-child-of-style-sharing-2.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-004.html",
+                      "test":  "css/selectors/selectors-4/lang-004.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-010.html",
+                      "test":  "css/selectors/selectors-4/lang-010.html"
+                  },
+                  {
+                      "id":  "selectors__visited-nested.html",
+                      "test":  "css/selectors/visited-nested.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-pseudo.html",
+                      "test":  "css/selectors/nth-child-of-pseudo.html"
+                  },
+                  {
+                      "id":  "selectors__selector-structural-pseudo-root.html",
+                      "test":  "css/selectors/selector-structural-pseudo-root.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-017.html",
+                      "test":  "css/selectors/selectors-4/lang-017.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-008.html",
+                      "test":  "css/selectors/selectors-4/lang-008.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-specificity-4.html",
+                      "test":  "css/selectors/nth-last-child-specificity-4.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-attr-white-space-001.html",
+                      "test":  "css/selectors/selectors-attr-white-space-001.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-011.html",
+                      "test":  "css/selectors/selectors-4/lang-011.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-023.html",
+                      "test":  "css/selectors/selectors-4/lang-023.html"
+                  },
+                  {
+                      "id":  "selectors__first-line-bidi-002.html",
+                      "test":  "css/selectors/first-line-bidi-002.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-complex-selector.html",
+                      "test":  "css/selectors/nth-child-of-complex-selector.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-of-compound-selector.html",
+                      "test":  "css/selectors/nth-last-child-of-compound-selector.html"
+                  },
+                  {
+                      "id":  "selectors__invalidation__any-link-attribute-removal.html",
+                      "test":  "css/selectors/invalidation/any-link-attribute-removal.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-006.html",
+                      "test":  "css/selectors/has-style-sharing-006.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-001.html",
+                      "test":  "css/selectors/selectors-4/lang-001.html"
+                  },
+                  {
+                      "id":  "selectors__nth-last-child-specificity-3.html",
+                      "test":  "css/selectors/nth-last-child-specificity-3.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-021.html",
+                      "test":  "css/selectors/selectors-4/lang-021.html"
+                  },
+                  {
+                      "id":  "selectors__has-style-sharing-005.html",
+                      "test":  "css/selectors/has-style-sharing-005.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-specificity-4.html",
+                      "test":  "css/selectors/nth-child-specificity-4.html"
+                  },
+                  {
+                      "id":  "selectors__selectors-4__lang-007.html",
+                      "test":  "css/selectors/selectors-4/lang-007.html"
+                  },
+                  {
+                      "id":  "selectors__nth-child-of-classname.html",
+                      "test":  "css/selectors/nth-child-of-classname.html"
+                  },
+                  {
+                      "id":  "css-values__calc-border-radius-1.html",
+                      "test":  "css/css-values/calc-border-radius-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-max-height-block-1.html",
+                      "test":  "css/css-values/calc-max-height-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-min-width-block-intrinsic-1.html",
+                      "test":  "css/css-values/calc-min-width-block-intrinsic-1.html"
+                  },
+                  {
+                      "id":  "css-values__ch-unit-008.html",
+                      "test":  "css/css-values/ch-unit-008.html"
+                  },
+                  {
+                      "id":  "css-values__vh-interpolate-px.html",
+                      "test":  "css/css-values/vh-interpolate-px.html"
+                  },
+                  {
+                      "id":  "css-values__calc-invalid-range-clamping.html",
+                      "test":  "css/css-values/calc-invalid-range-clamping.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-min-max-sizes-001.html",
+                      "test":  "css/css-values/calc-size/calc-size-min-max-sizes-001.html"
+                  },
+                  {
+                      "id":  "css-values__attr-in-slotted.html",
+                      "test":  "css/css-values/attr-in-slotted.html"
+                  },
+                  {
+                      "id":  "css-values__calc-in-media-queries-001.html",
+                      "test":  "css/css-values/calc-in-media-queries-001.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-scrollbars-scroll-vw-003.html",
+                      "test":  "css/css-values/viewport-units-scrollbars-scroll-vw-003.html"
+                  },
+                  {
+                      "id":  "css-values__calc-rounding-003.html",
+                      "test":  "css/css-values/calc-rounding-003.html"
+                  },
+                  {
+                      "id":  "css-values__max-unitless-zero-invalid.html",
+                      "test":  "css/css-values/max-unitless-zero-invalid.html"
+                  },
+                  {
+                      "id":  "css-values__calc-background-image-gradient-1.html",
+                      "test":  "css/css-values/calc-background-image-gradient-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-offsets-relative-bottom-1.html",
+                      "test":  "css/css-values/calc-offsets-relative-bottom-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-flex-006.html",
+                      "test":  "css/css-values/calc-size/calc-size-flex-006.html"
+                  },
+                  {
+                      "id":  "css-values__vh-inherit.html",
+                      "test":  "css/css-values/vh-inherit.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-min-max-sizes-004.html",
+                      "test":  "css/css-values/calc-size/calc-size-min-max-sizes-004.html"
+                  },
+                  {
+                      "id":  "css-values__calc-height-block-1.html",
+                      "test":  "css/css-values/calc-height-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-scrollbars-scroll-vw-001.html",
+                      "test":  "css/css-values/viewport-units-scrollbars-scroll-vw-001.html"
+                  },
+                  {
+                      "id":  "css-values__attr-in-max.html",
+                      "test":  "css/css-values/attr-in-max.html"
+                  },
+                  {
+                      "id":  "css-values__calc-width-block-intrinsic-1.html",
+                      "test":  "css/css-values/calc-width-block-intrinsic-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-transform-origin-1.html",
+                      "test":  "css/css-values/calc-transform-origin-1.html"
+                  },
+                  {
+                      "id":  "css-values__attr-length-valid-zero-nofallback.html",
+                      "test":  "css/css-values/attr-length-valid-zero-nofallback.html"
+                  },
+                  {
+                      "id":  "css-values__attr-style-sharing-5.html",
+                      "test":  "css/css-values/attr-style-sharing-5.html"
+                  },
+                  {
+                      "id":  "css-values__calc-max-width-block-intrinsic-1.html",
+                      "test":  "css/css-values/calc-max-width-block-intrinsic-1.html"
+                  },
+                  {
+                      "id":  "css-values__vh-interpolate-pct.html",
+                      "test":  "css/css-values/vh-interpolate-pct.html"
+                  },
+                  {
+                      "id":  "css-values__calc-offsets-relative-top-1.html",
+                      "test":  "css/css-values/calc-offsets-relative-top-1.html"
+                  },
+                  {
+                      "id":  "css-values__ex-calc-expression-001.html",
+                      "test":  "css/css-values/ex-calc-expression-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-aspect-ratio-003.html",
+                      "test":  "css/css-values/calc-size/calc-size-aspect-ratio-003.html"
+                  },
+                  {
+                      "id":  "css-values__vh-em-inherit.html",
+                      "test":  "css/css-values/vh-em-inherit.html"
+                  },
+                  {
+                      "id":  "css-values__calc-offsets-absolute-left-1.html",
+                      "test":  "css/css-values/calc-offsets-absolute-left-1.html"
+                  },
+                  {
+                      "id":  "css-values__vh-calc-support.html",
+                      "test":  "css/css-values/vh-calc-support.html"
+                  },
+                  {
+                      "id":  "css-values__calc-offsets-relative-left-1.html",
+                      "test":  "css/css-values/calc-offsets-relative-left-1.html"
+                  },
+                  {
+                      "id":  "css-values__negative-calc-to-non-negative-integer.html",
+                      "test":  "css/css-values/negative-calc-to-non-negative-integer.html"
+                  },
+                  {
+                      "id":  "css-values__calc-min-height-block-1.html",
+                      "test":  "css/css-values/calc-min-height-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-width-table-auto-1.html",
+                      "test":  "css/css-values/calc-width-table-auto-1.html"
+                  },
+                  {
+                      "id":  "css-values__attr-notype-fallback.html",
+                      "test":  "css/css-values/attr-notype-fallback.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-min-max-sizes-006.html",
+                      "test":  "css/css-values/calc-size/calc-size-min-max-sizes-006.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-scrollbars-custom-001.html",
+                      "test":  "css/css-values/viewport-units-scrollbars-custom-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-in-calc.html",
+                      "test":  "css/css-values/calc-in-calc.html"
+                  },
+                  {
+                      "id":  "css-values__calc-width-table-fixed-1.html",
+                      "test":  "css/css-values/calc-width-table-fixed-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-max-width-block-1.html",
+                      "test":  "css/css-values/calc-max-width-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__vh-zero-support.html",
+                      "test":  "css/css-values/vh-zero-support.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-scrollbars-scroll-vhw-001.html",
+                      "test":  "css/css-values/viewport-units-scrollbars-scroll-vhw-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-ch-ex-lang.html",
+                      "test":  "css/css-values/calc-ch-ex-lang.html"
+                  },
+                  {
+                      "id":  "css-values__vh-support-margin.html",
+                      "test":  "css/css-values/vh-support-margin.html"
+                  },
+                  {
+                      "id":  "css-values__attr-length-valid-zero.html",
+                      "test":  "css/css-values/attr-length-valid-zero.html"
+                  },
+                  {
+                      "id":  "css-values__vh-calc-support-pct.html",
+                      "test":  "css/css-values/vh-calc-support-pct.html"
+                  },
+                  {
+                      "id":  "css-values__calc-rem-lang.html",
+                      "test":  "css/css-values/calc-rem-lang.html"
+                  },
+                  {
+                      "id":  "css-values__calc-padding-block-1.html",
+                      "test":  "css/css-values/calc-padding-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__attr-length-valid.html",
+                      "test":  "css/css-values/attr-length-valid.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-grid-repeat.html",
+                      "test":  "css/css-values/calc-size/calc-size-grid-repeat.html"
+                  },
+                  {
+                      "id":  "css-values__calc-min-width-block-1.html",
+                      "test":  "css/css-values/calc-min-width-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__attr-length-invalid-cast.html",
+                      "test":  "css/css-values/attr-length-invalid-cast.html"
+                  },
+                  {
+                      "id":  "css-values__calc-in-max.html",
+                      "test":  "css/css-values/calc-in-max.html"
+                  },
+                  {
+                      "id":  "css-values__attr-color-invalid-cast.html",
+                      "test":  "css/css-values/attr-color-invalid-cast.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-aspect-ratio-005.html",
+                      "test":  "css/css-values/calc-size/calc-size-aspect-ratio-005.html"
+                  },
+                  {
+                      "id":  "css-values__calc-text-indent-1.html",
+                      "test":  "css/css-values/calc-text-indent-1.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-scrollbars-auto-vhw-001.html",
+                      "test":  "css/css-values/viewport-units-scrollbars-auto-vhw-001.html"
+                  },
+                  {
+                      "id":  "css-values__vh-interpolate-vh.html",
+                      "test":  "css/css-values/vh-interpolate-vh.html"
+                  },
+                  {
+                      "id":  "css-values__calc-rounding-002.html",
+                      "test":  "css/css-values/calc-rounding-002.html"
+                  },
+                  {
+                      "id":  "css-values__ch-unit-010.html",
+                      "test":  "css/css-values/ch-unit-010.html"
+                  },
+                  {
+                      "id":  "css-values__calc-width-block-1.html",
+                      "test":  "css/css-values/calc-width-block-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-rounding-001.html",
+                      "test":  "css/css-values/calc-rounding-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-aspect-ratio-001.html",
+                      "test":  "css/css-values/calc-size/calc-size-aspect-ratio-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-flex-001.html",
+                      "test":  "css/css-values/calc-size/calc-size-flex-001.html"
+                  },
+                  {
+                      "id":  "css-values__viewport-units-001-print.html",
+                      "test":  "css/css-values/viewport-units-001-print.html"
+                  },
+                  {
+                      "id":  "css-values__html-attr-case-insensitivity.html",
+                      "test":  "css/css-values/html-attr-case-insensitivity.html"
+                  },
+                  {
+                      "id":  "css-values__calc-in-media-queries-002.html",
+                      "test":  "css/css-values/calc-in-media-queries-002.html"
+                  },
+                  {
+                      "id":  "css-values__max-length-percent-001.html",
+                      "test":  "css/css-values/max-length-percent-001.html"
+                  },
+                  {
+                      "id":  "css-values__calc-background-linear-gradient-1.html",
+                      "test":  "css/css-values/calc-background-linear-gradient-1.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-flex-005.html",
+                      "test":  "css/css-values/calc-size/calc-size-flex-005.html"
+                  },
+                  {
+                      "id":  "css-values__calc-offsets-absolute-right-1.html",
+                      "test":  "css/css-values/calc-offsets-absolute-right-1.html"
+                  },
+                  {
+                      "id":  "css-values__max-20-arguments.html",
+                      "test":  "css/css-values/max-20-arguments.html"
+                  },
+                  {
+                      "id":  "css-values__ch-unit-011.html",
+                      "test":  "css/css-values/ch-unit-011.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-no-body-height-quirk-001.html",
+                      "test":  "css/css-values/calc-size/calc-size-no-body-height-quirk-001.html"
+                  },
+                  {
+                      "id":  "css-values__percentage-rem-low.html",
+                      "test":  "css/css-values/percentage-rem-low.html"
+                  },
+                  {
+                      "id":  "css-values__attr-style-sharing-2.html",
+                      "test":  "css/css-values/attr-style-sharing-2.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-min-max-sizes-002.html",
+                      "test":  "css/css-values/calc-size/calc-size-min-max-sizes-002.html"
+                  },
+                  {
+                      "id":  "css-values__calc-size__calc-size-min-max-sizes-003.html",
+                      "test":  "css/css-values/calc-size/calc-size-min-max-sizes-003.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-l-almost-0.html",
+                      "test":  "css/css-color/oklch-l-almost-0.html"
+                  },
+                  {
+                      "id":  "css-color__xyz-d65-005.html",
+                      "test":  "css/css-color/xyz-d65-005.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-017.html",
+                      "test":  "css/css-color/deprecated-sameas-017.html"
+                  },
+                  {
+                      "id":  "css-color__hwb-005.html",
+                      "test":  "css/css-color/hwb-005.html"
+                  },
+                  {
+                      "id":  "css-color__a98rgb-001.html",
+                      "test":  "css/css-color/a98rgb-001.html"
+                  },
+                  {
+                      "id":  "css-color__color-mix-currentcolor-002.html",
+                      "test":  "css/css-color/color-mix-currentcolor-002.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-019.html",
+                      "test":  "css/css-color/deprecated-sameas-019.html"
+                  },
+                  {
+                      "id":  "css-color__hsl-003.html",
+                      "test":  "css/css-color/hsl-003.html"
+                  },
+                  {
+                      "id":  "css-color__lch-001.html",
+                      "test":  "css/css-color/lch-001.html"
+                  },
+                  {
+                      "id":  "css-color__relative-currentcolor-rec2020-02.html",
+                      "test":  "css/css-color/relative-currentcolor-rec2020-02.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-004.html",
+                      "test":  "css/css-color/oklch-004.html"
+                  },
+                  {
+                      "id":  "css-color__display-p3-linear-002.html",
+                      "test":  "css/css-color/display-p3-linear-002.html"
+                  },
+                  {
+                      "id":  "css-color__xyz-002.html",
+                      "test":  "css/css-color/xyz-002.html"
+                  },
+                  {
+                      "id":  "css-color__rgba-007.html",
+                      "test":  "css/css-color/rgba-007.html"
+                  },
+                  {
+                      "id":  "css-color__xyz-d50-001.html",
+                      "test":  "css/css-color/xyz-d50-001.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-009.html",
+                      "test":  "css/css-color/oklch-009.html"
+                  },
+                  {
+                      "id":  "css-color__background-color-rgb-001.html",
+                      "test":  "css/css-color/background-color-rgb-001.html"
+                  },
+                  {
+                      "id":  "css-color__srgb-linear-002.html",
+                      "test":  "css/css-color/srgb-linear-002.html"
+                  },
+                  {
+                      "id":  "css-color__hwb-003.html",
+                      "test":  "css/css-color/hwb-003.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-003.html",
+                      "test":  "css/css-color/oklch-003.html"
+                  },
+                  {
+                      "id":  "css-color__xyz-d50-002.html",
+                      "test":  "css/css-color/xyz-d50-002.html"
+                  },
+                  {
+                      "id":  "css-color__color-mix-percents-01.html",
+                      "test":  "css/css-color/color-mix-percents-01.html"
+                  },
+                  {
+                      "id":  "css-color__rgb-008.html",
+                      "test":  "css/css-color/rgb-008.html"
+                  },
+                  {
+                      "id":  "css-color__rgba-005.html",
+                      "test":  "css/css-color/rgba-005.html"
+                  },
+                  {
+                      "id":  "css-color__background-color-hsl-001.html",
+                      "test":  "css/css-color/background-color-hsl-001.html"
+                  },
+                  {
+                      "id":  "css-color__oklab-l-over-1-2.html",
+                      "test":  "css/css-color/oklab-l-over-1-2.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-12.html",
+                      "test":  "css/css-color/t424-hsl-values-b-12.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-008.html",
+                      "test":  "css/css-color/deprecated-sameas-008.html"
+                  },
+                  {
+                      "id":  "css-color__display-p3-linear-004.html",
+                      "test":  "css/css-color/display-p3-linear-004.html"
+                  },
+                  {
+                      "id":  "css-color__hsl-006.html",
+                      "test":  "css/css-color/hsl-006.html"
+                  },
+                  {
+                      "id":  "css-color__hsla-008.html",
+                      "test":  "css/css-color/hsla-008.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-010.html",
+                      "test":  "css/css-color/deprecated-sameas-010.html"
+                  },
+                  {
+                      "id":  "css-color__a98rgb-004.html",
+                      "test":  "css/css-color/a98rgb-004.html"
+                  },
+                  {
+                      "id":  "css-color__lch-002.html",
+                      "test":  "css/css-color/lch-002.html"
+                  },
+                  {
+                      "id":  "css-color__hsla-004.html",
+                      "test":  "css/css-color/hsla-004.html"
+                  },
+                  {
+                      "id":  "css-color__relative-currentcolor-hsl-01.html",
+                      "test":  "css/css-color/relative-currentcolor-hsl-01.html"
+                  },
+                  {
+                      "id":  "css-color__hsla-003.html",
+                      "test":  "css/css-color/hsla-003.html"
+                  },
+                  {
+                      "id":  "css-color__display-p3-006.html",
+                      "test":  "css/css-color/display-p3-006.html"
+                  },
+                  {
+                      "id":  "css-color__prophoto-rgb-004.html",
+                      "test":  "css/css-color/prophoto-rgb-004.html"
+                  },
+                  {
+                      "id":  "css-color__lab-003.html",
+                      "test":  "css/css-color/lab-003.html"
+                  },
+                  {
+                      "id":  "css-color__hex-001.html",
+                      "test":  "css/css-color/hex-001.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-012.html",
+                      "test":  "css/css-color/deprecated-sameas-012.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-l-over-1-2.html",
+                      "test":  "css/css-color/oklch-l-over-1-2.html"
+                  },
+                  {
+                      "id":  "css-color__oklab-001.html",
+                      "test":  "css/css-color/oklab-001.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-003.html",
+                      "test":  "css/css-color/deprecated-sameas-003.html"
+                  },
+                  {
+                      "id":  "css-color__hwb-001.html",
+                      "test":  "css/css-color/hwb-001.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-4.html",
+                      "test":  "css/css-color/t424-hsl-values-b-4.html"
+                  },
+                  {
+                      "id":  "css-color__lch-l-over-100-1.html",
+                      "test":  "css/css-color/lch-l-over-100-1.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-1.html",
+                      "test":  "css/css-color/t424-hsl-values-b-1.html"
+                  },
+                  {
+                      "id":  "css-color__hwb-004.html",
+                      "test":  "css/css-color/hwb-004.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-l-over-1-1.html",
+                      "test":  "css/css-color/oklch-l-over-1-1.html"
+                  },
+                  {
+                      "id":  "css-color__hex-004.html",
+                      "test":  "css/css-color/hex-004.html"
+                  },
+                  {
+                      "id":  "css-color__lab-008.html",
+                      "test":  "css/css-color/lab-008.html"
+                  },
+                  {
+                      "id":  "css-color__rec2020-005.html",
+                      "test":  "css/css-color/rec2020-005.html"
+                  },
+                  {
+                      "id":  "css-color__relative-currentcolor-rec2020-01.html",
+                      "test":  "css/css-color/relative-currentcolor-rec2020-01.html"
+                  },
+                  {
+                      "id":  "css-color__display-p3-001.html",
+                      "test":  "css/css-color/display-p3-001.html"
+                  },
+                  {
+                      "id":  "css-color__contrast-color-001.html",
+                      "test":  "css/css-color/contrast-color-001.html"
+                  },
+                  {
+                      "id":  "css-color__oklab-006.html",
+                      "test":  "css/css-color/oklab-006.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-15.html",
+                      "test":  "css/css-color/t424-hsl-values-b-15.html"
+                  },
+                  {
+                      "id":  "css-color__currentcolor-visited-fallback.html",
+                      "test":  "css/css-color/currentcolor-visited-fallback.html"
+                  },
+                  {
+                      "id":  "css-color__prophoto-rgb-003.html",
+                      "test":  "css/css-color/prophoto-rgb-003.html"
+                  },
+                  {
+                      "id":  "css-color__currentcolor-001.html",
+                      "test":  "css/css-color/currentcolor-001.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-002.html",
+                      "test":  "css/css-color/oklch-002.html"
+                  },
+                  {
+                      "id":  "css-color__lch-009.html",
+                      "test":  "css/css-color/lch-009.html"
+                  },
+                  {
+                      "id":  "css-color__oklch-005.html",
+                      "test":  "css/css-color/oklch-005.html"
+                  },
+                  {
+                      "id":  "css-color__rgba-002.html",
+                      "test":  "css/css-color/rgba-002.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-011.html",
+                      "test":  "css/css-color/deprecated-sameas-011.html"
+                  },
+                  {
+                      "id":  "css-color__color-mix-currentcolor-003.html",
+                      "test":  "css/css-color/color-mix-currentcolor-003.html"
+                  },
+                  {
+                      "id":  "css-color__xyz-d50-003.html",
+                      "test":  "css/css-color/xyz-d50-003.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-020.html",
+                      "test":  "css/css-color/deprecated-sameas-020.html"
+                  },
+                  {
+                      "id":  "css-color__deprecated-sameas-006.html",
+                      "test":  "css/css-color/deprecated-sameas-006.html"
+                  },
+                  {
+                      "id":  "css-color__rec2020-004.html",
+                      "test":  "css/css-color/rec2020-004.html"
+                  },
+                  {
+                      "id":  "css-color__hsla-005.html",
+                      "test":  "css/css-color/hsla-005.html"
+                  },
+                  {
+                      "id":  "css-color__predefined-007.html",
+                      "test":  "css/css-color/predefined-007.html"
+                  },
+                  {
+                      "id":  "css-color__oklab-l-almost-0.html",
+                      "test":  "css/css-color/oklab-l-almost-0.html"
+                  },
+                  {
+                      "id":  "css-color__rgb-005.html",
+                      "test":  "css/css-color/rgb-005.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-2.html",
+                      "test":  "css/css-color/t424-hsl-values-b-2.html"
+                  },
+                  {
+                      "id":  "css-color__currentcolor-003.html",
+                      "test":  "css/css-color/currentcolor-003.html"
+                  },
+                  {
+                      "id":  "css-color__relative-currentcolor-displayp3-01.html",
+                      "test":  "css/css-color/relative-currentcolor-displayp3-01.html"
+                  },
+                  {
+                      "id":  "css-color__t424-hsl-values-b-9.html",
+                      "test":  "css/css-color/t424-hsl-values-b-9.html"
+                  }
+              ]
+}

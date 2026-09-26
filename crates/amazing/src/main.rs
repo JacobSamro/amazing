@@ -14,6 +14,7 @@ mod page;
 mod render_oracle;
 mod runtime_binding_host;
 mod runtime_host_ipc;
+mod runtime_host_replaced_content;
 #[cfg(test)]
 mod driver_tests;
 
