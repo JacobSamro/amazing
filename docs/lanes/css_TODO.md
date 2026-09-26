@@ -2219,20 +2219,148 @@ Boundary (deliberately not fixed here, with the reason):
   `valid_grid_*` family into a new `grid_values.rs` submodule) rather than
   attempted under this ticket's gate.
 
+## CSS-29 (based on 120600f9)
+
+Three parts, one commit series: a code-health split, the selector cluster
+routed from dom-bindings, and the box-shadow-invalid.html cluster (the
+largest remaining one across the 10 WPT selections).
+
+**Part 1 -- split `computed.rs`.** Moved the css-grid track-list/`<grid-
+line>`/shorthand grammar (30 functions, unchanged bodies) into a new
+`grid_values.rs` module, re-exported with `pub(crate) use grid_values::{...}`
+so both `crate::computed::name` (from `values.rs`) and bare-name internal
+calls keep working. `computed.rs` 4,806 -> 3,960 lines; `cargo check`/`cargo
+nextest run -p amazing-css` clean; css-grid WPT selection unchanged at
+792/953, proving zero behavior change. Commit `12deb44a`.
+
+**Part 2 -- the selector cluster.**
+
+- **querySelector CSS-escapes** (`dom/nodes/ParentNode-querySelector-
+  escapes.html`, 40 subtests, routed earlier): CSS Syntax 3 SS4.3.7's
+  "consume an escaped code point" had two bugs. The hex-digit branch
+  returned `None` (meaning "not an escape at all") for a NUL/surrogate/
+  out-of-range value instead of U+FFFD -- but by then it had already
+  consumed the whole escape sequence, so the caller's `None`-handling code
+  (which assumes the `\` is still unconsumed) advanced position AGAIN,
+  desyncing the tokenizer. A lone backslash at EOF decoded as a literal `\`
+  instead of U+FFFD (a parse error per spec, but still a code point, not
+  "not an escape"). Fixed both branches to always return a code point except
+  for the one true "not a valid escape" case (`\` directly followed by a
+  newline). Also added CSS Syntax 3 SS3.3 input preprocessing (CRLF/lone-CR/
+  FF -> LF, NUL -> U+FFFD) before tokenizing, needed because a hex escape's
+  trailing-whitespace consumption only ever sees an already-normalized LF.
+  Root-causing this surfaced a THIRD, separate bug: the tokenizer's hash-
+  token (`#`) and at-keyword (`@`) dispatch only checked for a literal ident
+  char right after the sigil, never for a valid-escape lookahead (backslash
+  not followed by newline) -- so `#\30 foo`-style escaped id selectors
+  tokenized as a lone `Delim('#')` and never reached `ident()`/`escape()` at
+  all. Fixed by adding the escape-lookahead arm to both dispatches.
+- **`:scope`/`:has(> :scope)` for `Element.closest()`** (`dom/nodes/Element-
+  closest.html`, part of its 4 subtests): root-caused to
+  `crates/amazing/src/dom_host.rs`'s `matches_selector`, which always calls
+  `amazing_css::selectors::matches(...)` (scope always `None`) -- `closest()`
+  must bind `:scope` to the ORIGINAL context element throughout its whole
+  inclusive-ancestor walk. `amazing-css` already had the right scope-
+  threading machinery (`matches_in_scope`/`matches_pseudo_in_scope`, and
+  `Simple::Has`'s `compound_in_scope` call already forwards `scope`
+  correctly), it was just `pub(crate)`-only. Made both `pub` so a caller
+  outside this crate can supply a scope root; the actual `closest()`/
+  `DomHost` wiring is outside `amazing-css` (routed in
+  `.agents/css/questions.md` to devtools/integrator-assist).
+- **`:invalid`/`:valid`** (the other half of `Element-closest.html`'s 4
+  subtests, previously a SyntaxError since an unrecognized pseudo-class
+  invalidates the whole selector): added as a Phase 2, attribute-only
+  subset -- no live form/widget state in this DOM. `input`/`select`/
+  `textarea` are invalid when `required` and their effective value is empty
+  (select reads its selected/first `<option>`'s `value` attribute or text;
+  textarea reads its text content). `fieldset`/`form` match `:invalid` when
+  they have any non-disabled `input`/`select`/`textarea` descendant that is
+  itself invalid -- per the HTML Standard's own `:valid`/`:invalid` rule for
+  those two elements, since neither has a value of its own. `pattern`/
+  type-format/min-max mismatches are out of scope. New unit test
+  `invalid_and_valid_pseudo_classes_read_required_and_empty_value` mirrors
+  the routed WPT fixture's shape (`do_test(":invalid", "test11", "test2")`:
+  a form and a fieldset both matching `:invalid` via a descendant, while the
+  select in between is validly filled).
+
+amazing-css: 356/356 nextest (incl. new
+`id_selector_escapes_decode_per_css_syntax_4_3_7` and the `:invalid`/`:valid`
+test above), 0 doctests. WPT parsing-conformance runner (10 selections)
+unaffected by this part: 2621/3823, matching the CSS-28 baseline exactly (the
+runner only exercises `values::parse`/`compute()`, not selector matching).
+Verification for the actual routed DOM/selector WPT files is by unit tests
+mirroring their assertions plus the full crate regression above, since this
+lane does not own the JS-engine/DOM-bindings harness that executes real
+`testharness.js` files end to end. Commit `92372a58`.
+
+**Part 3 -- box-shadow-invalid.html cluster (40 failures, the largest
+remaining across the 10 selections once Part 2 was measured with no effect
+on this runner).** `box-shadow`'s `<shadow>` grammar
+(`<color>? && <length>{2,4} && inset?`) was checked by counting each kind of
+component independently and never checking adjacency: `-4px red 4px`
+(a color splitting the two required lengths into two separated runs),
+`4px inset -4px`, a color or `inset` alone with no lengths, too many/too few
+lengths, two colors, two insets -- all of it parsed as valid. Rewrote as
+`valid_single_box_shadow`: classify each component, then require the
+lengths to form exactly one contiguous run (a color/inset interrupting it
+directly produces two runs, caught immediately) plus at most one color and
+one `inset`.
+
+Wiring this into `values::parse`'s `"box-shadow"` arm (there wasn't one --
+box-shadow fell through to the generic `Unparsed` catch-all, so the WPT
+runner reported every string valid regardless of content, masking the bug
+above from measurement) surfaced two more gaps once real values started
+being checked: `shadow_length` only recognized the `px` unit, and rejected
+`calc()`-based lengths outright including percentage-free ones CSS Values 4
+allows for `box-shadow` (`calc(1em - 2px)`, `calc(-1px)` -- the latter valid
+because a `calc()` result outside a property's allowed range is clamped at
+computed-value time, not rejected as a parse error, unlike a literal
+out-of-range token, so a calc()-derived blur radius's sign is deliberately
+left unchecked). Also added the missing comma-separated shadow LIST support
+(multiple `<shadow>`s), previously rejected outright regardless of content.
+Fixing these three together, rather than only the ordering bug, was needed
+to avoid regressing four `box-shadow-valid.html` cases that had been passing
+vacuously (no real check existed) and would otherwise have started failing
+once real validation was wired in.
+
+Split box-shadow's whole grammar into `shadow_values.rs` (same pattern as
+Part 1's `grid_values.rs`) to keep `computed.rs` under the 4,000-line policy
+-- adding the fixes above brought it back up to 4,079 lines; after the split,
+3,797.
+
+amazing-css: 356/356 nextest, 0 doctests, both before and after the split.
+WPT parsing-conformance runner (10 selections): css-backgrounds 385 -> 427
+(+42), combined total 2621 -> 2663/3823. Verified **zero lost by test
+identity**: diffed the full sorted FAIL-key sets (test file + assertion,
+suffix after `->` stripped) before and after with `comm`; the four
+box-shadow-valid.html cases mentioned above were the only ones that would
+have regressed, and are covered by the calc()/units/comma-list fixes.
+Commit `accfba0d`.
+
+Boundary / not fixed here:
+
+- **Full-workspace gate blocked by a pre-existing, unrelated compile break**:
+  `cargo nextest run --workspace --locked` fails to compile at
+  `crates/amazing/src/runtime_host_devtools.rs:974`
+  (`missing field 'node' in initializer of 'PageScript'`) -- HTML-29 added
+  that field to `PageScript` in `crates/amazing/src/cmd/js.rs`, but
+  devtools's own file wasn't updated. Confirmed via `git status`/`git log`
+  that this is pre-existing in the synced tree, not introduced by CSS-29.
+  Routed in `.agents/css/questions.md` with the exact one-line fix; not
+  edited here since it's outside `LANE_PATHS["css"]`. `amazing-css`'s own
+  crate gate (nextest + doctests) is unaffected and reported above.
+- **`:scope`/`:has(> :scope)` end-to-end wiring**: the `amazing-css`-side
+  primitive is public now; the `DomHost`/`closest()` consumer change is
+  cross-lane (routed, see Part 2 above).
+
 ## Next
 
-Biggest clusters first: `color`'s computed-value canonicalization (unblocks
-`alpha-color-computed.html` and `color-computed.html` together),
-`box-shadow-invalid.html`, then the css-transforms `*-origin`/`scale`/
-`rotate` computed files and css-fonts' `font-variant`/`font-synthesis`
-grammar. `grid-row`/`grid-column`/`grid-area`'s real shortest-serialization
-(see CSS-28's Boundary) would additionally close the
-`grid-row-shortest-serialization.html`-shaped gap if that file selection is
-ever widened to include `*-serialization.html`. Legacy comma-form
-`rgb()`/`hsla()` strictness and `sibling-index()`/`sibling-count()` remain
-smaller, later items. Also still open from CSS-25: `calc()` infinity/NaN,
-relative-color channel keywords inside nested `calc()`/`clamp()`, `container`
-shorthand serialization, `random-item()`, and `mediaqueries`'
-`matchMedia().media` canonical serialization. A `computed.rs` split (see
-CSS-28's Boundary) is also a good early candidate before the file grows
-further.
+Biggest clusters first (post-CSS-29): css-text (253 failing), css-transforms
+(176), css-grid's remaining `*-computed.html` shortest-serialization gaps
+(161), css-fonts (159), and `color`'s computed-value canonicalization
+(unblocks `alpha-color-computed.html` and `color-computed.html` together).
+Legacy comma-form `rgb()`/`hsla()` strictness and `sibling-index()`/
+`sibling-count()` remain smaller, later items. Also still open from CSS-25:
+`calc()` infinity/NaN, relative-color channel keywords inside nested
+`calc()`/`clamp()`, `container` shorthand serialization, `random-item()`,
+and `mediaqueries`' `matchMedia().media` canonical serialization.
