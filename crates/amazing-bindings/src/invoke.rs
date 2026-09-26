@@ -199,6 +199,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::abort_bindings::handles(operation) {
         return crate::abort_bindings::invoke(host, operation, receiver, args);
     }
+    if crate::observable_bindings::handles(operation) {
+        return crate::observable_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::legacy_document_bindings::handles(operation) {
         return crate::legacy_document_bindings::invoke(host, operation, receiver, args);
     }

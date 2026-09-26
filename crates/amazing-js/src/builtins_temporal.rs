@@ -788,6 +788,28 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
     Ok(values)
 }
 
+// ToRelativeTemporalObject (used only by Duration.prototype.{round,total,compare}'s
+// relativeTo handling) additionally requires a string relativeTo carrying both a
+// bracketed time zone annotation and an explicit numeric UTC offset to be
+// internally consistent, even though the plain date/time fields end up all that
+// gets kept. General Temporal string parsing (Plain*.from, .compare, etc.) must
+// NOT run this check: a mismatched offset there is simply ignored per spec, and
+// applying it unconditionally in std_temporal_parse regressed a wide swath of
+// otherwise-valid Plain-type parsing (e.g. PlainDate.from with a UTC-offset or
+// zone-annotation suffix).
+fn std_temporal_validate_relative_to_offset(text: &str) -> Result<(), Throw> {
+    let original = text;
+    let (text, _calendar, zone) = std_temporal_parse_annotations(text)?;
+    if zone.is_none() || text.ends_with('Z') || text.ends_with('z') { return Ok(()); }
+    let has_offset = text.find('T').or_else(|| text.find('t')).or_else(|| text.find(' '))
+        .is_some_and(|time_start| text[time_start + 1..].char_indices()
+            .any(|(index, c)| index > 0 && (c == '+' || c == '-')));
+    if has_offset {
+        std_epoch_parse(original, StdEpochKind::ZonedDateTime, "reject", "compatible")?;
+    }
+    Ok(())
+}
+
 fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: JsValue) -> Result<[i64; 10], Throw> {
     if let Ok(data) = std_temporal_record(&value, Some(kind)) { return Ok(data.fields); }
     if let Ok(data) = std_temporal_record(&value, None) {

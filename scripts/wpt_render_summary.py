@@ -33,11 +33,22 @@ TEXT = {
     "css-highlight-api", "css-writing-modes", "css-speech", "css-size-adjust", "WOFF2",
 }
 
+# SHELL-L8: animation/transition/transform timing and pixel-parity-under-motion
+# categories move here from REPLACED_CONTENT -- they exercise the compositor's
+# animation pipeline (ADR 0006), not a replaced-element's own paint. Static
+# transform *rendering* without motion (e.g. a plain matrix() reftest) still
+# looks like a REPLACED_CONTENT/paint concern in practice, but WPT doesn't
+# split css-transforms that way, so the whole category goes to compositor.
+COMPOSITOR = {
+    "css-animations", "css-transitions", "css-transforms", "compositing",
+    "css-view-transitions", "css-will-change", "css-easing",
+}
+
 REPLACED_CONTENT = {
     "css-backgrounds", "css-borders", "css-masking", "css-shadow", "filter-effects",
     "css-images", "css-image-animation", "css-color", "css-color-adjust", "css-color-hdr",
-    "css-motion-path", "css-animations", "css-transitions", "css-transforms", "compositing",
-    "css-paint-api", "fill-stroke", "css-shapes",
+    "css-motion-path", "css-paint-api", "fill-stroke", "css-shapes",
+    "css-forced-color-adjust",
 }
 
 LAYOUT = {
@@ -47,12 +58,12 @@ LAYOUT = {
     "css-overflow", "css-overscroll-behavior", "css-page", "css-rhythm",
     "css-round-display", "css-scroll-anchoring", "css-scrollbars", "css-scroll-snap",
     "css-sizing", "css-tables", "css-viewport", "css-device-adapt", "css-navigation",
-    "css-layout-api", "printing",
+    "css-layout-api", "printing", "css-zoom", "geometry",
 }
 
 # Everything else (parsing/cascade/values/JS-API categories with no strong
-# layout/paint/text signal, plus svg/html entries) defaults to `css`.
-CSS_DEFAULT_NOTE = "default: cascade/values/selectors or a JS-only API, no strong layout/paint/text signal"
+# layout/paint/text/compositor signal, plus svg/html entries) defaults to `css`.
+CSS_DEFAULT_NOTE = "default: cascade/values/selectors or a JS-only API, no strong layout/paint/text/compositor signal"
 
 
 def owning_lane(slug: str) -> str:
@@ -65,6 +76,8 @@ def owning_lane(slug: str) -> str:
         return "layout-flexgrid"
     if category in TEXT:
         return "text"
+    if category in COMPOSITOR:
+        return "compositor"
     if category in REPLACED_CONTENT:
         return "replaced-content"
     if category in LAYOUT:
@@ -83,12 +96,21 @@ def main() -> int:
     totals = {"pass": 0, "mismatch": 0, "error": 0, "timeout": 0, "unsupported": 0, "crash": 0}
     missing = []
     for slug_dir in sorted(reports_dir.iterdir()):
+        # SHELL-L7: a category baselined with --compact only has compact.json
+        # (no "inventory" key -- it drops everything but schema/counts/tests
+        # to keep committed evidence small); fall back to it, and derive
+        # "eligible" from the counts sum instead of the full report's
+        # inventory field.
         report_path = slug_dir / "report.json"
+        is_compact = False
+        if not report_path.is_file():
+            report_path = slug_dir / "compact.json"
+            is_compact = True
         if not report_path.is_file():
             continue
         report = json.loads(report_path.read_text())
         counts = report["counts"]
-        eligible = report["inventory"]["eligible_static_self_contained"]
+        eligible = report["inventory"]["eligible_static_self_contained"] if not is_compact else sum(counts.values())
         if eligible == 0:
             continue  # nothing to triage or commit for this category
         for key in totals:
@@ -105,7 +127,7 @@ def main() -> int:
         )
         target = evidence_dir / slug_dir.name
         target.mkdir(parents=True, exist_ok=True)
-        shutil.copy(report_path, target / "report.json")
+        shutil.copy(report_path, target / report_path.name)
         clusters_path = slug_dir / "clusters.json"
         if clusters_path.is_file():
             shutil.copy(clusters_path, target / "clusters.json")

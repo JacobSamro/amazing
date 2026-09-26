@@ -567,7 +567,16 @@ pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
     intrinsic_with_text(b, fonts, None)
 }
 
-fn intrinsic_with_text(
+/// Like [`intrinsic`], but threads real shaped text through when available.
+/// `intrinsic`'s hardcoded `text: None` measures every cell with fallback
+/// glyph-width heuristics; that estimate can diverge sharply from the same
+/// table's own live [`constraints`] call inside [`layout`] (which always
+/// receives real `text`), so a shrink-to-fit box sized from `intrinsic`
+/// alone can resolve narrower than the table actually needs once real
+/// shaping runs, squeezing columns below their true max-content width
+/// (LAYOUT-24). Callers that already have `text` in scope — e.g. an abspos
+/// table wrapper's shrink-to-fit computation — should call this instead.
+pub(crate) fn intrinsic_with_text(
     b: &LayoutBox,
     fonts: &FontSource,
     text: Option<&dyn amazing_text::TextSystem>,

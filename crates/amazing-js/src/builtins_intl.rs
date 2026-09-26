@@ -354,6 +354,21 @@ fn intl_canonical_locale_list(i: &mut Interpreter, value: &JsValue) -> Result<Ve
 /// intl402/fallback-locales-are-supported.js and
 /// intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
 fn intl_lookup_one(tag: &str) -> Option<&'static str> {
+    // A CLDR likely-subtags script hint (e.g. "zh-TW" -> "zh-Hant-TW") was
+    // tried here to disambiguate Chinese script by region, since this engine
+    // now carries both "zh" (Hans) and "zh-Hant" as literal rows and plain
+    // truncation alone resolves "zh-TW"/"zh-HK"/"zh-US" down to bare "zh".
+    // Reverted: this engine does not distinguish the "lookup" and "best fit"
+    // matchers (both go through this same function), and the BCP-47 Lookup
+    // algorithm is pure subtag truncation with no script inference --
+    // redirecting "zh-TW" to "zh-Hant" (never a truncation of "zh-TW") broke
+    // the invariant intl402/supportedLocalesOf-consistent-with-resolvedOptions.js
+    // checks: under "lookup", resolvedOptions().locale must always be a
+    // string prefix of the request. Fixing this for real needs the matcher
+    // option to actually take effect (currently accepted but unused across
+    // every Intl constructor), so "best fit" alone could add the script
+    // hint -- filed in questions.md rather than done here, given the risk of
+    // widening an already-ignored option's behavior across every constructor.
     let mut candidate = tag;
     loop {
         if let Some(data) = INTL_NUMBER_DATA.iter().find(|data| data.locale.eq_ignore_ascii_case(candidate)) {
@@ -382,10 +397,22 @@ fn intl_lookup(requested: &[String]) -> String {
 /// locale (en-US) when no requested tag matches the data locale.
 fn intl_resolved_locale(requested: &[String], data_locale: &str) -> String {
     let data_language = data_locale.split('-').next().unwrap_or(data_locale);
+    // Only echo the request's own region/script verbatim when its bare
+    // language itself has a literal data row (e.g. "en" -> keep "en-GB").
+    // When the data locale is reachable only through intl_lookup_one's
+    // relaxed same-language-prefix fallback -- a bare language with no row
+    // of its own, only a more specific one (e.g. "zh" has no row, only
+    // "zh-Hans") -- echoing the bare request would make resolvedOptions()
+    // report it as fully "supported" while supportedLocalesOf (which never
+    // echoes, and matches by strict truncation only) disagrees. Returning
+    // the real data locale instead keeps both consistent. See
+    // intl402/supportedLocalesOf-consistent-with-resolvedOptions.js.
+    let data_language_has_own_row = INTL_NUMBER_DATA.iter()
+        .any(|data| data.locale.eq_ignore_ascii_case(data_language));
     for tag in requested {
         let base = tag.split("-u-").next().unwrap_or(tag);
         if base.split('-').next() == Some(data_language) {
-            return base.to_string();
+            return if data_language_has_own_row { base.to_string() } else { data_locale.to_string() };
         }
     }
     "en-US".to_string()

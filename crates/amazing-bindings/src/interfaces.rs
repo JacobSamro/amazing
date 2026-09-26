@@ -79,6 +79,33 @@ const EVENT_TARGET: &[Member] = &[
     method("addEventListener", O::AddEventListener, 2),
     method("removeEventListener", O::RemoveEventListener, 2),
     method("dispatchEvent", O::DispatchEvent, 1),
+    method("when", O::EventTargetWhen, 1),
+];
+const OBSERVABLE: &[Member] = &[
+    method("subscribe", O::ObservableSubscribe, 0),
+    method("map", O::ObservableMap, 1),
+    method("filter", O::ObservableFilter, 1),
+    method("take", O::ObservableTake, 1),
+    method("drop", O::ObservableDrop, 1),
+    method("flatMap", O::ObservableFlatMap, 1),
+    method("switchMap", O::ObservableSwitchMap, 1),
+    method("takeUntil", O::ObservableTakeUntil, 1),
+    method("forEach", O::ObservableForEach, 1),
+    method("toArray", O::ObservableToArray, 0),
+    method("first", O::ObservableFirst, 0),
+    method("last", O::ObservableLast, 0),
+    method("find", O::ObservableFind, 1),
+    method("some", O::ObservableSome, 1),
+    method("every", O::ObservableEvery, 1),
+    method("reduce", O::ObservableReduce, 1),
+];
+const SUBSCRIBER: &[Member] = &[
+    method("next", O::SubscriberNext, 0),
+    method("error", O::SubscriberError, 1),
+    method("complete", O::SubscriberComplete, 0),
+    method("addTeardown", O::SubscriberAddTeardown, 1),
+    getter("active", O::SubscriberActive),
+    getter("signal", O::SubscriberSignal),
 ];
 const ABORT_CONTROLLER: &[Member] = &[
     getter("signal", O::AbortControllerSignal),
@@ -1076,6 +1103,10 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::AbortControllerConstructor), members: ABORT_CONTROLLER },
     D { interface: I::AbortSignal, name: "AbortSignal", parent: Some(I::EventTarget),
         constructor: None, members: ABORT_SIGNAL },
+    D { interface: I::Observable, name: "Observable", parent: None,
+        constructor: Some(O::ObservableConstructor), members: OBSERVABLE },
+    D { interface: I::Subscriber, name: "Subscriber", parent: None,
+        constructor: None, members: SUBSCRIBER },
     D {
         interface: I::Node,
         name: "Node",
@@ -1532,6 +1563,7 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
     host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;
+    host.install_static_method(I::Observable, "from", O::ObservableFrom, 1)?;
     host.install_static_method(I::URL, "canParse", O::URLCanParse, 1)?;
     host.install_static_method(I::URL, "parse", O::URLParse, 1)?;
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {

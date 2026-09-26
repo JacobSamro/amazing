@@ -561,11 +561,35 @@ impl TextProvider {
         self.matching_font_with_space_policy(style, text, false)
     }
 
+    /// A trailing U+FE0E/U+FE0F variation selector forces a specific
+    /// presentation regardless of the declared font's own default coverage
+    /// (real browsers still switch to a colour-capable face even when the
+    /// declared family technically maps the base code point), so this tries
+    /// a presentation-constrained search first and only relaxes it -- same
+    /// result as before this existed -- when no installed face satisfies the
+    /// constraint at all, rather than ever rendering nothing.
     fn matching_font_with_space_policy(
         &self,
         style: &TextStyle,
         text: Option<&str>,
         require_space: bool,
+    ) -> Option<usize> {
+        let presentation = text.and_then(emoji_presentation_intent);
+        if presentation.is_some()
+            && let Some(index) =
+                self.matching_font_impl(style, text, require_space, presentation)
+        {
+            return Some(index);
+        }
+        self.matching_font_impl(style, text, require_space, None)
+    }
+
+    fn matching_font_impl(
+        &self,
+        style: &TextStyle,
+        text: Option<&str>,
+        require_space: bool,
+        presentation: Option<EmojiPresentation>,
     ) -> Option<usize> {
         let private_use = text.is_some_and(|value| value.chars().any(is_private_use));
         for family in &style.families {
@@ -599,6 +623,7 @@ impl TextProvider {
             for index in candidates {
                 if text.is_none_or(|value| font_covers(&self.fonts[index], value))
                     && (!require_space || font_covers_space(&self.fonts[index]))
+                    && font_matches_presentation(&self.fonts[index], presentation)
                 {
                     return Some(index);
                 }
@@ -607,24 +632,32 @@ impl TextProvider {
         if private_use {
             return None;
         }
-        // The driver registers its platform faces under these generic aliases.
-        // Once the author list is exhausted, use an installed face that covers
-        // the cluster before the deterministic missing-glyph renderer.
-        ["serif", "sans-serif", "system-ui", "monospace"]
-            .iter()
-            .find_map(|family| {
-                self.fonts
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, font)| {
-                        font.family == *family
-                            && font.author_face.is_none()
-                            && text.is_none_or(|value| font_covers(font, value))
-                            && (!require_space || font_covers_space(font))
-                    })
-                    .min_by_key(|(_, font)| font_matching::rank(style, font))
-                    .map(|(index, _)| index)
-            })
+        // The driver registers its platform faces under these generic
+        // aliases. Once the author list is exhausted, use an installed face
+        // that covers the cluster before the deterministic missing-glyph
+        // renderer. A forced emoji presentation (U+FE0F) searches the
+        // dedicated "emoji" alias first, ahead of the plain-text generics, so
+        // it prefers a colour-capable face over a monochrome one when both
+        // are installed.
+        let mut generics: Vec<&str> = Vec::new();
+        if presentation == Some(EmojiPresentation::Emoji) {
+            generics.push("emoji");
+        }
+        generics.extend(["serif", "sans-serif", "system-ui", "monospace"]);
+        generics.iter().find_map(|family| {
+            self.fonts
+                .iter()
+                .enumerate()
+                .filter(|(_, font)| {
+                    font.family == *family
+                        && font.author_face.is_none()
+                        && text.is_none_or(|value| font_covers(font, value))
+                        && (!require_space || font_covers_space(font))
+                        && font_matches_presentation(font, presentation)
+                })
+                .min_by_key(|(_, font)| font_matching::rank(style, font))
+                .map(|(index, _)| index)
+        })
     }
 
     fn itemize_font_spans(
@@ -1292,6 +1325,47 @@ fn is_private_use(ch: char) -> bool {
     matches!(ch as u32, 0xE000..=0xF8FF | 0xF0000..=0xFFFFD | 0x100000..=0x10FFFD)
 }
 
+/// Unicode emoji variation selectors (UTR #51 / CSS Fonts'
+/// font-variant-emoji) force a specific presentation for the preceding
+/// character regardless of the font's own default: U+FE0E requests the
+/// plain "text" glyph, U+FE0F requests the colourful "emoji" glyph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmojiPresentation {
+    Text,
+    Emoji,
+}
+
+fn emoji_presentation_intent(text: &str) -> Option<EmojiPresentation> {
+    match text.chars().next_back()? {
+        '\u{FE0E}' => Some(EmojiPresentation::Text),
+        '\u{FE0F}' => Some(EmojiPresentation::Emoji),
+        _ => None,
+    }
+}
+
+/// Whether `font` is an acceptable choice under a forced presentation: a
+/// forced emoji presentation requires a colour-capable face, a forced text
+/// presentation requires a monochrome-only one. No constraint when the text
+/// carries no presentation selector.
+fn font_matches_presentation(font: &FontRecord, presentation: Option<EmojiPresentation>) -> bool {
+    match presentation {
+        None => true,
+        Some(EmojiPresentation::Emoji) => has_color_glyph_tables(&font.sfnt),
+        Some(EmojiPresentation::Text) => !has_color_glyph_tables(&font.sfnt),
+    }
+}
+
+/// Whether this font provides colour glyphs via any of OpenType's colour
+/// tables (COLR, CBDT, sbix, or SVG), rather than only monochrome outlines.
+fn has_color_glyph_tables(sfnt: &[u8]) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        HarfFontRef::from_index(sfnt, 0).is_ok_and(|face| {
+            face.colr().is_ok() || face.cbdt().is_ok() || face.sbix().is_ok() || face.svg().is_ok()
+        })
+    }))
+    .unwrap_or(false)
+}
+
 fn font_covers(font: &FontRecord, text: &str) -> bool {
     if let Some(face) = &font.author_face {
         if !face.unicode_ranges.is_empty()
@@ -1438,7 +1512,18 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
         options.word_option = Some(match word_break {
             amazing_text::WordBreak::Normal => LineBreakWordOption::Normal,
             amazing_text::WordBreak::BreakAll => LineBreakWordOption::BreakAll,
-            amazing_text::WordBreak::KeepAll => LineBreakWordOption::KeepAll,
+            // `manual` behaves like `keep-all` everywhere ICU's own word
+            // option applies (CJK ideograph adjacency); the two diverge for
+            // complex-context/dictionary-segmented scripts (Thai, Lao,
+            // Khmer, ...), where `KeepAll` does not suppress ICU's
+            // dictionary-assisted word-internal breaks (verified: it still
+            // produced them for Thai). `manual`'s extra reach for those
+            // scripts is filtered separately below, since the ICU line
+            // segmenter has no option to disable dictionary segmentation
+            // itself.
+            amazing_text::WordBreak::KeepAll | amazing_text::WordBreak::Manual => {
+                LineBreakWordOption::KeepAll
+            }
         });
         opportunities.extend(
             LineSegmenter::new_auto(options)
@@ -1450,6 +1535,19 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
                         || style_at_break(text, spans, *offset).is_some_and(|style| {
                             style.line_break == line_break && style.word_break == word_break
                         })
+                })
+                .filter(|offset| {
+                    // CSS Text 4 `word-break: manual`: "words are not broken
+                    // by the UA for line-wrapping purposes" beyond breaks
+                    // defined by an explicit separator (whitespace, soft
+                    // hyphen -- handled by `break_kind` below) or a
+                    // mandatory break. Drop every other opportunity ICU's
+                    // dictionary segmentation contributed for complex-
+                    // context scripts.
+                    word_break != amazing_text::WordBreak::Manual
+                        || *offset == text.len()
+                        || mandatory_break_before(text, *offset)
+                        || is_whitespace_adjacent(text, *offset)
                 })
                 .filter_map(|offset| {
                     break_kind(text, spans, offset).map(|kind| BreakOpportunity { offset, kind })
@@ -1559,6 +1657,17 @@ fn mandatory_break_before(text: &str, offset: usize) -> bool {
             '\n' | '\r' | '\u{000b}' | '\u{000c}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
         )
     })
+}
+
+/// True when the character immediately before or after `offset` is
+/// whitespace. Used by `word-break: manual` to keep only the break
+/// opportunities an explicit separator justifies.
+fn is_whitespace_adjacent(text: &str, offset: usize) -> bool {
+    text[..offset]
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
+        || text[offset..].chars().next().is_some_and(char::is_whitespace)
 }
 
 fn visual_clusters(
@@ -2332,6 +2441,23 @@ mod tests {
     }
 
     pub(super) fn synthetic_font_with_metrics(mapped: char, feature: Option<[u8; 4]>, ascent: u16) -> Vec<u8> {
+        synthetic_font_with_metrics_and_color(mapped, feature, ascent, false)
+    }
+
+    /// Same as `synthetic_font_with_metrics`, plus a minimal (all-null,
+    /// zero-record) COLR table -- exercises `has_color_glyph_tables`'s real
+    /// table-directory parse against a well-formed font rather than a
+    /// hand-rolled byte scan.
+    fn synthetic_font_with_color_table(mapped: char) -> Vec<u8> {
+        synthetic_font_with_metrics_and_color(mapped, None, 800, true)
+    }
+
+    fn synthetic_font_with_metrics_and_color(
+        mapped: char,
+        feature: Option<[u8; 4]>,
+        ascent: u16,
+        color: bool,
+    ) -> Vec<u8> {
         let mut glyf = vec![0u8; 10];
         glyf[0..2].copy_from_slice(&be16(1));
         glyf[6..8].copy_from_slice(&be16(500));
@@ -2412,6 +2538,12 @@ mod tests {
                 .concat(),
             );
             tables.push((b"GSUB", gsub));
+        }
+        if color {
+            // COLR v0 header with zero base-glyph and layer records:
+            // version(0) + numBaseGlyphRecords(0) + baseGlyphRecordsOffset
+            // (null) + layerRecordsOffset(null) + numLayerRecords(0).
+            tables.push((b"COLR", vec![0u8; 14]));
         }
         assemble_sfnt(&tables)
     }
@@ -3038,6 +3170,76 @@ mod tests {
             .unwrap();
         assert_eq!((image.width, image.height), (5, 7));
         assert_eq!(image.content, amazing_text::GlyphContent::Mask);
+    }
+
+    #[test]
+    fn has_color_glyph_tables_detects_colr_and_not_plain_fonts() {
+        assert!(!has_color_glyph_tables(&synthetic_font('A')));
+        assert!(has_color_glyph_tables(&synthetic_font_with_color_table('A')));
+    }
+
+    #[test]
+    fn emoji_presentation_intent_reads_the_trailing_variation_selector() {
+        assert_eq!(
+            emoji_presentation_intent("\u{263A}\u{FE0E}"),
+            Some(EmojiPresentation::Text)
+        );
+        assert_eq!(
+            emoji_presentation_intent("\u{263A}\u{FE0F}"),
+            Some(EmojiPresentation::Emoji)
+        );
+        assert_eq!(emoji_presentation_intent("\u{263A}"), None);
+        assert_eq!(emoji_presentation_intent(""), None);
+    }
+
+    /// CSS Fonts' font-variant-emoji / UTR #51: a trailing U+FE0F forces
+    /// emoji presentation even when the declared family ("serif" here, as in
+    /// WPT's font-variant-emoji-1.html) already maps the bare code point --
+    /// real engines still switch to a colour-capable face. U+FE0E (or no
+    /// selector) keeps the declared face, since this font's own default
+    /// presentation for the character is already the plain glyph.
+    #[test]
+    fn emoji_variation_selectors_pick_presentation_appropriate_fonts() {
+        let mut provider = TextProvider::new();
+        let text_font = provider
+            .register_web_font(WebFont {
+                family: "serif".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('\u{263A}'),
+            })
+            .unwrap();
+        let emoji_font = provider
+            .register_web_font(WebFont {
+                family: "emoji".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_color_table('\u{263A}'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["serif".into()],
+            size: 10.0,
+            ..TextStyle::default()
+        };
+        let font_key = |index: Option<usize>| index.map(|index| provider.fonts[index].key);
+
+        assert_eq!(
+            font_key(provider.matching_font(&style, Some("\u{263A}"))),
+            Some(text_font)
+        );
+        assert_eq!(
+            font_key(provider.matching_font(&style, Some("\u{263A}\u{FE0E}"))),
+            Some(text_font)
+        );
+        assert_eq!(
+            font_key(provider.matching_font(&style, Some("\u{263A}\u{FE0F}"))),
+            Some(emoji_font)
+        );
     }
 
     #[test]
@@ -4419,6 +4621,65 @@ mod tests {
                     kind: BreakKind::Mandatory,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn word_break_manual_suppresses_dictionary_segmented_breaks_like_keep_all() {
+        // "กรุงเทพคือสวยงาม" (Bangkok is beautiful) has no spaces; ICU's
+        // default (Normal) word segmentation still finds dictionary-based
+        // word-internal break opportunities for Thai. CSS Text 4's
+        // `word-break: manual` generalizes `keep-all` to exactly this case
+        // and must suppress every one of them, leaving only the mandatory
+        // break at the end of the text.
+        let provider = TextProvider::new();
+        let text = "กรุงเทพคือสวยงาม";
+
+        let normal_spans = [TextSpan {
+            range: 0..text.len(),
+            source: 1,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let normal = provider
+            .shape(Paragraph {
+                text,
+                spans: &normal_spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert!(
+            normal.breaks.len() > 1,
+            "expected dictionary-segmented breaks under word-break: normal, got {:?}",
+            normal.breaks
+        );
+
+        let manual_spans = [TextSpan {
+            range: 0..text.len(),
+            source: 1,
+            style: TextStyle {
+                word_break: WordBreak::Manual,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let manual = provider
+            .shape(Paragraph {
+                text,
+                spans: &manual_spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+        assert_eq!(
+            manual.breaks,
+            vec![BreakOpportunity {
+                offset: text.len(),
+                kind: BreakKind::Mandatory,
+            }]
         );
     }
 

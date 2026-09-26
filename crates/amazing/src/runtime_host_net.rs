@@ -1167,12 +1167,21 @@ impl FetchHost for RuntimeBindingHost<'_> {
         self.js.binding_own_property_keys(value)
     }
     fn fetch_base(&self) -> Result<HttpUrl, Throw> {
-        let url = self
-            .state
-            .borrow()
-            .document_url
-            .clone()
-            .unwrap_or_else(|| "http://localhost/".into());
+        let url = self.state.borrow().document_url.clone().unwrap_or_default();
+        // IA-REAL-2 (app-chat.html): a document opened from a local file has a
+        // `document_url` of `file:...` or a bare filesystem path, neither of
+        // which `HttpUrl` (http(s)/data/about only) can represent. `HttpUrl`
+        // only backs the WHATWG "API base URL" here for origin/mixed-content
+        // purposes -- not actual navigation -- so fall back to the same
+        // placeholder already used when there is no document URL at all,
+        // rather than throwing. This mirrors `fetch_local_file`'s own
+        // file-document detection. A `http:` base correctly yields
+        // `client_restricts_mixed_content == false`: a local file is not an
+        // `https:` document, so it should not gate mixed-content ws:// opens.
+        if url.is_empty() || url.starts_with("file:") || std::path::Path::new(&url).is_file() {
+            return HttpUrl::parse("http://localhost/")
+                .map_err(|_| Throw::type_error("Invalid document URL"));
+        }
         HttpUrl::parse(&url).map_err(|_| Throw::type_error("Invalid document URL"))
     }
     fn fetch_local_file(&mut self, args: &[JsValue]) -> Result<Option<JsValue>, Throw> {
@@ -1852,6 +1861,58 @@ mod tests {
         assert_eq!(scheduler.run_script("received === 65000").unwrap(), JsValue::Bool(true));
     }
 
+    /// NET-40: same round trip, but pumped the way `wpt_harness.rs::execute_page`
+    /// does -- a virtual 60Hz frame clock (`pump_at(frame * 16667us, true)` in a
+    /// tight loop, no real sleep) instead of `pump_now` on a real wall clock.
+    /// Written to isolate whether the Send-65K-data.any.js /
+    /// Send-binary-65K-arraybuffer.any.js corpus timeout (zero recorded
+    /// subtests) is caused by virtual-frame pumping racing testharness.js's
+    /// own internal timeout. It is not: this completes in 330 frames (~1.15s
+    /// wall clock), well inside budget, so the corpus gap is specific to the
+    /// installed wpt-harness/`wpt_server.rs` path, not this pumping pattern in
+    /// general -- kept as permanent coverage for the virtual-frame pump case.
+    #[test]
+    fn websocket_large_message_round_trip_under_virtual_frame_pump() {
+        let port = spawn_ws_echo_server();
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("https://example.test/");
+        scheduler
+            .run_script(&format!(
+                "var opened=false, received=null, closed=false; \
+                 var ws = new WebSocket('ws://127.0.0.1:{port}/'); \
+                 ws.onopen = function() {{ \
+                     opened = true; \
+                     var data = ''; for (var i = 0; i < 65000; i++) {{ data += 'c'; }} \
+                     ws.send(data); \
+                 }}; \
+                 ws.onmessage = function(e) {{ received = e.data.length; ws.close(1000, 'bye'); }}; \
+                 ws.onclose = function(e) {{ closed = true; }};"
+            ))
+            .unwrap();
+        let mut closed = false;
+        let mut frame: u64 = 0;
+        for _ in 0..2000 {
+            if scheduler.run_script("closed").unwrap() == JsValue::Bool(true) {
+                closed = true;
+                break;
+            }
+            scheduler
+                .pump_at(Duration::from_micros(frame.saturating_mul(16_667)), true)
+                .unwrap();
+            frame = frame.saturating_add(1);
+        }
+        eprintln!(
+            "frame={frame} opened={:?} received={:?} closed={closed}",
+            scheduler.run_script("opened"),
+            scheduler.run_script("received"),
+        );
+        assert!(closed, "large message round-trip did not complete under virtual-frame pumping");
+    }
+
     /// NET-39 (WPT `websockets/basic-auth.any.js`): a `ws://user:pass@host/`
     /// URL authenticates via an `Authorization: Basic` header derived from
     /// the userinfo, the same as `fetch()`/XHR, rather than being rejected.
@@ -1925,6 +1986,28 @@ mod tests {
             .run_script("var w2 = new WebSocket('http://example.test/socket'); w2.url === 'ws://example.test/socket'")
             .unwrap();
         assert_eq!(rewritten, JsValue::Bool(true), "http scheme should rewrite to ws");
+    }
+
+    /// IA-REAL-2 (NET-40 fold-in): `app-chat.html`, opened as a local file,
+    /// has a `document_url` of `file:///...`, which `fetch_base()` used to
+    /// reject (`HttpUrl` only understands http(s)/data/about), throwing out
+    /// of the WebSocket constructor before it ever reached the network. A
+    /// local-file document must be able to open an absolute `ws://` URL.
+    #[test]
+    fn websocket_constructs_from_a_local_file_document() {
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse("<body></body>"),
+            native_forwarded: false,
+        }));
+        let mut scheduler = DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+        scheduler.set_location_url("file:///Users/example/app-chat.html");
+        let result = scheduler
+            .run_script(
+                "var w = new WebSocket('ws://example.test/socket'); \
+                 w.readyState === 0 && w.url === 'ws://example.test/socket'",
+            )
+            .unwrap_or_else(|error| panic!("WebSocket from a file: document: {}", error.describe()));
+        assert_eq!(result, JsValue::Bool(true));
     }
 
     #[test]

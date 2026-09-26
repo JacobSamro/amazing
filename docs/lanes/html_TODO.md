@@ -1210,3 +1210,112 @@ tests, one `about:blank` origin test); full workspace `cargo nextest run
 --workspace --locked --no-fail-fast` **3,135/3,135 passed, 14 skipped**, run
 twice with a stable count both times; workspace `cargo test --workspace
 --locked --doc` green, 0 failed.
+
+## HTML-30 — venus/Boat-outage tooling fixes; MutationObserver, a11y-filed
+parser bug and forms-cluster items all investigated and found out of scope
+
+Brief's three items, based on `ff56cfc9`, during the fleet's Boat daily-start
+quota outage (venus-001/venus-003 used in place of Boat throughout, via
+`scripts/linux-run.sh html --host venus-001`):
+
+- **`dom/nodes/MutationObserver-document.html` (3 fails): investigated, not
+  fixed, scoped as a future ticket.** Not a "tree builder bypasses the
+  record-queueing DOM entry point" bug -- `Dom::attach_before`/`attach_last`
+  (`amazing-dom/src/lib.rs`) already call `queue_tree_record` on every
+  parser insertion. The real cause is architectural: `amazing_html::parse()`
+  parses a document's entire source into a full DOM tree in one upfront call
+  before any of its scripts run (a separate loop, in `cmd/js.rs`/
+  `cmd/wpt_harness.rs`). This test's premise is a real streaming parser: a
+  script creates a `MutationObserver` on `document`, then the parser
+  *resumes* and inserts a later `<script>` (and its text child) that must
+  still be ahead of the parser at observer-creation time. Here, every node
+  -- including everything after the observing script -- already exists in
+  the tree (mutation records queued and gone) long before that script runs.
+  Fixing this needs genuine incremental/streaming HTML parsing (pausing at
+  each classic `<script>`, running it synchronously, resuming on the rest of
+  the source) threaded through every script-running call site, not a
+  cluster-style bulk fix. Full repro and reasoning in `.agents/html/
+  questions.md` (2026-09-27 entry); routing there rather than attempting a
+  rearchitecture inside this ticket.
+- **The a11y-filed parser bug (A11Y-10, "element dropped after unclosed
+  `<p>...<p>`"): investigated, corrected, routed to a11y, not a
+  `amazing-html` bug.** Reproduced the exact WPT file
+  (`html-aam/roles-minimum.tentative.html`) through `amazing parse`: the DOM
+  tree is fully correct -- `el-div` (the first plain `<div>` right after the
+  auto-closed `<p>`) is body's child, a sibling of both `<p>` elements, with
+  its text intact; every later attributed `<div>` is also correctly placed.
+  `amazing a11y-tree` on the same file shows the accessibility tree skips
+  only `el-div` itself while every attributed sibling div appears --
+  consistent with a "generic element with no distinguishing content"
+  flattening rule in `amazing-a11y`'s role computation
+  (`crates/amazing-a11y/src/tree.rs`) applying where this test expects it
+  not to. Not fixed here (out of this lane's ownership); corrected and
+  routed to a11y in `.agents/html/questions.md`.
+- **Next-largest cluster in `html/semantics/forms`: measured fresh, found
+  out of scope, routed by cluster rather than fixed.** Getting a fresh
+  measurement at all first required fixing two venus-compatibility gaps
+  exposed by the Boat outage, both fleet-wide-valuable and committed with
+  this ticket:
+  - `crates/amazing/src/cmd/wpt_harness.rs`: `supervise()`'s checkout-pin
+    check and `source()`'s per-resource byte-diff check both shell out to
+    `git`, which fails unconditionally on venus (`scripts/ensure-wpt.sh`'s
+    checkout there is a git-less GitHub tarball extraction, marked instead
+    with an empty `.pinned-<rev7>` sentinel file). Added
+    `checkout_is_marker_pinned(root)`, accepted as an alternative proof of
+    pinning in both checks -- no behavior change on a real git checkout
+    (Boat).
+  - `crates/amazing/src/cmd/measure-wpt-dom.py` had the same gap at all 6 of
+    its `git(...)` call sites (`inventory()`'s `ls-tree` file enumeration,
+    two `git show` byte checks, `rev-parse HEAD`, and the harness-content
+    `git show`). Added a Python port of the same marker check; when
+    marker-pinned, `list_tree()` walks the suite's on-disk tree instead of
+    `git ls-tree` (the tarball's on-disk state at that path already *is*
+    the pinned tree) and every `git show` byte-diff check is skipped
+    outright (no git object database exists there to diff against, and the
+    tarball content already is the pinned content).
+  - With both fixed, ran the 468-file `html/semantics/forms` selection
+    fresh at this ticket's head (superseding stale HTML-26-era data, which
+    spot-checking showed no longer matched current behavior): file status
+    pass=135/fail=222/timeout=38/error=19/unsupported=54; subtests
+    pass=3,213/fail=535. Raw output: `.agents/html/
+    html30-forms-after.jsonl`.
+  - Clustered the 535 subtest failures by normalized message. Every cluster
+    large enough to matter turned out to be outside `amazing-html`'s own
+    ownership: the three largest (177 subtests / ~53 files) are all
+    `test_driver.send_keys()`/`.click()`/`.Actions()` calls hitting WPT's
+    upstream `testdriver.js` fallback ("... is not implemented by
+    testdriver-vendor.js") -- nothing in `amazing` implements
+    `window.test_driver_internal` at all, a real but sizeable
+    WebDriver-style input-simulation gap with no current lane owner, not a
+    per-corpus bulk fix; `input.files` returning `undefined` instead of
+    `null` (21 subtests, 1 file) and label click-delegation edge cases (17
+    subtests, 1 file) are dom-bindings' `amazing-bindings`/`amazing-dom`;
+    `getComputedStyle is not defined` (17 subtests / ~10 files, all
+    `customizable-select`/textarea) is css/layout/dom-bindings territory;
+    `requestSubmit()`'s reentrancy guard and related bugs are dom-bindings'
+    `amazing-bindings/src/interfaces.rs`; the remaining "SyntaxError" bucket
+    (14/9) is a grab-bag, mostly `<input pattern>` RegExp Unicode-property-
+    escape / `v`-flag syntax (js-lang/regex ownership). No
+    `amazing-html`/`amazing-encoding`-owned cluster was found. Full
+    per-cluster breakdown and routing in `.agents/html/questions.md`
+    (2026-09-27 entries).
+- **Cross-lane merge-integration fix** (one line, needed to build, outside
+  this lane's normal ownership): `runtime_host_devtools.rs::
+  collect_module_scripts` constructed `PageScript` directly and hadn't
+  picked up HTML-29's new `node: NodeIdx` field, so `dev` at `ff56cfc9`
+  failed to build `amazing` at all (`E0063`). Fixed by passing the
+  function's own `node` parameter (already in scope).
+
+All three brief items were investigated in full rather than force-fitted
+into this crate's ownership; the two committable, fleet-wide-valuable
+deliverables are the venus-compatibility fixes (unblocking `wpt-harness` and
+`measure-wpt-dom.py`-based sweeps on venus during any future Boat outage)
+and a fresh, accurate `html/semantics/forms` baseline replacing stale
+HTML-26-era numbers.
+
+Linux gate on this head (`ff56cfc9` + this ticket's diff): `amazing` crate
+nextest **312/312 passed, 6 skipped**; full workspace `cargo nextest run
+--workspace --locked --no-fail-fast` **3,277/3,277 passed, 15 skipped**, run
+twice with a stable count both times; workspace `cargo test --workspace
+--locked --doc` green, 0 failed across every doctested crate
+(`amazing-html`, `amazing-js`, and others).

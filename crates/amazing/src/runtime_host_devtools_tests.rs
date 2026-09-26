@@ -1186,19 +1186,41 @@ fn end_to_end_debugger_domain_scripts_breakpoints_and_pause() {
         "resume should have cleared the pending pause: {more:?}"
     );
 
-    // stepInto/evaluateOnCallFrame genuinely have no suspended state to
-    // act on with this driver (nothing is ever truly blocked — see the
-    // module's "Known limitations") and stay `Unsupported`.
-    let step = client.raw("Debugger.stepInto", Json::Object(Vec::new()));
-    assert!(step.get("error").is_some(), "{step}");
-    let eval_on_frame = client.raw(
+    // stepInto (CDP-23): real, in the same after-the-fact sense as
+    // Debugger.pause — arms `StepMode::Any`, so the very next statement
+    // that runs, at any depth, reports a pause.
+    client.result("Debugger.stepInto", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "9;");
+    let stepped: Vec<Json> = more
+        .iter()
+        .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+        .cloned()
+        .collect();
+    assert_eq!(stepped.len(), 1, "{more:?}");
+
+    // evaluateOnCallFrame (CDP-23): real evaluation, delegated to the
+    // page's global realm through the only call frame id this driver ever
+    // mints ("cf0"); an unknown id is a genuine NotFound.
+    let eval_on_frame = client.result(
         "Debugger.evaluateOnCallFrame",
         Json::Object(vec![
             ("callFrameId".into(), Json::String("cf0".into())),
+            ("expression".into(), Json::String("1 + 2".into())),
+        ]),
+    );
+    assert_eq!(
+        eval_on_frame.get("result").and_then(|result| result.get("value")).and_then(Json::as_f64),
+        Some(3.0),
+        "{eval_on_frame}"
+    );
+    let unknown_frame = client.raw(
+        "Debugger.evaluateOnCallFrame",
+        Json::Object(vec![
+            ("callFrameId".into(), Json::String("cf99".into())),
             ("expression".into(), Json::String("1".into())),
         ]),
     );
-    assert!(eval_on_frame.get("error").is_some(), "{eval_on_frame}");
+    assert!(unknown_frame.get("error").is_some(), "{unknown_frame}");
 
     // Page.captureScreenshot (CDP-17, exercised here as CDP-20's ticket
     // names it alongside the Debugger domain).
@@ -1421,6 +1443,366 @@ fn end_to_end_device_metrics_override_and_insert_text() {
         got_input.get("result").and_then(|result| result.get("value")).and_then(Json::as_bool),
         Some(true),
         "insertText should dispatch a real bubbling input event: {got_input}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-22: `Debugger.stepOver` and a real `scopeChain` on paused frames.
+/// At this test's own call depth (0, every statement here is top-level) a
+/// depth-based `stepOver` (CDP-23) and the CDP-22 one-shot-flag
+/// approximation it replaced are indistinguishable — both fire on the next
+/// top-level statement — so this test still stands unmodified; see
+/// `end_to_end_debugger_depth_based_stepping_and_conditional_breakpoints`
+/// below for the depth-sensitive cases CDP-23 actually changes. The paused
+/// event's `scopeChain` carries a real, live `"global"` scope object —
+/// `Runtime.getProperties` on it reflects genuine `globalThis` state set
+/// just before the pause, not a snapshot.
+#[test]
+fn end_to_end_debugger_step_over_and_scope_chain_reflect_live_globals() {
+    let host = spawn_test_host(
+        "http://example.test/step.html",
+        "<title>Step</title><body><script>var a = 1;</script></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    client.result("Debugger.enable", Json::Object(Vec::new()));
+    client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("globalThis.probe = 42;".into()))]),
+    );
+
+    // Same "nudge" pattern CDP-20's own Debugger test uses: every event here
+    // is queued synchronously during its triggering command but only
+    // flushed by the server's poll loop *after* that command's own reply.
+    let evaluate_and_collect = |client: &mut Client, expression: &str| -> Vec<Json> {
+        let (_, mut more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String(expression.into()))]),
+        );
+        let (_, nudge) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("0;".into()))]),
+        );
+        more.extend(nudge);
+        more
+    };
+
+    client.result("Debugger.stepOver", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "1;");
+    let paused: Vec<Json> = more
+        .iter()
+        .filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused"))
+        .cloned()
+        .collect();
+    assert_eq!(paused.len(), 1, "stepOver should force a pause on the next statement: {more:?}");
+    let params = paused[0].get("params").expect("params");
+    let frames = params.get("callFrames").and_then(Json::as_array).expect("callFrames");
+    assert_eq!(frames.len(), 1, "{frames:?}");
+    let scope_chain = frames[0].get("scopeChain").and_then(Json::as_array).expect("scopeChain");
+    assert_eq!(scope_chain.len(), 1, "{scope_chain:?}");
+    assert_eq!(scope_chain[0].get("type").and_then(Json::as_str), Some("global"), "{scope_chain:?}");
+    let object_id = scope_chain[0]
+        .get("object")
+        .and_then(|object| object.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("the global scope's object should carry a real objectId")
+        .to_owned();
+
+    let properties = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(object_id)),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    let descriptors = properties.get("result").and_then(Json::as_array).expect("result array");
+    let probe = descriptors
+        .iter()
+        .find(|descriptor| descriptor.get("name").and_then(Json::as_str) == Some("probe"))
+        .unwrap_or_else(|| panic!("no probe property on the global scope object: {descriptors:?}"));
+    assert_eq!(
+        probe.get("value").and_then(|value| value.get("value")).and_then(Json::as_f64),
+        Some(42.0),
+        "the scope chain's global object should be live, not a snapshot: {probe}"
+    );
+
+    // Debugger.resume clears a still-pending step just like it clears a
+    // pending pause (they arm the same flag).
+    client.result("Debugger.stepOver", Json::Object(Vec::new()));
+    client.result("Debugger.resume", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "2;");
+    assert!(
+        !more.iter().any(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")),
+        "resume should have cleared the pending step: {more:?}"
+    );
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-23: real depth-based `stepOut` (distinct from the trivial
+/// "next-statement" behavior `stepInto`/`Debugger.pause` share), plus
+/// `setBreakpointByUrl`'s `condition`.
+///
+/// `stepOver`/`stepOut`'s reference depth is `last_paused_depth` — the depth
+/// recorded at the most recent pause (see `PageOwner::step_reference_depth`'s
+/// doc comment) — and every `Runtime.evaluate` call is its own fresh
+/// top-level script, so its *first* statement is always observed at depth 0
+/// (there is no way for a client of this driver to arm a step and have the
+/// very next statement it sees already be mid-call; entering a call is what
+/// *increments* depth, and that only happens after the hook already fired
+/// for the statement making the call). That makes `Over`/`Out` behave
+/// identically to `Any` for a reference depth of 0 or more once execution is
+/// back at depth 0 or shallower — the meaningful, honestly-testable
+/// distinction this test proves instead is `StepMode::Out`'s depth-0
+/// reference case: stepping out of the top-level frame is not a thing that
+/// can ever happen (there is nothing shallower than depth 0), so it must
+/// never fire, unlike `stepInto`/`pause`'s `Any`, which always fires on the
+/// next statement regardless of depth.
+#[test]
+fn end_to_end_debugger_depth_based_step_out_and_conditional_breakpoints() {
+    // `level1`'s body statement is deliberately on its own line (line 3,
+    // 1-based; CDP `lineNumber: 2`), distinct from every later `Runtime.
+    // evaluate` call site: a call statement's own line is relative to
+    // *that* evaluate call's freshly parsed text (always line 1 there), so
+    // sharing a line number with the body would make a breakpoint on that
+    // line match both the call site and the body statement by (url, line)
+    // alone (a real, separately-documented driver limitation — see the
+    // module's "Known limitations" and CDP-20's own test) — this test wants
+    // exactly one match per call, to isolate the depth/condition behavior
+    // it is actually proving.
+    let host = spawn_test_host(
+        "http://example.test/step2.html",
+        "<title>Step2</title><body><script>\nfunction level1() {\n  var inner1 = 1;\n}\n</script></body>",
+    );
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+    client.result("Debugger.enable", Json::Object(Vec::new()));
+
+    let evaluate_and_collect = |client: &mut Client, expression: &str| -> Vec<Json> {
+        let (_, mut more) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String(expression.into()))]),
+        );
+        let (_, nudge) = client.result_and_events(
+            "Runtime.evaluate",
+            Json::Object(vec![("expression".into(), Json::String("0;".into()))]),
+        );
+        more.extend(nudge);
+        more
+    };
+    let paused_events = |events: &[Json]| -> Vec<Json> {
+        events.iter().filter(|event| event.get("method").and_then(Json::as_str) == Some("Debugger.paused")).cloned().collect()
+    };
+
+    // With no prior pause, the reference depth defaults to 0: `stepOut`
+    // arms `Out(0)`, which requires `depth < 0` — never true for a `u32` —
+    // so three ordinary top-level statements produce no pause at all. This
+    // is the behavior that actually distinguishes `stepOut` from
+    // `stepInto`/`pause`'s `Any`, which the next block proves fires
+    // unconditionally in the exact same setting.
+    client.result("Debugger.stepOut", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "1;\n2;\n3;");
+    assert!(paused_events(&more).is_empty(), "stepOut from the top-level frame should never fire: {more:?}");
+
+    client.result("Debugger.stepInto", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "4;\n5;");
+    assert_eq!(paused_events(&more).len(), 1, "stepInto should fire on the very next statement regardless of depth: {more:?}");
+
+    // Establish a real depth-1 reference: a breakpoint on `level1`'s own
+    // (only) statement, hit while actually running inside that call.
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("false".into())),
+        ]),
+    );
+    let false_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    assert!(paused_events(&more).is_empty(), "a false condition should suppress the breakpoint entirely: {more:?}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(false_cond_id))]));
+
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("1 === 1".into())),
+        ]),
+    );
+    let true_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    let hit = paused_events(&more);
+    assert_eq!(hit.len(), 1, "a true condition should let the breakpoint fire: {more:?}");
+    let hit_params = hit[0].get("params").expect("params");
+    assert_eq!(
+        hit_params.get("hitBreakpoints").and_then(Json::as_array).and_then(|hits| hits.first()).and_then(Json::as_str),
+        Some(true_cond_id.as_str()),
+        "{hit_params}"
+    );
+    assert_eq!(hit_params.get("reason").and_then(Json::as_str), Some("Breakpoint"), "{hit_params}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(true_cond_id))]));
+
+    // An erroring condition counts as false, same as a literal `false` —
+    // the breakpoint is suppressed, not treated as an unconditional hit and
+    // not surfaced as a driver error either.
+    let breakpoint = client.result(
+        "Debugger.setBreakpointByUrl",
+        Json::Object(vec![
+            ("url".into(), Json::String("http://example.test/step2.html".into())),
+            ("lineNumber".into(), Json::Number(2.0)),
+            ("condition".into(), Json::String("throw new Error('boom')".into())),
+        ]),
+    );
+    let error_cond_id = breakpoint.get("breakpointId").and_then(Json::as_str).expect("breakpointId").to_owned();
+    let more = evaluate_and_collect(&mut client, "level1();");
+    assert!(paused_events(&more).is_empty(), "an erroring condition should count as false: {more:?}");
+    client.result("Debugger.removeBreakpoint", Json::Object(vec![("breakpointId".into(), Json::String(error_cond_id))]));
+
+    // That true-condition hit above ran with `level1`'s body at depth 1
+    // (see `drain_debugger_paused`, which sets `last_paused_depth` for
+    // every queued pause, breakpoint or forced), so a `stepOut` armed now
+    // has reference depth 1: `Out(1)` requires `depth < 1`, which the very
+    // next top-level statement (depth 0) satisfies — proving the reference
+    // depth genuinely came from that pause, not a stale default of 0.
+    client.result("Debugger.stepOut", Json::Object(Vec::new()));
+    let more = evaluate_and_collect(&mut client, "6;");
+    assert_eq!(paused_events(&more).len(), 1, "stepOut with a depth-1 reference should fire once back at depth 0: {more:?}");
+
+    shutdown.store(true, Ordering::Relaxed);
+    let _ = join.join();
+}
+
+/// CDP-22 completeness: `Runtime.evaluate`/`callFunctionOn`'s
+/// `returnByValue: true` now serializes objects/arrays structurally instead
+/// of minting an unwanted `objectId`, and `Runtime.getProperties` with
+/// `ownProperties: false` now walks the prototype chain instead of silently
+/// behaving exactly like `true`.
+#[test]
+fn end_to_end_runtime_return_by_value_and_inherited_properties() {
+    let host = spawn_test_host("http://example.test/runtime.html", "<title>Runtime</title>");
+    let server = CdpServer::bind(host, "127.0.0.1:0").expect("bind");
+    let addr = server.local_addr().expect("local_addr");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = shutdown.clone();
+    let join = std::thread::spawn(move || server.serve(worker_shutdown));
+
+    let mut client = Client::connect(addr, "/devtools/page/page-1");
+
+    // returnByValue on Runtime.evaluate: a nested array/object is serialized
+    // structurally, with no objectId minted.
+    let evaluated = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![
+            ("expression".into(), Json::String("[1, 'two', { three: 3 }]".into())),
+            ("returnByValue".into(), Json::Bool(true)),
+        ]),
+    );
+    let result = evaluated.get("result").expect("result");
+    assert!(result.get("objectId").is_none(), "returnByValue should not mint an objectId: {result}");
+    let array = result.get("value").and_then(Json::as_array).expect("array value");
+    assert_eq!(array.len(), 3, "{array:?}");
+    assert_eq!(array[0].as_f64(), Some(1.0), "{array:?}");
+    assert_eq!(array[1].as_str(), Some("two"), "{array:?}");
+    assert_eq!(array[2].get("three").and_then(Json::as_f64), Some(3.0), "{array:?}");
+
+    // returnByValue on Runtime.callFunctionOn: same serialization path,
+    // against a real live object this time (not a fresh literal).
+    let object_result = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![("expression".into(), Json::String("({ x: 1, y: 2 })".into()))]),
+    );
+    let object_id = object_result
+        .get("result")
+        .and_then(|result| result.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("a plain object should have a real objectId when not returned by value")
+        .to_owned();
+    let called = client.result(
+        "Runtime.callFunctionOn",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(object_id)),
+            (
+                "functionDeclaration".into(),
+                Json::String("function() { return { sum: this.x + this.y }; }".into()),
+            ),
+            ("returnByValue".into(), Json::Bool(true)),
+        ]),
+    );
+    let called_result = called.get("result").expect("result");
+    assert!(called_result.get("objectId").is_none(), "{called_result}");
+    assert_eq!(
+        called_result.get("value").and_then(|value| value.get("sum")).and_then(Json::as_f64),
+        Some(3.0),
+        "{called_result}"
+    );
+
+    // getProperties(ownProperties: false) walks the prototype chain.
+    let with_proto = client.result(
+        "Runtime.evaluate",
+        Json::Object(vec![(
+            "expression".into(),
+            Json::String(
+                "(() => { const o = Object.create({ inherited: 99 }); o.own = 1; return o; })()".into(),
+            ),
+        )]),
+    );
+    let with_proto_id = with_proto
+        .get("result")
+        .and_then(|result| result.get("objectId"))
+        .and_then(Json::as_str)
+        .expect("objectId")
+        .to_owned();
+
+    let own_only = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(with_proto_id.clone())),
+            ("ownProperties".into(), Json::Bool(true)),
+        ]),
+    );
+    let own_descriptors = own_only.get("result").and_then(Json::as_array).expect("result array");
+    assert!(
+        !own_descriptors.iter().any(|d| d.get("name").and_then(Json::as_str) == Some("inherited")),
+        "ownProperties: true should not see the prototype's own property: {own_descriptors:?}"
+    );
+
+    let with_inherited = client.result(
+        "Runtime.getProperties",
+        Json::Object(vec![
+            ("objectId".into(), Json::String(with_proto_id)),
+            ("ownProperties".into(), Json::Bool(false)),
+        ]),
+    );
+    let all_descriptors = with_inherited.get("result").and_then(Json::as_array).expect("result array");
+    let own_prop = all_descriptors
+        .iter()
+        .find(|d| d.get("name").and_then(Json::as_str) == Some("own"))
+        .unwrap_or_else(|| panic!("own property missing: {all_descriptors:?}"));
+    assert_eq!(own_prop.get("isOwn").and_then(Json::as_bool), Some(true), "{own_prop}");
+    let inherited_prop = all_descriptors
+        .iter()
+        .find(|d| d.get("name").and_then(Json::as_str) == Some("inherited"))
+        .unwrap_or_else(|| panic!("inherited property missing from an ownProperties:false walk: {all_descriptors:?}"));
+    assert_eq!(inherited_prop.get("isOwn").and_then(Json::as_bool), Some(false), "{inherited_prop}");
+    assert_eq!(
+        inherited_prop.get("value").and_then(|value| value.get("value")).and_then(Json::as_f64),
+        Some(99.0),
+        "{inherited_prop}"
     );
 
     shutdown.store(true, Ordering::Relaxed);

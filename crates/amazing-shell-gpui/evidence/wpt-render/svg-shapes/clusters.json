@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "subdir": "svg/shapes",
+  "mismatch_count": 4,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 4,
+      "examples": [
+        "svg__shapes__rect-01.svg",
+        "svg__shapes__rect-03.svg",
+        "svg__shapes__rect-04.svg",
+        "svg__shapes__rect-02.svg"
+      ]
+    }
+  ]
+}

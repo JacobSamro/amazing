@@ -141,7 +141,7 @@ macro_rules! keywords {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $name { $($variant),+ }
         impl $name {
-            fn parse(css: &str) -> Option<Self> {
+            pub(crate) fn parse(css: &str) -> Option<Self> {
                 match css.trim().to_ascii_lowercase().as_str() {
                     $($css => Some(Self::$variant),)+ _ => None,
                 }
@@ -522,11 +522,41 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             return (!parts.is_empty() && parts.len() <= 4 && parts.iter().all(|part| valid(part))).then_some(V::Unparsed);
         }
         "grid-template-columns" | "grid-template-rows" => {
+            if crate::computed::css_wide_keyword(css).is_some() {
+                return Some(V::Unparsed);
+            }
+            if !crate::computed::valid_grid_track_list(css) {
+                return None;
+            }
             return Some(
                 crate::computed::parse_subgrid(css)
                     .map(V::Subgrid)
                     .unwrap_or(V::Unparsed),
             );
+        }
+        "grid-row-start" | "grid-row-end" | "grid-column-start" | "grid-column-end" => {
+            return crate::computed::valid_grid_line(css).then_some(V::Unparsed);
+        }
+        "grid-row" | "grid-column" => {
+            return crate::computed::valid_grid_line_pair(css).then_some(V::Unparsed);
+        }
+        "grid-area" => {
+            return crate::computed::valid_grid_area(css).then_some(V::Unparsed);
+        }
+        "grid-auto-columns" | "grid-auto-rows" => {
+            return crate::computed::valid_grid_auto_track_list(css).then_some(V::Unparsed);
+        }
+        "grid-auto-flow" => {
+            return crate::computed::valid_grid_auto_flow(css).then_some(V::Unparsed);
+        }
+        "grid-template-areas" => {
+            return crate::computed::valid_grid_template_areas(css).then_some(V::Unparsed);
+        }
+        "grid-template" => {
+            return crate::computed::valid_grid_template(css).then_some(V::Unparsed);
+        }
+        "grid" => {
+            return crate::computed::valid_grid_shorthand(css).then_some(V::Unparsed);
         }
         "position" => keyword!(Position),
         "float" => keyword!(Float),
@@ -656,6 +686,16 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             };
         }
         "transform" => return transforms(css).map(V::Transform),
+        // CSS-29: box-shadow keeps its cascade-side literal representation
+        // (`Unparsed`, same as before), but now actually goes through the
+        // real grammar check -- previously this property had no arm here at
+        // all, so `values::parses`/the WPT parsing-conformance runner
+        // reported every string as valid regardless of content, even though
+        // `expand_declaration`'s cascade path already rejects malformed
+        // shadows via `valid_box_shadow`.
+        "box-shadow" => {
+            return (s == "none" || crate::computed::valid_box_shadow(css)).then_some(V::Unparsed);
+        }
         "filter" | "backdrop-filter" => {
             return crate::effects::parse_filter_list(css).map(V::FilterList);
         }

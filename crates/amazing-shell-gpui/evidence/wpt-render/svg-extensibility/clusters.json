@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "subdir": "svg/extensibility",
+  "mismatch_count": 9,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "svg__extensibility__foreignObject__isolation-with-html.html",
+        "svg__extensibility__foreignObject__will-change-in-transformed-foreign-object.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "svg__extensibility__foreignObject__stacking-context.html",
+        "svg__extensibility__foreignObject__position-svg-root-in-foreign-object.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "svg__extensibility__foreignObject__scroll-transform-nested-stacked-children.html",
+        "svg__extensibility__foreignObject__overlapped-positioned-and-will-change-transform-descendant.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less blue than reference",
+      "count": 1,
+      "examples": [
+        "svg__extensibility__foreignObject__isolation-with-svg.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "svg__extensibility__foreignObject__foreign-object-scale-scroll.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "svg__extensibility__foreignObject__foreign-object-paints-before-rect.html"
+      ]
+    }
+  ]
+}

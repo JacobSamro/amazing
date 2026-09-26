@@ -8,6 +8,38 @@
 use crate::syntax::{Token, serialize, tokenize};
 #[path = "attr_values.rs"]
 mod attr_values;
+#[path = "grid_values.rs"]
+mod grid_values;
+// CSS-29: the css-grid track-list/`<grid-line>`/shorthand grammar lives in
+// its own module (was the single largest cohesive group once CSS-28 added
+// it, and pushed this file over the 4,000-line policy). Every name below is
+// called from `values.rs` as `crate::computed::name` and from this file's
+// own `expand_declaration`/`resolve_deferred_shorthand` as a bare name;
+// re-exporting here keeps both call shapes working unchanged.
+// Several of these are called only from `values.rs` as `crate::computed::name`,
+// never as a bare name from this file itself, so `unused_imports` cannot see
+// that use across the re-export -- it is a real, exercised call path (and
+// covered by `values.rs`'s own tests/WPT gate), not dead code.
+#[allow(unused_imports)]
+pub(crate) use grid_values::{
+    deferred_grid_template, expand_grid_template, grid_line_custom_ident, is_line_names_component,
+    parse_subgrid, parse_subgrid_names, split_grid_line_words, split_top_level_comma,
+    top_level_solidus, valid_calc_length_percentage, valid_fixed_breadth, valid_fixed_size,
+    valid_fixed_track_tokens, valid_grid_area, valid_grid_auto_flow, valid_grid_auto_flow_axis,
+    valid_grid_auto_flow_form, valid_grid_auto_track_list, valid_grid_breadth, valid_grid_line,
+    valid_grid_line_name, valid_grid_line_pair, valid_grid_shorthand, valid_grid_template,
+    valid_grid_template_areas, valid_grid_track_component, valid_grid_track_list,
+    valid_grid_track_tokens, valid_line_names_block, valid_repeat, valid_track_size,
+};
+#[path = "shadow_values.rs"]
+mod shadow_values;
+// CSS-29: `box-shadow`'s `<shadow>` list grammar moved out too, for the same
+// reason as `grid_values` above (kept this file under the 4,000-line policy
+// after the box-shadow-invalid.html fix). Only `valid_box_shadow` crosses
+// this seam (called from `values.rs` as `crate::computed::valid_box_shadow`,
+// and from this file's own `expand_declaration` as a bare name); re-exporting
+// keeps both call shapes working unchanged.
+pub(crate) use shadow_values::valid_box_shadow;
 use crate::values::{self, ComputedValue};
 use crate::media_queries::MediaEnvironment;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1321,6 +1353,42 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("column-gap".to_owned(), column.to_owned()),
             ]
         }
+        "place-content" if css_wide_keyword(value).is_some() => vec![
+            ("align-content".to_owned(), value.to_owned()),
+            ("justify-content".to_owned(), value.to_owned()),
+        ],
+        "place-content" if contains_var_function(value) => deferred_place_content(value),
+        "place-content" => match split_place_shorthand(value) {
+            Some((align, justify)) => vec![
+                ("align-content".to_owned(), align),
+                ("justify-content".to_owned(), justify),
+            ],
+            None => Vec::new(),
+        },
+        "place-items" if css_wide_keyword(value).is_some() => vec![
+            ("align-items".to_owned(), value.to_owned()),
+            ("justify-items".to_owned(), value.to_owned()),
+        ],
+        "place-items" if contains_var_function(value) => deferred_place_items(value),
+        "place-items" => match split_place_shorthand(value) {
+            Some((align, justify)) => vec![
+                ("align-items".to_owned(), align),
+                ("justify-items".to_owned(), justify),
+            ],
+            None => Vec::new(),
+        },
+        "place-self" if css_wide_keyword(value).is_some() => vec![
+            ("align-self".to_owned(), value.to_owned()),
+            ("justify-self".to_owned(), value.to_owned()),
+        ],
+        "place-self" if contains_var_function(value) => deferred_place_self(value),
+        "place-self" => match split_place_shorthand(value) {
+            Some((align, justify)) => vec![
+                ("align-self".to_owned(), align),
+                ("justify-self".to_owned(), justify),
+            ],
+            None => Vec::new(),
+        },
         "grid-column-start" | "grid-column-end" | "grid-row-start" | "grid-row-end"
             if css_wide_keyword(value).is_some()
                 || contains_var_function(value)
@@ -1354,6 +1422,41 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             vec![
                 (format!("{prefix}-start"), start.to_owned()),
                 (format!("{prefix}-end"), end.to_owned()),
+            ]
+        }
+        "grid-area" if css_wide_keyword(value).is_some() => {
+            let mut out: Vec<(String, String)> = [
+                "grid-row-start", "grid-column-start", "grid-row-end", "grid-column-end",
+            ].into_iter().map(|name| (name.to_owned(), value.to_owned())).collect();
+            out.push(("grid-area".to_owned(), value.to_owned()));
+            out
+        }
+        "grid-area" if !parts.is_empty() => {
+            let segments: Vec<&str> = value.split('/').map(str::trim).collect();
+            if segments.len() > 4 || segments.iter().any(|segment| !valid_grid_line(segment)) {
+                return Vec::new();
+            }
+            let row_start = segments[0];
+            fn default_from<'a>(source: &'a str) -> &'a str {
+                if grid_line_custom_ident(source) { source } else { "auto" }
+            }
+            let column_start = segments.get(1).copied().unwrap_or_else(|| default_from(row_start));
+            let row_end = segments.get(2).copied().unwrap_or_else(|| default_from(row_start));
+            let column_end = segments.get(3).copied().unwrap_or_else(|| default_from(column_start));
+            // Also retain the shorthand's own raw text so `get("grid-area")`
+            // round-trips for CSSOM/WPT computed-value callers, matching the
+            // established pattern below for `grid-row`/`grid-column`'s own
+            // longhand halves. This is a literal round-trip, not a re-derived
+            // shortest serialization: it can go stale if a later, higher-
+            // priority longhand declaration overrides only one quadrant of
+            // this same shorthand's cascade slot (see docs/lanes/css_TODO.md
+            // CSS-28's Boundary section).
+            vec![
+                ("grid-row-start".to_owned(), row_start.to_owned()),
+                ("grid-column-start".to_owned(), column_start.to_owned()),
+                ("grid-row-end".to_owned(), row_end.to_owned()),
+                ("grid-column-end".to_owned(), column_end.to_owned()),
+                ("grid-area".to_owned(), value.trim().to_owned()),
             ]
         }
         "grid-template" if contains_var_function(value) => deferred_grid_template(value),
@@ -1499,6 +1602,12 @@ const DEFERRED_RADIUS_BOTTOM_RIGHT: &str = "amazing-internal-border-radius-botto
 const DEFERRED_RADIUS_BOTTOM_LEFT: &str = "amazing-internal-border-radius-bottom-left";
 const DEFERRED_OVERFLOW_X: &str = "amazing-internal-overflow-x";
 const DEFERRED_OVERFLOW_Y: &str = "amazing-internal-overflow-y";
+const DEFERRED_ALIGN_CONTENT: &str = "amazing-internal-place-content-align";
+const DEFERRED_JUSTIFY_CONTENT: &str = "amazing-internal-place-content-justify";
+const DEFERRED_ALIGN_ITEMS: &str = "amazing-internal-place-items-align";
+const DEFERRED_JUSTIFY_ITEMS: &str = "amazing-internal-place-items-justify";
+const DEFERRED_ALIGN_SELF: &str = "amazing-internal-place-self-align";
+const DEFERRED_JUSTIFY_SELF: &str = "amazing-internal-place-self-justify";
 
 fn contains_var_function(value: &str) -> bool {
     tokenize(value)
@@ -1526,19 +1635,6 @@ fn deferred_flex_flow(value: &str) -> Vec<(String, String)> {
     ]
 }
 
-fn deferred_grid_template(value: &str) -> Vec<(String, String)> {
-    vec![
-        (
-            "grid-template-rows".to_owned(),
-            deferred(DEFERRED_GRID_ROWS, value),
-        ),
-        (
-            "grid-template-columns".to_owned(),
-            deferred(DEFERRED_GRID_COLUMNS, value),
-        ),
-    ]
-}
-
 fn deferred_border_radius(value: &str) -> Vec<(String, String)> {
     [
         ("border-top-left-radius", DEFERRED_RADIUS_TOP_LEFT),
@@ -1549,6 +1645,86 @@ fn deferred_border_radius(value: &str) -> Vec<(String, String)> {
     .into_iter()
     .map(|(property, function)| (property.to_owned(), deferred(function, value)))
     .collect()
+}
+
+// CSS-28: `place-content`/`place-items`/`place-self` (CSS Box Alignment 3
+// SS5) had no shorthand expansion at all -- not even PROPERTIES metadata --
+// so `place-items: center` never reached `align-items`/`justify-items`,
+// which is exactly what layout-flexgrid's grid abspos static-position code
+// reads. Each is `<align-longhand> <justify-longhand>?`: if only one "unit"
+// is given, it is duplicated to the justify side too. A unit is 1 word, or
+// 2 words for the compound forms (`first baseline`, `last baseline`, `safe
+// <position>`, `unsafe <position>`).
+fn deferred_place_content(value: &str) -> Vec<(String, String)> {
+    vec![
+        ("align-content".to_owned(), deferred(DEFERRED_ALIGN_CONTENT, value)),
+        ("justify-content".to_owned(), deferred(DEFERRED_JUSTIFY_CONTENT, value)),
+    ]
+}
+fn deferred_place_items(value: &str) -> Vec<(String, String)> {
+    vec![
+        ("align-items".to_owned(), deferred(DEFERRED_ALIGN_ITEMS, value)),
+        ("justify-items".to_owned(), deferred(DEFERRED_JUSTIFY_ITEMS, value)),
+    ]
+}
+fn deferred_place_self(value: &str) -> Vec<(String, String)> {
+    vec![
+        ("align-self".to_owned(), deferred(DEFERRED_ALIGN_SELF, value)),
+        ("justify-self".to_owned(), deferred(DEFERRED_JUSTIFY_SELF, value)),
+    ]
+}
+
+/// A single alignment "unit": one of `Alignment`'s recognized keywords
+/// (which already covers `first baseline`/`last baseline`/`safe center`/
+/// `unsafe center` as literal two-word entries), generalized to also accept
+/// `safe`/`unsafe` paired with any self/content position (CSS Box
+/// Alignment 3's `<overflow-position>? <self-position>` — `Alignment`'s
+/// closed keyword set only spells out the `center` case literally).
+fn is_valid_alignment_unit(unit: &str) -> bool {
+    if values::Alignment::parse(unit).is_some() {
+        return true;
+    }
+    match unit.trim().to_ascii_lowercase().split_once(' ') {
+        Some(("safe" | "unsafe", rest)) => matches!(
+            rest,
+            "center" | "start" | "end" | "flex-start" | "flex-end"
+                | "self-start" | "self-end" | "left" | "right"
+        ),
+        _ => false,
+    }
+}
+
+/// Splits a `place-*` value into its align-side and justify-side longhand
+/// text. Returns `None` when the split is ambiguous (more than two units)
+/// or either side isn't a recognized alignment unit.
+fn split_place_shorthand(value: &str) -> Option<(String, String)> {
+    fn unit_len(words: &[&str]) -> Option<usize> {
+        match words {
+            [first, second, ..]
+                if matches!(first.to_ascii_lowercase().as_str(), "safe" | "unsafe")
+                    || (matches!(first.to_ascii_lowercase().as_str(), "first" | "last")
+                        && second.eq_ignore_ascii_case("baseline")) =>
+            {
+                Some(2)
+            }
+            [_, ..] => Some(1),
+            [] => None,
+        }
+    }
+    let parts: Vec<&str> = value.split_ascii_whitespace().collect();
+    let first_len = unit_len(&parts)?;
+    let (first_words, rest) = parts.split_at(first_len);
+    let first = first_words.join(" ");
+    let second = if rest.is_empty() {
+        first.clone()
+    } else {
+        let second_len = unit_len(rest)?;
+        if second_len != rest.len() {
+            return None; // trailing extra words: not a 1- or 2-unit value
+        }
+        rest.join(" ")
+    };
+    (is_valid_alignment_unit(&first) && is_valid_alignment_unit(&second)).then_some((first, second))
 }
 
 fn deferred_overflow(value: &str) -> Vec<(String, String)> {
@@ -1741,170 +1917,6 @@ fn valid_background_clip(value: &str) -> bool {
     )
 }
 
-fn valid_box_shadow(value: &str) -> bool {
-    if value.trim().eq_ignore_ascii_case("none") {
-        return true;
-    }
-    let tokens = tokenize(value);
-    if tokens.iter().any(|token| matches!(token, Token::Comma)) {
-        return false;
-    }
-    let Some(components) = top_level_components(&tokens) else {
-        return false;
-    };
-    let mut inset = false;
-    let mut color = false;
-    let mut lengths = Vec::new();
-    for component in components {
-        match trim_tokens(component) {
-            [Token::Ident(keyword)] if keyword.eq_ignore_ascii_case("inset") => {
-                if inset {
-                    return false;
-                }
-                inset = true;
-            }
-            [Token::Ident(keyword)] if valid_supported_color_name(keyword) => {
-                if color {
-                    return false;
-                }
-                color = true;
-            }
-            [Token::Hash(hex)] if valid_hex_color(hex) => {
-                if color {
-                    return false;
-                }
-                color = true;
-            }
-            component
-                if function_inner(component, "rgb").is_some()
-                    || function_inner(component, "rgba").is_some() =>
-            {
-                let inner =
-                    function_inner(component, "rgb").or_else(|| function_inner(component, "rgba"));
-                if color || !inner.is_some_and(valid_rgb_color_tokens) {
-                    return false;
-                }
-                color = true;
-            }
-            component => {
-                let Some(length) = shadow_length(component) else {
-                    return false;
-                };
-                lengths.push(length);
-            }
-        }
-    }
-    (2..=4).contains(&lengths.len()) && lengths.get(2).is_none_or(|blur| *blur >= 0.0)
-}
-
-fn valid_supported_color_name(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "currentcolor"
-            | "aliceblue"
-            | "antiquewhite"
-            | "aqua"
-            | "aquamarine"
-            | "azure"
-            | "beige"
-            | "black"
-            | "blue"
-            | "brown"
-            | "chocolate"
-            | "coral"
-            | "crimson"
-            | "cyan"
-            | "darkgray"
-            | "darkgrey"
-            | "dimgray"
-            | "dimgrey"
-            | "fuchsia"
-            | "gold"
-            | "goldenrod"
-            | "gray"
-            | "green"
-            | "greenyellow"
-            | "grey"
-            | "honeydew"
-            | "hotpink"
-            | "indigo"
-            | "ivory"
-            | "khaki"
-            | "lavender"
-            | "lime"
-            | "magenta"
-            | "maroon"
-            | "navy"
-            | "olive"
-            | "orange"
-            | "orchid"
-            | "pink"
-            | "plum"
-            | "purple"
-            | "rebeccapurple"
-            | "red"
-            | "salmon"
-            | "seagreen"
-            | "silver"
-            | "skyblue"
-            | "slategray"
-            | "snow"
-            | "steelblue"
-            | "tan"
-            | "teal"
-            | "thistle"
-            | "tomato"
-            | "transparent"
-            | "turquoise"
-            | "violet"
-            | "wheat"
-            | "white"
-            | "whitesmoke"
-            | "yellow"
-    )
-}
-
-fn valid_hex_color(hex: &str) -> bool {
-    matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
-fn valid_rgb_color_tokens(tokens: &[Token]) -> bool {
-    let value = serialize(tokens);
-    if value.contains(',') {
-        let parts = value.split(',').map(str::trim).collect::<Vec<_>>();
-        matches!(parts.len(), 3 | 4)
-            && parts[..3].iter().all(|part| valid_rgb_channel(part))
-            && parts.get(3).is_none_or(|alpha| valid_alpha_channel(alpha))
-    } else {
-        let normalized = value.replace('/', " / ");
-        let parts = normalized.split_ascii_whitespace().collect::<Vec<_>>();
-        match parts.as_slice() {
-            [red, green, blue] => [red, green, blue]
-                .into_iter()
-                .all(|part| valid_rgb_channel(part)),
-            [red, green, blue, slash, alpha] if *slash == "/" => {
-                [red, green, blue]
-                    .into_iter()
-                    .all(|part| valid_rgb_channel(part))
-                    && valid_alpha_channel(alpha)
-            }
-            _ => false,
-        }
-    }
-}
-
-fn valid_rgb_channel(value: &str) -> bool {
-    value
-        .strip_suffix('%')
-        .unwrap_or(value)
-        .parse::<f32>()
-        .is_ok_and(|value| value.is_finite())
-}
-
-fn valid_alpha_channel(value: &str) -> bool {
-    valid_rgb_channel(value)
-}
-
 // CSS-27: this used to accept only a bare `Token::Number`/`Token::Percentage`,
 // so a `calc()`/`min()`/`max()`/`clamp()` opacity value failed this earlier
 // gate (`valid_new_paint_property`) and the computed value fell all the way
@@ -1924,14 +1936,6 @@ fn valid_overflow(value: &str) -> bool {
             "visible" | "hidden" | "clip" | "scroll" | "auto"
         )
     )
-}
-
-fn shadow_length(tokens: &[Token]) -> Option<f64> {
-    match trim_tokens(tokens) {
-        [Token::Number(value)] if *value == 0.0 => Some(*value),
-        [Token::Dimension(value, unit)] if unit.eq_ignore_ascii_case("px") => Some(*value),
-        _ => None,
-    }
 }
 
 fn valid_transform(value: &str) -> bool {
@@ -2073,46 +2077,6 @@ fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
     ])
 }
 
-fn expand_grid_template(value: &str) -> Option<Vec<(String, String)>> {
-    if css_wide_keyword(value).is_some() || value.trim().eq_ignore_ascii_case("none") {
-        return Some(vec![
-            ("grid-template-rows".to_owned(), value.trim().to_owned()),
-            ("grid-template-columns".to_owned(), value.trim().to_owned()),
-        ]);
-    }
-
-    let tokens = tokenize(value);
-    let mut stack = Vec::new();
-    let mut slash = None;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => stack.push(')'),
-            Token::OpenSquare => stack.push(']'),
-            Token::OpenCurly => stack.push('}'),
-            Token::CloseParen if stack.pop() != Some(')') => return None,
-            Token::CloseSquare if stack.pop() != Some(']') => return None,
-            Token::CloseCurly if stack.pop() != Some('}') => return None,
-            Token::Delim('/') if stack.is_empty() && slash.replace(index).is_some() => {
-                return None;
-            }
-            _ => {}
-        }
-    }
-    if !stack.is_empty() {
-        return None;
-    }
-    let slash = slash?;
-    let rows = serialize(&tokens[..slash]).trim().to_owned();
-    let columns = serialize(&tokens[slash + 1..]).trim().to_owned();
-    if !valid_grid_track_list(&rows) || !valid_grid_track_list(&columns) {
-        return None;
-    }
-    Some(vec![
-        ("grid-template-rows".to_owned(), rows),
-        ("grid-template-columns".to_owned(), columns),
-    ])
-}
-
 pub(crate) fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     let mut components = Vec::new();
     let mut stack = Vec::new();
@@ -2145,33 +2109,6 @@ pub(crate) fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     Some(components)
 }
 
-fn split_top_level_comma(tokens: &[Token]) -> Option<(&[Token], &[Token])> {
-    let mut stack = Vec::new();
-    let mut comma = None;
-    for (index, token) in tokens.iter().enumerate() {
-        match token {
-            Token::OpenParen => stack.push(')'),
-            Token::OpenSquare => stack.push(']'),
-            Token::OpenCurly => stack.push('}'),
-            Token::CloseParen if stack.pop() != Some(')') => return None,
-            Token::CloseSquare if stack.pop() != Some(']') => return None,
-            Token::CloseCurly if stack.pop() != Some('}') => return None,
-            Token::Comma if stack.is_empty() && comma.replace(index).is_some() => {
-                return None;
-            }
-            _ => {}
-        }
-    }
-    if !stack.is_empty() {
-        return None;
-    }
-    let comma = comma?;
-    Some((
-        trim_tokens(&tokens[..comma]),
-        trim_tokens(&tokens[comma + 1..]),
-    ))
-}
-
 pub(crate) fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]> {
     let tokens = trim_tokens(tokens);
     match (tokens.first(), tokens.get(1), tokens.last()) {
@@ -2181,335 +2118,6 @@ pub(crate) fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<
             Some(&tokens[2..tokens.len() - 1])
         }
         _ => None,
-    }
-}
-
-fn valid_grid_track_list(value: &str) -> bool {
-    let tokens = tokenize(value);
-    let tokens = trim_tokens(&tokens);
-    if matches!(tokens, [Token::Ident(value)] if value.eq_ignore_ascii_case("none")) {
-        return true;
-    }
-    if matches!(tokens.first(), Some(Token::Ident(name)) if name.eq_ignore_ascii_case("subgrid")) {
-        return parse_subgrid(value).is_some();
-    }
-    valid_grid_track_tokens(tokens, true)
-}
-
-/// Grid Level 2 §7.2: `subgrid <line-name-list>?`. Track sizes cannot
-/// participate in this branch of the grid-template grammar.
-pub(crate) fn parse_subgrid(value: &str) -> Option<values::Subgrid> {
-    use values::{Subgrid, SubgridLineNames, SubgridRepeatCount};
-    let tokens = tokenize(value);
-    let mut position = 0;
-    skip_css_whitespace(&tokens, &mut position);
-    match tokens.get(position)? {
-        Token::Ident(name) if name.eq_ignore_ascii_case("subgrid") => position += 1,
-        _ => return None,
-    }
-    let mut line_names = Vec::new();
-    let mut auto_fill_seen = false;
-    loop {
-        skip_css_whitespace(&tokens, &mut position);
-        let Some(token) = tokens.get(position) else { break };
-        if matches!(token, Token::OpenSquare) {
-            let (names, end) = parse_subgrid_names(&tokens, position)?;
-            line_names.push(SubgridLineNames::Names(names));
-            position = end;
-            continue;
-        }
-        if matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("repeat")) {
-            let start = position;
-            let mut depth = 0usize;
-            loop {
-                match tokens.get(position)? {
-                    Token::OpenParen => depth += 1,
-                    Token::CloseParen => {
-                        depth = depth.checked_sub(1)?;
-                        if depth == 0 { position += 1; break; }
-                    }
-                    _ => {}
-                }
-                position += 1;
-            }
-            let inner = function_inner(&tokens[start..position], "repeat")?;
-            let (count, names) = split_top_level_comma(inner)?;
-            let count = match trim_tokens(count) {
-                [Token::Number(n)] if n.is_finite() && *n >= 1.0 && n.fract() == 0.0 && *n <= u32::MAX as f64 => SubgridRepeatCount::Integer(*n as u32),
-                [Token::Ident(name)] if name.eq_ignore_ascii_case("auto-fill") && !auto_fill_seen => {
-                    auto_fill_seen = true;
-                    SubgridRepeatCount::AutoFill
-                }
-                _ => return None,
-            };
-            let mut names_position = 0;
-            let mut groups = Vec::new();
-            while names_position < names.len() {
-                skip_css_whitespace(names, &mut names_position);
-                if names_position == names.len() { break; }
-                let (group, end) = parse_subgrid_names(names, names_position)?;
-                groups.push(group);
-                names_position = end;
-            }
-            if groups.is_empty() { return None; }
-            line_names.push(SubgridLineNames::Repeat { count, names: groups });
-            continue;
-        }
-        return None;
-    }
-    Some(Subgrid { line_names })
-}
-
-fn parse_subgrid_names(tokens: &[Token], start: usize) -> Option<(Vec<String>, usize)> {
-    if !matches!(tokens.get(start), Some(Token::OpenSquare)) { return None; }
-    let end = tokens[start + 1..].iter().position(|token| matches!(token, Token::CloseSquare))? + start + 1;
-    let mut names = Vec::new();
-    for token in &tokens[start + 1..end] {
-        match token {
-            Token::Whitespace => {}
-            Token::Ident(name) if valid_grid_line_name(name) => names.push(name.clone()),
-            _ => return None,
-        }
-    }
-    Some((names, end + 1))
-}
-
-fn valid_grid_track_tokens(tokens: &[Token], allow_repeat: bool) -> bool {
-    let Some(components) = top_level_components(tokens) else {
-        return false;
-    };
-    if components.is_empty() {
-        return false;
-    }
-    let mut auto_repeat_seen = false;
-    for component in components {
-        if function_inner(component, "repeat").is_some() {
-            if !allow_repeat {
-                return false;
-            }
-            let Some((auto_repeat, tracks)) = valid_repeat(component) else {
-                return false;
-            };
-            if auto_repeat {
-                if auto_repeat_seen || !valid_fixed_track_tokens(tracks) {
-                    return false;
-                }
-                auto_repeat_seen = true;
-            } else if !valid_grid_track_tokens(tracks, false) {
-                return false;
-            }
-        } else if !valid_grid_track_component(component) {
-            return false;
-        }
-    }
-    true
-}
-
-fn valid_grid_track_component(tokens: &[Token]) -> bool {
-    let tokens = trim_tokens(tokens);
-    if valid_grid_breadth(tokens, true) {
-        return true;
-    }
-    if matches!(
-        (tokens.first(), tokens.last()),
-        (Some(Token::OpenSquare), Some(Token::CloseSquare))
-    ) {
-        // One or more adjacent `[name]` blocks (`[a][b]` is valid without
-        // intervening whitespace); each block validates independently.
-        let mut rest: &[Token] = tokens;
-        loop {
-            let Some((first, tail)) = rest.split_first() else {
-                return false;
-            };
-            if !matches!(first, Token::OpenSquare) {
-                return false;
-            }
-            let mut depth = 1usize;
-            let mut close = None;
-            for (index, token) in tail.iter().enumerate() {
-                match token {
-                    Token::OpenSquare => depth += 1,
-                    Token::CloseSquare => {
-                        depth -= 1;
-                        if depth == 0 {
-                            close = Some(index);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let Some(close) = close else {
-                return false;
-            };
-            let inner = trim_tokens(&tail[..close]);
-            if inner.is_empty() {
-                return false;
-            }
-            if !inner.iter().all(|token| match token {
-                Token::Ident(name) => valid_grid_line_name(name),
-                Token::Whitespace => true,
-                _ => false,
-            }) {
-                return false;
-            }
-            rest = trim_tokens(&tail[close + 1..]);
-            if rest.is_empty() {
-                return true;
-            }
-        }
-    }
-    if let Some(inner) = function_inner(tokens, "minmax") {
-        return split_top_level_comma(inner).is_some_and(|(minimum, maximum)| {
-            valid_grid_breadth(minimum, false) && valid_grid_breadth(maximum, true)
-        });
-    }
-    false
-}
-
-fn valid_grid_line_name(name: &str) -> bool {
-    !matches!(
-        name.to_ascii_lowercase().as_str(),
-        "auto" | "span" | "default" | "initial" | "inherit" | "unset" | "revert" | "revert-layer"
-    )
-}
-
-fn grid_line_custom_ident(value: &str) -> bool {
-    matches!(trim_tokens(&tokenize(value)), [Token::Ident(name)] if valid_grid_line_name(name))
-}
-
-fn valid_grid_line(value: &str) -> bool {
-    // A variable can supply the complete grid-line grammar after substitution.
-    if contains_var_function(value) {
-        return true;
-    }
-    let tokens = tokenize(value);
-    let components: Vec<&Token> = tokens.iter().filter(|token| !matches!(token, Token::Whitespace)).collect();
-    if matches!(components.as_slice(), [Token::Ident(name)] if name.eq_ignore_ascii_case("auto")) {
-        return true;
-    }
-    let mut span = false;
-    let mut integer = None;
-    let mut name = false;
-    for token in &components {
-        match token {
-            Token::Ident(ident) if ident.eq_ignore_ascii_case("span") && !span => span = true,
-            Token::Ident(ident) if valid_grid_line_name(ident) && !name => name = true,
-            Token::Number(number) if number.is_finite() && number.fract() == 0.0 && integer.is_none() => integer = Some(*number),
-            _ => return false,
-        }
-    }
-    if span {
-        (integer.is_some_and(|number| number > 0.0) || name)
-            && integer.is_none_or(|number| number > 0.0)
-    } else {
-        (integer.is_some() || name) && integer != Some(0.0)
-    }
-}
-
-/// Returns whether this is an auto-repeat plus its track-list body.
-fn valid_repeat(tokens: &[Token]) -> Option<(bool, &[Token])> {
-    let inner = function_inner(tokens, "repeat")?;
-    let (count, tracks) = split_top_level_comma(inner)?;
-    let auto_repeat = match count {
-        [Token::Number(value)] if value.is_finite() && *value >= 1.0 && value.fract() == 0.0 => {
-            false
-        }
-        [Token::Ident(value)]
-            if value.eq_ignore_ascii_case("auto-fill")
-                || value.eq_ignore_ascii_case("auto-fit") =>
-        {
-            true
-        }
-        _ => return None,
-    };
-    Some((auto_repeat, tracks))
-}
-
-fn valid_fixed_track_tokens(tokens: &[Token]) -> bool {
-    let Some(components) = top_level_components(tokens) else {
-        return false;
-    };
-    let mut saw_track = false;
-    for component in components {
-        let component = trim_tokens(component);
-        if matches!(
-            (component.first(), component.last()),
-            (Some(Token::OpenSquare), Some(Token::CloseSquare))
-        ) {
-            if !valid_grid_track_component(component) {
-                return false;
-            }
-            continue;
-        }
-        saw_track = true;
-        if !valid_fixed_size(component) {
-            return false;
-        }
-    }
-    saw_track
-}
-
-fn valid_fixed_size(tokens: &[Token]) -> bool {
-    if valid_fixed_breadth(tokens) {
-        return true;
-    }
-    function_inner(tokens, "minmax")
-        .and_then(split_top_level_comma)
-        .is_some_and(|(minimum, maximum)| {
-            (valid_fixed_breadth(minimum) && valid_grid_breadth(maximum, true))
-                || (valid_grid_breadth(minimum, false) && valid_fixed_breadth(maximum))
-        })
-}
-
-fn valid_fixed_breadth(tokens: &[Token]) -> bool {
-    match trim_tokens(tokens) {
-        [Token::Number(value)] => value.is_finite() && *value == 0.0,
-        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
-        [Token::Dimension(value, unit)] => {
-            value.is_finite()
-                && *value >= 0.0
-                && matches!(
-                    unit.to_ascii_lowercase().as_str(),
-                    "px" | "em"
-                        | "rem"
-                        | "ex"
-                        | "ch"
-                        | "vw"
-                        | "vh"
-                        | "vmin"
-                        | "vmax"
-                        | "cm"
-                        | "mm"
-                        | "q"
-                        | "in"
-                        | "pc"
-                        | "pt"
-                )
-        }
-        _ => false,
-    }
-}
-
-fn valid_grid_breadth(tokens: &[Token], allow_fr: bool) -> bool {
-    match trim_tokens(tokens) {
-        [Token::Ident(value)] => matches!(
-            value.to_ascii_lowercase().as_str(),
-            "auto" | "min-content" | "max-content"
-        ),
-        [Token::Number(value)] => value.is_finite() && *value == 0.0,
-        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
-        [Token::Dimension(value, unit)] => {
-            value.is_finite()
-                && *value >= 0.0
-                && match unit.to_ascii_lowercase().as_str() {
-                    "fr" => allow_fr,
-                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax" | "cm"
-                    | "mm" | "q" | "in" | "pc" | "pt" => true,
-                    _ => false,
-                }
-        }
-        _ => false,
     }
 }
 
@@ -2864,7 +2472,7 @@ fn is_border_width(value: &str) -> bool {
 }
 
 #[derive(Clone, Copy)]
-enum CssWide {
+pub(crate) enum CssWide {
     Initial,
     Inherit,
     Unset,
@@ -2872,7 +2480,7 @@ enum CssWide {
     RevertLayer,
 }
 
-fn css_wide_keyword(value: &str) -> Option<CssWide> {
+pub(crate) fn css_wide_keyword(value: &str) -> Option<CssWide> {
     match value.trim().to_ascii_lowercase().as_str() {
         "initial" => Some(CssWide::Initial),
         "inherit" => Some(CssWide::Inherit),
@@ -3408,6 +3016,12 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
         DEFERRED_RADIUS_BOTTOM_LEFT,
         DEFERRED_OVERFLOW_X,
         DEFERRED_OVERFLOW_Y,
+        DEFERRED_ALIGN_CONTENT,
+        DEFERRED_JUSTIFY_CONTENT,
+        DEFERRED_ALIGN_ITEMS,
+        DEFERRED_JUSTIFY_ITEMS,
+        DEFERRED_ALIGN_SELF,
+        DEFERRED_JUSTIFY_SELF,
     ] {
         if let Some(inner) = deferred_inner(value, function) {
             if css_wide_keyword(inner).is_some() {
@@ -3440,6 +3054,21 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
             return Err(());
         }
         return Ok(parts.get(index).copied().unwrap_or(parts[0]).to_owned());
+    }
+    let place_function = match property {
+        "align-content" => Some((DEFERRED_ALIGN_CONTENT, true)),
+        "justify-content" => Some((DEFERRED_JUSTIFY_CONTENT, false)),
+        "align-items" => Some((DEFERRED_ALIGN_ITEMS, true)),
+        "justify-items" => Some((DEFERRED_JUSTIFY_ITEMS, false)),
+        "align-self" => Some((DEFERRED_ALIGN_SELF, true)),
+        "justify-self" => Some((DEFERRED_JUSTIFY_SELF, false)),
+        _ => None,
+    };
+    if let Some((function, want_align)) = place_function
+        && let Some(inner) = deferred_inner(value, function)
+    {
+        let (align, justify) = split_place_shorthand(inner).ok_or(())?;
+        return Ok(if want_align { align } else { justify });
     }
     let radius_function = match property {
         "border-top-left-radius" => Some(DEFERRED_RADIUS_TOP_LEFT),
@@ -4030,12 +3659,28 @@ mod tests {
 
     #[test]
     fn grid_template_only_splits_on_a_top_level_solidus() {
+        // CSS-28: `calc()` is now a valid grid track breadth (a `/` division
+        // inside it must not be mistaken for `grid-template`'s own top-level
+        // rows/columns separator), so the rows side below is valid on its
+        // own; the columns side's unrecognized `banana` keyword is what
+        // keeps the whole declaration invalid, still exercising the
+        // nested-solidus case the test name promises.
         assert!(
             expand_declaration(
                 "grid-template",
-                "minmax(10px,calc(20px / 2)) / repeat(2,1fr)"
+                "minmax(10px,calc(20px / 2)) / repeat(2,banana)"
             )
             .is_empty()
+        );
+        assert_eq!(
+            expand_declaration(
+                "grid-template",
+                "minmax(10px,calc(20px / 2)) / repeat(2,1fr)"
+            ),
+            vec![
+                ("grid-template-rows".to_owned(), "minmax(10px, calc(20px / 2))".to_owned()),
+                ("grid-template-columns".to_owned(), "repeat(2, 1fr)".to_owned()),
+            ]
         );
         assert_eq!(
             expand_declaration("grid-template", "10px / 20px / 30px"),
@@ -4052,6 +3697,77 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    // CSS-28: `place-content`/`place-items`/`place-self` had no shorthand
+    // expansion at all before this ticket -- not even `PROPERTIES` metadata
+    // -- so a declaration like `place-items: center` was silently inert.
+    #[test]
+    fn place_shorthands_expand_to_their_align_and_justify_longhands() {
+        assert_eq!(
+            expand_declaration("place-items", "center"),
+            vec![("align-items".to_owned(), "center".to_owned()),
+                 ("justify-items".to_owned(), "center".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("place-content", "center start"),
+            vec![("align-content".to_owned(), "center".to_owned()),
+                 ("justify-content".to_owned(), "start".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("place-self", "stretch"),
+            vec![("align-self".to_owned(), "stretch".to_owned()),
+                 ("justify-self".to_owned(), "stretch".to_owned())]
+        );
+        // Compound two-word units (`first baseline`/`last baseline`/`safe
+        // <position>`/`unsafe <position>`) are kept as one unit, not split.
+        assert_eq!(
+            expand_declaration("place-items", "first baseline"),
+            vec![("align-items".to_owned(), "first baseline".to_owned()),
+                 ("justify-items".to_owned(), "first baseline".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("place-content", "safe start end"),
+            vec![("align-content".to_owned(), "safe start".to_owned()),
+                 ("justify-content".to_owned(), "end".to_owned())]
+        );
+        assert_eq!(
+            expand_declaration("place-self", "last baseline unsafe self-end"),
+            vec![("align-self".to_owned(), "last baseline".to_owned()),
+                 ("justify-self".to_owned(), "unsafe self-end".to_owned())]
+        );
+        // CSS-wide keywords propagate to both longhands unresolved.
+        for kw in ["inherit", "initial", "unset", "revert"] {
+            assert_eq!(
+                expand_declaration("place-items", kw),
+                vec![("align-items".to_owned(), kw.to_owned()),
+                     ("justify-items".to_owned(), kw.to_owned())]
+            );
+        }
+        // var() defers both longhands rather than expanding eagerly, and
+        // once substitution has run, `resolve_deferred_shorthand` re-splits
+        // the substituted text for each specific longhand.
+        let deferred = expand_declaration("place-content", "var(--x)");
+        assert_eq!(deferred.len(), 2);
+        assert_eq!(deferred[0].0, "align-content");
+        assert_eq!(deferred[1].0, "justify-content");
+        assert_eq!(
+            resolve_deferred_shorthand("align-content", "amazing-internal-place-content-align(center start)"),
+            Ok("center".to_owned())
+        );
+        assert_eq!(
+            resolve_deferred_shorthand("justify-content", "amazing-internal-place-content-justify(center start)"),
+            Ok("start".to_owned())
+        );
+        // Invalid/ambiguous forms drop the whole declaration.
+        for (property, value) in [
+            ("place-items", "center center center"),
+            ("place-items", "banana"),
+            ("place-content", "safe"),
+            ("place-self", "safe banana"),
+        ] {
+            assert!(expand_declaration(property, value).is_empty(), "{property}: {value}");
+        }
     }
 
     #[test]

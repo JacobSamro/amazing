@@ -486,3 +486,23 @@ fn unknown_handler_fails_opening_handshake_with_404() {
     let (_client, hs) = Client::connect(&server, "/does-not-exist", &[]);
     assert_eq!(hs.status, 404);
 }
+
+/// NET-40: `websockets/send-many-64K-messages-with-backpressure.any.js`
+/// connects to `/receive-many-with-backpressure`, previously missing from
+/// the `known` handler allow-list (a plain 404). Exercises the ported
+/// `ws_loop_receive_many_with_backpressure` directly: each data message gets
+/// a text reply of its own byte length, after the handler's per-message
+/// delay (kept short here so the test stays fast), and a client-initiated
+/// close is answered in kind once every reply has gone out.
+#[test]
+fn receive_many_with_backpressure_replies_with_byte_length_per_message() {
+    let server = WptServer::new();
+    let (mut client, hs) = Client::connect(&server, "/receive-many-with-backpressure", &[]);
+    assert_eq!(hs.status, 101);
+    for _ in 0..3 {
+        client.send_text("hello");
+        assert_eq!(client.recv(), Some((0x1, b"5".to_vec())));
+    }
+    client.send(0x2, &[0u8; 42]);
+    assert_eq!(client.recv(), Some((0x1, b"42".to_vec())));
+}

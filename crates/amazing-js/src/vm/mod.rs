@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod compiler;
+mod fast_path;
 #[cfg(test)]
 mod tests;
 
@@ -10,9 +11,25 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
+use crate::value::{DerivedConstructor, Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+thread_local! {
+    /// Reuse frame register storage across calls; values are cleared at return.
+    static REGISTER_POOL: RefCell<Vec<Vec<JsValue>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn take_registers(count: usize) -> Vec<JsValue> {
+    let mut registers = REGISTER_POOL.with(|pool| {
+        let mut pool = pool.borrow_mut();
+        pool.iter().position(|registers| registers.capacity() >= count)
+            .map(|index| pool.swap_remove(index))
+            .unwrap_or_default()
+    });
+    registers.resize(count, JsValue::Undefined);
+    registers
+}
 
 pub use compiler::compile;
 #[allow(unused_imports)] // Re-exported for the runtime async bridge in interp.rs.
@@ -65,10 +82,20 @@ struct ClassMethodCode {
     code: FunctionCode,
 }
 
+/// A compiled class's super-class expression, plus whether the constructor
+/// was synthesized (no explicit `constructor` member): an implicit derived
+/// constructor forwards its own arguments to the super call.
+#[derive(Debug)]
+struct ClassSuper {
+    register: Register,
+    implicit: bool,
+}
+
 #[derive(Debug)]
 struct ClassCode {
     constructor: FunctionCode,
     methods: Vec<ClassMethodCode>,
+    super_class: Option<ClassSuper>,
 }
 
 fn expand_arguments(
@@ -115,6 +142,20 @@ enum Instruction {
     StoreReference(usize, Register),
     NewObject(Register),
     SetObjectProperty(Register, KeyOperand, Register),
+    /// A non-computed literal `__proto__: value` property definition sets
+    /// [[Prototype]] instead of creating an own property (`B.3.1`).
+    SetPrototype(Register, Register),
+    /// Throws TypeError if the register holds null/undefined. Emitted before
+    /// a member access's key conversion so a nullish base is rejected before
+    /// `ToPropertyKey` gets a chance to run user code, matching the tree
+    /// walker's `resolve_reference` ordering.
+    RequireObjectCoercible(Register),
+    /// Brackets a class's heritage expression and each computed member key:
+    /// both are always evaluated in strict mode, per spec, even when the
+    /// surrounding code is sloppy (matching the tree walker's `eval_class`,
+    /// which saves/restores `strict_eval_context` around the whole class).
+    EnterStrict,
+    ExitStrict,
     SetObjectMethod(Register, KeyOperand, FunctionCode, crate::ast::MethodKind),
     SpreadObject(Register, Register),
     NewArray(Register),
@@ -152,6 +193,14 @@ enum Instruction {
     YieldDelegate(Register, Register),
     Await(Register, Register),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
+    /// `new.target`: the active call's constructor target, or `undefined`
+    /// for an ordinary call.
+    LoadNewTarget(Register),
+    /// `super` as the object of a member expression: the active method's
+    /// `[[HomeObject]].[[GetPrototypeOf]]()`.
+    LoadSuperHome(Register),
+    /// `super(...)` in a derived constructor.
+    SuperCall(Register, Vec<CallArgument>),
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +241,7 @@ pub struct Program {
 /// survive an instruction-boundary suspension with the other VM state.
 struct VmFrame {
     registers: Vec<JsValue>,
+    caches: Vec<Option<fast_path::InlineCache>>,
     references: Vec<Option<Reference>>,
     spreads: Vec<Option<Vec<JsValue>>>,
     scopes: Vec<EnvHandle>,
@@ -205,6 +255,18 @@ struct VmFrame {
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
     await_dst: Option<Register>,
+}
+
+impl Drop for VmFrame {
+    fn drop(&mut self) {
+        if self.registers.capacity() > 4096 { return; }
+        let mut registers = std::mem::take(&mut self.registers);
+        registers.clear();
+        let _ = REGISTER_POOL.try_with(|pool| {
+            let mut pool = pool.borrow_mut();
+            if pool.len() < 16 { pool.push(registers); }
+        });
+    }
 }
 
 struct DelegateState {
@@ -296,7 +358,8 @@ impl Program {
         fuel: usize,
     ) -> Result<Box<VmFrame>, Throw> {
         let mut frame = Box::new(VmFrame {
-            registers: vec![JsValue::Undefined; self.registers],
+            registers: take_registers(self.registers),
+            caches: (0..self.code.len()).map(|_| None).collect(),
             references: (0..self.references).map(|_| None).collect(),
             spreads: (0..self.spread_slots).map(|_| None).collect(),
             scopes: Vec::new(),
@@ -343,6 +406,7 @@ impl Program {
         }
         let VmFrame {
             registers,
+            caches,
             references,
             spreads,
             scopes,
@@ -370,6 +434,19 @@ impl Program {
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
                     Instruction::RegExp(dst, regex) => registers[*dst] = i.make_regexp(regex.clone())?,
+                    Instruction::RequireObjectCoercible(register) => {
+                        if registers[*register].is_null() || registers[*register].is_undefined() {
+                            return Err(Throw::type_error("cannot access a property on nullish value"));
+                        }
+                    }
+                    Instruction::EnterStrict => {
+                        i.vm_strict_stack.push(i.strict_eval_context);
+                        i.strict_eval_context = true;
+                    }
+                    Instruction::ExitStrict => {
+                        i.strict_eval_context = i.vm_strict_stack.pop()
+                            .unwrap_or(i.strict_eval_context);
+                    }
                     Instruction::ToKey(register) => {
                         registers[*register] = match i.to_property_key(&registers[*register])? {
                             PropertyKey::String(key) => JsValue::Str(key),
@@ -387,9 +464,51 @@ impl Program {
                             }
                         };
                     }
-                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this(),
+                    // Checked, matching the tree walker's `ExprKind::This`:
+                    // `this` is a ReferenceError before a derived
+                    // constructor's `super()` call has run.
+                    Instruction::LoadThis(dst) => registers[*dst] = env.resolve_this_checked()?,
+                    Instruction::LoadNewTarget(dst) => {
+                        registers[*dst] = i.current_new_target().unwrap_or(JsValue::Undefined);
+                    }
+                    Instruction::LoadSuperHome(dst) => {
+                        // `[[HomeObject]]` of the active frame; not exposed as
+                        // a shared accessor (only `current_new_target` is),
+                        // so vm/mod.rs -- a child module of interp.rs -- reads
+                        // the private `frames` field directly.
+                        let home = i.frames.last().and_then(|frame| frame.home.clone())
+                            .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
+                        let prototype = home.borrow().proto.clone()
+                            .ok_or_else(|| Throw::type_error("super prototype is null"))?;
+                        registers[*dst] = JsValue::Object(prototype);
+                    }
+                    Instruction::SuperCall(dst, arguments) => {
+                        let super_constructor = i.frames.last().and_then(|frame| frame.super_constructor.clone())
+                            .ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
+                        let new_target = i.current_new_target()
+                            .ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+                        let args = expand_arguments(&registers, spreads, arguments)?;
+                        let result = i.construct_with_new_target(&super_constructor, args, new_target)?;
+                        env.initialize_this(result.clone())?;
+                        if let Some(frame) = i.frames.last_mut() {
+                            frame.this = result.clone();
+                        }
+                        registers[*dst] = result;
+                    }
                     Instruction::ResolveName(slot, dst, name) => {
-                        let (reference, value) = if let Some(value) = env.resolve(name) {
+                        // Matches the tree walker's `resolve_reference`: a
+                        // non-lexical global binding (e.g. `NaN`, `undefined`,
+                        // a `var`-declared global) is fetched and stored back
+                        // through the global *object*'s property, not the env
+                        // binding cell directly, so a non-writable property
+                        // throws in strict mode (`set_with_receiver`/
+                        // `put_reference`'s `Reference::Property` arm) instead
+                        // of silently no-oping through `env.assign`.
+                        let (reference, value) = if let Some(global) = env.global_binding_object(name) {
+                            let global = JsValue::Object(global);
+                            let value = i.get_prop(&global, name)?;
+                            (Reference::Property(global, name.clone().into()), value)
+                        } else if let Some(value) = env.resolve(name) {
                             (Reference::Binding(name.clone()), value)
                         } else if i.global_obj.borrow().has_property(name) {
                             let global = JsValue::Object(i.global_obj.clone());
@@ -412,12 +531,12 @@ impl Program {
                     },
                     Instruction::GetMember(dst, object, key) => {
                         let key = key.resolve(&registers)?;
-                        registers[*dst] = i.get_prop(&registers[*object], key)?;
+                        registers[*dst] = fast_path::get(i, &registers[*object], key, &mut caches[*pc - 1])?;
                     }
                     Instruction::ResolveMember(slot, dst, object, key) => {
                         let key = key.resolve(&registers)?;
                         let receiver = registers[*object].clone();
-                        registers[*dst] = i.get_prop(&receiver, key.clone())?;
+                        registers[*dst] = fast_path::get(i, &receiver, key.clone(), &mut caches[*pc - 1])?;
                         references[*slot] = Some(Reference::Property(receiver, key));
                     }
                     Instruction::StoreReference(slot, src) => {
@@ -428,7 +547,12 @@ impl Program {
                         if let Some(name) = reference_name(&reference) {
                             i.infer_function_name(&mut value, &name);
                         }
-                        i.put_reference(reference, value, &env)?;
+                        match reference {
+                            Reference::Property(receiver, key) => {
+                                fast_path::set(i, &receiver, key, value, &env, &mut caches[*pc - 1])?;
+                            }
+                            other => i.put_reference(other, value, &env)?,
+                        }
                     }
                     Instruction::Update(dst, slot, old, op, prefix) => {
                         let reference = references[*slot]
@@ -439,12 +563,25 @@ impl Program {
                         i.put_reference(reference, next.clone(), &env)?;
                         registers[*dst] = if *prefix { next } else { previous };
                     }
-                    Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
+                    Instruction::NewObject(dst) => {
+                        registers[*dst] = i.object_value();
+                        if let JsValue::Object(object) = &registers[*dst] {
+                            object.borrow_mut().vm_cacheable = true;
+                        }
+                    }
                     Instruction::SetObjectProperty(object, key, src) => {
                         let key = key.resolve(&registers)?;
                         let JsValue::Object(target) = &registers[*object] else { unreachable!() };
                         target.borrow_mut().define(&key, Property::data(registers[*src].clone()))
                             .map_err(|_| Throw::type_error("could not define object property"))?;
+                    }
+                    Instruction::SetPrototype(object, src) => {
+                        let JsValue::Object(target) = &registers[*object] else { unreachable!() };
+                        match &registers[*src] {
+                            JsValue::Object(prototype) => target.borrow_mut().proto = Some(prototype.clone()),
+                            JsValue::Null => target.borrow_mut().proto = None,
+                            _ => {}
+                        }
                     }
                     Instruction::SetObjectMethod(object, key, code, kind) => {
                         let key = key.resolve(&registers)?;
@@ -545,8 +682,10 @@ impl Program {
                         registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
                     Instruction::Binary(dst, op, left, right) => {
-                        registers[*dst] =
-                            i.binary(*op, registers[*left].clone(), registers[*right].clone())?;
+                        registers[*dst] = match fast_path::binary(*op, &registers[*left], &registers[*right]) {
+                            Some(value) => value,
+                            None => i.binary(*op, registers[*left].clone(), registers[*right].clone())?,
+                        };
                     }
                     Instruction::Move(dst, src) => registers[*dst] = registers[*src].clone(),
                     Instruction::Jump(target) => *pc = *target,
@@ -637,7 +776,56 @@ impl Program {
                         let Some(JsValue::Object(prototype)) = callable.borrow().get_own("prototype") else {
                             return Err(Throw::type_error("class constructor has no prototype"));
                         };
-                        prototype.borrow_mut().set_own("constructor", constructor.clone());
+                        // A class constructor throws TypeError when called
+                        // without `new` (matching the tree walker, which sets
+                        // this in its own class evaluation); this had never
+                        // been set for a VM-compiled class of any kind.
+                        callable.borrow_mut().class_constructor = true;
+                        if let Some(super_class) = &class.super_class {
+                            let super_value = registers[super_class.register].clone();
+                            // Matches the tree walker's ClassDefinitionEvaluation: a
+                            // non-object super class (including `extends null`)
+                            // is rejected rather than given full null-prototype
+                            // semantics, which the runtime does not model yet.
+                            let super_prototype = match &super_value {
+                                JsValue::Object(super_constructor) => match super_constructor.borrow().get_own("prototype") {
+                                    Some(JsValue::Object(prototype)) => prototype,
+                                    _ => return Err(Throw::type_error("super constructor has no prototype")),
+                                },
+                                _ => return Err(Throw::type_error("super class is not a constructor")),
+                            };
+                            // ClassDefinitionEvaluation: the constructor's own
+                            // [[Prototype]] is the super constructor (static
+                            // inheritance); the class prototype's is the super
+                            // constructor's `prototype` (instance inheritance).
+                            prototype.borrow_mut().proto = Some(super_prototype);
+                            callable.borrow_mut().proto = match &super_value {
+                                JsValue::Object(parent) => Some(parent.clone()),
+                                _ => unreachable!(),
+                            };
+                            callable.borrow_mut().derived_constructor = Some(DerivedConstructor {
+                                parent: super_value,
+                                implicit: super_class.implicit,
+                            });
+                        }
+                        // MakeConstructor(F, false, proto): a class constructor's
+                        // `prototype` is non-writable/non-enumerable/non-configurable.
+                        callable.borrow_mut().define("prototype", Property {
+                            value: JsValue::Object(prototype.clone()),
+                            writable: false,
+                            enumerable: false,
+                            configurable: false,
+                            getter: None,
+                            setter: None,
+                        }).ok();
+                        prototype.borrow_mut().define("constructor", Property {
+                            value: constructor.clone(),
+                            writable: true,
+                            enumerable: false,
+                            configurable: true,
+                            getter: None,
+                            setter: None,
+                        }).map_err(|_| Throw::type_error("could not define class constructor"))?;
                         callable.borrow_mut().func.as_mut().unwrap().home = Some(prototype.clone());
                         for method in &class.methods {
                             let key = method.key.resolve(&registers)?;
@@ -659,7 +847,14 @@ impl Program {
                                 prototype.borrow_mut().define(&key, property)
                                     .map_err(|_| Throw::type_error("could not define class accessor"))?;
                             } else {
-                                i.set_prop(&JsValue::Object(prototype.clone()), &key, value)?;
+                                prototype.borrow_mut().define(&key, Property {
+                                    value,
+                                    writable: true,
+                                    enumerable: false,
+                                    configurable: true,
+                                    getter: None,
+                                    setter: None,
+                                }).map_err(|_| Throw::type_error("could not define class method"))?;
                             }
                         }
                         registers[*dst] = constructor;
@@ -826,12 +1021,33 @@ fn route_abrupt(
     }
 }
 
+/// Reconstruct the AST parameter list for a compiled function. The compiler
+/// only accepts simple identifier parameters (defaults, rest and patterns are
+/// rejected), so names are enough to give the function object the correct
+/// `length` and `Function.prototype.toString` shape.
+fn bytecode_params(names: &[String]) -> Vec<crate::ast::Param> {
+    let span = Span::new(
+        crate::tokens::SourceLocation::new(1, 1),
+        crate::tokens::SourceLocation::new(1, 1),
+    );
+    names
+        .iter()
+        .map(|name| crate::ast::Param {
+            binding: crate::ast::Binding::Ident(crate::ast::Ident { name: name.clone(), span }),
+            default: None,
+            rest: false,
+            span,
+        })
+        .collect()
+}
+
 impl FunctionCode {
     fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
         let name = self.0.name.clone();
+        let params = bytecode_params(&self.0.params);
         let mut object = JsObject::function(JsFunction {
-            name: name.clone(),
-            params: vec![],
+            name,
+            params,
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
             is_generator: self.0.is_generator,
@@ -854,9 +1070,20 @@ impl FunctionCode {
         if self.0.is_generator || self.0.is_async || self.0.is_method {
             handle.borrow_mut().constructible = false;
         }
-        handle
-            .borrow_mut()
-            .set_own("name", JsValue::str(name.as_str()));
+        if self.0.is_arrow {
+            // An arrow inherits `new.target` and the super constructor
+            // lexically from the frame that creates it, matching the tree
+            // walker's `make_arrow` (interp.rs). Without this, a VM-compiled
+            // arrow's own `new.target`/`super()` resolve to nothing instead
+            // of the enclosing (derived) constructor's.
+            if let Some(frame) = i.frames.last() {
+                let mut arrow = handle.borrow_mut();
+                arrow.lexical_super_constructor = frame.super_constructor.clone();
+                arrow.lexical_new_target = frame.new_target.clone();
+            }
+        }
+        // `JsObject::function` already defines `name` and `length` with the
+        // spec descriptors; do not overwrite them here.
         if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
@@ -870,9 +1097,37 @@ impl FunctionCode {
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
+            if !self.0.is_generator {
+                // MakeConstructor(F, false, prototype): an ordinary function's
+                // own `prototype.constructor` links back to F, matching the
+                // tree walker's `make_function`. Without this, `new F()`
+                // instances resolve `.constructor` through Object.prototype
+                // instead of F, breaking every consumer that identifies a
+                // thrown/constructed value by its constructor (Test262Error
+                // included) -- this had been silently missing for every
+                // VM-compiled ordinary function, not just classes.
+                prototype.borrow_mut().define("constructor", Property {
+                    value: JsValue::Object(handle.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).ok();
+            }
+            // Function `prototype` is a non-enumerable data property
+            // (`{writable:true, enumerable:false, configurable:false}`).
             handle
                 .borrow_mut()
-                .set_own("prototype", JsValue::Object(prototype.clone()));
+                .define("prototype", Property {
+                    value: JsValue::Object(prototype.clone()),
+                    writable: true,
+                    enumerable: false,
+                    configurable: false,
+                    getter: None,
+                    setter: None,
+                })
+                .ok();
             handle.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
         }
         JsValue::Object(handle)
@@ -886,27 +1141,96 @@ impl FunctionCode {
         this: JsValue,
         args: Vec<JsValue>,
         generator_proto: Option<Obj>,
+        derived: Option<DerivedConstructor>,
+        new_target: Option<JsValue>,
     ) -> Result<JsValue, Throw> {
-        let bound_this = if is_arrow {
-            parent.resolve_this()
-        } else {
-            this
-        };
-        let env = EnvHandle::new(EnvKind::Function, Some(parent));
-        env.bind_this(bound_this);
-        for (index, name) in self.0.params.iter().enumerate() {
-            env.declare_lexical(
-                name,
-                args.get(index).cloned().unwrap_or(JsValue::Undefined),
-                true,
-            )?;
+        // An arrow's own environment owns no `this`/`super`/TDZ state of its
+        // own: it is `EnvKind::Arrow`, transparent to `resolve_this_checked`,
+        // `initialize_this` and `mark_this_uninitialized`, which all walk
+        // through it to the enclosing (possibly still-uninitialized, in a
+        // derived constructor) frame -- matching the tree walker's
+        // `FunctionBody::Block`/`Expr`. `bind_this` must never run for an
+        // arrow: on a Function-kind env it would wrongly look "already
+        // initialized" to `initialize_this`, and even harmlessly it would
+        // freeze a `this` read before the enclosing `super()` runs.
+        let env = EnvHandle::new(if is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(parent));
+        // A derived constructor's `this` starts uninitialized (TDZ until
+        // `super()` runs); an implicit one (no explicit `constructor` member)
+        // forwards its own arguments to the super call itself, matching the
+        // tree walker's `FunctionBody::Block` derived-constructor handling.
+        if !is_arrow && derived.is_some() {
+            if new_target.is_none() {
+                return Err(Throw::type_error("derived constructor requires new"));
+            }
+            env.mark_this_uninitialized();
+            if let Some(meta) = derived.as_ref().filter(|meta| meta.implicit) {
+                let bound = i.construct_with_new_target(
+                    &meta.parent, args.clone(), new_target.clone().expect("derived constructor new_target"),
+                )?;
+                env.initialize_this(bound.clone())?;
+                if let Some(frame) = i.frames.last_mut() {
+                    frame.this = bound;
+                }
+            }
+        } else if !is_arrow {
+            env.bind_this(this);
         }
-        if !is_arrow {
-            let arguments = JsValue::object(JsObject::array());
+        // Sloppy-mode duplicate simple parameter names are legal (the last
+        // one wins); only strict functions reject them, at parse time,
+        // before the compiler ever sees them. Parameters are mutable function
+        // bindings, not lexical declarations: body `var` declarations reuse
+        // them (and must not throw as a redeclaration) and sloppy duplicate
+        // names overwrite -- matching the tree walker's `bind_params`. Each
+        // name is allocated once via `declare_uninitialized` (kept lexical
+        // just long enough that nothing else can race a binding into this
+        // frame), given its value with `initialize_parameter` (also used for
+        // repeats), and only after every parameter is bound does
+        // `finish_parameter_initialization` flip each to non-lexical so a
+        // later `var`/function-declaration hoist of the same name is a no-op
+        // instead of a "already declared" syntax error.
+        let mut declared_params = std::collections::HashSet::new();
+        for (index, name) in self.0.params.iter().enumerate() {
+            let value = args.get(index).cloned().unwrap_or(JsValue::Undefined);
+            if declared_params.insert(name.clone()) {
+                env.declare_uninitialized(name, true)?;
+            }
+            env.initialize_parameter(name, value)?;
+        }
+        for name in &declared_params {
+            env.finish_parameter_initialization(name);
+        }
+        // Per spec, no `arguments` object is created when a parameter is
+        // already named `arguments` (matching the tree walker's `bind_params`,
+        // which returns early in that case); otherwise `declare_var` below
+        // would also throw on redeclaring the lexical parameter binding.
+        if !is_arrow && !declared_params.contains("arguments") {
+            // An arguments object is an ordinary object, not an Array exotic
+            // (matching the tree walker): indexed data properties, a
+            // non-enumerable writable `length`, and Symbol.iterator.
+            let arguments = i.object_value();
             for (index, value) in args.iter().enumerate() {
                 i.set_prop(&arguments, &index.to_string(), value.clone())?;
             }
-            i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
+            if let JsValue::Object(object) = &arguments {
+                object.borrow_mut().define("length", Property {
+                    value: JsValue::num(args.len() as f64),
+                    writable: true,
+                    enumerable: false,
+                    configurable: true,
+                    getter: None,
+                    setter: None,
+                }).map_err(|_| Throw::type_error("could not define arguments length"))?;
+                if let Some(values) = i.array_proto.borrow().get_own("values") {
+                    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
+                        value: values,
+                        writable: true,
+                        enumerable: false,
+                        configurable: true,
+                        getter: None,
+                        setter: None,
+                    }).map_err(|_| Throw::type_error("could not define arguments iterator"))?;
+                }
+            }
             env.declare_var("arguments", arguments)?;
         }
         if self.0.is_generator {
@@ -925,6 +1249,19 @@ impl FunctionCode {
         }
         if self.0.is_async {
             return self.call_async(i, env);
+        }
+        if derived.is_some() {
+            // A derived constructor's completion, per spec: an object return
+            // value wins outright, a non-undefined non-object return value is
+            // a TypeError, and otherwise the (by now super()-initialized)
+            // `this` is the result -- a ReferenceError if `super()` never ran.
+            return match self.0.program.execute(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+                Ok(value) if value.is_object() => Ok(value),
+                Ok(value) if !value.is_undefined() =>
+                    Err(Throw::type_error("derived constructor returned a non-object")),
+                Ok(_) => env.resolve_this_checked(),
+                Err(error) => Err(error),
+            };
         }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
     }

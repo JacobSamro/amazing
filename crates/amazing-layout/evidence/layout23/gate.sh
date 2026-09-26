@@ -46,17 +46,36 @@ for corpus in position writing ruby tables retained; do
   #    remerge-lfg2-subgrid-lanes-loss.md.
   # 3) LFG-3 remerge (2026-09-26): widening CSS2.1 shrink-to-fit from "both
   #    insets auto" to "width auto" (coordinator-mandated, faithfully ported;
-  #    flex.rs/grid.rs untouched/byte-identical to dev) newly exercises a
-  #    real, pre-existing amazing-layout bug where an abspos box's shrink-
-  #    to-fit width computes correctly (verified via box-tree dump matching
-  #    the reference exactly) but paints incorrectly for non-trivial content
-  #    (tables, floats, ruby, orthogonal writing modes). Confirmed with real
-  #    pixel evidence (table-anonymous-objects-059: 0 -> 26,103 differing
-  #    pixels; abspos-008: Ian Hickson's canonical shrink-wrap case, 0 ->
-  #    mismatch), not assumed. Squarely this lane's own code (table.rs/
-  #    block.rs/paint), filed as LAYOUT-24 in docs/lanes/layout_TODO.md and
-  #    .agents/layout/questions.md, not routed elsewhere. See
-  #    lfg3-shrink-to-fit-loss.md.
+  #    flex.rs/grid.rs untouched/byte-identical to dev) newly exercised a
+  #    real, pre-existing amazing-layout bug: a shrink-to-fit box wrapping a
+  #    table measured that table's intrinsic width via `table::intrinsic`,
+  #    which hardcodes `text: None` (fallback glyph-width heuristics), while
+  #    `table::layout`'s own live `constraints()` call always uses real
+  #    shaped text -- the two could diverge sharply, so the shrink-to-fit
+  #    box resolved narrower than the table needed and its columns were
+  #    squeezed below their true max-content width. Filed and root-caused as
+  #    LAYOUT-24; fixed 2026-09-27 in position.rs/table.rs (see the
+  #    "Resolution" section appended to lfg3-shrink-to-fit-loss.md) by
+  #    threading real text into a table found anywhere under a shrink-to-
+  #    fit box's block-flow descendants (`table::intrinsic_with_text`,
+  #    `position.rs`'s
+  #    `shaped_intrinsic_width`). Confirmed structural fix with real pixel
+  #    evidence: table-anonymous-objects-059's differing pixels dropped
+  #    26,103 -> 8,929 (-66%), -098's 26,686 -> 9,544 (-64%), abspos-008
+  #    (Ian Hickson's canonical shrink-wrap case) now matches exactly (0
+  #    diff, no longer a loss, removed from `accepted` below). The
+  #    remaining tables/writing/ruby/retained cases below still fail the
+  #    corpus's strict zero-tolerance pixel comparison, but not from the
+  #    LAYOUT-24 mechanism any more: measured pixel offsets are a
+  #    consistent ~1px cumulative rounding drift in table column-width
+  #    distribution (`auto_widths`'s float arithmetic vs. the reference's
+  #    own rounding/snapping), which a 1px shift turns into thousands of
+  #    differing anti-aliased glyph-edge pixels under allowed_differing_
+  #    pixels=0. That drift is pre-existing (fixed-table-layout-003a03/04
+  #    already had 2 differing pixels before this fix, unchanged after) and
+  #    affects tables generally, not just shrink-to-fit ones -- filed
+  #    separately as LAYOUT-26 (not this lane's LFG-3 regression, so kept
+  #    as a documented exception here rather than blocking this gate).
   python3 - "$RUN/$corpus-comparison.json" "$corpus" <<'CHECK' || status=1
 import json,sys
 r=json.load(open(sys.argv[1]))
@@ -65,7 +84,8 @@ lfg3_shrink_to_fit = 'LFG-3 shrink-to-fit widening exposes pre-existing table/fl
 accepted = {
     'position': {
         'CSS2__positioning__right-113.xht': 'IPC-10/RC-21 utility decode bug',
-        'CSS2__positioning__abspos-008.xht': lfg3_shrink_to_fit,
+        # abspos-008 (Ian Hickson's canonical shrink-wrap case) fixed by
+        # LAYOUT-24 2026-09-27; no longer a loss, intentionally absent here.
         'css-position__sticky__position-sticky-table-pixel-rounding.html': lfg3_shrink_to_fit,
     },
     'writing': {

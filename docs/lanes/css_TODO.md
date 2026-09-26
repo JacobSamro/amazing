@@ -2078,16 +2078,289 @@ shared sandbox ran low (`~/amazing/targets/*/debug/incremental` regrows
 fast under six lanes sharing one host); purged per the established
 disk-hygiene precedent (rebuildable, safe).
 
+## CSS-28 — `place-*` shorthand expansion + the css-grid `*-invalid.html` cluster (base `dev` at `d1d41ec3`)
+
+Two parts, one commit series.
+
+**Part 1: `place-items`/`place-self`/`place-content` reach the full cascade.**
+`expand_declaration` already had real arms for these three shorthands, but
+nothing had exercised them through the full `compute()` pipeline (as opposed
+to `expand_declaration`'s own unit tests) — layout-flexgrid's grid abspos
+static-position code reads `ComputedStyle::get("align-items")`/etc. after a
+real cascade, not via a synthetic call. Added
+`place_shorthands_reach_computed_style_through_the_full_cascade` in
+`crates/amazing-css/tests/css6_grid_values.rs` covering all three shorthands
+plus the ordinary "a longhand declared after the shorthand wins for that
+longhand only" cascade-order case; no production-code gap was found (already
+correct), so this is a regression-proofing test, not a fix.
+
+**Part 2: css-grid's `*-invalid.html` shorthand-strictness cluster.**
+Root cause: `values::parse()` — the function
+`wpt_conformance.rs`'s `test_valid_value`/`test_invalid_value` calls through
+`values::parses()` — had **no match arm at all** for
+`grid-template-columns`/`-rows` (fell through to an unconditional `Some(...)`),
+and no arm whatsoever for `grid-row-start`/`-end`, `grid-column-start`/`-end`,
+`grid-row`/`grid-column`, `grid-area`, `grid-auto-columns`/`-rows`,
+`grid-auto-flow`, `grid-template-areas`, `grid-template`, or `grid` (all fell
+through to the generic bottom-of-function fallback, which accepts anything).
+Every `test_invalid_value` for these properties was therefore unwinnable:
+validity was never actually checked.
+
+Fixed by wiring all of the above into real validators in `computed.rs`
+(`valid_grid_track_list`/`valid_grid_track_tokens` rewritten for
+`<line-names>?` sequencing and fixed-size enforcement alongside an
+auto-repeat; new `valid_track_size` adding `fit-content()`; `valid_grid_line`
+rewritten from a token-order-independent flag check to a word-based,
+position-tracking implementation enforcing "`span` may lead or trail an
+integer+name pair but not sit between them" and rejecting lexical
+`<number>`s like `1.0` where `<integer>` is required; new
+`valid_grid_line_pair`, `valid_grid_area`, `valid_grid_auto_track_list`,
+`valid_grid_auto_flow`, `valid_grid_template_areas`, `valid_grid_template`,
+`valid_grid_shorthand`), then calling them from new `values::parse` match
+arms for every property above. Also added `grid-area`'s cascade expansion in
+`expand_declaration` (it previously had no arm at all and fell to the
+generic passthrough, so it never split into its four longhand quadrants for
+layout).
+
+**Regression found and fixed before this could ship (zero-lost-passes
+check):** giving `grid-area` a real `expand_declaration` arm stopped it from
+being stored under its own shorthand name (matching the crate's established
+"shorthand values are not directly retrievable via `get()`" pattern, per the
+existing `public_set_uses_the_same_shorthand_expansion_seam` test) — but six
+`grid-area-computed.html` cases were passing *only* because the old
+passthrough happened to echo the specified text back verbatim, which is what
+`getComputedStyle().gridArea` needs. Restored that round-trip deliberately:
+`expand_declaration`'s `"grid-area"` arms now emit a fifth `("grid-area",
+value)` pair alongside the four longhands, so `get("grid-area")` still
+works. This is a literal echo, not a re-derived shortest serialization, and
+can go stale if a later, higher-priority `grid-row-end`/etc. declaration
+overrides only one quadrant of the same cascade slot — see Boundary below.
+`grid-row`/`grid-column`'s own equivalent computed-value gap predates this
+ticket (they never had this passthrough) and is not a regression; left
+as-is (see Boundary).
+
+Two more regressions surfaced by the same before/after diff, both inside the
+new `valid_grid_line` rewrite itself (not `grid-area`): (a) it pre-split the
+value on ASCII whitespace *before* tokenizing, which cut a CSS escape's own
+mandatory single trailing whitespace (`\31 st` decodes to the one ident
+`1st`; naive splitting cut it into `\31` and `st`, each unparseable) — fixed
+with a new `split_grid_line_words` that walks the string once, treating an
+escape sequence (and, for the calc case below, anything inside balanced
+parens) as non-splitting; (b) the old value-based (not token-order) rewrite
+had no path for CSS Values 4's "`<integer>` may be a math function"
+(`span calc(-2)`, `span min(-1, 6)`) — added an `integer_calc_function` check
+recognizing a balanced `calc()`/`min()`/`max()`/`clamp()` in the integer slot,
+accepted for grammar purposes with an *unknown* value (exempt from the sign
+checks, since a UA cannot statically evaluate `sibling-index()` or a
+container-query-dependent `sign()`).
+
+**Verification methodology:** measured pass/fail by *test identity*
+(`property: value`, stripping the `-> actual, expected` suffix before
+diffing), not raw line text or net counts — a naive line-diff flags a test
+that fails at both baseline and current-but-with-a-different-actual-value
+text as a "new regression" when it never passed either way. Baseline was
+captured by `git stash`-ing all CSS-28 changes locally (the Boat sandbox tree
+has no `.git`, so `git stash` had to run on the Mac worktree before each
+`scripts/linux-run.sh` sync), running the full `wpt_conformance` corpus, then
+popping the stash and re-running on the same commit (`d1d41ec3`) plus
+uncommitted changes.
+
+Measured (Linux, Boat sandbox `bx_cp5jbn5z`, pool-layout):
+
+| Selection | Baseline (`d1d41ec3`, no CSS-28 changes) | After CSS-28 |
+|---|---|---|
+| css-grid | 454/953 | 792/953 |
+| **All 10 selections total** | **2283/3823** | **2621/3823** |
+
+Zero regressions by test identity across all 10 selections (`comm -13` on the
+sorted, actual-value-stripped FAIL-key sets: empty); 338 tests newly passing,
+all in css-grid. Crate tests: **354/354** (0 doctests, unchanged). Workspace
+gate: `cargo nextest run --workspace --locked --no-fail-fast` **3104/3104
+passed, 13 skipped, 0 failed** (up from baseline's 3102 — the two new
+`place-*` regression tests); `cargo test --workspace --locked --doc` **ok**
+across every doc-tested crate, both before and after.
+
+Boundary (deliberately not fixed here, with the reason):
+
+- **`grid-row`/`grid-column`'s own `*-computed.html` round-trip** (8 of
+  `grid-area-computed.html`'s remaining failures): these two shorthands have
+  never stored a reconstructible value under their own name (no passthrough
+  was ever added for them, unlike `grid-area`'s restored one above), so
+  `get("grid-row")`/`get("grid-column")` return `None` after a full cascade —
+  a pre-existing gap, not a regression from this ticket. A real fix needs
+  actual CSS shortest-serialization (`grid-row-shortest-serialization.html`
+  covers this directly, but that file is never run: `wpt_conformance.rs`'s
+  `collect_files` only picks up `*-valid.html`/`*-invalid.html`/
+  `*-computed.html`, and this file ends in `-serialization.html`).
+- **`calc()`-typed `<integer>` resolving to an actual value** (5 remaining
+  `grid-area-computed.html` failures: `calc(1.1)` rounding, `calc(10 + (sign(
+  2cqw - 10px) * 5))` needing real container-query evaluation against the
+  test's `100px` container, `span calc(-1)`/`span calc(sibling-index() - 2)`
+  needing the spec's "negative or unresolvable → clamp to 1" rule): accepted
+  for *validity* (fixed above, unblocking three `grid-area-valid.html`
+  failures), but computing the actual resolved integer — especially the
+  container-query-dependent case — needs real layout/query evaluation this
+  validator-level fix does not attempt.
+- **`grid-area`'s round-trip staleness** (no current test exercises this,
+  documented as a known edge): the restored `("grid-area", value)` passthrough
+  is the shorthand's own raw text, cascaded as its own independent candidate.
+  If a later, higher-specificity `grid-row-end` (etc.) declaration overrides
+  only one quadrant, `get("grid-area")` still returns the original shorthand
+  text, not a value reflecting the override. Real shortest-serialization
+  (same fix as the bullet above, generalized to all three shorthands) would
+  close this properly.
+- **`grid-lanes` tentative WPT files** (~51 failures per the earlier widened
+  baseline): not touched this ticket, out of the `*-invalid.html` cluster's
+  scope.
+- **`computed.rs` file size**: was already over this repo's 4,000-line
+  budget before this ticket (4,081 lines at `d1d41ec3`); the validators added
+  here bring it to 4,806. Flagged in `.agents/css/questions.md` as a split
+  candidate for a dedicated follow-up ticket (e.g. hiving off the
+  `valid_grid_*` family into a new `grid_values.rs` submodule) rather than
+  attempted under this ticket's gate.
+
+## CSS-29 (based on 120600f9)
+
+Three parts, one commit series: a code-health split, the selector cluster
+routed from dom-bindings, and the box-shadow-invalid.html cluster (the
+largest remaining one across the 10 WPT selections).
+
+**Part 1 -- split `computed.rs`.** Moved the css-grid track-list/`<grid-
+line>`/shorthand grammar (30 functions, unchanged bodies) into a new
+`grid_values.rs` module, re-exported with `pub(crate) use grid_values::{...}`
+so both `crate::computed::name` (from `values.rs`) and bare-name internal
+calls keep working. `computed.rs` 4,806 -> 3,960 lines; `cargo check`/`cargo
+nextest run -p amazing-css` clean; css-grid WPT selection unchanged at
+792/953, proving zero behavior change. Commit `12deb44a`.
+
+**Part 2 -- the selector cluster.**
+
+- **querySelector CSS-escapes** (`dom/nodes/ParentNode-querySelector-
+  escapes.html`, 40 subtests, routed earlier): CSS Syntax 3 SS4.3.7's
+  "consume an escaped code point" had two bugs. The hex-digit branch
+  returned `None` (meaning "not an escape at all") for a NUL/surrogate/
+  out-of-range value instead of U+FFFD -- but by then it had already
+  consumed the whole escape sequence, so the caller's `None`-handling code
+  (which assumes the `\` is still unconsumed) advanced position AGAIN,
+  desyncing the tokenizer. A lone backslash at EOF decoded as a literal `\`
+  instead of U+FFFD (a parse error per spec, but still a code point, not
+  "not an escape"). Fixed both branches to always return a code point except
+  for the one true "not a valid escape" case (`\` directly followed by a
+  newline). Also added CSS Syntax 3 SS3.3 input preprocessing (CRLF/lone-CR/
+  FF -> LF, NUL -> U+FFFD) before tokenizing, needed because a hex escape's
+  trailing-whitespace consumption only ever sees an already-normalized LF.
+  Root-causing this surfaced a THIRD, separate bug: the tokenizer's hash-
+  token (`#`) and at-keyword (`@`) dispatch only checked for a literal ident
+  char right after the sigil, never for a valid-escape lookahead (backslash
+  not followed by newline) -- so `#\30 foo`-style escaped id selectors
+  tokenized as a lone `Delim('#')` and never reached `ident()`/`escape()` at
+  all. Fixed by adding the escape-lookahead arm to both dispatches.
+- **`:scope`/`:has(> :scope)` for `Element.closest()`** (`dom/nodes/Element-
+  closest.html`, part of its 4 subtests): root-caused to
+  `crates/amazing/src/dom_host.rs`'s `matches_selector`, which always calls
+  `amazing_css::selectors::matches(...)` (scope always `None`) -- `closest()`
+  must bind `:scope` to the ORIGINAL context element throughout its whole
+  inclusive-ancestor walk. `amazing-css` already had the right scope-
+  threading machinery (`matches_in_scope`/`matches_pseudo_in_scope`, and
+  `Simple::Has`'s `compound_in_scope` call already forwards `scope`
+  correctly), it was just `pub(crate)`-only. Made both `pub` so a caller
+  outside this crate can supply a scope root; the actual `closest()`/
+  `DomHost` wiring is outside `amazing-css` (routed in
+  `.agents/css/questions.md` to devtools/integrator-assist).
+- **`:invalid`/`:valid`** (the other half of `Element-closest.html`'s 4
+  subtests, previously a SyntaxError since an unrecognized pseudo-class
+  invalidates the whole selector): added as a Phase 2, attribute-only
+  subset -- no live form/widget state in this DOM. `input`/`select`/
+  `textarea` are invalid when `required` and their effective value is empty
+  (select reads its selected/first `<option>`'s `value` attribute or text;
+  textarea reads its text content). `fieldset`/`form` match `:invalid` when
+  they have any non-disabled `input`/`select`/`textarea` descendant that is
+  itself invalid -- per the HTML Standard's own `:valid`/`:invalid` rule for
+  those two elements, since neither has a value of its own. `pattern`/
+  type-format/min-max mismatches are out of scope. New unit test
+  `invalid_and_valid_pseudo_classes_read_required_and_empty_value` mirrors
+  the routed WPT fixture's shape (`do_test(":invalid", "test11", "test2")`:
+  a form and a fieldset both matching `:invalid` via a descendant, while the
+  select in between is validly filled).
+
+amazing-css: 356/356 nextest (incl. new
+`id_selector_escapes_decode_per_css_syntax_4_3_7` and the `:invalid`/`:valid`
+test above), 0 doctests. WPT parsing-conformance runner (10 selections)
+unaffected by this part: 2621/3823, matching the CSS-28 baseline exactly (the
+runner only exercises `values::parse`/`compute()`, not selector matching).
+Verification for the actual routed DOM/selector WPT files is by unit tests
+mirroring their assertions plus the full crate regression above, since this
+lane does not own the JS-engine/DOM-bindings harness that executes real
+`testharness.js` files end to end. Commit `92372a58`.
+
+**Part 3 -- box-shadow-invalid.html cluster (40 failures, the largest
+remaining across the 10 selections once Part 2 was measured with no effect
+on this runner).** `box-shadow`'s `<shadow>` grammar
+(`<color>? && <length>{2,4} && inset?`) was checked by counting each kind of
+component independently and never checking adjacency: `-4px red 4px`
+(a color splitting the two required lengths into two separated runs),
+`4px inset -4px`, a color or `inset` alone with no lengths, too many/too few
+lengths, two colors, two insets -- all of it parsed as valid. Rewrote as
+`valid_single_box_shadow`: classify each component, then require the
+lengths to form exactly one contiguous run (a color/inset interrupting it
+directly produces two runs, caught immediately) plus at most one color and
+one `inset`.
+
+Wiring this into `values::parse`'s `"box-shadow"` arm (there wasn't one --
+box-shadow fell through to the generic `Unparsed` catch-all, so the WPT
+runner reported every string valid regardless of content, masking the bug
+above from measurement) surfaced two more gaps once real values started
+being checked: `shadow_length` only recognized the `px` unit, and rejected
+`calc()`-based lengths outright including percentage-free ones CSS Values 4
+allows for `box-shadow` (`calc(1em - 2px)`, `calc(-1px)` -- the latter valid
+because a `calc()` result outside a property's allowed range is clamped at
+computed-value time, not rejected as a parse error, unlike a literal
+out-of-range token, so a calc()-derived blur radius's sign is deliberately
+left unchecked). Also added the missing comma-separated shadow LIST support
+(multiple `<shadow>`s), previously rejected outright regardless of content.
+Fixing these three together, rather than only the ordering bug, was needed
+to avoid regressing four `box-shadow-valid.html` cases that had been passing
+vacuously (no real check existed) and would otherwise have started failing
+once real validation was wired in.
+
+Split box-shadow's whole grammar into `shadow_values.rs` (same pattern as
+Part 1's `grid_values.rs`) to keep `computed.rs` under the 4,000-line policy
+-- adding the fixes above brought it back up to 4,079 lines; after the split,
+3,797.
+
+amazing-css: 356/356 nextest, 0 doctests, both before and after the split.
+WPT parsing-conformance runner (10 selections): css-backgrounds 385 -> 427
+(+42), combined total 2621 -> 2663/3823. Verified **zero lost by test
+identity**: diffed the full sorted FAIL-key sets (test file + assertion,
+suffix after `->` stripped) before and after with `comm`; the four
+box-shadow-valid.html cases mentioned above were the only ones that would
+have regressed, and are covered by the calc()/units/comma-list fixes.
+Commit `accfba0d`.
+
+Boundary / not fixed here:
+
+- **Full-workspace gate blocked by a pre-existing, unrelated compile break**:
+  `cargo nextest run --workspace --locked` fails to compile at
+  `crates/amazing/src/runtime_host_devtools.rs:974`
+  (`missing field 'node' in initializer of 'PageScript'`) -- HTML-29 added
+  that field to `PageScript` in `crates/amazing/src/cmd/js.rs`, but
+  devtools's own file wasn't updated. Confirmed via `git status`/`git log`
+  that this is pre-existing in the synced tree, not introduced by CSS-29.
+  Routed in `.agents/css/questions.md` with the exact one-line fix; not
+  edited here since it's outside `LANE_PATHS["css"]`. `amazing-css`'s own
+  crate gate (nextest + doctests) is unaffected and reported above.
+- **`:scope`/`:has(> :scope)` end-to-end wiring**: the `amazing-css`-side
+  primitive is public now; the `DomHost`/`closest()` consumer change is
+  cross-lane (routed, see Part 2 above).
+
 ## Next
 
-Biggest clusters first, per the widened baseline above: `css-grid`'s
-`*-invalid.html` shorthand/track-list strictness (~300+), `color`'s
-computed-value canonicalization (unblocks `alpha-color-computed.html` and
-`color-computed.html` together), `box-shadow-invalid.html`, then the
-css-transforms `*-origin`/`scale`/`rotate` computed files and css-fonts'
-`font-variant`/`font-synthesis` grammar. Legacy comma-form `rgb()`/`hsla()`
-strictness and `sibling-index()`/`sibling-count()` remain smaller, later
-items. Also still open from CSS-25: `calc()` infinity/NaN, relative-color
-channel keywords inside nested `calc()`/`clamp()`, `container` shorthand
-serialization, `random-item()`, and `mediaqueries`' `matchMedia().media`
-canonical serialization.
+Biggest clusters first (post-CSS-29): css-text (253 failing), css-transforms
+(176), css-grid's remaining `*-computed.html` shortest-serialization gaps
+(161), css-fonts (159), and `color`'s computed-value canonicalization
+(unblocks `alpha-color-computed.html` and `color-computed.html` together).
+Legacy comma-form `rgb()`/`hsla()` strictness and `sibling-index()`/
+`sibling-count()` remain smaller, later items. Also still open from CSS-25:
+`calc()` infinity/NaN, relative-color channel keywords inside nested
+`calc()`/`clamp()`, `container` shorthand serialization, `random-item()`,
+and `mediaqueries`' `matchMedia().media` canonical serialization.

@@ -32,7 +32,7 @@ pub(crate) fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result
     host.with_dom(|dom| dom.events().event_checked(id).ok_or(DomError::InvalidStateError).map(|_| ()))?;
     Ok(id)
 }
-fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget, H::Error> {
+pub(crate) fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget, H::Error> {
     if let Some(slot) = host.window_event_target_slot(value) {
         return Ok(EventTarget::External(slot));
     }

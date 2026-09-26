@@ -17,6 +17,14 @@ if [ "$HOST" = boat ]; then
       -i "$HOME/.ssh/ascii_box_ed25519" -P "$P" "$H:$src" "$DEST/" 2>/dev/null || rc=1
   done
 else
-  for src in "$@"; do scp -q -o ControlPath=none "$HOST:$src" "$DEST/" 2>/dev/null || rc=1; done
+  # A run started before the lane moved hosts left its outputs on the old one;
+  # fall back to every other build host.
+  for src in "$@"; do
+    ok=0
+    for h in "$HOST" venus-001 venus-003 root@46.224.130.223 root@159.69.124.56 root@178.104.111.133; do
+      scp -q -o ControlPath=none -o ConnectTimeout=10 "$h:$src" "$DEST/" 2>/dev/null && { ok=1; break; }
+    done
+    [ "$ok" = 1 ] || rc=1
+  done
 fi
 exit $rc

@@ -21,6 +21,12 @@ struct IntlDateState {
     fractional_second_digits: Option<usize>,
     time_zone_name: Option<String>,
     hour_cycle: String,
+    // True when year/month/day were synthesized by the constructor's "no
+    // component requested at all" fallback rather than asked for by the
+    // caller. A Temporal kind that can't supply year/month/day (PlainTime)
+    // drops them either way, but only an *explicit* request with no
+    // remaining overlap is a TypeError -- see intl_temporal_adapt_state.
+    ymd_defaulted: bool,
 }
 
 fn intl_optional_string(i: &mut Interpreter, options: &JsValue, key: &str, allowed: &[&str]) -> Result<Option<String>, Throw> {
@@ -140,10 +146,17 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     {
         return Err(Throw::type_error("dateStyle/timeStyle conflicts with components"));
     }
-    if date_style.is_none() && time_style.is_none()
+    // Unlike the conflict check above, timeZoneName is deliberately excluded
+    // here: requesting timeZoneName alone (no dateStyle/timeStyle, no other
+    // component) still gets the year/month/day numeric default, it doesn't
+    // count as "something else was requested" -- see the intl402/
+    // DateTimeFormat/prototype/*/temporal-plain*-formatting-timezonename.js
+    // tests, which construct exactly that and expect a non-throwing result.
+    let ymd_defaulted = date_style.is_none() && time_style.is_none()
         && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
-            hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().all(|field| field.is_none())
-        && fractional_second_digits.is_none() {
+            hour.as_ref(), minute.as_ref(), second.as_ref()].iter().all(|field| field.is_none())
+        && fractional_second_digits.is_none();
+    if ymd_defaulted {
         year = Some("numeric".into());
         month = Some("numeric".into());
         day = Some("numeric".into());
@@ -152,7 +165,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let hour12 = i.get_prop(&options, "hour12")?;
     let hc_extension = requested.first().and_then(|tag| intl_unicode_keyword(tag, "hc"))
         .filter(|value| ["h11", "h12", "h23", "h24"].contains(&value.as_str()));
-    let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
+    let default_cycle = if ["en", "ar", "ko", "zh-Hant"].contains(&locale.as_str()) { "h12" } else { "h23" };
     // An explicit hour12 always overrides (and drops) the hc extension.
     let (hc_retained, hour_cycle) = if !hour12.is_undefined() {
         (None, if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string())
@@ -168,7 +181,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let state = IntlDateState {
         locale, resolved_locale, calendar, numbering_system, time_zone,
         date_style, time_style, weekday, era, year, month, day, day_period, hour, minute,
-        second, fractional_second_digits, time_zone_name, hour_cycle,
+        second, fractional_second_digits, time_zone_name, hour_cycle, ymd_defaulted,
     };
     intl_chain_construct(i, this, "DateTimeFormat", IntlState::DateTime(state))
 }
@@ -242,9 +255,9 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     let day = match state.day.as_deref() { Some("2-digit") => "dd", Some(_) => "d", None => "" };
     let year = match state.year.as_deref() { Some("2-digit") => "yy", Some(_) => "y", None => "" };
     let textual_month = ["MMM", "MMMM", "MMMMM"].contains(&month);
-    let fields: Vec<&str> = if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) {
+    let fields: Vec<&str> = if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) {
         [day, month, year].into_iter().filter(|part| !part.is_empty()).collect()
-    } else if ["ja", "zh-Hans"].contains(&state.locale.as_str()) {
+    } else if ["ja", "zh", "zh-Hans", "zh-Hant", "ko"].contains(&state.locale.as_str()) {
         [year, month, day].into_iter().filter(|part| !part.is_empty()).collect()
     } else {
         [month, day, year].into_iter().filter(|part| !part.is_empty()).collect()
@@ -257,7 +270,7 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
             date.push_str(year);
         }
     } else {
-        date.push_str(&fields.join(if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) { "." } else { "/" }));
+        date.push_str(&fields.join(if ["de", "fr", "es", "ru", "sr"].contains(&state.locale.as_str()) { "." } else { "/" }));
     }
     let mut time = String::new();
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
@@ -283,6 +296,14 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     } else if state.hour.is_some() && ["h11", "h12"].contains(&state.hour_cycle.as_str()) {
         time.push_str(" a");
     }
+    // timeZoneName can never combine with dateStyle/timeStyle (rejected at
+    // construction), so it only needs adding to the manually-built pattern
+    // here; any 'z' letter renders identically at the char-loop below
+    // regardless of the requested width.
+    if state.time_zone_name.is_some() {
+        if !time.is_empty() { time.push(' '); time.push('z'); }
+        else { if !date.is_empty() { date.push(' '); } date.push('z'); }
+    }
     if !date.is_empty() && !time.is_empty() { format!("{date}, {time}") }
     else { format!("{date}{time}") }
 }
@@ -293,6 +314,136 @@ fn intl_render_date(state: &IntlDateState, milliseconds: f64) -> Vec<(&'static s
     let Some(date) = intl_civil_date(milliseconds, offset_seconds) else {
         return vec![("literal", "Invalid Date".into())];
     };
+    intl_render_civil(state, date, offset_seconds)
+}
+
+// Days from 1970-01-01 in the proleptic Gregorian calendar; the exact
+// inverse of intl_civil_date's civil-from-days decoding (same era/yoe/doy
+// constants), so it round-trips correctly at the extreme Temporal PlainDate
+// bounds (-271821-04-19 .. +275760-09-13), which fall outside the range a
+// legacy Date/millisecond value can represent -- see
+// temporal-objects-no-time-clip-weekday.js.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = y - if m <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = m + if m > 2 { -3 } else { 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+// Which Temporal Plain* type a value was recognised as; drives which
+// DateTimeFormat fields apply (see intl_temporal_adapt_state) and which
+// fields intl_civil_date_from_temporal reads out of the shared 10-field
+// layout ([[year, month, day, hour, minute, second, ms, us, ns, refYear]]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IntlTemporalKind { Date, Time, DateTime, YearMonth, MonthDay }
+
+fn intl_civil_date_from_temporal(kind: IntlTemporalKind, fields: &[i64; 10]) -> IntlCivilDate {
+    let (year, month, day, hour, minute, second, millisecond) = match kind {
+        IntlTemporalKind::Date => (fields[0], fields[1], fields[2], 0, 0, 0, 0),
+        IntlTemporalKind::Time => (1970, 1, 1, fields[3], fields[4], fields[5], fields[6]),
+        IntlTemporalKind::DateTime => (fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]),
+        // YearMonth/MonthDay carry a placeholder reference day/year (never
+        // rendered, since intl_temporal_adapt_state always drops the field
+        // the kind doesn't have).
+        IntlTemporalKind::YearMonth => (fields[0], fields[1], 1, 0, 0, 0, 0),
+        IntlTemporalKind::MonthDay => (1972, fields[1], fields[2], 0, 0, 0, 0),
+    };
+    let days = days_from_civil(year, month, day);
+    IntlCivilDate {
+        year: year as i32, month: month as u32, day: day as u32,
+        weekday: (days + 4).rem_euclid(7) as usize,
+        hour: hour as u32, minute: minute as u32, second: second as u32, millisecond: millisecond as u32,
+    }
+}
+
+// HandleDateTimeValue's internal-slot dispatch: try each Temporal Plain*
+// kind's exact internal slot (mirroring "x has an [[InitializedTemporalX]]
+// internal slot") without ever invoking a prototype getter. Instant and
+// ZonedDateTime are not implemented yet (see .agents/js-intl/questions.md),
+// so those values fall through to the legacy ToNumber path below, same as
+// any other non-Date object -- correct for ZonedDateTime (format() must
+// throw TypeError for it) but not yet reachable for Instant.
+fn intl_temporal_lookup(value: &JsValue) -> Option<(IntlTemporalKind, IntlCivilDate)> {
+    for (std_kind, kind) in [
+        (StdTemporalKind::PlainDateTime, IntlTemporalKind::DateTime),
+        (StdTemporalKind::PlainDate, IntlTemporalKind::Date),
+        (StdTemporalKind::PlainTime, IntlTemporalKind::Time),
+        (StdTemporalKind::PlainYearMonth, IntlTemporalKind::YearMonth),
+        (StdTemporalKind::PlainMonthDay, IntlTemporalKind::MonthDay),
+    ] {
+        if let Ok(record) = std_temporal_record(value, Some(std_kind)) {
+            return Some((kind, intl_civil_date_from_temporal(kind, &record.fields)));
+        }
+    }
+    None
+}
+
+// Drops every DateTimeFormat field the Temporal kind has no data for (a
+// PlainDate has no hour, a PlainYearMonth has no day, no Plain* type has a
+// time zone since [[IsPlain]] is true for all of them) and throws TypeError
+// if nothing requested survives -- e.g. a timeStyle-only formatter has no
+// field a PlainDate can supply. Matches
+// temporal-objects-not-overlapping-options.js's per-field "no overlap"
+// behaviour (drop, don't throw, as long as *something* still overlaps).
+fn intl_temporal_adapt_state(state: &IntlDateState, kind: IntlTemporalKind) -> Result<IntlDateState, Throw> {
+    let has_date = !matches!(kind, IntlTemporalKind::Time);
+    let has_time = matches!(kind, IntlTemporalKind::Time | IntlTemporalKind::DateTime);
+    let has_weekday = matches!(kind, IntlTemporalKind::Date | IntlTemporalKind::DateTime);
+    let has_era_year = matches!(kind, IntlTemporalKind::Date | IntlTemporalKind::DateTime | IntlTemporalKind::YearMonth);
+    let has_month = has_date;
+    let has_day = matches!(kind, IntlTemporalKind::Date | IntlTemporalKind::DateTime | IntlTemporalKind::MonthDay);
+    let mut adapted = state.clone();
+    adapted.time_zone_name = None;
+    if !has_date { adapted.date_style = None; }
+    if !has_time { adapted.time_style = None; }
+    if !has_weekday { adapted.weekday = None; }
+    if !has_era_year { adapted.era = None; adapted.year = None; }
+    if !has_month { adapted.month = None; }
+    if !has_day { adapted.day = None; }
+    if !has_time {
+        adapted.hour = None; adapted.minute = None; adapted.second = None;
+        adapted.day_period = None; adapted.fractional_second_digits = None;
+    }
+    let has_any = adapted.date_style.is_some() || adapted.time_style.is_some()
+        || adapted.weekday.is_some() || adapted.era.is_some() || adapted.year.is_some()
+        || adapted.month.is_some() || adapted.day.is_some() || adapted.day_period.is_some()
+        || adapted.hour.is_some() || adapted.minute.is_some() || adapted.second.is_some()
+        || adapted.fractional_second_digits.is_some();
+    if !has_any {
+        // The user never explicitly asked for anything this kind lacks --
+        // year/month/day were only present because the constructor
+        // synthesizes them when nothing else is requested. Render whatever
+        // is left (possibly nothing) instead of throwing; only an
+        // *explicit* request with no overlap is a TypeError. See
+        // temporal-plain{time,date,datetime}-formatting-timezonename.js,
+        // which request only timeZoneName (always dropped for Plain*
+        // kinds) and must not throw.
+        if state.ymd_defaulted { return Ok(adapted); }
+        return Err(Throw::type_error("no overlap between DateTimeFormat options and the Temporal object"));
+    }
+    Ok(adapted)
+}
+
+// A value handed to format/formatToParts/formatRange/formatRangeToParts:
+// either the legacy Date/number/undefined("now") path (unchanged), or one
+// of the five implemented Temporal Plain* kinds, carrying its own
+// already-computed civil date (never routed through millisecond TimeClip,
+// so it works past the legacy Date range -- see days_from_civil above).
+enum IntlDateInput { Legacy(f64), Temporal(IntlTemporalKind, IntlCivilDate) }
+
+fn intl_date_input(i: &mut Interpreter, value: Option<&JsValue>) -> Result<IntlDateInput, Throw> {
+    if let Some(value @ JsValue::Object(_)) = value {
+        if let Some((kind, date)) = intl_temporal_lookup(value) {
+            return Ok(IntlDateInput::Temporal(kind, date));
+        }
+    }
+    intl_date_value(i, value).map(IntlDateInput::Legacy)
+}
+
+fn intl_render_civil(state: &IntlDateState, date: IntlCivilDate, offset_seconds: i64) -> Vec<(&'static str, String)> {
     let pattern = intl_date_pattern(state);
     let data = intl_date_data(&state.locale);
     let mut parts: Vec<(&'static str, String)> = Vec::new();
@@ -384,21 +535,47 @@ fn intl_date_format_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) 
     Ok(function)
 }
 
+fn intl_render_input(state: &IntlDateState, input: IntlDateInput) -> Result<Vec<(&'static str, String)>, Throw> {
+    match input {
+        IntlDateInput::Legacy(milliseconds) => Ok(intl_render_date(state, milliseconds)),
+        IntlDateInput::Temporal(kind, date) => Ok(intl_render_civil(&intl_temporal_adapt_state(state, kind)?, date, 0)),
+    }
+}
+
+// formatRange/formatRangeToParts requires both endpoints to be the "same
+// kind" of value: two legacy Date/number values, or two Temporal objects of
+// the identical Plain* kind. Any other pairing (including one Temporal, one
+// legacy) is a TypeError -- see fails-on-distinct-temporal-types.js.
+fn intl_date_range_input(
+    state: &IntlDateState, left: IntlDateInput, right: IntlDateInput,
+) -> Result<Vec<(&'static str, String, &'static str)>, Throw> {
+    match (left, right) {
+        (IntlDateInput::Legacy(start), IntlDateInput::Legacy(end)) => {
+            if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
+            Ok(intl_date_range_parts(state, start, end))
+        }
+        (IntlDateInput::Temporal(left_kind, start), IntlDateInput::Temporal(right_kind, end)) if left_kind == right_kind => {
+            intl_date_range_parts_temporal(state, left_kind, start, end)
+        }
+        _ => Err(Throw::type_error("formatRange requires two values of the same type")),
+    }
+}
+
 fn intl_date_bound_format(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let function = i.native_stack.last().ok_or_else(|| Throw::type_error("missing bound DateTimeFormat"))?;
     let state = match intl_state(function) {
         Some(IntlState::BoundDateTime(state)) => state,
         _ => return Err(Throw::type_error("invalid bound DateTimeFormat")),
     };
-    let timestamp = intl_date_value(i, args.first())?;
-    let parts = intl_render_date(&state, timestamp);
+    let input = intl_date_input(i, args.first())?;
+    let parts = intl_render_input(&state, input)?;
     Ok(JsValue::str(parts.iter().map(|(_, value)| value.as_str()).collect::<String>()))
 }
 
 fn intl_date_format_to_parts(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let state = intl_date_state(i, &this)?;
-    let timestamp = intl_date_value(i, args.first())?;
-    intl_parts_array(i, intl_render_date(&state, timestamp))
+    let input = intl_date_input(i, args.first())?;
+    intl_parts_array(i, intl_render_input(&state, input)?)
 }
 
 fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -406,10 +583,9 @@ fn intl_date_format_range(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRange requires two dates"));
     }
-    let start = intl_date_value(i, args.first())?;
-    let end = intl_date_value(i, args.get(1))?;
-    if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
-    let parts = intl_date_range_parts(&state, start, end);
+    let start = intl_date_input(i, args.first())?;
+    let end = intl_date_input(i, args.get(1))?;
+    let parts = intl_date_range_input(&state, start, end)?;
     Ok(JsValue::str(parts.iter().map(|(_, value, _)| value.as_str()).collect::<String>()))
 }
 
@@ -418,11 +594,10 @@ fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec
     if args.len() < 2 || args[0].is_undefined() || args[1].is_undefined() {
         return Err(Throw::type_error("formatRangeToParts requires two dates"));
     }
-    let start = intl_date_value(i, args.first())?;
-    let end = intl_date_value(i, args.get(1))?;
-    if !start.is_finite() || !end.is_finite() { return Err(Throw::range_error("invalid date range")); }
+    let start = intl_date_input(i, args.first())?;
+    let end = intl_date_input(i, args.get(1))?;
     let mut values = Vec::new();
-    for (kind, value, source) in intl_date_range_parts(&state, start, end) {
+    for (kind, value, source) in intl_date_range_input(&state, start, end)? {
         let part = i.object_value();
         i.set_prop(&part, "type", JsValue::str(kind))?;
         i.set_prop(&part, "value", JsValue::str(value))?;
@@ -433,8 +608,24 @@ fn intl_date_format_range_to_parts(i: &mut Interpreter, this: JsValue, args: Vec
 }
 
 fn intl_date_range_parts(state: &IntlDateState, start: f64, end: f64) -> Vec<(&'static str, String, &'static str)> {
-    let left = intl_render_date(state, start);
-    let right = intl_render_date(state, end);
+    intl_date_range_parts_from(state, intl_render_date(state, start), intl_render_date(state, end))
+}
+
+// Both Temporal range endpoints have already been checked to share the same
+// IntlTemporalKind (fails-on-distinct-temporal-types.js), so the state is
+// adapted once and both sides render through the same field set.
+fn intl_date_range_parts_temporal(
+    state: &IntlDateState, kind: IntlTemporalKind, start: IntlCivilDate, end: IntlCivilDate,
+) -> Result<Vec<(&'static str, String, &'static str)>, Throw> {
+    let adapted = intl_temporal_adapt_state(state, kind)?;
+    let left = intl_render_civil(&adapted, start, 0);
+    let right = intl_render_civil(&adapted, end, 0);
+    Ok(intl_date_range_parts_from(&adapted, left, right))
+}
+
+fn intl_date_range_parts_from(
+    state: &IntlDateState, left: Vec<(&'static str, String)>, right: Vec<(&'static str, String)>,
+) -> Vec<(&'static str, String, &'static str)> {
     if left == right {
         return left.into_iter().map(|(kind, value)| (kind, value, "shared")).collect();
     }
