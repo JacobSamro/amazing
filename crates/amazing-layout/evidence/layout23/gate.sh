@@ -49,13 +49,13 @@ import json,sys
 r=json.load(open(sys.argv[1]))
 corpus=sys.argv[2]
 accepted = {
-    'position': {'CSS2__positioning__right-113.xht'},
-    'retained': {'css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html'},
-}.get(corpus, set())
-unexplained_losses = sorted(set(r['losses']) - accepted)
-if accepted & set(r['losses']):
-    print('ACCEPTED OWNER-EXTERNAL LOSS (IPC-10/RC-21 utility decode bug):',
-          sorted(accepted & set(r['losses'])), flush=True)
+    'position': {'CSS2__positioning__right-113.xht': 'IPC-10/RC-21 utility decode bug'},
+    'retained': {'css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__line-names__row-line-names-008.html':
+                 'layout-flexgrid subgrid/grid-lanes named-line bug, pre-existing, routed'},
+}.get(corpus, {})
+unexplained_losses = sorted(set(r['losses']) - set(accepted))
+for case in sorted(set(accepted) & set(r['losses'])):
+    print('ACCEPTED OWNER-EXTERNAL LOSS (' + accepted[case] + '):', case, flush=True)
 if unexplained_losses or any(r['after_counts'][key] > r['before_counts'][key]
         for key in ('error','timeout','crash','unsupported')):
     print('CORPUS GATE HELD:',sys.argv[1],unexplained_losses,flush=True)

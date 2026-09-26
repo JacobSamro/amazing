@@ -1518,4 +1518,36 @@ owner-external exception instead of holding. Re-gated on merged `dev`
 five corpora reproduce byte-identical position/writing/ruby/tables/retained
 counts to the numbers above, with zero unexplained losses. SHA: see
 `.agents/layout/status.json`.
+
+**Remerge with layout-flexgrid LFG-1/LFG-2 (2026-09-26):** the orchestrator
+could not merge `7e84c772` into `dev` because layout-flexgrid's LFG-1/LFG-2
+landed first, conflicting in `block.rs`/`grid.rs`/`position.rs`/this file
+(grid abspos static position and containing block, shrink-to-fit in
+`prepare_stretch`, grid-area placement). Resolved by hand: kept this lane's
+`ContainingBlock`/`prepare_sizes`/`relative_offset` (RTL, zoom-correct,
+anchor-aware shrink-to-fit) and layout-flexgrid's `GridTracks`/grid-area
+abspos plumbing verbatim, adapting only `grid_area_containing_block`'s return
+type. Re-gating against the fixed retained449 baseline (not part of
+layout-flexgrid's own gate) surfaced a real regression — `grid_child_static_anchor`
+used the grid-area rect unconditionally, but a `position: static` grid
+container does not generate the abspos containing block per CSS2.1 (no
+flexbox-style unconditional special case for grid), confirmed against the
+pinned WPT reference for `grid-abspos-staticpos-justify-self-002`/`-rtl-003`.
+Fixed with a `use_grid_area` gate matching the existing `grid_generates_cb`
+condition. Merge commit `4c694f2a`; final gate on that SHA: workspace
+**3094 pass/12 skip**, four doctests pass, layout **372 pass/1 skip**.
+Position **226→255/645** (+30/-1), writing **243→245/1112** (+2/-0), ruby
+**70/118** unchanged, tables **309→310/386** (+1/-0), retained
+**303→305/449** (+3/-1). Both single losses are documented, non-silent
+owner-external exceptions in `gate.sh` (right-113/IPC-10, and one
+pre-existing layout-flexgrid subgrid+grid-lanes named-line bug routed via
+`.agents/layout-flexgrid/questions.md`; see
+`crates/amazing-layout/evidence/layout23/remerge-lfg2-subgrid-lanes-loss.md`).
+Cross-check of layout-flexgrid's own 1,446-case flex/grid selection on the
+same binary: **614→709 pass** (net +95, +11 over their reported 698 at
+LFG-2); 7 case-level losses relative to the 614 baseline are pre-existing
+LFG-1/LFG-2 artifacts unrelated to this merge (`flex.rs` is byte-identical
+before/after), routed to the same questions.md. Evidence:
+`crates/amazing-layout/evidence/layout23/final-remerge/`.
+
 Next: inline positioned ancestors and fragment containing blocks (LAYOUT-24).
