@@ -1043,3 +1043,35 @@ Known adjacent gap, not claimed: the retained path's per-item resource set
 replaced fragments on a content item, unlike the old/new delta's `resources()`.
 Seeding and damage must agree before enabling retirement for them, so this
 stays a follow-up when the integrator-assist damage adapter lands.
+
+## RC-20 — gradient background-image layers (2026-09-26)
+
+Deferred from the RC-18/RC-19 reprioritization. `BackgroundLayer` now carries an
+optional serialized `<gradient>` function beside the existing `url()`.
+`paint` resolves a gradient layer through the same RC-18 `gradient::raster` at
+its used size: a gradient has no intrinsic dimensions, so `auto` resolves to the
+background positioning area and the tile is rasterized there; `cover`,
+`contain` and explicit sizes scale from the positioning area. URL layers keep
+the provider's decoded pixels and natural size. Layer order (first listed
+topmost), repeat modes, position, `background-origin`/`background-clip` and the
+shared per-frame sample budget stay in the existing loop. No CSS parsing and no
+duplicate rasterizer were added; unsupported gradient syntax paints no layer
+rather than guessing.
+
+Recognized functions: `linear-gradient`, `repeating-linear-gradient`,
+`radial-gradient`, `repeating-radial-gradient`, `conic-gradient`,
+`repeating-conic-gradient`. Nothing outside `amazing-paint` changed.
+
+Four new focused paint tests assert pixels: linear fill of the positioning area,
+repeating tiling through `background-size`, first-listed-layer-on-top ordering,
+and unsupported syntax painting nothing. Linux gate at `e3e475fd`: workspace
+nextest **2,707 passed / 0 failed / 10 skipped** with `--no-fail-fast`; separate
+workspace doctests **4 passed / 0 failed**. The focused `amazing-paint` crate run
+was **131 passed / 0 skipped**, including the four new cases.
+
+The ticket's frozen WPT gradient reftest selection and its two-round
+before/after are Windows-only and were not run under the Linux-first deferral,
+so RC-20 claims **zero WPT conformance credit**; the retained RC-18 focused 12,
+SVG 35 and gradient/scroll 4 selections are likewise unclaimed. Reproduction and
+rationale: `tests/wpt-replaced-content/rc20/README.md`. Per-paint gradient
+caching is a performance follow-up, not a correctness gap.
