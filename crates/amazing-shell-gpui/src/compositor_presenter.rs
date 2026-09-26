@@ -499,6 +499,13 @@ mod tests {
         assert_eq!(frame.passes.len(), 1);
         let output = GpuiPresenter::default().present(&frame).unwrap();
         assert!(output.direct_tiles);
-        assert_eq!(output.tiles[0].quad.opacity, 0.5);
+        // Not exactly 0.5: `amazing_compositor::property::nested_effect_opacity`
+        // round-trips both the root's (255) and this effect's (0.5 -> 128) opacity
+        // through `amazing_paint::quantize_opacity`'s u8 channel before combining
+        // ((255*128+127)/255 = 128) and dividing back by 255.0, the standard 8-bit
+        // premultiplied-alpha blend formula. That is amazing-compositor's own,
+        // deliberate quantization (see property.rs), not a GPUI presenter bug, so
+        // this asserts the quantized value rather than the pre-quantization input.
+        assert!((output.tiles[0].quad.opacity - 128.0 / 255.0).abs() < 1e-6);
     }
 }
