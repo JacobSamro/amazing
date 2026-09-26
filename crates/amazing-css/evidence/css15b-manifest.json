@@ -1,0 +1,891 @@
+﻿{
+    "schema":  1,
+    "revision":  "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+    "selection":  {
+                      "kind":  "sha256-path-stratified",
+                      "per_category":  80
+                  },
+    "sparse_paths":  [
+                         "css/css-pseudo",
+                         "css/css-counter-styles",
+                         "css/css-conditional"
+                     ],
+    "tests":  [
+                  {
+                      "id":  "css-pseudo__marker-color.html",
+                      "test":  "css/css-pseudo/marker-color.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-005.html",
+                      "test":  "css/css-pseudo/first-letter-005.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-with-quote.html",
+                      "test":  "css/css-pseudo/first-letter-with-quote.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-opacity-001-ref.html",
+                      "test":  "css/css-pseudo/first-letter-opacity-001-ref.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-punctuation-and-space.html",
+                      "test":  "css/css-pseudo/first-letter-punctuation-and-space.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-text-align-001.html",
+                      "test":  "css/css-pseudo/marker-text-align-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-trailing-punctuation.html",
+                      "test":  "css/css-pseudo/first-letter-trailing-punctuation.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-word-break.html",
+                      "test":  "css/css-pseudo/marker-word-break.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-005.html",
+                      "test":  "css/css-pseudo/marker-content-005.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-track-001.html",
+                      "test":  "css/css-pseudo/slider/slider-track-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__relative-box-order-of-pseudo-elements.html",
+                      "test":  "css/css-pseudo/relative-box-order-of-pseudo-elements.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-width.html",
+                      "test":  "css/css-pseudo/first-letter-width.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-with-before-after.html",
+                      "test":  "css/css-pseudo/first-letter-with-before-after.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-002.html",
+                      "test":  "css/css-pseudo/first-letter-002.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-with-out-of-flow-and-nested-span.html",
+                      "test":  "css/css-pseudo/first-line-with-out-of-flow-and-nested-span.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-input-textarea.tentative.html",
+                      "test":  "css/css-pseudo/first-line-input-textarea.tentative.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-fill-001.html",
+                      "test":  "css/css-pseudo/slider/slider-fill-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-variable.html",
+                      "test":  "css/css-pseudo/marker-variable.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-018.html",
+                      "test":  "css/css-pseudo/marker-content-018.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-skip-empty-span-nested.html",
+                      "test":  "css/css-pseudo/first-letter-skip-empty-span-nested.html"
+                  },
+                  {
+                      "id":  "css-pseudo__placeholder-excluded-properties.html",
+                      "test":  "css/css-pseudo/placeholder-excluded-properties.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-002.html",
+                      "test":  "css/css-pseudo/marker-content-002.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-with-out-of-flow.html",
+                      "test":  "css/css-pseudo/first-line-with-out-of-flow.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-003.html",
+                      "test":  "css/css-pseudo/first-letter-003.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-fill-002.html",
+                      "test":  "css/css-pseudo/slider/slider-fill-002.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-006.html",
+                      "test":  "css/css-pseudo/marker-content-006.html"
+                  },
+                  {
+                      "id":  "css-pseudo__before-as-flex-container.html",
+                      "test":  "css/css-pseudo/before-as-flex-container.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-004.html",
+                      "test":  "css/css-pseudo/marker-content-004.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-overflow-wrap.html",
+                      "test":  "css/css-pseudo/marker-overflow-wrap.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-001c.html",
+                      "test":  "css/css-pseudo/marker-content-001c.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-and-other-pseudo-elements.html",
+                      "test":  "css/css-pseudo/marker-and-other-pseudo-elements.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-text-transform-uppercase.html",
+                      "test":  "css/css-pseudo/marker-text-transform-uppercase.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-opacity-001.html",
+                      "test":  "css/css-pseudo/first-letter-opacity-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-list-style-position.html",
+                      "test":  "css/css-pseudo/marker-list-style-position.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-text-combine-upright.html",
+                      "test":  "css/css-pseudo/marker-text-combine-upright.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-replaced-001.html",
+                      "test":  "css/css-pseudo/first-line-replaced-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-track-002.html",
+                      "test":  "css/css-pseudo/slider/slider-track-002.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-on-ancestor-block.html",
+                      "test":  "css/css-pseudo/first-line-on-ancestor-block.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-exclude-inline-child-marker.html",
+                      "test":  "css/css-pseudo/first-letter-exclude-inline-child-marker.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-c0.tentative.html",
+                      "test":  "css/css-pseudo/first-letter-c0.tentative.html"
+                  },
+                  {
+                      "id":  "css-pseudo__file-selector-button-001.html",
+                      "test":  "css/css-pseudo/file-selector-button-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-text-transform-default.html",
+                      "test":  "css/css-pseudo/marker-text-transform-default.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-exclude-inline-marker.html",
+                      "test":  "css/css-pseudo/first-letter-exclude-inline-marker.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-001b.html",
+                      "test":  "css/css-pseudo/marker-content-001b.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-004.html",
+                      "test":  "css/css-pseudo/first-letter-004.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-with-inline-block-before.html",
+                      "test":  "css/css-pseudo/first-line-with-inline-block-before.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-skip-marker.html",
+                      "test":  "css/css-pseudo/first-letter-skip-marker.html"
+                  },
+                  {
+                      "id":  "css-pseudo__spelling-error-001.html",
+                      "test":  "css/css-pseudo/spelling-error-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-line-height-001.html",
+                      "test":  "css/css-pseudo/first-line-line-height-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-font-properties.html",
+                      "test":  "css/css-pseudo/marker-font-properties.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-input-textarea.tentative.html",
+                      "test":  "css/css-pseudo/first-letter-input-textarea.tentative.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-fill-003.html",
+                      "test":  "css/css-pseudo/slider/slider-fill-003.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-thumb-001.html",
+                      "test":  "css/css-pseudo/slider/slider-thumb-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-015.html",
+                      "test":  "css/css-pseudo/marker-content-015.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-hyphens.html",
+                      "test":  "css/css-pseudo/marker-hyphens.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-with-preceding-new-line.html",
+                      "test":  "css/css-pseudo/first-letter-with-preceding-new-line.html"
+                  },
+                  {
+                      "id":  "css-pseudo__slider__slider-track-003.html",
+                      "test":  "css/css-pseudo/slider/slider-track-003.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-003.html",
+                      "test":  "css/css-pseudo/marker-content-003.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-exclude-block-child-marker.html",
+                      "test":  "css/css-pseudo/first-letter-exclude-block-child-marker.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-010.html",
+                      "test":  "css/css-pseudo/marker-content-010.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-inherit-values.html",
+                      "test":  "css/css-pseudo/marker-inherit-values.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-line-height.html",
+                      "test":  "css/css-pseudo/marker-line-height.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-inherited-no-transition.html",
+                      "test":  "css/css-pseudo/first-line-inherited-no-transition.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-line-height-003.html",
+                      "test":  "css/css-pseudo/first-line-line-height-003.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-and-placeholder.html",
+                      "test":  "css/css-pseudo/first-line-and-placeholder.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-with-out-of-flow-and-nested-div.html",
+                      "test":  "css/css-pseudo/first-line-with-out-of-flow-and-nested-div.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-016.html",
+                      "test":  "css/css-pseudo/marker-content-016.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-with-span.html",
+                      "test":  "css/css-pseudo/first-letter-with-span.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-skip-empty-span.html",
+                      "test":  "css/css-pseudo/first-letter-skip-empty-span.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-and-marker.html",
+                      "test":  "css/css-pseudo/first-line-and-marker.html"
+                  },
+                  {
+                      "id":  "css-pseudo__placeholder-input-number.html",
+                      "test":  "css/css-pseudo/placeholder-input-number.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-003b.html",
+                      "test":  "css/css-pseudo/marker-content-003b.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-001.html",
+                      "test":  "css/css-pseudo/first-letter-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-023.html",
+                      "test":  "css/css-pseudo/marker-content-023.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-opacity-001.html",
+                      "test":  "css/css-pseudo/first-line-opacity-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-capitalize-supplementary-char.html",
+                      "test":  "css/css-pseudo/first-letter-capitalize-supplementary-char.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-on-list-item-with-block-children.html",
+                      "test":  "css/css-pseudo/first-line-on-list-item-with-block-children.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-letter-digraph.html",
+                      "test":  "css/css-pseudo/first-letter-digraph.html"
+                  },
+                  {
+                      "id":  "css-pseudo__marker-content-001.html",
+                      "test":  "css/css-pseudo/marker-content-001.html"
+                  },
+                  {
+                      "id":  "css-pseudo__first-line-with-inline-block.html",
+                      "test":  "css/css-pseudo/first-line-with-inline-block.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__malayalam__css3-counter-styles-136.html",
+                      "test":  "css/css-counter-styles/malayalam/css3-counter-styles-136.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__japanese-formal__css3-counter-styles-051.html",
+                      "test":  "css/css-counter-styles/japanese-formal/css3-counter-styles-051.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__mongolian__css3-counter-styles-137.html",
+                      "test":  "css/css-counter-styles/mongolian/css3-counter-styles-137.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__khmer__css3-counter-styles-163.html",
+                      "test":  "css/css-counter-styles/khmer/css3-counter-styles-163.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-formal__css3-counter-styles-088.html",
+                      "test":  "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-088.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__armenian__css3-counter-styles-009.html",
+                      "test":  "css/css-counter-styles/armenian/css3-counter-styles-009.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__tamil__css3-counter-styles-148.html",
+                      "test":  "css/css-counter-styles/tamil/css3-counter-styles-148.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__upper-roman__css3-counter-styles-024a.html",
+                      "test":  "css/css-counter-styles/upper-roman/css3-counter-styles-024a.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__malayalam__css3-counter-styles-135.html",
+                      "test":  "css/css-counter-styles/malayalam/css3-counter-styles-135.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__upper-armenian__css3-counter-styles-107.html",
+                      "test":  "css/css-counter-styles/upper-armenian/css3-counter-styles-107.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__counter-style-at-rule__descriptor-suffix.html",
+                      "test":  "css/css-counter-styles/counter-style-at-rule/descriptor-suffix.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__kannada__css3-counter-styles-129.html",
+                      "test":  "css/css-counter-styles/kannada/css3-counter-styles-129.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__korean-hanja-formal__css3-counter-styles-062.html",
+                      "test":  "css/css-counter-styles/korean-hanja-formal/css3-counter-styles-062.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-informal__css3-counter-styles-073.html",
+                      "test":  "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-073.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-formal__counter-simp-chinese-formal.html",
+                      "test":  "css/css-counter-styles/simp-chinese-formal/counter-simp-chinese-formal.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__persian__css3-counter-styles-104.html",
+                      "test":  "css/css-counter-styles/persian/css3-counter-styles-104.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__lower-roman__css3-counter-styles-020a.html",
+                      "test":  "css/css-counter-styles/lower-roman/css3-counter-styles-020a.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__gujarati__css3-counter-styles-122.html",
+                      "test":  "css/css-counter-styles/gujarati/css3-counter-styles-122.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__bengali__css3-counter-styles-118.html",
+                      "test":  "css/css-counter-styles/bengali/css3-counter-styles-118.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__myanmar__css3-counter-styles-142.html",
+                      "test":  "css/css-counter-styles/myanmar/css3-counter-styles-142.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__armenian__css3-counter-styles-008.html",
+                      "test":  "css/css-counter-styles/armenian/css3-counter-styles-008.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cambodian__css3-counter-styles-159.html",
+                      "test":  "css/css-counter-styles/cambodian/css3-counter-styles-159.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-formal__css3-counter-styles-087.html",
+                      "test":  "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-087.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__thai__css3-counter-styles-153.html",
+                      "test":  "css/css-counter-styles/thai/css3-counter-styles-153.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-informal__css3-counter-styles-082.html",
+                      "test":  "css/css-counter-styles/trad-chinese-informal/css3-counter-styles-082.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__lower-roman__css3-counter-styles-019.html",
+                      "test":  "css/css-counter-styles/lower-roman/css3-counter-styles-019.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-earthly-branch__css3-counter-styles-202.html",
+                      "test":  "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-202.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-formal__css3-counter-styles-078.html",
+                      "test":  "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-078.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-206.html",
+                      "test":  "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-206.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-earthly-branch__css3-counter-styles-201.html",
+                      "test":  "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-201.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__lower-armenian__css3-counter-styles-114.html",
+                      "test":  "css/css-counter-styles/lower-armenian/css3-counter-styles-114.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__korean-hangul-formal__css3-counter-styles-053.html",
+                      "test":  "css/css-counter-styles/korean-hangul-formal/css3-counter-styles-053.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hebrew__css3-counter-styles-015.html",
+                      "test":  "css/css-counter-styles/hebrew/css3-counter-styles-015.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__khmer__css3-counter-styles-162.html",
+                      "test":  "css/css-counter-styles/khmer/css3-counter-styles-162.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__oriya__css3-counter-styles-143.html",
+                      "test":  "css/css-counter-styles/oriya/css3-counter-styles-143.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-205.html",
+                      "test":  "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-205.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-formal__css3-counter-styles-077.html",
+                      "test":  "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-077.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-formal__counter-trad-chinese-formal.html",
+                      "test":  "css/css-counter-styles/trad-chinese-formal/counter-trad-chinese-formal.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__japanese-informal__counter-japanese-informal.html",
+                      "test":  "css/css-counter-styles/japanese-informal/counter-japanese-informal.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__kannada__css3-counter-styles-128.html",
+                      "test":  "css/css-counter-styles/kannada/css3-counter-styles-128.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-informal__counter-trad-chinese-informal.html",
+                      "test":  "css/css-counter-styles/trad-chinese-informal/counter-trad-chinese-informal.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__japanese-informal__css3-counter-styles-043.html",
+                      "test":  "css/css-counter-styles/japanese-informal/css3-counter-styles-043.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-formal__css3-counter-styles-086.html",
+                      "test":  "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-086.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-formal__css3-counter-styles-076.html",
+                      "test":  "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-076.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__korean-hanja-formal__css3-counter-styles-065.html",
+                      "test":  "css/css-counter-styles/korean-hanja-formal/css3-counter-styles-065.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-formal__css3-counter-styles-090.html",
+                      "test":  "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-090.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-earthly-branch__css3-counter-styles-203.html",
+                      "test":  "css/css-counter-styles/cjk-earthly-branch/css3-counter-styles-203.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__devanagari__css3-counter-styles-121.html",
+                      "test":  "css/css-counter-styles/devanagari/css3-counter-styles-121.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__lao__css3-counter-styles-133.html",
+                      "test":  "css/css-counter-styles/lao/css3-counter-styles-133.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__gujarati__css3-counter-styles-123.html",
+                      "test":  "css/css-counter-styles/gujarati/css3-counter-styles-123.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__tamil__css3-counter-styles-147.html",
+                      "test":  "css/css-counter-styles/tamil/css3-counter-styles-147.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__kannada__css3-counter-styles-130.html",
+                      "test":  "css/css-counter-styles/kannada/css3-counter-styles-130.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hiragana-iroha__css3-counter-styles-034.html",
+                      "test":  "css/css-counter-styles/hiragana-iroha/css3-counter-styles-034.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hiragana__css3-counter-styles-032.html",
+                      "test":  "css/css-counter-styles/hiragana/css3-counter-styles-032.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__counter-style-at-rule__empty-string-symbol.html",
+                      "test":  "css/css-counter-styles/counter-style-at-rule/empty-string-symbol.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cambodian__css3-counter-styles-160.html",
+                      "test":  "css/css-counter-styles/cambodian/css3-counter-styles-160.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__myanmar__css3-counter-styles-141.html",
+                      "test":  "css/css-counter-styles/myanmar/css3-counter-styles-141.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hebrew__counter-hebrew-nested.html",
+                      "test":  "css/css-counter-styles/hebrew/counter-hebrew-nested.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-informal__css3-counter-styles-071.html",
+                      "test":  "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-071.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__japanese-formal__css3-counter-styles-047.html",
+                      "test":  "css/css-counter-styles/japanese-formal/css3-counter-styles-047.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__georgian__css3-counter-styles-014.html",
+                      "test":  "css/css-counter-styles/georgian/css3-counter-styles-014.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__trad-chinese-informal__css3-counter-styles-085.html",
+                      "test":  "css/css-counter-styles/trad-chinese-informal/css3-counter-styles-085.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__georgian__css3-counter-styles-011.html",
+                      "test":  "css/css-counter-styles/georgian/css3-counter-styles-011.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__tibetan__css3-counter-styles-156.html",
+                      "test":  "css/css-counter-styles/tibetan/css3-counter-styles-156.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__katakana__css3-counter-styles-038.html",
+                      "test":  "css/css-counter-styles/katakana/css3-counter-styles-038.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__katakana-iroha__css3-counter-styles-039.html",
+                      "test":  "css/css-counter-styles/katakana-iroha/css3-counter-styles-039.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__tibetan__css3-counter-styles-157.html",
+                      "test":  "css/css-counter-styles/tibetan/css3-counter-styles-157.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-decimal__css3-counter-styles-001.html",
+                      "test":  "css/css-counter-styles/cjk-decimal/css3-counter-styles-001.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__japanese-formal__css3-counter-styles-049.html",
+                      "test":  "css/css-counter-styles/japanese-formal/css3-counter-styles-049.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__katakana__css3-counter-styles-037.html",
+                      "test":  "css/css-counter-styles/katakana/css3-counter-styles-037.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__cjk-heavenly-stem__css3-counter-styles-204.html",
+                      "test":  "css/css-counter-styles/cjk-heavenly-stem/css3-counter-styles-204.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__myanmar__css3-counter-styles-140.html",
+                      "test":  "css/css-counter-styles/myanmar/css3-counter-styles-140.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hiragana-iroha__css3-counter-styles-033.html",
+                      "test":  "css/css-counter-styles/hiragana-iroha/css3-counter-styles-033.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__korean-hanja-informal__css3-counter-styles-059.html",
+                      "test":  "css/css-counter-styles/korean-hanja-informal/css3-counter-styles-059.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__hebrew__css3-counter-styles-016.html",
+                      "test":  "css/css-counter-styles/hebrew/css3-counter-styles-016.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__simp-chinese-formal__css3-counter-styles-079.html",
+                      "test":  "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-079.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__upper-roman__css3-counter-styles-025.html",
+                      "test":  "css/css-counter-styles/upper-roman/css3-counter-styles-025.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__thai__css3-counter-styles-152.html",
+                      "test":  "css/css-counter-styles/thai/css3-counter-styles-152.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__oriya__css3-counter-styles-144.html",
+                      "test":  "css/css-counter-styles/oriya/css3-counter-styles-144.html"
+                  },
+                  {
+                      "id":  "css-counter-styles__korean-hanja-informal__css3-counter-styles-060.html",
+                      "test":  "css/css-counter-styles/korean-hanja-informal/css3-counter-styles-060.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-namespace-001.html",
+                      "test":  "css/css-conditional/at-supports-namespace-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__scrollbar-container-units-inline.html",
+                      "test":  "css/css-conditional/container-queries/scrollbar-container-units-inline.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-009.html",
+                      "test":  "css/css-conditional/at-supports-009.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-002.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-picker.html",
+                      "test":  "css/css-conditional/at-supports-selector-picker.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-details-content-before.html",
+                      "test":  "css/css-conditional/at-supports-selector-details-content-before.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-namespace-002.html",
+                      "test":  "css/css-conditional/at-supports-namespace-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-010.html",
+                      "test":  "css/css-conditional/at-supports-010.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-003.html",
+                      "test":  "css/css-conditional/at-supports-003.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-content-003.html",
+                      "test":  "css/css-conditional/at-supports-content-003.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__size-container-with-quotes.html",
+                      "test":  "css/css-conditional/container-queries/size-container-with-quotes.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-012.html",
+                      "test":  "css/css-conditional/at-supports-012.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-media-whitespace-optional-002.html",
+                      "test":  "css/css-conditional/at-media-whitespace-optional-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-picker-icon.html",
+                      "test":  "css/css-conditional/at-supports-selector-picker-icon.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-018.html",
+                      "test":  "css/css-conditional/at-supports-018.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-media-content-003.html",
+                      "test":  "css/css-conditional/at-media-content-003.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-001.html",
+                      "test":  "css/css-conditional/at-supports-selector-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-004.html",
+                      "test":  "css/css-conditional/at-supports-004.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-004.html",
+                      "test":  "css/css-conditional/at-supports-selector-004.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-006.html",
+                      "test":  "css/css-conditional/at-supports-006.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-webkit-slider-thumb.tentative.html",
+                      "test":  "css/css-conditional/at-supports-selector-webkit-slider-thumb.tentative.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-placeholder.html",
+                      "test":  "css/css-conditional/at-supports-selector-placeholder.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-detecting-invalid-in-logical-combinations.html",
+                      "test":  "css/css-conditional/at-supports-selector-detecting-invalid-in-logical-combinations.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-044.html",
+                      "test":  "css/css-conditional/at-supports-044.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__scrollbar-container-units-block.html",
+                      "test":  "css/css-conditional/container-queries/scrollbar-container-units-block.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-font-format-001.html",
+                      "test":  "css/css-conditional/at-supports-font-format-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__display-in-container.html",
+                      "test":  "css/css-conditional/container-queries/display-in-container.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-001.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-details-content.html",
+                      "test":  "css/css-conditional/at-supports-selector-details-content.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__no-layout-containment-baseline.html",
+                      "test":  "css/css-conditional/container-queries/no-layout-containment-baseline.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__inline-size-bfc-floats.html",
+                      "test":  "css/css-conditional/container-queries/inline-size-bfc-floats.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-002.html",
+                      "test":  "css/css-conditional/at-supports-selector-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__container-units-rule-cache.html",
+                      "test":  "css/css-conditional/container-queries/container-units-rule-cache.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-003.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-003.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-media-whitespace-optional-001.html",
+                      "test":  "css/css-conditional/at-media-whitespace-optional-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-048.html",
+                      "test":  "css/css-conditional/at-supports-048.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-001.html",
+                      "test":  "css/css-conditional/at-supports-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__style-negation-with-container-name.html",
+                      "test":  "css/css-conditional/container-queries/style-negation-with-container-name.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-046.html",
+                      "test":  "css/css-conditional/at-supports-046.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-008.html",
+                      "test":  "css/css-conditional/at-supports-008.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-file-selector-button.html",
+                      "test":  "css/css-conditional/at-supports-selector-file-selector-button.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__multiple-conditions-001.html",
+                      "test":  "css/css-conditional/container-queries/multiple-conditions-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-015.html",
+                      "test":  "css/css-conditional/at-supports-015.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-005.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-005.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__container-units-sharing-via-rule-node.html",
+                      "test":  "css/css-conditional/container-queries/container-units-sharing-via-rule-node.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-media-001.html",
+                      "test":  "css/css-conditional/at-media-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-005.html",
+                      "test":  "css/css-conditional/at-supports-005.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-media-002.html",
+                      "test":  "css/css-conditional/at-media-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-font-tech-001.html",
+                      "test":  "css/css-conditional/at-supports-font-tech-001.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-002.html",
+                      "test":  "css/css-conditional/at-supports-002.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-selector-003.html",
+                      "test":  "css/css-conditional/at-supports-selector-003.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-004.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-004.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__inner-first-line-non-matching.html",
+                      "test":  "css/css-conditional/container-queries/inner-first-line-non-matching.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__query-style-color.html",
+                      "test":  "css/css-conditional/container-queries/query-style-color.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-007.html",
+                      "test":  "css/css-conditional/at-supports-007.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__counters-in-container.html",
+                      "test":  "css/css-conditional/container-queries/counters-in-container.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-at-rule-006.html",
+                      "test":  "css/css-conditional/at-supports-at-rule-006.html"
+                  },
+                  {
+                      "id":  "css-conditional__at-supports-013.html",
+                      "test":  "css/css-conditional/at-supports-013.html"
+                  },
+                  {
+                      "id":  "css-conditional__container-queries__container-units-gradient.html",
+                      "test":  "css/css-conditional/container-queries/container-units-gradient.html"
+                  }
+              ]
+}
