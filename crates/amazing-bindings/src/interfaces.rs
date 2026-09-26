@@ -211,6 +211,7 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    method("moveBefore", O::MoveBefore, 2),
     getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
     getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
@@ -448,6 +449,7 @@ const SELECTION: &[Member] = &[
     method("toString", O::SelectionToString, 0),
 ];
 const ELEMENT: &[Member] = &[
+    method("moveBefore", O::MoveBefore, 2),
     getter("namespaceURI", O::ElementNamespaceURI),
     getter("prefix", O::ElementPrefix),
     getter("localName", O::ElementLocalName),
@@ -460,6 +462,8 @@ const ELEMENT: &[Member] = &[
     method("getHTML", O::ElementGetHTML, 0),
     getter("outerHTML", O::ElementOuterHTML), setter("outerHTML", O::ElementSetOuterHTML),
     method("insertAdjacentHTML", O::ElementInsertAdjacentHTML, 2),
+    method("insertAdjacentElement", O::ElementInsertAdjacentElement, 2),
+    method("insertAdjacentText", O::ElementInsertAdjacentText, 2),
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     method("matches", O::ElementMatches, 1),
@@ -536,6 +540,8 @@ const TEXT: &[Member] = &[
     method("splitText", O::TextSplit, 1),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    method("focus", O::ElementFocus, 0),
+    method("blur", O::ElementBlur, 0),
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
     getter("lang", O::HTMLLang), setter("lang", O::HTMLSetLang),
@@ -847,6 +853,8 @@ pub static INTERFACES: &[D] = &[
         members: ELEMENT,
     },
     D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
+    D { interface: I::SVGElement, name: "SVGElement", parent: Some(I::Element), constructor: None,
+        members: &[method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -1152,6 +1160,18 @@ pub fn html_element_interface(local: &str) -> I {
         "article" | "aside" | "b" | "bdi" | "bdo" | "big" | "center" | "cite" | "code" | "dd" | "dfn" | "dt" | "em" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "i" | "kbd" | "main" | "mark" | "nav" | "nobr" | "noembed" | "noframes" | "noscript" | "plaintext" | "rb" | "rp" | "rt" | "rtc" | "ruby" | "s" | "samp" | "search" | "section" | "small" | "strike" | "strong" | "sub" | "sup" | "tt" | "u" | "var" | "wbr" | "address" | "abbr" | "acronym" | "basefont" => I::HTMLElement,
         name if name.contains('-') => I::HTMLElement,
         _ => I::HTMLUnknownElement,
+    }
+}
+
+/// DOM mixin members marked [Unscopable] in the DOM Standard. Each interface
+/// receives its own null-prototype @@unscopables object.
+pub fn unscopable_members(interface: I) -> &'static [&'static str] {
+    match interface {
+        I::Document | I::DocumentFragment => &["prepend", "append", "replaceChildren"],
+        I::Element => &["prepend", "append", "replaceChildren", "before", "after",
+            "replaceWith", "remove", "slot"],
+        I::CharacterData | I::DocumentType => &["before", "after", "replaceWith", "remove"],
+        _ => &[],
     }
 }
 
