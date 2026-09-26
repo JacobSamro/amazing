@@ -347,3 +347,78 @@ Accessibility push events). Remaining candidates for a future ticket:
 row-level browsing, `Tracing`'s streamed (rather than synchronous) chunking,
 `Animation`, `ServiceWorker`, `Page.printToPDF`, and multi-process renderer
 target routing.
+
+## CDP-16 — real `DevToolsSession` host, single-threaded page owner — done
+
+Linux gate on Boat `bx_xbhqabax` (per-lane target): `amazing` crate nextest
+259/259 (0 skipped) and 1 doctest; workspace nextest 3023 passed, 0 failed,
+12 skipped, doctests 4 passed.
+
+integrator-assist landed the first driver adoption directly (`crates/amazing/
+src/runtime_host_devtools.rs`, granted for this ticket like a11y's A11Y-6,
+merged to `dev` at `4bab124d`/`2e8f60c9`): `DriverDevToolsHost`/
+`DriverPageSession` over a real fetched page, `Page.navigate`/
+`getFrameTree`/`getLayoutMetrics`, `Runtime.evaluate`, and CDP discovery on a
+background thread via `amazing devtools <url> [listen-addr]`. Its own doc
+comment named the gap: `evaluate` built a **fresh JS realm per call**, because
+`amazing-js`'s `Rc`-based heap can't be `Send` while `DevToolsSession: Send`
+requires the session to be usable from whichever thread a CDP connection
+spawns. DOM mutations survived (plain owned data moved through a throwaway
+scheduler each call); `globalThis` state, closures and anything else living
+in the JS heap did not.
+
+This ticket is the file's per its grant ("the file is yours from now on");
+fixed the gap with a dedicated single-threaded page owner rather than any
+attempt to make the engine `Send`:
+
+- `PageOwner` holds the live `Rc<RefCell<BrowserDomHost>>` DOM and one
+  persistent `DriverScheduler` (one JS realm, kept alive for the page's whole
+  lifetime) and never leaves the thread it is built on.
+- `spawn_page_thread` starts that thread. Its closure captures a `PageInit`
+  (`Parsed { dom: amazing_dom::Dom, .. }` for tests, or `Fetch { url, .. }`
+  for the real CLI path) — plain `Send` data — and calls
+  `PageOwner::from_parsed`/`fetch_and_load` **inside** the spawned closure, so
+  the non-`Send` `PageOwner` is constructed on its own thread and never
+  crosses the `std::thread::spawn` boundary that requires the closure itself
+  to be `Send`. A one-shot ready channel reports the initial load's success
+  (with the resolved URL) or failure back to the caller synchronously, so a
+  bad URL fails `spawn_devtools_server`/`DriverDevToolsHost::spawn` the same
+  way it did before.
+- `DriverDevToolsHost` (needs `Send + Sync`) and `DriverPageSession` (needs
+  `Send`) hold nothing but a `Mutex<Sender<PageCommand>>`/`Sender<PageCommand>`
+  and an `Arc<Mutex<String>>` for the display URL — no engine state, so both
+  trivially satisfy their bounds. Every `DevToolsSession` method sends a
+  `PageCommand` (its own one-shot reply channel) and blocks for the answer;
+  the page thread's `run_page_thread` loop is the only code that ever calls
+  into `PageOwner`. `DriverDevToolsHost::drop` sends `PageCommand::Shutdown`,
+  so the page thread never outlives its host.
+- Wired up on that one live page/realm: `Runtime.evaluate` (now the *same*
+  scheduler across calls), `Page.navigate` (reloads `PageOwner` in place, on
+  the page thread, no new thread spawned), `DOM.getDocument` (recursive
+  `NodeDescription` builder over the live arena DOM, depth-limited per the
+  domain layer's existing `-1`→64 convention) and `DOM.querySelector`/
+  `querySelectorAll` (single selector via `amazing_css::selectors::parse_selector`/
+  `matches`, no comma-list support yet) and `Accessibility.getFullAXTree`
+  (style+layout via the same minimal `FallbackTextSystem`/`NoReplacedElements`
+  path `amazing axtree` uses, then `runtime_host_a11y::build_ax_tree` per the
+  ticket, converted to the CDP-shaped `host::AxNode` seam).
+- Proof: `evaluate_persists_full_js_realm_state_across_calls` increments a
+  `globalThis` counter across two `evaluate()` calls and asserts `2`, not `1`
+  twice — the exact regression the fresh-realm-per-call bug would produce.
+  `end_to_end_cdp_client_evaluates_queries_dom_and_reads_the_ax_tree` is a raw
+  WebSocket CDP client (the same framing `amazing-devtools`' own
+  `tests/cdp.rs` uses) driving `Runtime.evaluate`, `DOM.getDocument`,
+  `DOM.querySelector`/`querySelectorAll` and `Accessibility.getFullAXTree`
+  against the real page thread over a real socket.
+- `navigate_fetches_a_real_page_and_evaluate_reads_the_new_dom` exercises the
+  real `navigate()` fetch path against a one-shot local HTTP fixture server
+  (everything on `127.0.0.1`), since `fetch_document` is HTTP(S)-only.
+
+Known limitations, unchanged or extended from the previous report:
+`Page.captureScreenshot` still `Unsupported` (no PNG/JPEG/WebP encoder, only
+BMP); `DOM.describeNode`/`getOuterHTML`/`setAttributeValue` and the CSS/Input
+domains stay on the crate default; `querySelector(All)` takes one selector,
+no comma lists; `Accessibility.getFullAXTree`'s `depth` parameter is ignored
+(whole tree always returned, matching the domain layer's own `-1`
+convention); layout for the ax tree uses the same fallback text/no-replaced-
+content path as `amazing axtree`, not the driver's real providers.
