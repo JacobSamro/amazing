@@ -342,6 +342,9 @@ LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-dom/src/forms.rs", "c
 LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/Cargo.lock", "crates/amazing-shell-gpui/src/main.rs", "crates/amazing-shell-gpui/src/engine_viewport.rs"])
 # IPC-11: one postMessage/BroadcastChannel drain hook in the driver scheduler.
 LANE_GRANTS.setdefault("ipc", []).append("crates/amazing/src/js_scheduler.rs")
+# 2026-09-26 new lanes: one additive installer line each.
+LANE_GRANTS.setdefault("js-date", []).append("crates/amazing-js/src/interp_install.rs")
+LANE_GRANTS.setdefault("js-intl", []).append("crates/amazing-js/src/interp_install.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
