@@ -12,6 +12,16 @@ cargo build -p amazing --release --locked
 cp "$CARGO_TARGET_DIR/release/amazing" "$RUN/amazing"
 status=0
 cargo nextest run --workspace --locked --no-fail-fast && cargo test --workspace --locked --doc || status=$?
+# The Boat pool gives this lane its own sparse WPT clone at ~/corpora/wpt-layout
+# (to avoid the shared-tree sparse-checkout narrowing other lanes hit, see
+# scripts/ensure-wpt.sh's note). worker-2/venus hosts have no such per-lane
+# clone, only the shared ~/corpora/wpt (LAYOUT-26, 2026-09-27) -- prefer the
+# lane-private copy when present, else fall back to the shared one.
+if [ -d "$HOME/corpora/wpt-layout" ]; then
+  WPT="$HOME/corpora/wpt-layout"
+else
+  WPT="$HOME/corpora/wpt"
+fi
 for corpus in position writing ruby tables retained; do
   case "$corpus" in
     position) MANIFEST="$E/layout23/manifest.json"; BEFORE="$E/layout23/before/report.json";;
@@ -21,7 +31,7 @@ for corpus in position writing ruby tables retained; do
     retained) MANIFEST="$E/layout16/layout16-full-manifest.json"; BEFORE="$E/layout22/final-after/retained/report.json";;
   esac
   # Unsupported XHTML DTD cases are baseline limitations, recorded in reports.
-  python3 "$E/layout18/render-linux.py" --manifest "$MANIFEST" --wpt "$HOME/corpora/wpt-layout" \
+  python3 "$E/layout18/render-linux.py" --manifest "$MANIFEST" --wpt "$WPT" \
     --binary "$RUN/amazing" --source "$SOURCE" --output "$RUN/$corpus" --compress-images || true
   test -f "$RUN/$corpus/report.json"
   python3 "$E/layout18/compare.py" "$BEFORE" "$RUN/$corpus/report.json" "$RUN/$corpus-comparison.json"
@@ -84,8 +94,23 @@ lfg3_shrink_to_fit = 'LFG-3 shrink-to-fit widening exposes pre-existing table/fl
 accepted = {
     'position': {
         'CSS2__positioning__right-113.xht': 'IPC-10/RC-21 utility decode bug',
-        # abspos-008 (Ian Hickson's canonical shrink-wrap case) fixed by
-        # LAYOUT-24 2026-09-27; no longer a loss, intentionally absent here.
+        # abspos-008 (Ian Hickson's canonical shrink-wrap case): LAYOUT-24
+        # (2026-09-27) fixed this against the `before` baseline's own host.
+        # LAYOUT-26 (2026-09-27) found it failing again on worker-2 --
+        # but proved this is a *host-rendering* difference, not a LAYOUT-26
+        # regression: it involves zero <table> elements (float/abspos divs
+        # only), so table.rs/inline.rs cannot affect it, and a same-host
+        # before/after on worker-2 (built from df103fca with vs. without
+        # every LAYOUT-26 code change) produced a byte-identical actual PNG
+        # (sha256 1358832a..., differing_pixels=28513) in both cases --
+        # proof the discrepancy already exists in df103fca as committed, on
+        # this specific host, before this ticket touched anything. The
+        # checked-in `before` baseline this gate compares against was
+        # captured on a different host (Boat), so this is a cross-host
+        # font/rendering-parity gap, not a code defect; see
+        # docs/lanes/layout_TODO.md's LAYOUT-26 section.
+        'CSS2__positioning__abspos-008.xht':
+            'host-dependent rendering difference (worker-2 vs the before baseline host), pre-existing in df103fca, proven byte-identical before/after LAYOUT-26 on worker-2',
         'css-position__sticky__position-sticky-table-pixel-rounding.html': lfg3_shrink_to_fit,
     },
     'writing': {
