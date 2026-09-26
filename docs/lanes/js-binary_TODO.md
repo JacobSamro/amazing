@@ -287,3 +287,43 @@ need generator support. These cross-lane requests are recorded in
 The final win-002 gate at `7832142d32f008d1fa0345045160bd003a9332dc`
 passed: amazing-js nextest 297/297 (one skipped), amazing-js doctests 1/1,
 workspace nextest 2,352/2,352 (six skipped), and workspace doctests 2/2.
+
+## JSB-6 — Intl depth (handed off to js-intl)
+
+Commits `8b4995b9` … `f0e92251` on `lane/js-binary`. All Intl scope
+(`builtins_intl*`) moved to the new `js-intl` lane on 2026-09-26; the handoff
+with the commit list and scope is in `.agents/js-intl/questions.md` and
+`.agents/js-binary/report.md`. `intl402/` moved 954 → 1,101 passing files
+(+147, zero lost within the directory); full Linux corpus at head `aa17cecd`
+was 32,044 pass / 20,818 fail / 18 timeout / 698 unsupported, classification
+SHA-256 `6e9688758dc9f1070b87a5791c61a316d368c67393634c49d9002b3455fc3503`.
+The Date engine (`builtins_intl_date_support.rs`) is a shared deliverable and
+unblocks js-runtime's HTML-26 Date blocker.
+
+## JSB-7 — binary groups (ArrayBuffer, DataView, TypedArrays, Atomics, BigInt)
+
+Known fixes in bulk, measured against the JSB-6 full-corpus baseline (pinned
+revision `3655e746`, input SHA-256
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`):
+
+- DataView 504 → 554 pass (55 → 5 fail): new-target receiver, mutability and
+  out-of-bounds check ordering, locked `BYTES_PER_ELEMENT`, detached TypeError.
+- TypedArray 1,312 → 1,338 pass (131 → 105 fail): this-receiver construction,
+  `toLocaleString` element dispatch, callback callable checks, immutable/search
+  ordering.
+- TypedArrayConstructors 632 → 654 (82 → 60): `BYTES_PER_ELEMENT` attributes and
+  this-receiver construction.
+- Atomics 214 → 245 (57 → 25): immutable-write ordering, `store` returns
+  ToInteger, `pause`, `Symbol.toStringTag`, `waitAsync` result objects.
+- BigInt 76 pass / 0 fail; ArrayBuffer 215/5 and SharedArrayBuffer 101/2 already
+  clean except ordering cases.
+
+Deltas: **+129 passing files** across the five binary directories, no losses.
+Commits `72e1a53e`, `5b31e5c1`, `b230e551`, `0542eb33` (the last batch —
+search-method detachment, slice species recheck, `with` coercion order, `from`
+detached result, `toString` identity — is being re-measured by the orchestrator's
+`jsb8-*` run).
+
+Remaining large clusters: TypedArray resizable-buffer iterator exhaustion
+(~8), `from`/`map` species ordering (~8), ArrayBuffer/SharedArrayBuffer
+ordering (~7), TypedArrayConstructors custom-proto newTarget (~10).

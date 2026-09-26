@@ -64,6 +64,38 @@ struct BinaryView {
 #[derive(Clone)]
 enum BinaryState { Buffer(Rc<RefCell<BinaryBuffer>>), View(BinaryView) }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BinaryIteratorKind { Keys, Values, Entries }
+
+#[derive(Clone)]
+struct BinaryIteratorState {
+    view: BinaryView,
+    kind: BinaryKind,
+    iteration: BinaryIteratorKind,
+    next_index: usize,
+    exhausted: bool,
+}
+
+thread_local! {
+    // TypedArray iterators are keyed by object identity rather than added to
+    // BinaryState, so the shared value model and other lanes' matches stay
+    // unchanged.
+    static BINARY_ITERATORS: RefCell<HashMap<usize, (Weak<RefCell<JsObject>>, Rc<RefCell<BinaryIteratorState>>)>> =
+        RefCell::new(HashMap::new());
+}
+fn binary_register_iterator(object: &Obj, state: BinaryIteratorState) {
+    BINARY_ITERATORS.with(|entries| {
+        entries.borrow_mut().insert(binary_identity(object), (Rc::downgrade(&object.0), Rc::new(RefCell::new(state))));
+    });
+}
+fn binary_iterator_state(object: &Obj) -> Option<Rc<RefCell<BinaryIteratorState>>> {
+    BINARY_ITERATORS.with(|entries| {
+        let entries = entries.borrow();
+        let (weak, state) = entries.get(&binary_identity(object))?;
+        weak.upgrade().filter(|live| Rc::ptr_eq(live, &object.0)).map(|_| state.clone())
+    })
+}
+
 thread_local! {
     static BINARY_OBJECTS: RefCell<HashMap<usize, (Weak<RefCell<JsObject>>, BinaryState)>> =
         RefCell::new(HashMap::new());
@@ -970,6 +1002,78 @@ fn binary_typed_species_from_values(i: &mut Interpreter, source: &JsValue, kind:
     let constructor = binary_typed_species(i, source, kind)?;
     binary_typed_from_constructor(i, constructor, kind, values)
 }
+fn binary_iterator_result(i: &mut Interpreter, value: JsValue, done: bool) -> Result<JsValue, Throw> {
+    let object = i.object_value();
+    i.set_prop(&object, "value", value)?;
+    i.set_prop(&object, "done", JsValue::Bool(done))?;
+    Ok(object)
+}
+
+fn binary_array(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let mut raw = JsObject::array();
+    raw.proto = Some(i.array_proto.clone());
+    let array = JsValue::object(raw);
+    let mut length = 0;
+    for value in values {
+        i.set_prop(&array, length.to_string(), value)?;
+        length += 1;
+    }
+    i.set_prop(&array, "length", JsValue::num(length as f64))?;
+    Ok(array)
+}
+
+fn binary_typed_iterator(i: &mut Interpreter, view: BinaryView, kind: BinaryKind, iteration: BinaryIteratorKind) -> Result<JsValue, Throw> {
+    let mut raw = JsObject::ordinary();
+    raw.proto = Some(i.object_proto.clone());
+    let object = Obj(Rc::new(RefCell::new(raw)));
+    binary_method(i, &object, "next", binary_typed_iterator_next, 0);
+    let self_iter = Interpreter::native("[Symbol.iterator]", binary_typed_iterator_self, &i.function_proto);
+    object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), binary_writable_property(self_iter)).unwrap();
+    object.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), binary_property(JsValue::str("Array Iterator"))).unwrap();
+    binary_register_iterator(&object, BinaryIteratorState {
+        view, kind, iteration, next_index: 0, exhausted: false,
+    });
+    Ok(JsValue::Object(object))
+}
+fn binary_typed_iterator_self(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("incompatible TypedArray iterator")); };
+    if binary_iterator_state(object).is_none() {
+        return Err(Throw::type_error("incompatible TypedArray iterator"));
+    }
+    Ok(this)
+}
+fn binary_typed_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("incompatible TypedArray iterator")); };
+    let Some(state) = binary_iterator_state(object) else {
+        return Err(Throw::type_error("incompatible TypedArray iterator"));
+    };
+    let mut state = state.borrow_mut();
+    if state.exhausted { return binary_iterator_result(i, JsValue::Undefined, true); }
+    if binary_view_out_of_bounds(&state.view) {
+        // A fixed-length view that leaves its buffer throws TypeError; a
+        // length-tracking view ends iteration and stays exhausted.
+        if state.view.length.is_some() { return Err(Throw::type_error("TypedArray went out of bounds")); }
+        state.exhausted = true;
+        return binary_iterator_result(i, JsValue::Undefined, true);
+    }
+    let length = binary_length(&state.view);
+    if state.next_index >= length {
+        state.exhausted = true;
+        return binary_iterator_result(i, JsValue::Undefined, true);
+    }
+    let index = state.next_index;
+    state.next_index += 1;
+    let value = match state.iteration {
+        BinaryIteratorKind::Keys => JsValue::num(index as f64),
+        BinaryIteratorKind::Values => binary_read(&state.view, state.kind, index * state.kind.size(), true)?,
+        BinaryIteratorKind::Entries => {
+            let element = binary_read(&state.view, state.kind, index * state.kind.size(), true)?;
+            binary_array(i, vec![JsValue::num(index as f64), element])?
+        }
+    };
+    binary_iterator_result(i, value, false)
+}
+
 fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let name = binary_current_name(i);
     let (view, kind) = binary_typed(&this)?;
@@ -1022,7 +1126,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             }
             let values = binary_typed_values(&view, kind)?;
             let length = values.len();
-            let start = start.min(length as i64).max(0) as usize;
+            let start = start.min(length);
             let found = if name == "lastIndexOf" { values.iter().enumerate().rev().find(|(j, v)| *j <= start && i.strict_eq(v, &needle)).map(|(j, _)| j) }
                 else { values.iter().enumerate().find(|(j, v)| *j >= start && (i.strict_eq(v, &needle) || name == "includes" && matches!((v, &needle), (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan()))).map(|(j, _)| j) };
             Ok(if name == "includes" { JsValue::Bool(found.is_some()) } else { JsValue::num(found.map_or(-1, |x| x as i64) as f64) })
@@ -1105,7 +1209,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             // index against the current length (value coercion may resize).
             let raw_index = i.to_number(&arg(0))?;
             let relative = if raw_index.is_nan() { 0.0 } else { raw_index.trunc() };
-            let value = if kind.big() { JsValue::BigInt(i.to_bigint(&arg(1))?) }
+            let value = if kind.big() { Interpreter::bigint_value(i.to_bigint(&arg(1))?) }
                 else { JsValue::num(i.to_number(&arg(1))?) };
             let current_length = binary_length(&view);
             let target = if relative < 0.0 { current_length as f64 + relative } else { relative };
@@ -1156,6 +1260,22 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 return Err(Throw::type_error("callback is not a function"));
             }
             let receiver = arg(1);
+            // %TypedArray%.prototype.map creates the result (and gets
+            // @@species) before invoking the callback for the first element.
+            if name == "map" {
+                let constructor = binary_typed_species(i, &this, kind)?;
+                if binary_view_out_of_bounds(&view) { return Err(Throw::type_error("out-of-bounds TypedArray")); }
+                let (result, result_view, result_kind) = binary_construct_typed_object(i, &constructor, length)?;
+                if binary_length(&result_view) < length {
+                    return Err(Throw::type_error("incompatible TypedArray species result"));
+                }
+                for j in 0..length {
+                    let value = i.get_prop(&this, j.to_string())?;
+                    let mapped = i.call_value(&callback, receiver.clone(), vec![value, JsValue::num(j as f64), this.clone()])?;
+                    binary_write_value(i, &result_view, result_kind, j * result_kind.size(), true, &mapped)?;
+                }
+                return Ok(result);
+            }
             let indices: Vec<_> = if name.ends_with("Last") || name.ends_with("LastIndex") { (0..length).rev().collect() } else { (0..length).collect() };
             let mut selected = Vec::new();
             for j in indices {
@@ -1200,12 +1320,12 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(accumulator)
         }
         "keys" | "values" | "entries" => {
-            let iterator_kind = match name.as_str() {
-                "keys" => SequenceIteratorKind::ArrayKeys,
-                "entries" => SequenceIteratorKind::ArrayEntries,
-                _ => SequenceIteratorKind::ArrayValues,
+            let iteration = match name.as_str() {
+                "keys" => BinaryIteratorKind::Keys,
+                "entries" => BinaryIteratorKind::Entries,
+                _ => BinaryIteratorKind::Values,
             };
-            Ok(i.sequence_iterator(this, iterator_kind))
+            binary_typed_iterator(i, view, kind, iteration)
         }
         _ => Err(Throw::type_error("unknown TypedArray operation")),
     }
