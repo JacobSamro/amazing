@@ -56,11 +56,13 @@ POOLS = {
     "pool-js-b": ["js-lang"],
     "pool-js-date": ["js-date"],  # split 2026-09-26: 57% busy, 24% overlap with js-lang
     "pool-js-lib": ["js-binary", "js-stdlib", "js-intl"],
-    "pool-dom": ["dom-bindings", "html", "integrator-assist"],
+    "pool-dom": ["dom-bindings", "html"],
     "pool-layout": ["layout", "layout-flexgrid", "css", "text"],
     "pool-paint": ["replaced-content", "compositor"],
     "pool-sys": ["net", "ipc", "storage"],
-    "pool-new": ["wasm", "a11y", "devtools"],
+    # integrator-assist moved from pool-dom 2026-09-26: three full `amazing` targets
+    # filled a 69 GB default disk to 3 GB free; pool-new had 1% overlap.
+    "pool-new": ["wasm", "a11y", "devtools", "integrator-assist"],
     "pool-desktop": ["shell"],
 }
 POOL_OF = {lane: pool for pool, lanes in POOLS.items() for lane in lanes}
