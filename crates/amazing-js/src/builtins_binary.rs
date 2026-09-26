@@ -528,6 +528,7 @@ impl Interpreter {
             binary_species(self, function);
             let _ = function.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
             let _ = proto.borrow_mut().define("BYTES_PER_ELEMENT", binary_locked_property(JsValue::num(kind.size() as f64)));
+            if kind == BinaryKind::Uint8 { self.install_uint8_base64_hex(function, &proto); }
             self.define_global(name, ctor);
         }
         let atomics = self.object_value();

@@ -330,3 +330,47 @@ JSB-6 baseline.
 Remaining large clusters: TypedArray resizable-buffer iterator exhaustion
 (~8), `from`/`map` species ordering (~8), ArrayBuffer/SharedArrayBuffer
 ordering (~7), TypedArrayConstructors custom-proto newTarget (~10).
+
+## JSB-8 — Uint8Array to/from base64 and hex
+
+`built-ins/Uint8Array` (the `Uint8Array.fromBase64`/`fromHex` statics and
+`Uint8Array.prototype.setFromBase64`/`setFromHex`/`toBase64`/`toHex`, ECMA-262
+stage-4 "Uint8Array to/from base64" proposal) was entirely unimplemented: 10
+pass / 60 fail files. Implemented in a new
+`crates/amazing-js/src/builtins_binary_base64.rs` (included from `interp.rs`
+alongside `builtins_binary.rs`/`builtins_binary_bigint.rs`), installed only on
+`%Uint8Array%`/`%Uint8Array.prototype%` — not shared with the other TypedArray
+kinds. `FromBase64`/`FromHex`/`ToBase64`/`ToHex` and `DecodeBase64Chunk` are
+transcribed from the tc39/proposal-arraybuffer-base64 spec text, hand-verified
+against the raw nested `<ol>` HTML (a flattened text extraction had misplaced
+two nesting levels and produced a wrong algorithm on first pass). Two
+non-obvious corrections, both found only by tracing failing Test262 files
+against the raw spec HTML:
+
+- `[[Read]]` only advances when a full 4-value chunk actually decodes (that
+  step is nested inside `chunkLength = 4`, not a sibling of it) — a pending
+  partial chunk that later gets abandoned (via the `remaining`-capacity check)
+  must not count its already-buffered characters as read. Otherwise
+  `setFromBase64` on a target too small to hold a further complete group
+  over-reports `read` (caught by `setFromBase64/target-size.js` and
+  `last-chunk-handling.js`).
+- The trailing-content-after-padding check applies to both the 2-value-chunk
+  and 3-value-chunk padding paths, not only the 2-value one, so `"AAA=="` and
+  similar over-padded final chunks are rejected in every `lastChunkHandling`
+  mode, including `stop-before-partial` (`fromBase64/last-chunk-invalid.js`).
+
+`setFromBase64`/`setFromHex` verify the target's mutability and bounds
+*before* reading `options.alphabet`/`options.lastChunkHandling` (an
+immutable-backed target must reject without ever calling those getters), with
+a second bounds re-check after the getters run, since a getter can detach the
+buffer mid-call (`throws-when-target-is-backed-by-immutable-arraybuffer.js`,
+`detached-buffer.js`).
+
+Pinned Test262 revision `3655e746`, input SHA-256 `91109b82...`: `Uint8Array`
+10 → 70 pass files (+60, zero losses), with the other seven binary directories
+unchanged (`ArrayBuffer` 215/5, `DataView` 554/5, `TypedArray` 1,375/68,
+`TypedArrayConstructors` 656/58, `Atomics` 245/25, `BigInt` 76/0,
+`SharedArrayBuffer` 101/2). Full corpus 32,329 → 32,391 pass files, zero lost
+passing files or variants. Linux gate: crate nextest 357/357 (one skipped) +
+doctest 1/1; workspace nextest 2,819/2,819 (ten skipped) + doctests 3/3
+(`amazing-devtools`, `amazing-html`, `amazing-js`).
