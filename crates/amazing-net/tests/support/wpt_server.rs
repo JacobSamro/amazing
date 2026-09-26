@@ -259,6 +259,12 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
     let xhr = path.starts_with("/xhr/resources/");
     let name = path.rsplit('/').next().unwrap_or("");
     let mut headers = vec![header("Content-Type", "text/plain")];
+    // WPT tests such as xhr/responsetype.any.js open "/" and wait for
+    // readyState LOADING, which needs a non-empty body; the real WPT server
+    // returns a directory listing there.
+    if path == "/" {
+        return reply(200, "OK", headers, b"amazing wpt shim root\n");
+    }
     if fetch && name == "data.json" {
         return reply(200, "OK", vec![header("Content-Type", "application/json")],
             b"{\"key\": \"value\"}\n");
