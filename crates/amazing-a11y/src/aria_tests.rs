@@ -16,6 +16,133 @@ fn native_and_aria_checked() {
     assert_eq!(ax_of_tag(&doc, "div").unwrap().states.checked, Tristate::Mixed);
 }
 
+/// A11Y-15: `native_checked` must read the *live* checkedness
+/// (`Dom::input_checked`, which a real click's activation toggles) rather
+/// than the `checked` content attribute, which per spec only ever reflects
+/// *default* checkedness from parse time. Simulates a real click's effect
+/// with `Dom::set_input_checked` (the same call
+/// `input_activation::prepare_input_activation` makes) directly, in both
+/// directions, so a regression back to reading the attribute — which would
+/// keep reporting whichever state the fixture parsed with, regardless of
+/// this call — is caught either way.
+#[test]
+fn native_checked_reads_live_state_not_the_content_attribute() {
+    use crate::test_support::{dom_of_tag, rebuild};
+
+    let mut doc = document("<input type=\"checkbox\">");
+    let node = dom_of_tag(&doc, "input").unwrap();
+    assert_eq!(ax_of_tag(&doc, "input").unwrap().states.checked, Tristate::False);
+    doc.dom.set_input_checked(node, true).unwrap();
+    rebuild(&mut doc);
+    assert_eq!(
+        ax_of_tag(&doc, "input").unwrap().states.checked,
+        Tristate::True,
+        "a live check must be reported even though the `checked` attribute was never set"
+    );
+
+    let mut doc = document("<input type=\"checkbox\" checked>");
+    let node = dom_of_tag(&doc, "input").unwrap();
+    assert_eq!(ax_of_tag(&doc, "input").unwrap().states.checked, Tristate::True);
+    doc.dom.set_input_checked(node, false).unwrap();
+    rebuild(&mut doc);
+    assert_eq!(
+        ax_of_tag(&doc, "input").unwrap().states.checked,
+        Tristate::False,
+        "a live uncheck must be reported even though the `checked` attribute is still present"
+    );
+}
+
+/// A11Y-15: a checkbox's live `.indeterminate` (IDL-only, no content
+/// attribute at all) maps to `aria-checked="mixed"` when nothing explicit
+/// overrides it, and an explicit `aria-checked` still wins over it.
+#[test]
+fn native_indeterminate_maps_to_mixed_checked() {
+    use crate::test_support::{dom_of_tag, rebuild};
+
+    let mut doc = document("<input type=\"checkbox\" checked>");
+    let node = dom_of_tag(&doc, "input").unwrap();
+    doc.dom.set_input_indeterminate(node, true).unwrap();
+    rebuild(&mut doc);
+    assert_eq!(ax_of_tag(&doc, "input").unwrap().states.checked, Tristate::Mixed);
+
+    let mut doc = document("<input type=\"checkbox\" checked aria-checked=\"false\">");
+    let node = dom_of_tag(&doc, "input").unwrap();
+    doc.dom.set_input_indeterminate(node, true).unwrap();
+    rebuild(&mut doc);
+    assert_eq!(
+        ax_of_tag(&doc, "input").unwrap().states.checked,
+        Tristate::False,
+        "an explicit aria-checked still overrides native indeterminate"
+    );
+}
+
+/// A11Y-15: `native_selected` must read the *live* selectedness
+/// (`Dom::option_selected`) rather than the `selected` content attribute —
+/// picking a different option (`Dom::set_option_selected`, what a real
+/// selection change calls) never touches the attribute.
+#[test]
+fn native_selected_reads_live_state_not_the_content_attribute() {
+    use crate::test_support::rebuild;
+
+    let mut doc = document("<select><option id=\"a\">A</option><option id=\"b\">B</option></select>");
+    let a = crate::test_support::ax_of_id(&doc, "a").unwrap();
+    let b = crate::test_support::ax_of_id(&doc, "b").unwrap();
+    assert!(a.states.selected, "HTML default: first option is selected");
+    assert!(!b.states.selected);
+
+    let b_node = doc
+        .dom
+        .tree_order(amazing_dom::NodeIdx(0))
+        .into_iter()
+        .find(|n| doc.dom.get_attribute_ns(*n, None, "id") == Some("b"))
+        .unwrap();
+    doc.dom.set_option_selected(b_node, true).unwrap();
+    rebuild(&mut doc);
+    let a = crate::test_support::ax_of_id(&doc, "a").unwrap();
+    let b = crate::test_support::ax_of_id(&doc, "b").unwrap();
+    assert!(!a.states.selected, "no `selected` attribute changed, but live selectedness moved off a");
+    assert!(b.states.selected, "live selection change must be reported even with no `selected` attribute");
+}
+
+/// A11Y-15: `<input type=range>`'s ARIA `valuenow` fallback must read the
+/// live value (`Dom::input_value_as_number`, dirty-value-flag-aware) rather
+/// than the `value` content attribute, which stays at its parse-time
+/// default once a real interaction (a drag, `stepUp()`, `.valueAsNumber =`)
+/// changes the live value without touching the attribute.
+#[test]
+fn native_range_valuenow_reads_live_value_not_the_content_attribute() {
+    use crate::test_support::{dom_of_tag, rebuild};
+
+    let mut doc = document("<input type=\"range\" min=\"0\" max=\"10\" value=\"5\">");
+    let node = dom_of_tag(&doc, "input").unwrap();
+    assert_eq!(ax_of_tag(&doc, "input").unwrap().properties.value_now, Some(5.0));
+    doc.dom.set_input_value_as_number(node, 8.0).unwrap();
+    rebuild(&mut doc);
+    assert_eq!(
+        ax_of_tag(&doc, "input").unwrap().properties.value_now,
+        Some(8.0),
+        "the live value must be reported even though the `value` attribute is still \"5\""
+    );
+}
+
+/// A11Y-15: `<progress>`/`<meter>` have no separate live/dirty value state
+/// (setting `.value` reflects straight back to the attribute per spec), so
+/// their native valuenow fallback stays a plain attribute read — confirmed
+/// here so a future change doesn't accidentally require a live accessor
+/// that doesn't exist for these two.
+#[test]
+fn native_progress_and_meter_valuenow_use_the_plain_attribute() {
+    let doc = document("<progress value=\"3\" max=\"4\"></progress>");
+    let progress = ax_of_tag(&doc, "progress").unwrap();
+    assert_eq!(progress.properties.value_now, Some(3.0));
+    assert_eq!(progress.properties.value_max, Some(4.0));
+
+    let doc = document("<meter value=\"2\" min=\"0\" max=\"10\"></meter>");
+    let meter = ax_of_tag(&doc, "meter").unwrap();
+    assert_eq!(meter.properties.value_now, Some(2.0));
+    assert_eq!(meter.properties.value_max, Some(10.0));
+}
+
 #[test]
 fn aria_overrides_native_disabled() {
     let doc = document("<button disabled>x</button>");

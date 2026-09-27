@@ -376,6 +376,59 @@ mod tests {
         );
     }
 
+    /// A11Y-15 end-to-end: a *real* click, dispatched through the engine's
+    /// own event-dispatch/checkbox-activation pipeline (`Dom::
+    /// begin_event_dispatch`/`finish_input_activation` — the same path a
+    /// real user interaction runs, not a direct `set_input_checked` poke),
+    /// toggles a checkbox's live checkedness and the watcher reports a
+    /// `StateChanged` event for it. Before A11Y-15, `host::native_checked`
+    /// read the `checked` *content* attribute (untouched by a real click,
+    /// per spec — only the default checkedness), so this produced no event
+    /// at all: the bug integrator-assist found (IA-REAL-3,
+    /// `.agents/integrator-assist/questions.md`) that started this ticket.
+    #[test]
+    fn a_real_click_toggle_emits_state_changed_through_the_watcher() {
+        use amazing_a11y::AxEventKind;
+        use amazing_dom::events::{DispatchOrigin, Event, EventClass, EventInit, EventTarget};
+        use std::time::Duration;
+
+        let (mut dom, styled, layout) = build_pipeline("<input type=\"checkbox\">");
+        let checkbox = dom
+            .tree_order(NodeIdx(0))
+            .into_iter()
+            .find(|node| dom.name(*node) == Some("input"))
+            .expect("checkbox in fixture");
+        assert!(!dom.input_checked(checkbox).unwrap(), "starts unchecked");
+
+        let mut watcher = AxTreeWatcher::new();
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        assert!(watcher.drain_events().is_empty());
+
+        let mut event = Event::new(
+            "click",
+            EventInit { bubbles: true, cancelable: true, composed: true },
+            Duration::ZERO,
+        );
+        event.set_class(EventClass::Mouse);
+        let id = dom.events_mut().create_event(event);
+        let mut dispatch = dom
+            .begin_event_dispatch(EventTarget::Node(checkbox), id, DispatchOrigin::Script)
+            .expect("dispatch starts");
+        while dom.events_mut().next_listener(&mut dispatch).is_some() {}
+        dom.finish_input_activation(&mut dispatch);
+        assert!(
+            dom.input_checked(checkbox).unwrap(),
+            "a real, uncanceled click should have toggled .checked live"
+        );
+
+        watcher.record_checkpoint(&dom, &styled, &layout);
+        let events = watcher.drain_events();
+        assert!(
+            events.iter().any(|event| event.kind == AxEventKind::StateChanged),
+            "expected a StateChanged event from the real click toggle, got {events:?}"
+        );
+    }
+
     #[test]
     fn real_page_fixture_produces_a_populated_accessibility_tree() {
         let tree = ax_tree_for_page(&fixture_path(), 1024.0, None)

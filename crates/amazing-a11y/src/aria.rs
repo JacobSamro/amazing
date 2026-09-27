@@ -257,6 +257,11 @@ pub fn compute_states(dom: &Dom, node: NodeIdx, role: Role) -> AxStates {
     // checked.tentative.html`'s "missing aria-checked" case, which expects
     // `"false"`, not `"undefined"`).
     states.checked = match aria_tristate(dom, node, "aria-checked") {
+        // A11Y-15: a native checkbox's live `.indeterminate` (IDL-only, no
+        // content attribute — script sets it, HTML-AAM maps it to
+        // `aria-checked="mixed"`) takes priority over `.checked` when no
+        // explicit `aria-checked` overrides either.
+        Tristate::Undefined if host::native_indeterminate(dom, node) => Tristate::Mixed,
         Tristate::Undefined => host::native_checked(dom, node)
             .map(|checked| if checked { Tristate::True } else { Tristate::False })
             .unwrap_or(Tristate::False),
@@ -309,11 +314,20 @@ pub fn compute_properties(
     node: NodeIdx,
     role: Role,
 ) -> AxProperties {
+    // A11Y-15: `<input type=range>`/`<progress>`/`<meter>`'s native value is
+    // the ARIA valuenow/min/max fallback when no explicit `aria-value*`
+    // overrides it (HTML-AAM) — see `host::native_range_value`'s own doc for
+    // why range's current value needs a live read while progress/meter's
+    // don't.
+    let native_range = host::native_range_value(dom, node);
     let mut props = AxProperties {
         level: aria_u32(dom, node, "aria-level"),
-        value_now: aria_number(dom, node, "aria-valuenow"),
-        value_min: aria_number(dom, node, "aria-valuemin"),
-        value_max: aria_number(dom, node, "aria-valuemax"),
+        value_now: aria_number(dom, node, "aria-valuenow")
+            .or_else(|| native_range.map(|(value, _, _)| value)),
+        value_min: aria_number(dom, node, "aria-valuemin")
+            .or_else(|| native_range.map(|(_, min, _)| min)),
+        value_max: aria_number(dom, node, "aria-valuemax")
+            .or_else(|| native_range.map(|(_, _, max)| max)),
         value_text: non_empty(dom.get_attribute_ns(node, None, "aria-valuetext")),
         orientation: match dom
             .get_attribute_ns(node, None, "aria-orientation")
