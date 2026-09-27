@@ -33,7 +33,7 @@ Speed comes from doing a lot per cycle, not from many small cycles.
   licensed Rust engine, port the algorithm instead of re-deriving it. See "Porting from other
   engines" below.
 
-## Porting from other engines (2026-09-27, user-approved)
+## Porting from other engines (2026-09-27, user-approved, ADR 0013)
 
 Amazing stays our own architecture (value model, VM, bindings) and std-only in the engine cores,
 but lanes may **port code** from other open-source engines to close spec gaps faster. Ports are
