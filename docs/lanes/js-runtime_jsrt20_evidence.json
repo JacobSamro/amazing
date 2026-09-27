@@ -1,0 +1,93 @@
+{
+  "ticket": "JSRT-20 (JsObject property store O(1) access) + JSRT-21 WIP (array set path)",
+  "base": "6a002829",
+  "commits": {
+    "jsrt21_lookups": "d30cccf2",
+    "jsrt21_proxy_fixup": "2a08ed3a",
+    "jsrt20": "c91122f6",
+    "jsrt21_array_length_fixup": "4aa49c4a"
+  },
+  "jsrt20": {
+    "root_cause": "crates/amazing-js/src/value.rs JsObject.props was a linear-scan Vec<(PropertyKey, Property)>; get_own/own_prop/define/delete_own/own_slot_index all did a full .iter().find()/.position() scan, so single-property access was O(n) and building an n-property object was O(n^2).",
+    "fix": "Added prop_index: HashMap<PropertyKey, usize> as a purely additive side index alongside the existing insertion-ordered Vec (never tombstoned/compacted, so slot indices used by vm/fast_path.rs's inline caches stay stable). Rewrote get_own/own_prop/define/delete_own/own_slot_index to O(1) lookups via prop_index; added push_prop() helper for the two append sites (initialize_string_data, array()'s initial length push). own_property_keys's spec ordering (integer indices ascending, then strings insertion order, then symbols insertion order) and define()'s shape_version bump semantics (bump on new-key add, or on an existing key's attribute change, never on a pure value update) are unchanged.",
+    "scope_note": "Kept entirely inside value.rs and its direct accessors per the ticket's explicit constraint, since js-lang/js-vm were landing large changes concurrently.",
+    "microbenchmark": {
+      "note": "Full-spec-size (100k object / 1M array) run against the OLD linear-scan store is computationally impractical (O(n^2)); measured a bounded scaling trend instead, then ran AFTER at the full ticket-specified size.",
+      "before_release_bounded": {
+        "n_1000": {"object_ms": 34.2, "array_push_ms": 30.2, "array_index_assign_ms": 26.2},
+        "n_10000": {"object_ms": 3177, "array_push_ms": 2699, "array_index_assign_ms": 1843},
+        "scaling_10x_step": "~93x (object), ~89x (push), ~70x (index-assign) for a 10x size increase, confirming O(n^2)"
+      },
+      "after_release_full_spec_size": {
+        "object_100000": "1.2-1.3s",
+        "array_push_1000000": "14.1-14.4s",
+        "array_index_assign_1000000": "12.6-14.1s",
+        "caveat": "Runs were on venus-001/venus-003 under varying concurrent load from other lanes (observed load average up to 32 on one run); numbers are directionally consistent but not isolated single-tenant measurements."
+      }
+    }
+  },
+  "jsrt21_wip": {
+    "status": "in progress, not the ticket this evidence file gates -- included here because its 3 commits sit in the same tree this gate measured",
+    "item_1_redundant_lookups": {
+      "root_cause": "set_with_receiver's fallback (builtins_std_object_model.rs) built a throwaway JsObject descriptor and round-tripped it through define_own_property, which re-parses each field via std_descriptor_fields (has_property+get_prop per field) and re-fetches the same own-property `existing` set_with_receiver had already looked up. set_prop (interp_property_access.rs) called own_prop(&key) twice back-to-back with nothing mutating the object in between, and refetched \"length\" twice per array-index write.",
+      "fix": "Added ordinary_set_data_property, reusing the already-fetched property/length directly. Merged set_prop's duplicate fetches, keeping a re-fetch only around the \"length\" ToNumber conversion (a hostile valueOf can mutate/delete the property as a side effect there).",
+      "microbenchmark_isolated": {
+        "method": "Same idle host (venus-003, load average 0.33 at measurement time, no other lane's job running there), same release build, back-to-back: JSRT-20-only (builtins_std_object_model.rs/interp_property_access.rs reverted to their 6a002829 pre-JSRT-21 content) vs the full JSRT-20+21 HEAD (fb12afc5).",
+        "jsrt20_only": {"object_100000": "1.24s", "array_push_1000000": "14.83s", "array_index_assign_1000000": "12.44s"},
+        "jsrt20_plus_21": {"object_100000": "0.72s", "array_push_1000000": "7.51s", "array_index_assign_1000000": "6.94s"},
+        "improvement": "~42% faster (object), ~49% faster / ~2x (array push), ~44% faster (array index-assign)",
+        "note": "An earlier contended run on venus-001 (load average up to 32 from other lanes' concurrent builds) showed no clear improvement and was correctly not reported as a measured result; this isolated re-run supersedes it."
+      }
+    },
+    "item_2_proxy_trap_bug_fixed": {
+      "root_cause": "ordinary_set_data_property skipped the window_proxy_define/proxy_define trap checks define_own_property makes on entry, so setting through a Proxy or WindowProxy silently used the ordinary algorithm instead of invoking the trap.",
+      "caught_by": "amazing-js crate tests: window_proxy_reflection_receivers_and_global_bindings, proxy_traps_and_invariants_behave_per_spec",
+      "fix": "Falls back to the general descriptor-based path only when the target actually is a Proxy or WindowProxy (checked via is_window_proxy/proxy_parts); the common ordinary-object case still takes the fast path."
+    },
+    "item_3_array_length_truncation_bug_fixed": {
+      "root_cause": "ordinary_set_data_property's existing-property branch wrote .value through for every property, including an Array's \"length\", which is exotic even under plain [[Set]]: shrinking it must delete elements at or above the new length (ArraySetLength, 10.4.2.1). The general path got this via define_own_property's own \"is_array && key == length\" branch; the fast path skipped straight to a value write and lost it. arr.length = x (Reference::Property assignment, interp_stmt.rs) and Object.assign onto an array both go through this path.",
+      "caught_by": "Direct per-file diff against .agents/test262/baseline.json (6a002829): built-ins/Array lost 56 passes (length/* and the ES5 15.4.5.1/15.4.5.2-numbered corpus), built-ins/Object lost 1 (Object/assign/target-Array.js). Same root cause for both.",
+      "fix": "Restored ToNumber + range validation + array_prepare_length_change before writing the new length, matching define_own_property's original special case."
+    }
+  },
+  "gate": {
+    "platform": "Linux (venus-003 for corpus + workspace, venus-001 for crate-scoped iteration)",
+    "lane": "js-runtime",
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "timeout_seconds": 60.0,
+    "before_source": ".agents/test262/baseline.json (6a002829 full run from origin/dev), same timeout_seconds so directly comparable",
+    "directories": {
+      "built-ins/RegExp/property-escapes": {
+        "before": {"files": 613, "pass": 170, "fail": 22, "timeout": 421},
+        "after": {"files": 613, "pass": 170, "fail": 24, "timeout": 419},
+        "note": "No meaningful change (421->419 timeouts). The ticket's hypothesis named two mechanisms, buildString() and .apply() over big arrays; JSRT-20 fixes the O(n) property-access path that .apply()'s create_list_from_array_like relies on, but buildString()-style repeated string concatenation is a separate JsString-immutability cost this ticket did not touch. Flagged as a known gap, not claimed as fixed."
+      },
+      "built-ins/Object": {
+        "before": {"files": 3411, "pass": 3320, "fail": 91},
+        "after": {"files": 3414, "pass": 3320, "fail": 93, "timeout": 0, "unsupported": 1},
+        "per_file_diff_vs_baseline": {"lost": 0, "gained": 0}
+      },
+      "built-ins/Array": {
+        "before": {"files": 3330, "pass": 3215, "fail": 115},
+        "after": {"files": 3332, "pass": 3216, "fail": 115, "timeout": 0, "unsupported": 1},
+        "per_file_diff_vs_baseline": {"lost": 0, "gained": 0}
+      },
+      "language/expressions/object": {
+        "before": {"files": 1170, "pass": 1135, "fail": 34, "unsupported": 1},
+        "after": {"files": 1170, "pass": 1135, "fail": 34, "unsupported": 1},
+        "per_file_diff_vs_baseline": {"lost": 0, "gained": 0, "note": "exact match"}
+      }
+    },
+    "workspace": {
+      "nextest": "3466 tests run: 3466 passed (3 slow), 17 skipped, 121.248s",
+      "doctests": "all ok across the workspace; amazing_js 1 passed, amazing_html 1 passed (the two crates with real doctests), all others 0 passed/ok"
+    },
+    "crate_amazing_js": {
+      "nextest": "445 tests run: 445 passed, 1 skipped (venus-001, with the two JSRT-21 fixups applied)",
+      "doctest": "1 passed"
+    }
+  },
+  "known_gaps": [
+    "built-ins/RegExp/property-escapes timeouts are essentially unchanged (421 -> 419); the dominant cost there is very likely JsString concatenation (buildString()-style repeated += on an immutable Rc<[u16]>), not property access. Candidate for a follow-up ticket, out of JSRT-20's value.rs-only scope."
+  ]
+}

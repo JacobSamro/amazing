@@ -177,8 +177,18 @@ impl Interpreter {
                 } else { prototype.borrow().proto.clone() };
             }
         }
-        if let Some(property) = o.borrow().own_prop(&key).cloned() {
-            if let Some(setter) = property.setter {
+        // JSRT-21: fetch the own property once and reuse it below, instead of
+        // re-fetching the identical key right after (the old code called
+        // `own_prop(&key)` twice in a row with nothing between the two calls
+        // that could mutate `o`, on every single indexed set/push). The one
+        // path that CAN mutate `o` between the fetch and the write is the
+        // `k == "length"` ToNumber conversion below (a hostile valueOf could
+        // delete/redefine "length" as a side effect), so that path alone
+        // re-fetches after the conversion rather than trusting the cache.
+        let cached = o.borrow().own_prop(&key).cloned();
+        if let Some(property) = &cached {
+            if let Some(setter) = &property.setter {
+                let setter = setter.clone();
                 self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
                 return Ok(());
             }
@@ -191,13 +201,14 @@ impl Interpreter {
         } else if !o.borrow().extensible {
             return Err(Throw::type_error("object is not extensible"));
         }
-        if k == "length" && matches!(o.borrow().exotic, Exotic::Array) {
+        let is_length_set = k == "length" && matches!(o.borrow().exotic, Exotic::Array);
+        if is_length_set {
             let n = self.to_number(&x)?;
             if !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
                 return Err(Throw::range_error("invalid array length"));
             }
         }
-        let existing = o.borrow().own_prop(&key).cloned();
+        let existing = if is_length_set { o.borrow().own_prop(&key).cloned() } else { cached };
         if let Some(mut property) = existing {
             property.value = x;
             o.borrow_mut().define(&key, property).unwrap();
@@ -206,14 +217,14 @@ impl Interpreter {
         }
         if let Ok(n) = k.parse::<usize>() {
             if matches!(o.borrow().exotic, Exotic::Array) {
-                let len = match o.borrow().get_own("length") {
-                    Some(JsValue::Num(n)) => n,
+                let mut length_property = o.borrow().own_prop("length").cloned().unwrap();
+                let len = match length_property.value {
+                    JsValue::Num(n) => n,
                     _ => 0.0,
                 };
                 if n as f64 + 1.0 > len {
-                    let mut property = o.borrow().own_prop("length").cloned().unwrap();
-                    property.value = JsValue::num(n as f64 + 1.0);
-                    o.borrow_mut().define("length", property).unwrap();
+                    length_property.value = JsValue::num(n as f64 + 1.0);
+                    o.borrow_mut().define("length", length_property).unwrap();
                 }
             }
         }

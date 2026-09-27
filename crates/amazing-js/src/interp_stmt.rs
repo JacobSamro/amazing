@@ -192,7 +192,17 @@ impl Interpreter {
                         // the second check, a later individually-blocked same-named declaration
                         // (shadowed by an intervening let/const at its own nesting depth) would
                         // still stomp an earlier legitimately-hoisted one on every execution.
-                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                        //
+                        // B.3.3.1's own exception: the whole extension is skipped, not merely a
+                        // no-op sync, when F collides with a parameter name of the immediately
+                        // enclosing function (a parameter's own cell IS non-lexical once bound,
+                        // indistinguishable by identity/is_lexical alone from a genuine
+                        // hoist_inner-created placeholder -- current_function_param_names checks
+                        // the AST directly, mirroring exec_if_branch's identical check for the
+                        // bare if/else-position case).
+                        let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
+                        let promoted = !blocked_by_param
+                            && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
                             && is_annex_b_eligible(f.as_ref() as *const ast::FunctionItem);
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
@@ -387,26 +397,18 @@ impl Interpreter {
                         def = Some(n);
                     }
                 }
-                let mut i = start.or(def);
-                while let Some(n) = i {
-                    match self.exec_stmts(&cases[n].body, &e)? {
-                        Flow::Normal => {
-                            i = (n + 1 < cases.len()).then_some(n + 1);
-                        }
-                        // An UNLABELED break targets the nearest enclosing
-                        // switch/loop -- this switch, here -- and is
-                        // swallowed. A LABELED break (JSVM-10 fix: this
-                        // previously swallowed it unconditionally too, so
-                        // `outer: for (...) { switch (x) { case 1: break
-                        // outer; } }` silently did nothing instead of
-                        // breaking the outer loop) must keep propagating
-                        // upward exactly like any other Flow -- only the
-                        // matching `Labeled` wrapper may swallow it.
-                        Flow::Break(None) => break,
-                        x => return Ok(x),
-                    }
+                let start = start.or(def);
+                // A CaseBlock is a disposal boundary only when some clause directly declares a
+                // `using` / `await using` resource, matching StmtKind::Block's own check. The
+                // shared exec_switch_cases loop (below) carries JSVM-10's labeled-break fix: an
+                // UNLABELED break is swallowed here, a LABELED break keeps propagating upward.
+                if !cases.iter().any(|c| c.body.iter().any(stmt_declares_resource)) {
+                    return self.exec_switch_cases(cases, start, &e);
                 }
-                Ok(Flow::Normal)
+                self.using_stack.push(Vec::new());
+                let result = self.exec_switch_cases(cases, start, &e);
+                let frame = self.using_stack.pop().unwrap_or_default();
+                self.dispose_frame(frame, result)
             }
             StmtKind::Break { label: l } => Ok(Flow::Break(l.as_ref().map(|x| x.name.clone()))),
             StmtKind::Continue { label: l } => {
@@ -449,6 +451,30 @@ impl Interpreter {
                 self.exec_try(t, env)
             }
         }
+    }
+
+    /// CaseBlockEvaluation's clause-selection loop (14.12.3), factored out so both the plain and
+    /// the disposal-boundary path in StmtKind::Switch above can share it. `start` is the already-
+    /// resolved index of the matched (or, failing that, default) clause to begin running from --
+    /// `None` when nothing matched and there was no default clause, in which case nothing runs.
+    fn exec_switch_cases(&mut self, cases: &[ast::SwitchCase], start: Option<usize>, env: &EnvHandle) -> Result<Flow, Throw> {
+        let mut i = start;
+        while let Some(n) = i {
+            match self.exec_stmts(&cases[n].body, env)? {
+                Flow::Normal => {
+                    i = (n + 1 < cases.len()).then_some(n + 1);
+                }
+                // An UNLABELED break targets the nearest enclosing switch/loop -- this
+                // switch, here -- and is swallowed. A LABELED break (JSVM-10 fix: this
+                // previously swallowed it unconditionally too, so `outer: for (...) {
+                // switch (x) { case 1: break outer; } }` silently did nothing instead of
+                // breaking the outer loop) must keep propagating upward exactly like any
+                // other Flow -- only the matching `Labeled` wrapper may swallow it.
+                Flow::Break(None) => break,
+                x => return Ok(x),
+            }
+        }
+        Ok(Flow::Normal)
     }
 
     /// Executes one IfStatement branch (spec 13.6.7 / Annex B.3.4): a *bare*,
@@ -836,7 +862,7 @@ impl Interpreter {
                     if let Some(binding) = &c.binding {
                         self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                     }
-                    self.hoist(&c.body.body, env)?;
+                    self.hoist_catch_body(c, env)?;
                     self.exec_stmts(&c.body.body, &ce)
                 } else {
                     Err(th)
@@ -1297,14 +1323,17 @@ impl Interpreter {
     fn unary_value(&mut self, op: ast::UnOp, value: JsValue) -> Result<JsValue, Throw> {
         match op {
             ast::UnOp::Neg => {
-                let primitive = self.primitive(value)?;
+                // Unary minus is ToNumeric(expr) (13.5.6) -- ToPrimitive with the number
+                // hint, not default, per 7.1.3.
+                let primitive = self.primitive_number_hint(value)?;
                 if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.negated())) }
                 else { Ok(JsValue::num(-self.to_number(&primitive)?)) }
             },
             ast::UnOp::Pos => Ok(JsValue::num(self.to_number(&value)?)),
             ast::UnOp::Not => Ok(JsValue::Bool(!value.to_boolean())),
             ast::UnOp::BitNot => {
-                let primitive = self.primitive(value)?;
+                // Bitwise NOT is also ToNumeric(expr) (13.5.8) -- number hint.
+                let primitive = self.primitive_number_hint(value)?;
                 if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.bit_not())) }
                 else { Ok(JsValue::num((!self.to_int32(&primitive)?) as f64)) }
             },
@@ -1314,7 +1343,8 @@ impl Interpreter {
         }
     }
     fn update_value(&mut self, op: ast::UpdateOp, old: JsValue) -> Result<JsValue, Throw> {
-        let primitive = self.primitive(old)?;
+        // ++/-- are ToNumeric(oldValue) (13.4.x) -- number hint, not default.
+        let primitive = self.primitive_number_hint(old)?;
         if let JsValue::BigInt(value) = primitive {
             Ok(Self::bigint_value(if op == ast::UpdateOp::Inc { value.add(&BinaryBigInt::one()) }
                 else { value.sub(&BinaryBigInt::one()) }))
@@ -1331,9 +1361,15 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         let (reference, old) = self.resolve_reference(x, env)?;
-        let next = self.update_value(op, old.clone())?;
+        // 13.4.2/13.4.3: postfix ++/-- return ToNumeric(oldValue), not the raw
+        // pre-conversion operand -- observable when the operand is an object with a
+        // custom valueOf/@@toPrimitive. Convert once here; update_value() re-deriving
+        // it from an already-primitive value is a no-op re-entry, not a second
+        // ToPrimitive call, so this does not double the conversion's side effects.
+        let old_numeric = self.primitive_number_hint(old)?;
+        let next = self.update_value(op, old_numeric.clone())?;
         self.put_reference(reference, next.clone(), env)?;
-        Ok(if prefix { next } else { old })
+        Ok(if prefix { next } else { old_numeric })
     }
     fn binary(&mut self, op: ast::BinOp, a: JsValue, b: JsValue) -> Result<JsValue, Throw> {
         use ast::BinOp::*;
@@ -1355,8 +1391,11 @@ impl Interpreter {
                 }
             }
             Sub | Mul | Div | Rem | Pow | Shl | Shr | UShr | BitAnd | BitOr | BitXor => {
-                let x = self.primitive(a)?;
-                let y = self.primitive(b)?;
+                // Every numeric/bitwise operator other than `+` is
+                // ApplyStringOrNumericBinaryOperator's ToNumeric(lval)/ToNumeric(rval)
+                // (13.15.3) -- ToPrimitive with the number hint, not default.
+                let x = self.primitive_number_hint(a)?;
+                let y = self.primitive_number_hint(b)?;
                 if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
                     return self.bigint_operator(op, x, y);
                 }
@@ -1384,8 +1423,10 @@ impl Interpreter {
                 }))
             }
             Lt | Gt | Le | Ge => {
-                let x = self.primitive(a)?;
-                let y = self.primitive(b)?;
+                // IsLessThan(x, y, LeftFirst) (7.2.13) calls ToPrimitive on each operand
+                // with the number hint, not default.
+                let x = self.primitive_number_hint(a)?;
+                let y = self.primitive_number_hint(b)?;
                 let c = if x.is_str() && y.is_str() {
                     Some(x.as_str().unwrap().cmp(y.as_str().unwrap()))
                 } else if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {

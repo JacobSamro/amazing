@@ -5,9 +5,17 @@
 //! - [`JsValue::Object`] is `Rc<RefCell<JsObject>>`: shared mutable identity
 //!   is observable (`a === b` for the same object; mutation through one
 //!   alias visible via another) and `Rc<RefCell>` is std-only.
-//! - Property storage is an insertion-ordered `Vec` of entries, linearly
-//!   searched. Real engines hash; we need *observable key order* (for-in,
-//!   `Object.keys`) more than throughput, and a Vec gives it for free.
+//! - Property storage is an insertion-ordered `Vec` of entries (JSRT-20), with a
+//!   side `HashMap<PropertyKey, usize>` giving O(1) lookup by key. The `Vec`
+//!   alone still gives spec key order (for-in, `Object.keys`) for free via
+//!   `own_property_keys`'s single classify-and-sort pass; the map exists purely
+//!   to avoid the O(n) linear scan a lookup/define/delete used to pay on every
+//!   call (previously O(n) per access, O(n^2) to build an n-property object).
+//!   `props` itself is never tombstoned or compacted -- slot indices stay plain
+//!   `usize` positions, which `amazing-js/src/vm/fast_path.rs`'s inline-cache
+//!   slot accessors (`own_data_slot`/`own_slot_index`/`set_own_data_slot`)
+//!   depend on; `delete_own` still shifts (`Vec::remove`) and still bumps
+//!   `shape_version`, exactly as before, invalidating any cached slot.
 //! - Arrays are ordinary objects whose `"length"` property is kept in sync
 //!   by the array operations; there is no dense-elements fast path to
 //!   invalidate.
@@ -21,6 +29,7 @@
 //! integer-indexed exotics, shared array buffers.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -937,6 +946,10 @@ pub struct PendingReaction {
 #[derive(Debug, Clone)]
 pub struct JsObject {
     props: Vec<(PropertyKey, Property)>,
+    /// `key -> index into props`, kept in sync by every mutator below
+    /// (JSRT-20). O(1) lookup; `props` stays the source of truth for order
+    /// and for slot-index stability (see the module doc comment above).
+    prop_index: HashMap<PropertyKey, usize>,
     /// Changes when the indexed layout or a property's descriptor changes.
     pub(crate) shape_version: u64,
     /// Object literals constructed by the VM can use ordinary-own-property caches.
@@ -991,6 +1004,7 @@ impl JsObject {
     pub fn ordinary() -> JsObject {
         JsObject {
             props: Vec::new(),
+            prop_index: HashMap::new(),
             shape_version: 0,
             vm_cacheable: false,
             realm: None,
@@ -1019,20 +1033,30 @@ impl JsObject {
     /// use ordinary immutable descriptors, shared by every property operation.
     pub(crate) fn initialize_string_data(&mut self, string: JsString) {
         debug_assert!(self.props.is_empty());
-        self.props.extend(string.units().iter().enumerate().map(|(index, unit)| {
-            (PropertyKey::from(index.to_string()), Property {
+        for (index, unit) in string.units().iter().enumerate() {
+            self.push_prop(PropertyKey::from(index.to_string()), Property {
                 value: JsValue::str_units(vec![*unit]), writable: false,
                 enumerable: true, configurable: false, getter: None, setter: None,
-            })
-        }));
-        self.props.push((PropertyKey::from("length"), Property {
+            });
+        }
+        self.push_prop(PropertyKey::from("length"), Property {
             value: JsValue::num(string.units().len() as f64), writable: false,
             enumerable: false, configurable: false, getter: None, setter: None,
-        }));
-        self.props.push((PropertyKey::from("[[StringData]]"), Property {
+        });
+        self.push_prop(PropertyKey::from("[[StringData]]"), Property {
             value: JsValue::Str(string), writable: true, enumerable: false,
             configurable: true, getter: None, setter: None,
-        }));
+        });
+    }
+
+    /// Appends a brand-new own property (caller guarantees the key isn't
+    /// already present) and records its slot in `prop_index`. Used by the
+    /// few constructors that build `props` directly rather than through
+    /// `define` (which already does its own existing-key check).
+    fn push_prop(&mut self, key: PropertyKey, prop: Property) {
+        let slot = self.props.len();
+        self.prop_index.insert(key.clone(), slot);
+        self.props.push((key, prop));
     }
 
     pub fn array() -> JsObject {
@@ -1040,7 +1064,7 @@ impl JsObject {
         o.exotic = Exotic::Array;
         // length is a real own property: writable but non-enumerable per
         // spec §10.4.2.5 property attributes.
-        o.props.push((
+        o.push_prop(
             PropertyKey::from("length"),
             Property {
                 value: JsValue::num(0.0),
@@ -1050,7 +1074,7 @@ impl JsObject {
                 getter: None,
                 setter: None,
             },
-        ));
+        );
         o
     }
 
@@ -1108,16 +1132,17 @@ impl JsObject {
     /// (preserving its position). Infallible for our ordinary-model subset.
     pub fn define(&mut self, key: impl Into<PropertyKey>, prop: Property) -> Result<(), ()> {
         let key = key.into();
-        if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == &key) {
-            if slot.1.writable != prop.writable || slot.1.enumerable != prop.enumerable
-                || slot.1.configurable != prop.configurable
-                || slot.1.getter.is_some() != prop.getter.is_some()
-                || slot.1.setter.is_some() != prop.setter.is_some() {
+        if let Some(&slot) = self.prop_index.get(&key) {
+            let existing = &mut self.props[slot].1;
+            if existing.writable != prop.writable || existing.enumerable != prop.enumerable
+                || existing.configurable != prop.configurable
+                || existing.getter.is_some() != prop.getter.is_some()
+                || existing.setter.is_some() != prop.setter.is_some() {
                 self.shape_version = self.shape_version.wrapping_add(1);
             }
-            slot.1 = prop;
+            *existing = prop;
         } else {
-            self.props.push((key, prop));
+            self.push_prop(key, prop);
             self.shape_version = self.shape_version.wrapping_add(1);
         }
         Ok(())
@@ -1132,7 +1157,7 @@ impl JsObject {
     }
 
     pub(crate) fn own_slot_index(&self, key: &PropertyKey) -> Option<usize> {
-        self.props.iter().position(|(actual, _)| actual == key)
+        self.prop_index.get(key).copied()
     }
 
     pub(crate) fn set_own_data_slot(&mut self, key: &PropertyKey, slot: usize, value: JsValue) -> bool {
@@ -1149,24 +1174,30 @@ impl JsObject {
 
     pub fn get_own(&self, key: impl Into<PropertyKey>) -> Option<JsValue> {
         let key = key.into();
-        self.props
-            .iter()
-            .find(|(k, _)| k == &key)
-            .map(|(_, p)| p.value.clone())
+        let &slot = self.prop_index.get(&key)?;
+        Some(self.props[slot].1.value.clone())
     }
 
     pub fn own_prop(&self, key: impl Into<PropertyKey>) -> Option<&Property> {
         let key = key.into();
-        self.props.iter().find(|(k, _)| k == &key).map(|(_, p)| p)
+        let &slot = self.prop_index.get(&key)?;
+        Some(&self.props[slot].1)
     }
 
     pub fn delete_own(&mut self, key: impl Into<PropertyKey>) -> bool {
         let key = key.into();
-        if let Some(pos) = self.props.iter().position(|(k, _)| k == &key) {
+        if let Some(&pos) = self.prop_index.get(&key) {
             if !self.props[pos].1.configurable {
                 return false;
             }
             self.props.remove(pos);
+            // `Vec::remove` shifts every later entry down by one slot; rebuild
+            // the index rather than patch it in place, matching the removal's
+            // own O(n) cost (delete is not the audited hot path -- get/set/
+            // define/own_keys are).
+            self.prop_index = self.props.iter().enumerate()
+                .map(|(index, (k, _))| (k.clone(), index))
+                .collect();
             self.shape_version = self.shape_version.wrapping_add(1);
             true
         } else {

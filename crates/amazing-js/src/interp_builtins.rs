@@ -2689,7 +2689,9 @@ fn native_min(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValu
 }
 fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let number = if let Some(argument) = a.first() {
-        let primitive = i.primitive(argument.clone())?;
+        // Number(value) is ToNumeric(value) (21.1.1.1) -- ToPrimitive with the number
+        // hint, not default.
+        let primitive = i.primitive_number_hint(argument.clone())?;
         if let JsValue::BigInt(bigint) = &primitive { bigint.to_f64() }
         else { i.to_number(&primitive)? }
     } else { 0.0 };

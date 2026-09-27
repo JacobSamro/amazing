@@ -263,14 +263,101 @@ impl Interpreter {
             self.set_prop(&JsValue::Object(receiver_object), key, value)?;
             return Ok(true);
         }
-        let mut descriptor = JsObject::ordinary();
-        descriptor.set_own("value", value);
-        if existing.is_none() {
-            for name in ["writable", "enumerable", "configurable"] {
-                descriptor.set_own(name, JsValue::Bool(true));
+        self.ordinary_set_data_property(&receiver_object, key, value, existing)
+    }
+
+    // JSRT-21: array push/index-assign fast path for OrdinarySet's final step
+    // (10.1.9.2 step 4.d, "Perform ? CreateDataProperty(Receiver, P, V)" /
+    // the existing-writable-data-property value replacement in step 3). The
+    // code this replaces built a throwaway 3-4-field JsObject descriptor and
+    // round-tripped it through define_own_property, which re-parses those
+    // fields one at a time via std_descriptor_fields (a has_property +
+    // get_prop pair per field, each walking the descriptor object's own
+    // lookup path) and re-fetches the same own-property `existing` that
+    // set_with_receiver had just looked up. Every one of those re-lookups
+    // observes the same object with no intervening call that can run user
+    // code, so they are pure overhead: this writes the identical Property
+    // this Interpreter and value.rs would have produced, directly.
+    fn ordinary_set_data_property(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, existing: Option<Property>) -> Result<bool, Throw> {
+        // define_own_property's own entry point checks these two traps before
+        // touching `target`; skipping straight to the ordinary algorithm below
+        // would silently bypass a Proxy's/WindowProxy's [[DefineOwnProperty]]
+        // trap when `receiver_object` (passed in here as `target`) is itself
+        // one, which is the general path this fast path replaces. Traps need a
+        // real descriptor object handed to arbitrary trap code, so build one
+        // and fall back for this (rare -- ordinary objects are the common
+        // case) branch only.
+        if self.is_window_proxy(target) || self.proxy_parts(target).is_some() {
+            let mut descriptor = JsObject::ordinary();
+            descriptor.set_own("value", value);
+            if existing.is_none() {
+                for name in ["writable", "enumerable", "configurable"] {
+                    descriptor.set_own(name, JsValue::Bool(true));
+                }
             }
+            return self.define_own_property(target, key, &JsValue::object(descriptor));
         }
-        self.define_own_property(&receiver_object, key, &JsValue::object(descriptor))
+        if let Some(mut property) = existing {
+            // An Array's "length" is exotic even through plain [[Set]]: unlike
+            // every other data property, writing it can delete existing
+            // elements (ArraySetLength, 10.4.2.1), so it needs ToNumber +
+            // range validation and array_prepare_length_change here -- this
+            // was previously handled inside the general path's
+            // define_own_property call, which this fast path bypasses.
+            // Losing this branch silently kept stale elements above a
+            // shrunk length (caught by built-ins/Array/length/* and the
+            // ES5 15.4.5.1 corpus: -56 Test262 passes without it).
+            if matches!(target.borrow().exotic, Exotic::Array)
+                && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
+                let number = self.to_number(&value)?;
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
+                    return Err(Throw::range_error("invalid array length"));
+                }
+                if !property.writable && property.value != JsValue::num(number) {
+                    return Ok(false);
+                }
+                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
+                property.value = JsValue::num(number);
+                if let Some(name) = key.as_string() {
+                    if self.legacy_define(target, name, &property)? { return Ok(true); }
+                }
+                target.borrow_mut().define(key, property).unwrap();
+                return Ok(true);
+            }
+            // Caller (set_with_receiver) already confirmed this property has
+            // no getter/setter and is writable, so only .value changes here;
+            // a plain [[Set]] never touches writable/enumerable/configurable.
+            property.value = value;
+            if let Some(name) = key.as_string() {
+                if self.legacy_define(target, name, &property)? { return Ok(true); }
+            }
+            target.borrow_mut().define(key, property).unwrap();
+            return Ok(true);
+        }
+        if !target.borrow().extensible { return Ok(false); }
+        let is_array = matches!(target.borrow().exotic, Exotic::Array);
+        let extending_array_index = if is_array {
+            array_index_key(key).and_then(|index| {
+                let length = target.borrow().get_own("length")?.to_number().ok()?;
+                (index as f64 >= length).then_some(index)
+            })
+        } else { None };
+        if extending_array_index.is_some() && target.borrow().own_prop("length").is_some_and(|p| !p.writable) {
+            return Ok(false);
+        }
+        let property = Property {
+            value, writable: true, enumerable: true, configurable: true, getter: None, setter: None,
+        };
+        if let Some(name) = key.as_string() {
+            if self.legacy_define(target, name, &property)? { return Ok(true); }
+        }
+        target.borrow_mut().define(key, property).unwrap();
+        if let Some(index) = extending_array_index {
+            let mut length = target.borrow().own_prop("length").cloned().unwrap();
+            length.value = JsValue::num(index as f64 + 1.0);
+            target.borrow_mut().define("length", length).unwrap();
+        }
+        Ok(true)
     }
 
     fn create_list_from_array_like(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
