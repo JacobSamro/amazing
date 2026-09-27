@@ -2874,3 +2874,48 @@ runs of the same unchanged binary against that one file gave 1216, 608, and
 `amazing` + `amazing-bindings` + `amazing-dom` **736/736 passed, 6 skipped**.
 
 Evidence: `crates/amazing-bindings/evidence/set-html-unsafe/`.
+
+## observable-takeUntil.any.js: investigated, root cause found, fix reverted (base d7103c5b)
+
+Took this from the queued-tickets backlog under "keep batching". Two findings, no code landed
+(working tree is clean, back to `d7103c5b`) -- this section exists so the investigation isn't
+repeated.
+
+**Finding 1 (why the target file can't even be measured)**: `observable-takeUntil.any.js` errors
+as a whole page (`status: error, harness_status: null, detail: "[object]"`) before any subtest
+runs -- confirmed identical on base and on every variant tried. `"[object]"` traces to
+`Throw::describe()` (`crates/amazing-js/src/value.rs:454`) formatting a thrown plain object with no
+string `name`/`message`. Something throws a non-Error object during this file's setup/execution,
+and `cmd/wpt_harness.rs`'s page driver treats it as fatal despite the file's own
+`setup({allow_uncaught_exception: true})`. Not triaged further (no panic, no backtrace -- a real JS
+throw, not a Rust crash). `dom/observable` corpus can't validate anything about `takeUntil`
+specifically until this is fixed first.
+
+**Finding 2 (the obvious per-spec fix regresses 9 other files, reverted)**: implemented the WICG
+Observable spec's SS4.1 step 4 exactly ("if the initializer's abrupt completion, invoke
+Subscriber's error() with the value") -- a new `BindingHost::caught_value` trait method plus a
+`catch_to_error` helper wired into `Producer::Js`. Crate/workspace gates stayed green (no unit test
+anywhere exercises this path). Measured `dom/observable` (29 files), base `d7103c5b`, two
+independent runs per side to rule out host-load noise: base 100% stable both runs; the fix
+reproducibly (both its own runs agree) flips 9 files from real `fail{pass:N,...}` counts to a
+full-file `timeout{pass:0,fail:0}` hang (`observable-every/-find/-first/-forEach/-forEach.window/
+-last/-reduce/-some/-toArray/-map.window`), while gaining 3 real passes on
+`observable-constructor.any.js` and leaving the actual target file (`takeUntil.any.js`) completely
+unaffected (blocked by finding 1). Root cause of the hang not found within budget. **Reverted**
+rather than trade one broken file for nine newly broken ones under a gate that can't see it (no
+Observable unit tests exist to catch this at the crate level -- a gap worth closing before anyone
+touches `observable_bindings.rs` again).
+
+**Finding 3 (a larger, separate spec-conformance gap, not attempted)**: `notify_terminate`
+(`observable_bindings.rs`) forwards to observers *before* running teardowns and aborting its own
+signal; the live WICG spec's "close a subscription" (invoked by `Subscriber#error()`/`#complete()`
+*before* forwarding to observers) does the opposite order: abort signal, run teardowns LIFO, *then*
+forward. Also, `relay_forward`'s `RelayKind::TakeUntilNotifier` arm maps notifier `Error` to an
+outer *error* and notifier's own `Complete` to an outer *complete*; spec has notifier's error steps
+call the outer's *complete()* (not error), and leaves notifier's own complete steps unspecified (a
+no-op, source keeps mirroring uninterrupted) -- confirmed by the WPT file's own asserted results
+array. Both are real, but reordering `notify_terminate` changes every operator's callback ordering
+project-wide and needs a full `dom/observable` before/after gate to attempt safely -- out of this
+ticket's budget. Full detail, including the exact spec quotes and reproduction commands, is in
+`.agents/dom-bindings/questions.md` (not git-tracked; ask the lane agent or re-derive from this
+entry plus the WICG Observable spec at https://wicg.github.io/observable/ if picking this up later).
