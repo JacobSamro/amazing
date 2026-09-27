@@ -1,29 +1,27 @@
 {
   "schema": 1,
   "subdir": "css/css-position",
-  "mismatch_count": 19,
+  "mismatch_count": 13,
   "unreadable": 0,
   "clusters": [
     {
-      "signature": "medium-region, top-left, darker than reference",
-      "count": 9,
-      "examples": [
-        "css__css-position__static-position__inline-level-absolute-in-block-level-context-009.html",
-        "css__css-position__position-relative-013.html",
-        "css__css-position__static-position__inline-level-absolute-in-block-level-context-003.html",
-        "css__css-position__position-relative-011.html",
-        "css__css-position__static-position__inline-level-absolute-in-block-level-context-007.html"
-      ]
-    },
-    {
-      "signature": "small-region, top-left, darker than reference",
+      "signature": "small-region, top-left, lighter than reference",
       "count": 6,
       "examples": [
-        "css__css-position__static-position__inline-level-absolute-in-block-level-context-004.html",
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-003.html",
         "css__css-position__static-position__inline-level-absolute-in-block-level-context-012.html",
         "css__css-position__static-position__inline-level-absolute-in-block-level-context-011.html",
         "css__css-position__static-position__inline-level-absolute-in-block-level-context-010.html",
-        "css__css-position__static-position__inline-level-absolute-in-block-level-context-006.html"
+        "css__css-position__static-position__inline-level-absolute-in-block-level-context-002.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 3,
+      "examples": [
+        "css__css-position__position-relative-013.html",
+        "css__css-position__position-relative-011.html",
+        "css__css-position__position-relative-012.html"
       ]
     },
     {

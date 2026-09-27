@@ -405,7 +405,15 @@ fn prepare_sizes(
         if !stretch && (!auto || replaced) {
             continue;
         }
-        if property == "width" && start.is_none() && end.is_none() {
+        // The static-position anchor fallback determines *position* only
+        // (case 1 of CSS2.1 §10.3.7 / css-position-3 §3.5.1's rule for width
+        // not auto with both insets auto): it must not narrow `stretch`'s
+        // *size*, which -- per css-sizing-4's stretch-fit-sizing -- always
+        // fills the whole containing block minus margin/chrome regardless of
+        // insets. `absolute_origin` below independently resolves the box's
+        // final x/y from `anchor` and this box's own resolved width, so
+        // skipping the fallback here does not lose the position.
+        if property == "width" && start.is_none() && end.is_none() && !stretch {
             if anchor.right {
                 end = Some(cb.x + cb.w - anchor.x);
             } else {

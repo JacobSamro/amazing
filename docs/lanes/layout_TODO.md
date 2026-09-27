@@ -2481,3 +2481,152 @@ CSS (`width:100px; border-right:100px solid red`) and the reference
 
 Filed in `questions.md` for replaced-content with the exact pixel evidence
 above.
+
+## LAYOUT-32 (1) — CSS Sizing 3 keywords on ordinary block boxes (base `72870144`)
+
+Coordinator brief: sweep the layout-heavy WPT dirs not yet swept
+(`css/css-tables`, `css/CSS2/floats`, `css/CSS2/normal-flow`, `css/css-sizing`,
+`css/css-display`), rank clusters by count, fix the largest two or three.
+
+**Sweep.** `scripts/linux-render-wpt.sh layout css/css-tables css/CSS2/floats
+css/CSS2/normal-flow css/css-sizing css/css-display --baseline auto --release
+--jobs 8`, one call, sharing a single build. `css/css-tables` and
+`css/css-display` already had checked-in baselines (from `SHELL-L4`); the other
+three were first-time sweeps. Full `clusters.json` per dir (not just the
+truncated "e.g." samples) gave the true per-cluster counts: css-sizing's top 3
+(15, 13, 9) dwarfed every other directory's largest cluster (4), so css-sizing
+alone was "the largest two or three."
+
+**Root cause (top 2 clusters, 15+13 of 85 css-sizing mismatches, one
+architectural gap).** CSS Sizing 3 lets `width`/`min-width`/`max-width`/
+`height`/`min-height`/`max-height` take `min-content`/`max-content`/
+`fit-content` as bare keywords on **any** block-level box. The codebase's
+`values::calc_size_basis(source)` only recognizes these keywords wrapped in a
+literal `calc-size(...)` call and returns `None` for a bare keyword; the only
+place that handled a bare keyword directly was ruby text's width resolution
+(gated on `ruby_intrinsic.is_some()`). An ordinary block with e.g.
+`min-height: max-content` fell through to the wrong default (0 for
+`min-height`, unconstrained for `max-height`, "fill available" for bare
+`width`).
+
+**Fix**, all in `crates/amazing-layout/src/block.rs`:
+- `width`'s bare-keyword match no longer gates on `ruby_intrinsic.is_some()` —
+  it always resolves `min-content`/`max-content`/`fit-content` via the
+  `intrinsic()` closure, which already knows how to fall back correctly.
+- `calc_size_width_limit` (used for `min-width`/`max-width`) resolves a bare
+  keyword directly, before falling back to the `calc-size()`-only
+  `calc_size_basis` path.
+- `calc_height` (used for `height`/`min-height`/`max-height`) treats
+  `min-content`/`max-content`/`fit-content` as equal to `intrinsic_height`
+  (the box's own content-based height) — CSS Sizing 3 has no block-axis
+  wrapping analogous to inline width-wrapping, so for ordinary block layout
+  min-content block size == max-content block size == the auto/content-based
+  size. Bare `height: auto` itself is excluded from this shortcut and keeps
+  its existing trailing-margin-escape/BFC-establishing logic; including it
+  broke `bfc_auto_height_includes_a_negative_trailing_margin` and
+  `min_height_below_content_allows_the_trailing_margin_to_escape`, fixed by
+  narrowing the match arm to exclude `"auto"`.
+
+**Regression found and fixed along the way.** After the width-keyword fix
+alone, `css-sizing/slice-nowrap-intrinsic-size.html` (11 span/whitespace/
+box-decoration-break combinations under `white-space:nowrap` + `width:
+max-content`/`min-content`) went from pass to mismatch: resolving a bare
+width keyword on an ordinary block now used the coarse, non-shaped
+`crate::flex::max_content_width`/`min_content_width` fallback instead of the
+precise HarfRust-based `crate::inline::intrinsic_widths_shaped` that ruby
+already prefers. Fixed by widening `shaped_intrinsic`'s trigger condition
+(renamed `ruby_intrinsic` -> `keyword_shaped_intrinsic`) to also cover
+`width: min-content|max-content|fit-content` boxes, not just ruby/floating/
+atomic/vertical-text ones.
+
+**Gate.** Crate: 382 passed, 1 skipped, 0 failed (twice, after each fix
+iteration). `css/css-sizing`: pass 51->76, mismatch 85->62, gained=25 lost=0.
+Combined re-sweep of all 5 directories confirmed no other regressions:
+`css/css-tables` unchanged (gained=3 lost=1, same pre-existing
+`th-text-align.html` loss); `css/CSS2/floats` unchanged (pass=23/mismatch=16,
+no prior baseline); `css/CSS2/normal-flow` first sweep (pass=24/mismatch=5);
+`css/css-display` unchanged (gained=0 lost=1, same pre-existing
+`display-flow-root-002.html` loss). Both "LOST" entries were independently
+verified as pre-existing baseline drift (not caused by this ticket) by
+rendering fixture+reference at HEAD and at LAYOUT-30's tip (`eccee5d3`) and
+comparing sha256 — identical at both commits.
+
+Checked-in evidence refreshed in a separate, code-free commit: `css-sizing`'s
+baseline updated to the new (correct, improved) counts; `css/CSS2/floats` and
+`css/CSS2/normal-flow` got their first checked-in baseline; `css-tables` and
+`css-display` were left untouched (no change from their existing baseline).
+
+css-sizing's remaining smaller clusters (9 "large-region, center, darker" —
+orthogonal writing-mode auto-margin tests; 7 "small-region, lighter"; 5
+"medium-region, darker"; 4 "large-region, top, darker", mostly
+`contain-intrinsic-size`) and the smaller clusters in the other 4 directories
+(all <=4, dwarfed by css-sizing's) are next per "continue down the ranking."
+
+**Correction:** the re-clustered post-fix `clusters.json` (62 remaining
+mismatches) does not actually break down as the 9/7/5/4 guess above —
+fixing the top 2 clusters changed which signatures dominate. The new top 2
+(20 "medium-region, lighter", 10 "small-region, lighter" — 30 of 62) turned
+out to be a different, larger, coherent bug (see item 2 below), which is
+what "continue down the ranking" was actually followed into.
+
+## LAYOUT-32 (2) — CSS Sizing 4 `stretch` keyword; abspos anchor/stretch bug
+
+Re-clustering after item 1's fix moved a `stretch`-keyword family to the top
+of css-sizing's ranking (20+10=30 of 62 remaining mismatches, examples:
+`stretch/positioned-non-replaced-1.html`, `stretch/min-width-1.html`,
+`stretch/stretch-float-with-sibling.html`, `stretch/block-height-003.html`,
+`stretch/fixed-table-1.html`), dwarfing every other remaining cluster (<=4
+each) — so this became "the next largest," per "continue down the ranking."
+
+**Layout-side fix (block.rs).** CSS Sizing 4's `stretch` keyword (née
+`-webkit-fill-available`) needed the same treatment item 1 gave the three
+CSS Sizing 3 keywords, but with a different formula per axis:
+- `width`/`min-width`/`max-width: stretch` -> containing block minus this
+  box's own margins and chrome — the same equation an ordinary in-flow
+  block's width already uses — applied unconditionally so it also overrides
+  a float/inline-block/replaced box's default shrink-to-fit.
+- `height`/`min-height`/`max-height: stretch` -> the containing block's own
+  definite height minus border/padding only, **no margin subtraction**
+  (confirmed by `stretch/block-height-003.html`'s own assert: "Both margins
+  are ignored for sizing, but top margin still collapses"), falling through
+  to ordinary `auto` height when the containing block's height is
+  indefinite (css-sizing-4: stretch behaves as auto when available space is
+  indefinite).
+
+**Independent bug found and fixed (position.rs).** `prepare_sizes`'s abspos
+sizing loop had a static-position anchor fallback (CSS2.1 §10.3.7 rule 3:
+when width is not `auto` and both `left`/`right` are `auto`, treat `left` as
+the static position to *place* the box) that was also feeding into
+`stretch`'s *size* computation — narrowing a stretch box by however far its
+static position sits from the containing block edge, when css-sizing-4's
+stretch-fit-sizing does not depend on insets at all. Fixed by skipping that
+fallback when the property resolves to `stretch`; `absolute_origin` (the
+box's real x/y placement) already resolves position independently from
+`anchor` and the box's own resolved width, so nothing regresses there.
+
+**Blocked at the CSS layer, root-caused and filed to `css`.** The
+width/height fixes above are correct but **inert**: `amazing-css`'s
+`values.rs::parse()` rejects a bare `stretch`/`-webkit-fill-available`
+keyword for every sizing property — it accepts `min-content`/`max-content`/
+`fit-content` in the exact same `Keyword` match arm but has no `stretch`
+case, and nothing else in that function parses it either, so the whole
+declaration is dropped as invalid before layout ever sees the string.
+(`math.rs`'s `calc_size_basis`, used only inside a `calc-size(...)` call,
+already accepts `stretch` — this gap is specifically the bare-keyword path,
+which every `css/css-sizing/stretch/*` fixture uses.) Confirmed via
+`min-width-1.html`'s exact 5000-pixel (50×100) shortfall — `min-width`
+literally never took effect. Filed to the css lane in `questions.md` with
+the exact location and a minimal, precedented fix (add the two keywords
+alongside the existing three). `css/css-sizing/stretch/fixed-table-1.html`
+will need a further, separate `table.rs` follow-up even after that lands
+(table role bypasses `block.rs`'s width resolution entirely) — noted, not
+attempted.
+
+**Gate.** Targeted re-sweep of `css/css-sizing` + `css/css-position` (not
+the full 5-directory set — only these two corpora exercise the changed
+code): `css/css-position` gained=6 lost=0 (pass 35->41, mismatch 19->13) — a
+clean, real win from the position.rs fix, unrelated to the still-blocked
+css-sizing cluster. `css/css-sizing`: gained=0 lost=0, as expected given the
+CSS-layer block above. Crate tests: 382 passed, 1 skipped, 0 failed.
+Checked-in evidence refreshed for `css-position` in a separate, code-free
+commit.

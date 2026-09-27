@@ -213,17 +213,23 @@ fn layout_block_in_context(
 
     // Intrinsic queries use the same provider as painting. Avoid measuring
     // ordinary fill-width paragraphs twice; only shrink-to-fit, ruby keyword
-    // constraints and vertical flow need this contribution here.
+    // constraints, an explicit width keyword and vertical flow need this
+    // contribution here.
     let has_ruby = matches!(&b.flow, Flow::Inlines(items) if items.iter().any(|item| matches!(item, crate::InlineNode::Ruby { .. })));
     let vertical_text = b.font_metric_style.as_ref().is_some_and(|style| style.writing_mode.is_vertical_flow());
+    let width_keyword = matches!(b.style.get("width"), Some("min-content" | "max-content" | "fit-content"));
     let shaped_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
-        (has_ruby || floating || b.inline_atomic || vertical_text).then(|| {
+        (has_ruby || floating || b.inline_atomic || vertical_text || width_keyword).then(|| {
             crate::inline::intrinsic_widths_shaped(items,
                 b.font_metric_style.as_ref().map(|style| style.direction).unwrap_or_default(), text)
         }).flatten().map(|(min, max)| (min + bl + pl + pr + br_, max + bl + pl + pr + br_))
     } else { None };
-    let ruby_intrinsic = shaped_intrinsic.filter(|_| has_ruby);
-    let intrinsic = |b: &LayoutBox, minimum| ruby_intrinsic.map(|pair| if minimum {pair.0} else {pair.1})
+    // Ruby and an explicit width keyword both need the accurate shaped
+    // measurement for the `intrinsic` closure below; ordinary shrink-to-fit
+    // (floats/atomic/vertical) keeps using shaped_intrinsic directly where
+    // it already applies, without forcing every such box through this path.
+    let keyword_shaped_intrinsic = shaped_intrinsic.filter(|_| has_ruby || width_keyword);
+    let intrinsic = |b: &LayoutBox, minimum| keyword_shaped_intrinsic.map(|pair| if minimum {pair.0} else {pair.1})
         .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
             else { crate::flex::max_content_width(b, fonts) });
     let mut vertical_intrinsic = vertical_inline_measure(b, cbw, text);
@@ -302,14 +308,29 @@ fn layout_block_in_context(
         }
     }
     let chrome = bl + pl + pr + br_;
-    // Ruby needs shaped keyword widths. Other formatting contexts retain their
-    // own intrinsic sizing path; token-only flex measurements do not model
-    // inline decorations or grid track constraints.
-    match b.style.get("width").filter(|_| ruby_intrinsic.is_some()) {
+    // CSS Sizing 3 extends `width` to accept these three keywords on any
+    // block-level box, not only floats/replaced/inline-blocks (whose
+    // shrink-to-fit is handled above via MaybeLen::Auto). Ruby's shaped
+    // measurement and the plain flex-based fallback both live behind the
+    // `intrinsic` closure, so this match applies unconditionally; it only
+    // pays for `intrinsic()` when the raw value actually names one of these
+    // keywords.
+    match b.style.get("width") {
         Some("min-content") => content_w = (intrinsic(b, true) - chrome).max(0.0),
         Some("max-content") => content_w = (intrinsic(b, false) - chrome).max(0.0),
         Some("fit-content") => content_w = (intrinsic(b, true).max(content_w + chrome)
             .min(intrinsic(b, false)) - chrome).max(0.0),
+        // CSS Sizing 4 `stretch` (formerly `-webkit-fill-available`): the
+        // stretch-fit size fills the containing block minus the box's own
+        // margins, same equation as an ordinary in-flow block's width
+        // (MaybeLen::Auto's non-float branch above) -- applied here
+        // unconditionally so it also overrides a float/inline-block/replaced
+        // box's default shrink-to-fit sizing.
+        Some("stretch" | "-webkit-fill-available") => {
+            let used_ml = b.margin.left.unwrap_or(0.0);
+            let used_mr = b.margin.right.unwrap_or(0.0);
+            content_w = (cbw - used_ml - chrome - used_mr).max(0.0);
+        }
         _ => {},
     }
     if let Some(source) = b.style.get("width")
@@ -339,6 +360,21 @@ fn layout_block_in_context(
         let intrinsic = |minimum| if crate::grid::is_grid_lanes(&b.style) {
             crate::grid::intrinsic_lanes_width(b, fonts, minimum)
         } else { intrinsic(b, minimum) };
+        // A bare keyword (no `calc-size()` wrapper) resolves directly to its
+        // intrinsic contribution, same as `width` above -- CSS Sizing 3
+        // extends min-width/max-width to accept these keywords on any block.
+        match source.trim() {
+            "min-content" => return Some((intrinsic(true) - chrome).max(0.0)),
+            "max-content" => return Some((intrinsic(false) - chrome).max(0.0)),
+            "fit-content" => return Some((intrinsic(true).max(content_w + chrome)
+                .min(intrinsic(false)) - chrome).max(0.0)),
+            "stretch" | "-webkit-fill-available" => {
+                let used_ml = b.margin.left.unwrap_or(0.0);
+                let used_mr = b.margin.right.unwrap_or(0.0);
+                return Some((cbw - used_ml - chrome - used_mr).max(0.0));
+            }
+            _ => {},
+        }
         let basis = match values::calc_size_basis(source)? {
             "auto" | "min-content" => (intrinsic(true) - chrome).max(0.0),
             "max-content" => (intrinsic(false) - chrome).max(0.0),
@@ -537,6 +573,30 @@ fn layout_block_in_context(
     let intrinsic_height = content.content_end.max(float_extent).max(0.0);
     let calc_height = |property| {
         let source = b.style.get(property)?;
+        // A bare keyword (no `calc-size()` wrapper) resolves directly to the
+        // box's own content-based block size: for ordinary block layout the
+        // min-content, max-content and fit-content block sizes all coincide
+        // with the "auto" content-based height (CSS Sizing 3 has no block-axis
+        // wrapping to make them diverge here), so `min-height: max-content`,
+        // `max-height: min-content`, `height: fit-content` etc. all resolve
+        // to the same intrinsic_height already used as auto height's basis.
+        // Bare "auto" itself is excluded: `height: auto` keeps its own
+        // trailing-margin-escape/BFC handling below rather than this shortcut.
+        match source.trim() {
+            "min-content" | "max-content" | "fit-content" => return Some(intrinsic_height),
+            // CSS Sizing 4 `stretch`: the block axis's stretch-fit size is the
+            // containing block's own definite height minus this box's border
+            // and padding -- margins are NOT subtracted here (unlike the
+            // inline axis), matching css-sizing-4's stretch-fit-sizing draft
+            // (margins can then overflow past the containing block, and
+            // still take part in normal margin collapsing above). When the
+            // containing block's height is indefinite, `stretch` behaves as
+            // `auto`, so fall through to the existing auto-height path below.
+            "stretch" | "-webkit-fill-available" => {
+                return b.containing_block_height.map(|h| (h - bt - pt(b) - pb(b) - bb).max(0.0));
+            }
+            _ => {},
+        }
         match values::calc_size_basis(source)? {
             "auto" | "min-content" | "max-content" | "fit-content" =>
                 values::used_calc_size_with_basis(
