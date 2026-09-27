@@ -692,6 +692,13 @@ impl Interpreter {
         self.hoist(&t.block.body, env)?;
         let mut out = match self.exec_stmts(&t.block.body, &e) {
             Ok(x) => Ok(x),
+            // A coroutine-backed generator's `.return(v)` completion at a suspended `yield`
+            // inside this try block is smuggled through this same `Err` channel (see
+            // interp_coroutine.rs's module doc) so it unwinds through arbitrarily nested
+            // expressions/statements -- but unlike a real JS throw, it must bypass `catch`
+            // entirely (only `finally`, below, still runs), the same way a real `return`
+            // statement would. `has_pending_return()` distinguishes the two.
+            Err(th) if has_pending_return() => Err(th),
             Err(th) => {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
@@ -985,7 +992,13 @@ impl Interpreter {
                     self.get_prop(&o, &k)
                 }
             }
-            ExprKind::Yield { .. } => Err(Throw::type_error("generators are not implemented")),
+            ExprKind::Yield { argument, delegate } => {
+                let value = match argument {
+                    Some(a) => self.eval_expr(a, env)?,
+                    None => JsValue::Undefined,
+                };
+                eval_yield(self, value, *delegate)
+            }
         }
     }
 
@@ -1934,6 +1947,19 @@ impl Interpreter {
                         }
                     }
                     self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
+                    // still runs eagerly, synchronously, right here -- only the body's statements
+                    // are deferred, to a pooled coroutine thread that the first `.next()` drives
+                    // (JSVM-8; see interp_coroutine.rs). `new_target` is set only when called via
+                    // `new`, which generator functions never support (25.5.1/27.3.1: no
+                    // [[Construct]]).
+                    if fun.is_generator {
+                        if new_target.is_some() {
+                            return Err(Throw::type_error("generator functions are not constructors"));
+                        }
+                        self.hoist(&b.body, &e)?;
+                        return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function));
+                    }
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     self.hoist(&b.body, &e)?;
                     // A function body is a disposal boundary in its own right (spec: ordinary
@@ -1973,7 +1999,12 @@ impl Interpreter {
                 Ok(value) => Ok(value),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
             }
-        } else if fun.is_async {
+        } else if fun.is_async && !fun.is_generator {
+            // An async *generator* call returns the AsyncGenerator instance itself, synchronously
+            // and directly (spec 27.4.3.2 EvaluateAsyncGeneratorBody's completion is the generator
+            // object, not a promise) -- the async part shows up per-call, in `next`/`return`/
+            // `throw` each returning their own promise (see interp_coroutine.rs), not by wrapping
+            // the whole `g()` call the way a plain (non-generator) async function's call is here.
             match r {
                 Ok(value) => Ok(new_promise(self, PromiseFate::Fulfilled(value))),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
@@ -2269,6 +2300,24 @@ impl Interpreter {
         });
         o.strict_function = class_method || self.strict_eval_context || has_use_strict_directive(&m.body.body);
         let handle = Obj(Rc::new(RefCell::new(o)));
+        // Sync/async generator methods get their own per-method `.prototype` too (15.5.1
+        // GeneratorMethod's OrdinaryObjectCreate(%GeneratorFunction.prototype.prototype%)),
+        // exactly like a generator function declaration/expression via `make_function` --
+        // a coroutine-backed generator instance's proto chain (`start_thread_generator`)
+        // depends on this to reach the shared `next`/`return`/`throw` methods through the
+        // spec-correct object rather than only through its own fallback default.
+        if m.is_generator {
+            let p = Obj(Rc::new(RefCell::new({
+                let mut x = JsObject::ordinary();
+                x.proto = Some(if m.is_async { self.async_generator_proto.clone() } else { self.generator_proto.clone() });
+                x
+            })));
+            handle.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(p.clone()), writable: true, enumerable: false,
+                configurable: false, getter: None, setter: None,
+            }).unwrap();
+            handle.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
+        }
         JsValue::Object(handle)
     }
     fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
