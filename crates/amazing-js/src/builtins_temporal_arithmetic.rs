@@ -188,17 +188,27 @@ fn std_temporal_split_duration_ns(total: i128, largest: usize) -> [i64; 10] {
     fields
 }
 
-fn std_temporal_largest_unit(i: &mut Interpreter, option: &JsValue, default: &str) -> Result<String, Throw> {
-    let unit = std_temporal_option_string(i, option, "largestUnit")?.unwrap_or_else(|| default.to_string());
-    let unit = if unit == "auto" { default.to_string() } else { unit };
-    Ok(unit.strip_suffix('s').unwrap_or(&unit).to_string())
-}
-
-fn std_temporal_rounding_options(i: &mut Interpreter, option: &JsValue,
-    smallest_default: &str, mode_default: &str) -> Result<(String, i64, String), Throw> {
-    let smallest = std_temporal_option_string(i, option, "smallestUnit")?
-        .unwrap_or_else(|| smallest_default.to_string());
-    let smallest = smallest.strip_suffix('s').unwrap_or(&smallest).to_string();
+// GetDifferenceSettings (spec): the four option properties are read and cast
+// in this exact order -- largestUnit, roundingIncrement, roundingMode,
+// smallestUnit -- and every one of the twelve Get/toString/valueOf calls
+// they cause completes before ANY algorithmic validation (is this unit
+// allowed for this operation, largestUnit >= smallestUnit, the
+// roundingIncrement bound implied by the now-known smallestUnit) is allowed
+// to throw. `since`/`until` used to read smallestUnit/roundingIncrement/
+// roundingMode first and largestUnit only afterward, deep inside each
+// per-kind branch -- confirmed wrong by PlainDate/PlainDateTime's
+// `options-read-before-algorithmic-validation.js` and
+// `order-of-operations.js`, which observe the four reads via a Proxy in this
+// order and require all of them to complete even on a call that is going to
+// throw. This function does the four raw reads only; every caller resolves
+// its own per-kind defaults, disallowed-unit set and increment bound
+// afterward, all deferred past this point. Ordering ported from
+// boa-dev/temporal (temporal_rs) @ eadf8039d2577e4375493a0eb3f46a66f25616ec,
+// src/options.rs's `DifferenceSettings` parsing, Apache-2.0.
+fn std_temporal_difference_reads(i: &mut Interpreter, option: &JsValue, mode_default: &str, since: bool)
+    -> Result<(Option<String>, i64, String, Option<String>), Throw> {
+    let largest_raw = std_temporal_option_string(i, option, "largestUnit")?
+        .map(|u| std_temporal_singular_unit(&u));
     let increment = std_temporal_option_value(i, option, "roundingIncrement")?;
     let increment = std_temporal_number(i, increment, Some(1))?;
     let mode = std_temporal_option_string(i, option, "roundingMode")?
@@ -206,7 +216,19 @@ fn std_temporal_rounding_options(i: &mut Interpreter, option: &JsValue,
     if !std_temporal_round_mode_valid(&mode) {
         return Err(Throw::range_error("invalid roundingMode"));
     }
-    let maximum = match smallest.as_str() {
+    let mode = if since { std_temporal_swap_directional_mode(&mode) } else { mode };
+    let smallest_raw = std_temporal_option_string(i, option, "smallestUnit")?
+        .map(|u| std_temporal_singular_unit(&u));
+    Ok((largest_raw, increment, mode, smallest_raw))
+}
+
+// The roundingIncrement bound depends on the final resolved smallestUnit,
+// which (per `std_temporal_difference_reads` above) is only known after all
+// four option properties have already been read -- so this check is always
+// one of the deferred "algorithmic validation" steps, never inline with a
+// read.
+fn std_temporal_validate_rounding_increment(smallest: &str, increment: i64) -> Result<(), Throw> {
+    let maximum = match smallest {
         "hour" => 24, "minute" | "second" => 60,
         "millisecond" | "microsecond" | "nanosecond" => 1_000,
         _ => i64::MAX,
@@ -215,7 +237,16 @@ fn std_temporal_rounding_options(i: &mut Interpreter, option: &JsValue,
         || (maximum != i64::MAX && maximum % increment != 0) {
         return Err(Throw::range_error("invalid roundingIncrement"));
     }
-    Ok((smallest, increment, mode))
+    Ok(())
+}
+
+// Resolves an already-read, already-singularized largestUnit against its
+// per-call default: absent or explicit "auto" both mean "use the default".
+fn std_temporal_resolve_largest(largest_raw: &Option<String>, default: &str) -> String {
+    match largest_raw.as_deref() {
+        None | Some("auto") => default.to_string(),
+        Some(u) => u.to_string(),
+    }
 }
 
 fn std_temporal_round_mode_valid(mode: &str) -> bool {
@@ -303,10 +334,10 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     let data = std_temporal_record(&this, None)?;
     let other = std_temporal_from_fields(i, data.kind, std_reflect_arg(&args, 0), false)?;
     let options = std_reflect_arg(&args, 1);
-    let smallest_default = if matches!(data.kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth) {
-        if data.kind == StdTemporalKind::PlainYearMonth { "month" } else { "day" }
-    } else { "nanosecond" };
-    let (smallest, increment, mode) = std_temporal_rounding_options(i, &options, smallest_default, "trunc")?;
+    // All four option properties are read here, in spec order, before any
+    // per-kind default/validation logic below is allowed to throw -- see
+    // `std_temporal_difference_reads`.
+    let (largest_raw, increment, mode, smallest_raw) = std_temporal_difference_reads(i, &options, "trunc", since)?;
     // Ported from boa-dev/temporal (temporal_rs) @ eadf8039d2577e4375493a0eb3f46a66f25616ec,
     // src/builtins/core/plain_date.rs `diff_date`/`internal_diff_date` and the
     // RoundRelativeDuration algorithm they call into (Apache-2.0). `since` and
@@ -327,15 +358,18 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     // caller asked for (confirmed by `roundingmode-ceil.js`, which expects
     // `since` and `until` on swapped receiver/argument to agree exactly, not
     // merely negate). `trunc`/`expand`/`halfExpand`/`halfTrunc`/`halfEven` are
-    // already symmetric under negation and need no swap.
-    let mode = if since { std_temporal_swap_directional_mode(&mode) } else { mode };
+    // already symmetric under negation and need no swap. The swap itself
+    // already happened inside `std_temporal_difference_reads`.
     if data.kind == StdTemporalKind::PlainYearMonth {
-        let largest = std_temporal_largest_unit(i, &options, "year")?;
-        if !matches!(largest.as_str(), "year" | "month")
-            || !matches!(smallest.as_str(), "year" | "month")
-            || (largest == "month" && smallest == "year") {
+        let smallest = smallest_raw.unwrap_or_else(|| "month".to_string());
+        if !matches!(smallest.as_str(), "year" | "month") {
+            return Err(Throw::range_error("invalid smallestUnit for PlainYearMonth difference"));
+        }
+        let largest = std_temporal_resolve_largest(&largest_raw, "year");
+        if !matches!(largest.as_str(), "year" | "month") || (largest == "month" && smallest == "year") {
             return Err(Throw::range_error("invalid PlainYearMonth difference units"));
         }
+        std_temporal_validate_rounding_increment(&smallest, increment)?;
         for fields in [&data.fields, &other] {
             if !(-100_000_000..=100_000_000).contains(&std_temporal_epoch_day(fields[0], fields[1], 1)) {
                 return Err(Throw::range_error("PlainYearMonth difference outside date range"));
@@ -354,6 +388,7 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
     }
     let mut result = match data.kind {
         StdTemporalKind::PlainDate => {
+            let smallest = smallest_raw.unwrap_or_else(|| "day".to_string());
             if !matches!(smallest.as_str(), "year" | "month" | "week" | "day") {
                 return Err(Throw::range_error("invalid smallestUnit for date difference"));
             }
@@ -363,13 +398,14 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             // resolves to largestUnit "week", not "day", and does not throw
             // "largestUnit is smaller than smallestUnit".
             let largest_default = std_temporal_larger_unit("day", &smallest);
-            let largest = std_temporal_largest_unit(i, &options, &largest_default)?;
+            let largest = std_temporal_resolve_largest(&largest_raw, &largest_default);
             if !matches!(largest.as_str(), "year" | "month" | "week" | "day") {
                 return Err(Throw::range_error("invalid largestUnit for date difference"));
             }
             if std_temporal_unit_rank(&largest).unwrap() > std_temporal_unit_rank(&smallest).unwrap() {
                 return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
             }
+            std_temporal_validate_rounding_increment(&smallest, increment)?;
             if smallest == "day" {
                 // A fixed-length unit: round the exact receiver->argument day
                 // count to the requested increment/mode, then re-express that
@@ -399,29 +435,50 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             }
         }
         StdTemporalKind::PlainTime | StdTemporalKind::PlainDateTime => {
+            let smallest = smallest_raw.unwrap_or_else(|| "nanosecond".to_string());
+            if data.kind == StdTemporalKind::PlainTime && smallest == "day" {
+                return Err(Throw::range_error("day is not a PlainTime unit"));
+            }
             if data.kind == StdTemporalKind::PlainDateTime
                 && matches!(smallest.as_str(), "year" | "month" | "week") {
                 let largest_default = std_temporal_larger_unit("day", &smallest);
-                let largest = std_temporal_largest_unit(i, &options, &largest_default)?;
+                let largest = std_temporal_resolve_largest(&largest_raw, &largest_default);
                 if !matches!(largest.as_str(), "year" | "month" | "week" | "day") {
                     return Err(Throw::range_error("invalid largestUnit for date difference"));
                 }
                 if std_temporal_unit_rank(&largest).unwrap() > std_temporal_unit_rank(&smallest).unwrap() {
                     return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
                 }
+                std_temporal_validate_rounding_increment(&smallest, increment)?;
                 std_temporal_round_to_calendar_unit(&data.fields, std_temporal_epoch_ns(&other), &smallest, &largest, increment, &mode)?
             } else {
                 let default = if data.kind == StdTemporalKind::PlainTime { "hour" } else { "day" };
-                let largest = std_temporal_largest_unit(i, &options, default)?;
+                let largest = std_temporal_resolve_largest(&largest_raw, default);
                 if data.kind == StdTemporalKind::PlainDateTime
                     && matches!(largest.as_str(), "year" | "month" | "week") {
-                    // Full precision (smallestUnit defaulted to nanosecond, the
-                    // only case reaching here): an exact calendar+time
-                    // rebalance to the requested largestUnit, no rounding
-                    // involved (a mode swap/negation is a no-op on an exact,
-                    // unrounded value, so the receiver->argument direction
-                    // alone is negated for `since` below with everything else).
-                    std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&other), &largest)?
+                    // smallestUnit here is a FIXED unit (day..nanosecond, not
+                    // necessarily nanosecond -- any of them reach this branch
+                    // once largestUnit is a calendar unit), so the exact
+                    // receiver->argument delta must still be rounded to it
+                    // before being re-expressed as a calendar+time breakdown
+                    // at `largest`: a rounding that carries all the way
+                    // through the sub-day remainder can cross into (or past)
+                    // the next `largest`-unit boundary, e.g. rounding
+                    // 1970-01-01 .. 1971-12-31T23:59:59.999999999 to whole
+                    // microseconds with mode "expand" carries the trailing
+                    // fractional microsecond all the way up into a full
+                    // extra year (confirmed by
+                    // `round-cross-unit-boundary.js`'s "rounding down 1 ns
+                    // balances to -2 years" case). When smallestUnit is
+                    // "nanosecond" with increment 1 this round is an
+                    // identity (delta is already an exact integer of
+                    // nanoseconds), so no separate unrounded-shortcut branch
+                    // is needed.
+                    std_temporal_validate_rounding_increment(&smallest, increment)?;
+                    let unit = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+                    let delta = std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields);
+                    let rounded = std_temporal_round_integer(delta, unit * increment as i128, &mode)?;
+                    std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&data.fields) + rounded, &largest)?
                 } else {
                     let index = match largest.as_str() {
                         "day" if data.kind == StdTemporalKind::PlainDateTime => 3,
@@ -429,15 +486,13 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                         "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
                         _ => return Err(Throw::range_error("invalid largestUnit for time difference")),
                     };
-                    if data.kind == StdTemporalKind::PlainTime && smallest == "day" {
-                        return Err(Throw::range_error("day is not a PlainTime unit"));
-                    }
                     let smallest_index = match smallest.as_str() { "day" => 3, "hour" => 4, "minute" => 5,
                         "second" => 6, "millisecond" => 7, "microsecond" => 8, "nanosecond" => 9,
                         _ => return Err(Throw::range_error("invalid smallestUnit")) };
                     if index > smallest_index {
                         return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
                     }
+                    std_temporal_validate_rounding_increment(&smallest, increment)?;
                     let delta = if data.kind == StdTemporalKind::PlainTime {
                         std_temporal_time_ns(&other) - std_temporal_time_ns(&data.fields)
                     } else { std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields) };
@@ -487,35 +542,18 @@ fn std_temporal_since(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
 // regulates the result without being stored in it).
 enum StdWithField { Plural(usize), Year, Month, MonthCode, Day, Hour, Minute, Second, Millisecond, Microsecond, Nanosecond }
 
-fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let data = std_temporal_record(&this, None)?;
-    let bag = std_reflect_arg(&args, 0);
-    if data.kind == StdTemporalKind::Duration {
-        if !bag.is_object() { return Err(Throw::type_error("Temporal fields must be an object")); }
-    } else {
-        // IsPartialTemporalObject + RejectObjectWithCalendarOrTimeZone: a bag
-        // that is itself a recognized Temporal object (of ANY kind, not just
-        // this receiver's own) is rejected outright, without ever touching
-        // its calendar/timeZone properties -- those may be throwing getters
-        // on a real Temporal instance, and real internal-slot access never
-        // triggers a getter. An ordinary object IS allowed to carry other,
-        // unrelated properties (extras are just ignored), but not calendar
-        // or timeZone specifically.
-        if !bag.is_object()
-            || std_temporal_record(&bag, None).is_ok()
-            || std_epoch_record(&bag, Some(StdEpochKind::ZonedDateTime)).is_ok() {
-            return Err(Throw::type_error("with() argument must be a plain object"));
-        }
-        let calendar = i.get_prop(&bag, "calendar")?;
-        if !calendar.is_undefined() {
-            return Err(Throw::type_error("with() argument must not have a calendar property"));
-        }
-        let time_zone = i.get_prop(&bag, "timeZone")?;
-        if !time_zone.is_undefined() {
-            return Err(Throw::type_error("with() argument must not have a timeZone property"));
-        }
-    }
-    let fields: &[(&str, StdWithField)] = match data.kind {
+// The per-kind field name table, already listed in the exact alphabetical
+// order PrepareTemporalFields/PrepareCalendarFields/GetTemporalPlainTimeFields
+// specifies (and that many order-of-operations.js tests observe via a Proxy).
+// Shared by `with()` (merging into an existing record) and `std_temporal_bag`
+// (building a fresh record for `from()`/since/until's `other` argument/
+// constructors) -- both must read a property bag's OWN fields in this same
+// order, not the fields' natural/positional order (year, month, day, ...),
+// which `std_temporal_bag` got wrong until this port (confirmed by
+// PlainDate/PlainDateTime/PlainTime's own `since`/`until`/`from`
+// `order-of-operations.js`).
+fn std_temporal_field_table(kind: StdTemporalKind) -> &'static [(&'static str, StdWithField)] {
+    match kind {
         StdTemporalKind::Duration => &[
             ("days", StdWithField::Plural(3)), ("hours", StdWithField::Plural(4)),
             ("microseconds", StdWithField::Plural(8)), ("milliseconds", StdWithField::Plural(7)),
@@ -547,7 +585,85 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             ("day", StdWithField::Day), ("month", StdWithField::Month),
             ("monthCode", StdWithField::MonthCode), ("year", StdWithField::Year),
         ],
-    };
+    }
+}
+
+// The result of reading a property bag's own calendar/time fields, in
+// alphabetical order, with each field's own immediate validation
+// (month/day < 1 throws right at ITS OWN read, per
+// ToPositiveIntegerWithTruncation) already applied. `monthCode` is only
+// *read* here (ToString, an observable call); its calendar-format validation
+// and cross-check against `month` is calendar-dependent resolution deferred
+// to the caller, matching `options-read-before-algorithmic-validation.js`.
+struct StdCalendarRead {
+    year: Option<i64>,
+    month: Option<i64>,
+    month_code_text: Option<String>,
+    day: Option<i64>,
+    time: [i64; 6],
+    any_present: bool,
+}
+
+fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<StdCalendarRead, Throw> {
+    let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], any_present: false };
+    for (name, field) in std_temporal_field_table(kind) {
+        let property = i.get_prop(value, *name)?;
+        if property.is_undefined() { continue; }
+        read.any_present = true;
+        match field {
+            StdWithField::Plural(_) => unreachable!("Duration is read directly by its own caller"),
+            StdWithField::Year => read.year = Some(std_temporal_number(i, property, None)?),
+            StdWithField::Month => {
+                let value = std_temporal_number(i, property, None)?;
+                if value < 1 { return Err(Throw::range_error("month must be a positive integer")); }
+                read.month = Some(value);
+            }
+            StdWithField::MonthCode => read.month_code_text = Some(i.to_string(&property)?),
+            StdWithField::Day => {
+                let value = std_temporal_number(i, property, None)?;
+                if value < 1 { return Err(Throw::range_error("day must be a positive integer")); }
+                read.day = Some(value);
+            }
+            StdWithField::Hour => read.time[0] = std_temporal_number(i, property, None)?,
+            StdWithField::Minute => read.time[1] = std_temporal_number(i, property, None)?,
+            StdWithField::Second => read.time[2] = std_temporal_number(i, property, None)?,
+            StdWithField::Millisecond => read.time[3] = std_temporal_number(i, property, None)?,
+            StdWithField::Microsecond => read.time[4] = std_temporal_number(i, property, None)?,
+            StdWithField::Nanosecond => read.time[5] = std_temporal_number(i, property, None)?,
+        }
+    }
+    Ok(read)
+}
+
+fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let data = std_temporal_record(&this, None)?;
+    let bag = std_reflect_arg(&args, 0);
+    if data.kind == StdTemporalKind::Duration {
+        if !bag.is_object() { return Err(Throw::type_error("Temporal fields must be an object")); }
+    } else {
+        // IsPartialTemporalObject + RejectObjectWithCalendarOrTimeZone: a bag
+        // that is itself a recognized Temporal object (of ANY kind, not just
+        // this receiver's own) is rejected outright, without ever touching
+        // its calendar/timeZone properties -- those may be throwing getters
+        // on a real Temporal instance, and real internal-slot access never
+        // triggers a getter. An ordinary object IS allowed to carry other,
+        // unrelated properties (extras are just ignored), but not calendar
+        // or timeZone specifically.
+        if !bag.is_object()
+            || std_temporal_record(&bag, None).is_ok()
+            || std_epoch_record(&bag, Some(StdEpochKind::ZonedDateTime)).is_ok() {
+            return Err(Throw::type_error("with() argument must be a plain object"));
+        }
+        let calendar = i.get_prop(&bag, "calendar")?;
+        if !calendar.is_undefined() {
+            return Err(Throw::type_error("with() argument must not have a calendar property"));
+        }
+        let time_zone = i.get_prop(&bag, "timeZone")?;
+        if !time_zone.is_undefined() {
+            return Err(Throw::type_error("with() argument must not have a timeZone property"));
+        }
+    }
+    let fields: &[(&str, StdWithField)] = std_temporal_field_table(data.kind);
     let mut result = data.fields;
     let mut present = false;
     let mut month_seen = None;
@@ -1039,16 +1155,8 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
     } else { (1, "halfExpand".to_string()) };
     if !std_temporal_round_mode_valid(&mode) { return Err(Throw::range_error("invalid roundingMode")); }
     // Time units additionally cannot exceed (or fail to evenly divide) the
-    // next-largest unit, matching std_temporal_rounding_options.
-    let maximum = match smallest.as_str() {
-        "hour" => 24, "minute" | "second" => 60,
-        "millisecond" | "microsecond" | "nanosecond" => 1_000,
-        _ => i64::MAX,
-    };
-    if increment < 1 || increment > 1_000_000_000 || increment >= maximum
-        || (maximum != i64::MAX && maximum % increment != 0) {
-        return Err(Throw::range_error("invalid roundingIncrement"));
-    }
+    // next-largest unit, matching std_temporal_validate_rounding_increment.
+    std_temporal_validate_rounding_increment(&smallest, increment)?;
 
     let needs_calendar = smallest_index <= 2 || largest_index <= 2
         || fields[0] != 0 || fields[1] != 0 || fields[2] != 0;
@@ -1056,7 +1164,23 @@ fn std_temporal_round_duration(i: &mut Interpreter, fields: [i64; 10], option: &
         let step = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?
             * increment as i128;
         let rounded = std_temporal_round_integer(std_temporal_duration_time_ns(&fields), step, &mode)?;
-        return std_temporal_make(i, StdTemporalKind::Duration, std_temporal_split_duration_ns(rounded, largest_index));
+        let split = std_temporal_split_duration_ns(rounded, largest_index);
+        // BalanceTimeDuration's own float64-safe-integer requirement on the
+        // field(s) it produces, stricter than (and on top of)
+        // IsValidDuration's total-based bound in std_temporal_validate --
+        // confirmed by round/out-of-range-when-converting-from-normalized-
+        // duration.js, where Number.MAX_SAFE_INTEGER seconds (a legal total)
+        // collapsed to largestUnit "nanoseconds" overflows float64 precision
+        // in that one surviving field even though the total in seconds
+        // stays within std_temporal_validate's own bound. Unlike
+        // since/until's Duration output (`largestunit-plurals-accepted.js`/
+        // `float64-representable-integer.js`), which never routes through
+        // here, this check is specific to round()'s own conversion, not
+        // Duration validity in general.
+        if split.iter().any(|v| v.abs() > 9_007_199_254_740_991) {
+            return Err(Throw::range_error("invalid Temporal duration"));
+        }
+        return std_temporal_make(i, StdTemporalKind::Duration, split);
     }
     let relative = if option.is_object() { std_temporal_option_value(i, option, "relativeTo")? } else { JsValue::Undefined };
     if relative.is_undefined() {

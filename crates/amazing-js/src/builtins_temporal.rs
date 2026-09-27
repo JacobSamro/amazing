@@ -427,20 +427,23 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
             + values[7] as i128 * 1_000_000
             + values[8] as i128 * 1_000
             + values[9] as i128;
-        // Days is bounded only by the total (a days-only span can already
-        // run past 2**32-1 while its total in seconds is still safely in
-        // range, e.g. Duration/max.js's "max days" case), but
-        // hours-through-nanoseconds ALSO each keep an individual
-        // float64-safe-integer cap on top of the total: once BalanceDuration
-        // collapses everything into a single requested largestUnit (e.g.
-        // `.round({largestUnit: "nanoseconds"})`), that one surviving field
-        // must itself be representable, even though the exact total
-        // expressed in seconds is still within the total-based bound --
-        // confirmed by
-        // round/out-of-range-when-converting-from-normalized-duration.js.
+        // Days-through-nanoseconds are bounded only by the total, not
+        // individually: a days-only (or, after `since`/`until` collapses a
+        // full-precision span into a single requested largestUnit, a
+        // nanoseconds-only) span can run far past 2**53-1 in that one field
+        // while the exact total expressed in seconds is still safely in
+        // range -- e.g. Duration/max.js's "max days" case, and
+        // PlainDateTime's own since/until `largestunit-plurals-accepted.js`/
+        // `float64-representable-integer.js`/`units-changed.js` at
+        // `largestUnit: "nanoseconds"`. `Duration.prototype.round`'s own
+        // narrower rule -- that the SPECIFIC field its BalanceTimeDuration
+        // conversion produces must itself be float64-safe, confirmed by
+        // `round/out-of-range-when-converting-from-normalized-duration.js`
+        // -- is a property of that one conversion algorithm, not of Duration
+        // validity in general, so it is checked locally in
+        // `std_temporal_round_duration` instead of here.
         if values.iter().any(|v| *v != 0 && v.signum() != sign)
             || values[..3].iter().any(|v| v.abs() > 4_294_967_295)
-            || values[4..].iter().any(|v| v.abs() > 9_007_199_254_740_991)
             || total_ns.abs() > STD_TEMPORAL_DURATION_MAX_NS {
             return Err(Throw::range_error("invalid Temporal duration"));
         }
@@ -558,60 +561,46 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         std_temporal_validate(kind, &fields)?;
         return Ok(fields);
     } else if kind == StdTemporalKind::PlainTime {
-        let mut present = false;
-        for (index, name) in ["hour", "minute", "second", "millisecond", "microsecond", "nanosecond"].iter().enumerate() {
-            if let Some(part) = std_temporal_property(i, value, name)? {
-                fields[index + 3] = part;
-                present = true;
-            }
-        }
-        if !present { return Err(Throw::type_error("time-like object has no fields")); }
+        // Reads hour..nanosecond in alphabetical order (hour, microsecond,
+        // millisecond, minute, nanosecond, second), not the natural
+        // hour->nanosecond order used here before this port -- confirmed
+        // wrong by PlainTime's own `since`/`until` `order-of-operations.js`.
+        let read = std_temporal_read_calendar_fields(i, kind, value)?;
+        if !read.any_present { return Err(Throw::type_error("time-like object has no fields")); }
+        fields[3..9].copy_from_slice(&read.time);
     } else {
-        let year = std_temporal_property(i, value, "year")?;
-        let month = std_temporal_property(i, value, "month")?;
-        // PrepareCalendarFields reads "month" and "day" via
-        // ToPositiveIntegerWithTruncation: a value less than 1 throws a
-        // RangeError immediately, unconditionally of the overflow option --
-        // unlike the *upper* bound (month > 12, day > days-in-month), which
-        // std_temporal_regulate below applies only once overflow is known.
-        if month.is_some_and(|value| value < 1) {
-            return Err(Throw::range_error("month must be a positive integer"));
-        }
-        let month_code = i.get_prop(value, "monthCode")?;
-        let code_month = if month_code.is_undefined() { None } else {
-            let code = i.to_string(&month_code)?;
+        // Reads year/month/monthCode/day(/hour..nanosecond for
+        // PlainDateTime) in the exact alphabetical order
+        // PrepareCalendarFields specifies -- not year, month, monthCode, day
+        // as this used to read them, which is only alphabetical by
+        // coincidence for that particular subset and was never alphabetical
+        // once hour..nanosecond joined for PlainDateTime. Each field's own
+        // immediate validation (month/day < 1) happens inside the read, at
+        // its own alphabetical position, matching
+        // `options-read-before-algorithmic-validation.js`'s distinction
+        // between a field's own malformed-value throw (immediate) and
+        // cross-field validation (deferred, here: month vs monthCode
+        // disagreement, and each field being present at all).
+        let read = std_temporal_read_calendar_fields(i, kind, value)?;
+        let code_month = if let Some(code) = &read.month_code_text {
             let number = code.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
                 .filter(|number| code.len() == 3 && (1..=12).contains(number))
                 .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
             Some(number)
-        };
-        if month.zip(code_month).is_some_and(|(a, b)| a != b) {
+        } else { None };
+        if read.month.zip(code_month).is_some_and(|(a, b)| a != b) {
             return Err(Throw::range_error("month and monthCode disagree"));
         }
-        let day = std_temporal_property(i, value, "day")?;
-        if day.is_some_and(|value| value < 1) && kind != StdTemporalKind::PlainYearMonth {
-            return Err(Throw::range_error("day must be a positive integer"));
-        }
-        fields[0] = if matches!(kind, StdTemporalKind::PlainMonthDay | StdTemporalKind::PlainTime) { 0 } else {
-            year.ok_or_else(|| Throw::type_error("year is required"))?
+        fields[0] = if kind == StdTemporalKind::PlainMonthDay { 0 } else {
+            read.year.ok_or_else(|| Throw::type_error("year is required"))?
         };
-        fields[1] = match kind {
-            StdTemporalKind::PlainTime => 0,
-            _ => month.or(code_month).ok_or_else(|| Throw::type_error("month is required"))?,
-        };
+        fields[1] = read.month.or(code_month).ok_or_else(|| Throw::type_error("month is required"))?;
         fields[2] = match kind {
             StdTemporalKind::PlainYearMonth => 1,
-            StdTemporalKind::PlainTime => 0,
-            _ => day.ok_or_else(|| Throw::type_error("day is required"))?,
+            _ => read.day.ok_or_else(|| Throw::type_error("day is required"))?,
         };
         if kind == StdTemporalKind::PlainMonthDay { fields[9] = 1972; }
-        if kind == StdTemporalKind::PlainDateTime {
-            for (index, name) in ["hour", "minute", "second", "millisecond", "microsecond", "nanosecond"].iter().enumerate() {
-                if let Some(part) = std_temporal_property(i, value, name)? {
-                    fields[index + 3] = part;
-                }
-            }
-        }
+        if kind == StdTemporalKind::PlainDateTime { fields[3..9].copy_from_slice(&read.time); }
     }
     Ok(fields)
 }
@@ -855,11 +844,20 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
                 let mut ignored = [0; 10];
                 std_temporal_validate_time_offset(&tail[1..])?;
                 std_temporal_parse_time(std_temporal_time_prefix(&tail[1..]), &mut ignored)?;
+                // A discarded time part is still validated (hour <= 23,
+                // minute <= 59, ...) -- std_temporal_parse_time itself only
+                // checks digit shape/count, not range, and the range check
+                // below this match only ever sees `values`, never `ignored`.
+                // Confirmed by PlainDate's own since/until
+                // `argument-string-invalid.js`, where a discarded
+                // "T25:00:00" must still throw.
+                std_temporal_validate(StdTemporalKind::PlainTime, &ignored)?;
             } else if !tail.is_empty() {
                 let time = tail.strip_prefix('T').or_else(|| tail.strip_prefix('t')).or_else(|| tail.strip_prefix(' ')).ok_or_else(invalid)?;
                 let mut ignored = [0; 10];
                 std_temporal_validate_time_offset(time)?;
                 std_temporal_parse_time(std_temporal_time_prefix(time), &mut ignored)?;
+                std_temporal_validate(StdTemporalKind::PlainTime, &ignored)?;
             }
         }
     }
