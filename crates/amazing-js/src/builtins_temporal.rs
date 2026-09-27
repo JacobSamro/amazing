@@ -461,8 +461,8 @@ fn std_temporal_resolve_calendar_id_ex(i: &mut Interpreter, value: &JsValue, all
             return Ok(record.calendar.clone());
         }
     }
-    if std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)).is_ok() {
-        return Ok("iso8601".to_string());
+    if let Ok(data) = std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)) {
+        return Ok(data.calendar.clone());
     }
     if !matches!(value, JsValue::Str(_)) {
         return Err(Throw::type_error("Temporal calendar must be a string or Temporal object"));
@@ -531,7 +531,7 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
             || !(1..=std_temporal_days_in_month(actual_year, month)).contains(&day) {
             return Err(Throw::range_error("invalid ISO date"));
         }
-        if matches!(kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime) {
+        if matches!(kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime | StdTemporalKind::PlainYearMonth) {
             // ISODateTimeWithinLimits (spec): PlainDateTime can represent a
             // point in time within 24h (nsPerDay) of Instant's own
             // +-nsMaxInstant boundary on either side -- a plain day-count
@@ -542,10 +542,24 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
             // PlainDate has no time-of-day of its own, so its own
             // ISODateWithinLimits defers to this same check with hour 12 (a
             // neutral reference time comfortably inside the padding at
-            // either extreme) rather than actual midnight.
+            // either extreme) rather than actual midnight. PlainYearMonth
+            // (ISOYearMonthWithinLimits) represents the WHOLE month, not a
+            // single day, so it defers to this same check at whichever of
+            // day 1 or the month's last day is closer to being in range --
+            // a coarse year-only bound is not tight enough at the extremes,
+            // but neither is checking day 1 alone: e.g. -271821-04 (April)
+            // is a VALID minimum year-month even though its day 1 (April 1)
+            // falls before the ISO limit (April 19), because its LAST day
+            // (April 30) does not -- confirmed by `PlainYearMonth/from/
+            // limits.js`'s "min object"/"max object" cases. Conversely a
+            // calendar's earliest representable year-month can still fail
+            // this finer, day-precise check at BOTH its first and last day
+            // even though the bare year number is in range (confirmed by
+            // every calendar's `extreme-unsupported-dates.js`, e.g. buddhist
+            // year -271278 month 3 -- ISO year -271821 month 3 (March),
+            // entirely before the April 19 limit at either endpoint).
             const NS_PER_DAY: i128 = 86_400_000_000_000;
             const NS_MAX_INSTANT: i128 = 8_640_000_000_000_000_000_000;
-            let days = std_temporal_epoch_day(actual_year, month, day) as i128;
             let time_ns: i128 = if kind == StdTemporalKind::PlainDateTime {
                 hour as i128 * 3_600_000_000_000
                     + minute as i128 * 60_000_000_000
@@ -556,8 +570,16 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
             } else {
                 12 * 3_600_000_000_000
             };
-            let total_ns = days * NS_PER_DAY + time_ns;
-            if total_ns <= -NS_MAX_INSTANT - NS_PER_DAY || total_ns >= NS_MAX_INSTANT + NS_PER_DAY {
+            let in_range = |d: i64| {
+                let total_ns = std_temporal_epoch_day(actual_year, month, d) as i128 * NS_PER_DAY + time_ns;
+                total_ns > -NS_MAX_INSTANT - NS_PER_DAY && total_ns < NS_MAX_INSTANT + NS_PER_DAY
+            };
+            let within = if kind == StdTemporalKind::PlainYearMonth {
+                in_range(1) || in_range(std_temporal_days_in_month(actual_year, month))
+            } else {
+                in_range(day)
+            };
+            if !within {
                 return Err(Throw::range_error("ISO date outside Temporal range"));
             }
         }
@@ -693,7 +715,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // millisecond, minute, nanosecond, second), not the natural
         // hour->nanosecond order used here before this port -- confirmed
         // wrong by PlainTime's own `since`/`until` `order-of-operations.js`.
-        let read = std_temporal_read_calendar_fields(i, kind, value)?;
+        let read = std_temporal_read_calendar_fields(i, kind, &calendar_id, value)?;
         if !read.any_present { return Err(Throw::type_error("time-like object has no fields")); }
         fields[3..9].copy_from_slice(&read.time);
         return Ok((fields, None, None, calendar_id));
@@ -710,7 +732,31 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // between a field's own malformed-value throw (immediate) and
         // cross-field validation (deferred, here: month vs monthCode
         // disagreement, and each field being present at all).
-        let read = std_temporal_read_calendar_fields(i, kind, value)?;
+        let read = std_temporal_read_calendar_fields(i, kind, &calendar_id, value)?;
+        // era/eraYear (a RangeError for an unrecognized era name, or a
+        // mismatch against an explicit `year`) resolve into the same
+        // calendar-native year `year` would otherwise supply -- this must
+        // run for every kind, INCLUDING PlainMonthDay, even though
+        // PlainMonthDay's own fields[0] is always hardcoded to 0 below: an
+        // eraYear/year (or monthCode/month) inconsistency must still throw
+        // (confirmed by PlainMonthDay's own fields-overspecified.js).
+        let resolved_year = std_temporal_resolve_era_year(&calendar_id, &read.era_text, read.era_year, read.year)?;
+        // PlainMonthDay stores no calendar-native year at all (fields[0] is
+        // always hardcoded to 0 below) and its ISO reference year (1972) is
+        // fixed regardless of what's given -- but a wildly out-of-range
+        // `year`/`era`+`eraYear` must still throw immediately, rather than
+        // silently ignoring it and going on to resolve monthCode against the
+        // fixed reference year. Confirmed by dont-calculate-month-info-for-
+        // out-of-range-year.js's year: Β±999999 cases (every real calendar's
+        // representable range, checked precisely for PlainYearMonth/PlainDate
+        // via std_temporal_validate, is comfortably inside Β±300_000).
+        if kind == StdTemporalKind::PlainMonthDay {
+            if let Some(y) = resolved_year {
+                if !(-300_000..=300_000).contains(&y) {
+                    return Err(Throw::range_error("year is outside the representable range"));
+                }
+            }
+        }
         // CalendarResolveFields: every required field's PRESENCE (a
         // TypeError, since a field is simply missing, not malformed) is
         // checked before any monthCode SUITABILITY validation (a
@@ -720,7 +766,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // where an invalid/conflicting monthCode must never preempt a
         // missing year/month/day's TypeError.
         fields[0] = if kind == StdTemporalKind::PlainMonthDay { 0 } else {
-            read.year.ok_or_else(|| Throw::type_error("year is required"))?
+            resolved_year.ok_or_else(|| Throw::type_error("year is required"))?
         };
         if read.month.is_none() && read.month_code_text.is_none() {
             return Err(Throw::type_error("month is required"));
@@ -774,7 +820,7 @@ fn std_temporal_bag_resolve_month(fields: &mut [i64; 10], month: Option<i64>, co
 // simply taken as already-ISO, matching this function's behavior before the
 // JSS-calendars port.
 fn std_temporal_bag_resolve_calendar(kind: StdTemporalKind, calendar: &str, fields: &mut [i64; 10],
-    month: Option<i64>, code_text: Option<String>) -> Result<(), Throw> {
+    month: Option<i64>, code_text: Option<String>, reject_overflow: bool) -> Result<(), Throw> {
     if calendar == "iso8601" || kind == StdTemporalKind::PlainMonthDay {
         return std_temporal_bag_resolve_month(fields, month, code_text);
     }
@@ -793,9 +839,17 @@ fn std_temporal_bag_resolve_calendar(kind: StdTemporalKind, calendar: &str, fiel
     let months_in_year = std_calendar_months_in_year(calendar, native_year);
     let m = if std_calendar_has_leap_months(calendar) {
         if let Some(code) = &code_text {
-            let (ordinal, existed) = std_calendar_resolve_code_ord(calendar, native_year, code)
+            let (ordinal, _existed) = std_calendar_resolve_code_ord(calendar, native_year, code)
                 .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
-            if !existed && month.is_some_and(|value| value != ordinal) {
+            // 2026-09-27 (calendarresolvefields-error-ordering-chinese.js):
+            // a month/monthCode disagreement is a RangeError unconditionally
+            // once both are given -- `_existed` only distinguishes a
+            // genuinely-nonexistent leap month (e.g. "M05L" outside a leap
+            // year, which resolve_code_ord already turned into a fallback
+            // ordinal) from a real one; it must never suppress this check,
+            // or an explicit month that disagrees with a valid monthCode
+              // silently wins instead of throwing.
+            if month.is_some_and(|value| value != ordinal) {
                 return Err(Throw::range_error("month and monthCode disagree"));
             }
             ordinal
@@ -804,7 +858,22 @@ fn std_temporal_bag_resolve_calendar(kind: StdTemporalKind, calendar: &str, fiel
         }
     } else {
         std_calendar_bag_resolve_plain_month(calendar, month, code_text)?
-    }.clamp(1, months_in_year);
+    };
+    // 2026-09-27: month/day bounds for a month-structure calendar are
+    // overflow-dependent just like the ISO grid's own RegulateISODate
+    // (std_temporal_regulate) -- "reject" throws RangeError instead of
+    // clamping. Previously this always clamped regardless of the overflow
+    // option, so {overflow:"reject"} silently accepted an out-of-range
+    // calendar-native day/month instead of throwing.
+    let m = if reject_overflow {
+        if m > months_in_year { return Err(Throw::range_error("month is invalid in this calendar")); }
+        m
+    } else { m.clamp(1, months_in_year) };
+    let max_day = std_calendar_month_len(calendar, native_year, m);
+    let native_day = if reject_overflow {
+        if native_day > max_day { return Err(Throw::range_error("day is invalid in this calendar month")); }
+        native_day
+    } else { native_day.clamp(1, max_day) };
     let (iso_year, iso_month, iso_day) = std_calendar_to_iso(calendar, native_year, m, native_day);
     fields[0] = iso_year;
     fields[1] = iso_month;
@@ -1188,16 +1257,17 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
                 StdTemporalKind::PlainTime => fields[0..3].fill(0),
                 _ => {}
             }
-            // ZonedDateTime is calendar-locked to iso8601 (JSS-calendars has
-            // not yet extended it -- see std_temporal_iso_calendar).
-            return Ok((fields, "iso8601".to_string()));
+            // ZonedDateTime carries its own calendar (JSS-calendars item 2)
+            // forward into the converted Plain* result, matching
+            // ToTemporalDate/ToTemporalDateTime/ToTemporalTime.
+            return Ok((fields, data.calendar.clone()));
         }
     }
     match &value {
         JsValue::Str(text) => std_temporal_parse(kind, &text.to_utf8_lossy()),
         JsValue::Object(_) => {
             let (mut fields, month, code, calendar) = std_temporal_bag(i, kind, &value)?;
-            std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code)?;
+            std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code, reject)?;
             std_temporal_regulate(kind, &mut fields, reject);
             std_temporal_validate(kind, &fields)?;
             Ok((fields, calendar))
@@ -1229,7 +1299,7 @@ fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalK
         // CalendarYearMonthFromFields/CalendarDateFromFields) is checked
         // AFTER GetTemporalOverflowOption reads/coerces `overflow` here --
         // confirmed by options-read-before-algorithmic-validation.js.
-        std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code)?;
+        std_temporal_bag_resolve_calendar(kind, &calendar, &mut fields, month, code, reject)?;
         std_temporal_regulate(kind, &mut fields, reject);
         std_temporal_validate(kind, &fields)?;
         (fields, calendar)
