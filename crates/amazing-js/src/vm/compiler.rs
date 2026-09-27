@@ -3,7 +3,7 @@ use super::{
     Instruction, KeyOperand, Program, Register,
 };
 use crate::ast::{
-    self, AssignOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
+    self, AssignOp, BinOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
 };
 use crate::tokens::Span;
 use crate::value::{JsString, JsValue};
@@ -134,6 +134,37 @@ struct Compiler {
     is_generator: bool,
     is_async: bool,
     strict: bool,
+    /// Enclosing loops/switches/labeled statements, innermost last (JSVM-10).
+    /// `break`/`continue` search this from the top to resolve their target;
+    /// see `find_break_target`/`find_continue_target`.
+    loop_stack: Vec<LoopCtx>,
+    /// Labels collected from a `Labeled` statement (possibly several:
+    /// `a: b: for (...) {}`) not yet attached to the `LoopCtx` they belong
+    /// to. Always empty except in the single step between compiling a
+    /// `Labeled` statement and the loop/switch/plain-statement arm right
+    /// below it that consumes (`std::mem::take`s) it -- see `StmtKind::Labeled`.
+    pending_labels: Vec<String>,
+    /// The frame's runtime `scopes` depth at the current emission point:
+    /// `EnterScope`/`EnterCatch`/`BindFor` push, `LeaveScope` pops, and
+    /// emission is statically balanced. A `break`/`continue` target records
+    /// it so `ExitTo` can pop the scopes the jump leaves.
+    scope_depth: usize,
+}
+
+/// One entry per enclosing loop, `switch`, or plain labeled statement a
+/// `break`/`continue` might target. `is_loop` is false for a `switch` or a
+/// labeled statement wrapping something other than an iteration statement:
+/// both are valid `break` targets but never a `continue` target (10.2.11 /
+/// 14.9.1: `continue`'s label must directly label an enclosing
+/// IterationStatement). `labels` holds every label attached to this
+/// construct (`a: b: for (...) {}` attaches both to the same loop entry).
+struct LoopCtx {
+    labels: Vec<String>,
+    /// `scope_depth` at both the break and the continue target.
+    depth: usize,
+    is_loop: bool,
+    break_patches: Vec<usize>,
+    continue_patches: Vec<usize>,
 }
 
 impl Compiler {
@@ -148,11 +179,60 @@ impl Compiler {
                 functions: vec![],
                 is_function,
                 async_iterator_slots: 0,
+                for_in_slots: 0,
             },
             depth: 0,
             is_generator: false,
             is_async: false,
             strict: false,
+            loop_stack: Vec::new(),
+            pending_labels: Vec::new(),
+            scope_depth: 0,
+        }
+    }
+
+    fn push_loop(&mut self, labels: Vec<String>, is_loop: bool) {
+        self.loop_stack.push(LoopCtx { labels, is_loop, depth: self.scope_depth, break_patches: Vec::new(), continue_patches: Vec::new() });
+    }
+
+    /// Pop the innermost loop entry, patching its `break`s to `break_target`
+    /// and (if it's a real loop) its `continue`s to `continue_target`. A
+    /// non-loop entry (`switch`, plain labeled statement) has no
+    /// `continue_target` to patch against -- `continue_patches` is always
+    /// empty for those, since `find_continue_target` never resolves to one.
+    fn pop_loop(&mut self, break_target: usize, continue_target: Option<usize>) {
+        let ctx = self.loop_stack.pop().expect("push_loop/pop_loop must be paired");
+        for idx in ctx.break_patches {
+            self.patch_to(idx, break_target);
+        }
+        if let Some(continue_target) = continue_target {
+            for idx in ctx.continue_patches {
+                self.patch_to(idx, continue_target);
+            }
+        } else {
+            debug_assert!(ctx.continue_patches.is_empty(), "non-loop entry collected a continue");
+        }
+    }
+
+    fn find_break_target(&self, span: Span, label: &Option<ast::Ident>) -> Result<usize, CompileError> {
+        match label {
+            None => {
+                if self.loop_stack.is_empty() {
+                    return Err(self.error(span, "break outside loop/switch"));
+                }
+                Ok(self.loop_stack.len() - 1)
+            }
+            Some(l) => self.loop_stack.iter().rposition(|c| c.labels.iter().any(|x| x == &l.name))
+                .ok_or_else(|| self.error(span, "undefined label")),
+        }
+    }
+
+    fn find_continue_target(&self, span: Span, label: &Option<ast::Ident>) -> Result<usize, CompileError> {
+        match label {
+            None => self.loop_stack.iter().rposition(|c| c.is_loop)
+                .ok_or_else(|| self.error(span, "continue outside loop")),
+            Some(l) => self.loop_stack.iter().rposition(|c| c.is_loop && c.labels.iter().any(|x| x == &l.name))
+                .ok_or_else(|| self.error(span, "undefined label")),
         }
     }
 
@@ -370,8 +450,17 @@ impl Compiler {
                 }
                 StmtKind::While { body, .. }
                 | StmtKind::DoWhile { body, .. }
-                | StmtKind::For { body, .. } => {
+                | StmtKind::For { body, .. }
+                | StmtKind::ForIn { body, .. }
+                | StmtKind::ForOf { body, .. }
+                | StmtKind::ForAwaitOf { body, .. }
+                | StmtKind::Labeled { body, .. } => {
                     self.hoist_functions(std::slice::from_ref(body.as_ref()))?;
+                }
+                StmtKind::Switch { cases, .. } => {
+                    for case in cases {
+                        self.hoist_functions(&case.body)?;
+                    }
                 }
                 StmtKind::Try(statement) => {
                     self.hoist_functions(&statement.block.body)?;
@@ -411,14 +500,26 @@ impl Compiler {
 
     fn emit(&mut self, op: Instruction) -> usize {
         let index = self.program.code.len();
+        match &op {
+            Instruction::EnterScope | Instruction::EnterCatch(_) | Instruction::BindFor(..) => self.scope_depth += 1,
+            Instruction::LeaveScope => self.scope_depth -= 1,
+            _ => {}
+        }
         self.program.code.push(op);
         index
     }
 
     fn patch(&mut self, index: usize) {
         let end = self.program.code.len();
+        self.patch_to(index, end);
+    }
+
+    /// Like `patch`, but to an explicit, already-known target rather than
+    /// the current end of the program (JSVM-10: `break`/`continue` patch to
+    /// a loop's break/continue point, not to "here").
+    fn patch_to(&mut self, index: usize, target: usize) {
         match &mut self.program.code[index] {
-            Instruction::Jump(target) | Instruction::Branch(_, _, target) => *target = end,
+            Instruction::Jump(t) | Instruction::Branch(_, _, t) | Instruction::ExitTo(t, _) => *t = target,
             _ => unreachable!("compiler only patches branches"),
         }
     }
@@ -493,6 +594,8 @@ impl Compiler {
                 self.patch(end);
             }
             StmtKind::While { test, body } => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
                 let start = self.program.code.len();
                 let test = self.expression(test)?;
@@ -500,13 +603,20 @@ impl Compiler {
                 self.statement(body)?;
                 self.emit(Instruction::Jump(start));
                 self.patch(end);
+                let break_target = self.program.code.len();
+                self.pop_loop(break_target, Some(start));
             }
             StmtKind::DoWhile { body, test } => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
                 let start = self.program.code.len();
                 self.statement(body)?;
+                let continue_target = self.program.code.len();
                 let condition = self.expression(test)?;
                 self.emit(Instruction::Branch(condition, Condition::Truthy, start));
+                let break_target = self.program.code.len();
+                self.pop_loop(break_target, Some(continue_target));
             }
             StmtKind::For {
                 init,
@@ -514,6 +624,8 @@ impl Compiler {
                 update,
                 body,
             } => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
                 match init {
                     Some(ast::ForInit::Expr(expression)) => {
@@ -538,6 +650,10 @@ impl Compiler {
                     None
                 };
                 self.statement(body)?;
+                // `continue` must still run the update expression before
+                // re-testing, so its target is here -- right after the body,
+                // right before `update` -- not back at `start`.
+                let continue_target = self.program.code.len();
                 if let Some(update) = update {
                     self.expression(update)?;
                 }
@@ -545,8 +661,73 @@ impl Compiler {
                 if let Some(end) = end {
                     self.patch(end);
                 }
+                let break_target = self.program.code.len();
+                self.pop_loop(break_target, Some(continue_target));
+            }
+            StmtKind::ForOf { left, right, body } => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
+                self.emit(Instruction::Complete(0));
+                let iterable = self.expression(right)?;
+                let slot = self.program.async_iterator_slots;
+                self.program.async_iterator_slots += 1;
+                self.emit(Instruction::IteratorStart(slot, iterable));
+                let handler = self.emit(Instruction::PushTry { catch: None, finally: None, end: 0 });
+                let start = self.program.code.len();
+                let next = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorNext(next, slot));
+                let done = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorDone(done, slot, next));
+                let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                let value = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorValue(value, next));
+                self.emit(Instruction::BindFor(left.clone(), value));
+                self.statement(body)?;
+                self.emit(Instruction::LeaveScope);
+                self.emit(Instruction::Jump(start));
+                self.patch(done_branch);
+                self.emit(Instruction::TryNormal);
+                let finally = self.program.code.len();
+                let closed = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorClose(closed, slot));
+                self.emit(Instruction::AsyncIteratorCloseCheck(closed));
+                self.emit(Instruction::EndFinally);
+                let end = self.program.code.len();
+                self.program.code[handler] = Instruction::PushTry {
+                    catch: None, finally: Some(finally), end,
+                };
+                // `break`/`continue` both leave this try's protected region
+                // (`route_abrupt` sees their target is `>= handler.end` --
+                // `end` above -- for a break, or `< handler.end` for a
+                // continue back to `start`, which is inside it) so
+                // `IteratorClose` runs on a break automatically, and never
+                // spuriously on a continue.
+                self.pop_loop(end, Some(start));
+            }
+            StmtKind::ForIn { left, right, body } => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
+                self.emit(Instruction::Complete(0));
+                let source = self.expression(right)?;
+                let slot = self.program.for_in_slots;
+                self.program.for_in_slots += 1;
+                self.emit(Instruction::ForInStart(slot, source));
+                let start = self.program.code.len();
+                let value = self.register(statement.span)?;
+                let done = self.register(statement.span)?;
+                self.emit(Instruction::ForInNext(value, done, slot));
+                let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                self.emit(Instruction::BindFor(left.clone(), value));
+                self.statement(body)?;
+                self.emit(Instruction::LeaveScope);
+                self.emit(Instruction::Jump(start));
+                self.patch(end);
+                let break_target = self.program.code.len();
+                self.pop_loop(break_target, Some(start));
             }
             StmtKind::ForAwaitOf { left, right, body } if self.is_async => {
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
                 let iterable = self.expression(right)?;
                 let slot = self.program.async_iterator_slots;
@@ -560,7 +741,7 @@ impl Compiler {
                 self.emit(Instruction::Await(result, next));
                 let done = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorDone(done, slot, result));
-                let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
                 let value = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorValue(value, result));
                 let awaited = self.register(statement.span)?;
@@ -569,7 +750,7 @@ impl Compiler {
                 self.statement(body)?;
                 self.emit(Instruction::LeaveScope);
                 self.emit(Instruction::Jump(start));
-                self.patch(end);
+                self.patch(done_branch);
                 self.emit(Instruction::TryNormal);
                 let finally = self.program.code.len();
                 let closed = self.register(statement.span)?;
@@ -582,6 +763,96 @@ impl Compiler {
                 self.program.code[handler] = Instruction::PushTry {
                     catch: None, finally: Some(finally), end,
                 };
+                self.pop_loop(end, Some(start));
+            }
+            StmtKind::Switch { disc, cases } => {
+                self.emit(Instruction::Complete(0));
+                let disc = self.expression(disc)?;
+                let labels = std::mem::take(&mut self.pending_labels);
+                self.push_loop(labels, false);
+                self.emit(Instruction::EnterScope);
+                // Test each `case` in source order (Falsy => fall through to
+                // the next test), first match wins; `default` (if any) has no
+                // test of its own and is handled as a final unconditional
+                // jump after every real case has been tried, matching spec
+                // CaseBlockEvaluation's "try every case, then default" order
+                // regardless of `default`'s syntactic position.
+                let mut case_branches = Vec::new();
+                let mut default_index = None;
+                for (index, case) in cases.iter().enumerate() {
+                    match &case.test {
+                        Some(test) => {
+                            let value = self.expression(test)?;
+                            let matched = self.register(case.span)?;
+                            self.emit(Instruction::Binary(matched, BinOp::StrictEq, disc, value));
+                            case_branches.push((index, self.emit(Instruction::Branch(matched, Condition::Truthy, 0))));
+                        }
+                        None => default_index = Some(index),
+                    }
+                }
+                let bodies_start = self.program.code.len();
+                let default_jump = if default_index.is_some() {
+                    Some(self.emit(Instruction::Jump(0)))
+                } else {
+                    None
+                };
+                let no_match_exit = if default_index.is_none() {
+                    Some(self.emit(Instruction::Jump(0)))
+                } else {
+                    None
+                };
+                // Patch each `case` test's branch and (if present) the
+                // fallback `Jump` to `default` now that every body's start
+                // offset can be measured as it's compiled.
+                let mut body_starts = Vec::with_capacity(cases.len());
+                for (case_index, case) in cases.iter().enumerate() {
+                    let body_start = self.program.code.len();
+                    body_starts.push(body_start);
+                    for statement in &case.body {
+                        self.statement(statement)?;
+                    }
+                    let _ = case_index;
+                }
+                for (index, branch) in case_branches {
+                    self.patch_to(branch, body_starts[index]);
+                }
+                if let (Some(default_jump), Some(default_index)) = (default_jump, default_index) {
+                    self.patch_to(default_jump, body_starts[default_index]);
+                }
+                let _ = bodies_start;
+                self.emit(Instruction::LeaveScope);
+                let end = self.program.code.len();
+                if let Some(no_match_exit) = no_match_exit {
+                    self.patch_to(no_match_exit, end);
+                }
+                self.pop_loop(end, None);
+            }
+            StmtKind::Break { label } => {
+                let target = self.find_break_target(statement.span, label)?;
+                let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
+                self.loop_stack[target].break_patches.push(jump);
+            }
+            StmtKind::Continue { label } => {
+                let target = self.find_continue_target(statement.span, label)?;
+                let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
+                self.loop_stack[target].continue_patches.push(jump);
+            }
+            StmtKind::Labeled { label, body } => {
+                self.pending_labels.push(label.name.clone());
+                if is_loop_statement(&body.kind) {
+                    // The loop arm above `take`s (and clears) `pending_labels`
+                    // itself, attaching every accumulated label (there may be
+                    // several: `a: b: for (...) {}`) straight to its own
+                    // `LoopCtx` so `continue`/`break` with any of them resolve
+                    // to it directly.
+                    self.statement(body)?;
+                } else {
+                    let labels = std::mem::take(&mut self.pending_labels);
+                    self.push_loop(labels, false);
+                    self.statement(body)?;
+                    let end = self.program.code.len();
+                    self.pop_loop(end, None);
+                }
             }
             StmtKind::Throw(expression) => {
                 let value = self.expression(expression)?;
@@ -859,6 +1130,14 @@ impl Compiler {
             }
             ExprKind::Member {
                 obj,
+                prop: ast::MemberProp::Private(name),
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                self.emit(Instruction::GetPrivateField(dst, object, name.name.clone()));
+            }
+            ExprKind::Member {
+                obj,
                 prop,
                 optional: false,
             } => {
@@ -893,6 +1172,13 @@ impl Compiler {
                 };
                 self.emit(Instruction::Unary(dst, *op, src));
             }
+            ExprKind::Binary { op: ast::BinOp::In, left, right }
+                if matches!(&left.kind, ExprKind::PrivateName(_)) =>
+            {
+                let ExprKind::PrivateName(name) = &left.kind else { unreachable!() };
+                let object = self.expression(right)?;
+                self.emit(Instruction::HasPrivateField(dst, object, name.name.clone()));
+            }
             ExprKind::Binary { op, left, right } => {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;
@@ -919,6 +1205,16 @@ impl Compiler {
                     return Err(self.error(expression.span, "direct eval"));
                 }
                 let (callee, this) = match &callee.kind {
+                    ExprKind::Member {
+                        obj,
+                        prop: ast::MemberProp::Private(name),
+                        optional: false,
+                    } => {
+                        let object = self.expression(obj)?;
+                        let function = self.register(callee.span)?;
+                        self.emit(Instruction::GetPrivateField(function, object, name.name.clone()));
+                        (function, object)
+                    }
                     ExprKind::Member {
                         obj,
                         prop,
@@ -1010,6 +1306,14 @@ impl Compiler {
                     self.program.references += 1;
                     self.emit(Instruction::ResolveWriteName(slot, name.to_owned()));
                     slot
+                } else if let Some((obj, name)) = private_target(target) {
+                    // Plain `=` must not read: a setter-only private accessor
+                    // has no getter, and reading it throws.
+                    let object = self.expression(obj)?;
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
+                    slot
                 } else { self.reference(target)?.0 };
                 let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     self.named_class_expression(value, KeyOperand::Static(name.into()))?
@@ -1098,6 +1402,14 @@ impl Compiler {
             }
             ExprKind::Member {
                 obj,
+                prop: ast::MemberProp::Private(name),
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                self.emit(Instruction::ResolvePrivate(slot, old, object, name.name.clone()));
+            }
+            ExprKind::Member {
+                obj,
                 prop,
                 optional: false,
             } => {
@@ -1175,6 +1487,22 @@ impl Compiler {
     }
 }
 
+/// True for an iteration statement (JSVM-10): `StmtKind::Labeled` checks this
+/// to decide whether to attach its label(s) directly to the loop's own
+/// `LoopCtx` (enabling `continue label`) rather than pushing a separate,
+/// `continue`-blind break-only wrapper.
+fn is_loop_statement(kind: &StmtKind) -> bool {
+    matches!(
+        kind,
+        StmtKind::While { .. }
+            | StmtKind::DoWhile { .. }
+            | StmtKind::For { .. }
+            | StmtKind::ForIn { .. }
+            | StmtKind::ForOf { .. }
+            | StmtKind::ForAwaitOf { .. }
+    )
+}
+
 fn unsupported_statement(kind: &StmtKind) -> &'static str {
     match kind {
         StmtKind::ForIn { .. } => "for-in",
@@ -1186,6 +1514,16 @@ fn unsupported_statement(kind: &StmtKind) -> &'static str {
         StmtKind::Labeled { .. } => "labeled statement",
         StmtKind::Class(_) => "class",
         _ => "statement kind",
+    }
+}
+
+fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
+    while let ExprKind::Paren(inner) = &target.kind {
+        target = inner;
+    }
+    match &target.kind {
+        ExprKind::Member { obj, prop: ast::MemberProp::Private(name), optional: false } => Some((obj, name)),
+        _ => None,
     }
 }
 

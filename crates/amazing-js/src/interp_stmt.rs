@@ -343,12 +343,42 @@ impl Interpreter {
             }
             StmtKind::Switch { disc, cases } => {
                 self.completion = JsValue::Undefined;
+                // 14.12's CaseBlockEvaluation: the discriminant is evaluated
+                // in the *outer* environment, but every case's test
+                // expression and body run in ONE fresh Block environment
+                // shared by the whole switch (not per-case, and not the
+                // enclosing one) -- e.g. a `let` in one case and another
+                // `let` of the same name after the switch must not conflict
+                // (JSVM-10: this switch previously ran everything straight
+                // in the caller's own `env`, so they did).
                 let d = self.eval_expr(disc, env)?;
+                let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                // Mirrors `StmtKind::Block`'s own Annex-B function pre-pass,
+                // over every case's body concatenated in source order (one
+                // shared scope, so a later case's function still shadows an
+                // earlier same-named one at switch entry, per spec).
+                for case in cases {
+                    for stmt in &case.body {
+                        if let StmtKind::Function(f) = &stmt.kind {
+                            if let Some(n) = &f.name {
+                                let v = self.make_function(f, &e);
+                                if e.local_cell(&n.name).is_some() {
+                                    // Annex B.3.3.4, same as `StmtKind::Block` above: a later
+                                    // same-named FunctionDeclaration (even in a different case)
+                                    // silently re-initializes rather than re-declaring.
+                                    let _ = e.assign(&n.name, v);
+                                } else {
+                                    e.declare_lexical(&n.name, v, true)?;
+                                }
+                            }
+                        }
+                    }
+                }
                 let mut start = None;
                 let mut def = None;
                 for (n, c) in cases.iter().enumerate() {
                     if let Some(t) = &c.test {
-                        let tv = self.eval_expr(t, env)?;
+                        let tv = self.eval_expr(t, &e)?;
                         if self.strict_eq(&d, &tv) {
                             start = Some(n);
                             break;
@@ -359,11 +389,20 @@ impl Interpreter {
                 }
                 let mut i = start.or(def);
                 while let Some(n) = i {
-                    match self.exec_stmts(&cases[n].body, env)? {
+                    match self.exec_stmts(&cases[n].body, &e)? {
                         Flow::Normal => {
                             i = (n + 1 < cases.len()).then_some(n + 1);
                         }
-                        Flow::Break(_) => break,
+                        // An UNLABELED break targets the nearest enclosing
+                        // switch/loop -- this switch, here -- and is
+                        // swallowed. A LABELED break (JSVM-10 fix: this
+                        // previously swallowed it unconditionally too, so
+                        // `outer: for (...) { switch (x) { case 1: break
+                        // outer; } }` silently did nothing instead of
+                        // breaking the outer loop) must keep propagating
+                        // upward exactly like any other Flow -- only the
+                        // matching `Labeled` wrapper may swallow it.
+                        Flow::Break(None) => break,
                         x => return Ok(x),
                     }
                 }
@@ -2424,7 +2463,9 @@ impl Interpreter {
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
         if f.is_generator {
-            if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
+            let compiled = vm::compile_function_item(f, f.body.span, self.strict_eval_context);
+            jsvm10_record(if f.is_async { "asyncgen" } else { "gen" }, compiled.as_ref().map(|_| ()));
+            if let Ok(code) = compiled {
                 return code.instantiate(self, e);
             }
         }
@@ -2527,7 +2568,13 @@ impl Interpreter {
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
         if m.kind != ast::MethodKind::Constructor {
-            if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
+            let compiled = vm::compile_class_method(m, class_method || self.strict_eval_context);
+            if m.is_generator || m.is_async {
+                jsvm10_record(match (m.is_async, m.is_generator) {
+                    (true, true) => "asyncgen-method", (false, true) => "gen-method", _ => "async-method",
+                }, compiled.as_ref().map(|_| ()));
+            }
+            if let Ok(code) = compiled {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {
                     let mut function = function.borrow_mut();

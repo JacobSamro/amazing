@@ -185,6 +185,14 @@ enum Instruction {
     Move(Register, Register),
     Jump(usize),
     Branch(Register, Condition, usize),
+    /// `break`/`continue` (JSVM-10): unlike a plain `Jump`, goes through
+    /// `route_abrupt` so a jump that actually leaves an active try/finally
+    /// (including a for-of/for-await-of's `IteratorClose` finally) runs it
+    /// first, per spec. `(target, scope_depth)`: the compile-time-resolved
+    /// target and the frame's `scopes` depth there, so every block/iteration
+    /// scope the jump leaves is popped (a `break` out of `{ let x; ... }`
+    /// never runs that block's `LeaveScope`).
+    ExitTo(usize, usize),
     EnterScope,
     LeaveScope,
     PushTry {
@@ -216,7 +224,43 @@ enum Instruction {
     AsyncIteratorAwaitValue(Register, usize, Register),
     AsyncIteratorClose(Register, usize),
     AsyncIteratorCloseCheck(Register),
+    /// Plain (sync-only) `for-of`'s iterator start (JSVM-10): unlike
+    /// `AsyncIteratorStart`, never tries `@@asyncIterator` -- a sync `for-of`
+    /// must use `@@iterator` even when both are present. Reuses
+    /// `AsyncIteratorState`'s `Iterator`/`Values` shape (and the existing
+    /// `AsyncIteratorNext`/`Done`/`Value`/`Close`/`CloseCheck` instructions
+    /// unchanged) since the sync half of that state machine is exactly a
+    /// plain iterator's.
+    IteratorStart(usize, Register),
+    /// `for-in`'s enumeration start (JSVM-10): builds a `ForInState` from the
+    /// tree walker's own `array_receiver`/prototype-walk rules, `None` for a
+    /// nullish right-hand side (the loop body then never runs).
+    ForInStart(usize, Register),
+    /// `for-in`'s per-iteration step: `next_for_in_key` into `value` (a
+    /// string), `done` set once the key chain is exhausted.
+    ForInNext(Register, Register, usize),
     BindFor(ForLeft, Register),
+    /// Private field read (JSVM-10): `#x` resolves lexically through the
+    /// active PrivateEnvironment chain at *runtime* (`env.resolve_private`),
+    /// not at compile time -- a private name closes over whichever class
+    /// body lexically encloses this code, which the compiler (unlike the
+    /// tree walker's env chain) has no static view of once it's compiling a
+    /// nested function/closure body in isolation. `(dst, base, name)`.
+    GetPrivateField(Register, Register, String),
+    /// Private field reference, for plain/compound assignment and
+    /// update expressions (`obj.#x = v`, `+=`, `++`) -- mirrors
+    /// `ResolveMember`: reads the current value into `dst` and records a
+    /// `Reference::Private` in `slot` for `StoreReference` to write back
+    /// through (already generic over every `Reference` variant).
+    /// `(slot, dst, base, name)`.
+    ResolvePrivate(usize, Register, Register, String),
+    /// `#x in obj` (`dst, base, name`); the general `Binary(_, BinOp::In, ..)`
+    /// path never applies here since a bare `#x` isn't itself a compilable
+    /// expression outside this one position (checked directly on the AST at
+    /// compile time, not through a resolved register).
+    HasPrivateField(Register, Register, String),
+    /// `ResolvePrivate` without the read, for a plain `=` target.
+    ResolvePrivateWrite(usize, Register, String),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
     /// `new.target`: the active call's constructor target, or `undefined`
     /// for an ordinary call.
@@ -260,6 +304,7 @@ pub struct Program {
     functions: Vec<HoistedFunction>,
     is_function: bool,
     async_iterator_slots: usize,
+    for_in_slots: usize,
 }
 
 /// Mutable execution state owned by a heap allocation. The try stack is empty
@@ -286,6 +331,13 @@ struct VmFrame {
     /// (AsyncGeneratorUnwrapYieldResumption) before it is delivered.
     await_return: bool,
     async_iterators: Vec<Option<AsyncIteratorState>>,
+    /// `for-in`'s enumeration state (JSVM-10): one slot per syntactic `for-in`
+    /// in the compiled body, mirroring `async_iterators`'s per-slot shape.
+    /// Reuses the tree walker's own `ForInState`/`next_for_in_key` (private
+    /// items in `interp.rs`/`interp_property_access.rs`, visible here because
+    /// `vm` is declared as a child module of `interp`) rather than
+    /// re-deriving for-in's live-mutation-safe enumeration order.
+    for_in_states: Vec<Option<super::ForInState>>,
 }
 
 enum AsyncIteratorState {
@@ -367,6 +419,15 @@ impl std::fmt::Debug for GeneratorState {
 enum Abrupt {
     Return(JsValue),
     Throw(Throw),
+    /// `break`/`continue` (JSVM-10): jump to a compile-time-resolved `pc`,
+    /// running any try/finally (including a for-of/for-await-of's
+    /// `IteratorClose` finally) whose protected region the jump actually
+    /// leaves, exactly like `Return`/`Throw` already do -- but, unlike
+    /// those, a `Goto` may resolve *within* an active handler's own region
+    /// (a `continue` back to a loop nested inside a `try`, or a `break` to
+    /// just past that same loop but still inside the `try`), in which case
+    /// no finally runs at all. See `route_abrupt`'s early-exit check.
+    Goto(usize, usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -379,6 +440,10 @@ enum TryPhase {
 struct TryHandler {
     catch: Option<usize>,
     finally: Option<usize>,
+    /// The pc a `break`/`continue` target must be `>=` to still be within
+    /// this handler's own protected region (JSVM-10) -- the pc right after
+    /// `PushTry` itself, i.e. where its own body starts.
+    start: usize,
     end: usize,
     scope_depth: usize,
     env: EnvHandle,
@@ -441,6 +506,7 @@ impl Program {
             await_dst: None,
             await_return: false,
             async_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
+            for_in_states: (0..self.for_in_slots).map(|_| None).collect(),
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
@@ -491,6 +557,7 @@ impl Program {
             await_dst,
             await_return: _,
             async_iterators,
+            for_in_states,
         } = frame.as_mut();
         let mut steps = 0;
         while let Some(op) = self.code.get(*pc) {
@@ -644,6 +711,32 @@ impl Program {
                         let receiver = registers[*object].clone();
                         registers[*dst] = fast_path::get(i, &receiver, key.clone(), &mut caches[*pc - 1])?;
                         references[*slot] = Some(Reference::Property(receiver, key));
+                    }
+                    Instruction::GetPrivateField(dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        registers[*dst] = super::private_field_get(i, &registers[*base], &private)?;
+                    }
+                    Instruction::ResolvePrivate(slot, dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        let receiver = registers[*base].clone();
+                        registers[*dst] = super::private_field_get(i, &receiver, &private)?;
+                        references[*slot] = Some(Reference::Private(receiver, private));
+                    }
+                    Instruction::ResolvePrivateWrite(slot, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        references[*slot] = Some(Reference::Private(registers[*base].clone(), private));
+                    }
+                    Instruction::HasPrivateField(dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        registers[*dst] = JsValue::Bool(super::private_field_has(&registers[*base], &private)?);
                     }
                     Instruction::StoreReference(slot, src) => {
                         let reference = references[*slot]
@@ -821,6 +914,7 @@ impl Program {
                     } => try_stack.push(TryHandler {
                         catch: *catch,
                         finally: *finally,
+                        start: *pc,
                         end: *end,
                         scope_depth: scopes.len(),
                         env: env.clone(),
@@ -873,6 +967,9 @@ impl Program {
                     Instruction::Complete(src) => i.completion = registers[*src].clone(),
                     Instruction::Return(src) => {
                         return Ok(Some(Abrupt::Return(registers[*src].clone())));
+                    }
+                    Instruction::ExitTo(target, depth) => {
+                        return Ok(Some(Abrupt::Goto(*target, *depth)));
                     }
                     Instruction::MakeFunction(dst, code) => {
                         registers[*dst] = code.instantiate(i, &env);
@@ -1187,6 +1284,49 @@ impl Program {
                             return Err(Throw::type_error("async iterator return result is not an object"));
                         }
                     }
+                    Instruction::IteratorStart(slot, source) => {
+                        let iterable = registers[*source].clone();
+                        let state = if let Some(value) = i.custom_iterator(&iterable)? {
+                            let next = i.get_prop(&value, "next")?;
+                            if callable_function(&next).is_none() {
+                                return Err(Throw::type_error("iterator next is not callable"));
+                            }
+                            AsyncIteratorState::Iterator { value, next, exhausted: false, sync: true }
+                        } else {
+                            AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
+                        };
+                        async_iterators[*slot] = Some(state);
+                    }
+                    Instruction::ForInStart(slot, source) => {
+                        let v = registers[*source].clone();
+                        let object = match v {
+                            JsValue::Null | JsValue::Undefined => None,
+                            other => match super::array_receiver(i, other)? {
+                                JsValue::Object(object) => Some(object),
+                                _ => None,
+                            },
+                        };
+                        for_in_states[*slot] = Some(super::ForInState {
+                            object,
+                            object_was_visited: false,
+                            visited_keys: std::collections::HashSet::new(),
+                            remaining_keys: std::collections::VecDeque::new(),
+                        });
+                    }
+                    Instruction::ForInNext(value, done, slot) => {
+                        let state = for_in_states[*slot].as_mut()
+                            .ok_or_else(|| Throw::type_error("missing for-in frame"))?;
+                        match i.next_for_in_key(state)? {
+                            Some(key) => {
+                                registers[*value] = JsValue::str(key);
+                                registers[*done] = JsValue::Bool(false);
+                            }
+                            None => {
+                                registers[*value] = JsValue::Undefined;
+                                registers[*done] = JsValue::Bool(true);
+                            }
+                        }
+                    }
                     Instruction::BindFor(left, source) => {
                         let previous = env.clone();
                         let iteration = for_iteration_env(left, env);
@@ -1237,6 +1377,15 @@ impl Program {
     }
 }
 
+/// Pop `scopes` back to `depth`, restoring the environment that was current
+/// there -- `LeaveScope` repeated for every scope a `break`/`continue` leaves.
+fn leave_scopes_to(scopes: &mut Vec<EnvHandle>, env: &mut EnvHandle, depth: usize) {
+    if scopes.len() > depth {
+        *env = scopes[depth].clone();
+        scopes.truncate(depth);
+    }
+}
+
 /// Continue a return or throw through active handlers. An instruction fuel
 /// failure is handled outside this path so a catch cannot reset the VM budget.
 fn route_abrupt(
@@ -1252,8 +1401,30 @@ fn route_abrupt(
             return match abrupt {
                 Abrupt::Return(value) => Ok(Some(value)),
                 Abrupt::Throw(error) => Err(error),
+                Abrupt::Goto(target, depth) => {
+                    leave_scopes_to(scopes, env, depth);
+                    *pc = target;
+                    Ok(None)
+                }
             };
         };
+        if let Abrupt::Goto(target, depth) = &abrupt {
+            // The jump's target is still inside this handler's own protected
+            // region [start, end) -- e.g. `continue` back to a for-of's own
+            // loop top, which is inside ITS iterator-close try but before
+            // any try nested in the body, or `break` to a point still
+            // inside an enclosing try -- resolve directly, no finally, and
+            // leave the handler active on `try_stack`. A plain `< end` check
+            // (this ticket's first attempt) wrongly matched a *backward*
+            // jump to a target lexically BEFORE this handler even began
+            // (continue jumping past a `try` nested in the loop body, back
+            // to the for-of's own loop top) -- `>= start` excludes that.
+            if *target >= handler.start && *target < handler.end {
+                leave_scopes_to(scopes, env, *depth);
+                *pc = *target;
+                return Ok(None);
+            }
+        }
         scopes.truncate(handler.scope_depth);
         *env = handler.env.clone();
         if handler.phase == TryPhase::Body {

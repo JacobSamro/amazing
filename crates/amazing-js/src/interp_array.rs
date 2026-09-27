@@ -295,7 +295,17 @@ fn native_array_from_async(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) 
     })();
     Ok(new_promise(i, match result {
         Ok(value) => PromiseFate::Fulfilled(value),
-        Err(Throw(value)) => PromiseFate::Rejected(value),
+        // `Throw::type_error`/`Throw::range_error` etc. construct a bare,
+        // proto-less error marker (see `normalize_throw`) that every other
+        // catcher in the engine normalizes before a script can observe it
+        // (interp_stmt.rs's exec_try, run_script, ...) -- this promise's
+        // `then` handlers are exactly such an observer, so skipping it here
+        // handed JS code a TypeError-shaped-but-not-actually-`instanceof
+        // TypeError` object (JSVM-10: found via Array.fromAsync's own
+        // Test262 cases once JSVM-9 made `await` truly suspend and actually
+        // reach this rejection instead of some other, already-normalized,
+        // error swallowing it first).
+        Err(error) => PromiseFate::Rejected(i.normalize_throw(error).0),
     }))
 }
 

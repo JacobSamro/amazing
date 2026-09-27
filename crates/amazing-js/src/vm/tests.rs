@@ -213,15 +213,184 @@ fn bindings_branches_loops_and_completion_match() {
 }
 
 #[test]
+fn jsvm10_break_continue_switch_for_in_for_of_labels_match() {
+    for source in [
+        // Plain break/continue in every loop shape.
+        "var sum=0,i=0; while(true){ i++; if(i>5) break; sum+=i; } sum+':'+i;",
+        "var sum=0,i=0; do { i++; if(i%2===0) continue; sum+=i; } while(i<6); sum+':'+i;",
+        "var sum=0; for(var i=0;i<10;i++){ if(i===7) break; if(i%2) continue; sum+=i; } sum+':'+i;",
+        "var out=''; for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(j===1) continue; if(i===2) break; out+=i+','+j+';'; } } out;",
+        // Labeled break/continue across nested loops.
+        "var out=''; outer: for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(j===1) continue outer; out+=i+','+j+';'; } } out;",
+        "var out=''; outer: for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(i===1&&j===1) break outer; out+=i+','+j+';'; } } out;",
+        "var out=''; a: b: for(var i=0;i<3;i++){ if(i===1) continue b; out+=i+';'; } out;",
+        "l: { var x=1; break l; x=2; } x;",
+        // switch: fallthrough, default anywhere, break, no-default no-match.
+        "var out=''; for(var i=0;i<4;i++){ switch(i){ case 0: out+='a'; case 1: out+='b'; break; case 2: out+='c'; break; default: out+='d'; } } out;",
+        "var out=''; switch(2){ default: out+='d'; case 0: out+='a'; break; case 1: out+='b'; } out;",
+        "var out='x'; switch(99){ case 0: out+='a'; } out;",
+        "var calls=0; function f(){ calls++; return 1; } switch(f()){ case 0: break; case f(): break; } calls;",
+        "var out=''; outer: for(var i=0;i<3;i++){ switch(i){ case 1: continue outer; } out+=i+';'; } out;",
+        "var out=''; loop: for(var i=0;i<3;i++){ switch(i){ case 1: break loop; } out+=i+';'; } out;",
+        // for-in: own+inherited enumerable keys, order, skips non-enumerable.
+        "var out=''; for(var k in {a:1,b:2,c:3}) out+=k; out;",
+        "var out=''; function P(){} P.prototype.p=1; var o=new P(); o.own=2; for(var k in o) out+=k; out;",
+        "var out=''; for(var k in [10,20,30]) out+=k; out;",
+        "var out=''; for(var k in null) out+=k; for(var k2 in undefined) out+=k2; out+'done';",
+        "var out=''; outer: for(var i=0;i<2;i++){ for(var k in {a:1,b:2}){ if(k==='b') continue outer; out+=i+k+';'; } } out;",
+        // for-of: arrays, strings, custom iterators, break closes early.
+        "var out=''; for(var v of [1,2,3]) out+=v; out;",
+        "var out=''; for(var v of 'abc') out+=v; out;",
+        "var out=''; for(var v of [1,2,3,4]){ if(v===3) break; out+=v; } out;",
+        "var out=''; for(var [a,b] of [[1,2],[3,4]]) out+=a+':'+b+';'; out;",
+        "var closed=false; var it={ [Symbol.iterator](){ return { i:0, next(){ return {value:this.i++, done:this.i>5}; }, return(v){ closed=true; return {value:v,done:true}; } }; } };\
+         for(var v of it){ if(v===2) break; } closed;",
+        "var out=''; try { for(var v of [1,2,3]){ if(v===2) throw 'x'; out+=v; } } catch(e){ out+=e; } out;",
+        // continue/break through try/finally must still run finally.
+        "var out=''; for(var i=0;i<3;i++){ try { if(i===1) continue; out+=i; } finally { out+='f'; } } out;",
+        "var out=''; outer: for(var i=0;i<3;i++){ try { if(i===1) break outer; out+=i; } finally { out+='f'; } } out;",
+        "var out=''; while(true){ try { out+='a'; break; } finally { out+='b'; } } out;",
+        // break/continue pop every scope they leave (else the next `let`
+        // lands in a stale block/iteration scope and redeclares).
+        "for (let x of [1,2]) { continue; } let x = 7; x;",
+        "for (let x in {a:1}) { break; } let x = 8; x;",
+        "while (true) { let y = 1; { let z = 2; break; } } let y = 2; let z = 3; y + z;",
+        "switch (1) { case 1: let q = 1; break; } let q = 2; q;",
+        "l: { let w = 1; { let v = 2; break l; } } let w = 3; let v = 4; w + v;",
+        "var out=''; for (var i = 0; i < 3; i++) { let j = i; { let k = j; if (k === 1) continue; out += k; } } let k = 9; out + k;",
+        "var out=''; for (const a of [1,2,3]) { try { let t = a; if (t === 2) continue; out += t; } finally { out += 'f'; } } let t = 0; out + t;",
+    ] {
+        differential(source, &["out", "sum", "i", "calls", "closed"]);
+    }
+}
+
+#[test]
+fn jsvm10_private_fields_and_methods_compile_in_generator_and_async_bodies() {
+    use crate::ast::{self, ClassMember, StmtKind};
+
+    fn class_method<'a>(class: &'a ast::ClassItem, name: &str) -> &'a ast::ClassMethod {
+        class.members.iter().find_map(|member| match member {
+            ClassMember::Method(method) => match &method.key {
+                ast::PropKey::Ident(id) | ast::PropKey::Private(id) if id.name == name => {
+                    Some(method)
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no method {name} on class"))
+    }
+
+    let program = parse_script(
+        "class C {            #x = 1;            #getX() { return this.#x; }            *gen() { this.#x++; yield this.#x; this.#x += 10; yield this.#getX(); yield (#x in this); }            async run() { this.#x++; await 1; this.#x += 10; return [this.#x, this.#getX(), (#x in this)].join(','); }            async *agen() { this.#x++; yield this.#x; await 1; this.#x += 10; yield this.#getX(); }          }",
+    )
+    .unwrap();
+    let class = match &program.body[0].kind {
+        StmtKind::Class(class) => class,
+        other => panic!("expected class declaration: {other:?}"),
+    };
+
+    compile_class_method(class_method(class, "gen"), true)
+        .expect("generator method with private field/method/`in` access should compile");
+    compile_class_method(class_method(class, "run"), true)
+        .expect("async method with private field/method/`in` access should compile");
+    compile_class_method(class_method(class, "agen"), true)
+        .expect("async generator method with private field/method access should compile");
+}
+
+#[test]
+fn jsvm10_private_fields_and_methods_in_generator_and_async_bodies_match() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class C {
+            #x = 1;
+            #getX() { return this.#x; }
+            *gen() {
+                this.#x++;
+                yield this.#x;
+                this.#x += 10;
+                yield this.#getX();
+                yield (#x in this);
+            }
+        }
+        var g = new C().gen();
+        var out = [g.next().value, g.next().value, g.next().value].join(',');
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("2,12,true")));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class D {
+            #y = 2;
+            static #tag = 'd';
+            #getY() { return this.#y; }
+            static #describe() { return D.#tag; }
+            async run() {
+                this.#y++;
+                await 1;
+                this.#y += 10;
+                await 1;
+                return [this.#y, this.#getY(), (#y in this), D.#describe()].join(',');
+            }
+        }
+        var out = '';
+        new D().run().then(function(v) { out = v; });
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("13,13,true,d")));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class E {
+            #z = 5;
+            async *agen() {
+                var self = this;
+                var read = function() { return self.#z; };
+                this.#z += read();
+                yield this.#z;
+            }
+        }
+        var out = '';
+        var it = new E().agen();
+        it.next().then(function(r) { out = r.value; });
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::num(10.0)));
+
+    // Plain `=` to a setter-only private accessor must not read it first.
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class S {
+            set #s(v) { this.log = v; }
+            get #g() { return 1; }
+            *gen() {
+                this.#s = 5;
+                yield this.log;
+                try { this.#g = 2; } catch (e) { yield e instanceof TypeError; }
+            }
+        }
+        var g = new S().gen();
+        var out = [g.next().value, g.next().value].join(',');
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("5,true")));
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",
         "changed = 1; class A { static { 1; } }",
-        "changed = 1; for (;;) { break; }",
-        "changed = 1; while (true) { break; }",
+        // for/while/for-of/for-await-of/labeled break/continue are all VM-
+        // compilable as of JSVM-10; these three cover constructs the
+        // compiler still declines, keeping this test's actual point (atomic
+        // whole-program rejection before hoisting or side effects) real.
+        "changed = 1; with ({}) { 1; }",
+        "changed = 1; try { throw [1]; } catch ([a]) { a; }",
+        "changed = 1; let [...a] = [1];",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
-        "changed = 1; async function g() { for await (const x of [1]) { break; } }",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);
@@ -1079,3 +1248,6 @@ fn class_static_methods_and_accessors_install_on_the_constructor() {
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("undefined:function:2:3:42:7:base"));
 }
+
+
+
