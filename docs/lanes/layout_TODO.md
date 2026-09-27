@@ -2275,3 +2275,50 @@ real tests and is worth keeping regardless of this one case's final pixel
 proof. If revisited: render `align-self-016.html` directly with
 `render-wpt` and inspect the PNG for whether the border-right red is still
 visible at x:100-200.
+
+## LAYOUT-30 (2) -- css-position/abspos: the 4 pre-existing grid abspos losses (partial)
+
+Investigated the 4 losses named in the LAYOUT-29/LAYOUT-30 tickets
+(`abspos/positioned-grid-items-{008,016}`,
+`abspos/orthogonal-positioned-grid-items-008`,
+`grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`).
+
+**These are real regressions, not evidence drift** -- confirmed by the same
+actual/reference-sha comparison used for the css-flexbox 15 (see item 3
+below): all 4 have `actual_sha256` **different** from the checked-in
+baseline (not matching), so this is not the "reference rendering drifted"
+pattern; the code's own output for these tests has genuinely changed since
+that baseline was captured. Per the base-commit checks earlier in LAYOUT-28
+and LAYOUT-29, they already failed identically at `8fccf8a4^` (the dev base
+before this lane's own work started), so the regression predates
+LAYOUT-28/29/30 -- somewhere further back in the project's history, not
+introduced by this lane's recent commits.
+
+Reproduced `positioned-grid-items-008.html` in isolation (`amazing-layout`'s
+own `layout_document_with_text` plus the test's and reference's real CSS,
+same corrected-diagnostic methodology as LAYOUT-29): **the layout geometry
+comes out byte-identical between the abspos test and its plain in-flow
+reference** -- all four items land at the same `border_box` in both (e.g.
+`(23,37,84,150)`, `(223,37,92.8,150)`, ...), meaning `amazing-layout`'s
+`position.rs` grid-area-as-containing-block machinery
+(`grid_generates_cb`/`grid_area_containing_block`/`grid_child_static_anchor`)
+already gets this case right when driven directly. Yet the real
+`render-wpt` corpus run reports a genuine pixel mismatch (3681 differing
+pixels for -008). The discrepancy is something the isolated
+`layout_document_with_text` path doesn't reach -- `render-wpt`'s pipeline
+differs (fixed viewport height via `crates/amazing/src/page.rs`'s real
+document flow vs. this diagnostic's unbounded height; possibly something in
+paint) and reproducing that gap needs the real pipeline, not another
+layout-only unit test.
+
+**Not resolved this ticket** -- budget went to item 1's fix and item 3's
+evidence work. Correctly did NOT refresh the checked-in evidence for these
+4 (see item 3): that would hide a real bug behind evidence that no longer
+reflects a real pass. Next step for whoever picks this back up: render
+`positioned-grid-items-008.html` with the real `render-wpt` binary (not a
+layout-only diagnostic) and diff its display list/PPM against the
+isolated-diagnostic's expected geometry to find where the real pipeline
+diverges from what `amazing-layout` alone produces.
+
+The broader "css-position/abspos" sweep beyond these 4 named cases was not
+started this ticket.
