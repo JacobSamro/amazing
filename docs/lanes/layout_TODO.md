@@ -2026,9 +2026,43 @@ ascending; base-size-from-min-content, base-size-from-max-content,
 growth-limit-from-min-content, growth-limit-from-max-content as four
 distinguishable sub-passes) onto that richer `Contrib`, dropping taffy's
 scroll-container/fit-content-limit/percentage-indefinite quirks as a
-documented simplification (not modeled in `TrackSize` today). This is the
-piece the SHELL-L8 "auto-repeat"/"track-sizing" mismatch clusters likely
-trace to, per this ticket's clustering pass, but needs its own ticket:
-it's a bigger, more invasive change than this one, and should land with its
-own live iteration loop against the exact WPT cases it's meant to fix rather
-than guessed at in bulk.
+documented simplification (not modeled in `TrackSize` today).
+
+**Correction (2026-09-27, same day, before starting it):** this was guessed
+to be "the real fix for the SHELL-L8 auto-repeat/track-sizing mismatch
+clusters" without checking an actual failing case first -- checked one
+before committing to the rewrite, and the guess doesn't hold. Pulled the
+`css/css-grid` render's compact report and bucketed its 556 mismatches by
+test-id substring: **97 contain "track-sizing"**, the single largest named
+cluster. Read `grid-lanes/track-sizing/row-track-sizing-001.html` (52
+lines, the shortest, cleanest case in that cluster) directly: its
+`grid-template-rows` is `5% repeat(3, 10px 15%) repeat(1, 15px 5px 20px)` --
+**every row track is an explicit length or percentage**, zero `auto`/`fr`/
+`max-content` anywhere. Contrib's min-vs-max-content conflation cannot be
+this test's problem; there is no intrinsic sizing in it to conflate.
+Reproduced its exact `layout_row_lanes` call directly in a scratch unit
+test (30 items, the same 10 widths cycled 3x, matching the fixture) and
+hand-verified two of its ten row-lanes against the WPT reference's manual
+`translateX`-encoded expected layout (`row-track-sizing-001-ref.html`,
+which fakes the same masonry packing with ordinary `display:grid` + negative
+`translateX` offsets, since Grid Lanes 3's lane axis literally is "the
+ordinary track-sizing model"): lane 0's members and their x-offsets
+(items of width 50/60/40, landing in that order at x=0/60/130 -- exactly
+`width + 10px gap` apart) match the reference's block A precisely; lane 5's
+four members (widths 60/15/30/90 at x=0/70/95/135) match block F precisely
+too. **`layout_row_lanes`'s track sizing and packing are correct for this
+fixture** -- the corpus mismatch is real (confirmed separately by an actual
+`render-wpt` pixel diff, bounding box roughly x:8-232 y:76-599, not a
+1px-class difference) but its cause is *not* in `grid.rs`'s track-sizing or
+lane-packing logic at all. Candidates not yet checked: the reference file's
+own ordinary-`display:grid` + `translateX` rendering (a different code
+path, `translateX` handling in paint/transform, or ordinary ROW-axis
+percentage-track resolution against a definite height), or something
+downstream of layout geometry entirely (paint, compositing) -- outside this
+lane's normal tooling to isolate further without checking whether it's
+even a `layout` bug vs. a `paint`/`compositor`-owned one. **Do not restart
+the Contrib rewrite on the strength of this cluster** until a *different*
+failing case is confirmed to actually exercise the min/max-content gap by
+direct inspection first, the same way this one was ruled out. Escalating
+via `questions.md` rather than guessing further or unilaterally digging
+into paint/compositor territory.
