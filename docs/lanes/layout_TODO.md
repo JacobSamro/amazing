@@ -2322,3 +2322,76 @@ diverges from what `amazing-layout` alone produces.
 
 The broader "css-position/abspos" sweep beyond these 4 named cases was not
 started this ticket.
+
+## LAYOUT-31 — bisect + fix the 4 grid abspos losses; css-position/abspos sweep; align-self-016 paint diff
+
+### Item 1: bisect the 4 pre-existing css-grid abspos losses
+
+Per-commit render of the exact 4 fixtures (`amazing render-wpt` + sha256, bypassing
+the fuzzy classifier) at successive `dev` mainline points, using
+`scripts/linux-run.sh layout --ref <sha>` to sync each historical commit's exact
+tree (never `git stash`):
+
+| commit | position | positioned-grid-items-008/016, orthogonal-...-008 | row-auto-placed-subgrid-...-003 |
+|---|---|---|---|
+| `ac455ff7` (before LFG-1/2) | oldest | BAD (feature not implemented yet) | BAD |
+| `a38fe2f0` (LFG-1/2, `c78edbfc`) | | BAD | BAD |
+| `ab002ce4` (LFG-3, `5935e2ae`) | | **GOOD** (matches checked-in baseline sha) | BAD |
+| `512912d5` (lane/layout remerge, `178b6542`) | | **BAD** (regression here) | BAD |
+| `e6ca3ffa` (dev tip right before LFG-4) | | BAD | BAD |
+| `ff5f0094` (LFG-4, `b4f90596`) | newest before LAYOUT-27 | BAD | BAD |
+
+**Root cause (3 of 4, pinned to `512912d5`/`178b6542`):** that commit's large
+`prepare_sizes` rewrite in `position.rs` (folding the CSS2.1 §10.3.7
+shrink-to-fit-width computation together with the static-position anchor
+fallback) switched an abspos box's shrink-to-fit intrinsic-width measurement
+to a shaped-text-aware path (`intrinsic_content_widths` →
+`inline::intrinsic_widths_shaped`, real HarfRust shaping) when a `TextSystem`
+is available. `grid.rs`'s own sibling formula for a *normal-flow* grid item's
+fit-content width (`layout_grid_with_context`, `crate::flex::max_content_width(it,
+fonts)`) has no `text`/shaping parameter at all -- an architectural gap, not
+something `178b6542` touched. The three fixtures' abspos items and their
+references' normal-flow grid items shape the exact same text ("First item"
+etc.) through two now-different measurement paths, and shaped-vs-advance-sum
+width differs by enough sub-pixels to flip an exact-pixel WPT reftest.
+Confirms this session's own earlier (LAYOUT-30) diagnostic note that the
+divergence was "something the isolated `layout_document_with_text` path
+doesn't reach" -- that diagnostic never passes a real `TextSystem`, so it
+never exercises the shaped path either, and reported false byte-identical
+geometry.
+
+**Fix** (`position.rs`): added a `grid_area: bool` parameter to `prepare_sizes`,
+passed as `grid_generates_cb` from its one call site. When true, the
+shrink-to-fit branch calls `intrinsic_content_widths(box_, fonts, None)`
+instead of `..., text)`, which falls through every shaped-text branch in
+`intrinsic_content_widths`/`shaped_intrinsic_width` straight to the same
+plain `flex::min/max_content_width` grid.rs's sibling items already use --
+restoring measurement parity for exactly the grid-area-anchored case, without
+touching the (LAYOUT-24-owned) shaped-text improvement for every other
+shrink-to-fit case (page-level, non-grid containing blocks).
+
+Considered and rejected: threading `text: Option<&dyn TextSystem>` through
+`layout_grid`/`layout_grid_with_context` instead (converging grid.rs to the
+more-accurate shaped measurement for every grid item, not just abspos ones).
+Correct in principle, but touches every caller of two `pub`/`pub(crate)`
+functions across the crate and risks shifting pixel results across the whole
+947-case css-grid corpus -- too wide a blast radius to validate inside this
+ticket's budget. Filed as a follow-up in `questions.md` for whoever next
+touches grid item sizing.
+
+**4th loss (`row-auto-placed-subgrid-inherited-tracks-003.html`) not pinned:**
+BAD at every tested point from `ac455ff7` (before the LFG lane's abspos work
+even started) through `ff5f0094` (LFG-4, the last commit that specifically
+targeted Grid Lanes intrinsic width) -- i.e. never observed matching the
+checked-in baseline anywhere in the LFG lane's whole contribution window.
+Either the baseline capture reflects an even earlier commit (before
+`ac455ff7`, back toward the original `3e22b3cd`/`e0114174` Grid Lanes+subgrid
+implementation) that a full bisection this ticket's budget didn't reach, or
+it reflects a transient lane-branch state that was never reflected in any
+single `dev` mainline commit. Not fixed or further bisected this ticket;
+flagged honestly rather than guessed at.
+
+Gate (crate + the two named corpora, `--baseline auto --release`, worker-2):
+crate 382/1 skipped, 0 failed. `css/css-grid`: gained=58 lost=1 (the
+still-unpinned 4th loss above, unchanged, not a new regression) changed=0
+unchanged=884 new=2. Confirms all 3 pinned fixtures now pass.

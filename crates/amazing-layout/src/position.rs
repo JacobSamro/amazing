@@ -195,7 +195,7 @@ fn position_subtree(
             values::resolve_margins_with_units(&child.style, units, containing_block.rect.w);
         // Used sizes are temporary inputs to normal layout, not computed style.
         let computed_style = child.style.clone();
-        prepare_sizes(child, containing_block.rect, static_anchor, fonts, text);
+        prepare_sizes(child, containing_block.rect, static_anchor, fonts, text, grid_generates_cb);
         layout_child(
             child,
             containing_block.rect.x,
@@ -321,6 +321,7 @@ fn prepare_sizes(
     anchor: StaticAnchor,
     fonts: &FontSource,
     text: Option<&dyn TextSystem>,
+    grid_area: bool,
 ) {
     let units = font_units(box_, text);
     let margins = values::resolve_margins_with_units(&box_.style, units, cb.w);
@@ -429,7 +430,23 @@ fn prepare_sizes(
             // insets at all, by the anchor fallback) instead of shrinking to
             // fit its content against the whole containing block.
             let shrink_to_fit_available = (extent - margin - chrome).max(0.0);
-            let (minimum, preferred) = intrinsic_content_widths(box_, fonts, text);
+            // LAYOUT-31: when the containing block is a grid area, its
+            // sibling *normal-flow* grid items are sized by grid.rs's own
+            // fit-content formula (`crate::flex::max_content_width`), which
+            // has no `text`/shaping parameter at all -- an abspos item using
+            // the shaped-text measurement below instead diverges from that
+            // sibling formula by the shaping-vs-advance-sum difference on
+            // the same text run, breaking exact-pixel parity with a
+            // reference that lays the same content out as a normal (not
+            // abspos) grid item. Bisected (dev 512912d5, LFG-3 remerge) via
+            // css/css-grid/abspos/{positioned,orthogonal-positioned}-grid-
+            // items-{008,016}.html regressing from the shaped-text switch;
+            // matching grid.rs's own unshaped formula here restores parity
+            // without touching the (LAYOUT-24-owned) shaped path for every
+            // other shrink-to-fit case, whose text-measurement improvement
+            // this leaves untouched.
+            let (minimum, preferred) =
+                intrinsic_content_widths(box_, fonts, if grid_area { None } else { text });
             Some(minimum.max(shrink_to_fit_available).min(preferred))
         } else {
             None
