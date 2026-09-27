@@ -149,6 +149,10 @@ struct Compiler {
     /// emission is statically balanced. A `break`/`continue` target records
     /// it so `ExitTo` can pop the scopes the jump leaves.
     scope_depth: usize,
+    /// Set on the probe that validates parameter initializers: those run in
+    /// the tree walker's parameter scope, where a direct eval's var and
+    /// `arguments` scoping must not be delegated piecemeal.
+    parameter_probe: bool,
 }
 
 /// One entry per enclosing loop, `switch`, or plain labeled statement a
@@ -188,6 +192,7 @@ impl Compiler {
             loop_stack: Vec::new(),
             pending_labels: Vec::new(),
             scope_depth: 0,
+            parameter_probe: false,
         }
     }
 
@@ -242,6 +247,7 @@ impl Compiler {
     fn validate_parameters(&self, params: &[ast::Param]) -> Result<(), CompileError> {
         let mut probe = Self::new(true);
         probe.strict = self.strict;
+        probe.parameter_probe = true;
         for param in params {
             probe.validate_binding_expressions(&param.binding)?;
             if let Some(default) = &param.default { probe.expression(default)?; }
@@ -1005,10 +1011,12 @@ impl Compiler {
         }
         let mark = (self.program.code.len(), self.scope_depth);
         let result = match self.expression_inner(expression) {
-            // Direct eval stays excluded: its var/arguments scoping in
-            // parameter defaults differs from a plain tree-walker eval.
+            // Direct eval in a body runs against the frame's own env chain,
+            // so its `var`s land in the function scope as usual; in parameter
+            // defaults it stays excluded (see `parameter_probe`).
             Err(error)
-                if !matches!(error.message, RESOURCE_LIMIT | "register limit" | "direct eval")
+                if !matches!(error.message, RESOURCE_LIMIT | "register limit")
+                    && !(self.parameter_probe && error.message == "direct eval")
                     && !context_dependent(expression)
                     && !may_suspend(expression) =>
             {
