@@ -1,0 +1,66 @@
+{
+  "ticket": "JSRT-23 (Switch Annex B hoisting + CaseBlock lexical scope, carried forward from JSRT-19)",
+  "base": "3cbfc982",
+  "commits": {
+    "switch_fix": "bc50f1a0",
+    "annexb_exceptions_fixup": "68a3a8e0"
+  },
+  "root_cause": {
+    "hoist_inner_missing_switch_arm": {
+      "summary": "interp.rs's hoist_inner (the static, once-per-call AST pre-pass that discovers every var/Annex-B-function-declaration name in a function/eval/script body, recursively) had NO StmtKind::Switch arm at all -- it fell through the catch-all `_ => {}`. A `var` or a sloppy plain FunctionDeclaration declared directly in ANY switch case, matched or not, was therefore never hoisted to the enclosing var scope: VarDeclaredNames was violated for `var`, and Annex B.3.3 promotion never happened for a case-level function, regardless of whether that case ever executed.",
+      "fix": "Added a StmtKind::Switch arm: it unions every case's own top-level lexical names (block_lexical_names) into `blocked` ONCE for the whole CaseBlock (14.12's clauses share one lexical scope, so a let/const/class in one case blocks Annex-B promotion for a same-named function in ANY other case, not just its own), then hoists each case body with nested=true, mirroring StmtKind::Block's own recursion exactly."
+    },
+    "exec_stmt_missing_lexical_env": {
+      "summary": "exec_stmt's StmtKind::Switch arm ran every case's statements directly against the outer `env` -- no fresh lexical Block environment was ever created for the CaseBlock (unlike StmtKind::Block, which creates one and pre-binds every direct FunctionDeclaration child before running any statement). Consequences: (a) let/const/class declared in a case leaked past the end of the switch statement into the outer scope; (b) a plain function declaration in a case never got BlockDeclarationInstantiation's up-front binding, so the generic Annex-B sync arm in StmtKind::Function had nothing correctly-populated to sync from, and a function declared in one case was not visible to a different, matched case sharing the same CaseBlock scope; (c) no using/await-using disposal boundary existed for a case that declares one.",
+      "fix": "Creates one Block env for the whole CaseBlock up front, pre-binds every case's direct function declarations into it (mirroring StmtKind::Block, including its Annex B.3.3.4 duplicate-name last-one-wins relaxation), evaluates case test expressions and case bodies against it, and adds the same disposal-boundary check StmtKind::Block already has. Factored the clause-selection loop into exec_switch_cases() so both the plain and disposal-boundary paths share it."
+    }
+  },
+  "collateral_fixes_surfaced_by_the_switch_fix": {
+    "note": "hoist_inner's own missing Switch arm had accidentally masked two separate, pre-existing gaps in the shared Annex-B sync machinery (used by Block and now Switch): switch bodies being invisible to hoisting meant these gaps were never exercised through a switch case before. Fixing Switch surfaced them as new Test262 losses; both are fixed here since they are otherwise real, gate-visible regressions, not left as known gaps.",
+    "hoist_top_level_missing_self_seed": {
+      "root_cause": "hoist() (the entry point hoist_inner is always first called through) started blocked as an empty Vec, never seeding it with the body's OWN direct lexical names before walking (possibly nested) Annex-B candidates. LexicallyDeclaredNames conflicts are order-independent, and a top-level sibling `let f = 123;` next to a switch/block/if/loop must still block a same-named nested function inside that sibling -- StmtKind::Block/Switch/If/etc already self-seed when recursing into THEIR OWN child body, but the very first call (a function/script/module/eval body, or one of StmtKind::Try's per-block resets) had no ancestor to do this for it.",
+      "fix": "hoist() now seeds blocked with block_lexical_names(body) before calling hoist_inner.",
+      "caught_by": "annexB/language/eval-code and annexB/language/function-code Test262 regressions (e.g. func-switch-case-eval-func-skip-early-err.js, func-block-decl-eval-func-skip-early-err.js -- the latter is a plain-Block case, already failing on the unmodified dev base, now fixed as a side effect)."
+    },
+    "b333_parameter_exception_missing_in_generic_sync_arm": {
+      "root_cause": "The generic StmtKind::Function Annex-B sync arm (shared by Block and now Switch) never checked whether the promoted name collides with a parameter of the immediately enclosing function -- unlike exec_if_branch's already-existing blocked_by_param check for the bare if/else-position case. A parameter's own cell is non-lexical once bound (finish_parameter_initialization), indistinguishable by is_lexical() alone from a genuine hoist_inner-created Annex-B placeholder, so the sync arm would incorrectly overwrite a same-named parameter's value when a block/case-position function declaration executed.",
+      "fix": "Added the same current_function_param_names().iter().any(|p| p == &n.name) check exec_if_branch already uses.",
+      "caught_by": "annexB/language/function-code Test262 regressions for the switch-case/switch-dflt func-skip-param.js and func-skip-dft-param.js files; the plain Block equivalents (block-decl-func-skip-param.js, block-decl-func-skip-dft-param.js) were already failing on the unmodified dev base and are fixed as a side effect too."
+    },
+    "b35_catch_parameter_exception_missing": {
+      "root_cause": "Neither hoist_inner's StmtKind::Try arm NOR exec_try's own per-execution re-hoist (interp_stmt.rs, called every time a catch block actually executes -- necessary because Try/catch/finally bodies are deliberately NOT given Block's own up-front lexical treatment, a separate, still-open, explicitly documented gap) ever consulted the CatchClause's own bound names. B.3.5: hypothetically replacing a colliding nested FunctionDeclaration with `var F;` (the same substitution B.3.3.3 always imagines before promoting it) is a Syntax Error against a CatchParameter's own bound names UNLESS the CatchParameter is a plain BindingIdentifier, in which case that specific substitution is explicitly exempted.",
+      "fix": "Added hoist_catch_body(), called by both hoist_inner's StmtKind::Try arm and exec_try, seeding blocked with the catch body's own lexical names plus -- only when catch.binding is a destructuring pattern (Array/Object/Rest/Default), never a plain Ident -- the catch parameter's own bound names.",
+      "caught_by": "The remaining annexB/language/{eval-code,function-code} '*-skip-early-err-try.js' Test262 regressions (catch ({f}) { switch(1){case 1: function f(){}} } and its function-scope/global-scope/direct/indirect variants). First attempt (unconditionally blocking on any catch.binding) over-corrected and broke 24-32 unrelated '*-no-skip-try.js' tests (catch (f) { { function f(){} } }, a plain-identifier catch parameter, which is explicitly exempted) -- caught by re-running the same 8-directory gate and finding new losses, then corrected to the Array/Object/Rest/Default-only condition. A second attempt only fixed hoist_inner's static Try arm and missed exec_try's own separate runtime re-hoist call (line ~790, which calls hoist() directly on the catch body, bypassing hoist_inner's Try-arm dispatch entirely) -- caught via a minimal repro binary (Interpreter::run_script on `catch ({f}) { switch(1){case 1: function f(){}} }`) showing the promotion still happened, then fixed by extracting hoist_catch_body() and updating both call sites to use it."
+    }
+  },
+  "known_pre_existing_baseline_mismatch_not_caused_by_this_ticket": {
+    "summary": "A directory-scoped gate over language/statements/for (which substring-matches for-await-of too) showed 107 Test262 files going pass -> fail versus .agents/test262/baseline.json, plus 4 in language/statements/function and 1 in language/statements/try -- all async-generator/async-function destructuring-in-for-await-of or destructuring-parameter files, structurally unrelated to switch/try/catch. Root-caused by reverting crates/amazing-js/src/{interp.rs,interp_stmt.rs} to their exact content at the unmodified dev base (3cbfc982, the commit baseline.json itself was built from) and rebuilding+rerunning: the SAME 112 files fail identically on that pristine, completely-unmodified build. This is a pre-existing baseline/environment mismatch (baseline.json's recorded 'pass' for these specific async-timing-sensitive files does not reproduce on a byte-identical rebuild on this host), not a regression from JSRT-22 or JSRT-23. Excluded from this ticket's loss count on that basis; reported in questions.md as an infrastructure finding for the coordinator/integrator, not fixed here (out of this lane's ticket scope and not reproducibly attributable to any specific commit without the original baseline run's exact host/conditions)."
+  },
+  "gate": {
+    "platform": "Linux (venus-003, idle dedicated host)",
+    "lane": "js-runtime",
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "timeout_seconds": 60.0,
+    "before_source": ".agents/test262/baseline.json, built at dev 3cbfc982 (this ticket's exact rebase base)",
+    "method": "scripts/linux-run.sh js-runtime --host venus-003, release test262_host, one test262.py --only invocation per directory, per-file diff against baseline.json's records; true-regression filtering additionally cross-checked every apparent loss against a from-scratch rebuild of the unmodified 3cbfc982 base run through the identical gate, to separate this ticket's own effect from the pre-existing for-await-of mismatch above.",
+    "directories": {
+      "language/statements/switch": {"after": {"pass": 108, "fail": 3, "unsupported": 1}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 6}},
+      "annexB/language/eval-code": {"after": {"pass": 452, "fail": 17}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 114}},
+      "annexB/language/statements": {"after": {"pass": 12, "fail": 1, "unsupported": 9}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 0}},
+      "language/statements/function": {"after": {"pass": 425, "fail": 26, "unsupported": 1}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 0, "pre_existing_mismatch_excluded": 4}},
+      "annexB/language/function-code": {"after": {"pass": 157, "fail": 2}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 38}},
+      "language/statements/try": {"after": {"pass": 197, "fail": 9}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 0, "pre_existing_mismatch_excluded": 1}},
+      "language/statements/for": {"after": {"pass": 2303, "fail": 192, "unsupported": 3}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 0, "pre_existing_mismatch_excluded": 107}},
+      "language/statements/if": {"after": {"pass": 67, "fail": 2, "unsupported": 1}, "per_file_diff_vs_baseline": {"lost": 0, "gained": 0}}
+    },
+    "grand_total": {"true_lost": 0, "gained": 158, "pre_existing_mismatches_excluded": 112},
+    "crate_amazing_js": {
+      "nextest": "447 tests run: 447 passed, 1 skipped (up from JSRT-22's 446; +1 is switch_case_bodies_are_hoisted_and_share_one_lexical_scope)",
+      "doctest": "1 passed"
+    },
+    "workspace": {
+      "nextest": "3469 tests run: 3469 passed (3 slow), 17 skipped, 180.794s",
+      "doctests": "all ok across the workspace; amazing_js 1 passed, amazing_html 1 passed"
+    }
+  }
+}
