@@ -11,7 +11,7 @@ the table, once per license.
 
 | Upstream | Commit | License | Copyright | Our files |
 |----------|--------|---------|-----------|-----------|
-| [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp.rs`, `crates/amazing-js/src/interp_disposable.rs`, `crates/amazing-js/src/value.rs` |
+| [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp.rs`, `crates/amazing-js/src/interp_stmt.rs`, `crates/amazing-js/src/interp_disposable.rs`, `crates/amazing-js/src/value.rs` |
 
 ## MIT License
 
