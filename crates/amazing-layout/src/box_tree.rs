@@ -134,8 +134,19 @@ fn build_element(
 ) -> LayoutBox {
     let mut style = styled.get(idx).cloned().unwrap_or_default();
     let table_role = crate::table_tree::Role::of(&style);
-    if !matches!(table_role, crate::table_tree::Role::Other | crate::table_tree::Role::Table)
-        && (crate::floats::side(&style).is_some() || is_out_of_flow(&style)) {
+    let out_of_flow = !matches!(table_role, crate::table_tree::Role::Other | crate::table_tree::Role::Table)
+        && (crate::floats::side(&style).is_some() || is_out_of_flow(&style));
+    // CSS2 §10.3.7: an absolutely/fixed-positioned box's static position
+    // (when both inset properties on an axis are auto) is computed
+    // differently depending on whether the box is inline-level -- captured
+    // here from the SPECIFIED display, before §9.7's block-equivalent reset
+    // below overwrites it (floats already collapse to Display::Block inside
+    // `parse_display` regardless, so this only ever matters for the
+    // out-of-flow/positioned case).
+    let originally_inline_level = out_of_flow
+        && crate::floats::side(&style).is_none()
+        && matches!(parse_display(&style), Display::Inline);
+    if out_of_flow {
         style.set("display", "block");
     }
     let font_size = values::resolve_used_font_size(&style, parent_font_px);
@@ -143,6 +154,7 @@ fn build_element(
     let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
+    box_.originally_inline_level = originally_inline_level;
     box_.font_metric_style = Some(text_style(dom, idx, &box_.style, font_size, false));
     box_.html_table_width = dom.name(idx) == Some("table");
     if crate::svg::is_outer(dom, idx) {

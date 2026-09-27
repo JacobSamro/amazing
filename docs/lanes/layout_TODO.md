@@ -2322,3 +2322,162 @@ diverges from what `amazing-layout` alone produces.
 
 The broader "css-position/abspos" sweep beyond these 4 named cases was not
 started this ticket.
+
+## LAYOUT-31 — bisect + fix the 4 grid abspos losses; css-position/abspos sweep; align-self-016 paint diff
+
+### Item 1: bisect the 4 pre-existing css-grid abspos losses
+
+Per-commit render of the exact 4 fixtures (`amazing render-wpt` + sha256, bypassing
+the fuzzy classifier) at successive `dev` mainline points, using
+`scripts/linux-run.sh layout --ref <sha>` to sync each historical commit's exact
+tree (never `git stash`):
+
+| commit | position | positioned-grid-items-008/016, orthogonal-...-008 | row-auto-placed-subgrid-...-003 |
+|---|---|---|---|
+| `ac455ff7` (before LFG-1/2) | oldest | BAD (feature not implemented yet) | BAD |
+| `a38fe2f0` (LFG-1/2, `c78edbfc`) | | BAD | BAD |
+| `ab002ce4` (LFG-3, `5935e2ae`) | | **GOOD** (matches checked-in baseline sha) | BAD |
+| `512912d5` (lane/layout remerge, `178b6542`) | | **BAD** (regression here) | BAD |
+| `e6ca3ffa` (dev tip right before LFG-4) | | BAD | BAD |
+| `ff5f0094` (LFG-4, `b4f90596`) | newest before LAYOUT-27 | BAD | BAD |
+
+**Root cause (3 of 4, pinned to `512912d5`/`178b6542`):** that commit's large
+`prepare_sizes` rewrite in `position.rs` (folding the CSS2.1 §10.3.7
+shrink-to-fit-width computation together with the static-position anchor
+fallback) switched an abspos box's shrink-to-fit intrinsic-width measurement
+to a shaped-text-aware path (`intrinsic_content_widths` →
+`inline::intrinsic_widths_shaped`, real HarfRust shaping) when a `TextSystem`
+is available. `grid.rs`'s own sibling formula for a *normal-flow* grid item's
+fit-content width (`layout_grid_with_context`, `crate::flex::max_content_width(it,
+fonts)`) has no `text`/shaping parameter at all -- an architectural gap, not
+something `178b6542` touched. The three fixtures' abspos items and their
+references' normal-flow grid items shape the exact same text ("First item"
+etc.) through two now-different measurement paths, and shaped-vs-advance-sum
+width differs by enough sub-pixels to flip an exact-pixel WPT reftest.
+Confirms this session's own earlier (LAYOUT-30) diagnostic note that the
+divergence was "something the isolated `layout_document_with_text` path
+doesn't reach" -- that diagnostic never passes a real `TextSystem`, so it
+never exercises the shaped path either, and reported false byte-identical
+geometry.
+
+**Fix** (`position.rs`): added a `grid_area: bool` parameter to `prepare_sizes`,
+passed as `grid_generates_cb` from its one call site. When true, the
+shrink-to-fit branch calls `intrinsic_content_widths(box_, fonts, None)`
+instead of `..., text)`, which falls through every shaped-text branch in
+`intrinsic_content_widths`/`shaped_intrinsic_width` straight to the same
+plain `flex::min/max_content_width` grid.rs's sibling items already use --
+restoring measurement parity for exactly the grid-area-anchored case, without
+touching the (LAYOUT-24-owned) shaped-text improvement for every other
+shrink-to-fit case (page-level, non-grid containing blocks).
+
+Considered and rejected: threading `text: Option<&dyn TextSystem>` through
+`layout_grid`/`layout_grid_with_context` instead (converging grid.rs to the
+more-accurate shaped measurement for every grid item, not just abspos ones).
+Correct in principle, but touches every caller of two `pub`/`pub(crate)`
+functions across the crate and risks shifting pixel results across the whole
+947-case css-grid corpus -- too wide a blast radius to validate inside this
+ticket's budget. Filed as a follow-up in `questions.md` for whoever next
+touches grid item sizing.
+
+**4th loss (`row-auto-placed-subgrid-inherited-tracks-003.html`) not pinned:**
+BAD at every tested point from `ac455ff7` (before the LFG lane's abspos work
+even started) through `ff5f0094` (LFG-4, the last commit that specifically
+targeted Grid Lanes intrinsic width) -- i.e. never observed matching the
+checked-in baseline anywhere in the LFG lane's whole contribution window.
+Either the baseline capture reflects an even earlier commit (before
+`ac455ff7`, back toward the original `3e22b3cd`/`e0114174` Grid Lanes+subgrid
+implementation) that a full bisection this ticket's budget didn't reach, or
+it reflects a transient lane-branch state that was never reflected in any
+single `dev` mainline commit. Not fixed or further bisected this ticket;
+flagged honestly rather than guessed at.
+
+Gate (crate + the two named corpora, `--baseline auto --release`, worker-2):
+crate 382/1 skipped, 0 failed. `css/css-grid`: gained=58 lost=1 (the
+still-unpinned 4th loss above, unchanged, not a new regression) changed=0
+unchanged=884 new=2. Confirms all 3 pinned fixtures now pass.
+
+### Item 2: css-position/abspos sweep
+
+Largest real cluster in the checked-in `css/css-position` evidence (9+6=15 of
+19 mismatches, `crates/amazing-shell-gpui/evidence/wpt-render/css-css-position/
+clusters.json`): `static-position/inline-level-absolute-in-block-level-context-*`
+(a matrix of direction x text-align x float-side combinations) plus 2
+`position-relative-011/013` (an unrelated table-percentage-height bug,
+left alone -- different root cause, not chased this ticket).
+
+**Root cause:** `position.rs`'s `static_anchor` (the static-position fallback
+for an abspos child when both inset properties on an axis are auto) computed
+the horizontal anchor as strictly the containing block's near/far content
+edge based only on `direction` -- CSS2 §10.3.7 requires an *inline-level*
+descendant's static position to be that of a hypothetical zero-width inline
+box at that point in the flow: narrowed by any floats already placed at that
+block position, and shifted within the narrowed band by `text-align`, same as
+real inline content (`inline_alignment::apply`'s shift formula). A
+block-level descendant's static position ignores both, per spec -- so this
+had to be gated on "was this box's specified `display` inline-level before
+CSS2 §9.7 reset it to block for box generation", a distinction the codebase
+discarded at construction time.
+
+**Fix:**
+- New `LayoutBox` field `originally_inline_level`, captured in
+  `box_tree.rs::build_element` from `parse_display` on the pre-mutation style,
+  before the out-of-flow/float `display: block` override.
+- `position.rs::static_anchor`: when `positioned.originally_inline_level` and
+  the parent is `Flow::Blocks` (floats have no effect on flex/grid items,
+  LAYOUT-30) and not a vertical writing mode, compute the anchor from a new
+  `float_narrowed_band` (walks the parent's `Flow::Blocks` children, narrowing
+  by any floated sibling's final border box that spans the anchor's `y`) and a
+  new `text_align_fraction` (0.0/0.5/1.0, matching `left`/`right`/`center`/
+  `start`/`end` resolution against the container's direction). Block-level
+  abspos children and every pre-existing (non-float, default-align) case fall
+  through to the unchanged prior formula -- verified algebraically equivalent
+  at the boundary (no floats, default `text-align`: new formula reduces to
+  the exact old `content_box.x` / `content_box.x + w` expressions).
+
+Scoped to physical horizontal resolution only (matches the pre-existing
+limitation already noted at this call site for vertical writing modes);
+`display: inline-block`/`inline-flex`/etc. (outer-inline but
+generation-block per `parse_display`) aren't covered, only plain
+`display: inline` -- matches every fixture in this cluster, left as a
+follow-up for a broader fix.
+
+Gate: crate 382/1 skipped, 0 failed. `css/css-position`: gained=6 lost=0
+changed=0 unchanged=48. 6 of the 9+6=15-test family now pass
+(`-004/-005/-006/-007/-008/-009`); 6 remain (`-001/-002/-003/-010/-011/-012`),
+reported by `wpt_render_cluster.py` as "small-region... lighter" (not the
+same large/darker signature as before the fix) -- consistent with a residual
+edge/rounding-class gap rather than the same wrong-band bug, not root-caused
+further this ticket. `position-relative-011/013` (table row/cell percentage
+`top` resolving against specified vs. used height) untouched, as intended --
+different bug, not attempted.
+
+### Item 3: align-self-016.html pixel gap after LAYOUT-30's layout fix
+
+LAYOUT-30 already proved the isolated layout geometry is correct (the flex
+item's border box is exactly 200x200, flush with `#container`), so this
+diff is paint-time, not layout geometry -- out of this lane's owned paths
+(`amazing-paint` belongs to replaced-content). Pixel-sampled the real
+`amazing render-wpt` PPM output directly against both `#container`'s own
+CSS (`width:100px; border-right:100px solid red`) and the reference
+`css/reference/ref-filled-green-200px-square.html`, at matching absolute
+(x, y) coordinates on the shared 800x600 canvas:
+
+- y=95, y=105, y=150: actual and reference are byte-identical across
+  x=50..205 -- the item correctly covers the container's red border-right
+  for most of its height.
+- Starting at y=151 (immediately below the last matching row) through at
+  least y=221: a band from x~108 to x~208 (~100px wide, exactly matching
+  `border-right: 100px`) renders `(255,0,0)` -- the border-right showing
+  through -- where the reference is solid `(0,128,0)`. This is a real
+  ~100x70+px hole (matches the measured 4508/40000 mismatched pixels),
+  not a rounding artifact.
+- The hole's top edge lines up with the boundary between the item's two
+  halves (top half painted by child floats that span the full 200px width;
+  bottom half painted by the item's own background/gradient per LAYOUT-30's
+  structural notes) -- suggesting the item's own background paint is
+  clipped narrower than its border box specifically for that self-painted
+  half. Not confirmed against `amazing-paint`'s background-painting code
+  (out of this lane's owned paths).
+
+Filed in `questions.md` for replaced-content with the exact pixel evidence
+above.

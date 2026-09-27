@@ -187,6 +187,13 @@ pub struct LayoutBox {
     pub positioned: Vec<LayoutBox>,
     /// An in-flow atomic inline kept in `positioned` for tree traversal.
     pub(crate) inline_atomic: bool,
+    /// CSS2 §9.7: this box's specified `display` was inline-level (plain
+    /// `inline`) before an out-of-flow (`position: absolute`/`fixed`) or
+    /// float reset it to a block-equivalent for box generation. Consulted by
+    /// `position.rs`'s static-position calculation, which per §10.3.7 must
+    /// treat an inline-level abspos descendant differently (float-narrowed,
+    /// text-align-shifted) from a block-level one (content-edge only).
+    pub(crate) originally_inline_level: bool,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
     /// Outer SVG root for a block/flex/grid item. Its resolved viewport is
@@ -252,6 +259,7 @@ impl LayoutBox {
             flow: Flow::Empty,
             positioned: Vec::new(),
             inline_atomic: false,
+            originally_inline_level: false,
             replaced_size: None,
             svg_root: None,
             svg_sizing: None,
