@@ -53,9 +53,23 @@ pub(crate) fn cmd_parse(path: Option<&str>) -> ExitCode {
     }
 }
 
+/// html5lib/WPT `#document-fragment` context lines are a bare local name for
+/// an HTML context (`"div"`) or `"<namespace> <local name>"` for a foreign
+/// one (`"svg title"`, `"math ms"`) -- split that convention here so this
+/// CLI can drive `parse_fragment_with_namespace` for both, rather than only
+/// ever parsing in the HTML namespace.
+fn split_fragment_context(context: &str) -> (amazing_dom::Namespace, &str) {
+    match context.split_once(' ') {
+        Some(("svg", name)) => (amazing_dom::Namespace::Svg, name),
+        Some(("math", name)) => (amazing_dom::Namespace::MathMl, name),
+        _ => (amazing_dom::Namespace::Html, context),
+    }
+}
+
 pub(crate) fn cmd_parse_fragment(context: &str, path: Option<&str>) -> ExitCode {
+    let (namespace, local_context) = split_fragment_context(context);
     match read_source(path, "parse-fragment") {
-        Ok(src) => match amazing_html::parse_fragment(context, &src) {
+        Ok(src) => match amazing_html::parse_fragment_with_namespace(local_context, namespace, &src) {
             Ok(dom) => {
                 print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
                 ExitCode::SUCCESS
