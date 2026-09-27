@@ -188,8 +188,11 @@ enum Instruction {
     /// `break`/`continue` (JSVM-10): unlike a plain `Jump`, goes through
     /// `route_abrupt` so a jump that actually leaves an active try/finally
     /// (including a for-of/for-await-of's `IteratorClose` finally) runs it
-    /// first, per spec. Compile-time-resolved target, same as `Jump`.
-    ExitTo(usize),
+    /// first, per spec. `(target, scope_depth)`: the compile-time-resolved
+    /// target and the frame's `scopes` depth there, so every block/iteration
+    /// scope the jump leaves is popped (a `break` out of `{ let x; ... }`
+    /// never runs that block's `LeaveScope`).
+    ExitTo(usize, usize),
     EnterScope,
     LeaveScope,
     PushTry {
@@ -403,7 +406,7 @@ enum Abrupt {
     /// (a `continue` back to a loop nested inside a `try`, or a `break` to
     /// just past that same loop but still inside the `try`), in which case
     /// no finally runs at all. See `route_abrupt`'s early-exit check.
-    Goto(usize),
+    Goto(usize, usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -416,6 +419,10 @@ enum TryPhase {
 struct TryHandler {
     catch: Option<usize>,
     finally: Option<usize>,
+    /// The pc a `break`/`continue` target must be `>=` to still be within
+    /// this handler's own protected region (JSVM-10) -- the pc right after
+    /// `PushTry` itself, i.e. where its own body starts.
+    start: usize,
     end: usize,
     scope_depth: usize,
     env: EnvHandle,
@@ -860,6 +867,7 @@ impl Program {
                     } => try_stack.push(TryHandler {
                         catch: *catch,
                         finally: *finally,
+                        start: *pc,
                         end: *end,
                         scope_depth: scopes.len(),
                         env: env.clone(),
@@ -913,8 +921,8 @@ impl Program {
                     Instruction::Return(src) => {
                         return Ok(Some(Abrupt::Return(registers[*src].clone())));
                     }
-                    Instruction::ExitTo(target) => {
-                        return Ok(Some(Abrupt::Goto(*target)));
+                    Instruction::ExitTo(target, depth) => {
+                        return Ok(Some(Abrupt::Goto(*target, *depth)));
                     }
                     Instruction::MakeFunction(dst, code) => {
                         registers[*dst] = code.instantiate(i, &env);
@@ -1322,6 +1330,15 @@ impl Program {
     }
 }
 
+/// Pop `scopes` back to `depth`, restoring the environment that was current
+/// there -- `LeaveScope` repeated for every scope a `break`/`continue` leaves.
+fn leave_scopes_to(scopes: &mut Vec<EnvHandle>, env: &mut EnvHandle, depth: usize) {
+    if scopes.len() > depth {
+        *env = scopes[depth].clone();
+        scopes.truncate(depth);
+    }
+}
+
 /// Continue a return or throw through active handlers. An instruction fuel
 /// failure is handled outside this path so a catch cannot reset the VM budget.
 fn route_abrupt(
@@ -1337,15 +1354,26 @@ fn route_abrupt(
             return match abrupt {
                 Abrupt::Return(value) => Ok(Some(value)),
                 Abrupt::Throw(error) => Err(error),
-                Abrupt::Goto(target) => { *pc = target; Ok(None) }
+                Abrupt::Goto(target, depth) => {
+                    leave_scopes_to(scopes, env, depth);
+                    *pc = target;
+                    Ok(None)
+                }
             };
         };
-        if let Abrupt::Goto(target) = &abrupt {
+        if let Abrupt::Goto(target, depth) = &abrupt {
             // The jump's target is still inside this handler's own protected
-            // region (e.g. `continue` back to a loop nested in a `try`, or
-            // `break` to a point still inside it) -- resolve directly, no
-            // finally, and leave the handler active on `try_stack`.
-            if *target < handler.end {
+            // region [start, end) -- e.g. `continue` back to a for-of's own
+            // loop top, which is inside ITS iterator-close try but before
+            // any try nested in the body, or `break` to a point still
+            // inside an enclosing try -- resolve directly, no finally, and
+            // leave the handler active on `try_stack`. A plain `< end` check
+            // (this ticket's first attempt) wrongly matched a *backward*
+            // jump to a target lexically BEFORE this handler even began
+            // (continue jumping past a `try` nested in the loop body, back
+            // to the for-of's own loop top) -- `>= start` excludes that.
+            if *target >= handler.start && *target < handler.end {
+                leave_scopes_to(scopes, env, *depth);
                 *pc = *target;
                 return Ok(None);
             }

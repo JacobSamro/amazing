@@ -250,6 +250,15 @@ fn jsvm10_break_continue_switch_for_in_for_of_labels_match() {
         "var out=''; for(var i=0;i<3;i++){ try { if(i===1) continue; out+=i; } finally { out+='f'; } } out;",
         "var out=''; outer: for(var i=0;i<3;i++){ try { if(i===1) break outer; out+=i; } finally { out+='f'; } } out;",
         "var out=''; while(true){ try { out+='a'; break; } finally { out+='b'; } } out;",
+        // break/continue pop every scope they leave (else the next `let`
+        // lands in a stale block/iteration scope and redeclares).
+        "for (let x of [1,2]) { continue; } let x = 7; x;",
+        "for (let x in {a:1}) { break; } let x = 8; x;",
+        "while (true) { let y = 1; { let z = 2; break; } } let y = 2; let z = 3; y + z;",
+        "switch (1) { case 1: let q = 1; break; } let q = 2; q;",
+        "l: { let w = 1; { let v = 2; break l; } } let w = 3; let v = 4; w + v;",
+        "var out=''; for (var i = 0; i < 3; i++) { let j = i; { let k = j; if (k === 1) continue; out += k; } } let k = 9; out + k;",
+        "var out=''; for (const a of [1,2,3]) { try { let t = a; if (t === 2) continue; out += t; } finally { out += 'f'; } } let t = 0; out + t;",
     ] {
         differential(source, &["out", "sum", "i", "calls", "closed"]);
     }
@@ -1126,3 +1135,5 @@ fn class_static_methods_and_accessors_install_on_the_constructor() {
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("undefined:function:2:3:42:7:base"));
 }
+
+

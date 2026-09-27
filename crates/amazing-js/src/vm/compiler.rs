@@ -144,6 +144,11 @@ struct Compiler {
     /// `Labeled` statement and the loop/switch/plain-statement arm right
     /// below it that consumes (`std::mem::take`s) it -- see `StmtKind::Labeled`.
     pending_labels: Vec<String>,
+    /// The frame's runtime `scopes` depth at the current emission point:
+    /// `EnterScope`/`EnterCatch`/`BindFor` push, `LeaveScope` pops, and
+    /// emission is statically balanced. A `break`/`continue` target records
+    /// it so `ExitTo` can pop the scopes the jump leaves.
+    scope_depth: usize,
 }
 
 /// One entry per enclosing loop, `switch`, or plain labeled statement a
@@ -155,6 +160,8 @@ struct Compiler {
 /// construct (`a: b: for (...) {}` attaches both to the same loop entry).
 struct LoopCtx {
     labels: Vec<String>,
+    /// `scope_depth` at both the break and the continue target.
+    depth: usize,
     is_loop: bool,
     break_patches: Vec<usize>,
     continue_patches: Vec<usize>,
@@ -180,11 +187,12 @@ impl Compiler {
             strict: false,
             loop_stack: Vec::new(),
             pending_labels: Vec::new(),
+            scope_depth: 0,
         }
     }
 
     fn push_loop(&mut self, labels: Vec<String>, is_loop: bool) {
-        self.loop_stack.push(LoopCtx { labels, is_loop, break_patches: Vec::new(), continue_patches: Vec::new() });
+        self.loop_stack.push(LoopCtx { labels, is_loop, depth: self.scope_depth, break_patches: Vec::new(), continue_patches: Vec::new() });
     }
 
     /// Pop the innermost loop entry, patching its `break`s to `break_target`
@@ -492,6 +500,11 @@ impl Compiler {
 
     fn emit(&mut self, op: Instruction) -> usize {
         let index = self.program.code.len();
+        match &op {
+            Instruction::EnterScope | Instruction::EnterCatch(_) | Instruction::BindFor(..) => self.scope_depth += 1,
+            Instruction::LeaveScope => self.scope_depth -= 1,
+            _ => {}
+        }
         self.program.code.push(op);
         index
     }
@@ -506,7 +519,7 @@ impl Compiler {
     /// a loop's break/continue point, not to "here").
     fn patch_to(&mut self, index: usize, target: usize) {
         match &mut self.program.code[index] {
-            Instruction::Jump(t) | Instruction::Branch(_, _, t) | Instruction::ExitTo(t) => *t = target,
+            Instruction::Jump(t) | Instruction::Branch(_, _, t) | Instruction::ExitTo(t, _) => *t = target,
             _ => unreachable!("compiler only patches branches"),
         }
     }
@@ -816,12 +829,12 @@ impl Compiler {
             }
             StmtKind::Break { label } => {
                 let target = self.find_break_target(statement.span, label)?;
-                let jump = self.emit(Instruction::ExitTo(0));
+                let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
                 self.loop_stack[target].break_patches.push(jump);
             }
             StmtKind::Continue { label } => {
                 let target = self.find_continue_target(statement.span, label)?;
-                let jump = self.emit(Instruction::ExitTo(0));
+                let jump = self.emit(Instruction::ExitTo(0, self.loop_stack[target].depth));
                 self.loop_stack[target].continue_patches.push(jump);
             }
             StmtKind::Labeled { label, body } => {
