@@ -6,6 +6,11 @@
 // handling are ported from boa-dev/temporal (temporal_rs)
 // @ eadf8039d2577e4375493a0eb3f46a66f25616ec, src/builtins/core/plain_date.rs
 // and src/rounding.rs, Apache-2.0. See THIRD_PARTY_NOTICES.md.
+//
+// The month-structure calendar branch of std_temporal_calendar_difference_cal
+// is ported from lucid-softworks/lumen (crates/lumen/src/temporal.rs,
+// diff_date_cal) @ f6c9860d44fa52249cfd647122edea184d32c863, MIT. See
+// THIRD_PARTY_NOTICES.md.
 
 const STD_TEMPORAL_NS_SECOND: i128 = 1_000_000_000;
 const STD_TEMPORAL_NS_DAY: i128 = 86_400 * STD_TEMPORAL_NS_SECOND;
@@ -309,29 +314,14 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             let mut anchor = result;
             anchor[2] = 1;
             std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
-            // PARKED (2026-09-27): reverted to the ISO-only add here,
-            // matching aa5116a0 exactly. PlainYearMonth/PlainDate/
-            // PlainDateTime already had calendar-real getters before this
-            // session (JSS-calendars item 1), paired with ISO-only add()/
-            // since()/until() there the whole time -- an "accidental
-            // self-consistency" that must stay matched on both sides. Only
-            // ZonedDateTime (whose getters went calendar-real for the first
-            // time this session, item 2) keeps add()/subtract() wired to
-            // std_temporal_add_calendar_cal, since no baseline behavior
-            // exists there to stay accidentally consistent with. Resume the
-            // real calendar-native add() generalization for these three
-            // kinds together with since()/until() from the WIP commit once
-            // the bracket-search bug is root-caused.
-            let mut added = std_temporal_add_calendar(&anchor, &duration, factor, reject)?;
+            let mut added = std_temporal_add_calendar_cal(&data.calendar, &anchor, &duration, factor, reject)?;
             std_temporal_validate(StdTemporalKind::PlainDate, &added)?;
             added[2] = data.fields[2];
             result = added;
         }
         StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime => {
             let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
-            // PARKED: see the matching note at the PlainYearMonth add
-            // branch above.
-            result = std_temporal_add_calendar(&result, &duration, factor, reject)?;
+            result = std_temporal_add_calendar_cal(&data.calendar, &result, &duration, factor, reject)?;
             if data.kind == StdTemporalKind::PlainDateTime {
                 let time_delta = factor as i128 * (duration[4] as i128 * 3_600_000_000_000
                     + duration[5] as i128 * 60_000_000_000
@@ -445,20 +435,6 @@ fn std_temporal_round_mode_valid(mode: &str) -> bool {
         | "halfFloor" | "halfExpand" | "halfTrunc" | "halfEven")
 }
 
-// Ported from boa-dev/temporal (temporal_rs) @ eadf8039d2577e4375493a0eb3f46a66f25616ec,
-// src/iso.rs `IsoDate::diff_iso_date` (spec 5.5.6 DifferenceISODate), Apache-2.0.
-// Always anchored at `first` (never swapped to whichever endpoint is
-// chronologically earlier): a month/year step's day-of-month clamping keeps
-// using `first`'s own day throughout the bracket search, so which argument is
-// `first` is observable in the day remainder whenever a month is shorter than
-// `first`'s day-of-month, not just the overall sign of the result -- e.g.
-// 2019-03-01 minus 2019-01-29 at largestUnit "month" is 1 month, 3 days
-// (anchored at 2019-03-01, day 1, stepping backward), not 1 month, 1 day (the
-// wrong answer produced by anchoring at whichever side is earlier and
-// clamping with ITS day-of-month instead).
-fn std_temporal_calendar_difference(first: &[i64; 10], second: &[i64; 10], largest: &str) -> Result<[i64; 10], Throw> {
-    std_temporal_calendar_difference_cal("iso8601", first, second, largest)
-}
 
 // Calendar-native generalization of std_temporal_calendar_difference
 // (JSS-calendars item 2), used by since/until's bracket search
@@ -495,54 +471,129 @@ fn std_temporal_calendar_difference_cal(cal: &str, first: &[i64; 10], second: &[
         return Ok(result);
     }
     let sign: i64 = if second_day < first_day { -1 } else { 1 };
-    // For the ISO-grid family, bracket-search directly on the raw ISO
-    // tuples (unchanged from before); a month-structure calendar instead
-    // brackets on its OWN (year, ordinal month, day) -- month boundaries
-    // genuinely differ, so comparing raw ISO fields would compare the
-    // wrong quantity entirely.
     let month_structure = std_calendar_is_month_structure(cal);
-    let (first_native, second_native) = if month_structure {
-        let (fy, fm, fd, ..) = std_calendar_fields(cal, first[0], first[1], first[2]);
-        let (sy, sm, sd, ..) = std_calendar_fields(cal, second[0], second[1], second[2]);
-        ((fy, fm, fd), (sy, sm, sd))
-    } else {
-        ((first[0], first[1], first[2]), (second[0], second[1], second[2]))
+    if !month_structure {
+        // ISO-grid family (iso8601/gregory/japanese/roc/buddhist): the year
+        // LABEL cancels out of a year/month delta, so bracket-searching
+        // directly on the raw ISO tuples already gives the calendar-correct
+        // answer -- unchanged from before this file's calendar work.
+        let first_native = (first[0], first[1], first[2]);
+        let second_native = (second[0], second[1], second[2]);
+        let mut years = 0i64;
+        let mut months = 0i64;
+        // `years`/`months` are found by walking candidate offsets from `first` in
+        // the `sign` direction until the next step would land strictly past
+        // `second` (per `sign`); the comparison uses `first`'s own
+        // (year, month, day) tuple unclamped (a raw calendar-date compare, not a
+        // valid calendar date) exactly as the ported algorithm's
+        // `IsoDate::new_unchecked` does, so a day-of-month that overflows the
+        // candidate month (e.g. day 31 against a candidate February) still
+        // orders correctly against `second` without being silently clamped away
+        // first.
+        let mut candidate_years = second_native.0 - first_native.0;
+        if candidate_years != 0 { candidate_years -= sign; }
+        loop {
+            let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + candidate_years, first_native.1);
+            if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
+            years = candidate_years;
+            candidate_years += sign;
+        }
+        let mut candidate_months = sign;
+        loop {
+            let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + years, first_native.1 + candidate_months);
+            if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
+            months = candidate_months;
+            candidate_months += sign;
+        }
+        if largest == "month" {
+            months += std_calendar_months_between(cal, first_native.0, first_native.0 + years);
+            years = 0;
+        }
+        let mut single = [0i64; 10];
+        single[0] = years; single[1] = months;
+        let constrained = std_temporal_add_calendar_cal(cal, first, &single, 1, false)?;
+        let constrained_day = std_temporal_epoch_day(constrained[0], constrained[1], constrained[2]);
+        result[0] = years; result[1] = months; result[3] = second_day - constrained_day;
+        return Ok(result);
+    }
+    // Month-structure calendar (coptic/ethiopic/ethioaa/islamic-civil/tbla/
+    // umalqura/indian/persian/hebrew/chinese/dangi). Ported from
+    // lucid-softworks/lumen (crates/lumen/src/temporal.rs, diff_date_cal)
+    // @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+    //
+    // 2026-09-27: replaces an earlier ordinal-month-POSITION bracket search
+    // (std_calendar_balance_year_month adding a raw ordinal offset to a
+    // *different* year without first clamping it to that year's own
+    // months-per-year) that was correct for hebrew, whose leap month always
+    // falls at the same ordinal slot, but wrong for chinese/dangi, whose
+    // leap month's ordinal position varies year to year -- a year-only step
+    // from a high ordinal month (e.g. 13, only valid in a leap year) could
+    // silently roll over into the next year's month 1 instead of clamping,
+    // exactly the failure mode std_temporal_add_calendar_cal's own year-add
+    // branch already guards against. This version reuses that already-
+    // correct add function to walk year/month MAGNITUDES and check the
+    // resulting ISO date against `second`, sidestepping ordinal positions
+    // entirely.
+    let add = |y: i64, m: i64| -> Result<[i64; 10], Throw> {
+        let mut dur = [0i64; 10];
+        dur[0] = y; dur[1] = m;
+        std_temporal_add_calendar_cal(cal, first, &dur, sign, false)
+    };
+    let passed = |x: &[i64; 10]| -> bool {
+        let xd = std_temporal_epoch_day(x[0], x[1], x[2]);
+        if sign > 0 { xd > second_day } else { xd < second_day }
+    };
+    let (_, _, a_day, ..) = std_calendar_fields(cal, first[0], first[1], first[2]);
+    let a_code = std_calendar_month_code(cal, first[0], first[1], first[2]);
+    // A whole month reached exactly at `second` only because `first`'s day
+    // was clamped to a shorter target month does not count when moving
+    // forward (it does count moving backward, per ICU4X/lumen).
+    let clamped_at = |m: &[i64; 10]| -> bool {
+        if sign <= 0 { return false; }
+        if std_temporal_epoch_day(m[0], m[1], m[2]) != second_day { return false; }
+        let (_, _, day, ..) = std_calendar_fields(cal, m[0], m[1], m[2]);
+        day < a_day
+    };
+    // A whole year fails to complete when a leap monthCode had to collapse
+    // to its plain form on landing at `second`: forward, a SAME-numbered
+    // plain month (chinese M04L -> M04) doesn't complete; backward, a
+    // DIFFERENT-numbered plain month (hebrew M05L -> M06) doesn't either.
+    let year_clamped = |m: &[i64; 10]| -> bool {
+        let code = std_calendar_month_code(cal, m[0], m[1], m[2]);
+        let landed = std_temporal_epoch_day(m[0], m[1], m[2]) == second_day;
+        if sign > 0 {
+            clamped_at(m) || (landed && a_code.ends_with('L') && a_code.trim_end_matches('L') == code)
+        } else {
+            landed && a_code.ends_with('L') && a_code.trim_end_matches('L') != code
+        }
     };
     let mut years = 0i64;
+    if largest == "year" {
+        loop {
+            let candidate = add(years + 1, 0)?;
+            if passed(&candidate) { break; }
+            years += 1;
+        }
+        if years > 0 {
+            let landed = add(years, 0)?;
+            if year_clamped(&landed) { years -= 1; }
+        }
+    }
     let mut months = 0i64;
-    // `years`/`months` are found by walking candidate offsets from `first` in
-    // the `sign` direction until the next step would land strictly past
-    // `second` (per `sign`); the comparison uses `first`'s own
-    // (year, month, day) tuple unclamped (a raw calendar-date compare, not a
-    // valid calendar date) exactly as the ported algorithm's
-    // `IsoDate::new_unchecked` does, so a day-of-month that overflows the
-    // candidate month (e.g. day 31 against a candidate February) still
-    // orders correctly against `second` without being silently clamped away
-    // first.
-    let mut candidate_years = second_native.0 - first_native.0;
-    if candidate_years != 0 { candidate_years -= sign; }
     loop {
-        let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + candidate_years, first_native.1);
-        if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
-        years = candidate_years;
-        candidate_years += sign;
+        let candidate = add(years, months + 1)?;
+        if passed(&candidate) { break; }
+        months += 1;
     }
-    let mut candidate_months = sign;
-    loop {
-        let (cy, cm) = std_calendar_balance_year_month(cal, first_native.0 + years, first_native.1 + candidate_months);
-        if std_temporal_calendar_surpasses((cy, cm, first_native.2), second_native, sign) { break; }
-        months = candidate_months;
-        candidate_months += sign;
+    if months > 0 {
+        let landed = add(years, months)?;
+        if clamped_at(&landed) { months -= 1; }
     }
-    if largest == "month" {
-        months += std_calendar_months_between(cal, first_native.0, first_native.0 + years);
-        years = 0;
-    }
-    let mut single = [0i64; 10];
-    single[0] = years; single[1] = months;
-    let constrained = std_temporal_add_calendar_cal(cal, first, &single, 1, false)?;
-    let constrained_day = std_temporal_epoch_day(constrained[0], constrained[1], constrained[2]);
-    result[0] = years; result[1] = months; result[3] = second_day - constrained_day;
+    let mid = add(years, months)?;
+    let mid_day = std_temporal_epoch_day(mid[0], mid[1], mid[2]);
+    result[0] = sign * years;
+    result[1] = sign * months;
+    result[3] = second_day - mid_day;
     Ok(result)
 }
 
@@ -739,14 +790,7 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                 let rounded = std_temporal_round_integer((other_day - base_day) as i128, increment as i128, &mode)? as i64;
                 let (ry, rm, rd) = std_temporal_civil_from_epoch_day(base_day + rounded);
                 let rounded_other = { let mut f = [0i64; 10]; f[0] = ry; f[1] = rm; f[2] = rd; f };
-                // PARKED (2026-09-27): the calendar-native bracket search
-                // (std_temporal_calendar_difference_cal) mis-counts months
-                // for chinese/dangi in some cases (a real bug still under
-                // investigation, see questions.md) and is not required for
-                // the JSS-calendars-fix-14 regressions -- reverted to the
-                // ISO-only wrapper here so this commit stays zero-loss;
-                // resume from the WIP commit that has the wiring.
-                std_temporal_calendar_difference(&data.fields, &rounded_other, &largest)?
+                std_temporal_calendar_difference_cal(&data.calendar, &data.fields, &rounded_other, &largest)?
             } else {
                 // smallest is "week", "month" or "year": a real calendar-unit
                 // rounding, bracket-searched from the RECEIVER (the same
@@ -807,9 +851,7 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                     let unit = std_temporal_unit_ns(&smallest).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
                     let delta = std_temporal_epoch_ns(&other) - std_temporal_epoch_ns(&data.fields);
                     let rounded = std_temporal_round_integer(delta, unit * increment as i128, &mode)?;
-                    // PARKED: see the matching note at std_temporal_calendar_
-                    // difference_cal's call site above.
-                    std_temporal_epoch_breakdown(&data.fields, std_temporal_epoch_ns(&data.fields) + rounded, &largest)?
+                    std_temporal_epoch_breakdown_cal(&data.calendar, &data.fields, std_temporal_epoch_ns(&data.fields) + rounded, &largest)?
                 } else {
                     let index = match largest.as_str() {
                         "day" if data.kind == StdTemporalKind::PlainDateTime => 3,
@@ -1451,7 +1493,11 @@ fn std_temporal_epoch_breakdown_cal(cal: &str, base: &[i64; 10], target_epoch_ns
     // actually supports; `std_temporal_set_epoch_ns` above only rejects an
     // i64 day-count overflow, not that narrower range, so check it here.
     std_temporal_validate(StdTemporalKind::PlainDate, &adjusted_target)?;
-    let mut result = std_temporal_calendar_difference(&base_date_only, &adjusted_target, largest)?;
+    // 2026-09-27: this was calling the plain, always-iso8601
+    // std_temporal_calendar_difference here, silently ignoring `cal` --
+    // this function's whole purpose is to be the calendar-native sibling,
+    // so `cal` must reach the actual date-difference step.
+    let mut result = std_temporal_calendar_difference_cal(cal, &base_date_only, &adjusted_target, largest)?;
     let time_fields = std_temporal_split_duration_ns(time_delta, 4);
     result[4..10].copy_from_slice(&time_fields[4..10]);
     Ok(result)
