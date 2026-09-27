@@ -192,7 +192,17 @@ impl Interpreter {
                         // the second check, a later individually-blocked same-named declaration
                         // (shadowed by an intervening let/const at its own nesting depth) would
                         // still stomp an earlier legitimately-hoisted one on every execution.
-                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                        //
+                        // B.3.3.1's own exception: the whole extension is skipped, not merely a
+                        // no-op sync, when F collides with a parameter name of the immediately
+                        // enclosing function (a parameter's own cell IS non-lexical once bound,
+                        // indistinguishable by identity/is_lexical alone from a genuine
+                        // hoist_inner-created placeholder -- current_function_param_names checks
+                        // the AST directly, mirroring exec_if_branch's identical check for the
+                        // bare if/else-position case).
+                        let blocked_by_param = self.current_function_param_names().iter().any(|p| p == &n.name);
+                        let promoted = !blocked_by_param
+                            && scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
                             && is_annex_b_eligible(f.as_ref() as *const ast::FunctionItem);
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
@@ -852,7 +862,7 @@ impl Interpreter {
                     if let Some(binding) = &c.binding {
                         self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                     }
-                    self.hoist(&c.body.body, env)?;
+                    self.hoist_catch_body(c, env)?;
                     self.exec_stmts(&c.body.body, &ce)
                 } else {
                     Err(th)

@@ -1284,7 +1284,39 @@ impl Interpreter {
 
 
     fn hoist(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<(), Throw> {
-        self.hoist_inner(body, env, false, &mut Vec::new())
+        // Seed `blocked` with this body's OWN direct lexical names before walking its
+        // (possibly nested) Annex B function-declaration candidates: LexicallyDeclaredNames
+        // conflicts are order-independent (`{ function f(){} } let f;` is exactly as blocked
+        // as the reverse), and a sibling `let`/`const`/class at THIS level -- not just one
+        // pushed by an ancestor Block/If/For/etc already walking into this level -- must
+        // still prevent promoting a same-named function nested somewhere inside a sibling
+        // Block/Switch/If/loop. Every StmtKind::Block/Switch/etc arm below already does this
+        // self-seeding when recursing into ITS OWN child body; only the very first, top-level
+        // call (a function/script/module/eval body, or one of StmtKind::Try's per-block resets)
+        // was missing it.
+        let mut blocked = block_lexical_names(body);
+        self.hoist_inner(body, env, false, &mut blocked)
+    }
+
+    /// `hoist()` for a Catch clause's own body, with B.3.5's extra exception: hypothetically
+    /// replacing a colliding nested FunctionDeclaration with `var F;` (the same substitution
+    /// B.3.3.3 always imagines before promoting it) is a Syntax Error against a CatchParameter's
+    /// own bound names UNLESS the CatchParameter is a plain BindingIdentifier -- in which case
+    /// the resulting `catch (f) { var f; }` shape is explicitly exempted, so Annex B proceeds
+    /// normally there. A *destructuring* CatchParameter never gets that exemption, so it always
+    /// blocks a same-named nested function's promotion. `catch.binding` (not `catch.param`, a
+    /// bare-identifier-only shortcut) is the full pattern.
+    ///
+    /// Shared by hoist_inner's own StmtKind::Try arm (the static, once-per-call AST pre-pass that
+    /// must still see a catch body's declarations even if the try block never actually throws)
+    /// and exec_try's per-execution re-hoist (interp_stmt.rs) -- both call sites hoist the exact
+    /// same catch body and must agree on this exception, so this is the only place it is written.
+    fn hoist_catch_body(&mut self, catch: &ast::CatchClause, env: &EnvHandle) -> Result<(), Throw> {
+        let mut blocked = block_lexical_names(&catch.body.body);
+        if let Some(binding @ (Binding::Array(_) | Binding::Object(_) | Binding::Rest(_) | Binding::Default(_, _))) = &catch.binding {
+            push_blocked(&mut blocked, binding_names(binding));
+        }
+        self.hoist_inner(&catch.body.body, env, false, &mut blocked)
     }
 
     /// `nested` is `false` only for the direct statement list of a function/script/module/eval
@@ -1395,7 +1427,7 @@ impl Interpreter {
                 StmtKind::Try(statement) => {
                     self.hoist(&statement.block.body, env)?;
                     if let Some(catch) = &statement.catch {
-                        self.hoist(&catch.body.body, env)?;
+                        self.hoist_catch_body(catch, env)?;
                     }
                     if let Some(finally) = &statement.finally {
                         self.hoist(&finally.body, env)?;
