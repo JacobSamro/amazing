@@ -621,7 +621,39 @@ fn layout_block_in_context(
             _ => None,
         }
     };
-    let fixed_height = def_h.or_else(|| calc_height("height")).or(replaced_height);
+    // CSS Sizing 4 preferred aspect ratio (#aspect-ratio-height-derivation):
+    // when nothing else pins the height (no explicit `height`, no
+    // `calc-size()` result, and no replaced-element intrinsic size), a box
+    // with `aspect-ratio` derives a height suggestion from its own resolved
+    // content width. Only a box that CANNOT grow a scrollbar/clip instead
+    // (every relevant overflow axis `visible`/`clip`) uses it -- that is
+    // what keeps `overflow:auto`/`scroll` + `aspect-ratio:1/1` at its
+    // ratio-derived height (scrollbar, not growth) per
+    // #aspect-ratio-minimum's "setting overflow to non-visible/clip should
+    // not apply min-height:auto". An overflow-visible box (the common case)
+    // is left to ordinary content measurement below, unmodified: a plain
+    // fieldset's legend/inputs still grow it past a too-small ratio-derived
+    // height, and -- more subtly -- a flex item mid-measurement (this
+    // function also runs for the intermediate `layout_block` call before
+    // row-direction stretch sizes its cross axis) must not have this height
+    // pinned yet either, or `align-items: stretch` can no longer tell it
+    // apart from a box that already has enough content and skip growing it
+    // (`layout_row`'s `if target > border_box.h` stretch guard). Only the
+    // plain non-replaced case is covered here; a replaced element's natural
+    // ratio already resolves through `replaced_height` above and wins
+    // first. Only a box whose height isn't pinned by any other source
+    // derives it from the ratio -- an explicit/replaced/calc-size height
+    // instead means the ratio (if anything) constrains the WIDTH axis, not
+    // this one, and must not be used to compute a self-referential floor
+    // from a height that's already settled.
+    let other_height_source = def_h.or_else(|| calc_height("height")).or(replaced_height);
+    let overflow_allows_growth = values::overflow_allows_automatic_minimum(&b.style);
+    let aspect_ratio_height = (other_height_source.is_none() && !overflow_allows_growth)
+        .then(|| values::preferred_aspect_ratio(&b.style))
+        .flatten()
+        .filter(|ratio| *ratio > 0.0)
+        .map(|ratio| content_w / ratio);
+    let fixed_height = other_height_source.or(aspect_ratio_height);
     let min_height = height_constraint("min-height").or_else(|| calc_height("min-height")).unwrap_or(0.0);
     let max_height = height_constraint("max-height").or_else(|| calc_height("max-height"));
     let final_h = if let Some(height) = fixed_height {

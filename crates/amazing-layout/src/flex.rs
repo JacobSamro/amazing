@@ -432,6 +432,40 @@ fn v_chrome(it: &LayoutBox) -> f32 {
     it.padding.top + it.padding.bottom + it.border.top + it.border.bottom
 }
 
+/// CSS Sizing 4 / Flexbox 1 §9.2.3 rule B "transferred size suggestion": a
+/// flex item with a preferred `aspect-ratio` and an auto main size derives
+/// its flex base size from a *definite* cross size (explicit, or resolved
+/// via `align-items`/`align-self: stretch` against the container's own
+/// definite cross extent) times the ratio, instead of a content
+/// measurement. `row` is true for a row-direction container (main = width,
+/// cross = height); false for column (main = height, cross = width).
+/// Only the plain "content size suggestion" case is covered -- interaction
+/// with the automatic minimum size (`flex-aspect-ratio-025`) is left to
+/// `main_limits`/`column_limits`, unchanged.
+fn transferred_main_size(
+    it: &LayoutBox,
+    align_self: Option<Pack>,
+    align_items: Pack,
+    definite_cross: Option<f32>,
+    row: bool,
+) -> Option<f32> {
+    let ratio = values::preferred_aspect_ratio(&it.style)?;
+    let cross_property = if row { "height" } else { "width" };
+    let (margin_start, margin_end) = if row { ("top", "bottom") } else { ("left", "right") };
+    let explicit = values::style_length_percentage(&it.style, cross_property, it.font_size, it.font_size * 0.6)
+        .and_then(|len| len.resolve(definite_cross));
+    let cross = explicit.or_else(|| {
+        let align = align_self.unwrap_or(align_items);
+        (align == Pack::Stretch
+            && !margin_is_auto(&it.style, margin_start)
+            && !margin_is_auto(&it.style, margin_end))
+            .then_some(())
+            .and_then(|_| definite_cross)
+    })?;
+    let main = if row { cross * ratio } else { cross / ratio };
+    Some(main.max(0.0))
+}
+
 /// Outer main size (content + horizontal chrome + side margins).
 fn outer_main(items: &[LayoutBox], i: usize, base: f32) -> f32 {
     base + h_chrome(&items[i])
@@ -514,12 +548,7 @@ fn main_limits(it: &LayoutBox, containing: f32, fonts: &FontSource) -> (f32, f32
 }
 
 fn automatic_minimum_applies(style: &ComputedStyle) -> bool {
-    ["overflow", "overflow-x", "overflow-y"]
-        .into_iter()
-        .filter_map(|property| style.get(property))
-        .all(|overflow| {
-            overflow.eq_ignore_ascii_case("visible") || overflow.eq_ignore_ascii_case("clip")
-        })
+    values::overflow_allows_automatic_minimum(style)
 }
 
 fn column_limits(it: &LayoutBox, measured_content: f32, containing: f32) -> (f32, f32) {
@@ -611,7 +640,18 @@ fn layout_row(
                 None => match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
                     MaybeLen::Px(w) => w.max(0.0),
                     MaybeLen::Auto => {
-                        (max_content_width(it, fonts) - h_chrome(it)).max(0.0).min(content_w)
+                        // The transferred size suggestion is NOT capped to
+                        // `content_w` -- unlike the plain max-content
+                        // fallback below, it has nothing to do with the
+                        // container's own (possibly zero/indefinite) main
+                        // size; `main_limits`' automatic minimum (content
+                        // min-width, ignoring the ratio) still floors the
+                        // clamped `hypothetical` size afterward when
+                        // content needs more room than the ratio gives.
+                        match transferred_main_size(it, props[i].align_self, spec.align_items, spec.definite_height, true) {
+                            Some(size) => size,
+                            None => (max_content_width(it, fonts) - h_chrome(it)).max(0.0).min(content_w),
+                        }
                     },
                 },
             }
