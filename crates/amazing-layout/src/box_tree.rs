@@ -1405,13 +1405,29 @@ fn classify_children(
                         // within the same nowrap scope must remain one
                         // continuous inline run, with the float's own
                         // source position irrelevant to where (or whether)
-                        // that text wraps. Defer instead of hoisting --
-                        // `inlines` stays open, and the float lands in
-                        // `blocks` from flush_anonymous_into's tail once
-                        // that run is finally flushed.
-                        deferred_floats.push(build_element(
-                            dom, styled, child, entry.parent_font, fonts, replaced,
-                        ));
+                        // that text wraps.
+                        //
+                        // Only defer when something has already flowed in
+                        // this run (`inlines`/`deferred_floats` non-empty):
+                        // deferring unconditionally would move a float that
+                        // is the very FIRST thing in its nowrap scope past
+                        // *later* text too, reversing DOM order instead of
+                        // preserving it (float-nowrap-1's own "must not
+                        // match a float-first arrangement" check regressed
+                        // this way, along with float-nowrap-4's and -6's own
+                        // float-first fixtures). When nothing precedes it,
+                        // hoist immediately -- `inlines` stays open for
+                        // whatever follows, exactly like the pre-existing
+                        // (non-float) hoist arm below.
+                        if inlines.is_empty() && deferred_floats.is_empty() {
+                            blocks.push(build_element(
+                                dom, styled, child, entry.parent_font, fonts, replaced,
+                            ));
+                        } else {
+                            deferred_floats.push(build_element(
+                                dom, styled, child, entry.parent_font, fonts, replaced,
+                            ));
+                        }
                     }
                     _ if matches!(
                         parse_display(&child_style),
@@ -1680,17 +1696,29 @@ fn flatten_inline(
                     _ if crate::floats::side(&cs).is_some() && no_wrap_here(&style) => {
                         // CSS2 #float-position (float-nowrap-*): see
                         // classify_children's matching branch for the full
-                        // rationale. `style` here is this scope's own
-                        // (e.g. the `white-space:nowrap` span's) computed
-                        // style, not the float's.
-                        deferred_floats.push(build_element(
-                            dom,
-                            styled,
-                            child,
-                            entry.parent_font,
-                            fonts,
-                            replaced,
-                        ));
+                        // rationale and the "only defer once something has
+                        // already flowed" fix. `style` here is this scope's
+                        // own (e.g. the `white-space:nowrap` span's)
+                        // computed style, not the float's.
+                        if inlines.is_empty() && deferred_floats.is_empty() {
+                            blocks_out.push(build_element(
+                                dom,
+                                styled,
+                                child,
+                                entry.parent_font,
+                                fonts,
+                                replaced,
+                            ));
+                        } else {
+                            deferred_floats.push(build_element(
+                                dom,
+                                styled,
+                                child,
+                                entry.parent_font,
+                                fonts,
+                                replaced,
+                            ));
+                        }
                     }
                     _ if matches!(
                         parse_display(&cs),
@@ -1820,6 +1848,31 @@ mod tests {
             "first part should be the unified inline run"
         );
         assert_eq!(parts[1].style.get("float"), Some("right"));
+    }
+
+    #[test]
+    fn float_first_in_a_nowrap_run_hoists_immediately_instead_of_deferring() {
+        // CSS2 #float-position (WPT float-nowrap-1-notref.html / -4.html /
+        // -6.html): a float that is the very FIRST thing in its nowrap
+        // scope has nothing preceding it to keep contiguous, so it must
+        // hoist in place -- landing BEFORE the text that follows, not
+        // after it. Deferring unconditionally (this session's first
+        // attempt) collapsed this into the same [text, float] order as the
+        // float-last case below, making the two indistinguishable --
+        // exactly the float-nowrap-1-notref.html regression (float-nowrap-1,
+        // float-last, must NOT match a float-first arrangement like this).
+        let (_, root) = tree_css(
+            "<body><div id=d><span class=f></span>Some text that overflows my parent.</div></body>",
+            "#d{width:10ch;white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 2, "expected [float, unified text], got {parts:?}");
+        assert_eq!(parts[0].style.get("float"), Some("right"), "float must come first");
+        assert!(
+            matches!(&parts[1].flow, Flow::Inlines(_)),
+            "second part should be the unified inline run"
+        );
     }
 
     #[test]
