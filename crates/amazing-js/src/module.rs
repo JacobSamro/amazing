@@ -257,6 +257,13 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             module_env
                 .declare_lexical("\0import.meta", JsValue::object(meta), false)
                 .map_err(ModuleFailure::runtime)?;
+            // The referrer a dynamic `import()` made from this module's own top-level or nested
+            // function code reports to `Interpreter::binding_set_module_loader_hook`'s hook (see
+            // `interp_module_host.rs`), so the driver's own registry can resolve a relative
+            // specifier against the SAME module identity this linker used for `record_id`.
+            module_env
+                .declare_lexical("\0module.id", JsValue::str(record_id.as_str()), false)
+                .map_err(ModuleFailure::runtime)?;
             predeclare_lexical(&module_env, &program).map_err(ModuleFailure::runtime)?;
             let previous = std::mem::replace(&mut engine.global_env, module_env.clone());
             let prepared = engine.prepare_module(&program);

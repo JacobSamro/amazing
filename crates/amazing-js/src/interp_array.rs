@@ -932,9 +932,10 @@ impl Interpreter {
             .borrow_mut()
             .define(
                 WellKnownSymbol::Iterator.symbol(),
-                symbol_data(values, true, true),
+                symbol_data(values.clone(), true, true),
             )
             .unwrap();
+        self.original_array_iterator = values;
         let mut unscopables = JsObject::ordinary();
         for name in [
             "at",

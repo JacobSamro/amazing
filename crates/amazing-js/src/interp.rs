@@ -257,6 +257,14 @@ pub struct Interpreter {
     /// %AsyncGeneratorPrototype%, the async equivalent of `generator_proto`.
     pub async_generator_proto: Obj,
     pub array_proto: Obj,
+    /// This realm's *original* `%Array.prototype%[Symbol.iterator]` (the same function object
+    /// as its original `.values`), captured once at install time so `has_original_array_iterator`
+    /// can tell a plain array using the stock protocol from one that isn't, even after user code
+    /// reassigns `Array.prototype[Symbol.iterator]` -- comparing against `array_proto`'s *current*
+    /// value instead (the previous approach) always agreed with itself post-override, so the
+    /// fast paths that skip the iterator protocol entirely (destructuring, spread, `iterate()`)
+    /// silently kept reading array elements by index instead of actually calling the override.
+    original_array_iterator: JsValue,
     pub string_proto: Obj,
     pub number_proto: Obj,
     pub boolean_proto: Obj,
@@ -276,6 +284,10 @@ pub struct Interpreter {
     depth: u32,
     native_stack: Vec<Obj>,
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
+    /// The embedding's dynamic `import()` / `import.source()` loader hook (see
+    /// `ModuleLoaderHook`'s own doc comment in `interp_module_host.rs`). `None`
+    /// until a driver installs one, e.g. via HTML script execution.
+    module_loader: Option<Rc<ModuleLoaderHook>>,
     host_realm: u64,
     realm_origin: String,
     window_proxy: Option<Obj>,
@@ -471,6 +483,7 @@ impl Interpreter {
             generator_proto,
             async_generator_proto,
             array_proto,
+            original_array_iterator: JsValue::Undefined,
             string_proto,
             number_proto,
             boolean_proto,
@@ -486,6 +499,7 @@ impl Interpreter {
             depth: 0,
             native_stack: Vec::new(),
             host_native_dispatch: None,
+            module_loader: None,
             host_realm,
             realm_origin: String::new(),
             window_proxy: None,
@@ -1300,10 +1314,23 @@ impl Interpreter {
                             let v = self.make_function(f, env);
                             if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
                             else { env.declare_var(&n.name, v)?; }
-                        } else if !self.strict_eval_context && !f.is_async && !f.is_generator
-                            && !blocked.iter().any(|b| b == &n.name)
-                        {
-                            env.hoist_var(&n.name)?;
+                        } else if !self.strict_eval_context && !f.is_async && !f.is_generator {
+                            // Record THIS declaration's own individual eligibility, keyed by its
+                            // own AST node address, not just "does the shared var exist" -- the
+                            // sync step in interp_stmt.rs's StmtKind::Function execution arm reads
+                            // this to decide whether *it specifically* may promote, since several
+                            // same-named FunctionDeclarations at different nesting depths can have
+                            // different `blocked` outcomes even though they'd all otherwise see the
+                            // same (or no) outer var cell. Never cleared: re-derived fresh, and
+                            // correctly, on every hoist pass this exact static node is visited,
+                            // including from a nested/recursive call's own hoist() in between.
+                            let key = f.as_ref() as *const ast::FunctionItem as usize;
+                            if blocked.iter().any(|b| b == &n.name) {
+                                annex_b_eligible_set(|set| { set.remove(&key); });
+                            } else {
+                                annex_b_eligible_set(|set| { set.insert(key); });
+                                env.hoist_var(&n.name)?;
+                            }
                         }
                     }
                 }
@@ -1589,6 +1616,7 @@ include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
+include!("interp_module_host.rs");
 include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");

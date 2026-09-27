@@ -1470,6 +1470,94 @@ mod class_name_tests {
     }
 
     #[test]
+    fn annex_b_3_3_sync_step_tracks_each_declarations_own_eligibility() {
+        for (source, expected) in [
+            // Two plain FunctionDeclarations of the same name directly in one block (Annex
+            // B.3.3.4's relaxed duplicate-LexicallyDeclaredNames case): the block's own
+            // reads and the promoted outer `var` both track whichever ran last.
+            ("var r = [];
+              { r.push(typeof f === 'undefined' ? 'undef' : f());
+                function f() { return 3; } r.push(f());
+                function f() { return 4; } r.push(f()); }
+              r.push(f());
+              r.join(',')", "4,4,4,4"),
+            // Same, but the second declaration is labeled (Annex B.3.2 lets a
+            // LabelledStatement's body be a FunctionDeclaration in non-strict code): the
+            // block-entry pre-loop must (re-)bind it exactly like an unlabeled one, or the
+            // block's own lexical cell -- which the sync step reads -- stays stuck on the
+            // first declaration. (test262 .../block-scoped-functions-deprecated-redecl.js)
+            ("var r = [];
+              { r.push(typeof f === 'undefined' ? 'undef' : f());
+                function f() { return 3; } r.push(f());
+                l: function f() { return 4; } r.push(f()); }
+              r.push(f());
+              r.join(',')", "4,4,4,4"),
+            // The same pattern nested inside a function body (not just a top-level script).
+            ("var r = [];
+              function test() {
+                { r.push(typeof f === 'undefined' ? 'undef' : f());
+                  function f() { return 1; } r.push(f());
+                  function f() { return 2; } r.push(f()); }
+                r.push(f());
+              }
+              test();
+              r.join(',')", "2,2,2,2"),
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(
+                i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::str(expected),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn dynamic_import_rejects_when_no_loader_hook_is_installed() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var seen; import('./x.js').then(() => seen = 'fulfilled', e => seen = (e instanceof TypeError)); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        // No microtask has run yet: import() always returns a promise, never throws synchronously.
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        let seen = i.run_script("seen").unwrap();
+        assert_eq!(seen, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn dynamic_import_resolves_through_the_installed_loader_hook_with_the_evaluated_specifier_and_referrer() {
+        let mut i = Interpreter::new();
+        i.binding_set_module_loader_hook(Rc::new(|host: &mut Interpreter, specifier: &str, referrer: &str| {
+            assert_eq!(referrer, "");
+            let mut namespace = JsObject::ordinary();
+            namespace.proto = Some(host.object_proto.clone());
+            namespace.define("specifier", Property {
+                value: JsValue::str(specifier), writable: false, enumerable: true, configurable: false,
+                getter: None, setter: None,
+            }).unwrap();
+            Ok(JsValue::object(namespace))
+        }));
+        let result = i.run_script(
+            "var seen; import('a' + 'b').then(ns => seen = ns.specifier); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("seen").unwrap(), JsValue::str("ab"));
+    }
+
+    #[test]
+    fn dynamic_import_phase_requests_reject_rather_than_throw_synchronously() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var seen; import.source('./x.js').then(() => seen = 'fulfilled', () => seen = 'rejected'); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("seen").unwrap(), JsValue::str("rejected"));
+    }
+
+    #[test]
     fn with_statement_resolves_through_the_bound_object() {
         for source in [
             // Reads and writes go to the bound object's own properties.
@@ -1533,5 +1621,142 @@ mod class_name_tests {
              make() === make()"
         ).unwrap();
         assert_eq!(result, JsValue::Bool(true), "the same call site must return the same Strings object");
+    }
+
+    #[test]
+    fn destructuring_assignment_in_for_of_and_for_await_heads_accepts_patterns_and_closes_the_iterator() {
+        for source in [
+            // Object-rest assignment target ({...x} = ...), previously rejected as
+            // "invalid assignment target" because the parser double-wraps a rest
+            // element's target in ExprKind::Spread(Box<Expr{kind: Spread(inner)}>).
+            "var r; ({...r} = {a: 1, b: 2}); r.a === 1 && r.b === 2",
+            "var a, rest; ({a, ...rest} = {a: 1, b: 2, c: 3}); a === 1 && rest.b === 2 && rest.c === 3",
+            // Bare array-pattern assignment (no let/const/var) in a for-of head must
+            // use the lazy, closing iterator protocol, not an eager collect-all.
+            "var closed = false; var it = { [Symbol.iterator]() { var n = 0; return { \
+               next() { n++; return { value: n, done: n > 5 }; }, \
+               return() { closed = true; return { done: true }; } }; } }; \
+             var x; for ([x] of [it]) break; closed",
+            // A plain (non-destructuring) for-of body break must also close the iterator.
+            "var closed = false; var it = { [Symbol.iterator]() { return { \
+               next() { return { value: 1, done: false }; }, \
+               return() { closed = true; return { done: true }; } }; } }; \
+             for (var x of it) break; closed",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn destructuring_honors_an_overridden_array_prototype_iterator() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var calls = 0; \
+             var original = Array.prototype[Symbol.iterator]; \
+             Array.prototype[Symbol.iterator] = function() { \
+               calls++; \
+               return original.call(this); \
+             }; \
+             var [a, b] = [1, 2]; \
+             Array.prototype[Symbol.iterator] = original; \
+             a === 1 && b === 2 && calls === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn parameter_defaults_can_reference_the_arguments_object() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function f(a = arguments.length) { return a; } f() === 0 && f(1) === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn static_class_element_named_prototype_throws_a_type_error() {
+        // A *literal* static "prototype" key (`static prototype`, `static
+        // ["prototype"]`) is already an early SyntaxError from the parser,
+        // thrown before the try block runs at all -- covered by the existing
+        // corpus (fields-literal/string-name-static-propname-prototype.js).
+        // A *computed* key's PropName is spec-defined as empty, so it skips
+        // that early check; these need the runtime check this fix adds,
+        // which throws once the class definition actually executes (in try).
+        for class_body in [
+            "static ['proto' + 'type'] = 1;",
+            "static ['proto' + 'type']() {}",
+            "static get ['proto' + 'type']() {}",
+            "static set ['proto' + 'type'](v) {}",
+            "static *['proto' + 'type']() {}",
+        ] {
+            let source = format!(
+                "var caught = false; \
+                 try {{ class C {{ {class_body} }} }} catch (e) {{ caught = e instanceof TypeError; }} \
+                 caught"
+            );
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn for_head_bound_names_are_in_tdz_while_evaluating_the_head_expression() {
+        for body in [
+            "for (let x of [x]) {}",
+            "for (const x of [x]) {}",
+            "for (let x in {x}) {}",
+            "for (const x in {x}) {}",
+        ] {
+            let source = format!(
+                "var caught = false; \
+                 try {{ let x = 1; {body} }} catch (e) {{ caught = e instanceof ReferenceError; }} \
+                 caught"
+            );
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(&source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+        // A `var` ForBinding is not in TDZ (it's function/script-scoped, not a
+        // fresh per-iteration binding), so the same shape must keep working.
+        let mut i = Interpreter::new();
+        let result = i.run_script("var x = 1; var seen; for (var x of [x]) seen = x; seen")
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::num(1.0));
+    }
+
+    #[test]
+    fn function_prototype_caller_and_arguments_are_a_shared_throw_type_error_accessor_pair() {
+        let mut i = Interpreter::new();
+        let get_throws = i.run_script(
+            "var caught = false; try { Function.prototype.caller; } catch (e) { caught = e instanceof TypeError; } caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(get_throws, JsValue::Bool(true), "reading Function.prototype.caller must throw a TypeError");
+
+        let set_throws = i.run_script(
+            "var caught = false; try { Function.prototype.arguments = 1; } catch (e) { caught = e instanceof TypeError; } caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(set_throws, JsValue::Bool(true), "writing Function.prototype.arguments must throw a TypeError");
+
+        let shared_and_shaped = i.run_script(
+            "var callerDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'caller'); \
+             var argsDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'arguments'); \
+             callerDesc.get === callerDesc.set && \
+             callerDesc.get === argsDesc.get && \
+             callerDesc.enumerable === false && callerDesc.configurable === true && \
+             argsDesc.enumerable === false && argsDesc.configurable === true"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(shared_and_shaped, JsValue::Bool(true));
+
+        // Ordinary functions must not carry their own "caller"/"arguments" -- only
+        // %Function.prototype% does (16.2 Forbidden Extensions).
+        let no_own_props = i.run_script(
+            "function f() {} \
+             !Object.prototype.hasOwnProperty.call(f, 'caller') && \
+             !Object.prototype.hasOwnProperty.call(f, 'arguments')"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(no_own_props, JsValue::Bool(true));
     }
 }

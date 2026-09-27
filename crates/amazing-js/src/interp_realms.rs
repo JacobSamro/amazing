@@ -15,6 +15,7 @@ struct RealmState {
     generator_proto: Obj,
     async_generator_proto: Obj,
     array_proto: Obj,
+    original_array_iterator: JsValue,
     string_proto: Obj,
     number_proto: Obj,
     boolean_proto: Obj,
@@ -60,6 +61,7 @@ impl RealmState {
             generator_proto: i.generator_proto.clone(),
             async_generator_proto: i.async_generator_proto.clone(),
             array_proto: i.array_proto.clone(),
+            original_array_iterator: i.original_array_iterator.clone(),
             string_proto: i.string_proto.clone(),
             number_proto: i.number_proto.clone(),
             boolean_proto: i.boolean_proto.clone(),
@@ -103,6 +105,7 @@ impl RealmState {
         i.generator_proto = self.generator_proto;
         i.async_generator_proto = self.async_generator_proto;
         i.array_proto = self.array_proto;
+        i.original_array_iterator = self.original_array_iterator;
         i.string_proto = self.string_proto;
         i.number_proto = self.number_proto;
         i.boolean_proto = self.boolean_proto;
