@@ -706,12 +706,26 @@ pub(crate) fn layout(
     } else {
         0.0
     };
-    let specified = length(b, "width", cbw).map(|w| outer_table_width(b, w, edges));
+    let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
+    // css-sizing-4 stretch-fit-sizing (fixed-table-1.html): `width:stretch`/
+    // `-webkit-fill-available` on the table itself resolves to the whole
+    // available border-box space (`available` above already subtracts the
+    // table's own margins from `cbw`) -- same fill-available formula
+    // block.rs's generic stretch arm uses, but expressed directly as an
+    // outer/border-box width like `specified` below, not a content width.
+    // Without this, `length()` (a plain-length parser) never recognizes the
+    // keyword, `specified` stayed `None`, and `table-layout:fixed` could
+    // never activate for a stretch-sized table.
+    let specified = length(b, "width", cbw)
+        .map(|w| outer_table_width(b, w, edges))
+        .or_else(|| {
+            matches!(b.style.get("width"), Some("stretch" | "-webkit-fill-available"))
+                .then_some(available)
+        });
     let fixed = specified.is_some()
         && b.style
             .get("table-layout")
             .is_some_and(|s| s.eq_ignore_ascii_case("fixed"));
-    let available = (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
     let (min, max) = if fixed {
         (vec![0.0; g.count], vec![0.0; g.count])
     } else {

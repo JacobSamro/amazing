@@ -894,3 +894,28 @@ fn col_max_width_clamps_a_definite_width_and_min_width_still_wins_over_it() {
     assert!(tables[0].border_box.w < 250.0, "t1: {}", tables[0].border_box.w);
     assert!(tables[1].border_box.w >= 400.0, "t2: {}", tables[1].border_box.w);
 }
+
+#[test]
+fn table_width_stretch_activates_fixed_table_layout() {
+    // css-sizing-4 stretch-fit-sizing (stretch/fixed-table-1.html):
+    // `width:stretch` on a `table-layout:fixed` table must both resolve to
+    // the available width AND still activate fixed-layout mode. `length()`
+    // (a plain-length parser) never recognized the `stretch` keyword, so
+    // `specified` stayed `None` and `fixed` could never become true --
+    // fixed-layout's own column-width distribution (ignoring a 200px-wide
+    // cell's content) never ran, and the table intrinsic-sized instead of
+    // stretching to the 100px containing block.
+    let b = layout(
+        r#"<body><div style="width:100px">
+<div style="display:table;table-layout:fixed;width:stretch">
+  <div style="display:table-cell;width:100px">
+    <div style="width:200px;height:10px"></div>
+  </div>
+</div>
+</div>"#,
+        "",
+        false,
+    );
+    let table = &collect(&b, Role::Table)[0];
+    near(table.border_box.w, 100.0);
+}
