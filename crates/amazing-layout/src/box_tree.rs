@@ -1713,7 +1713,29 @@ fn flatten_inline(
                         // `style` here is this scope's own (e.g. the
                         // `white-space:nowrap` span's) computed style, not
                         // the float's.
-                        if !has_renderable_inline_content(inlines) && deferred_floats.is_empty() {
+                        //
+                        // "Since" is scoped to `inline_start` (this
+                        // flatten_inline call's own entry point), not index
+                        // 0 of the whole shared `inlines` -- this element
+                        // (e.g. the nowrap span) may be nested inside an
+                        // OUTER scope that is NOT itself nowrap and already
+                        // flowed unrelated content into the same vector
+                        // before recursing here (float-nowrap-4.html: the
+                        // outer div's own leading "Some " text must not
+                        // count as "something flowed" for a float that is
+                        // the nowrap span's own first child -- that float
+                        // hoists in place, right after "Some ", per
+                        // float-nowrap-4-ref.html, not deferred past the
+                        // nowrap span's own trailing text). Does not
+                        // generalize to a float nested two-or-more inline
+                        // levels below where the CURRENT nowrap run
+                        // actually began if an intervening sibling already
+                        // flowed content earlier in that same run -- no
+                        // fixture in this family exercises that deeper
+                        // case.
+                        if !has_renderable_inline_content(&inlines[inline_start.min(inlines.len())..])
+                            && deferred_floats.is_empty()
+                        {
                             blocks_out.push(build_element(
                                 dom,
                                 styled,
@@ -1877,6 +1899,36 @@ mod tests {
         let (_, root) = tree_css(
             "<body><div id=d><span class=f></span>Some text that overflows my parent.</div></body>",
             "#d{width:10ch;white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 2, "expected [float, unified text], got {parts:?}");
+        assert_eq!(parts[0].style.get("float"), Some("right"), "float must come first");
+        assert!(
+            matches!(&parts[1].flow, Flow::Inlines(_)),
+            "second part should be the unified inline run"
+        );
+    }
+
+    #[test]
+    fn float_first_in_a_nested_nowrap_span_hoists_before_the_outer_text_that_preceded_it() {
+        // CSS2 #float-position (WPT float-nowrap-4.html / float-nowrap-4-
+        // ref.html): the float is the very first child of a NESTED
+        // `white-space:nowrap` span, but that span itself is nested inside
+        // an outer, non-nowrap div whose own leading text ("Some ") already
+        // flowed into the same shared `inlines` buffer before flatten_inline
+        // ever recurses into the span. That outer, unrelated text must not
+        // count as "something flowed" for the nowrap span's OWN scope --
+        // the float still hoists in place (right after "Some ", landing
+        // BEFORE the nowrap span's own text), matching float-nowrap-4-ref's
+        // `Some <float> <nowrap>text...</nowrap>` arrangement. Regression:
+        // checking `inlines` from index 0 (rather than from this
+        // flatten_inline call's own `inline_start`) saw the outer "Some "
+        // and deferred the float past the nowrap span's own trailing text
+        // instead.
+        let (_, root) = tree_css(
+            "<body><div id=d>Some <span class=nw><span class=f></span>text that overflows my parent.</span></div></body>",
+            "#d{width:10ch}.nw{white-space:nowrap}.f{float:right;width:5ch;height:5ch}",
         );
         let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
         let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
