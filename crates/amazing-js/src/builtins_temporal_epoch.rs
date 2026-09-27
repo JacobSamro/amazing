@@ -907,22 +907,47 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
     let data = std_epoch_record(&this, None)?;
     let (other, _) = std_epoch_from_value(i, std_reflect_arg(&args, 0), data.kind)?;
     let options = std_reflect_arg(&args, 1);
-    let (smallest, increment, mode) = std_temporal_rounding_options(i, &options, "nanosecond", "trunc")?;
+    // All four option properties (largestUnit, roundingIncrement,
+    // roundingMode, smallestUnit) are read here, in that spec order, before
+    // any default-resolution or cross-field validation below is allowed to
+    // throw -- see `std_temporal_difference_reads` (builtins_temporal_
+    // arithmetic.rs), shared with PlainDate/PlainDateTime's since/until.
+    // `since_for_fixed_units` distinguishes the two fixed-unit paths below
+    // (Instant always, ZonedDateTime's non-calendar largestUnit) from the
+    // calendar-anchored one: the fixed-unit paths compute the signed delta
+    // directly in the caller's requested direction and round it as-is (no
+    // mode swap, no final negation -- `since_for_fixed_units` is passed
+    // `false` to `std_temporal_difference_reads` so the mode comes back
+    // un-swapped), while the calendar path always anchors at the receiver
+    // and swaps+negates like PlainDate/PlainDateTime (`since` passed
+    // through), because a calendar unit's length depends on which side
+    // anchors it.
+    let (largest_raw, increment, mode_for_fixed, smallest_raw) =
+        std_temporal_difference_reads(i, &options, "trunc", false)?;
+    let smallest = smallest_raw.unwrap_or_else(|| "nanosecond".to_string());
     // The default largestUnit is the coarser of the kind's own default and the
     // (possibly explicit, possibly coarser) smallestUnit -- e.g. smallestUnit:
     // "years" with no largestUnit given must default largestUnit to "years"
     // too, not to the kind's usual "hour"/"second".
     let kind_default = if data.kind == StdEpochKind::Instant { "second" } else { "hour" };
     let default = std_temporal_larger_unit(kind_default, &smallest);
-    let largest = std_temporal_largest_unit(i, &options, &default)?;
+    let largest = std_temporal_resolve_largest(&largest_raw, &default);
     if std_temporal_unit_rank(&largest).zip(std_temporal_unit_rank(&smallest))
         .is_some_and(|(l, s)| l > s) {
         return Err(Throw::range_error("largestUnit is smaller than smallestUnit"));
     }
+    std_temporal_validate_rounding_increment(&smallest, increment)?;
     if data.kind == StdEpochKind::ZonedDateTime && matches!(largest.as_str(), "year" | "month" | "week") {
         // Rounds relative to the receiver: the calendar bracket search is
         // always anchored at `first` (the receiver's own local fields), for
         // both since and until; since negates the whole result at the end.
+        // Unlike the fixed-unit paths below, this needs the directional
+        // roundingMode swap for `since` (ceil/floor, halfCeil/halfFloor),
+        // matching PlainDate/PlainDateTime's calendar branch -- confirmed by
+        // ZonedDateTime's own `since`/`until` roundingmode-ceil/floor tests,
+        // which were previously wrong here because this branch reused the
+        // fixed-unit direct-delta model's un-swapped mode.
+        let mode = if since { std_temporal_swap_directional_mode(&mode_for_fixed) } else { mode_for_fixed };
         let first = std_epoch_local_fields(&data)?;
         let mut second = [0; 10];
         std_temporal_set_epoch_ns(&mut second, other + tz_offset_ns(&data.zone_id, other))?;
@@ -954,7 +979,7 @@ fn std_epoch_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, 
         return Err(Throw::range_error("invalid smallestUnit"));
     }
     let delta = if since { data.epoch_ns - other } else { other - data.epoch_ns };
-    let rounded = std_temporal_round_integer(delta, step * increment as i128, &mode)?;
+    let rounded = std_temporal_round_integer(delta, step * increment as i128, &mode_for_fixed)?;
     std_temporal_make(i, StdTemporalKind::Duration, std_temporal_split_duration_ns(rounded, index))
 }
 fn std_epoch_until(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
