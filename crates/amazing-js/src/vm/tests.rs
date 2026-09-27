@@ -378,6 +378,42 @@ fn jsvm10_private_fields_and_methods_in_generator_and_async_bodies_match() {
 }
 
 #[test]
+fn jsvm10_suspending_for_heads_and_using_declarations_stay_off_the_vm() {
+    for source in [
+        "function* g() { var x; for ([x = yield] of [[]]) {} }",
+        "function* g() { var x; for ({a: x = yield} of [{}]) {} }",
+        "function* g() { for (var [y = yield] of [[]]) {} }",
+        "async function f() { var o; for ({[await 0]: o} of [{}]) {} }",
+        "async function f() { for (const [C = class extends (await 0) {}] of [[]]) {} }",
+        "async function f() { var x; for ([x = await 0] in {a: 1}) {} }",
+        "async function f() { for (await using x of []) {} }",
+        "async function f() { for (let i in [0]) { await using x = null; } }",
+        "function f() { using x = null; }",
+    ] {
+        let program = parse_script(source).unwrap();
+        let function = match &program.body[0].kind {
+            crate::ast::StmtKind::Function(function) => function,
+            other => panic!("expected function: {other:?}"),
+        };
+        assert!(compile_function_item(function, program.body[0].span, false).is_err(), "{source}");
+    }
+    // Plain destructuring heads without a suspension point still compile.
+    for source in [
+        "function* g() { var x; for ([x = 1] of [[]]) { yield x; } }",
+        "async function f() { for (const {a = 2} of [{}]) { await a; } }",
+        "async function f() { for await (const [C = class { static x = 1; }] of [[]]) {} }",
+        "function* g() { var o; for ({a: o} of [{a: 1}]) { yield o; } }",
+    ] {
+        let program = parse_script(source).unwrap();
+        let function = match &program.body[0].kind {
+            crate::ast::StmtKind::Function(function) => function,
+            other => panic!("expected function: {other:?}"),
+        };
+        assert!(compile_function_item(function, program.body[0].span, false).is_ok(), "{source}");
+    }
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",

@@ -539,6 +539,10 @@ impl Compiler {
                 self.emit(Instruction::Complete(value));
             }
             StmtKind::Var(declaration) => {
+                if declaration.resource_kind.is_some() {
+                    // The VM has no disposal; the tree walker disposes.
+                    return Err(self.error(statement.span, "using declaration"));
+                }
                 for binding in &declaration.decls {
                     if self.program.code.len() >= MAX_INSTRUCTIONS {
                         return Err(self.error(binding.span, "instruction limit"));
@@ -681,6 +685,7 @@ impl Compiler {
                 let done_branch = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
                 let value = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorValue(value, next));
+                self.check_for_left(left, statement.span)?;
                 self.emit(Instruction::BindFor(left.clone(), value));
                 self.statement(body)?;
                 self.emit(Instruction::LeaveScope);
@@ -717,6 +722,7 @@ impl Compiler {
                 let done = self.register(statement.span)?;
                 self.emit(Instruction::ForInNext(value, done, slot));
                 let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                self.check_for_left(left, statement.span)?;
                 self.emit(Instruction::BindFor(left.clone(), value));
                 self.statement(body)?;
                 self.emit(Instruction::LeaveScope);
@@ -746,6 +752,7 @@ impl Compiler {
                 self.emit(Instruction::AsyncIteratorValue(value, result));
                 let awaited = self.register(statement.span)?;
                 self.emit(Instruction::AsyncIteratorAwaitValue(awaited, slot, value));
+                self.check_for_left(left, statement.span)?;
                 self.emit(Instruction::BindFor(left.clone(), awaited));
                 self.statement(body)?;
                 self.emit(Instruction::LeaveScope);
@@ -1434,6 +1441,28 @@ impl Compiler {
     /// value is converted with `ToPropertyKey` (which can itself run user
     /// code via `toString`/`valueOf`) -- the part the VM previously got
     /// backwards for compound assignment.
+    /// `BindFor` binds the head through the tree walker, which cannot
+    /// suspend: a `yield`/`await` inside the head pattern (a default, a
+    /// computed key, a target expression) must keep the whole body on the
+    /// coroutine. `using` heads need disposal the VM does not implement.
+    fn check_for_left(&self, left: &ast::ForLeft, span: Span) -> Result<(), CompileError> {
+        let suspending = self.is_generator || self.is_async;
+        match left {
+            ast::ForLeft::Decl(declaration) if declaration.resource_kind.is_some() => {
+                Err(self.error(span, "using declaration"))
+            }
+            ast::ForLeft::Decl(declaration)
+                if suspending && declaration.decls.iter().any(|d| binding_may_suspend(&d.binding)) =>
+            {
+                Err(self.error(span, "suspending for binding"))
+            }
+            ast::ForLeft::Target(target) if suspending && may_suspend(target) => {
+                Err(self.error(span, "suspending for binding"))
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn member_key(
         &mut self,
         object: Register,
@@ -1524,6 +1553,75 @@ fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
     match &target.kind {
         ExprKind::Member { obj, prop: ast::MemberProp::Private(name), optional: false } => Some((obj, name)),
         _ => None,
+    }
+}
+
+fn key_may_suspend(key: &ast::PropKey) -> bool {
+    matches!(key, ast::PropKey::Computed(key) if may_suspend(key))
+}
+
+fn binding_may_suspend(binding: &Binding) -> bool {
+    match binding {
+        Binding::Ident(_) => false,
+        Binding::Array(items) => items.iter().flatten().any(|item| binding_may_suspend(item)),
+        Binding::Object(props) => props.iter().any(|(key, value)| {
+            matches!(key, ast::BindingKey::Computed(key) if may_suspend(key)) || binding_may_suspend(value)
+        }),
+        Binding::Rest(inner) => binding_may_suspend(inner),
+        Binding::Default(inner, value) => binding_may_suspend(inner) || may_suspend(value),
+    }
+}
+
+/// Whether evaluating `expression` could reach a `yield` or `await` of the
+/// body being compiled. Nested function bodies are their own frames and do
+/// not count; anything not understood here is assumed to suspend.
+fn may_suspend(expression: &Expr) -> bool {
+    let all = |items: &[Expr]| items.iter().any(may_suspend);
+    match &expression.kind {
+        ExprKind::Yield { .. } | ExprKind::Unary { op: UnOp::Await, .. } => true,
+        ExprKind::Object(elements) => elements.iter().any(|element| match element {
+            ast::ObjElem::Spread(inner) => may_suspend(inner),
+            ast::ObjElem::Prop(property) => key_may_suspend(&property.key) || match &property.value {
+                ast::PropValue::Shorthand(_) | ast::PropValue::Method(_) => false,
+                ast::PropValue::CoverInitializedName { default, .. } => may_suspend(default),
+                ast::PropValue::Init(value) => may_suspend(value),
+            },
+        }),
+        // Field initializers, static blocks and method bodies are their own
+        // scopes; only the heritage and computed keys run in this body.
+        ExprKind::Class(class) => {
+            class.super_class.as_ref().is_some_and(may_suspend)
+                || class.members.iter().any(|member| match member {
+                    ast::ClassMember::Method(method) => key_may_suspend(&method.key),
+                    ast::ClassMember::Field(field) => key_may_suspend(&field.key),
+                    ast::ClassMember::StaticBlock(_) => false,
+                })
+        }
+        ExprKind::PrivateName(_) | ExprKind::RegExp(_) | ExprKind::Num(_) | ExprKind::BigInt(_)
+        | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Null | ExprKind::Ident(_)
+        | ExprKind::This | ExprKind::NewTarget | ExprKind::ImportMeta | ExprKind::Super
+        | ExprKind::Function(_) | ExprKind::Arrow(_) => false,
+        ExprKind::DynamicImport(args) | ExprKind::DynamicImportPhase { args, .. } => all(args),
+        ExprKind::Template(template) => all(&template.exprs),
+        ExprKind::TaggedTemplate { tag, template } => may_suspend(tag) || all(&template.exprs),
+        ExprKind::Array(items) => items.iter().flatten().any(may_suspend),
+        ExprKind::Spread(inner) | ExprKind::Paren(inner) => may_suspend(inner),
+        ExprKind::Unary { operand, .. } => may_suspend(operand),
+        ExprKind::Update { target, .. } => may_suspend(target),
+        ExprKind::Binary { left, right, .. } | ExprKind::Logical { left, right, .. } => {
+            may_suspend(left) || may_suspend(right)
+        }
+        ExprKind::Assign { target, value, .. } => may_suspend(target) || may_suspend(value),
+        ExprKind::Conditional { test, consequent, alternate } => {
+            may_suspend(test) || may_suspend(consequent) || may_suspend(alternate)
+        }
+        ExprKind::Call { callee, args, .. } | ExprKind::New { callee, args } => {
+            may_suspend(callee) || all(args)
+        }
+        ExprKind::Member { obj, prop, .. } => {
+            may_suspend(obj) || matches!(prop, ast::MemberProp::Computed(key) if may_suspend(key))
+        }
+        ExprKind::Sequence(items) => all(items),
     }
 }
 
