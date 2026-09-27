@@ -499,6 +499,15 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
                 return Err(Throw::range_error("ISO date outside Temporal range"));
             }
         }
+        // ISOYearMonthWithinLimits (spec): PlainYearMonth can represent any
+        // month that contains a day PlainDate can represent -- coarser than
+        // ISODateWithinLimits's day-precise boundary, since it drops the
+        // day/time-of-day components entirely and checks only year+month at
+        // the two extreme years.
+        if kind == StdTemporalKind::PlainYearMonth
+            && ((actual_year == -271_821 && month < 4) || (actual_year == 275_760 && month > 9)) {
+            return Err(Throw::range_error("ISO year-month outside Temporal range"));
+        }
     }
     if matches!(kind, StdTemporalKind::PlainTime | StdTemporalKind::PlainDateTime)
         && (hour > 23 || minute > 59 || second > 59 || millisecond > 999
@@ -539,11 +548,15 @@ fn std_temporal_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         };
     }
     if kind == StdTemporalKind::PlainYearMonth { values[2] = 1; }
-    if kind == StdTemporalKind::PlainMonthDay { values[9] = std_temporal_number(i, std_reflect_arg(&args, 3), Some(1972))?; }
-    if kind == StdTemporalKind::PlainYearMonth {
-        values[2] = std_temporal_number(i, std_reflect_arg(&args, 3), Some(1))?;
-    }
-    std_temporal_validate(kind, &values)?;
+    if kind == StdTemporalKind::PlainMonthDay { values[9] = 1972; }
+    // Per each constructor's own spec steps (PlainDate/PlainYearMonth/
+    // PlainMonthDay alike), the calendar argument's own type-check and
+    // canonicalization runs BEFORE IsValidISODate's final range validation
+    // -- and, for PlainYearMonth/PlainMonthDay specifically, also BEFORE the
+    // trailing referenceISODay/referenceISOYear argument is even read.
+    // Confirmed by PlainYearMonth's own calendar-invalid.js: an invalid
+    // calendar with a Symbol referenceISODay must throw RangeError from the
+    // calendar check, never reaching (and never coercing) that trailing arg.
     if kind != StdTemporalKind::Duration && kind != StdTemporalKind::PlainTime {
         let calendar_arg = match kind {
             StdTemporalKind::PlainDate => 3,
@@ -554,6 +567,11 @@ fn std_temporal_construct(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
         let calendar = std_reflect_arg(&args, calendar_arg);
         std_temporal_iso_calendar(i, &calendar)?;
     }
+    if kind == StdTemporalKind::PlainMonthDay { values[9] = std_temporal_number(i, std_reflect_arg(&args, 3), Some(1972))?; }
+    if kind == StdTemporalKind::PlainYearMonth {
+        values[2] = std_temporal_number(i, std_reflect_arg(&args, 3), Some(1))?;
+    }
+    std_temporal_validate(kind, &values)?;
     STD_TEMPORAL_DATA.with(|registry| registry.borrow_mut().insert(std_weak_id(object),
         StdTemporalData { owner: Rc::downgrade(&object.0), kind, fields: values }));
     Ok(this)
@@ -578,7 +596,7 @@ fn std_temporal_property(i: &mut Interpreter, value: &JsValue, name: &str) -> Re
 // be read from a *different* object (options) only after these gets on
 // `value` complete (Proxy-observable order). std_temporal_regulate below
 // applies the overflow-dependent half once the caller knows it.
-fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<[i64; 10], Throw> {
+fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<([i64; 10], Option<i64>, Option<String>), Throw> {
     let mut fields = [0; 10];
     if !matches!(kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) {
         let calendar = i.get_prop(value, "calendar")?;
@@ -586,9 +604,16 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
     }
     if kind == StdTemporalKind::Duration {
         let mut present = false;
-        for (index, name) in ["years", "months", "weeks", "days", "hours", "minutes",
-            "seconds", "milliseconds", "microseconds", "nanoseconds"].iter().enumerate() {
-            let property = i.get_prop(value, *name)?;
+        // ToTemporalDuration reads all ten properties in ALPHABETICAL
+        // order (days, hours, microseconds, milliseconds, minutes, months,
+        // nanoseconds, seconds, weeks, years) -- not years-down-to-
+        // nanoseconds, the natural field layout this used to iterate in.
+        // Confirmed by every kind's add/subtract `order-of-operations.js`
+        // (Duration/PlainDate/PlainDateTime/PlainTime/PlainYearMonth alike,
+        // since they all convert their argument via this same path).
+        for (index, name) in [(3, "days"), (4, "hours"), (8, "microseconds"), (7, "milliseconds"),
+            (5, "minutes"), (1, "months"), (9, "nanoseconds"), (6, "seconds"), (2, "weeks"), (0, "years")] {
+            let property = i.get_prop(value, name)?;
             if !property.is_undefined() {
                 fields[index] = std_temporal_duration_number(i, property, None)?;
                 present = true;
@@ -598,7 +623,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // Duration never takes an overflow option; its range check is
         // unconditional, so it runs here rather than in std_temporal_regulate.
         std_temporal_validate(kind, &fields)?;
-        return Ok(fields);
+        return Ok((fields, None, None));
     } else if kind == StdTemporalKind::PlainTime {
         // Reads hour..nanosecond in alphabetical order (hour, microsecond,
         // millisecond, minute, nanosecond, second), not the natural
@@ -607,6 +632,7 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         let read = std_temporal_read_calendar_fields(i, kind, value)?;
         if !read.any_present { return Err(Throw::type_error("time-like object has no fields")); }
         fields[3..9].copy_from_slice(&read.time);
+        return Ok((fields, None, None));
     } else {
         // Reads year/month/monthCode/day(/hour..nanosecond for
         // PlainDateTime) in the exact alphabetical order
@@ -621,27 +647,55 @@ fn std_temporal_bag(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue)
         // cross-field validation (deferred, here: month vs monthCode
         // disagreement, and each field being present at all).
         let read = std_temporal_read_calendar_fields(i, kind, value)?;
-        let code_month = if let Some(code) = &read.month_code_text {
-            let number = code.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
-                .filter(|number| code.len() == 3 && (1..=12).contains(number))
-                .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
-            Some(number)
-        } else { None };
-        if read.month.zip(code_month).is_some_and(|(a, b)| a != b) {
-            return Err(Throw::range_error("month and monthCode disagree"));
-        }
+        // CalendarResolveFields: every required field's PRESENCE (a
+        // TypeError, since a field is simply missing, not malformed) is
+        // checked before any monthCode SUITABILITY validation (a
+        // RangeError, deferred here) runs -- "month is required" only needs
+        // to know THAT monthCode was supplied, not yet whether its value is
+        // suitable. Confirmed by calendarresolvefields-error-ordering.js,
+        // where an invalid/conflicting monthCode must never preempt a
+        // missing year/month/day's TypeError.
         fields[0] = if kind == StdTemporalKind::PlainMonthDay { 0 } else {
             read.year.ok_or_else(|| Throw::type_error("year is required"))?
         };
-        fields[1] = read.month.or(code_month).ok_or_else(|| Throw::type_error("month is required"))?;
+        if read.month.is_none() && read.month_code_text.is_none() {
+            return Err(Throw::type_error("month is required"));
+        }
         fields[2] = match kind {
             StdTemporalKind::PlainYearMonth => 1,
             _ => read.day.ok_or_else(|| Throw::type_error("day is required"))?,
         };
         if kind == StdTemporalKind::PlainMonthDay { fields[9] = 1972; }
         if kind == StdTemporalKind::PlainDateTime { fields[3..9].copy_from_slice(&read.time); }
+        // monthCode SUITABILITY (a RangeError: does it name a real month,
+        // and does it agree with an explicit `month`?) is deferred to the
+        // caller, which may need to read/coerce an `overflow` option in
+        // between -- CalendarYearMonthFromFields/CalendarDateFromFields
+        // read GetTemporalOverflowOption before running CalendarResolveFields'
+        // own suitability check. Confirmed by `.from()`'s own
+        // options-read-before-algorithmic-validation.js.
+        return Ok((fields, read.month, read.month_code_text));
     }
-    Ok(fields)
+}
+
+fn std_temporal_bag_resolve_month(fields: &mut [i64; 10], month: Option<i64>, code_text: Option<String>) -> Result<(), Throw> {
+    // Duration/PlainTime's own std_temporal_bag branches always return
+    // (None, None) here (they have no month/monthCode concept at all) --
+    // every caller invokes this unconditionally after std_temporal_bag
+    // regardless of kind, so this must be a safe no-op for them rather
+    // than unwrapping two Nones.
+    if month.is_none() && code_text.is_none() { return Ok(()); }
+    let code_month = if let Some(code) = &code_text {
+        let number = code.strip_prefix('M').and_then(|digits| digits.parse::<i64>().ok())
+            .filter(|number| code.len() == 3 && (1..=12).contains(number))
+            .ok_or_else(|| Throw::range_error("invalid monthCode"))?;
+        Some(number)
+    } else { None };
+    if month.zip(code_month).is_some_and(|(a, b)| a != b) {
+        return Err(Throw::range_error("month and monthCode disagree"));
+    }
+    fields[1] = month.or(code_month).unwrap();
+    Ok(())
 }
 
 // RegulateISODate / RegulateISOYearMonth / RegulateISOMonthDay / RegulateTime:
@@ -984,7 +1038,8 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
     match &value {
         JsValue::Str(text) => std_temporal_parse(kind, &text.to_utf8_lossy()),
         JsValue::Object(_) => {
-            let mut fields = std_temporal_bag(i, kind, &value)?;
+            let (mut fields, month, code) = std_temporal_bag(i, kind, &value)?;
+            std_temporal_bag_resolve_month(&mut fields, month, code)?;
             std_temporal_regulate(kind, &mut fields, reject);
             std_temporal_validate(kind, &fields)?;
             Ok(fields)
@@ -1010,8 +1065,13 @@ fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalK
         && std_temporal_record(&item, None).is_err()
         && std_epoch_record(&item, Some(StdEpochKind::ZonedDateTime)).is_err();
     let fields = if is_bag {
-        let mut fields = std_temporal_bag(i, kind, &item)?;
+        let (mut fields, month, code) = std_temporal_bag(i, kind, &item)?;
         let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+        // monthCode suitability (CalendarResolveFields, folded into
+        // CalendarYearMonthFromFields/CalendarDateFromFields) is checked
+        // AFTER GetTemporalOverflowOption reads/coerces `overflow` here --
+        // confirmed by options-read-before-algorithmic-validation.js.
+        std_temporal_bag_resolve_month(&mut fields, month, code)?;
         std_temporal_regulate(kind, &mut fields, reject);
         std_temporal_validate(kind, &fields)?;
         fields
@@ -1019,10 +1079,24 @@ fn std_temporal_from(i: &mut Interpreter, args: Vec<JsValue>, kind: StdTemporalK
         let fields = std_temporal_from_fields(i, kind, item, false)?;
         if kind != StdTemporalKind::Duration { std_temporal_overflow(i, std_reflect_arg(&args, 1))?; }
         fields
-    } else {
+    } else if std_temporal_record(&item, None).is_ok()
+        || std_epoch_record(&item, Some(StdEpochKind::ZonedDateTime)).is_ok() {
+        // A recognized Temporal-like value (an existing record of some
+        // kind, or a ZonedDateTime instance): GetTemporalOverflowOption is
+        // validated (and its VALUE discarded, since none of
+        // std_temporal_from_fields' non-bag branches consume `reject`)
+        // before the already-fully-specified conversion runs.
         let reject = if kind == StdTemporalKind::Duration { false }
             else { std_temporal_overflow(i, std_reflect_arg(&args, 1))? };
         std_temporal_from_fields(i, kind, item, reject)?
+    } else {
+        // Neither a bag, a string, nor any recognized Temporal-like value
+        // (e.g. a bare Number or Boolean) -- this throws TypeError inside
+        // std_temporal_from_fields without ever touching `options`.
+        // Confirmed by observable-get-overflow-argument-primitive.js's
+        // `from(7, options)` case, which asserts zero property access on a
+        // failing non-bag, non-string, non-Temporal argument.
+        std_temporal_from_fields(i, kind, item, false)?
     };
     std_temporal_make(i, kind, fields)
 }
@@ -1158,8 +1232,14 @@ fn std_temporal_yearmonth_to_date(i: &mut Interpreter, this: JsValue, args: Vec<
     let mut fields = std_temporal_record(&this, Some(StdTemporalKind::PlainYearMonth))?.fields;
     let bag = std_reflect_arg(&args, 0);
     if !bag.is_object() { return Err(Throw::type_error("day property bag required")); }
-    fields[2] = std_temporal_property(i, &bag, "day")?
+    let day = std_temporal_property(i, &bag, "day")?
         .ok_or_else(|| Throw::type_error("day is required"))?;
+    // toPlainDate (spec): CalendarDateFromFields is always called with
+    // ~constrain~ overflow here -- there is no overflow option to read --
+    // so a day past the target month's end (e.g. day 29 in a common-year
+    // February, or day 31 in a 30-day month) is clamped, never rejected.
+    // Confirmed by default-overflow-behaviour.js.
+    fields[2] = day.min(std_temporal_days_in_month(fields[0], fields[1])).max(1);
     std_temporal_make(i, StdTemporalKind::PlainDate, fields)
 }
 
@@ -1314,8 +1394,20 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     if !matches!(calendar_name.as_str(), "auto" | "always" | "never" | "critical") {
         return Err(Throw::range_error("invalid calendarName"));
     }
-    let (digits, minute_only, step, mode) =
-        std_temporal_string_precision(i, &option, data.kind != StdTemporalKind::Duration)?;
+    // PlainDate/PlainYearMonth/PlainMonthDay have no time-of-day at all --
+    // TemporalDateToString/TemporalYearMonthToString/
+    // TemporalMonthDayToString never call GetTemporalFractionalSecondDigits
+    // Option/GetRoundingModeOption/GetTemporalUnitValuedOption, only
+    // GetTemporalShowCalendarNameOption above. Reading those three options
+    // regardless (even to find them absent) is observable via a Proxy
+    // options bag and wrong -- confirmed by PlainYearMonth's own
+    // toString/order-of-operations.js.
+    let (digits, minute_only, step, mode) = if matches!(data.kind,
+        StdTemporalKind::PlainDate | StdTemporalKind::PlainYearMonth | StdTemporalKind::PlainMonthDay) {
+        (None, false, None, "trunc".to_string())
+    } else {
+        std_temporal_string_precision(i, &option, data.kind != StdTemporalKind::Duration)?
+    };
     if let Some(step) = step {
         if data.kind == StdTemporalKind::PlainTime {
             let rounded = std_temporal_round_integer(std_temporal_time_ns(&v), step, &mode)?;

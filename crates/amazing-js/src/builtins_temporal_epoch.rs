@@ -580,7 +580,8 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
             // e.g. "islamic") happens before PrepareCalendarFields' field
             // reads, which is in turn before timeZone is read/validated --
             // std_temporal_bag validates the calendar as its first action.
-            let mut fields = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            let (mut fields, month, code) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
+            std_temporal_bag_resolve_month(&mut fields, month, code)?;
             let zone_value = i.get_prop(&value, "timeZone")?;
             let zone = std_epoch_zone_value(i, &zone_value)?;
             std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut fields, reject);

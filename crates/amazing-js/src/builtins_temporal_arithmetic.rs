@@ -124,7 +124,8 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
                 std_temporal_set_epoch_ns(&mut f, epoch_ns + tz_offset_ns(&zone, epoch_ns))?;
                 f
             } else {
-                let mut f = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
+                let (mut f, month, code) = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
+                std_temporal_bag_resolve_month(&mut f, month, code)?;
                 std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut f, false);
                 // ToRelativeTemporalObject reads hour..nanosecond (each
                 // still individually range/Infinity-checked by
@@ -229,7 +230,42 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             let total = std_temporal_time_ns(&result) + factor as i128 * time_only;
             std_temporal_set_time_ns(&mut result, total);
         }
-        StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime | StdTemporalKind::PlainYearMonth => {
+        StdTemporalKind::PlainYearMonth => {
+            // AddDurationToYearMonth (spec): the overflow option is read
+            // BEFORE this check, but a nonzero weeks/days component or ANY
+            // nonzero time component throws unconditionally -- a
+            // PlainYearMonth has no day-of-month or time-of-day of its own
+            // to redistribute those units through, unlike PlainDate/
+            // PlainDateTime (which DO accept and apply them via
+            // CalendarDateAdd). Confirmed by argument-lower-units.js, which
+            // throws for every non-year/month unit under every overflow
+            // setting.
+            let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
+            if duration[2] != 0 || duration[3] != 0 || duration[4..10].iter().any(|value| *value != 0) {
+                return Err(Throw::range_error("only year/month units are valid for PlainYearMonth"));
+            }
+            // AddDurationToYearMonth (spec): the calendar anchor used for
+            // the add is the 1st of the object's own month (fields.[[Day]]
+            // set to 1), NEVER the object's own referenceISODay -- and both
+            // that anchor (CalendarDateFromFields) and the added result
+            // (CalendarDateAdd) are independently gated by
+            // ISODateWithinLimits, the full day-precise PlainDate range,
+            // narrower at the two extreme years than PlainYearMonth's own
+            // ISOYearMonthWithinLimits (checked again below, on the final
+            // year-month result, via std_temporal_make). Confirmed by
+            // throws-if-year-outside-valid-iso-range.js (throws even for a
+            // blank duration, purely from materializing -271821-04-01) and
+            // options-read-before-algorithmic-validation.js (the overflow
+            // option is still read first).
+            let mut anchor = result;
+            anchor[2] = 1;
+            std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
+            let mut added = std_temporal_add_calendar(&anchor, &duration, factor, reject)?;
+            std_temporal_validate(StdTemporalKind::PlainDate, &added)?;
+            added[2] = data.fields[2];
+            result = added;
+        }
+        StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime => {
             let reject = std_temporal_overflow(i, std_reflect_arg(&args, 1))?;
             result = std_temporal_add_calendar(&result, &duration, factor, reject)?;
             if data.kind == StdTemporalKind::PlainDateTime {
@@ -250,7 +286,7 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
                 let day = i64::try_from(shifted.div_euclid(STD_TEMPORAL_NS_DAY))
                     .map_err(|_| Throw::range_error("Temporal date outside valid range"))?;
                 (result[0], result[1], result[2]) = std_temporal_civil_from_epoch_day(day);
-            } else { result[2] = data.fields[2]; }
+            }
         }
         StdTemporalKind::PlainMonthDay => return Err(Throw::type_error("PlainMonthDay does not support addition")),
     }
@@ -461,20 +497,102 @@ fn std_temporal_difference(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             return Err(Throw::range_error("invalid PlainYearMonth difference units"));
         }
         std_temporal_validate_rounding_increment(&smallest, increment)?;
+        // DifferenceTemporalPlainYearMonth (spec): equal year-months return
+        // a zero Duration immediately, BEFORE either side is ever
+        // materialized as a full calendar date -- confirmed by
+        // throws-if-year-outside-valid-iso-range.js's
+        // minYearMonth.since(minYearMonth), which must NOT throw even
+        // though minYearMonth's own day-1 anchor is out of PlainDate's
+        // range. Only when they differ does CalendarDateFromFields(day=1)
+        // run on each side, gated by ISODateWithinLimits (the day-precise
+        // PlainDate range, narrower at the two extremes than
+        // PlainYearMonth's own ISOYearMonthWithinLimits).
+        if data.fields[0] == other[0] && data.fields[1] == other[1] {
+            // The early return itself, not just a same-result optimization:
+            // it must skip the end-anchor check below too (an unrounded,
+            // zero-length span never needs to materialize ANY date),
+            // confirmed by minYearMonth.since(minYearMonth)/.until(...).
+            return std_temporal_make(i, StdTemporalKind::Duration, [0; 10]);
+        }
         for fields in [&data.fields, &other] {
-            if !(-100_000_000..=100_000_000).contains(&std_temporal_epoch_day(fields[0], fields[1], 1)) {
-                return Err(Throw::range_error("PlainYearMonth difference outside date range"));
-            }
+            let mut anchor = *fields;
+            anchor[2] = 1;
+            std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
         }
         let months = (other[0] - data.fields[0]) as i128 * 12 + (other[1] - data.fields[1]) as i128;
-        let step = increment as i128 * if smallest == "year" { 12 } else { 1 };
-        let rounded = std_temporal_round_integer(months, step, &mode)?;
-        let rounded = if since { -rounded } else { rounded };
+        let step = increment as i128;
+        let unit_months = if smallest == "year" { 12 } else { 1 };
+        let full_step = step * unit_months;
+        // NudgeToCalendarUnit's bracket search always materializes BOTH
+        // candidate ends adjacent to the exact span (the multiple of the
+        // increment immediately below it and immediately above it) via
+        // CalendarDateAdd -- gated by ISODateWithinLimits -- in order to
+        // decide which one rounding lands on, regardless of which is
+        // eventually picked. An outsized roundingIncrement can push one of
+        // those candidates (almost always the "above" one, since the exact
+        // span is usually far smaller than the increment) past the
+        // representable range even though the real, final rounded result
+        // never would be. Confirmed by
+        // throws-if-rounded-date-outside-valid-iso-range.js (a plain 12-
+        // month span with roundingIncrement: 100_000_000).
+        // DifferenceTemporalPlainYearMonth (spec) only enters this bracket
+        // search at all when smallestUnit is not month or roundingIncrement
+        // is not 1 -- the exact, unrounded CalendarDateUntil breakdown is
+        // returned as-is otherwise, and does NOT probe one unit past the
+        // argument the way the bracket search does. Skipping it for the
+        // (smallest="month", increment=1) default is required, not just an
+        // optimization: probing one month past a valid boundary argument
+        // (e.g. October 275760, one past the valid "+275760-09") would
+        // otherwise wrongly reject that argument. Confirmed by
+        // argument-string-limits.js's validStrings.
+        if smallest != "month" || step != 1 {
+            let bracket = months.div_euclid(full_step);
+            for candidate_k in [bracket, bracket + 1] {
+                let candidate_months = data.fields[0] as i128 * 12 + data.fields[1] as i128 - 1 + candidate_k * full_step;
+                let candidate_year = i64::try_from(candidate_months.div_euclid(12))
+                    .map_err(|_| Throw::range_error("PlainYearMonth difference outside date range"))?;
+                let candidate_month = (candidate_months.rem_euclid(12) + 1) as i64;
+                let mut anchor = [0i64; 10];
+                anchor[0] = candidate_year;
+                anchor[1] = candidate_month;
+                anchor[2] = 1;
+                std_temporal_validate(StdTemporalKind::PlainDate, &anchor)?;
+            }
+        }
+        // The exact (unrounded) receiver->argument span is first broken
+        // down into whole years plus a months remainder (both truncated
+        // toward zero -- matching CalendarDateUntil's own largest-unit-
+        // first breakdown), and rounding is then applied to the SMALLEST
+        // requested unit *within that breakdown*, not to the flattened
+        // total -- these disagree whenever smallestUnit is coarser than a
+        // single month but largestUnit still separates out years, e.g. an
+        // increment of 5 applied to a 2y8mo span rounds the 8-month
+        // remainder to 5 (giving 2y5mo), not the flattened 32 months to 30
+        // (which would give 2y6mo). Confirmed by
+        // roundingincrement-as-expected.js's "mixed with years" case.
+        let (year_part, month_part): (i128, i128) = match (largest.as_str(), smallest.as_str()) {
+            ("year", "year") => {
+                let total_rounded = std_temporal_round_integer(months, step * 12, &mode)?;
+                (total_rounded / 12, 0)
+            }
+            ("year", "month") => {
+                let years = months / 12;
+                let remainder = months % 12;
+                let mut rounded_month = std_temporal_round_integer(remainder, step, &mode)?;
+                let mut years = years;
+                if rounded_month.abs() >= 12 {
+                    let carry = rounded_month / 12;
+                    years += carry;
+                    rounded_month -= carry * 12;
+                }
+                (years, rounded_month)
+            }
+            _ => (0, std_temporal_round_integer(months, step, &mode)?),
+        };
+        let (year_part, month_part) = if since { (-year_part, -month_part) } else { (year_part, month_part) };
         let mut fields = [0; 10];
-        if largest == "year" {
-            fields[0] = (rounded / 12) as i64;
-            fields[1] = (rounded % 12) as i64;
-        } else { fields[1] = rounded as i64; }
+        fields[0] = year_part as i64;
+        fields[1] = month_part as i64;
         return std_temporal_make(i, StdTemporalKind::Duration, fields);
     }
     let mut result = match data.kind {
@@ -695,6 +813,20 @@ struct StdCalendarRead {
     any_present: bool,
 }
 
+// ParseISOMonthCode: a well-formed monthCode is "M" + exactly 2 ASCII
+// digits + an optional "L" (case-sensitive) -- this is pure GRAMMAR, checked
+// unconditionally regardless of calendar. Whether the resulting number is a
+// legal ISO 8601 month (1..=12, no "L" suffix -- iso8601 has no leap
+// months) is a separate, calendar-dependent SUITABILITY check performed by
+// the caller, not here.
+fn std_temporal_validate_month_code_syntax(code: &str) -> Result<(), Throw> {
+    let bytes = code.as_bytes();
+    let well_formed = matches!(bytes.len(), 3 | 4)
+        && bytes[0] == b'M' && bytes[1].is_ascii_digit() && bytes[2].is_ascii_digit()
+        && (bytes.len() == 3 || bytes[3] == b'L');
+    if well_formed { Ok(()) } else { Err(Throw::range_error("monthCode is not well-formed")) }
+}
+
 fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind, value: &JsValue) -> Result<StdCalendarRead, Throw> {
     let mut read = StdCalendarRead { year: None, month: None, month_code_text: None, day: None, time: [0; 6], any_present: false };
     for (name, field) in std_temporal_field_table(kind) {
@@ -720,7 +852,24 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
             // ToString-coercion since that side has far more passing
             // coverage in this pinned corpus (13 files vs 4). See
             // docs/lanes/js-stdlib_TODO.md, JSS-temporal-port item 2.
-            StdWithField::MonthCode => read.month_code_text = Some(i.to_string(&property)?),
+            StdWithField::MonthCode => {
+                let text = i.to_string(&property)?;
+                // ParseISOMonthCode's own grammar check (well-formed shape:
+                // "M" + 2 digits + optional "L") runs immediately, at
+                // monthCode's own alphabetical read position -- BEFORE any
+                // later field (year, for PlainDate) is even read/type-
+                // checked. The separate SUITABILITY check (is the resulting
+                // month number 1..=12, and does it agree with an explicit
+                // `month`) is calendar-dependent cross-field resolution,
+                // deferred to the caller (std_temporal_bag) until after
+                // every field's own presence/type validation has passed.
+                // Confirmed by monthcode-invalid.js's "L99M" (malformed
+                // shape, RangeError before a Symbol year's own TypeError)
+                // vs. "M99L" (well-formed shape but out-of-range, TypeError
+                // from the Symbol year fires first since it's read later).
+                std_temporal_validate_month_code_syntax(&text)?;
+                read.month_code_text = Some(text);
+            }
             StdWithField::Day => {
                 let value = std_temporal_number(i, property, None)?;
                 if value < 1 { return Err(Throw::range_error("day must be a positive integer")); }
