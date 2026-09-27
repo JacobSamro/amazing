@@ -447,3 +447,63 @@ and a handful of `ArrayBuffer`/`DataView` one-offs
 (`options-maxbytelength-compared-before-object-creation.js`,
 `resize/coerced-new-length-detach.js`, `sliceToImmutable/argument-coercion.js`,
 `transferToImmutable/this-is-not-detachable.js`).
+
+## JSB-10 — Atomics.wait, notify, waitAsync, pause over SharedArrayBuffer (base `0654b5d3`)
+
+The engine is single-threaded, so this implements the spec semantics that hold without a
+second real agent, and leaves `$262.agent`-based tests unsupported rather than faking
+agents (the existing `test262_host.rs` `$262.agent` hooks already report `"unsupported"`).
+
+- `Atomics.wait` now actually blocks: coerces value then timeout (matching
+  `validate-arraytype-before-*-coercion.js` / `symbol-for-timeout-throws.js` ordering),
+  compares against the current buffer contents, returns `"not-equal"` immediately on a
+  mismatch, and otherwise sleeps for the (capped, so a huge/infinite requested timeout
+  cannot hang a run) timeout and returns `"timed-out"` — nothing else can call `notify`
+  while the sole agent is blocked, so `"ok"` is unreachable from sync `wait`.
+  `crates/amazing-js/examples/test262_host.rs` now declares `can_block: true` (previously
+  `false`), so `CanBlockIsTrue`-flagged tests run for real and the one `CanBlockIsFalse`
+  test (`wait/cannot-suspend-throws.js`, which assumes a host that cannot suspend at all)
+  is correctly excluded (`host.CanBlockIsFalse`) instead of coincidentally passing via an
+  unconditional throw. That capability flag is shared infrastructure outside
+  `builtins_binary*`, touched here because implementing real `wait` semantics requires it;
+  flagged to the fleet in case another lane also gates on it.
+- `Atomics.waitAsync` creates a genuinely pending promise (the engine's internal
+  `PromiseFate::Pending` + `settle_promise`, not `Promise.resolve`) and registers it in a
+  new `ATOMICS_WAITERS` thread-local side table keyed by `(buffer Rc identity, byte
+  offset)` — matching spec WaiterList semantics, where two views over the same
+  `SharedArrayBuffer` at the same byte position share a waiter list. The prior code
+  resolved a finite timeout to `"timed-out"` immediately at call time, which is wrong
+  whenever the same synchronous script goes on to call `Atomics.notify` afterwards, as
+  `returns-result-object-value-is-promise-resolves-to-ok.js` and the two
+  `undefined-for-timeout.js`/`implicit-infinity-for-timeout.js` tests do.
+- `Atomics.notify` now looks up `ATOMICS_WAITERS` for the buffer/byte offset and settles up
+  to `count` of them (FIFO, insertion order) to `"ok"`, returning the count woken — always 0
+  against a real `$262.agent`, since nothing can be blocked in `Atomics.wait` while this
+  single-threaded `notify` call is running, which is exactly what the anchor tests measure.
+  It also now coerces and validates index/count fully before checking sharedness, returning
+  0 for a non-shared buffer instead of throwing, matching its distinct (non-throwing)
+  algorithm from `wait`/`waitAsync`.
+- Added a shared detached-buffer check (`ValidateTypedArray`) before any
+  index/value/timeout/count coercion for every Atomics op: needed because `notify`'s
+  "return 0" path for a non-shared buffer must not also swallow an outright detached one
+  (`notify/null-bufferdata-throws.js`, where the poisoned index/count args must never be
+  evaluated).
+- `ValidateAtomicAccess` reads `TypedArrayLength` before `index` is coerced, so a coercion
+  side effect that grows/shrinks/resizes/detaches the buffer must not change the bound the
+  index is checked against (`retrieve-length-before-index-coercion.js`); this now applies
+  uniformly to every Atomics op, not just `wait`/`notify`/`waitAsync`.
+- `Atomics.pause` was already spec-correct (returns `undefined` unconditionally, arity 0);
+  no change needed.
+
+Measured (Linux venus-001, directory-scoped before/after on base `0654b5d3` vs commit
+`d09b214c`, per the coordinator's revised gate — the full sharded Test262 run is the
+integrator's merge-time gate, not this lane's): `built-ins/Atomics` file-level diff 245 →
+272 pass, 25 → 3 fail (the 3 remaining fails, `compareExchange/{,bigint/}good-views.js` and
+`store/good-views.js`, are pre-existing and byte-for-byte unchanged by this commit — outside
+this ticket's anchors); `built-ins/SharedArrayBuffer` unchanged, 103 → 103 pass, 1 → 1 fail
+(0 regressions, 0 fixes). Zero real regressions in either directory; the two files
+`wait/{,bigint/}cannot-suspend-throws.js` move from a coincidental pass to a correct
+`unsupported` exclusion, which is the intended effect of declaring real `wait` semantics,
+not a functional loss. Workspace: `cargo nextest run --workspace --locked --no-fail-fast` →
+3,373 passed, 17 skipped, 0 failed; `cargo test --workspace --locked --doc` → 4/4 doctests
+(`amazing_a11y`, `amazing_devtools`, `amazing_html`, `amazing_js`).
