@@ -1807,35 +1807,6 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         result.map_err(|error| throw_dom_error(self, error))
     }
-    /// See the call site in `with_dom` above and `Dom::window_named_objects`
-    /// for the spec algorithm and its one deliberate omission (nested
-    /// browsing contexts by name -- this engine has no iframe content
-    /// navigables yet).
-    fn refresh_window_named_properties(&mut self) -> Result<(), Throw> {
-        let host = self.state.borrow().host.clone();
-        let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
-        let global = self.js.binding_global_object();
-        let previous = std::mem::replace(
-            &mut self.state.borrow_mut().window_named_property_keys,
-            entries.iter().map(|(name, _)| name.clone()).collect(),
-        );
-        for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
-            self.js.binding_delete_property(&global, stale)?;
-        }
-        for (name, nodes) in entries {
-            let value = if let [single] = nodes[..] {
-                self.wrap_node(single)?
-            } else {
-                let slot = host.borrow_mut().dom.create_static_node_list(nodes);
-                let mut key = self.node_platform_key(self.current_document());
-                key.slot = slot as u64;
-                self.wrap_platform_object(key, InterfaceBrand::STATIC_NODE_LIST)?
-            };
-            self.js.binding_define_data_property(&global, &name, value,
-                BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
-        }
-        Ok(())
-    }
     fn is_html_document(&self, document: NodeIdx) -> bool {
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();
@@ -1876,6 +1847,38 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn type_error(&mut self, message: &'static str) -> Throw {
         Throw::type_error(message)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    /// See the call site in `with_dom` above and `Dom::window_named_objects`
+    /// for the spec algorithm and its one deliberate omission (nested
+    /// browsing contexts by name -- this engine has no iframe content
+    /// navigables yet).
+    fn refresh_window_named_properties(&mut self) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
+        let global = self.js.binding_global_object();
+        let previous = std::mem::replace(
+            &mut self.state.borrow_mut().window_named_property_keys,
+            entries.iter().map(|(name, _)| name.clone()).collect(),
+        );
+        for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
+            self.js.binding_delete_property(&global, stale)?;
+        }
+        for (name, nodes) in entries {
+            let value = if let [single] = nodes[..] {
+                self.wrap_node(single)?
+            } else {
+                let slot = host.borrow_mut().dom.create_static_node_list(nodes);
+                let mut key = self.node_platform_key(self.current_document());
+                key.slot = slot as u64;
+                self.wrap_platform_object(key, InterfaceBrand::STATIC_NODE_LIST)?
+            };
+            self.js.binding_define_data_property(&global, &name, value,
+                BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
+        }
+        Ok(())
     }
 }
 
