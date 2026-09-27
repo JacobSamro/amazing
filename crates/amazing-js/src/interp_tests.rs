@@ -1880,4 +1880,122 @@ mod class_name_tests {
                 JsValue::Bool(true), "{source}");
         }
     }
+
+    #[test]
+    fn c_style_for_head_const_binding_is_immutable_in_every_per_iteration_copy() {
+        // JS-19 (js-vm cross-lane report, 2026-09-27): `loop_for_inner`'s per-iteration
+        // environment copies (CreatePerIterationEnvironment) re-declared a `const` for-head
+        // binding as mutable in every copy, so `c++` in the update clause -- and a plain
+        // reassignment in the body -- silently succeeded instead of throwing, and
+        // `for (const c = 1; ; c++) {}` looped forever instead of throwing on the first `c++`.
+        let mut i = Interpreter::new();
+        let update_throws = i.run_script(
+            "var caught = false; var iterations = 0; \
+             try { for (const c = 1; iterations < 1000; c++) { iterations++; } } \
+             catch (e) { caught = e instanceof TypeError; } \
+             caught && iterations === 1"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(update_throws, JsValue::Bool(true),
+            "c++ on a const for-head binding must throw on the first iteration, not loop forever");
+
+        let body_reassignment_throws = i.run_script(
+            "var caught = false; \
+             try { for (const c = 1; ; ) { c = 2; } } catch (e) { caught = e instanceof TypeError; } \
+             caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(body_reassignment_throws, JsValue::Bool(true));
+
+        // `let` for-head bindings must still be genuinely mutable across iterations (this is
+        // the by-far more common shape, and must not regress).
+        let mut i = Interpreter::new();
+        let let_sum = i.run_script("var sum = 0; for (let n = 0; n < 5; n++) { sum += n; } sum")
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(let_sum, JsValue::num(10.0));
+    }
+
+    #[test]
+    fn function_prototype_caller_and_arguments_are_a_shared_throw_type_error_accessor_pair() {
+        let mut i = Interpreter::new();
+        let get_throws = i.run_script(
+            "var caught = false; try { Function.prototype.caller; } catch (e) { caught = e instanceof TypeError; } caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(get_throws, JsValue::Bool(true), "reading Function.prototype.caller must throw a TypeError");
+
+        let set_throws = i.run_script(
+            "var caught = false; try { Function.prototype.arguments = 1; } catch (e) { caught = e instanceof TypeError; } caught"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(set_throws, JsValue::Bool(true), "writing Function.prototype.arguments must throw a TypeError");
+
+        let shared_and_shaped = i.run_script(
+            "var callerDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'caller'); \
+             var argsDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'arguments'); \
+             callerDesc.get === callerDesc.set && \
+             callerDesc.get === argsDesc.get && \
+             callerDesc.enumerable === false && callerDesc.configurable === true && \
+             argsDesc.enumerable === false && argsDesc.configurable === true"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(shared_and_shaped, JsValue::Bool(true));
+
+        // A strict function must not carry its own "caller"/"arguments" -- it keeps the
+        // inherited %Function.prototype% poison pill (16.2 Forbidden Extensions).
+        let strict_has_no_own_props = i.run_script(
+            "function f() { \"use strict\"; } \
+             !Object.prototype.hasOwnProperty.call(f, 'caller') && \
+             !Object.prototype.hasOwnProperty.call(f, 'arguments')"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(strict_has_no_own_props, JsValue::Bool(true));
+
+        // JS-19 fix-before-push (2026-09-27): a plain SLOPPY function does carry its own
+        // "caller" (but not "arguments") -- the non-standard, universally-implemented
+        // "legacy function.caller" feature (test262 `features: [caller]`; V8/SpiderMonkey both
+        // still ship it). This is what un-broke 21 Test262 files
+        // (built-ins/Function/15.3.5.4_2-{12,14,75..93}gs.js) that JS-18's poison pill made
+        // every function throw on, including these which read a sloppy function's own
+        // `.caller` and expect no throw.
+        let sloppy_has_own_caller_only = i.run_script(
+            "function g() {} \
+             Object.prototype.hasOwnProperty.call(g, 'caller') && \
+             !Object.prototype.hasOwnProperty.call(g, 'arguments')"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(sloppy_has_own_caller_only, JsValue::Bool(true));
+
+        // Reading it while NOT on the call stack (or with no caller at all) is null, never a
+        // throw; and it shadows the inherited accessor rather than reusing it.
+        let sloppy_caller_default_and_shadowed = i.run_script(
+            "function g() {} \
+             var descriptor = Object.getOwnPropertyDescriptor(g, 'caller'); \
+             g.caller === null && descriptor.configurable === true && descriptor.enumerable === false && \
+             descriptor.get !== Object.getOwnPropertyDescriptor(Function.prototype, 'caller').get"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(sloppy_caller_default_and_shadowed, JsValue::Bool(true));
+
+        // The classic legacy scenario: a sloppy function reads its own `.caller` while
+        // actively called by another sloppy function, and gets that function back (not a
+        // throw); when the actual caller is strict, it reads back null instead of leaking the
+        // strict function's identity.
+        let sloppy_caller_reflects_immediate_sloppy_caller = i.run_script(
+            "function reader() { return reader.caller; } \
+             function sloppyCaller() { return reader(); } \
+             function strictCaller() { \"use strict\"; return reader(); } \
+             sloppyCaller() === sloppyCaller && strictCaller() === null"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(sloppy_caller_reflects_immediate_sloppy_caller, JsValue::Bool(true));
+
+        // The exact scenario `built-ins/Function/15.3.5.4_2-{2,8,30,60,94,...}gs.js` cover: a
+        // STRICT function reads a sloppy function's own `.caller` from a call it made directly
+        // (not through another sloppy wrapper first) -- must observe null, not the strict
+        // caller, regardless of how many frames sit between the getter's own call and the
+        // reader's (an `assert.throws` harness wrapper, an extra local before the read, or a
+        // second read on the right side of `||` all shift that distance without changing which
+        // invocation is being asked about).
+        let strict_caller_via_wrapper_and_double_read = i.run_script(
+            "function f() { \"use strict\"; gNonStrict(); } \
+             function throwsHelper(fn) { fn(); } \
+             var threw = false; \
+             try { throwsHelper(function() { f(); }); } catch (e) { threw = e instanceof TypeError; } \
+             function gNonStrict() { return gNonStrict.caller || gNonStrict.caller.throwTypeError; } \
+             threw"
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(strict_caller_via_wrapper_and_double_read, JsValue::Bool(true));
+    }
 }

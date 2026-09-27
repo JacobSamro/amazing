@@ -448,6 +448,49 @@ impl Interpreter {
             symbol_method_length(&method, length);
             self.function_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
+        {
+            // 9.2.7 AddRestrictedFunctionProperties, applied here to
+            // %Function.prototype% itself (steps 2-4): `caller` and
+            // `arguments` are accessor properties sharing one %ThrowTypeError%
+            // getter/setter, {enumerable: false, configurable: true}. Built via
+            // symbol_method (name "", length 0, non-constructible, no own
+            // "prototype") so it matches the anonymous, poison-pill shape
+            // every other well-known-intrinsic check in the corpus expects.
+            //
+            // Re-landed here (2026-09-27) after cd669e67's original installation was
+            // reverted (c0de6390) along with the getter/setter that made every function
+            // throw unconditionally; make_function (interp_stmt.rs) now installs an OWN,
+            // non-throwing "caller" on plain sloppy functions that shadows this inherited
+            // pill, so the two no longer collide.
+            let thrower = symbol_method(self, "", native_throw_type_error_intrinsic);
+            // 10.2.4 %ThrowTypeError% ( ): unlike an ordinary anonymous built-in function
+            // (which `symbol_method` otherwise models correctly, with configurable "name"/
+            // "length"), this ONE intrinsic is explicitly unforgeable and frozen: [[Extensible]]
+            // false, and both "length" and "name" non-configurable (as well as non-writable,
+            // already true) -- found chasing a JS-19 zero-loss regression
+            // (built-ins/ThrowTypeError/{frozen,extensible,length,name}.js), unmasked the same
+            // way as the arguments-callee gaps above: `Object.isFrozen(undefined)` is
+            // trivially true, so before `caller`/`arguments` resolved to a real function here,
+            // these tests passed on an entirely different, accidental value.
+            if let JsValue::Object(object) = &thrower {
+                let mut o = object.borrow_mut();
+                o.define("length", Property {
+                    value: JsValue::num(0.0), writable: false, enumerable: false,
+                    configurable: false, getter: None, setter: None,
+                }).unwrap();
+                o.define("name", Property {
+                    value: JsValue::str(""), writable: false, enumerable: false,
+                    configurable: false, getter: None, setter: None,
+                }).unwrap();
+                o.extensible = false;
+            }
+            for name in ["caller", "arguments"] {
+                self.function_proto.borrow_mut().define(name, Property {
+                    value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
+                    getter: Some(thrower.clone()), setter: Some(thrower.clone()),
+                }).unwrap();
+            }
+        }
         for (n, f) in [
             ("toString", native_array_to_string as crate::value::NativeFn),
             ("push", native_array_push as crate::value::NativeFn),

@@ -1621,7 +1621,7 @@ impl FunctionCode {
         // shared with this VM path so both backends bind identically; it
         // already skips the `arguments` object for arrows and for a
         // parameter literally named `arguments`.
-        i.bind_params(&env, &self.0.params, args, is_arrow)?;
+        i.bind_params(&env, &self.0.params, args, is_arrow, self.0.strict)?;
         if self.0.is_generator {
             // Read `functionObject.prototype` now, not before parameters were
             // bound: a parameter default can replace it during

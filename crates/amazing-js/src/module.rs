@@ -73,6 +73,14 @@ pub struct ModuleRecord {
 pub struct ModuleLinker<R: ModuleResolver> {
     resolver: R,
     records: HashMap<String, ModuleRecord>,
+    /// Instances persist across `evaluate` calls (JS-19 item 1) so that a dynamic `import()`
+    /// made through `Interpreter::binding_set_module_loader_hook` that reuses this same linker
+    /// -- the normal case for an embedding with one linker per realm -- reaches an
+    /// already-evaluated module by its per-realm singleton record rather than re-instantiating
+    /// and re-running its top-level code (16.2.1.5.1's LoadedModules reuse). Without this, a
+    /// shared or cyclic dynamic-import graph re-evaluates unboundedly
+    /// (`module-graphs-does-not-hang.js`).
+    instances: HashMap<String, ModuleInstance>,
 }
 
 impl<R: ModuleResolver> ModuleLinker<R> {
@@ -80,6 +88,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         Self {
             resolver,
             records: HashMap::new(),
+            instances: HashMap::new(),
         }
     }
 
@@ -241,17 +250,56 @@ impl<R: ModuleResolver> ModuleLinker<R> {
     }
 
     pub fn evaluate(
-        &self,
+        &mut self,
         id: &str,
         root_interpreter: &mut Interpreter,
     ) -> Result<ModuleNamespace, ModuleFailure> {
-        let mut instances = HashMap::new();
+        self.instantiate_pending(root_interpreter)?;
+        self.evaluate_instance(id, root_interpreter)?;
+        let mut result = BTreeMap::new();
+        for (name, cell) in &self.instances[id].exports {
+            result.insert(name.clone(), cell.read().map_err(ModuleFailure::runtime)?);
+        }
+        Ok(result)
+    }
+
+    /// The live namespace exotic object for an already-evaluated (or at least instantiated)
+    /// module, keyed by the same id `link`/`evaluate` use. Unlike `evaluate`'s returned
+    /// `ModuleNamespace` (a flattened, one-shot snapshot), this is the actual per-realm
+    /// singleton object `fill_namespace` built, so repeat lookups of the same `id` -- e.g. from
+    /// two separate dynamic `import()` calls -- observe the identical object
+    /// (`await-dynamic-import-resolution.js`'s `import(x) === import(x)` shape). `None` means
+    /// `id` was never linked into this linker.
+    pub fn namespace_object(&self, id: &str) -> Option<JsValue> {
+        self.instances.get(id).map(|instance| instance.namespace.clone())
+    }
+
+    /// Instantiate every record `link` has added since the last call (module environments,
+    /// hoisted bindings, import/re-export wiring, the namespace object), leaving any
+    /// already-instantiated module completely untouched. Splitting this out of `evaluate` is
+    /// what makes calling `evaluate` again after further `link`s -- the shape a dynamic
+    /// `import()` loader hook needs -- safe: re-running the original single-shot version for
+    /// every record on every call would re-execute already-evaluated top-level code and, for a
+    /// widely shared or cyclic graph reached through repeated dynamic imports, never terminate.
+    fn instantiate_pending(&mut self, root_interpreter: &mut Interpreter) -> Result<(), ModuleFailure> {
         let realm_global = root_interpreter.global_env.clone();
-        // All environments and function declarations exist before any module
-        // evaluates. A dependency cycle can therefore read hoisted functions
-        // and observes TDZ for lexical declarations.
-        for (record_id, record) in &self.records {
-            let (program, default_binding) = module_program(record);
+        let new_ids: Vec<String> = self
+            .records
+            .keys()
+            .filter(|id| !self.instances.contains_key(id.as_str()))
+            .cloned()
+            .collect();
+        if new_ids.is_empty() {
+            return Ok(());
+        }
+        // All environments and function declarations for the newly linked subgraph exist before
+        // any of it evaluates. A dependency cycle can therefore read hoisted functions and
+        // observes TDZ for lexical declarations.
+        for record_id in &new_ids {
+            let (program, default_binding) = {
+                let record = &self.records[record_id];
+                module_program(record)
+            };
             let engine = &mut *root_interpreter;
             let module_env = EnvHandle::new(EnvKind::Module, Some(realm_global.clone()));
             module_env.bind_this(JsValue::Undefined);
@@ -275,7 +323,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
             let mut object = JsObject::ordinary();
             object.proto = None;
             object.extensible = false;
-            instances.insert(
+            self.instances.insert(
                 record_id.clone(),
                 ModuleInstance {
                     env: module_env,
@@ -287,101 +335,113 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 },
             );
         }
-        // Exported namespace aliases can refer to namespaces in a cycle.
-        for (record_id, record) in &self.records {
-            for item in &record.module.items {
-                if let ModuleItem::ExportAll {
-                    as_name: Some(name),
-                    from,
-                    ..
-                } = item
-                {
-                    let dependency = &record.dependencies[from];
-                    let namespace = instances[dependency].namespace.clone();
-                    instances[record_id]
+        // Exported namespace aliases can refer to namespaces in a cycle within the new subgraph.
+        for record_id in &new_ids {
+            let aliases: Vec<(String, String)> = {
+                let record = &self.records[record_id];
+                record
+                    .module
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        ModuleItem::ExportAll {
+                            as_name: Some(name),
+                            from,
+                            ..
+                        } => Some((name.clone(), record.dependencies[from].clone())),
+                        _ => None,
+                    })
+                    .collect()
+            };
+            for (name, dependency) in aliases {
+                let namespace = self.instances[&dependency].namespace.clone();
+                self.instances[record_id]
+                    .env
+                    .declare_lexical(&namespace_binding(&name), namespace, false)
+                    .map_err(ModuleFailure::runtime)?;
+            }
+        }
+        // Resolve import aliases after every local cell in the new subgraph exists. This follows
+        // export chains without evaluating a module and detects ambiguous star exports.
+        for record_id in &new_ids {
+            let imports: Vec<(String, Vec<(String, String)>)> = {
+                let record = &self.records[record_id];
+                record
+                    .module
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        ModuleItem::Import(import) => {
+                            let dependency = record.dependencies[&import.from].clone();
+                            let bindings = import
+                                .bindings
+                                .iter()
+                                .map(|binding| {
+                                    (binding.imported.clone(), binding.local.name.clone())
+                                })
+                                .collect();
+                            Some((dependency, bindings))
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            };
+            for (dependency, bindings) in imports {
+                for (imported, local) in bindings {
+                    let cell = if imported == "*" {
+                        BindingCell::new_value(self.instances[&dependency].namespace.clone())
+                    } else {
+                        self.export_cell(&dependency, &imported, &mut HashSet::new())?
+                            .ok_or_else(|| {
+                                ModuleFailure::new(
+                                    ModulePhase::Resolution,
+                                    format!("missing export {imported}"),
+                                )
+                            })?
+                    };
+                    self.instances[record_id]
                         .env
-                        .declare_lexical(&namespace_binding(name), namespace, false)
+                        .declare_import(&local, cell)
                         .map_err(ModuleFailure::runtime)?;
                 }
             }
         }
-        // Resolve aliases after every local cell exists. This follows export
-        // chains without evaluating a module and detects ambiguous star exports.
-        for (record_id, record) in &self.records {
-            for item in &record.module.items {
-                if let ModuleItem::Import(import) = item {
-                    let dependency = &record.dependencies[&import.from];
-                    for binding in &import.bindings {
-                        let cell = if binding.imported == "*" {
-                            BindingCell::new_value(instances[dependency].namespace.clone())
-                        } else {
-                            self.export_cell(
-                                dependency,
-                                &binding.imported,
-                                &instances,
-                                &mut HashSet::new(),
-                            )?
-                            .ok_or_else(|| {
-                                ModuleFailure::new(
-                                    ModulePhase::Resolution,
-                                    format!("missing export {}", binding.imported),
-                                )
-                            })?
-                        };
-                        instances[record_id]
-                            .env
-                            .declare_import(&binding.local.name, cell)
-                            .map_err(ModuleFailure::runtime)?;
-                    }
-                }
-            }
-        }
-        for record_id in self.records.keys() {
+        for record_id in &new_ids {
             let names = self.export_names(record_id, &mut HashSet::new());
             let mut exports = BTreeMap::new();
             for name in names {
-                if let Some(cell) =
-                    self.export_cell(record_id, &name, &instances, &mut HashSet::new())?
-                {
+                if let Some(cell) = self.export_cell(record_id, &name, &mut HashSet::new())? {
                     exports.insert(name, cell);
                 }
             }
-            let instance = instances.get_mut(record_id).unwrap();
+            let instance = self.instances.get_mut(record_id).unwrap();
             fill_namespace(&instance.namespace, &exports);
             instance.exports = exports;
         }
-        self.evaluate_instance(id, root_interpreter, &mut instances)?;
-        let mut result = BTreeMap::new();
-        for (name, cell) in &instances[id].exports {
-            result.insert(name.clone(), cell.read().map_err(ModuleFailure::runtime)?);
-        }
-        Ok(result)
+        Ok(())
     }
 
-    fn evaluate_instance(
-        &self,
-        id: &str,
-        root: &mut Interpreter,
-        instances: &mut HashMap<String, ModuleInstance>,
-    ) -> Result<(), ModuleFailure> {
-        match instances[id].state {
+    fn evaluate_instance(&mut self, id: &str, root: &mut Interpreter) -> Result<(), ModuleFailure> {
+        match self.instances[id].state {
             ModuleState::Evaluated | ModuleState::Evaluating => return Ok(()),
             ModuleState::Linked => {}
         }
-        instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
-        for dependency in self.records[id].dependencies.values() {
-            self.evaluate_instance(dependency, root, instances)?;
+        self.instances.get_mut(id).unwrap().state = ModuleState::Evaluating;
+        let dependencies: Vec<String> = self.records[id].dependencies.values().cloned().collect();
+        for dependency in dependencies {
+            self.evaluate_instance(&dependency, root)?;
         }
-        let instance = &instances[id];
-        let previous = std::mem::replace(&mut root.global_env, instance.env.clone());
+        let previous = std::mem::replace(&mut root.global_env, self.instances[id].env.clone());
         let evaluated = if self.records[id].module.has_top_level_await {
-            evaluate_async_module_body(root, instance)
+            evaluate_async_module_body(root, &self.instances[id])
         } else {
-            root.run_program(&instance.program).map(|_| ()).map_err(ModuleFailure::runtime)
+            root.run_program(&self.instances[id].program)
+                .map(|_| ())
+                .map_err(ModuleFailure::runtime)
         };
         root.global_env = previous;
         evaluated?;
-        instances.get_mut(id).unwrap().state = ModuleState::Evaluated;
+        self.instances.get_mut(id).unwrap().state = ModuleState::Evaluated;
         Ok(())
     }
 
@@ -430,7 +490,6 @@ impl<R: ModuleResolver> ModuleLinker<R> {
         &self,
         id: &str,
         name: &str,
-        instances: &HashMap<String, ModuleInstance>,
         visiting: &mut HashSet<(String, String)>,
     ) -> Result<Option<BindingCell>, ModuleFailure> {
         if !visiting.insert((id.to_owned(), name.to_owned())) {
@@ -444,12 +503,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 ModuleItem::ExportNamed { names, from, .. } => {
                     for entry in names.iter().filter(|entry| entry.exported == name) {
                         direct = if let Some(from) = from {
-                            self.export_cell(
-                                &record.dependencies[from],
-                                &entry.local,
-                                instances,
-                                visiting,
-                            )?
+                            self.export_cell(&record.dependencies[from], &entry.local, visiting)?
                         } else if let Some(import) =
                             record.module.items.iter().find_map(|item| match item {
                                 ModuleItem::Import(import) => import
@@ -463,7 +517,7 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                             let (import, binding) = import;
                             if binding.imported == "*" {
                                 Some(BindingCell::new_value(
-                                    instances[&record.dependencies[&import.from]]
+                                    self.instances[&record.dependencies[&import.from]]
                                         .namespace
                                         .clone(),
                                 ))
@@ -471,12 +525,11 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                                 self.export_cell(
                                     &record.dependencies[&import.from],
                                     &binding.imported,
-                                    instances,
                                     visiting,
                                 )?
                             }
                         } else {
-                            instances[id].env.local_cell(&entry.local)
+                            self.instances[id].env.local_cell(&entry.local)
                         };
                     }
                 }
@@ -484,24 +537,23 @@ impl<R: ModuleResolver> ModuleLinker<R> {
                 | ModuleItem::ExportDefaultDeclaration(_)
                     if name == "default" =>
                 {
-                    direct = instances[id]
+                    direct = self.instances[id]
                         .default_binding
                         .as_ref()
-                        .and_then(|binding| instances[id].env.local_cell(binding));
+                        .and_then(|binding| self.instances[id].env.local_cell(binding));
                 }
                 ModuleItem::ExportAll {
                     as_name: Some(alias),
                     ..
                 } if alias == name => {
-                    direct = instances[id].env.local_cell(&namespace_binding(alias));
+                    direct = self.instances[id].env.local_cell(&namespace_binding(alias));
                 }
                 ModuleItem::ExportAll {
                     as_name: None,
                     from,
                     ..
                 } if name != "default" => {
-                    if let Some(cell) =
-                        self.export_cell(&record.dependencies[from], name, instances, visiting)?
+                    if let Some(cell) = self.export_cell(&record.dependencies[from], name, visiting)?
                     {
                         stars.push(cell);
                     }

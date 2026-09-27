@@ -741,8 +741,26 @@ impl Interpreter {
                 }
             }
         }
+        // JS-19 (js-vm cross-lane report, 2026-09-27): 14.7.4.2 step 8 sets perIterationLets to
+        // the EMPTY list when the head's LexicalDeclaration isConst -- a `const` (or `using`/
+        // `await using`, which the parser also represents as VarKind::Const, see
+        // parser_statements.rs) for-head binding gets NO per-iteration copy at all. It keeps
+        // living in the one `loopEnv` binding created once, above, via the ordinary `const`
+        // path of executing that declaration statement (CreateImmutableBinding) -- test, body,
+        // and update all read/write that SAME binding directly. This was previously computing
+        // per_iteration_names for const too and copying it through fresh state/iteration/update
+        // environments every iteration (correct only for `let`), which broke in two opposite
+        // ways depending on how one first tried to fix it: with the copies left mutable,
+        // `for (const c = 1; ; c++) {}` never threw and looped forever; naively making the
+        // copies immutable instead made the ALWAYS-RUNS internal copy-back below
+        // (`state_env.assign`, step 9.e of CreatePerIterationEnvironment, which is not a user
+        // assignment and must never itself check constness) throw on every `for (const [x] =
+        // ...; ...) {}`, even when nothing ever reassigns `x`. Treating const's
+        // perIterationLets as empty -- matching the spec text -- avoids both: there is no
+        // separate copy for the internal step to touch, and the update clause's own assignment
+        // still throws because `loopEnv`'s binding is genuinely immutable.
         let per_iteration_names = match init {
-            Some(ForInit::Decl(decl)) if decl.kind != ast::VarKind::Var => decl
+            Some(ForInit::Decl(decl)) if !matches!(decl.kind, ast::VarKind::Var | ast::VarKind::Const) => decl
                 .decls
                 .iter()
                 .flat_map(|declarator| binding_names(&declarator.binding))
@@ -1167,8 +1185,26 @@ impl Interpreter {
                     })?;
                     private_field_get(self, &o, &name)
                 } else {
+                    // The key expression evaluates (and may have side effects, for a computed
+                    // `obj[expr]`) before base-nullishness is checked (13.3.2.1), but a
+                    // non-optional `.`/`[]` read on a null/undefined base must still throw here
+                    // -- `get_prop`/`get_prop_receiver` is also used internally for prototype
+                    // walks and primitive boxing where returning `undefined` for a nullish
+                    // receiver is the right internal behavior, so the throw belongs at this
+                    // call site, not inside `get_prop` itself (matching `resolve_reference`'s
+                    // assignment-target Member arm below, which already has this check).
+                    // Found via a JS-19 regression test (a strict function's identity leaking
+                    // null through a sloppy function's own `.caller` relies on exactly this:
+                    // `null.throwTypeError` must throw) and confirmed against the corpus:
+                    // built-ins/Function/15.3.5.4_2-94gs.js already failed on this in the
+                    // pre-JS-18 baseline with the identical "no exception thrown at all"
+                    // diagnostic -- a pre-existing gap, not a regression.
                     let k = self.member_key(prop, env)?;
-                    self.get_prop(&o, &k)
+                    if o.is_null() || o.is_undefined() {
+                        Err(Throw::type_error("cannot access a property on nullish value"))
+                    } else {
+                        self.get_prop(&o, &k)
+                    }
                 }
             }
             ExprKind::Yield { argument, delegate } => {
@@ -1971,7 +2007,13 @@ impl Interpreter {
                 })?;
                 private_field_get(self, &receiver, &name)?
             } else {
+                // Same non-optional nullish-base throw as the plain-read Member arm in
+                // eval_expr (JS-19): `null.method()`'s property read must throw here, not
+                // fall through to "value is not callable" from calling `undefined` below.
                 let k = self.member_key(prop, e)?;
+                if o.is_null() || o.is_undefined() {
+                    return Err(Throw::type_error("cannot access a property on nullish value"));
+                }
                 self.get_prop(&o, &k)?
             };
             (function, receiver)
@@ -2043,6 +2085,9 @@ impl Interpreter {
                 private_field_get(self, &receiver, &name)?
             } else {
                 let k = self.member_key(prop, e)?;
+                if o.is_null() || o.is_undefined() {
+                    return Err(Throw::type_error("cannot access a property on nullish value"));
+                }
                 self.get_prop(&o, &k)?
             };
             Ok((function, receiver))
@@ -2229,7 +2274,7 @@ impl Interpreter {
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
-                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
                     if thread_async {
                         if let Some(promise) = self.start_thread_async_function(FunctionBody::Expr(x.clone()), e.clone(), strict_function) {
@@ -2266,7 +2311,7 @@ impl Interpreter {
                             }
                         }
                     }
-                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow, strict_function)?;
                     // Generators/async generators: FunctionDeclarationInstantiation (hoisting)
                     // still runs eagerly, synchronously, right here -- only the body's statements
                     // are deferred, to a pooled coroutine thread that the first `.next()` drives
@@ -2366,6 +2411,7 @@ impl Interpreter {
         ps: &[ast::Param],
         args: Vec<JsValue>,
         is_arrow: bool,
+        strict: bool,
     ) -> Result<(), Throw> {
         // Parameters are mutable function bindings, not lexical declarations:
         // body var declarations reuse them and sloppy duplicate names overwrite.
@@ -2399,6 +2445,53 @@ impl Interpreter {
                     object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
                         value: values, writable: true, enumerable: false, configurable: true,
                         getter: None, setter: None,
+                    }).unwrap();
+                }
+                // 10.4.4.7 CreateUnmappedArgumentsObject step 8 (strict functions, OR sloppy
+                // functions with a non-simple parameter list -- 10.2.11 FunctionDeclaration
+                // Instantiation step 19's own ArgumentsObjectNeeded/simpleParameterList check
+                // routes both to the unmapped object): "callee" is a poison-pill accessor
+                // sharing the realm's single %ThrowTypeError% intrinsic -- the SAME function
+                // object already installed as Function.prototype's "caller"/"arguments"
+                // getter/setter (JS-18's AddRestrictedFunctionProperties), fetched live from
+                // its descriptor rather than re-created, so `built-ins/ThrowTypeError/
+                // unique-per-realm-function-proto.js`'s cross-check (`arguments.callee.get
+                // === Function.prototype.arguments.get`) holds. `has_simple_params` mirrors
+                // 10.2.10 IsSimpleParameterList: every parameter is a plain identifier, no
+                // rest, no default -- found chasing a JS-19 zero-loss regression
+                // (built-ins/ThrowTypeError/unique-per-realm-non-simple.js checks a sloppy
+                // function with a default parameter gets the SAME poison-pill callee as a
+                // strict function, not the mapped data-property one below).
+                //
+                // 10.4.4.6 CreateMappedArgumentsObject step 15 (sloppy functions with a simple
+                // parameter list get the mapped arguments exotic object instead): "callee" is a
+                // plain, writable, configurable data property pointing at the function itself --
+                // found while chasing a separate JS-19 zero-loss regression
+                // (language/arguments-object/10.6-13-a-{2,3}.js): those tests read
+                // `arguments.callee.caller` and, if `arguments.callee` is undefined,
+                // deliberately fall back to "extension not supported, fake it" by comparing
+                // `.caller` against `undefined` -- which used to accidentally succeed only
+                // because `undefined.caller` silently evaluated to `undefined` instead of
+                // throwing (the tree-walker's own missing null-check, fixed separately this
+                // same ticket); fixing that null-check exposed this real, separate gap. The
+                // current call's own function object is `self.frames.last()`'s `own_function`:
+                // a fresh frame for THIS call was pushed before `bind_params` runs (see the
+                // call dispatch above), so it's always present here.
+                let has_simple_params = ps.iter().all(|p| {
+                    !p.rest && p.default.is_none() && matches!(p.binding, Binding::Ident(_))
+                });
+                if strict || !has_simple_params {
+                    let thrower = self.function_proto.borrow().own_prop("arguments").and_then(|p| p.getter.clone());
+                    if let Some(thrower) = thrower {
+                        object.borrow_mut().define("callee", Property {
+                            value: JsValue::Undefined, writable: false, enumerable: false,
+                            configurable: false, getter: Some(thrower.clone()), setter: Some(thrower),
+                        }).unwrap();
+                    }
+                } else if let Some(callee) = self.frames.last().and_then(|frame| frame.own_function.clone()) {
+                    object.borrow_mut().define("callee", Property {
+                        value: JsValue::Object(callee), writable: true, enumerable: false,
+                        configurable: true, getter: None, setter: None,
                     }).unwrap();
                 }
             }
@@ -2567,6 +2660,21 @@ impl Interpreter {
                 configurable: false, getter: None, setter: None,
             }).unwrap();
             h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
+        }
+        // JS-19 fix-before-push (2026-09-27): a plain sloppy function declaration/expression
+        // gets its own, non-poisoned "caller" accessor here, shadowing the inherited
+        // %Function.prototype% poison pill -- see `native_legacy_function_caller_getter`'s doc
+        // comment in interp_builtins.rs for why (the "legacy function.caller" feature,
+        // test262 `features: [caller]`). Async and generator functions never qualify (matching
+        // 9.2.7 AddRestrictedFunctionProperties' own gating), nor do strict ones, which keep
+        // the inherited always-throwing accessor.
+        if !f.is_async && !f.is_generator && !h.borrow().strict_function {
+            let getter = symbol_method(self, "", native_legacy_function_caller_getter);
+            let setter = symbol_method(self, "", native_legacy_function_caller_setter);
+            h.borrow_mut().define("caller", Property {
+                value: JsValue::Undefined, writable: false, enumerable: false,
+                configurable: true, getter: Some(getter), setter: Some(setter),
+            }).unwrap();
         }
         JsValue::Object(h)
     }
