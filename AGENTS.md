@@ -23,6 +23,10 @@ Speed comes from doing a lot per cycle, not from many small cycles.
 - **Never `git stash`.** The stash is one stack shared by every lane worktree of this repo; on
   2026-09-27 a lane's `git stash pop` applied another lane's concurrently pushed stash. Park
   work-in-progress as a WIP commit on your own lane branch, or `git diff > $OUT/wip.patch`.
+- **Never `nohup … &` a run.** Start long `linux-run.sh` / `test262-boat.sh` commands with your
+  shell tool's background mode, which notifies you when they exit. A detached `nohup` job exits
+  silently and the lane waits forever (2026-09-27: layout and js-date each sat idle 20+ minutes
+  after their run had already finished).
 - **Sandbox time is money.** Sandboxes are shared and billed while running. Batch your work so each
   `linux-run.sh` call does a lot; do not hold a sandbox with polling or sleeps.
 - **Port, don't reinvent (2026-09-27).** When a spec area is already solved in a permissively
