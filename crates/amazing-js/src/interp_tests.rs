@@ -1813,4 +1813,39 @@ mod class_name_tests {
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(result, JsValue::num(1.0));
     }
+
+    // 14.12: a SwitchStatement's CaseBlock is VarDeclaredNames-visible to hoisting (a bare `var`
+    // or a sloppy plain FunctionDeclaration directly in ANY case, matched or not, is hoisted to
+    // the enclosing var scope -- Annex B.3.3 for the function case) and, independently, every
+    // clause shares ONE fresh lexical environment for let/const/class/function declared directly
+    // in a case (function declarations bind eagerly there, before any case runs; let/const/class
+    // do not leak into the enclosing scope once the switch ends).
+    #[test]
+    fn switch_case_bodies_are_hoisted_and_share_one_lexical_scope() {
+        for source in [
+            // A `var` in a case that never runs is still hoisted (VarDeclaredNames): reading it
+            // afterward resolves to `undefined`, it does not throw ReferenceError.
+            "var caught = false; \
+             try { switch (0) { case 1: var y = 5; break; } y; } catch (e) { caught = e instanceof ReferenceError; } \
+             caught === false",
+            // Annex B.3.3: a sloppy plain FunctionDeclaration directly in a MATCHED case syncs
+            // its closure into a pre-existing outer non-lexical `var` of the same name.
+            "var h; switch (1) { case 1: function h() { return 7; } break; } h() === 7",
+            // The whole CaseBlock is one lexical environment: function declarations bind there
+            // up front, before any clause runs, so a case that never executes still makes its
+            // function directly callable from an earlier, matched case.
+            "var result; \
+             switch (1) { case 1: result = g(); break; case 2: function g() { return 42; } break; } \
+             result === 42",
+            // A `let`/`const`/class declared directly in a case does not leak past the switch:
+            // referencing it afterward is an unresolvable reference (ReferenceError), not a
+            // read of some outer same-named binding.
+            "switch (1) { case 1: let z = 5; break; } \
+             var caught = false; try { z; } catch (e) { caught = e instanceof ReferenceError; } caught",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
 }

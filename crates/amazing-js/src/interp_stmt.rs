@@ -387,26 +387,18 @@ impl Interpreter {
                         def = Some(n);
                     }
                 }
-                let mut i = start.or(def);
-                while let Some(n) = i {
-                    match self.exec_stmts(&cases[n].body, &e)? {
-                        Flow::Normal => {
-                            i = (n + 1 < cases.len()).then_some(n + 1);
-                        }
-                        // An UNLABELED break targets the nearest enclosing
-                        // switch/loop -- this switch, here -- and is
-                        // swallowed. A LABELED break (JSVM-10 fix: this
-                        // previously swallowed it unconditionally too, so
-                        // `outer: for (...) { switch (x) { case 1: break
-                        // outer; } }` silently did nothing instead of
-                        // breaking the outer loop) must keep propagating
-                        // upward exactly like any other Flow -- only the
-                        // matching `Labeled` wrapper may swallow it.
-                        Flow::Break(None) => break,
-                        x => return Ok(x),
-                    }
+                let start = start.or(def);
+                // A CaseBlock is a disposal boundary only when some clause directly declares a
+                // `using` / `await using` resource, matching StmtKind::Block's own check. The
+                // shared exec_switch_cases loop (below) carries JSVM-10's labeled-break fix: an
+                // UNLABELED break is swallowed here, a LABELED break keeps propagating upward.
+                if !cases.iter().any(|c| c.body.iter().any(stmt_declares_resource)) {
+                    return self.exec_switch_cases(cases, start, &e);
                 }
-                Ok(Flow::Normal)
+                self.using_stack.push(Vec::new());
+                let result = self.exec_switch_cases(cases, start, &e);
+                let frame = self.using_stack.pop().unwrap_or_default();
+                self.dispose_frame(frame, result)
             }
             StmtKind::Break { label: l } => Ok(Flow::Break(l.as_ref().map(|x| x.name.clone()))),
             StmtKind::Continue { label: l } => {
@@ -449,6 +441,30 @@ impl Interpreter {
                 self.exec_try(t, env)
             }
         }
+    }
+
+    /// CaseBlockEvaluation's clause-selection loop (14.12.3), factored out so both the plain and
+    /// the disposal-boundary path in StmtKind::Switch above can share it. `start` is the already-
+    /// resolved index of the matched (or, failing that, default) clause to begin running from --
+    /// `None` when nothing matched and there was no default clause, in which case nothing runs.
+    fn exec_switch_cases(&mut self, cases: &[ast::SwitchCase], start: Option<usize>, env: &EnvHandle) -> Result<Flow, Throw> {
+        let mut i = start;
+        while let Some(n) = i {
+            match self.exec_stmts(&cases[n].body, env)? {
+                Flow::Normal => {
+                    i = (n + 1 < cases.len()).then_some(n + 1);
+                }
+                // An UNLABELED break targets the nearest enclosing switch/loop -- this
+                // switch, here -- and is swallowed. A LABELED break (JSVM-10 fix: this
+                // previously swallowed it unconditionally too, so `outer: for (...) {
+                // switch (x) { case 1: break outer; } }` silently did nothing instead of
+                // breaking the outer loop) must keep propagating upward exactly like any
+                // other Flow -- only the matching `Labeled` wrapper may swallow it.
+                Flow::Break(None) => break,
+                x => return Ok(x),
+            }
+        }
+        Ok(Flow::Normal)
     }
 
     /// Executes one IfStatement branch (spec 13.6.7 / Annex B.3.4): a *bare*,

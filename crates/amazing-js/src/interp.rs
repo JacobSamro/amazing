@@ -1378,6 +1378,20 @@ impl Interpreter {
                 }
                 StmtKind::Labeled { body, .. } => self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?,
                 StmtKind::With { body, .. } => self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?,
+                StmtKind::Switch { cases, .. } => {
+                    // A CaseBlock's clauses share ONE lexical scope (14.12), so a let/const/class
+                    // declared directly in any case blocks Annex B promotion for a same-named
+                    // function declared directly in any OTHER case, not just its own -- push
+                    // every case's own lexical names before hoisting any of them.
+                    let mut pushed = 0;
+                    for c in cases {
+                        pushed += push_blocked(blocked, block_lexical_names(&c.body));
+                    }
+                    for c in cases {
+                        self.hoist_inner(&c.body, env, true, blocked)?;
+                    }
+                    blocked.truncate(blocked.len() - pushed);
+                }
                 StmtKind::Try(statement) => {
                     self.hoist(&statement.block.body, env)?;
                     if let Some(catch) = &statement.catch {
