@@ -469,9 +469,35 @@ fn std_temporal_validate(kind: StdTemporalKind, values: &[i64; 10]) -> Result<()
             || !(1..=std_temporal_days_in_month(actual_year, month)).contains(&day) {
             return Err(Throw::range_error("invalid ISO date"));
         }
-        if matches!(kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime)
-            && !(-100_000_001..=100_000_000).contains(&std_temporal_epoch_day(actual_year, month, day)) {
-            return Err(Throw::range_error("ISO date outside Temporal range"));
+        if matches!(kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime) {
+            // ISODateTimeWithinLimits (spec): PlainDateTime can represent a
+            // point in time within 24h (nsPerDay) of Instant's own
+            // +-nsMaxInstant boundary on either side -- a plain day-count
+            // check is not equivalent, since a date exactly one day past
+            // Instant's boundary is valid at some times of day and not
+            // others (e.g. year -271821-04-19T00:00 is invalid, but the
+            // same date at any nanosecond after midnight is valid).
+            // PlainDate has no time-of-day of its own, so its own
+            // ISODateWithinLimits defers to this same check with hour 12 (a
+            // neutral reference time comfortably inside the padding at
+            // either extreme) rather than actual midnight.
+            const NS_PER_DAY: i128 = 86_400_000_000_000;
+            const NS_MAX_INSTANT: i128 = 8_640_000_000_000_000_000_000;
+            let days = std_temporal_epoch_day(actual_year, month, day) as i128;
+            let time_ns: i128 = if kind == StdTemporalKind::PlainDateTime {
+                hour as i128 * 3_600_000_000_000
+                    + minute as i128 * 60_000_000_000
+                    + second as i128 * 1_000_000_000
+                    + millisecond as i128 * 1_000_000
+                    + microsecond as i128 * 1_000
+                    + nanosecond as i128
+            } else {
+                12 * 3_600_000_000_000
+            };
+            let total_ns = days * NS_PER_DAY + time_ns;
+            if total_ns <= -NS_MAX_INSTANT - NS_PER_DAY || total_ns >= NS_MAX_INSTANT + NS_PER_DAY {
+                return Err(Throw::range_error("ISO date outside Temporal range"));
+            }
         }
     }
     if matches!(kind, StdTemporalKind::PlainTime | StdTemporalKind::PlainDateTime)
@@ -849,9 +875,16 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
             if kind == StdTemporalKind::PlainYearMonth { values[2] = 1; }
             if kind == StdTemporalKind::PlainMonthDay { values[0] = 0; values[9] = 1972; }
             if kind == StdTemporalKind::PlainDateTime {
-                let time = tail.strip_prefix('T').or_else(|| tail.strip_prefix('t')).or_else(|| tail.strip_prefix(' ')).ok_or_else(invalid)?;
-                std_temporal_validate_time_offset(time)?;
-                std_temporal_parse_time(std_temporal_time_prefix(time), &mut values)?;
+                // A TemporalDateTimeString's time-of-day is optional -- a
+                // bare date string ("-271821-04-20") defaults to midnight,
+                // it is not required to carry a T/t/space time separator at
+                // all. Confirmed by from/argument-string-limits.js's valid
+                // boundary dates, which are bare dates with no time part.
+                if !tail.is_empty() {
+                    let time = tail.strip_prefix('T').or_else(|| tail.strip_prefix('t')).or_else(|| tail.strip_prefix(' ')).ok_or_else(invalid)?;
+                    std_temporal_validate_time_offset(time)?;
+                    std_temporal_parse_time(std_temporal_time_prefix(time), &mut values)?;
+                }
             } else if !tail.is_empty() && !matches!(kind, StdTemporalKind::PlainDate) {
                 if !tail.starts_with('T') && !tail.starts_with('t') && !tail.starts_with(' ') { return Err(invalid()); }
                 let mut ignored = [0; 10];

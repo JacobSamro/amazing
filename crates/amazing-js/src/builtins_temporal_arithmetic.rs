@@ -126,7 +126,20 @@ fn std_temporal_resolve_relative_to(i: &mut Interpreter, relative: &JsValue) -> 
             } else {
                 let mut f = std_temporal_bag(i, StdTemporalKind::PlainDateTime, relative)?;
                 std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut f, false);
-                std_temporal_validate(StdTemporalKind::PlainDateTime, &f)?;
+                // ToRelativeTemporalObject reads hour..nanosecond (each
+                // still individually range/Infinity-checked by
+                // std_temporal_bag above) only to discard them --
+                // CalendarDateFromFields/CreateTemporalDate builds a
+                // PlainDate, not a PlainDateTime, so the final range check
+                // must use PlainDate's own hour-12-anchored
+                // ISODateWithinLimits, not PlainDateTime's midnight-anchored
+                // one: a date whose only valid representable instant is
+                // just after midnight (or just before, on the other end)
+                // is still a valid relativeTo PlainDate even though
+                // {..., hour: 0} (the field default) as an actual
+                // PlainDateTime would not be. Confirmed by
+                // relativeto-date-limits.js's minimum-date property bag.
+                std_temporal_validate(StdTemporalKind::PlainDate, &f)?;
                 f
             };
             fields[3..9].fill(0);
@@ -1300,25 +1313,54 @@ fn std_temporal_round(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) ->
     }
     // Duration is fully handled by std_temporal_round_duration above; only
     // PlainTime/PlainDateTime (day and finer, no calendar units) reach here.
-    let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
-        else { std_temporal_option_string(i, &option, "smallestUnit")?.unwrap_or_default() };
-    let unit = unit.strip_suffix('s').unwrap_or(&unit);
-    if matches!(unit, "year" | "month") {
-        return Err(Throw::range_error("calendar units require relativeTo"));
-    }
-    let unit_ns = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
+    // Every option property is read (and cast) in this exact order --
+    // roundingIncrement, roundingMode, smallestUnit -- before ANY
+    // algorithmic validation (unit legality, roundingMode validity,
+    // increment range, increment-divides-unit), confirmed by
+    // options-read-before-algorithmic-validation.js's exact property-read
+    // trace.
     let (increment, mode) = if option.is_object() {
         let increment = std_temporal_property(i, &option, "roundingIncrement")?.unwrap_or(1);
         let mode = std_temporal_option_string(i, &option, "roundingMode")?
             .unwrap_or_else(|| "halfExpand".to_string());
         (increment, mode)
     } else { (1, "halfExpand".to_string()) };
+    let unit = if let JsValue::Str(value) = &option { value.to_utf8_lossy() }
+        else { std_temporal_option_string(i, &option, "smallestUnit")?.unwrap_or_default() };
+    let unit = unit.strip_suffix('s').unwrap_or(&unit);
+
+    // Temporal.PlainDateTime.prototype.round's smallestUnit is restricted to
+    // day..nanosecond; Temporal.PlainTime.prototype.round's is restricted to
+    // hour..nanosecond ("day" is meaningless for a bare time-of-day with no
+    // date component, per spec's ValidateTemporalUnitValue(smallestUnit,
+    // ~time~) call for PlainTime vs. ValidateTemporalUnitValue(smallestUnit,
+    // ~time~, « ~day~ ») for PlainDateTime). year/month/week are rejected for
+    // both, even though week (unlike year/month) IS a fixed-length unit
+    // std_temporal_unit_ns can express; rounding to a week boundary has no
+    // defined anchor for a bare date/time with no relativeTo. Confirmed by
+    // smallestunit-invalid-string.js's "week"/"weeks" cases (both types) and
+    // "day"/"days" cases (PlainTime only).
+    if matches!(unit, "year" | "month" | "week")
+        || (unit == "day" && data.kind == StdTemporalKind::PlainTime) {
+        return Err(Throw::range_error("invalid smallestUnit"));
+    }
+    let unit_ns = std_temporal_unit_ns(unit).ok_or_else(|| Throw::range_error("invalid smallestUnit"))?;
     if !std_temporal_round_mode_valid(&mode) {
         return Err(Throw::range_error("invalid roundingMode"));
     }
-    if increment < 1 || increment > 1_000_000_000 {
+    // Per PlainDateTime.prototype.round's algorithm, smallestUnit "day" uses
+    // maximum = 1 with inclusive = true (i.e. increment must be exactly 1) --
+    // a special case local to THIS method, unlike Duration.round's and
+    // since/until's shared difference-rounding, both of which legitimately
+    // allow day increments > 1 (confirmed by
+    // Duration/prototype/round/roundingincrement-days-large.js and
+    // PlainDate(Time)/prototype/since|until/roundingincrement.js). "day" only
+    // reaches here for PlainDateTime (PlainTime rejects it just above), so no
+    // kind check is needed.
+    if unit == "day" && increment != 1 {
         return Err(Throw::range_error("invalid roundingIncrement"));
     }
+    std_temporal_validate_rounding_increment(unit, increment)?;
     let step = unit_ns * increment as i128;
     let mut fields = data.fields;
     match data.kind {
