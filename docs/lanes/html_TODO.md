@@ -1727,3 +1727,105 @@ unfixed after item 3 above; every other top-ranked file is one of the four
 buckets above. Routed 1 and 3 as separate findings in `.agents/html/
 questions.md` (2 needs no routing, it is a WICG proposal with no owner
 yet; 4 is a smaller finding folded into the same questions.md entry as 3).
+
+## HTML-33 — child-realm net/storage/messaging install; html5lib gap was a
+harness bug, not a tree-builder gap; no port needed
+
+Base: local `dev` at `2248f9bd` (HTML-32's merge). Brief: (1) NET-42's
+root-caused `ensure_realm()` missing `install_net()` for child realms
+(`document.cookie` undefined in an iframe), plus a check on whether
+storage/messaging need the same treatment. (2) A new "Porting from other
+engines" policy (`AGENTS.md`, 2026-09-27, user-approved: MIT/Apache-2.0
+sources only, with attribution headers and `THIRD_PARTY_NOTICES.md`) --
+target the html5lib gap (174/243) by porting `servo/html5ever`'s matching
+insertion-mode handling in bulk.
+
+### (1) NET-42: child-realm `install_net`/`install_storage_interfaces`/`install_messaging`
+
+`runtime_host_html.rs::ensure_realm`'s per-child-realm install sequence had
+an explicit, deliberate comment: "Storage, messaging, canvas and net stay
+top-only for this slice." `document.cookie` being undefined in an iframe is
+exactly what that scoping predicts, not a surprise bug -- but it is a real
+gap worth closing now. Added `adapter.install_net()`,
+`adapter.install_storage_interfaces()`, and `adapter.install_messaging()` to
+the child-realm closure, right after `install_selection_global()`, mirroring
+the top-level realm's own install sequence in `runtime_binding_host.rs`
+(all three only install classes/constructors onto *that* realm's own global
+object -- no cross-realm coupling, so the pattern transfers directly).
+
+**Not done, and worth flagging separately from the fix above:** the top
+realm additionally calls `storage_lexical_areas()` and declares
+`localStorage`/`sessionStorage` as lexical globals bound to actual `Storage`
+*instances* -- `install_storage_interfaces()` alone only makes the `Storage`
+*class* reachable (`frame.contentWindow.Storage` now works), not
+`frame.contentWindow.localStorage` itself. Giving an iframe a real,
+working, per-origin `localStorage`/`sessionStorage` instance is a materially
+bigger design question (should a sandboxed-without-`allow-same-origin`
+frame's storage be keyed to its own opaque origin the same way `ensure_realm`
+already keys its JS realm origin? what happens across re-navigation?) than
+this fix's "add three install calls" scope, so it is left as a follow-up.
+Canvas stays top-only too, unrequested and unrelated to cookies.
+
+Measured (`crates/amazing-fetch/tests/support/net41_cookies_batch.sh`, 23
+files, before = `2248f9bd` exact ref, after = this diff, same venus-001
+run): subtests pass **529 -> 609** (+80), fail 203 -> 123, 0 timeouts either
+side. (The coordinator's stated before-baseline, 529 pass / 210 fail / 6
+timeouts, matches this run's pass count exactly; the fail/timeout split
+differs slightly, consistent with a few borderline network-timing subtests
+landing in a different bucket on a different run of the same host -- the
+529 pass count matching exactly is what makes this the same baseline.) No
+file in this batch fully passes end to end (each still has at least one
+subtest needing real multi-page/testdriver navigation this single-page
+harness can't do, per the script's own header), but every file's own
+document-scoped cookie assertions that only needed a working `document.
+cookie` now pass, plus further gains from storage/messaging plausibly used
+by some files' own cross-frame test helpers.
+
+### (2) html5lib gap: root cause was `scripts/html5lib.py`, not the tree builder --
+no port performed
+
+Investigated before porting anything, per this project's own std-only,
+from-scratch architecture and the porting policy's own bar (ports close a
+*real* spec gap; this ticket's brief characterized the html5lib pass rate
+as a gap needing html5ever's insertion-mode logic). Re-ran `scripts/
+html5lib.py --show-failures 3`: **every one of the 69 "failing" cases had
+an identical shape** -- the actual dump matched the expected tree exactly,
+except for one extra leading `(0, '<!DOCTYPE html>')` line the actual side
+had and the expected side didn't. Example (`blocks.dat` case 1):
+
+```
+expected: [(0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), ...]
+actual:   [(0, '<!DOCTYPE html>'), (0, '<html>'), (1, '<head>'), (1, '<body>'), (2, '<p>'), ...]
+```
+
+`canonical_expected` (in `html5lib.py`) already skips a `<!DOCTYPE` line
+with a comment explaining why: "Amazing stores the doctype separately from
+the arena tree and the Phase 1 CLI intentionally dumps only the tree rooted
+at `#document`." That comment is stale -- some later ticket's dump-fidelity
+work started emitting a `<!DOCTYPE html>` line as the tree's first child (a
+real, correct improvement to the dump CLI), but `canonical_actual` (the
+other half of the same comparison) was never updated to skip it the same
+way `canonical_expected` does. Fixed with the identical skip in
+`canonical_actual`. Re-ran: **174/243 (71.60%) -> 243/243 (100%)**, zero
+new failures, confirming the tree-construction logic these 243 cases
+exercise was already fully correct -- this was a five-line test-harness
+bug, not a tree-builder gap, and **porting html5ever's insertion-mode
+handling would not have fixed a single one of these 69 cases** (their trees
+were already right). No upstream code was ported; no `THIRD_PARTY_NOTICES.md`
+row was needed. `servo/html5ever` 0.39.0 (verified dual MIT/Apache-2.0 at
+that version, matching the policy's allowed-sources bar) was checked out
+locally for this investigation but nothing was copied from it.
+
+This does not mean porting html5ever is never worthwhile for this lane --
+the WPT `html/syntax`/`html/dom` corpus (measured in HTML-31/32's standing
+1,112-file sweep) still has real fail/timeout/error files, and some of
+those could be genuine tree-construction gaps a port would close faster
+than re-deriving from spec. That is a distinct, separate investigation from
+"the html5lib pass rate," which this ticket's brief conflated with a
+tree-builder gap that, on inspection, did not exist. Flagged back to the
+coordinator in `.agents/html/questions.md` rather than silently
+substituting a different (unrequested) porting target.
+
+### Gate
+
+`amazing`+`amazing-html` crate nextest: **513/513 passed, 6 skipped**.
