@@ -19,10 +19,20 @@ use std::collections::HashMap;
 /// own arena-local tree -- so a plain parent-chain walk would call *every*
 /// such fragment "unreachable" even while its owning template/host is very
 /// much attached, and wrongly detach its `dest` counterpart.
+///
+/// HTML-40 (1) follow-up: guards against revisiting a node already seen on
+/// this same walk. `source` should never itself end up with a live host-
+/// including cycle (`reverse_sync`'s own mirroring gives up, rather than
+/// completing one, when `dest` has one -- see `mirror_dest_node_rec`), but
+/// this walk is cheap to make cycle-safe on its own terms too rather than
+/// lean entirely on that other function never regressing.
 fn source_reaches_document_root(dom: &Dom, node: NodeIdx) -> bool {
+    let mut seen = Vec::new();
     let mut cursor = Some(node);
     while let Some(id) = cursor {
         if id == NodeIdx(0) { return true; }
+        if seen.contains(&id) { return false; }
+        seen.push(id);
         cursor = dom.host_including_parent(id);
     }
     false
@@ -545,7 +555,20 @@ impl IncrementalDocumentImport {
                 };
                 if source.get(source_node).parent == target { continue; }
                 if let Some(t) = target {
-                    if source.contains(source_node, Some(t)) {
+                    // Host-including, not just `Dom::contains`'s ordinary
+                    // parent-chain check: `shadow-cycle`/`template-cycle`
+                    // construct exactly a *host-including* cycle (through a
+                    // shadow root's host, or a template's owning template),
+                    // which `attach_before`'s own hard cycle assert (also
+                    // ordinary-only) would not catch either -- deferring
+                    // here, same as an ordinary would-be cycle, is what lets
+                    // the surrounding retry loop's "give up rather than
+                    // loop forever" fallback apply to this case too, instead
+                    // of physically constructing a live cycle in `source`
+                    // that `adoption_agency`'s own cycle guard would then
+                    // have to detect (or hang trying to, absent HTML-40's
+                    // own fix to `host_including_ancestors`).
+                    if source.is_host_including_inclusive_ancestor(source_node, t) {
                         deferred.push((source_node, dest_node));
                         continue;
                     }
@@ -583,12 +606,46 @@ impl IncrementalDocumentImport {
     /// all -- so there is nothing to mirror it into.
     fn mirror_dest_node(&mut self, source: &mut Dom, dest: &Dom, node: NodeIdx)
         -> Result<Option<NodeIdx>, DomError> {
+        let mut resolving = Vec::new();
+        self.mirror_dest_node_rec(source, dest, node, &mut resolving)
+    }
+
+    /// `mirror_dest_node`'s actual recursion, with `resolving` tracking the
+    /// node's own currently-in-progress ancestor chain. HTML-40 (1)
+    /// follow-up: a live `Dom` can never hold an *ordinary* parent-child
+    /// cycle (`attach_before`'s own hard assert), but the host-including
+    /// hops this walks through (shadow root -> host, template contents ->
+    /// owning template) are not parent-child edges that assert ever sees --
+    /// a script can construct a live *host-including* cycle at `dest`
+    /// (`adoption-agency-reparenting-shadow-cycle.html` does exactly this:
+    /// the shadow host ends up an ordinary descendant of a node inside its
+    /// own shadow root's content). Resolving such a node's mirror walks
+    /// shadow-root -> host -> ... -> the very same shadow root, forever,
+    /// hanging the whole harness process with no script-level timeout ever
+    /// getting a chance to fire (this is one synchronous native call, never
+    /// yielding). Detect the re-entrancy and give up on this node's mirror
+    /// (`None`) instead -- the same "give up rather than loop forever"
+    /// choice `reverse_sync`'s own reparent-order retry loop already makes,
+    /// and harmless here: `adoption_agency`'s cycle guard is exactly what
+    /// will (correctly) refuse to reattach a node in this shape once the
+    /// parser resumes.
+    fn mirror_dest_node_rec(&mut self, source: &mut Dom, dest: &Dom, node: NodeIdx,
+        resolving: &mut Vec<NodeIdx>) -> Result<Option<NodeIdx>, DomError> {
         if let Some(&mapped) = self.rev.get(&node) { return Ok(Some(mapped)); }
+        if resolving.contains(&node) { return Ok(None); }
+        resolving.push(node);
+        let result = self.mirror_dest_node_body(source, dest, node, resolving);
+        resolving.pop();
+        result
+    }
+
+    fn mirror_dest_node_body(&mut self, source: &mut Dom, dest: &Dom, node: NodeIdx,
+        resolving: &mut Vec<NodeIdx>) -> Result<Option<NodeIdx>, DomError> {
         if let Some(data) = dest.shadow_data(node) {
             let (host, options) = (data.host, data.options.clone());
             let (declarative, available, keep_registry_null) = (data.declarative,
                 data.available_to_element_internals, data.keep_custom_element_registry_null);
-            let Some(source_host) = self.mirror_dest_node(source, dest, host)? else { return Ok(None) };
+            let Some(source_host) = self.mirror_dest_node_rec(source, dest, host, resolving)? else { return Ok(None) };
             let source_root = match source.shadow_root_of_host(source_host) {
                 Some(existing) => existing,
                 None => {
@@ -605,13 +662,13 @@ impl IncrementalDocumentImport {
             return Ok(Some(source_root));
         }
         if let Some(template) = dest.template_of_contents(node) {
-            let Some(source_template) = self.mirror_dest_node(source, dest, template)? else { return Ok(None) };
+            let Some(source_template) = self.mirror_dest_node_rec(source, dest, template, resolving)? else { return Ok(None) };
             let source_contents = source.ensure_template_contents(source_template)?;
             self.record(source_contents, node);
             return Ok(Some(source_contents));
         }
         let Some(parent) = dest.get(node).parent else { return Ok(None) };
-        let Some(source_parent) = self.mirror_dest_node(source, dest, parent)? else { return Ok(None) };
+        let Some(source_parent) = self.mirror_dest_node_rec(source, dest, parent, resolving)? else { return Ok(None) };
         self.reverse_import_one(source, dest, node, source_parent)
     }
 
