@@ -11,6 +11,18 @@ import tempfile
 
 REVISION = 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293'
 DIRECTORIES = ['dom/nodes', 'dom/traversal', 'dom/events', 'dom/collections']
+# Cross-directory helper scripts pulled in by `../../<dir>/...` relative
+# `<script src>`s from inside a selected DIRECTORIES tree, so a page whose
+# assertions are otherwise fine doesn't error on a missing file before it
+# runs any of them. Found by grepping the already-checked-out tree for
+# `../../` references that resolve outside `resources`/`common` and outside
+# the selected directories themselves: `shadow-dom/declarative/gethtml.html`
+# and its siblings (`declarative-shadow-dom-attachment.html`,
+# `-opt-in.html`, `-repeats.html`) pull `../../html/resources/common.js`;
+# `html/dom/usvstring-reflection.https.html` pulls
+# `../../webrtc/RTCPeerConnection-helper.js`. Extend this list if a future
+# `--directory` selection surfaces another one the same way.
+SHARED_RESOURCE_DIRECTORIES = ['resources', 'common', 'html/resources', 'webrtc']
 
 def sparse_checkout(root, mode, paths):
     """`git sparse-checkout set/add`, but never on a checkout this script did
@@ -74,13 +86,13 @@ root = Path(os.environ['OUT']) / 'dom-b-audit-wpt'
 if not (root / '.git').exists():
     subprocess.run(['git', 'init', str(root)], check=True)
     subprocess.run(['git', '-C', str(root), 'remote', 'add', 'origin', 'https://github.com/web-platform-tests/wpt.git'], check=True)
-    sparse_checkout(root, 'set', ['resources', 'common', *DIRECTORIES])
+    sparse_checkout(root, 'set', [*SHARED_RESOURCE_DIRECTORIES, *DIRECTORIES])
 if not (root / DIRECTORIES[0]).exists():
     subprocess.run(['git', '-C', str(root), 'fetch', '--depth=1', '--filter=blob:none', 'origin', REVISION], check=True)
     subprocess.run(['git', '-C', str(root), 'checkout', '--detach', REVISION], check=True)
 assert subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() == REVISION
 # Extend an existing lane-local sparse clone when a new whole area is selected.
-sparse_checkout(root, 'add', ['resources', 'common', *DIRECTORIES])
+sparse_checkout(root, 'add', [*SHARED_RESOURCE_DIRECTORIES, *DIRECTORIES])
 assert all((root / directory).is_dir() for directory in DIRECTORIES), 'missing selected corpus directory'
 selection = []
 excluded = []

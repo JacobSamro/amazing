@@ -1295,7 +1295,23 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_SCRIPT },
-    D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[getter("content", O::TemplateContent)] },
+    D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[
+        getter("content", O::TemplateContent),
+        // DOM-18 follow-up: declarative shadow DOM's four reflected IDL
+        // attributes on <template> (HTML SS4.12.4). shadowRootMode is a
+        // "limited to only known values" DOMString (getter-only limiting,
+        // default ""); the other three are plain boolean-attribute
+        // reflections, same shape as every other Boolean LegacyReflectGet/
+        // Set pair above.
+        getter("shadowRootMode", O::LegacyReflectGet(I::HTMLTemplateElement, "shadowrootmode", LR::LimitedKnownValues(&["open", "closed"]))),
+        setter("shadowRootMode", O::LegacyReflectSet(I::HTMLTemplateElement, "shadowrootmode", LR::LimitedKnownValues(&["open", "closed"]))),
+        getter("shadowRootDelegatesFocus", O::LegacyReflectGet(I::HTMLTemplateElement, "shadowrootdelegatesfocus", LR::Boolean)),
+        setter("shadowRootDelegatesFocus", O::LegacyReflectSet(I::HTMLTemplateElement, "shadowrootdelegatesfocus", LR::Boolean)),
+        getter("shadowRootClonable", O::LegacyReflectGet(I::HTMLTemplateElement, "shadowrootclonable", LR::Boolean)),
+        setter("shadowRootClonable", O::LegacyReflectSet(I::HTMLTemplateElement, "shadowrootclonable", LR::Boolean)),
+        getter("shadowRootSerializable", O::LegacyReflectGet(I::HTMLTemplateElement, "shadowrootserializable", LR::Boolean)),
+        setter("shadowRootSerializable", O::LegacyReflectSet(I::HTMLTemplateElement, "shadowrootserializable", LR::Boolean)),
+    ] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_IFRAME },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &LEGACY_EMBED },

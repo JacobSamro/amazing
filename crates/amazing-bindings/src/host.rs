@@ -247,7 +247,20 @@ pub enum FormAttribute {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LegacyReflectionKind { String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed }
+pub enum LegacyReflectionKind {
+    String, LegacyString, Url, UsvUrl, Boolean, Unsigned, Signed,
+    /// A `DOMString` attribute "limited to only known values" whose missing
+    /// value default is the empty string (unlike `Loading`/`Decoding` in
+    /// `element_reflection.rs`'s own `Kind`, which default to a specific
+    /// keyword instead -- those stay local since nothing else needs this
+    /// exact "" fallback yet). Getter: the attribute value if it
+    /// ASCII-case-insensitively matches one of `keywords`, else "". Setter:
+    /// plain passthrough, same as `String` -- WebIDL's reflection algorithm
+    /// only limits the *getter*, per
+    /// <https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect>.
+    /// First user: `HTMLTemplateElement.shadowRootMode` (DOM-18 follow-up).
+    LimitedKnownValues(&'static [&'static str]),
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {

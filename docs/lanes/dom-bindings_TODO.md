@@ -2745,3 +2745,47 @@ implementing them this ticket.
 `ok` (`amazing_js`/`amazing_html` 1/1 each).
 
 Evidence: `crates/amazing-bindings/evidence/dom-18-shadow-roots/`.
+
+## Coordinator follow-up: run-corpus.py sparse-checkout gap + HTMLTemplateElement reflection (fixed base 4c512a79)
+
+Both gaps flagged unaddressed in the previous ticket's evidence, fixed as one
+ticket per coordinator instruction:
+
+1. **`run-corpus.py` sparse checkout**: extracted the inlined
+   `['resources', 'common', ...]` list at both `sparse_checkout` call sites
+   into a new `SHARED_RESOURCE_DIRECTORIES` constant, adding `html/resources`
+   and `webrtc` (the two cross-directory helper dirs found missing via
+   `shadow-dom/declarative/gethtml.html` and
+   `html/dom/usvstring-reflection.https.html`).
+2. **`HTMLTemplateElement` reflection**: `shadowRootMode` (new
+   `LegacyReflectionKind::LimitedKnownValues(&'static [&'static str])` --
+   getter-only value limiting per the WebIDL reflection algorithm, default
+   `""`), `shadowRootDelegatesFocus`/`shadowRootClonable`/
+   `shadowRootSerializable` (existing `LegacyReflectionKind::Boolean`,
+   unchanged). All four wired through the existing generic
+   `O::LegacyReflectGet`/`LegacyReflectSet(Interface, attribute, kind)`
+   pattern -- no new bespoke `Operation` variants.
+
+**Measured** (venus-001, `--directory shadow-dom --directory html/dom`,
+whole directories, 509 files; both runs on a freshly built
+`cargo build -p amazing --release --locked` binary -- `run-corpus.py` only
+copies the existing release binary, it does not build it): **1621 subtests
+gained, 0 lost**; 34 files `error -> pass`, 29 `error -> fail`, 2
+`error -> timeout` (all from the sparse-checkout fix).
+`declarative-shadow-dom-basic.html` (the reflection fix's direct target):
+`fail {pass: 7, fail: 15}` -> `fail {pass: 15, fail: 7}`. `gethtml.html`:
+`error` (missing resource) -> `timeout` with 828/2062 real subtests
+(auto-generated page, thousands of subtests, hits the per-test deadline;
+still a real improvement over erroring before any assertion ran).
+
+**Gate**: workspace `cargo nextest run --workspace --locked --no-fail-fast`
+-- **3482 passed / 17 skipped / 0 failed**; `cargo test --workspace
+--locked --doc` -- all `ok`. Crate: `amazing-bindings` + `amazing-dom`
+372/372.
+
+Found in passing, not implemented (routed to `questions.md`):
+`innerhtml-on-ordinary-template.html`'s `ReferenceError: ordinarytemplate is
+not defined` (a declarative-shadow-attach-skip or window-named-access gap
+specific to `<template>`, not triaged further).
+
+Evidence: `crates/amazing-bindings/evidence/dom-18-shadow-roots/combined-followup/`.
