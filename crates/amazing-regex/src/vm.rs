@@ -134,13 +134,21 @@ impl SetExpr {
             Self::Char(member) => match sequence {
                 [c] => match member {
                     Member::Range(lo, hi) => {
+                        // `Node::Set`/`SetExpr` only exists under the `v`
+                        // flag (`class()` only builds it when
+                        // `unicode_sets` is set), so `canonical` is always
+                        // in its unicode-mode branch here: a fixed point, or
+                        // the lower side of some `PAIRS` entry (or entries --
+                        // e.g. both `K` and Kelvin-sign `K` fold to `k`).
+                        // `folded`'s only other possible class members are
+                        // those entries' upper sides, i.e. its `partners` --
+                        // two binary searches instead of an up-to-1512-entry
+                        // scan of the whole table (see `partners`' doc).
                         let folded = canonical(*c, flags);
                         (*lo..=*hi).contains(&folded)
                             || (flags.ignore_case
-                                && crate::unicode_casefold::PAIRS.iter().any(|&(a, b)| {
-                                    (*lo..=*hi).contains(&a) && canonical(a, flags) == folded
-                                        || (*lo..=*hi).contains(&b) && canonical(b, flags) == folded
-                                }))
+                                && crate::unicode_casefold::partners(folded)
+                                    .any(|p| (*lo..=*hi).contains(&p)))
                     }
                     Member::Digit(invert) => (48..=57).contains(c) != *invert,
                     Member::Word(invert) => word(*c, flags) != *invert,
@@ -179,11 +187,14 @@ impl SetExpr {
                                     hit
                                 }
                             };
+                            // Same two-binary-search swap as `Member::Range`
+                            // above: this is exactly `test` of each of `c`'s
+                            // `PAIRS` partners (there can be more than one --
+                            // both `K` and Kelvin-sign `K` fold to `k`), not
+                            // a fresh per-character scan of the whole table.
                             test(*c)
                                 || (flags.ignore_case
-                                    && crate::unicode_casefold::PAIRS.iter().any(|&(a, b)| {
-                                        (*c == a && test(b)) || (*c == b && test(a))
-                                    }))
+                                    && crate::unicode_casefold::partners(*c).any(test))
                         }
                         _ => false,
                     }

@@ -33,6 +33,7 @@ struct RealmState {
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
     pair_iterator_proto: Obj,
+    regexp_string_iterator_proto: Obj,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
     location_url: String,
@@ -75,6 +76,7 @@ impl RealmState {
             legacy_iterator_proto: i.legacy_iterator_proto.clone(),
             pair_hooks: i.pair_hooks.clone(),
             pair_iterator_proto: i.pair_iterator_proto.clone(),
+            regexp_string_iterator_proto: i.regexp_string_iterator_proto.clone(),
             dom_host: i.dom_host.clone(),
             dom_listeners: i.dom_listeners.clone(),
             location_url: i.location_url.clone(),
@@ -115,6 +117,7 @@ impl RealmState {
         i.legacy_iterator_proto = self.legacy_iterator_proto;
         i.pair_hooks = self.pair_hooks;
         i.pair_iterator_proto = self.pair_iterator_proto;
+        i.regexp_string_iterator_proto = self.regexp_string_iterator_proto;
         i.dom_host = self.dom_host;
         i.dom_listeners = self.dom_listeners;
         i.location_url = self.location_url;
@@ -262,7 +265,8 @@ impl Interpreter {
         let mut pending = vec![self.global_obj.clone(), self.object_proto.clone(),
             self.function_proto.clone(), self.async_function_proto.clone(),
             self.generator_function_proto.clone(), self.async_generator_function_proto.clone(),
-            self.legacy_iterator_proto.clone(), self.pair_iterator_proto.clone()];
+            self.legacy_iterator_proto.clone(), self.pair_iterator_proto.clone(),
+            self.regexp_string_iterator_proto.clone()];
         let mut seen = std::collections::HashSet::new();
         while let Some(object) = pending.pop() {
             if !seen.insert(Rc::as_ptr(&object.0) as usize) { continue; }
