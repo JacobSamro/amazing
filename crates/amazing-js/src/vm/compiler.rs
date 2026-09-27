@@ -1130,6 +1130,14 @@ impl Compiler {
             }
             ExprKind::Member {
                 obj,
+                prop: ast::MemberProp::Private(name),
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                self.emit(Instruction::GetPrivateField(dst, object, name.name.clone()));
+            }
+            ExprKind::Member {
+                obj,
                 prop,
                 optional: false,
             } => {
@@ -1164,6 +1172,13 @@ impl Compiler {
                 };
                 self.emit(Instruction::Unary(dst, *op, src));
             }
+            ExprKind::Binary { op: ast::BinOp::In, left, right }
+                if matches!(&left.kind, ExprKind::PrivateName(_)) =>
+            {
+                let ExprKind::PrivateName(name) = &left.kind else { unreachable!() };
+                let object = self.expression(right)?;
+                self.emit(Instruction::HasPrivateField(dst, object, name.name.clone()));
+            }
             ExprKind::Binary { op, left, right } => {
                 let left = self.expression(left)?;
                 let right = self.expression(right)?;
@@ -1190,6 +1205,16 @@ impl Compiler {
                     return Err(self.error(expression.span, "direct eval"));
                 }
                 let (callee, this) = match &callee.kind {
+                    ExprKind::Member {
+                        obj,
+                        prop: ast::MemberProp::Private(name),
+                        optional: false,
+                    } => {
+                        let object = self.expression(obj)?;
+                        let function = self.register(callee.span)?;
+                        self.emit(Instruction::GetPrivateField(function, object, name.name.clone()));
+                        (function, object)
+                    }
                     ExprKind::Member {
                         obj,
                         prop,
@@ -1281,6 +1306,14 @@ impl Compiler {
                     self.program.references += 1;
                     self.emit(Instruction::ResolveWriteName(slot, name.to_owned()));
                     slot
+                } else if let Some((obj, name)) = private_target(target) {
+                    // Plain `=` must not read: a setter-only private accessor
+                    // has no getter, and reading it throws.
+                    let object = self.expression(obj)?;
+                    let slot = self.program.references;
+                    self.program.references += 1;
+                    self.emit(Instruction::ResolvePrivateWrite(slot, object, name.name.clone()));
+                    slot
                 } else { self.reference(target)?.0 };
                 let value = if let Some(name) = super::super::event_handler::identifier_name(target) {
                     self.named_class_expression(value, KeyOperand::Static(name.into()))?
@@ -1366,6 +1399,14 @@ impl Compiler {
         match &target.kind {
             ExprKind::Ident(name) => {
                 self.emit(Instruction::ResolveName(slot, old, name.name.clone()));
+            }
+            ExprKind::Member {
+                obj,
+                prop: ast::MemberProp::Private(name),
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                self.emit(Instruction::ResolvePrivate(slot, old, object, name.name.clone()));
             }
             ExprKind::Member {
                 obj,
@@ -1473,6 +1514,16 @@ fn unsupported_statement(kind: &StmtKind) -> &'static str {
         StmtKind::Labeled { .. } => "labeled statement",
         StmtKind::Class(_) => "class",
         _ => "statement kind",
+    }
+}
+
+fn private_target(mut target: &Expr) -> Option<(&Expr, &ast::Ident)> {
+    while let ExprKind::Paren(inner) = &target.kind {
+        target = inner;
+    }
+    match &target.kind {
+        ExprKind::Member { obj, prop: ast::MemberProp::Private(name), optional: false } => Some((obj, name)),
+        _ => None,
     }
 }
 

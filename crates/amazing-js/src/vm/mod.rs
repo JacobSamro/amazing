@@ -240,6 +240,27 @@ enum Instruction {
     /// string), `done` set once the key chain is exhausted.
     ForInNext(Register, Register, usize),
     BindFor(ForLeft, Register),
+    /// Private field read (JSVM-10): `#x` resolves lexically through the
+    /// active PrivateEnvironment chain at *runtime* (`env.resolve_private`),
+    /// not at compile time -- a private name closes over whichever class
+    /// body lexically encloses this code, which the compiler (unlike the
+    /// tree walker's env chain) has no static view of once it's compiling a
+    /// nested function/closure body in isolation. `(dst, base, name)`.
+    GetPrivateField(Register, Register, String),
+    /// Private field reference, for plain/compound assignment and
+    /// update expressions (`obj.#x = v`, `+=`, `++`) -- mirrors
+    /// `ResolveMember`: reads the current value into `dst` and records a
+    /// `Reference::Private` in `slot` for `StoreReference` to write back
+    /// through (already generic over every `Reference` variant).
+    /// `(slot, dst, base, name)`.
+    ResolvePrivate(usize, Register, Register, String),
+    /// `#x in obj` (`dst, base, name`); the general `Binary(_, BinOp::In, ..)`
+    /// path never applies here since a bare `#x` isn't itself a compilable
+    /// expression outside this one position (checked directly on the AST at
+    /// compile time, not through a resolved register).
+    HasPrivateField(Register, Register, String),
+    /// `ResolvePrivate` without the read, for a plain `=` target.
+    ResolvePrivateWrite(usize, Register, String),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
     /// `new.target`: the active call's constructor target, or `undefined`
     /// for an ordinary call.
@@ -690,6 +711,32 @@ impl Program {
                         let receiver = registers[*object].clone();
                         registers[*dst] = fast_path::get(i, &receiver, key.clone(), &mut caches[*pc - 1])?;
                         references[*slot] = Some(Reference::Property(receiver, key));
+                    }
+                    Instruction::GetPrivateField(dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        registers[*dst] = super::private_field_get(i, &registers[*base], &private)?;
+                    }
+                    Instruction::ResolvePrivate(slot, dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        let receiver = registers[*base].clone();
+                        registers[*dst] = super::private_field_get(i, &receiver, &private)?;
+                        references[*slot] = Some(Reference::Private(receiver, private));
+                    }
+                    Instruction::ResolvePrivateWrite(slot, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        references[*slot] = Some(Reference::Private(registers[*base].clone(), private));
+                    }
+                    Instruction::HasPrivateField(dst, base, name) => {
+                        let private = env.resolve_private(name).ok_or_else(|| {
+                            Throw::syntax_error(format!("private name #{name} is not defined"))
+                        })?;
+                        registers[*dst] = JsValue::Bool(super::private_field_has(&registers[*base], &private)?);
                     }
                     Instruction::StoreReference(slot, src) => {
                         let reference = references[*slot]

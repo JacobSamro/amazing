@@ -265,6 +265,119 @@ fn jsvm10_break_continue_switch_for_in_for_of_labels_match() {
 }
 
 #[test]
+fn jsvm10_private_fields_and_methods_compile_in_generator_and_async_bodies() {
+    use crate::ast::{self, ClassMember, StmtKind};
+
+    fn class_method<'a>(class: &'a ast::ClassItem, name: &str) -> &'a ast::ClassMethod {
+        class.members.iter().find_map(|member| match member {
+            ClassMember::Method(method) => match &method.key {
+                ast::PropKey::Ident(id) | ast::PropKey::Private(id) if id.name == name => {
+                    Some(method)
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no method {name} on class"))
+    }
+
+    let program = parse_script(
+        "class C {            #x = 1;            #getX() { return this.#x; }            *gen() { this.#x++; yield this.#x; this.#x += 10; yield this.#getX(); yield (#x in this); }            async run() { this.#x++; await 1; this.#x += 10; return [this.#x, this.#getX(), (#x in this)].join(','); }            async *agen() { this.#x++; yield this.#x; await 1; this.#x += 10; yield this.#getX(); }          }",
+    )
+    .unwrap();
+    let class = match &program.body[0].kind {
+        StmtKind::Class(class) => class,
+        other => panic!("expected class declaration: {other:?}"),
+    };
+
+    compile_class_method(class_method(class, "gen"), true)
+        .expect("generator method with private field/method/`in` access should compile");
+    compile_class_method(class_method(class, "run"), true)
+        .expect("async method with private field/method/`in` access should compile");
+    compile_class_method(class_method(class, "agen"), true)
+        .expect("async generator method with private field/method access should compile");
+}
+
+#[test]
+fn jsvm10_private_fields_and_methods_in_generator_and_async_bodies_match() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class C {
+            #x = 1;
+            #getX() { return this.#x; }
+            *gen() {
+                this.#x++;
+                yield this.#x;
+                this.#x += 10;
+                yield this.#getX();
+                yield (#x in this);
+            }
+        }
+        var g = new C().gen();
+        var out = [g.next().value, g.next().value, g.next().value].join(',');
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("2,12,true")));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class D {
+            #y = 2;
+            static #tag = 'd';
+            #getY() { return this.#y; }
+            static #describe() { return D.#tag; }
+            async run() {
+                this.#y++;
+                await 1;
+                this.#y += 10;
+                await 1;
+                return [this.#y, this.#getY(), (#y in this), D.#describe()].join(',');
+            }
+        }
+        var out = '';
+        new D().run().then(function(v) { out = v; });
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("13,13,true,d")));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class E {
+            #z = 5;
+            async *agen() {
+                var self = this;
+                var read = function() { return self.#z; };
+                this.#z += read();
+                yield this.#z;
+            }
+        }
+        var out = '';
+        var it = new E().agen();
+        it.next().then(function(r) { out = r.value; });
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::num(10.0)));
+
+    // Plain `=` to a setter-only private accessor must not read it first.
+    let mut interpreter = Interpreter::new();
+    let source = "
+        class S {
+            set #s(v) { this.log = v; }
+            get #g() { return 1; }
+            *gen() {
+                this.#s = 5;
+                yield this.log;
+                try { this.#g = 2; } catch (e) { yield e instanceof TypeError; }
+            }
+        }
+        var g = new S().gen();
+        var out = [g.next().value, g.next().value].join(',');
+    ";
+    interpreter.run_script(source).unwrap();
+    assert_eq!(interpreter.global_env.resolve("out"), Some(JsValue::str("5,true")));
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",
