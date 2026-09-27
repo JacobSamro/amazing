@@ -952,6 +952,38 @@ mod tests {
     }
 
     #[test]
+    fn promise_combinators_reject_a_non_constructor_this_synchronously() {
+        let mut i = Interpreter::new();
+        for method in ["all", "race", "allSettled", "any"] {
+            let script = format!("Promise.{method}.call(undefined, [])");
+            let err = i.run_script(&script);
+            assert!(err.is_err(), "{method} should throw for a non-constructor this");
+        }
+    }
+
+    #[test]
+    fn promise_combinators_reject_when_resolve_is_not_callable() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "function C(exec){exec(()=>{},()=>{})} C.resolve=1; Promise.all.call(C, []).catch(e=>console.log(e instanceof TypeError));",
+        )
+        .unwrap();
+        assert_eq!(&*i.output.borrow(), &["true".to_string()]);
+    }
+
+    #[test]
+    fn promise_combinators_invoke_the_constructors_own_resolve() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "let calls=[]; function C(exec){exec(()=>{},()=>{})} C.prototype=Promise.prototype; \
+             C.resolve=function(v){calls.push(v); return Promise.resolve(v*10);}; \
+             Promise.all.call(C, [1,2]).then(v=>console.log(v.join(','), calls.join(',')));",
+        )
+        .unwrap();
+        assert_eq!(&*i.output.borrow(), &["10,20 1,2".to_string()]);
+    }
+
+    #[test]
     fn array_object_and_for_of_patterns_bind_values_defaults_and_rest() {
         let mut i = Interpreter::new();
         let value = match i.run_script(

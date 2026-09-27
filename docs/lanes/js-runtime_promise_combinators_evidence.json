@@ -1,0 +1,39 @@
+{
+  "ticket": "JSRT-24: Promise.all/race/allSettled/any spec-correct entry sequence (largest built-ins/ Test262 cluster not owned by js-vm/js-date/js-stdlib, per coordinator's Message 3 choice)",
+  "base": "2635118e",
+  "file": "crates/amazing-js/src/interp_builtins.rs",
+  "root_cause": {
+    "summary": "native_promise_all/race/all_settled/any (ECMA-262 27.2.4.1/4.2/4.3/4.7) discarded `this` entirely (`_: JsValue`), so they never validated IsConstructor(C), never performed GetPromiseResolve(C) (Get(C,\"resolve\") + callable check), and never invoked a real `resolve`. Instead every per-element input went through an ad-hoc helper, promise_input(), that only asked 'is this already one of our internal Promise objects? if so use it as-is, else wrap it as an already-fulfilled promise' -- a shortcut that never calls Call(promiseResolve, C, [nextValue]) and so never observes a subclass's or a plain object's own `resolve` method, never routes a thenable through resolution semantics, and never lets a non-constructor `this` or a non-callable `resolve` be observed at all.",
+    "spec_error_shape": "Per NewPromiseCapability, IsConstructor(C) failing is a synchronous throw (no capability exists yet). Everything from GetPromiseResolve onward (property lookup, GetIterator, the per-element resolve Call) is IfAbruptRejectPromise: an error there must REJECT the already-created capability's promise, not propagate as a synchronous exception. The prior code had no capability/target-vs-throw distinction at all -- every combinator either ran to completion or the whole call threw synchronously, regardless of which step failed."
+  },
+  "fix": {
+    "combinator_entry": "New shared helper in interp_builtins.rs: (1) IsConstructor(this) check using the codebase's existing idiom (object.func.is_some() && object.borrow().constructible), synchronous TypeError if false; (2) creates the internal target promise (stands in for the capability's promise -- a true Construct(C, executor)-based subclass instance is a separate, deeper, pre-existing gap shared with `new Promise()` itself's own new.target handling, deliberately out of scope here); (3) Get(this,\"resolve\") + callable check, rejecting the target (not throwing) on either failure; (4) runs the combinator's own body (iterate + per-element attach) with any Err rejecting the target instead of propagating.",
+    "attach_combinator": "Now takes `resolve`/`c` and calls `i.call_value(resolve, c.clone(), vec![input])?` (Call(promiseResolve, C, [nextValue])) instead of the ad-hoc promise_input() wrap-or-passthrough.",
+    "make_combinator_state": "Simplified to take the already-created target (from combinator_entry) instead of creating its own -- there is exactly one target per combinator call now, created once before any fallible step.",
+    "promise_input": "Removed (dead code; its only two callers both now go through the real resolve call).",
+    "native_promise_all/race/all_settled/any": "Rewritten as thin combinator_entry(i, &this, |i, target, c, resolve| { ...unchanged combinator-specific body (iterate, empty-input fast path, per-element attach, native_*_fulfill/native_*_reject)... }) closures. The zero-args special case ('Promise.all requires an iterable') was removed in favor of always defaulting to JsValue::Undefined and letting GetIterator's own failure surface as an (async) rejection through the same IfAbruptRejectPromise path -- more spec-uniform, and required by ctx-non-object.js-style tests that rely on a rejection rather than a synchronous throw for a non-iterable second argument.",
+    "eval_non_constructor": "Fixing the IsConstructor check surfaced a real, narrowly-scoped regression: every native function object in this engine defaults to `constructible: true` (JsObject's own default, relied on implicitly by every real constructor install site across interp_install.rs and the builtins_*.rs files). `Promise.all.call(eval)`-style ctx-non-ctor.js tests expect `eval` (a plain global function, never a valid `new` target) to fail IsConstructor. Added a narrow `Interpreter::native_non_constructor(name, f, proto)` helper (wraps `Self::native` and clears `constructible`) and used it for exactly the one native this ticket's tests exercise (`eval`, in interp_install.rs). The general 'audit which native install sites should default constructible: false' architecture gap is real, cross-cutting (touches js-binary/js-stdlib/js-date-owned constructor installs too), and is filed as a finding in questions.md rather than fixed broadly here -- flipping the shared default would require touching every other lane's constructor install sites."
+  },
+  "explicitly_out_of_scope": [
+    "True Construct(C, executor)-based subclass capability creation for the four combinators (and for `new Promise()` itself) -- the internal target promise always uses the intrinsic %Promise.prototype%, never C.prototype.",
+    "Generic thenable adoption (an object with a callable `.then` that is not one of this engine's own Promise objects): adopt_promise_result() only recognizes real internal Promise objects (promise_object() requires Exotic::Promise), so `Promise.resolve(thenable)` and any place a resolved value is a generic thenable does not run a PromiseResolveThenableJob. This is a separate, deeper gap (no generic thenable-job machinery exists at all) shared by Promise.resolve/reject and every combinator equally; not touched.",
+    "amazing-js/src/vm's parallel Update/IsLessThan gaps (js-vm-owned) and RegExp Annex B statics (js-date landed JSD-5) -- explicitly deferred per the coordinator's Message 3.",
+    "A full audit of every native install site's constructible default (see eval_non_constructor above) -- filed as a cross-lane architecture finding, not fixed."
+  ],
+  "gate": {
+    "platform": "Linux (venus-003 via scripts/linux-run.sh)",
+    "branch": "lane/js-runtime-promise-combinators",
+    "base_sha": "2635118e",
+    "crate_amazing_js": "467 pass / 1 skip (up from 464; +3 new regression tests: promise_combinators_reject_a_non_constructor_this_synchronously, promise_combinators_reject_when_resolve_is_not_callable, promise_combinators_invoke_the_constructors_own_resolve), 1 doctest pass. Pre-existing promise_combinators_preserve_order_and_settlement_kind still passes unchanged.",
+    "test262_directory_scoped": {
+      "directory": "built-ins/Promise",
+      "method": "scripts/test262.py --only built-ins/Promise --timeout 15 --jobs 8, before = release host built at dev tip 2635118e (scripts/linux-run.sh --ref), after = release host built with this fix; per-path diff of the two reports' records[].status.",
+      "before_files": "231 pass / 765 fail (996 total, non-fixture)",
+      "after_files": "355 pass / 641 fail (after the eval_non_constructor follow-up; first pass without it was 351/381 files with 4 real losses, all four combinators' ctx-non-ctor.js, root-caused and fixed -- see eval_non_constructor above)",
+      "lost": 0,
+      "gained": 121,
+      "note": "121 file-level gains span ctx-non-object.js/ctx-non-ctor.js/S25.4.4.1_A*.js for all four combinators plus the invoke-resolve-*/invoke-then-*/resolve-* family that depends on a real Call(promiseResolve, C, [nextValue]) instead of the ad-hoc promise_input() wrap."
+    },
+    "workspace_gate": "cargo nextest run --workspace --locked && cargo test --workspace --locked --doc, run once on venus-003 against this branch; see status.json for the exact pass/fail/skip counts and elapsed time recorded at ticket close."
+  }
+}
