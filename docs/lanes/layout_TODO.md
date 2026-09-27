@@ -2066,3 +2066,64 @@ failing case is confirmed to actually exercise the min/max-content gap by
 direct inspection first, the same way this one was ruled out. Escalating
 via `questions.md` rather than guessing further or unilaterally digging
 into paint/compositor territory.
+
+## LAYOUT-29 -- root cause found: grid item percentage-height resolution (base `351a03cb`)
+
+The `questions.md` display-list-diff lead filed for the paint/compositor lane on
+this exact cluster was **wrong and has been retracted**. Its diagnostic used
+`layout_document_with_text(html, author_css, width, text)` with `author_css=""`,
+which does not scan the DOM for `<style>` elements the way the real render-wpt
+pipeline (`crates/amazing/src/page.rs`'s `collect_style_text`) does -- so
+`display:grid-lanes`/`display:grid` from both fixtures' `<style>` blocks was
+silently never applied, and the "divergence" found was two documents both
+falling back to plain block flow, not a real signal. Fixed the diagnostic
+(extract `<style>` text, pass it as `author_css`) and re-ran it: with the real
+CSS applied, `row-track-sizing-001-ref.html`'s grid items (ordinary
+`display:grid`, `height:100%`) all came out with `border_box.h == 500` (the
+container's own height) regardless of which row they were placed in, while the
+grid-lanes test side correctly got each item's own row height. That is the bug,
+squarely in `amazing-layout`, not paint/compositor.
+
+**Root cause:** `layout_grid_with_context` (`grid.rs`, ordinary `display:grid`)
+lays out every item once before row sizes are known (to measure contributions
+for track sizing), then finalizes each item's grid-area geometry in a second
+pass. That second pass never updated `it.containing_block_height` to the
+item's own grid-area height (`ah`) -- so a percentage `height` (CSS Grid §10.3:
+a grid item's containing block for percentage resolution is its own grid area)
+kept resolving against whatever `containing_block_height` the item had from the
+premature first pass (empirically, the container's own height). The one
+re-flow branch that did exist only fired for a literal `auto` height with
+`align-self:stretch`, and only to *grow* (`if target_h > it.border_box.h`), so
+a percentage height that had already resolved too large from the stale value
+was never corrected back down. `layout_row_lanes` (the grid-lanes sibling)
+already did this correctly (`it.containing_block_height = Some(area_h)` before
+its own final `layout_block` call) -- `layout_grid_with_context` just never had
+the equivalent line.
+
+**Fix:** set `it.containing_block_height = Some(ah)` as soon as `ah` (the
+item's real grid-area height) is known in the finalize pass, and re-run
+`layout_block` for any item whose own `height` is a percentage (not just
+`auto`+stretch), so it re-resolves against the correct value in either
+direction.
+
+### Measured evidence
+
+- `cargo test -p amazing-layout --locked`: 381 passed, 1 ignored, 0 failed
+  (unchanged from before the fix -- no regressions).
+- `scripts/linux-render-wpt.sh layout css/css-grid --baseline auto --release`
+  (worker-2, base `351a03cb`): **gained=49 lost=4 changed=0 unchanged=890
+  new=2**. The 4 "lost" are the exact same four already-documented
+  pre-existing losses from LAYOUT-28's base-commit check
+  (`abspos/positioned-grid-items-{008,016}`,
+  `abspos/orthogonal-positioned-grid-items-008`,
+  `grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`) --
+  unaffected by this change, already confirmed failing at the dev base.
+- Corrected `questions.md` entry with the retraction and this finding, for
+  the record (no cross-lane action needed -- this was ours to fix).
+
+This does not close the whole 97-test "track-sizing" cluster (some of the
+remaining mismatches there are real track-sizing/lane-packing issues), but a
+single percentage-height-resolution bug affecting every `height:100%`/
+percentage-height grid item reference file accounted for a large share of it.
+The Contrib min/max-content-split rewrite is still not shown to be needed by
+any confirmed case; leave it deferred per the correction above.

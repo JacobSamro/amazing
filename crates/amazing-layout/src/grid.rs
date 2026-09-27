@@ -1832,6 +1832,13 @@ pub(crate) fn layout_grid_with_context(
             .fold(f32::NEG_INFINITY, f32::max);
         let aw = right - ax;
         let ah = row_pos[re - 1] + row_sizes[re - 1] - ay;
+        // §10.3: a grid item's containing block for the purpose of percentage
+        // resolution is its own grid area, not the grid container as a whole.
+        // Step 4 above laid every item out before row sizes were known, so a
+        // percentage `height` there resolved against a stale/inherited value
+        // (typically the container's own height) instead of `ah`. Set the
+        // real value now and re-resolve below.
+        it.containing_block_height = Some(ah);
 
         if it.grid_subgrid.as_ref().is_some_and(|context| context.rows.is_some()) {
             let axis = subgrid_axis_for_item(it, "grid-template-rows", &row_sizes,
@@ -1846,8 +1853,13 @@ pub(crate) fn layout_grid_with_context(
         // Vertical stretch: grow the item to fill the area (materialize the
         // height and re-flow so children see the final block size).
         let align = container_self_align(it, "align-self").unwrap_or(spec.align_items);
+        let own_height_is_percentage = it
+            .style
+            .get("height")
+            .is_some_and(|v| v.trim().ends_with('%'));
         if align == ItemAlign::Stretch
             && height_is_auto(it)
+            && !own_height_is_percentage
             && !margin_is_auto(&it.style, "top")
             && !margin_is_auto(&it.style, "bottom")
         {
@@ -1860,6 +1872,11 @@ pub(crate) fn layout_grid_with_context(
                 it.style.set("height", &format!("{}px", target_h));
                 crate::block::layout_block(it, 0.0, 0.0, aw.max(0.0), fonts);
             }
+        } else if own_height_is_percentage {
+            // Re-resolve against the now-known grid-area height (`ah`), set
+            // just above -- step 4's pass used a stale containing block and
+            // may have gotten this item's height wrong in either direction.
+            crate::block::layout_block(it, 0.0, 0.0, aw.max(0.0), fonts);
         }
 
         // Position within the area using OUTER sizes. Margins are
