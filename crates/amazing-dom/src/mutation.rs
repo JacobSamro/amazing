@@ -413,6 +413,7 @@ impl Dom {
         self.custom_element_attribute_changed(node, namespace, name, old, Some(value.into()));
         if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
+        if namespace.is_none() && matches!(name, "id" | "name") { self.mark_named_objects_dirty(); }
         Ok(())
     }
     pub fn set_attribute(
@@ -476,6 +477,7 @@ impl Dom {
         self.custom_element_attribute_changed(node, namespace, name, Some(old), None);
         if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
+        if namespace.is_none() && matches!(name, "id" | "name") { self.mark_named_objects_dirty(); }
         Ok(())
     }
     fn queue_attribute_record(

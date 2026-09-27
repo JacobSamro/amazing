@@ -111,7 +111,9 @@ impl Dom {
         }
         let uri = namespace_uri.filter(|uri| !uri.is_empty());
         let (prefix, local_name) = validate_and_extract(uri, qualified_name, false)?;
-        self.create_element_expanded_in(document, uri, prefix, local_name)
+        let node = self.create_element_expanded_in(document, uri, prefix, local_name)?;
+        self.init_force_async(node);
+        Ok(node)
     }
 
     /// `Document.createElement` takes a local name, not a qualified name.
@@ -122,7 +124,39 @@ impl Dom {
         if !valid_element_local_name(local_name) {
             return Err(DomError::InvalidCharacterError);
         }
-        self.create_element_expanded_in(document, namespace_uri, None, local_name)
+        let node = self.create_element_expanded_in(document, namespace_uri, None, local_name)?;
+        self.init_force_async(node);
+        Ok(node)
+    }
+
+    /// HTML SS4.5.6/HTML-35: a script element's "force async" flag starts
+    /// `true` only when created through `Document.createElement`/
+    /// `createElementNS` -- these are the only two callers of this helper.
+    /// The HTML/XML parser's own tree-construction insertion (`amazing-html`'s
+    /// `tree.rs::insert_element`, and `create_element_expanded[_in]` used by
+    /// `xml.rs`) never calls either of the two functions above, so a
+    /// parser-inserted script element is simply never touched by this and
+    /// keeps the type's default `false` -- exactly the spec's "set to false
+    /// by the HTML parser and the XML parser on script elements they insert",
+    /// with no change needed in the html lane's tree builder.
+    fn init_force_async(&mut self, node: NodeIdx) {
+        if self.local_name(node) == Some("script") && matches!(self.get(node).kind,
+            NodeKind::Element { namespace: Namespace::Html, .. }) {
+            self.set_force_async(node, true);
+        }
+    }
+
+    /// HTMLScriptElement's "force async" flag (see `init_force_async`).
+    /// Meaningless for a non-script node, which always reads `false`.
+    pub fn force_async(&self, node: NodeIdx) -> bool {
+        self.get(node).force_async
+    }
+
+    /// Sets HTMLScriptElement's "force async" flag directly. Exposed (not
+    /// just `init_force_async`) because the IDL `async` setter must clear it
+    /// on every call, per spec, regardless of the new attribute value.
+    pub fn set_force_async(&mut self, node: NodeIdx, value: bool) {
+        self.nodes[node.0 as usize].force_async = value;
     }
 
     /// Parser primitive: append an element from already-validated expanded names.

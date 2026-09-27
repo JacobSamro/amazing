@@ -443,6 +443,7 @@ impl Dom {
         if nodes.is_empty() {
             return;
         }
+        self.mark_named_objects_dirty();
         if matches!(self.get(node).kind, NodeKind::DocumentFragment) {
             for id in &nodes {
                 self.remove_internal(*id, true);
@@ -501,6 +502,7 @@ impl Dom {
         if signal_fallback { self.queue_slotchange(parent); }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
+        self.mark_named_objects_dirty();
         self.custom_element_tree_removed(node);
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let n = self.get(node);
