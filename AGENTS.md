@@ -41,7 +41,9 @@ code copied and adapted into our crates, never new crate dependencies.
   naming the upstream repo, path, commit and license, e.g.
   `// Portions ported from boa-dev/boa (core/engine/src/builtins/...) @ <sha>, MIT.`
   and the lane appends a line for that upstream to `THIRD_PARTY_NOTICES.md` (repo, license,
-  copyright line, which of our files use it) in the same commit.
+  copyright line, which of our files use it) in the same commit. **Append a new row; never
+  edit an existing one** (the file is union-merged, so an edited row comes back as a duplicate).
+  The integrator consolidates rows.
 - **Ports obey every other rule:** std-only, under 4000 lines per file, zero lost passes on the
   lane's Test262/WPT gate. Rewrite upstream dependencies (ICU4X, temporal_rs types, `gc` crates)
   onto our own types; do not pull them in.
