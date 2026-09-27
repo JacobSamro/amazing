@@ -1240,16 +1240,6 @@ fn native_error_is_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) ->
     Ok(JsValue::Bool(is_error))
 }
 
-// 9.2.7 %ThrowTypeError% (AddRestrictedFunctionProperties uses this shared,
-// anonymous, non-constructible, length-0 intrinsic as both the getter and
-// the setter installed for `Function.prototype.caller` / `.arguments`).
-// Called for either accessor role, so it ignores `this`/args and just throws.
-fn native_throw_type_error_intrinsic(_i: &mut Interpreter, _this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Err(Throw::type_error(
-        "'caller' and 'arguments' are restricted function properties and cannot be accessed in this context",
-    ))
-}
-
 // The `Error.prototype.stack` accessor (proposal "error-stack-accessor",
 // pinned in this Test262 revision under built-ins/Error/prototype/stack/).
 //

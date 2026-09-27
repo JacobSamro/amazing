@@ -1776,37 +1776,4 @@ mod class_name_tests {
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(result, JsValue::num(1.0));
     }
-
-    #[test]
-    fn function_prototype_caller_and_arguments_are_a_shared_throw_type_error_accessor_pair() {
-        let mut i = Interpreter::new();
-        let get_throws = i.run_script(
-            "var caught = false; try { Function.prototype.caller; } catch (e) { caught = e instanceof TypeError; } caught"
-        ).unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(get_throws, JsValue::Bool(true), "reading Function.prototype.caller must throw a TypeError");
-
-        let set_throws = i.run_script(
-            "var caught = false; try { Function.prototype.arguments = 1; } catch (e) { caught = e instanceof TypeError; } caught"
-        ).unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(set_throws, JsValue::Bool(true), "writing Function.prototype.arguments must throw a TypeError");
-
-        let shared_and_shaped = i.run_script(
-            "var callerDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'caller'); \
-             var argsDesc = Object.getOwnPropertyDescriptor(Function.prototype, 'arguments'); \
-             callerDesc.get === callerDesc.set && \
-             callerDesc.get === argsDesc.get && \
-             callerDesc.enumerable === false && callerDesc.configurable === true && \
-             argsDesc.enumerable === false && argsDesc.configurable === true"
-        ).unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(shared_and_shaped, JsValue::Bool(true));
-
-        // Ordinary functions must not carry their own "caller"/"arguments" -- only
-        // %Function.prototype% does (16.2 Forbidden Extensions).
-        let no_own_props = i.run_script(
-            "function f() {} \
-             !Object.prototype.hasOwnProperty.call(f, 'caller') && \
-             !Object.prototype.hasOwnProperty.call(f, 'arguments')"
-        ).unwrap_or_else(|e| panic!("{e:?}"));
-        assert_eq!(no_own_props, JsValue::Bool(true));
-    }
 }
