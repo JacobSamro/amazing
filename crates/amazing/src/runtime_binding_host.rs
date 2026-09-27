@@ -1918,6 +1918,24 @@ impl FragmentParser for RuntimeBindingHost<'_> {
         amazing_html::parse_fragment_with_namespace(parser_context, namespace, &markup)
             .map_err(|_| DomError::NotSupportedError)
     }
+
+    fn parse_fragment_with_shadow_roots(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
+        // `amazing_html::parse_fragment_with_shadow_roots` only covers the
+        // HTML-namespace context that `Element`/`ShadowRoot.setHTMLUnsafe`
+        // actually need (matching `parse_fragment`'s own default scope, see
+        // that function's doc comment); a foreign-namespace context (e.g.
+        // `setHTMLUnsafe` called on an SVG/MathML element) falls back to the
+        // ordinary, non-shadow-aware parse rather than failing outright --
+        // no regression, since declarative shadow roots were never
+        // supported there at all before this method existed.
+        if !matches!(context.namespace_uri.as_deref(), Some("http://www.w3.org/1999/xhtml") | None) {
+            return self.parse_fragment(context, markup);
+        }
+        let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
+        let parser_context = if context.local_name == "p" { "div" } else { &context.local_name };
+        amazing_html::parse_fragment_with_shadow_roots(parser_context, &markup)
+            .map_err(|_| DomError::NotSupportedError)
+    }
 }
 
 impl SelectorEngine for RuntimeBindingHost<'_> {

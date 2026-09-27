@@ -198,6 +198,27 @@ impl Dom {
         Ok(fragment)
     }
 
+    /// Imports `source_node`'s children (not `source_node` itself) into
+    /// `target`, an already-real node living in this arena --
+    /// `Element`/`ShadowRoot.setHTMLUnsafe`'s top-level declarative-shadow-
+    /// root shape needs this (`markup_bindings.rs`'s `top_level_
+    /// declarative_shadow_template`): the caller has already attached a
+    /// real shadow root via `attach_declarative_shadow` and must move a
+    /// standalone parsed fragment's `<template>`'s own `template_contents`
+    /// children into it, which `import_fragment` cannot do since it always
+    /// creates a fresh top-level `DocumentFragment` from `source`'s own
+    /// top-level children rather than importing an arbitrary subtree into
+    /// an arbitrary existing target.
+    pub fn import_subtree_children(&mut self, source: &Dom, source_node: NodeIdx, target: NodeIdx)
+        -> Result<(), DomError> {
+        self.check_node(target)?;
+        let document = self.owner_document(target).ok_or(DomError::InvalidStateError)?;
+        for child in source.children(source_node) {
+            self.import_node_into(source, child, document, target)?;
+        }
+        Ok(())
+    }
+
     /// Imports a parser's document into this arena without a browsing context or script execution.
     pub fn import_inert_document(&mut self, source: &Dom, url: &str, content_type: &str,
         character_set: &str) -> Result<NodeIdx, DomError> {

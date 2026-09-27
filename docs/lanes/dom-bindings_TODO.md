@@ -2919,3 +2919,87 @@ project-wide and needs a full `dom/observable` before/after gate to attempt safe
 ticket's budget. Full detail, including the exact spec quotes and reproduction commands, is in
 `.agents/dom-bindings/questions.md` (not git-tracked; ask the lane agent or re-derive from this
 entry plus the WICG Observable spec at https://wicg.github.io/observable/ if picking this up later).
+
+## Observable unit tests + notify_terminate ordering + takeUntil mapping fix (e80581b3)
+
+Coordinator-assigned, in order: (1) add crate-level Observable unit tests covering `takeUntil` and
+`notify_terminate` ordering (closing the gap that let the earlier initializer-throw regression
+through both gates undetected), (2) fix the ordering and mapping against those tests, with a full
+`dom/observable` WPT before/after in one batch.
+
+Added a `V::Script` mock-host callable (`tests.rs`) -- a boxed Rust closure run against the live
+`Host` via the ordinary `BindingHost::call` path, so a test's "user callback" can perform real side
+effects (`subscriber.next()`/`.error()`/`.complete()`/`.addTeardown()` on the exact `Subscriber` it
+was invoked with) without a JS engine. Five tests in the new `tests_observable.rs`. Verified 4 of 5
+fail against the unmodified `680d7659` code (temporarily swapped in via `git show HEAD:... >
+observable_bindings.rs`, restored after -- no `git stash`), confirming they're real tests, not
+vacuously true.
+
+Fixed both bugs found in the prior ticket's investigation, against the live WICG Observable spec
+text: `notify_terminate` now aborts its own signal and runs teardowns *before* forwarding to
+observers (was backwards); `takeUntil()`'s `RelayKind::TakeUntilNotifier` arm now maps notifier
+`Next`/`Error` to the outer completing (was: `Error` incorrectly mapped to outer *error*) and
+notifier `Complete` to a no-op (was incorrectly mapped to outer *complete*).
+
+Measured: workspace 3487/3487 passed (+5 new tests), 17 skipped, doctests ok; crate 741/741 passed,
+6 skipped. Full `dom/observable/tentative` (29 files, two independent `after` runs agree exactly,
+zero flakiness unlike the reverted initializer-throw attempt): **+6 subtests gained, 0 lost, 0 new
+timeouts/errors** -- `observable-constructor.any.js` 24/20->26/18,
+`observable-filter.any.js` 3/3->4/2, `observable-map.any.js` 3/3->4/2,
+`observable-take.any.js` 2/4->4/2; every other file byte-for-byte unchanged.
+`observable-takeUntil.any.js` itself remains unaffected (still blocked by the separate whole-page
+`"[object]"` crash documented in the prior ticket, not attempted here).
+
+Evidence: `crates/amazing-bindings/evidence/observable-notify-terminate-ordering/`.
+
+## `parse_fragment_with_shadow_roots` wired into setHTMLUnsafe/Document.parseHTMLUnsafe (1da899a5)
+
+Base `1da899a5` (local `dev`; Observable ordering/`takeUntil` fix, and html lane's
+`amazing_html::parse_fragment_with_shadow_roots` for the nested-ancestor shadow shape, both
+already in). Coordinator-assigned ticket: wire that new parser function into
+`Element`/`ShadowRoot.setHTMLUnsafe` and `Document.parseHTMLUnsafe`, then remeasure
+`shadow-dom/declarative`.
+
+Fetched the live HTML spec (dynamic-markup-insertion.html + parsing.html) to confirm the exact
+algorithms before writing code. Findings: (1) `setHTMLUnsafe` always parses with
+`allowDeclarativeShadowRoots = true`, and per the fragment-parsing algorithm's own "adjusted
+current node" definition, a *top-level* `<template shadowrootmode>` should attach to the real
+fragment context element itself when the parser's stack of open elements has only its synthetic
+root -- exactly the shape html lane's `parse_fragment_with_shadow_roots(context: &str, ...)`
+can't do, since it only ever has a tag-name string for `context`, never a real `NodeIdx`; that gap
+is why it was scoped to the nested-ancestor shape and left to this lane (`questions.md`). (2)
+`Document.parseHTMLUnsafe` is a *full-document* parse, and every full-document parse in this
+engine already defaults `allow_declarative_shadow_roots: true` unconditionally
+(`TreeBuilder::new()`) with real ancestors genuinely on the open-elements stack by the time body
+content starts -- so it needed no new parser support at all, just a static-method entry point onto
+the existing `create_inert_document` primitive `DOMParser.parseFromString` already uses.
+
+Added `FragmentParser::parse_fragment_with_shadow_roots` (`host.rs`, default falls back to plain
+`parse_fragment`) and its `RuntimeBindingHost` impl calling `amazing_html::parse_fragment_with_
+shadow_roots`. `markup_bindings.rs`'s `O::ElementSetHTMLUnsafe` alone now calls it; after parsing,
+`top_level_declarative_shadow_template` detects the fragment's first top-level child being a
+`<template shadowrootmode>`, attempts `Dom::attach_declarative_shadow` on the already-computed real
+host `context_node`, and on success moves the template's `template_contents` into the new shadow
+root (`Dom::import_subtree_children`, new in `amazing-dom/src/markup.rs` -- `import_fragment` can't
+import an arbitrary subtree into an arbitrary existing target) and detaches the template
+(`Dom::pre_remove`) before the unmodified `import_fragment` path imports the rest; on failure
+(already a shadow host, or an invalid host element name) nothing is detached, so the template falls
+through as ordinary content, matching the spec's exception-catch step. Added static
+`O::DocumentParseHTMLUnsafe` (`interfaces.rs`: `I::Document`), dispatched in `parser_bindings.rs`
+via the existing `create_inert_document("text/html", ...)` primitive.
+
+Four new crate tests (`tests_set_html_unsafe.rs` + one alongside the existing `DOMParser` coverage
+in `tests.rs`), via a `Host::parse_fragment_with_shadow_roots` sentinel-markup mock override (no
+real HTML parser needed for this plumbing -- `amazing-html`'s own tests and the WPT gate cover real
+parsing). Verified red before green by temporarily reverting the six production files to `HEAD`
+(`git show HEAD:path > path`, fix kept safe in `/tmp`, no `git stash`), then restored.
+
+Measured: workspace 3500/3500 passed (run twice, stable), 17 skipped, doctests ok every crate;
+`shadow-dom/declarative` (56 files, base `1da899a5`, excluding the pre-existing-noisy
+`gethtml.html`): pass 727->764, fail 120->84, **+37 subtests gained, 0 lost**, 0 new
+timeouts/errors. `declarative-shadow-dom-basic.html` 17/5->22/0 (now fully passing);
+`declarative-shadow-dom-slot-assignment-serialization.html` 0/3->3/0 (now fully passing);
+`declarative-shadow-dom-slot-assignment.html` 0/8->5/3; `declarative-shadow-dom-attachment.html`
+586/68->610/44. Every other file in the directory unchanged.
+
+Evidence: `crates/amazing-bindings/evidence/set-html-unsafe-shadow/`.

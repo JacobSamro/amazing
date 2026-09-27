@@ -27,6 +27,14 @@ enum V {
     Coerce(&'static str),
     Throw,
     Promise(u64),
+    /// A callable whose body is a Rust closure run against the live `Host`,
+    /// for tests that need a "user callback" to perform real side effects
+    /// (e.g. an Observable initializer that calls back into
+    /// `subscriber.next()`/`.error()`/`.complete()`/`.addTeardown()` on the
+    /// very `Subscriber` value it was invoked with) rather than the fixed
+    /// canned response every plain `V::Callable` gets from `Host::call`.
+    /// See `Host::script`.
+    Script(usize),
 }
 #[derive(Default)]
 struct Host {
@@ -66,6 +74,8 @@ struct Host {
     window: Option<(u64, V)>,
     cancel_events: bool,
     callback_targets: Vec<Option<amazing_dom::events::EventTarget>>,
+    #[allow(clippy::type_complexity)]
+    scripts: Vec<Option<Box<dyn FnMut(&mut Host, &V, &[V]) -> Result<V, String>>>>,
 }
 impl Host {
     fn web_push(&mut self, object: WebMock, brand: InterfaceBrand) -> V {
@@ -76,6 +86,13 @@ impl Host {
     fn web_index(&self, value: &V, brand: InterfaceBrand) -> Result<usize, String> {
         self.platform_object(value, brand).map(|key| key.slot as usize)
             .ok_or_else(|| "incompatible web receiver".into())
+    }
+    /// Wraps a Rust closure as a `V::Script`, callable through the ordinary
+    /// `BindingHost::call` path -- see `V::Script`'s doc comment.
+    fn script(&mut self, f: impl FnMut(&mut Host, &V, &[V]) -> Result<V, String> + 'static) -> V {
+        let id = self.scripts.len();
+        self.scripts.push(Some(Box::new(f)));
+        V::Script(id)
     }
 }
 impl BindingHost for Host {
@@ -180,7 +197,7 @@ impl BindingHost for Host {
         (key.arena == 1 && key.generation == 1 && key.slot < self.dom.node_count() as u64)
             .then(|| NodeIdx(key.slot as u32))
     }
-    fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_)) }
+    fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_) | V::Script(_)) }
     fn call(&mut self, function: &V, this: &V, arguments: &[V]) -> Result<V, String> {
         assert!(!self.arena_borrowed);
         self.call_receivers.push((this.clone(), arguments.to_vec()));
@@ -190,6 +207,12 @@ impl BindingHost for Host {
             if self.cancel_events { event.prevent_default(); }
         }
         if let V::Callable(id) = function { self.calls.push(*id); self.abort_trace.push(*id); }
+        if let V::Script(id) = function {
+            let mut script = self.scripts[*id].take().expect("script re-entered (no reentry support in this mock)");
+            let result = script(self, this, arguments);
+            self.scripts[*id] = Some(script);
+            return result;
+        }
         match function { V::Callable(1) => Ok(V::Number(1.)), V::Callable(_) => Ok(V::Undefined), _ => Err("not callable".into()) }
     }
     fn same_value(&self, left: &V, right: &V) -> bool { left == right }
@@ -568,6 +591,33 @@ impl FragmentParser for Host {
             parsed.append_child(NodeIdx(0), NodeKind::Text { data: source });
         }
         Ok(parsed)
+    }
+    /// Crate-level coverage for `markup_bindings.rs`'s top-level
+    /// declarative-shadow-root handling (`tests_set_html_unsafe.rs`) needs
+    /// a `Dom` shaped exactly like `amazing_html::parse_fragment_with_
+    /// shadow_roots` would produce for a top-level `<template
+    /// shadowrootmode="open">` -- not a real HTML parser (that shape's real
+    /// parsing is covered by `amazing-html`'s own tests and the
+    /// `shadow-dom/declarative` WPT gate). Recognizes two sentinel markup
+    /// strings; anything else falls back to the ordinary mock parser above.
+    fn parse_fragment_with_shadow_roots(&mut self, context: FragmentContext, markup: &[u16])
+        -> Result<Dom, DomError> {
+        assert!(!self.arena_borrowed);
+        let source = String::from_utf16(markup).map_err(|_| DomError::SyntaxError)?;
+        if source == "<template-shadow-open>" || source == "<template-shadow-open-with-sibling>" {
+            let mut parsed = Dom::new();
+            let template = parsed.create_element(NodeIdx(0), "template");
+            parsed.set_attribute(template, "shadowrootmode", "open").expect("set attribute");
+            let contents = parsed.ensure_template_contents(template).expect("template contents");
+            let child = parsed.create_element(contents, "b");
+            parsed.append_child(child, NodeKind::Text { data: "shadow-child".into() });
+            if source == "<template-shadow-open-with-sibling>" {
+                let sibling = parsed.create_element(NodeIdx(0), "i");
+                parsed.append_child(sibling, NodeKind::Text { data: "sibling".into() });
+            }
+            return Ok(parsed);
+        }
+        self.parse_fragment(context, markup)
     }
 }
 impl SelectorEngine for Host {
@@ -1182,6 +1232,22 @@ fn dom_parser_creates_inert_documents_and_xml_error_document() {
     assert_eq!(h.dom.local_name(h.dom.document_element(xml_error).unwrap().unwrap()), Some("parsererror"));
     assert_eq!(invoke(&mut h, O::DOMParserParseFromString, parser,
         &[str_value("x"), str_value("text/plain")]), Err("TypeError: Unsupported DOMParser content type".into()));
+}
+
+/// `Document.parseHTMLUnsafe` is static and routes through the same
+/// `create_inert_document("text/html", ...)` primitive `DOMParser.
+/// parseFromString` already uses -- see `parser_bindings.rs`'s doc comment
+/// for why this needed no new parser support, unlike `ElementSetHTMLUnsafe`.
+#[test]
+fn document_parse_html_unsafe_creates_an_inert_html_document() {
+    let mut h = Host::default();
+    let document = node(call(&mut h, O::DocumentParseHTMLUnsafe, V::Undefined,
+        &[str_value("<template shadowrootmode=open><p>hi</p></template>")]));
+    let metadata = h.dom.document_metadata(document).unwrap().unwrap();
+    assert_eq!(metadata.content_type, "text/html");
+    assert_eq!(h.dom.local_name(h.dom.document_element(document).unwrap().unwrap()), Some("html"));
+    assert_eq!(invoke(&mut h, O::DocumentParseHTMLUnsafe, V::Undefined, &[]),
+        Err("TypeError: Not enough arguments".into()));
 }
 
 #[test]
@@ -2597,3 +2663,8 @@ mod error_events;
 
 #[path = "tests_dom_b_reflect.rs"]
 mod tests_dom_b_reflect;
+
+#[path = "tests_observable.rs"]
+mod tests_observable;
+#[path = "tests_set_html_unsafe.rs"]
+mod tests_set_html_unsafe;
