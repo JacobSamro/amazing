@@ -832,8 +832,17 @@ impl Interpreter {
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => env.resolve_this_checked(),
             ExprKind::NewTarget => Ok(self.current_new_target().unwrap_or(JsValue::Undefined)),
-            ExprKind::DynamicImport(_) => Err(Throw::type_error("dynamic import is not implemented")),
-            ExprKind::DynamicImportPhase { .. } => Err(Throw::type_error("dynamic import phase is not implemented")),
+            ExprKind::DynamicImport(args) => {
+                let specifier = args.first().ok_or_else(|| Throw::type_error("import() requires a specifier"))?;
+                self.dynamic_import(specifier, env)
+            }
+            // import.source(...)/import.defer(...) (the source/deferred phase-imports proposal):
+            // no host hook returns a Module Source object yet, so this always rejects rather than
+            // resolving -- distinct from a missing `module_loader` hook's ordinary "unsupported"
+            // rejection, since even a fully wired driver has nothing to fulfill this with.
+            ExprKind::DynamicImportPhase { .. } => Ok(new_promise(self, PromiseFate::Rejected(
+                Throw::type_error("import phase requests (import.source/import.defer) are not implemented").0,
+            ))),
             ExprKind::ImportMeta => env.resolve("\0import.meta")
                 .ok_or_else(|| Throw::type_error("import.meta is only available in modules")),
             ExprKind::Super => {

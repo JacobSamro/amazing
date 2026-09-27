@@ -276,6 +276,10 @@ pub struct Interpreter {
     depth: u32,
     native_stack: Vec<Obj>,
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
+    /// The embedding's dynamic `import()` / `import.source()` loader hook (see
+    /// `ModuleLoaderHook`'s own doc comment in `interp_module_host.rs`). `None`
+    /// until a driver installs one, e.g. via HTML script execution.
+    module_loader: Option<Rc<ModuleLoaderHook>>,
     host_realm: u64,
     realm_origin: String,
     window_proxy: Option<Obj>,
@@ -486,6 +490,7 @@ impl Interpreter {
             depth: 0,
             native_stack: Vec::new(),
             host_native_dispatch: None,
+            module_loader: None,
             host_realm,
             realm_origin: String::new(),
             window_proxy: None,
@@ -1602,6 +1607,7 @@ include!("interp_async.rs");
 include!("interp_realms.rs");
 include!("interp_eval_declarations.rs");
 include!("interp_window_proxy.rs");
+include!("interp_module_host.rs");
 include!("interp_proxy.rs");
 include!("interp_property_access.rs");
 include!("interp_equality.rs");

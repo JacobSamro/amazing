@@ -1513,6 +1513,51 @@ mod class_name_tests {
     }
 
     #[test]
+    fn dynamic_import_rejects_when_no_loader_hook_is_installed() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var seen; import('./x.js').then(() => seen = 'fulfilled', e => seen = (e instanceof TypeError)); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        // No microtask has run yet: import() always returns a promise, never throws synchronously.
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        let seen = i.run_script("seen").unwrap();
+        assert_eq!(seen, JsValue::Bool(true));
+    }
+
+    #[test]
+    fn dynamic_import_resolves_through_the_installed_loader_hook_with_the_evaluated_specifier_and_referrer() {
+        let mut i = Interpreter::new();
+        i.binding_set_module_loader_hook(Rc::new(|host: &mut Interpreter, specifier: &str, referrer: &str| {
+            assert_eq!(referrer, "");
+            let mut namespace = JsObject::ordinary();
+            namespace.proto = Some(host.object_proto.clone());
+            namespace.define("specifier", Property {
+                value: JsValue::str(specifier), writable: false, enumerable: true, configurable: false,
+                getter: None, setter: None,
+            }).unwrap();
+            Ok(JsValue::object(namespace))
+        }));
+        let result = i.run_script(
+            "var seen; import('a' + 'b').then(ns => seen = ns.specifier); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("seen").unwrap(), JsValue::str("ab"));
+    }
+
+    #[test]
+    fn dynamic_import_phase_requests_reject_rather_than_throw_synchronously() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "var seen; import.source('./x.js').then(() => seen = 'fulfilled', () => seen = 'rejected'); seen",
+        ).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(result, JsValue::Undefined);
+        i.drain_microtasks().unwrap();
+        assert_eq!(i.run_script("seen").unwrap(), JsValue::str("rejected"));
+    }
+
+    #[test]
     fn with_statement_resolves_through_the_bound_object() {
         for source in [
             // Reads and writes go to the bound object's own properties.
