@@ -1258,6 +1258,23 @@ impl Interpreter {
 
 
     fn hoist(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<(), Throw> {
+        self.hoist_inner(body, env, false, &mut Vec::new())
+    }
+
+    /// `nested` is `false` only for the direct statement list of a function/script/module/eval
+    /// body: a `FunctionDeclaration` found there binds eagerly and unconditionally, as usual.
+    /// Recursing into a further block/if/loop/labeled body sets `nested = true`, where a *plain*
+    /// (non-async, non-generator) function declaration is instead an Annex B.3.3 candidate: in
+    /// sloppy mode, and unless shadowed by an intervening `let`/`const`/class/`using` declaration
+    /// of the same name (tracked via `blocked`), it gets an undefined-initialized legacy `var`
+    /// binding in the enclosing scope (`hoist_var`), synced with the block's own lexical binding
+    /// when the `FunctionDeclaration` statement is actually evaluated -- see `StmtKind::Function`
+    /// and `StmtKind::Block`'s block-entry hoist in interp_stmt.rs. `StmtKind::Try` deliberately
+    /// starts a *fresh* top-level hoist (unchanged from before this split): Annex B promotion out
+    /// of try/catch/finally bodies is a known, documented gap.
+    /// Adapted from lucid-softworks/lumen (crates/lumen/src/interpreter.rs, collect_annexb_funcs)
+    /// @ f6c9860d44fa52249cfd647122edea184d32c863, MIT.
+    fn hoist_inner(&mut self, body: &[ast::Stmt], env: &EnvHandle, nested: bool, blocked: &mut Vec<String>) -> Result<(), Throw> {
         for s in body {
             match &s.kind {
                 StmtKind::Var(d) if d.kind == ast::VarKind::Var => {
@@ -1267,35 +1284,60 @@ impl Interpreter {
                 }
                 StmtKind::Function(f) => {
                     if let Some(n) = &f.name {
-                        let v = self.make_function(f, env);
-                        if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
-                        else { env.declare_var(&n.name, v)?; }
+                        if !nested {
+                            let v = self.make_function(f, env);
+                            if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
+                            else { env.declare_var(&n.name, v)?; }
+                        } else if !self.strict_eval_context && !f.is_async && !f.is_generator
+                            && !blocked.iter().any(|b| b == &n.name)
+                        {
+                            env.hoist_var(&n.name)?;
+                        }
                     }
                 }
-                StmtKind::Block(b) => self.hoist(&b.body, env)?,
+                StmtKind::Block(b) => {
+                    let added = block_lexical_names(&b.body);
+                    let pushed = push_blocked(blocked, added);
+                    self.hoist_inner(&b.body, env, true, blocked)?;
+                    blocked.truncate(blocked.len() - pushed);
+                }
                 StmtKind::If { then, els, .. } => {
-                    self.hoist(std::slice::from_ref(then), env)?;
+                    self.hoist_inner(std::slice::from_ref(then), env, true, blocked)?;
                     if let Some(e) = els {
-                        self.hoist(std::slice::from_ref(e), env)?;
+                        self.hoist_inner(std::slice::from_ref(e), env, true, blocked)?;
                     }
                 }
                 StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. } => {
-                    self.hoist(std::slice::from_ref(body), env)?
+                    self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?
                 }
                 StmtKind::For { init, body, .. } => {
                     if let Some(ForInit::Decl(d)) = init {
                         self.hoist_var(d, env)?;
                     }
-                    self.hoist(std::slice::from_ref(body), env)?;
+                    let added = match init {
+                        Some(ForInit::Decl(d)) if d.kind != ast::VarKind::Var =>
+                            d.decls.iter().flat_map(|x| binding_names(&x.binding)).collect(),
+                        _ => Vec::new(),
+                    };
+                    let pushed = push_blocked(blocked, added);
+                    self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?;
+                    blocked.truncate(blocked.len() - pushed);
                 }
                 StmtKind::ForIn { left, body, .. } | StmtKind::ForOf { left, body, .. }
                 | StmtKind::ForAwaitOf { left, body, .. } => {
                     if let ForLeft::Decl(d) = left {
                         self.hoist_var(d, env)?;
                     }
-                    self.hoist(std::slice::from_ref(body), env)?;
+                    let added = match left {
+                        ForLeft::Decl(d) if d.kind != ast::VarKind::Var =>
+                            d.decls.iter().flat_map(|x| binding_names(&x.binding)).collect(),
+                        _ => Vec::new(),
+                    };
+                    let pushed = push_blocked(blocked, added);
+                    self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?;
+                    blocked.truncate(blocked.len() - pushed);
                 }
-                StmtKind::Labeled { body, .. } => self.hoist(std::slice::from_ref(body), env)?,
+                StmtKind::Labeled { body, .. } => self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?,
                 StmtKind::Try(statement) => {
                     self.hoist(&statement.block.body, env)?;
                     if let Some(catch) = &statement.catch {

@@ -34,6 +34,45 @@ fn for_of_dispose_kind(left: &ForLeft) -> Option<bool> {
     }
 }
 
+/// A block body's own top-level lexically-declared names (`let`/`const`/`using`/`await using`,
+/// plus named classes) -- used by Annex B.3.3 to decide whether a nested block-function's legacy
+/// `var` promotion would collide with an intervening lexical declaration of the same name.
+/// Adapted from lucid-softworks/lumen (crates/lumen/src/interpreter.rs, block_lexical_names) @
+/// f6c9860d, MIT.
+fn block_lexical_names(body: &[ast::Stmt]) -> Vec<String> {
+    let mut out = Vec::new();
+    for s in body {
+        match &s.kind {
+            StmtKind::Var(d) if d.kind != ast::VarKind::Var => {
+                for x in &d.decls {
+                    out.extend(binding_names(&x.binding));
+                }
+            }
+            StmtKind::Class(c) => {
+                if let Some(n) = &c.name {
+                    out.push(n.name.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Push newly-shadowing names onto Annex B.3.3's `blocked` list (dedup'd); returns how many were
+/// actually pushed, so the caller can truncate back to the enclosing scope's set once its own
+/// nested block/loop/if body has been walked.
+fn push_blocked(blocked: &mut Vec<String>, added: Vec<String>) -> usize {
+    let mut pushed = 0;
+    for name in added {
+        if !blocked.iter().any(|b| b == &name) {
+            blocked.push(name);
+            pushed += 1;
+        }
+    }
+    pushed
+}
+
 impl Interpreter {
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
         if let Some(hook) = self.debug_hook.clone() {
@@ -66,7 +105,33 @@ impl Interpreter {
                 }
                 Ok(Flow::Normal)
             }
-            StmtKind::Function(_) => Ok(Flow::Normal),
+            StmtKind::Function(f) => {
+                // Annex B.3.3 web-compat sync: evaluating a sloppy block/if-position plain
+                // function declaration copies the block's own (just-hoisted, possibly
+                // reassigned-by-now) binding into whatever legacy `var` binding `hoist_inner`
+                // created for it in the enclosing scope -- a no-op if that name was blocked by
+                // an intervening lexical declaration (no such outer binding exists) or we're in
+                // strict mode (Annex B never applies). Adapted from lucid-softworks/lumen
+                // (crates/lumen/src/eval.rs, annexb_fn_sync_eval) @ f6c9860d, MIT.
+                if !self.strict_eval_context && !f.is_async && !f.is_generator {
+                    if let Some(n) = &f.name {
+                        let scope = env.var_scope();
+                        // A Global-kind scope's non-lexical bindings are read through the global
+                        // object's own property (Env::resolve_raw), not the cell's `.value` --
+                        // `scope.assign` (Env::assign_raw) already knows to write through there
+                        // too, so use it for the actual mutation rather than the cell directly.
+                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical());
+                        if promoted {
+                            if let Some(local) = env.local_cell(&n.name) {
+                                if let Ok(v) = local.read() {
+                                    let _ = scope.assign(&n.name, v);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Flow::Normal)
+            }
             StmtKind::Class(c) => {
                 if let Some(n) = &c.name {
                     let v = self.eval_class(c, env)?;
@@ -77,6 +142,19 @@ impl Interpreter {
             StmtKind::Block(b) => {
                 self.completion = JsValue::Undefined;
                 let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                // BlockDeclarationInstantiation's own function-hoisting: every direct
+                // FunctionDeclaration child of this block is lexically bound, to a fresh
+                // closure, at block entry -- independent of Annex B (this happens in strict
+                // mode too; it's what makes `f` resolve inside the block at all, and what
+                // Annex B.3.3's sync step above reads from).
+                for stmt in &b.body {
+                    if let StmtKind::Function(f) = &stmt.kind {
+                        if let Some(n) = &f.name {
+                            let v = self.make_function(f, &e);
+                            e.declare_lexical(&n.name, v, true)?;
+                        }
+                    }
+                }
                 // A block is a disposal boundary only when it directly declares a `using` /
                 // `await using` resource (spec: BlockDeclarationInstantiation's disposal capability).
                 if !b.body.iter().any(stmt_declares_resource) {
