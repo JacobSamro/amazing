@@ -1300,10 +1300,23 @@ impl Interpreter {
                             let v = self.make_function(f, env);
                             if self.in_eval { self.create_eval_binding(env, &n.name, Some(v))?; }
                             else { env.declare_var(&n.name, v)?; }
-                        } else if !self.strict_eval_context && !f.is_async && !f.is_generator
-                            && !blocked.iter().any(|b| b == &n.name)
-                        {
-                            env.hoist_var(&n.name)?;
+                        } else if !self.strict_eval_context && !f.is_async && !f.is_generator {
+                            // Record THIS declaration's own individual eligibility, keyed by its
+                            // own AST node address, not just "does the shared var exist" -- the
+                            // sync step in interp_stmt.rs's StmtKind::Function execution arm reads
+                            // this to decide whether *it specifically* may promote, since several
+                            // same-named FunctionDeclarations at different nesting depths can have
+                            // different `blocked` outcomes even though they'd all otherwise see the
+                            // same (or no) outer var cell. Never cleared: re-derived fresh, and
+                            // correctly, on every hoist pass this exact static node is visited,
+                            // including from a nested/recursive call's own hoist() in between.
+                            let key = f.as_ref() as *const ast::FunctionItem as usize;
+                            if blocked.iter().any(|b| b == &n.name) {
+                                annex_b_eligible_set(|set| { set.remove(&key); });
+                            } else {
+                                annex_b_eligible_set(|set| { set.insert(key); });
+                                env.hoist_var(&n.name)?;
+                            }
                         }
                     }
                 }

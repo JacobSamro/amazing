@@ -78,6 +78,43 @@ thread_local! {
     /// here as (realm, template-literal AST node address) -> the frozen
     /// template object. See `Interpreter::get_template_object`.
     static TEMPLATE_OBJECTS: RefCell<HashMap<(RealmHandle, usize), JsValue>> = RefCell::new(HashMap::new());
+
+    /// Which FunctionDeclaration AST nodes (by address) `hoist_inner`'s most
+    /// recent visit found Annex-B.3.3-eligible (not blocked by an intervening
+    /// `let`/`const`/class of the same name at some level between the
+    /// declaration's own block and the enclosing function/var scope). See
+    /// `hoist_inner`'s `StmtKind::Function` nested-branch (interp.rs) for the
+    /// writer and this file's own `StmtKind::Function` execution arm (the
+    /// Annex B.3.3 "sync step") for the reader.
+    static ANNEX_B_ELIGIBLE: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
+}
+
+fn annex_b_eligible_set<R>(f: impl FnOnce(&mut HashSet<usize>) -> R) -> R {
+    ANNEX_B_ELIGIBLE.with(|set| f(&mut set.borrow_mut()))
+}
+
+fn is_annex_b_eligible(node: *const ast::FunctionItem) -> bool {
+    ANNEX_B_ELIGIBLE.with(|set| set.borrow().contains(&(node as usize)))
+}
+
+/// Peels through zero or more `LabelIdentifier :` wrappers (Annex B.3.2 allows a
+/// LabelledStatement's body to be a FunctionDeclaration in non-strict code -- see
+/// `parser_statements.rs`'s own `is_labeled_function`) to find the FunctionDeclaration
+/// itself, or `None` if this statement isn't (possibly labeled) one.
+///
+/// `StmtKind::Block`'s block-entry pre-loop (BlockDeclarationInstantiation) uses this
+/// so a labeled function declaration is lexically (re-)bound at block entry exactly
+/// like an unlabeled one -- without it, a later labeled redeclaration's own statement
+/// executes its Annex B.3.3 sync step (in the `StmtKind::Function`/`StmtKind::Labeled`
+/// exec arms) reading `env.local_cell`, but that cell was never updated to the labeled
+/// declaration's own closure, so both the block's own reads and the promoted outer
+/// `var` stay stuck on whichever earlier, unlabeled declaration last ran the pre-loop.
+fn labeled_function_decl(stmt: &ast::Stmt) -> Option<&ast::FunctionItem> {
+    match &stmt.kind {
+        StmtKind::Function(f) => Some(f.as_ref()),
+        StmtKind::Labeled { body, .. } => labeled_function_decl(body),
+        _ => None,
+    }
 }
 
 impl Interpreter {
@@ -149,7 +186,14 @@ impl Interpreter {
                         // object's own property (Env::resolve_raw), not the cell's `.value` --
                         // `scope.assign` (Env::assign_raw) already knows to write through there
                         // too, so use it for the actual mutation rather than the cell directly.
-                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical());
+                        // `scope.local_cell` alone only proves *some* sibling declaration of
+                        // this name was eligible somewhere in this function -- not that *this*
+                        // occurrence was (see `ANNEX_B_ELIGIBLE`'s doc comment above). Without
+                        // the second check, a later individually-blocked same-named declaration
+                        // (shadowed by an intervening let/const at its own nesting depth) would
+                        // still stomp an earlier legitimately-hoisted one on every execution.
+                        let promoted = scope.local_cell(&n.name).is_some_and(|c| !c.is_lexical())
+                            && is_annex_b_eligible(f.as_ref() as *const ast::FunctionItem);
                         if promoted {
                             if let Some(local) = env.local_cell(&n.name) {
                                 if let Ok(v) = local.read() {
@@ -177,7 +221,7 @@ impl Interpreter {
                 // mode too; it's what makes `f` resolve inside the block at all, and what
                 // Annex B.3.3's sync step above reads from).
                 for stmt in &b.body {
-                    if let StmtKind::Function(f) = &stmt.kind {
+                    if let Some(f) = labeled_function_decl(stmt) {
                         if let Some(n) = &f.name {
                             let v = self.make_function(f, &e);
                             if e.local_cell(&n.name).is_some() {

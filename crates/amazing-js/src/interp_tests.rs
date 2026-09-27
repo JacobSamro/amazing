@@ -1470,6 +1470,49 @@ mod class_name_tests {
     }
 
     #[test]
+    fn annex_b_3_3_sync_step_tracks_each_declarations_own_eligibility() {
+        for (source, expected) in [
+            // Two plain FunctionDeclarations of the same name directly in one block (Annex
+            // B.3.3.4's relaxed duplicate-LexicallyDeclaredNames case): the block's own
+            // reads and the promoted outer `var` both track whichever ran last.
+            ("var r = [];
+              { r.push(typeof f === 'undefined' ? 'undef' : f());
+                function f() { return 3; } r.push(f());
+                function f() { return 4; } r.push(f()); }
+              r.push(f());
+              r.join(',')", "4,4,4,4"),
+            // Same, but the second declaration is labeled (Annex B.3.2 lets a
+            // LabelledStatement's body be a FunctionDeclaration in non-strict code): the
+            // block-entry pre-loop must (re-)bind it exactly like an unlabeled one, or the
+            // block's own lexical cell -- which the sync step reads -- stays stuck on the
+            // first declaration. (test262 .../block-scoped-functions-deprecated-redecl.js)
+            ("var r = [];
+              { r.push(typeof f === 'undefined' ? 'undef' : f());
+                function f() { return 3; } r.push(f());
+                l: function f() { return 4; } r.push(f()); }
+              r.push(f());
+              r.join(',')", "4,4,4,4"),
+            // The same pattern nested inside a function body (not just a top-level script).
+            ("var r = [];
+              function test() {
+                { r.push(typeof f === 'undefined' ? 'undef' : f());
+                  function f() { return 1; } r.push(f());
+                  function f() { return 2; } r.push(f()); }
+                r.push(f());
+              }
+              test();
+              r.join(',')", "2,2,2,2"),
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(
+                i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::str(expected),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn with_statement_resolves_through_the_bound_object() {
         for source in [
             // Reads and writes go to the bound object's own properties.
