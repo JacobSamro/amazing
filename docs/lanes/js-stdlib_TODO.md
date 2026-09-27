@@ -1024,4 +1024,196 @@ sub-cluster (this ticket's stated next items) were only partially reached
 (the two bugs shared with since/until above); no dedicated round started on
 either this session.
 
+## JSS-temporal-port, item 1: option-read-order fix + real since/until bugs (checkpoint, not fully closed)
+
+Fixed base: `edca8055` (`localdev/dev`, fast-forwarded onto cleanly -- one
+sibling-lane one-line drift in `builtins_std_collections.rs`, unrelated).
+Pinned Test262: `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+Scope actually completed this session, in order:
+
+1. **The cross-cutting option-read-order bug**, confirmed via the real
+   `options-read-before-algorithmic-validation.js`/`order-of-operations.js`
+   expectation lists: `largestUnit` must be read (and cast) first, then
+   `roundingIncrement`, then `roundingMode`, then `smallestUnit`, and no
+   algorithmic validation (unit-name-for-this-operation, `largestUnit` <
+   `smallestUnit`, the `roundingIncrement` bound implied by the now-known
+   `smallestUnit`) may throw until all four reads complete. The old
+   `std_temporal_rounding_options` read smallest/increment/mode first and
+   read `largestUnit` afterward, deep inside each per-kind branch. Replaced
+   with `std_temporal_difference_reads` (raw four-tuple read, no validation)
+   plus `std_temporal_resolve_largest`/`std_temporal_validate_rounding_
+   increment` (per-kind default/validation, called after all four reads),
+   in both `std_temporal_difference` (PlainDate/PlainDateTime/PlainTime/
+   PlainYearMonth since/until, `builtins_temporal_arithmetic.rs`) and
+   `std_epoch_difference` (Instant/ZonedDateTime since/until,
+   `builtins_temporal_epoch.rs`). Fixed all four
+   `options-read-before-algorithmic-validation.js` failures and all three
+   `order-of-operations.js` failures (PlainDate/PlainDateTime/PlainTime).
+   Ported ordering from boa-dev/temporal (temporal_rs)
+   @ `eadf8039d2577e4375493a0eb3f46a66f25616ec`, `src/options.rs`'s
+   `DifferenceSettings` parsing order, Apache-2.0 (same upstream/commit as
+   JSS-since-until; no new `THIRD_PARTY_NOTICES.md` row needed).
+2. **Found, while auditing `std_epoch_difference`, that ZonedDateTime's own
+   calendar-unit since/until branch never applied the directional-
+   roundingMode swap** (`ceil`/`floor`/`halfCeil`/`halfFloor`) that
+   PlainDate/PlainDateTime's calendar branch already got from JSS-since-
+   until -- fixed in the same edit (`std_temporal_swap_directional_mode`
+   applied conditionally, only for the calendar branch; the fixed-unit
+   branches correctly compute the signed delta directly per direction and
+   need no swap, confirmed by re-deriving the math rather than assumed).
+3. **The alphabetical-field-read-order bug** in `std_temporal_bag`
+   (`builtins_temporal.rs`), the property-bag reader shared by every
+   `from()`/constructor/since-until-`other`-argument conversion for
+   PlainDate/PlainDateTime/PlainTime/PlainYearMonth/PlainMonthDay: it read
+   `calendar, year, month, monthCode, day, [hour..nanosecond]` (a fixed
+   natural order) instead of the alphabetical order
+   PrepareTemporalFields/PrepareCalendarFields specifies (confirmed by the
+   *real* assertion mismatch behind `order-of-operations.js`, after the
+   read-order fix above turned out not to be sufficient by itself). `with()`
+   already had this right, via its `StdWithField` enum and per-kind
+   `(&str, StdWithField)` table; extracted that table into
+   `std_temporal_field_table` and added `std_temporal_read_calendar_fields`
+   (the shared alphabetical-read loop, each field's own immediate validation
+   inlined, `monthCode` cross-check deferred), and rewrote `std_temporal_bag`
+   to use them. Incidentally also fixed a spurious extra "day" property read
+   for `PlainYearMonth.from()` (not in spec's field set for that kind, and
+   not in `with()`'s existing table either).
+4. **Duration validity's per-field float64-safe-integer cap was too
+   strict for since/until's own output.** `std_temporal_validate`'s Duration
+   branch rejected any hour-through-nanosecond field over 2**53-1, added in
+   an earlier ticket to satisfy `Duration.prototype.round`'s own
+   `round/out-of-range-when-converting-from-normalized-duration.js` --  but
+   that is a narrower rule specific to `round()`'s BalanceTimeDuration-style
+   conversion, not general `IsValidDuration` (confirmed by since/until's own
+   `largestunit-plurals-accepted.js`/`units-changed.js`, which legitimately
+   collapse a multi-year span into a single `nanoseconds` field well past
+   2**53-1 while the *total*, in seconds, stays far inside
+   `STD_TEMPORAL_DURATION_MAX_NS`). Removed the per-field cap from the
+   general validator (keeping years/months/weeks' 2**32-1 cap and the
+   total-based bound) and re-added the narrower field-level check locally in
+   `std_temporal_round_duration`'s non-calendar fast path, where the
+   round-conversion test actually lives. Verified both directions: the
+   round-conversion test still passes (it was never lost against baseline)
+   and the previously-blocked since/until tests now pass.
+5. **A real rounding-carry bug, not an option/order issue:**
+   `std_temporal_difference`'s PlainDateTime branch had an "exact, unrounded
+   breakdown" shortcut whenever `largestUnit` was a calendar unit
+   (year/month/week), taken unconditionally regardless of what `smallestUnit`
+   actually was -- its own comment claimed `smallestUnit` was always
+   `"nanosecond"` here ("the only case reaching here"), which was simply
+   wrong: any fixed unit (day..nanosecond) reaches this branch once
+   `largestUnit` is calendar-coarser. A real rounding request (e.g.
+   `smallestUnit: "microseconds", roundingMode: "expand"`) was silently
+   dropped, which matters exactly when the rounding carries across the
+   `largestUnit` boundary (confirmed by `round-cross-unit-boundary.js`'s
+   "rounding down 1 ns balances to -2 years" case, and this same fix
+   resolved `rounding-near-minimum-date.js` as a side effect). Fixed by
+   always rounding the exact receiver-argument delta to `smallestUnit`
+   first, then re-expressing the rounded instant via
+   `std_temporal_epoch_breakdown` at `largestUnit` -- an identity when
+   `smallestUnit` is `"nanosecond"` with increment 1, so no separate
+   unrounded-shortcut branch is needed at all.
+6. **A discarded time part was never range-checked.** `std_temporal_parse`'s
+   `PlainDate`/`PlainYearMonth`/`PlainMonthDay` branches parse (and then
+   discard) a trailing time-of-day when the input string has one, but
+   `std_temporal_parse_time` itself only checks digit shape/count, not
+   range (hour <= 23, etc.) -- range checking is normally deferred to
+   `std_temporal_validate` on the *kept* fields, which never sees the
+   discarded ones. Added an explicit `std_temporal_validate(PlainTime, &
+   ignored)` after each discard-parse. Fixes PlainDate's own since/until
+   `argument-string-invalid.js` (`"2020-01-01T25:00:00"` must still throw).
+
+Measured, `built-ins/Temporal` (fresh baseline taken at this ticket's start,
+same fixed-selection classification hash `e78d0849587f683b63436bcce4ca84eac09c2124bfe191a0a8e66eb674d44b00`
+as JSS-since-until's *end* state, confirming no drift touched this
+selection): **8,400 -> 8,510 pass variants (+110)**, **4,200 -> 4,255 pass
+files (+55)**, out of 9,206 variants / 4,603 files selected; **0 lost**
+(diffed by `(path, variant)` against a fresh
+`js-stdlib-temporalport-baseline.jsonl`).
+
+Workspace: `cargo nextest run --workspace --locked --no-fail-fast`
+**3,381/3,381 pass** (3 slow, 17 skipped, 0 failed, unchanged from
+JSS-since-until's end state); `cargo test --workspace --locked --doc`: 31
+crates, all green (`amazing_js`: 1 passed; `amazing_html`: 1 passed).
+
+### What item 1 did NOT finish
+
+A fresh survey after all the above puts PlainDate/PlainDateTime/PlainTime
+since/until at **14 remaining failures** (down from 25, several of which
+turned out to already be fixed by the field-order/rounding-carry fixes
+above rather than needing individual attention):
+
+- `PlainDate`: 2 (`argument-string-invalid.js` x since/until -- see below)
+- `PlainDateTime`: 4 (`argument-string-limits.js`,
+  `float64-representable-integer.js` x since/until)
+- `PlainTime`: 8 (`argument-string-calendar-annotation.js`,
+  `argument-string-minus-sign.js`,
+  `argument-string-time-designator-required-for-disambiguation.js`,
+  `year-zero.js` x since/until)
+
+Two distinct root causes remain, neither attempted this round:
+
+- **`float64-representable-integer.js`** (PlainDateTime only): the Duration
+  getter already returns the correct float64-rounded value for a field past
+  2**53-1 (`result.microseconds` itself passes), but `Duration.prototype.
+  toString`/`.add`/`Duration.compare` read the internal exact `i64` value
+  instead of first canonicalizing it through the same f64 rounding the
+  getter applies -- needs an audit of every Duration-consuming operation to
+  canonicalize each field through `as f64 as i64`-style rounding at read
+  time, not just the getter. Cross-cutting, not since/until-specific.
+- **PlainTime's parse path never validates (or even looks at) the *date*
+  portion of a full date-time string it is about to discard the date half
+  of.** `std_temporal_parse`'s `PlainTime` arm locates the substring after
+  `T`/`t`/a space and parses *only* that, so a malformed or ambiguous date
+  prefix (`-000000` extended year, a U+2212 minus sign instead of ASCII
+  `-`, a bare `YYYY-MM` requiring a `T` prefix per
+  `plainTimeStringsAmbiguous`, an invalid calendar annotation) is never
+  even looked at. Fixing this properly means restructuring PlainTime's
+  parse arm to validate the full ISO date-time grammar (like
+  `std_temporal_parse_date` already does for the other kinds) before
+  discarding the date half, not a quick patch -- deferred as its own item
+  rather than rushed.
+
+### Items 2 and 3 (not started)
+
+A fresh full-corpus cluster survey (same run as the numbers above) for
+item 2's remaining `built-ins/Temporal` failures by type:
+
+| Type | Fail files |
+| --- | ---: |
+| `ZonedDateTime` | 92 |
+| `Duration` | 63 |
+| `PlainDateTime` | 45 |
+| `PlainDate` | 42 |
+| `PlainTime` | 39 |
+| `PlainYearMonth` | 29 |
+| `Instant` | 22 |
+| `PlainMonthDay` | 11 |
+| `Now` | 8 |
+
+`ZonedDateTime.from` (the single largest method-level cluster, 24 files) was
+spot-checked: it is **not** the same field-read-order bug (ZonedDateTime's
+own property-bag reader is separate code in `builtins_temporal_epoch.rs`,
+not `std_temporal_bag`) -- the failures sampled are wrong-exception-type bugs
+(`TypeError` expected, `RangeError` thrown, e.g. an empty property bag, a
+`timeZone` of the wrong type, an invalid offset string used with an
+offset-aware disambiguation option), a distinct area from anything fixed
+this session. `ZonedDateTime.since`/`.until` (11 + 10 files),
+`Duration.total`/`.round` (21 + 19), `PlainYearMonth`/`PlainMonthDay.from`
+(7 + 8), `Instant.toString` (9) and the rest were not individually
+triaged. Item 2's actual porting from temporal_rs/lumen (`eadf8039`/
+`f6c9860d`) has not started -- everything fixed this session was an
+existing-code bug (wrong read order, wrong validation bound, a dropped
+rounding step, a missing range check), not a missing algorithm. Item 3
+(the 4,000-line file cap) needed no action: `builtins_temporal.rs` (1,415
+lines), `builtins_temporal_arithmetic.rs` (1,262 lines) and
+`builtins_temporal_epoch.rs` (1,107 lines) are all comfortably under it.
+
+Next session should start from the item-2 table above, triage
+`ZonedDateTime`/`Duration` (the two largest clusters) by exact test-name
+pattern the way this session did for PlainDate/PlainDateTime, and decide
+per-cluster whether the fix is a local bug (as everything this session
+turned out to be) or an actual missing port from temporal_rs/lumen.
+
 
