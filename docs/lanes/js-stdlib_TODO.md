@@ -1216,4 +1216,133 @@ pattern the way this session did for PlainDate/PlainDateTime, and decide
 per-cluster whether the fix is a local bug (as everything this session
 turned out to be) or an actual missing port from temporal_rs/lumen.
 
+## JSS-temporal-port, item 2: ZonedDateTime.from wrong-exception-type cluster (checkpoint)
+
+Fixed base: `136dcb33` (`dev`, fast-forwarded onto cleanly). Pinned Test262:
+same as item 1. Gate selections: `built-ins/Temporal` and `intl402/Temporal`
+(the latter added per the coordinator's note that 92% of intl402's failures
+are under `intl402/Temporal/*`, so this lane's fixes are measured there too).
+
+Worked the coordinator's largest-first cluster, `ZonedDateTime.from`
+wrong-exception-type (24 files), in `builtins_temporal_epoch.rs`'s
+`std_epoch_from_value_with_options`. All fixes below are local bug fixes
+(wrong read order or a missing type/range check); nothing needed porting
+from temporal_rs/lumen this session.
+
+1. **`std_epoch_zone_value`'s generic ToString fallback.** For any value
+   that wasn't already a ZonedDateTime instance or a string, the old code
+   called `i.to_string(value)` and fed the (often garbage) result to zone
+   parsing, producing a RangeError instead of the spec's TypeError
+   (ToTemporalTimeZoneIdentifier: TypeError for anything that isn't a
+   String or a `[[InitializedTemporalZonedDateTime]]` object, with no
+   generic ToString fallback). Rewrote to match directly on the value.
+2. **The `offset` field's missing type gate.** Added
+   `std_epoch_string_field_value` (String or non-null Object -> ToString;
+   else TypeError, matching `argument-propertybag-invalid-offset-string.js`
+   or the wrong-type observer's expectations) and used it for the
+   ZonedDateTime object-bag branch's `offset` field.
+3. **Options were skipped entirely when `item` is already a ZonedDateTime.**
+   `ZonedDateTime.from(existingZDT, options)` clones without applying
+   overflow/disambiguation/offset, but per spec still reads and validates
+   them first (steps 2.a-2.c). The old early-return path returned before
+   ever touching `options`, so a bad-type `options.overflow`/
+   `.disambiguation`/`.offset` (or a bad `options` primitive) silently
+   didn't throw. Added the reads (using the existing
+   `std_temporal_overflow`/`std_temporal_option_string` helpers, which
+   already have the right object/ToString semantics) plus their enum
+   validation (new `std_epoch_validate_disambiguation`, mirroring the
+   existing offset-option enum check) before the early return.
+4. **A string argument's options were read before the string was parsed.**
+   `ZonedDateTime.from("bad string", badOptions)` must surface the string's
+   own RangeError before ever validating `options`'s type -- the opposite
+   of the object/instance cases, which validate `options` first.  Split
+   `std_epoch_parse` into `std_epoch_parse_syntax` (pure syntax, no options)
+   and `std_epoch_resolve_parsed` (options-dependent resolution), so the
+   String branch of `std_epoch_from_value_with_options` parses first and
+   only reads `options` (with the same enum validation as point 3) once
+   parsing succeeds.
+5. **The offset field's format was validated only when actually used.**
+   `{ offset: "00:00", ... }` (missing sign) with `offsetOption: "ignore"`
+   must still throw RangeError for the malformed string, but the old code
+   only called `std_epoch_parse_offset` in the branch that *uses* the
+   parsed value, skipping it whenever `given_offset` was ignored. Now
+   parses/validates the field as soon as it's read, regardless of
+   `offsetOption`.
+6. **Missing Temporal-instant range check on the disambiguated paths.**
+   `std_epoch_resolve_parsed`'s offset-absent and "ignore"/"prefer"-mismatch
+   branches, plus the object-bag branch's own disambiguation calls, returned
+   `std_epoch_disambiguate`'s result directly without the
+   ±8.64e21 ns bounds check that the exact/offset-present path already had.
+   Added a shared `std_epoch_check_range` and applied it at all four call
+   sites (fixes e.g. the `invalidStrings`/most of `argument-string-limits.js`
+   cases; the `offset: prefer`/`reject` wall-clock-range variant of that
+   same file needs GetPossibleEpochNanoseconds' local-time-bounds check,
+   which is a different, not-yet-implemented check -- deferred).
+7. **Calendar was validated after `timeZone`, not before.** For the object-
+   bag branch, `std_temporal_bag` (which validates the `calendar` property,
+   e.g. rejecting unsupported ids like `"islamic"` with RangeError) was
+   called *after* reading/validating `timeZone` -- so `ZonedDateTime.from(
+   {calendar: "islamic", ...})` with no `timeZone` at all threw the
+   wrong-type TypeError for the missing `timeZone` before ever reaching the
+   calendar check. This one was caught by the `intl402/Temporal` gate
+   (`ZonedDateTime/from/islamic.js` regressed under the item 3/4 fixes
+   above, since the old TypeError-masking-as-RangeError ToString fallback
+   had been accidentally passing it). Reordered to validate the calendar
+   first, matching spec (calendar resolution precedes PrepareCalendarFields,
+   which is where `timeZone` is read).
+
+**Reverted, not kept**: a `monthCode` strict-string-type gate (TypeError for
+any non-string, even an object with `toString`), matching the 2026-dated
+`ZonedDateTime/from/month-code-wrong-type.js`/`PlainDate|PlainDateTime|
+PlainYearMonth/from/month-code-wrong-type.js` (4 files). Applying it in the
+shared `std_temporal_read_calendar_fields`/`std_temporal_with` regressed 13
+long-established (2020-dated) `order-of-operations.js` files across
+PlainDate/PlainDateTime/PlainMonthDay/PlainYearMonth's `from`/`with`/
+`since`/`until`, which observe `monthCode` being ToString-coerced (via
+`propertyBagObserver`-wrapped values) exactly like every other field. The
+pinned Test262 revision has both an old (ToString-coercion) and a new
+(strict-type) test for the same PrepareCalendarFields step; kept the old
+behavior since it has far more passing coverage (13 files vs 4) and zero-
+loss is the hard gate. Left as a known corpus inconsistency, not filed to
+`questions.md` since it isn't cross-lane.
+
+**Measured (zero-loss, hashes stable across two consecutive runs of
+`built-ins/Temporal`):**
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8510 pass / 696 fail | 8598 pass / 608 fail |
+| `built-ins/Temporal` files | 4255 pass / 348 fail | 4299 pass / 304 fail |
+| `intl402/Temporal` variants | 274 pass / 3784 fail | 274 pass / 3784 fail (unchanged) |
+| `intl402/Temporal` files | 137 pass / 1892 fail | 137 pass / 1892 fail (unchanged) |
+
++88 built-ins/Temporal pass variants (+44 pass files), zero lost (verified by
+a full pass-set diff against a true "before" build at the exact pre-session
+commit, not just totals). `intl402/Temporal` is unaffected either way (the
+92%-under-Temporal js-intl finding is about intl402-specific Intl.
+DateTimeFormat/calendar-locale plumbing this lane's fixes don't touch, not
+about the exception-type bugs fixed here). Workspace `cargo nextest run
+--workspace --locked --no-fail-fast`: 3394/3394 passed, 17 skipped.
+`cargo test --workspace --locked --doc`: all green (31 crates,
+`amazing_js` 1/1, `amazing_html` 1/1).
+
+12 of the original 24 `ZonedDateTime/from` files still fail: 2 need the
+full alphabetical field-read interleave with `offset`/`timeZone`
+(`order-of-operations.js`, `calendarresolvefields-error-ordering.js`); 3 need
+ISO string grammar extensions this lane's parser doesn't have yet
+(hour-only time, hour-only numeric offset, date-only-with-zone-annotation --
+`argument-string-optional-parts.js`, and partially `argument-string-limits.js`
+/`argument-string-calendar-case-insensitive.js`); `monthcode-invalid.js`
+needs the syntax-vs-suitability-validation two-phase ordering noted above but
+reverted; `subclassing-ignored.js` is an unrelated Instant/ZonedDateTime tag
+mixup not yet root-caused; the rest
+(`argument-propertybag-calendar-year-zero.js`,
+`argument-propertybag-calendar-invalid-iso-string.js`,
+`argument-propertybag-timezone-string-datetime.js`, `offset-string-invalid.js`,
+`observable-get-overflow-argument-primitive.js`) were not individually
+triaged this session. The coordinator's "next clusters" (Duration 63 fail
+files, PlainDateTime 45, PlainDate 42, PlainTime 39, PlainYearMonth 29,
+Instant 22, PlainMonthDay 11, Now 8, from the item-2 survey table) were not
+started.
+
 

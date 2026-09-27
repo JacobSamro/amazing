@@ -618,6 +618,17 @@ fn std_temporal_read_calendar_fields(i: &mut Interpreter, kind: StdTemporalKind,
                 if value < 1 { return Err(Throw::range_error("month must be a positive integer")); }
                 read.month = Some(value);
             }
+            // NOTE: a newer (2026) test (ZonedDateTime/from/month-code-wrong-
+            // type.js) expects a non-string monthCode -- even an object with
+            // a toString method -- to throw TypeError without ever calling
+            // ToString. But the long-established order-of-operations.js
+            // tests for PlainDate/PlainDateTime/PlainYearMonth's from/with/
+            // since/until (2020) observe monthCode being ToString-coerced
+            // like any other field, via propertyBagObserver-wrapped values.
+            // The two are mutually exclusive for this shared reader; kept as
+            // ToString-coercion since that side has far more passing
+            // coverage in this pinned corpus (13 files vs 4). See
+            // docs/lanes/js-stdlib_TODO.md, JSS-temporal-port item 2.
             StdWithField::MonthCode => read.month_code_text = Some(i.to_string(&property)?),
             StdWithField::Day => {
                 let value = std_temporal_number(i, property, None)?;
@@ -699,6 +710,8 @@ fn std_temporal_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
                 result[1] = value;
                 month_seen = Some(value);
             }
+            // See std_temporal_read_calendar_fields: kept as ToString
+            // coercion for the same reason.
             StdWithField::MonthCode => month_code_text = Some(i.to_string(&property)?),
             StdWithField::Day => {
                 let value = std_temporal_number(i, property, None)?;
