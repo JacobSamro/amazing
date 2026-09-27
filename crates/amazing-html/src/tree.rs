@@ -26,10 +26,25 @@ use amazing_dom::events::CallbackId;
 
 use crate::tokenizer::{Token, Tokenizer};
 
+// Pure move, no behavior change (see each module's own doc comment and
+// `docs/lanes/html_TODO.md`): these hold insertion-mode groups that used to
+// live directly in this file, split out to keep it under the workspace's
+// 4,000-line cap. Each is a child module so its `impl TreeBuilder` blocks
+// keep the same field/const/helper access they had before the split.
+mod foreign;
+mod in_select;
+mod in_table;
+
 /// Elements whose start tags never take children (void + obsolete empties).
+// `in_body_start_tag`'s "area" | "br" | "embed" | "img" | "keygen" | "wbr"
+// arm (§13.2.6.4.7, legacy `<keygen>` handling retained by html5lib's own
+// corpus) calls `insert_void("keygen", ...)`, whose `debug_assert!` checks
+// this list -- `keygen` was missing, so any debug build crashed outright on
+// `<keygen>` (html5lib tests19.dat case 66: `<keygen><frameset>` panicked
+// instead of producing a void `<keygen>` element).
 const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "basefont", "bgsound", "br", "col", "embed", "hr", "img",
-    "input", "link", "meta", "param", "source", "track", "wbr", "frame",
+    "input", "keygen", "link", "meta", "param", "source", "track", "wbr", "frame",
 ];
 
 /// Default-scope terminator element names (§13.2.4.3).
@@ -69,15 +84,6 @@ const SPECIAL_ELEMENTS: &[&str] = &[
     "search", "section", "select", "source", "style", "summary", "table",
     "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "title",
     "tr", "track", "ul", "wbr", "xmp",
-];
-
-/// HTML start tags that break out of foreign content (§13.2.6.5).
-const FOREIGN_BREAKOUT_START_TAGS: &[&str] = &[
-    "b", "big", "blockquote", "body", "br", "center", "code", "dd",
-    "div", "dl", "dt", "em", "embed", "h1", "h2", "h3", "h4", "h5",
-    "h6", "head", "hr", "i", "img", "li", "listing", "menu", "meta",
-    "nobr", "ol", "p", "pre", "ruby", "s", "small", "span", "strong",
-    "strike", "sub", "sup", "table", "tt", "u", "ul", "var",
 ];
 
 fn is_ws_char(c: char) -> bool {
@@ -440,7 +446,29 @@ impl TreeBuilder {
                 self.process_token_in_html(tok);
                 return;
             }
-            if !matches!(self.mode, Mode::Initial | Mode::BeforeHtml | Mode::BeforeHead | Mode::AfterHead | Mode::InHead) {
+            // §13.2.6: only the modes that actually redirect a `template`
+            // tag to "in head" rules (directly, or by cascading through "in
+            // table"/"in caption"/etc., which this shortcut short-circuits)
+            // belong here. `InSelect`, `InFrameset`, `AfterFrameset`,
+            // `AfterBody` and the `AfterAfter*` modes have no such rule --
+            // per spec `template` there is just an ordinary, unhandled
+            // token, ignored like any other. Reusing this shortcut for them
+            // wrongly opened/closed a template while, e.g., inside a
+            // `<frameset>` (html5lib template.dat case 40:
+            // `<frameset><template><frame></template></frameset>` swallowed
+            // the `<frame>` into an unwanted template instead of leaving it
+            // a plain child of `<frameset>`).
+            if matches!(
+                self.mode,
+                Mode::InBody
+                    | Mode::InTable
+                    | Mode::InCaption
+                    | Mode::InColumnGroup
+                    | Mode::InTableBody
+                    | Mode::InRow
+                    | Mode::InCell
+                    | Mode::InTemplate
+            ) {
                 match &tok {
                     Token::StartTag { name, attrs, .. } if name == "template" => {
                         self.start_template(attrs.clone());
@@ -552,58 +580,6 @@ impl TreeBuilder {
                 (name.clone(), attrs.clone())
             },
             _ => (String::new(), Vec::new()),
-        }
-    }
-
-    fn is_mathml_text_integration_point(&self, idx: NodeIdx) -> bool {
-        self.dom.namespace(idx) == Some(Namespace::MathMl)
-            && matches!(self.dom.name(idx), Some("mi" | "mo" | "mn" | "ms" | "mtext"))
-    }
-
-    fn is_html_integration_point(&self, idx: NodeIdx) -> bool {
-        match (self.dom.namespace(idx), self.dom.name(idx)) {
-            (Some(Namespace::Svg), Some("foreignObject" | "desc" | "title")) => true,
-            (Some(Namespace::MathMl), Some("annotation-xml")) => self
-                .dom
-                .attrs_of(idx)
-                .is_some_and(|attrs| {
-                    attrs.iter().any(|(name, value)| {
-                        name == "encoding"
-                            && (value.eq_ignore_ascii_case("text/html")
-                                || value.eq_ignore_ascii_case("application/xhtml+xml"))
-                    })
-                }),
-            _ => false,
-        }
-    }
-
-    fn should_process_in_foreign_content(&self, tok: &Token) -> bool {
-        let Some(current) = self.current() else { return false };
-        if self.dom.namespace(current) == Some(Namespace::Html) {
-            return false;
-        }
-        match tok {
-            Token::Eof => false,
-            Token::Characters(_) if self.is_mathml_text_integration_point(current) => false,
-            Token::StartTag { name, .. }
-                if self.is_mathml_text_integration_point(current)
-                    && !matches!(name.as_str(), "mglyph" | "malignmark") =>
-            {
-                false
-            },
-            Token::StartTag { name, .. }
-                if self.dom.namespace(current) == Some(Namespace::MathMl)
-                    && self.dom.name(current) == Some("annotation-xml")
-                    && name == "svg" =>
-            {
-                false
-            },
-            Token::Characters(_) | Token::StartTag { .. }
-                if self.is_html_integration_point(current) =>
-            {
-                false
-            },
-            _ => true,
         }
     }
 
@@ -783,121 +759,6 @@ impl TreeBuilder {
         idx
     }
 
-    fn in_foreign_content(&mut self, tok: Token) {
-        match tok {
-            Token::Characters(data) => {
-                if data.chars().any(|c| !is_ws_char(c)) {
-                    self.frameset_ok = false;
-                }
-                self.insert_text(&data.replace('\0', "\u{FFFD}"));
-            },
-            Token::Comment(data) => self.insert_comment_here(&data),
-            Token::Doctype { .. } => {},
-            Token::StartTag { name, attrs, self_closing } => {
-                let font_breakout = name == "font"
-                    && attrs.iter().any(|(attr, _)| {
-                        matches!(attr.as_str(), "color" | "face" | "size")
-                    });
-                if FOREIGN_BREAKOUT_START_TAGS.contains(&name.as_str()) || font_breakout {
-                    while let Some(current) = self.current() {
-                        if self.dom.namespace(current) == Some(Namespace::Html)
-                            || self.is_mathml_text_integration_point(current)
-                            || self.is_html_integration_point(current)
-                        {
-                            break;
-                        }
-                        self.open.pop();
-                    }
-                    self.process_token_in_html(Token::StartTag {
-                        name,
-                        attrs,
-                        self_closing,
-                    });
-                    return;
-                }
-                let namespace = self
-                    .current()
-                    .and_then(|idx| self.dom.namespace(idx))
-                    .unwrap_or(Namespace::Html);
-                let node = self.insert_foreign_element(&name, attrs, namespace);
-                if self_closing {
-                    // HTML-32: a self-closing SVG `<script/>` (necessarily
-                    // `src`-only -- self-closing leaves no room for inline
-                    // text content) used to be popped here with no classify/
-                    // pause check at all, so it was silently never collected
-                    // -- the same bug HTML-31 fixed for its non-self-closing
-                    // `<script>...</script>` sibling, just reached through
-                    // the self-closing branch instead of the `EndTag` match
-                    // arm below. Same guards: not a fragment parse, not
-                    // inside `<template>` content, SVG namespace only
-                    // (MathML has no script element).
-                    if !self.fragment
-                        && self.template_modes.is_empty()
-                        && name.eq_ignore_ascii_case("script")
-                        && namespace == Namespace::Svg
-                    {
-                        let attrs = self.dom.attrs_of(node).map(<[_]>::to_vec).unwrap_or_default();
-                        match classify_script(&attrs) {
-                            Some(ScriptMode::Blocking) => self.pending_script = Some(node),
-                            Some(mode) => self.script_events.push((node, mode)),
-                            None => {},
-                        }
-                    }
-                    self.open.pop();
-                }
-            },
-            Token::EndTag { name } => {
-                for position in (0..self.open.len()).rev() {
-                    let node = self.open[position];
-                    if self
-                        .dom
-                        .name(node)
-                        .is_some_and(|local| local.eq_ignore_ascii_case(&name))
-                    {
-                        // HTML-31: an SVG `<script>` (MathML has no script
-                        // element) is never tokenized as rawtext/script-data
-                        // -- per spec, foreign content's "in foreign
-                        // content" insertion mode has no special case for
-                        // `<script>` at all, so it is tokenized as ordinary
-                        // markup and closes here, through this generic
-                        // stack-popping match, never through `text_mode`'s
-                        // script handling above. Run the same classify/pause
-                        // decision here so an SVG script actually executes
-                        // (WPT's execution-timing/131.html: "scheduler:
-                        // inline svg script").
-                        if !self.fragment
-                            && self.template_modes.is_empty()
-                            && name.eq_ignore_ascii_case("script")
-                            && self.dom.namespace(node) == Some(Namespace::Svg)
-                        {
-                            let attrs = self.dom.attrs_of(node).map(<[_]>::to_vec).unwrap_or_default();
-                            match classify_script(&attrs) {
-                                Some(ScriptMode::Blocking) => self.pending_script = Some(node),
-                                Some(mode) => self.script_events.push((node, mode)),
-                                None => {},
-                            }
-                        }
-                        self.open.truncate(position);
-                        return;
-                    }
-                    if self.dom.namespace(node) == Some(Namespace::Html) {
-                        // The in-body rules synthesize an element for a stray
-                        // </p> or </br>. Those recovery elements belong after
-                        // the foreign subtree. Other unmatched end tags must
-                        // leave that subtree open.
-                        if matches!(name.as_str(), "p" | "br") {
-                            self.open.truncate(position + 1);
-                        }
-                        self.process_token_in_html(Token::EndTag { name });
-                        return;
-                    }
-                }
-            },
-            Token::Eof => self.process_token_in_html(Token::Eof),
-            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
-    }
-
     /// Generic scope walk (§13.2.4.3): scan top-down; terminate on a match
     /// or on any terminator.
     fn has_in_specific_scope(&self, name: &str, extra: &[&str]) -> bool {
@@ -972,11 +833,35 @@ impl TreeBuilder {
                 matches!(n, "table" | "tbody" | "tfoot" | "thead" | "tr")
             };
             if family {
-                if let Some(table_pos) = self
-                    .open
-                    .iter()
-                    .rposition(|&node| self.dom.name(node) == Some("table"))
-                {
+                let last_template_pos = self.open.iter()
+                    .rposition(|&node| self.dom.name(node) == Some("template"));
+                let last_table_pos = self.open.iter()
+                    .rposition(|&node| self.dom.name(node) == Some("table"));
+                // §13.2.6.1 foster-parenting step 3: a `template` more
+                // recent (higher on the stack) than any `table` -- or with
+                // no `table` on the stack at all -- redirects insertion
+                // into THAT template's own content fragment, not the
+                // nearest `table`. This is the normal case for a `<tr>`/
+                // `<td>`/etc. reached only through "in template"'s synthetic
+                // table-context modes (`in_table`/`in_row`/`in_cell`, ...),
+                // which never push a real `<table>` element at all (html5lib
+                // template.dat: `<body><template><tr><div></div></tr>
+                // </template>` foster-parented `<div>` as a *child of `<tr>`*
+                // instead of the template's content, since the old code
+                // fell straight through to `(target, None)` whenever no
+                // `<table>` was found).
+                let template_more_recent = match (last_template_pos, last_table_pos) {
+                    (Some(t), Some(tb)) => t > tb,
+                    (Some(_), None) => true,
+                    (None, _) => false,
+                };
+                if template_more_recent {
+                    let template = self.open[last_template_pos.expect("checked above")];
+                    if let Some(contents) = self.dom.template_contents(template) {
+                        return (contents, None);
+                    }
+                }
+                if let Some(table_pos) = last_table_pos {
                     let table = self.open[table_pos];
                     if let Some(parent) = self.dom.get(table).parent {
                         return (parent, Some(table));
@@ -984,6 +869,11 @@ impl TreeBuilder {
                     if table_pos > 0 {
                         return (self.open[table_pos - 1], None);
                     }
+                } else if let Some(&html) = self.open.first() {
+                    // Step 4: no `table` on the stack at all (only possible
+                    // during fragment parsing, per spec) -- foster-parent
+                    // into the synthetic `html` root.
+                    return (html, None);
                 }
             }
         }
@@ -1206,6 +1096,21 @@ impl TreeBuilder {
                 "template" => Some(*self.template_modes.last().unwrap_or(&Mode::InTemplate)),
                 "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
+                // Spec step 12 (§13.2.4.1): a `head` element still open on the
+                // stack resets to "in head", not "after head". This case was
+                // missing entirely, so `head` fell through to `_ => None` and
+                // the loop continued to `html`, whose own check only looks at
+                // whether the head element *pointer* (`self.head`) was ever
+                // set -- true as soon as the first head element was created,
+                // even while that same head is still open above it on the
+                // stack (e.g. right after `close_template` pops a `<template>`
+                // that was a direct child of `<head>`). That produced "after
+                // head" while `<head>` was still the current node, so the
+                // next implied `<body>` was inserted as `<head>`'s own child
+                // instead of a sibling of `<head>` under `<html>` (html5lib
+                // template.dat: ~30 of this file's cases had a `<body>` one
+                // level too deep for exactly this reason).
+                "head" => Some(Mode::InHead),
                 "html" if self.fragment => Some(fragment_insertion_mode(
                     self.fragment_context.as_deref().unwrap_or("html")
                 )),
@@ -1731,6 +1636,15 @@ impl TreeBuilder {
                 self.implied_head();
                 self.in_head(Token::EndTag { name: name.clone() });
             },
+            // §13.2.6.4.3 "before head", "any other end tag": parse error,
+            // ignore the token -- this must NOT fall into the catch-all
+            // below, which implicitly creates `<head>` and reprocesses.
+            // Doing that for a stray end tag (e.g. a bare `</p>` before any
+            // real content) created `<head>` a token early, so a comment
+            // immediately after landed *inside* it instead of staying a
+            // sibling of the not-yet-created `<head>` under `<html>`
+            // (html5lib tests19.dat case 2: `<html></p><!--foo-->`).
+            Token::EndTag { .. } => {},
             other => {
                 self.implied_head();
                 self.in_head(other);
@@ -1971,9 +1885,17 @@ impl TreeBuilder {
 
     fn in_body_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {
         match name {
+            // §13.2.6.4.7 "in body", start tag `html`: if a `template` is on
+            // the stack of open elements, ignore the token outright instead
+            // of merging attributes onto the stack's bottom element -- a
+            // stray `<html b=c>` inside template content was leaking `b=c`
+            // onto the real `<html>` element (html5lib template.dat cases
+            // 65-67: `<html a=b><template><div><html b=c>...`).
             "html" => {
-                if let Some(&root) = self.open.first() {
-                    self.merge_attrs(root, attrs);
+                if !self.stack_has("template") {
+                    if let Some(&root) = self.open.first() {
+                        self.merge_attrs(root, attrs);
+                    }
                 }
             },
             "base" | "basefont" | "bgsound" | "link" | "meta" | "noframes"
@@ -1984,16 +1906,26 @@ impl TreeBuilder {
                     self_closing: false,
                 });
             },
+            // §13.2.6.4.7 "in body", start tag `body`: ignore the token
+            // entirely (including leaving `frameset_ok` untouched) unless a
+            // `body` element is actually in scope -- a bare stack search
+            // found a real `<body>` *below* an intervening `<template>` and
+            // merged the stray tag's attributes onto it regardless (html5lib
+            // template.dat case 64: `<body a=b><template>...<body c=d>...`
+            // leaked `c=d` onto the outer body, since `template` terminates
+            // scope per §13.2.4.3 and should have hidden it).
             "body" => {
-                if let Some(&b) = self
-                    .open
-                    .iter()
-                    .rev()
-                    .find(|&&i| self.dom.name(i) == Some("body"))
-                {
-                    self.merge_attrs(b, attrs);
+                if self.has_in_scope("body") {
+                    if let Some(&b) = self
+                        .open
+                        .iter()
+                        .rev()
+                        .find(|&&i| self.dom.name(i) == Some("body"))
+                    {
+                        self.merge_attrs(b, attrs);
+                    }
+                    self.frameset_ok = false;
                 }
-                self.frameset_ok = false;
             },
             "frameset" => {
                 if self.open.len() < 2
@@ -2389,422 +2321,6 @@ impl TreeBuilder {
         }
     }
 
-    /// Bounded select fragment rules. The fragment context is not on the
-    /// open-elements stack, so a stray `</select>` cannot close it.
-    fn in_select(&mut self, tok: Token) {
-        match tok {
-            Token::Characters(data) => self.insert_text(&data),
-            Token::Comment(data) => self.insert_comment_here(&data),
-            Token::StartTag { name, attrs, .. } if name == "option" => {
-                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
-                    self.open.pop();
-                }
-                self.insert_and_push("option", attrs);
-            },
-            Token::StartTag { name, attrs, .. } if name == "optgroup" => {
-                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
-                    self.open.pop();
-                }
-                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("optgroup")) {
-                    self.open.pop();
-                }
-                self.insert_and_push("optgroup", attrs);
-            },
-            Token::EndTag { name } if name == "option" => {
-                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
-                    self.open.pop();
-                }
-            },
-            Token::EndTag { name } if name == "optgroup" => {
-                if self.open.len() > 2
-                    && self.current().is_some_and(|idx| self.dom.name(idx) == Some("option"))
-                    && self.dom.name(self.open[self.open.len() - 2]) == Some("optgroup")
-                {
-                    self.open.pop();
-                }
-                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("optgroup")) {
-                    self.open.pop();
-                }
-            },
-            Token::StartTag { name, attrs, .. } if name == "html" => {
-                self.in_body_start_tag("html", attrs);
-            },
-            Token::Eof => {},
-            _ => {}, // other tags and stray context end tags are ignored
-        }
-    }
-
-    fn in_table(&mut self, tok: Token) {
-        match tok {
-            Token::Characters(data) => {
-                self.table_text_return_mode = self.mode;
-                self.pending_table_text.clear();
-                self.pending_table_text.push_str(&data);
-                self.mode = Mode::InTableText;
-            },
-            Token::Comment(data) => self.insert_comment_here(&data),
-            Token::Doctype { .. } => {},
-            Token::StartTag { name, attrs, self_closing: _ } => {
-                self.in_table_start_tag(&name, attrs)
-            },
-            Token::EndTag { name } => self.in_table_end_tag(&name),
-            Token::Eof => {},
-            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
-        }
-    }
-
-    /// Accumulate adjacent character tokens before deciding their insertion
-    /// place. A non-whitespace scalar makes the entire run foster-parented;
-    /// otherwise it belongs under the current table-family element.
-    fn in_table_text(&mut self, tok: Token) {
-        match tok {
-            Token::Characters(data) => self.pending_table_text.push_str(&data),
-            other => {
-                let data = std::mem::take(&mut self.pending_table_text);
-                self.mode = self.table_text_return_mode;
-                if !data.is_empty() {
-                    if data.chars().all(is_ws_char) {
-                        self.insert_text(&data);
-                    } else {
-                        self.foster = true;
-                        self.in_body(Token::Characters(data));
-                        self.foster = false;
-                    }
-                }
-                self.process_token(other);
-            },
-        }
-    }
-
-    fn in_table_start_tag(&mut self, name: &str, attrs: Vec<(String, String)>) {
-        match name {
-            "caption" => {
-                self.clear_back_to_table();
-                self.fmt.push(FmtEntry::Marker);
-                self.insert_and_push("caption", attrs);
-                self.mode = Mode::InCaption;
-            },
-            "colgroup" => {
-                self.clear_back_to_table();
-                self.insert_and_push("colgroup", attrs);
-                self.mode = Mode::InColumnGroup;
-            },
-            "col" => {
-                self.clear_back_to_table();
-                self.insert_and_push("colgroup", Vec::new());
-                self.mode = Mode::InColumnGroup;
-                self.in_column_group(Token::StartTag {
-                    name: "col".to_owned(),
-                    attrs,
-                    self_closing: false,
-                });
-            },
-            "tbody" | "tfoot" | "thead" => {
-                self.clear_back_to_table();
-                self.insert_and_push(name, attrs);
-                self.mode = Mode::InTableBody;
-            },
-            "td" | "th" | "tr" => {
-                // Implicit tbody (§13.2.6.4.9).
-                self.clear_back_to_table();
-                self.insert_and_push("tbody", Vec::new());
-                self.mode = Mode::InTableBody;
-                self.in_table_body_start_tag(name, attrs);
-            },
-            "table" => {
-                if self.has_in_table_scope("table") {
-                    self.pop_until("table");
-                    self.reset_insertion_mode();
-                    self.process_token(Token::StartTag {
-                        name: name.to_owned(),
-                        attrs,
-                        self_closing: false,
-                    });
-                }
-            },
-            "style" | "script" | "title" | "noframes" => {
-                self.start_generic_text_element(name, attrs);
-            },
-            "input" => {
-                let hidden = attrs.iter().any(|(n, v)| {
-                    n == "type" && v.eq_ignore_ascii_case("hidden")
-                });
-                if hidden {
-                    self.insert_void("input", attrs);
-                } else {
-                    self.foster = true;
-                    self.in_body_start_tag(name, attrs);
-                }
-            },
-            "form" => {
-                if self.form.is_none() {
-                    let idx = self.insert_element("form", attrs);
-                    self.form = Some(idx);
-                }
-            },
-            _ => {
-                self.foster = true;
-                self.in_body_start_tag(name, attrs);
-            },
-        }
-    }
-
-    fn in_table_end_tag(&mut self, name: &str) {
-        match name {
-            "table" => {
-                if self.has_in_table_scope("table") {
-                    self.pop_until("table");
-                    self.reset_insertion_mode();
-                }
-            },
-            "body" | "caption" | "col" | "colgroup" | "html" | "tbody" | "td"
-            | "tfoot" | "th" | "thead" | "tr" => {},
-            _ => {
-                self.foster = true;
-                self.in_body_end_tag(name);
-            },
-        }
-    }
-
-    fn in_table_body(&mut self, tok: Token) {
-        match tok {
-            Token::StartTag { name, attrs, self_closing: _ } => {
-                self.in_table_body_start_tag(&name, attrs)
-            },
-            Token::EndTag { name } => self.in_table_body_end_tag(&name),
-            other => {
-                self.in_table(other);
-            },
-        }
-    }
-
-    fn in_table_body_start_tag(
-        &mut self,
-        name: &str,
-        attrs: Vec<(String, String)>,
-    ) {
-        match name {
-            "tr" => {
-                self.clear_back_to_section();
-                self.insert_and_push("tr", attrs);
-                self.mode = Mode::InRow;
-            },
-            "td" | "th" => {
-                // Parse error: synthesize the missing row, then reprocess
-                // the cell token using the in-row rules.
-                self.clear_back_to_section();
-                self.insert_and_push("tr", Vec::new());
-                self.mode = Mode::InRow;
-                self.in_row(Token::StartTag {
-                    name: name.to_owned(),
-                    attrs,
-                    self_closing: false,
-                });
-            },
-            "caption" | "colgroup" | "col" | "tbody" | "tfoot" | "thead" => {
-                if self.close_section() {
-                    self.reset_insertion_mode();
-                    self.in_table_start_tag(name, attrs);
-                }
-            },
-            _ => {
-                self.foster = true;
-                self.in_table_start_tag(name, attrs);
-            },
-        }
-    }
-
-    fn in_table_body_end_tag(&mut self, name: &str) {
-        match name {
-            "tbody" | "tfoot" | "thead" => {
-                if self.stack_has(name) {
-                    self.generate_implied_end_tags(Some(name));
-                    self.pop_until(name);
-                    self.mode = Mode::InTable;
-                }
-            },
-            "td" | "th" | "tr" => {
-                // Stray cell/row end: imply a tbody, then handle the tag.
-                let _ = self.insert_element("tbody", Vec::new());
-                self.any_other_end_tag(name);
-            },
-            _ => {
-                self.foster = true;
-                self.in_table_end_tag(name);
-            },
-        }
-    }
-
-    fn in_row(&mut self, tok: Token) {
-        match tok {
-            Token::StartTag { name, attrs, self_closing: _ } => {
-                match name.as_str() {
-                    "td" | "th" => {
-                        self.clear_back_to_row();
-                        self.fmt.push(FmtEntry::Marker);
-                        self.insert_and_push(&name, attrs);
-                        self.mode = Mode::InCell;
-                    },
-                    "caption" | "col" | "colgroup" | "tbody" | "tfoot"
-                    | "thead" | "tr" => {
-                        if self.close_tr() {
-                            self.mode = Mode::InTableBody;
-                            self.in_table_body_start_tag(&name, attrs);
-                        }
-                    },
-                    _ => {
-                        self.foster = true;
-                        self.in_table_start_tag(&name, attrs);
-                    },
-                }
-            },
-            Token::EndTag { name } => match name.as_str() {
-                "tr" => {
-                    if self.close_tr() {
-                        self.mode = Mode::InTableBody;
-                    }
-                },
-                "td" | "th" => {
-                    if self.stack_has(&name) {
-                        self.close_cell();
-                    }
-                },
-                "tbody" | "tfoot" | "thead" => {
-                    if self.close_tr() {
-                        self.mode = Mode::InTableBody;
-                        self.in_table_body_end_tag(&name);
-                    }
-                },
-                _ => {
-                    self.foster = true;
-                    self.in_table_end_tag(&name);
-                },
-            },
-            other => {
-                self.in_table(other);
-            },
-        }
-    }
-
-    fn in_cell(&mut self, tok: Token) {
-        match tok {
-            Token::StartTag { name, attrs, self_closing: _ } => {
-                let cell_open = self.stack_has("td") || self.stack_has("th");
-                let is_boundary = matches!(
-                    name.as_str(),
-                    "caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot"
-                        | "th" | "thead" | "tr"
-                );
-                if is_boundary && cell_open {
-                    self.close_cell();
-                    self.in_row(Token::StartTag {
-                        name,
-                        attrs,
-                        self_closing: false,
-                    });
-                } else {
-                    self.in_body_start_tag(&name, attrs);
-                }
-            },
-            Token::EndTag { name } => match name.as_str() {
-                "td" | "th" => {
-                    if self.stack_has(&name) {
-                        self.close_cell();
-                    }
-                },
-                "body" | "caption" | "col" | "colgroup" | "html" => {},
-                "table" | "tbody" | "tfoot" | "thead" | "tr" => {
-                    if self.has_in_table_scope(&name) {
-                        self.close_cell();
-                        self.in_row(Token::EndTag { name });
-                    }
-                },
-                _ => self.in_body_end_tag(&name),
-            },
-            other => self.in_body(other),
-        }
-    }
-
-    fn in_caption(&mut self, tok: Token) {
-        match tok {
-            Token::EndTag { ref name } => match name.as_str() {
-                "caption" => {
-                    if self.stack_has("caption") {
-                        self.generate_implied_end_tags(None);
-                        self.pop_until("caption");
-                        self.clear_fmt_to_marker();
-                        self.mode = Mode::InTable;
-                    }
-                },
-                "table" => {
-                    if self.has_in_table_scope("table") {
-                        self.generate_implied_end_tags(None);
-                        self.pop_until("caption");
-                        self.clear_fmt_to_marker();
-                        self.mode = Mode::InTable;
-                        self.in_table(Token::EndTag { name: name.clone() });
-                    }
-                },
-                "body" | "col" | "colgroup" | "html" | "tbody" | "td"
-                | "tfoot" | "th" | "thead" | "tr" => {},
-                _ => self.in_body(tok.clone()),
-            },
-            other => self.in_body(other),
-        }
-    }
-
-    fn in_column_group(&mut self, tok: Token) {
-        let in_colgroup = self
-            .current()
-            .map(|c| self.dom.name(c))
-            == Some(Some("colgroup"));
-        match tok {
-            Token::Characters(data) => {
-                if data.chars().all(is_ws_char) {
-                    self.insert_text(&data);
-                } else if in_colgroup {
-                    self.open.pop();
-                    self.mode = Mode::InTable;
-                    self.in_table(Token::Characters(data));
-                }
-            },
-            Token::Comment(data) => self.insert_comment_here(&data),
-            Token::Doctype { .. } => {},
-            Token::StartTag { ref name, attrs, self_closing: _ } => {
-                match name.as_str() {
-                    "html" => self.in_body_start_tag("html", attrs),
-                    "col" => {
-                        self.insert_void("col", attrs);
-                    },
-                    _ => {
-                        if in_colgroup {
-                            self.open.pop();
-                            self.mode = Mode::InTable;
-                            self.in_table_start_tag(name, attrs);
-                        }
-                    },
-                }
-            },
-            Token::EndTag { ref name } => match name.as_str() {
-                "colgroup" => {
-                    if in_colgroup {
-                        self.open.pop();
-                        self.mode = Mode::InTable;
-                    }
-                },
-                "col" => {},
-                _ => {
-                    if in_colgroup {
-                        self.open.pop();
-                        self.mode = Mode::InTable;
-                        self.in_table_end_tag(name);
-                    }
-                },
-            },
-            _ => {},
-        }
-    }
-
     fn in_frameset(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) if data.chars().all(is_ws_char) => {
@@ -3108,9 +2624,33 @@ fn fragment_insertion_mode(context: &str) -> Mode {
 /// -- HTML-40 (2): needed for `adjusted_current_namespace`'s spec-mandated
 /// fragment-case special-casing (`cdata-in-integration-point-fragment.html`),
 /// since the synthetic root pushed below is always HTML regardless.
-pub(crate) fn build_fragment(src: &str, context: &str, namespace: Namespace) -> Dom {
+///
+/// `allow_declarative_shadow_roots` gates `<template shadowrootmode>`
+/// handling exactly as it does for a full document parse (`start_template`,
+/// unchanged): a template whose *host* -- the real, already-open ancestor
+/// element it would otherwise be inserted under, e.g. a `<div>` earlier in
+/// this same fragment's own markup -- is on the open-elements stack gets its
+/// content redirected straight into a newly attached shadow root instead of
+/// becoming an ordinary child. `setHTMLUnsafe`/`Document.parseHTMLUnsafe`
+/// are the spec's two fragment-parsing entry points that turn this on;
+/// ordinary `innerHTML`/`insertAdjacentHTML` must keep it off, which is why
+/// this is a parameter here rather than always-on. The synthetic `html` root
+/// itself is never a valid shadow host (`Dom::attach_shadow` doesn't allow
+/// the name "html"), so a *top-level* `<template shadowrootmode>` -- with no
+/// real element ancestor in the fragment at all, as `Element.setHTMLUnsafe`'s
+/// own most common usage looks like -- still comes back as an ordinary
+/// leftover template rather than attaching to the caller's real host
+/// element; that caller-side host-identity gap is intentionally left to the
+/// binding layer, which has an actual host `NodeIdx` available to attach to
+/// (see `parse_fragment_with_shadow_roots`'s doc comment in `lib.rs`).
+pub(crate) fn build_fragment(
+    src: &str,
+    context: &str,
+    namespace: Namespace,
+    allow_declarative_shadow_roots: bool,
+) -> Dom {
     let mut builder = TreeBuilder::new();
-    builder.allow_declarative_shadow_roots = false;
+    builder.allow_declarative_shadow_roots = allow_declarative_shadow_roots;
     builder.fragment = true;
     builder.fragment_context = Some(context.to_owned());
     builder.fragment_context_namespace = namespace;

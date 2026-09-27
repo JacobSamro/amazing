@@ -2949,3 +2949,291 @@ remaining cluster is the table-context-in-`<template>`
 `HTMLTableElement.rows`/etc. gap, already routed to dom-bindings/HTML-32 --
 no further amazing-html-owned cluster identified in this selection at this
 head.
+
+## HTML-41: tree.rs module split + html5lib tree-construction cluster + setHTMLUnsafe shadow roots
+
+Coordinator brief (verbatim, 2026-09-27): split `tree.rs` (3784 lines, near the
+4,000 cap) into submodules, pure move only; then take the next amazing-html
+cluster outside `html/syntax/parsing` -- html5lib tree-construction failures
+first, then WPT `encoding/`; batch everything into one gate. A follow-up
+message mid-ticket added a third item: implement
+`amazing_html::parse_fragment_with_shadow_roots` for dom-bindings'
+`setHTMLUnsafe`/`Document.parseHTMLUnsafe` (their proposal, in their own
+`questions.md`).
+
+### (1) tree.rs module split (pure move, no behavior change)
+
+`tree.rs`: 3784 -> 3300 lines (further edits below moved it slightly since).
+New child modules, each `use super::*;` and declared via `mod foreign; mod
+in_select; mod in_table;` near the top of `tree.rs`:
+- `tree/foreign.rs` (191 lines): `FOREIGN_BREAKOUT_START_TAGS`,
+  `is_mathml_text_integration_point`/`is_html_integration_point` (private),
+  `should_process_in_foreign_content`/`in_foreign_content` (`pub(super)`).
+- `tree/in_select.rs` (54 lines): `in_select` (`pub(super)`).
+- `tree/in_table.rs` (401 lines): the whole table-context family
+  (`in_table`, `in_table_text`, `in_table_body`, `in_row`, `in_cell`,
+  `in_caption`, `in_column_group`, all `pub(super)`; their own
+  `*_start_tag`/`*_end_tag` helpers stay module-private since nothing outside
+  the file calls them).
+
+Rust module-privacy note for whoever splits `tree.rs` further: a child
+module declared inside a parent (`mod foo;` inside `tree.rs`) sees every
+private item the parent defines (fields, consts, fns) automatically --
+`use super::*;` is enough, no visibility widening needed for code that only
+calls *upward* into the parent. But the reverse direction needs an explicit
+bump: `tree.rs`'s own dispatcher (`process_token_in_html`/`process_token`)
+calls *into* the moved methods, so each dispatch entry point the parent
+still calls must be `pub(super)`. Anything called only from within its own
+moved file stays plain-private. Shared helpers that BOTH the parent and a
+moved child call (`insert_foreign_element`, `adjusted_svg_tag_name`,
+`adjusted_svg_attribute_name`, `foreign_attribute_identity`) must stay in the
+parent -- a child can freely call a parent-private item, but the parent can
+never call a child-private one.
+
+### (2) html5lib/WPT tree-construction corpus (`html/syntax/parsing/resources/*.dat`, 62 files, 1894 eligible cases)
+
+Runner: `scripts/html5lib.py <wpt-root> --binary <amazing-cli> --show-failures
+N --files <all 62 .dat names>` (its own `--files` default is only a 9-file
+curated subset from an earlier ticket -- pass every `.dat` filename
+explicitly for a full sweep). Before/after this ticket's whole series:
+**1655/1894 (87.38%) -> 1824/1894 (96.30%)**.
+
+Real amazing-html bugs found and fixed (each cross-checked against the live
+WHATWG HTML spec text, not memory):
+
+- **`reset_insertion_mode` (§13.2.4.1) had no `head` arm.** A `<head>` still
+  open on the stack fell through to the `html` check, which only tests
+  whether the head element *pointer* was ever set -- true even while
+  `<head>` is still the current node. That produced "after head" while
+  `<head>` was still open, so the next implied `<body>` landed as `<head>`'s
+  own child instead of a sibling under `<html>`. Fix: added
+  `"head" => Some(Mode::InHead)` before the `html` arm in `tree.rs`'s
+  `reset_insertion_mode`. Single largest cluster: ~26 of `template.dat`'s
+  111 original failures, all with the exact same `<body>`-one-level-too-deep
+  shape (any template closed via `close_template`, e.g. `<template>Hello
+  </template>`, reaches this because `<template>` is a direct child of the
+  implicit `<head>`).
+- **The `template` start/end tag shortcut in `process_token_in_html` was an
+  exclude-list, not an allow-list.** It fired in every mode except
+  `Initial`/`BeforeHtml`/`BeforeHead`/`AfterHead`/`InHead`, wrongly
+  including `InFrameset`, `InSelect`, `AfterFrameset` and others where spec
+  has no `template` rule at all (it's just an ordinary, ignored token
+  there). Fixed by inverting to an allow-list of the modes that actually
+  redirect to "in head" rules, directly or by cascading (`InBody`,
+  `InTable`, `InCaption`, `InColumnGroup`, `InTableBody`, `InRow`, `InCell`,
+  `InTemplate`). Fixed `template.dat` case 40
+  (`<frameset><template><frame></template></frameset>` was swallowing
+  `<frame>` into an unwanted template instead of leaving it a plain child of
+  `<frameset>`).
+- **Foster parenting (`adjusted_insertion_place_for`) only ever searched for
+  a real `<table>` on the open-elements stack.** When a `<tr>`/`<td>`/`<select>`
+  /etc. is reached only through "in template"'s synthetic table-context
+  modes (which never push a real `<table>` element at all -- e.g.
+  `<template><tr><div></div></tr></template>`, where `in_template`'s own
+  start-tag routing sends `tr` straight to `Mode::InRow` with no `<table>`
+  ever created), the missing-table search silently fell through to
+  "insert as an ordinary child of target", nesting the foster-parented
+  content one level too deep instead of redirecting into the nearest
+  enclosing template's content. Added the two missing §13.2.6.1 steps: step
+  3 (a `template` more recent on the stack than any `table`, or no `table`
+  at all, redirects into that template's own `template_contents`) and step
+  4 (fragment case, no `table` on the stack at all -- foster-parent into the
+  synthetic `html` root). Fixed `template.dat` cases 45/91/102 and
+  `domjs-unsafe.dat` case 37 (see next bullet).
+- **`in_column_group`'s character-token handling split a whitespace-then-text
+  run wrong.** The spec processes character tokens one at a time: each
+  leading whitespace character is inserted into the still-open `colgroup`
+  before the *first* non-whitespace character closes it and reprocesses
+  only the remainder. The batched implementation treated a run like `"
+  foo"` as either all-whitespace (it isn't) or entirely foster-parented
+  (wrong -- that put the leading space back in front of the table instead of
+  leaving it inside `colgroup`). Fixed by splitting the run at the first
+  non-whitespace character: insert the prefix normally, reprocess only the
+  remainder under "in table". Fixed `domjs-unsafe.dat` case 37
+  (`<colgroup> foo</colgroup>`).
+- **`in_body_start_tag`'s `html` and `body` cases ignored their spec
+  guards.** `html`: "if there is a template element on the stack of open
+  elements, ignore the token" was missing, so a stray `<html b=c>` inside
+  template content leaked `b=c` onto the real `<html>` element. `body`: "if
+  there is no body element *in scope* [...] ignore the token" was
+  implemented as a bare stack search with no scope-boundary check, so a
+  `<body c=d>` past an intervening `<template>` (which terminates scope per
+  §13.2.4.3, already in `SCOPE_TERMINATORS`) leaked `c=d` onto the real
+  `<body>` instead of being ignored. Fixed by adding the `stack_has
+  ("template")`/`has_in_scope("body")` guards respectively. Fixed
+  `template.dat` cases 64-67.
+- **`before_head`'s catch-all called `implied_head()` for literally any
+  token**, including a non-`head`/`body`/`html`/`br` end tag, which spec
+  says to just ignore (parse error, ignore the token). A stray `</p>` before
+  any real content created `<head>` a token early, so a comment immediately
+  after it landed *inside* `<head>` instead of staying a sibling of the
+  not-yet-created `<head>` under `<html>`. Fixed by adding an explicit
+  `Token::EndTag { .. } => {}` arm before the catch-all. Fixed
+  `tests19.dat` case 2 (`<html></p><!--foo-->`).
+- **`VOID_ELEMENTS` was missing `"keygen"`**, which `in_body_start_tag`'s
+  void-element arm (`"area" | "br" | "embed" | "img" | "keygen" | "wbr"`)
+  unconditionally asserts against via `insert_void`'s `debug_assert!`. Any
+  debug build crashed outright on a bare `<keygen>` tag. Fixed by adding it
+  to the list. Fixed `tests19.dat` case 66 (a real panic, not just a
+  mismatch: `<keygen><frameset>`).
+
+`scripts/html5lib.py` test-harness fixes (no engine behavior change --
+these were the comparator misreading correct output, confirmed by checking
+that `canonical_expected`, built purely from the `.dat` file's own text, had
+the identical truncation/mis-split on its side too):
+
+- The comment/text continuation-line merge (added in an earlier ticket for
+  multi-line comments) only covered comments. Any text node containing a
+  literal newline -- CDATA content, a `<script>` body, or plain text broken
+  across a line by a bare `\n` in the source -- silently truncated in
+  `canonical_expected` (dropping everything after the first line) and fed
+  its bare, unindented remainder(s) through `canonical_actual`'s normal
+  per-line path, producing bogus zero-depth entries. Generalized the merge
+  condition to quoted text too, with the one-character `"` edge case handled
+  explicitly (a text node's dumped value is exactly one `"` + data + one
+  closing `"`, so a lone `"` line can only mean the opening quote was
+  immediately followed by the data's own newline -- a real empty text node
+  dumps as `""`, two characters, on one line, never split; a plain
+  `endswith('"')` check alone would misread that one-character case as
+  already complete). Fixed the dominant shape in `domjs-unsafe.dat` cases
+  1-3 and `webkit01.dat` cases 5/7/27/28/35, `tests3.dat`, `tests6.dat`, and
+  others.
+- Attributes are compared in insertion order but html5lib's own reference
+  dump serializes them alphabetically -- a tag with 2+ attributes whose
+  source order isn't already alphabetical looked like a tree mismatch even
+  when the parsed tree was identical. Normalized both sides' tag attributes
+  to alphabetical order for the comparison only (never touching the CLI's
+  actual dump format, which existing `tree.rs` unit tests pin to insertion
+  order). Fixed `tests19.dat` cases 37/38/86.
+
+Two supporting fixes, outside `amazing-html`/the test script, needed to run
+this sweep at all:
+- `amazing-dom::Dom::dump_rec` now prints a `<template>` element's
+  `template_contents` fragment under a literal `"content"` line
+  (html5lib's own expected dump shape), since a template's real children
+  never live in ordinary light-DOM children (`ensure_template_contents` is
+  called unconditionally by `start_template` for every parsed template).
+  ~9 lines, per the established cross-lane-touch precedent (HTML-38: under
+  ~10 lines, named clearly in the commit).
+- `crates/amazing/src/cmd/parse.rs`'s `parse-fragment` CLI now splits a
+  `"svg <name>"`/`"math <name>"` fragment context into `(namespace, local
+  name)` via `parse_fragment_with_namespace`, instead of only ever parsing
+  an HTML-namespace fragment (landed in the prior HTML-40 series, carried
+  forward into this one's gate).
+
+**Remaining known gaps, not fixed this series** (largest cluster first, at
+the post-fix head):
+- `foreign-fragment.dat`: 18 failures, all the same architecturally-bigger
+  gap -- when the fragment CONTEXT element itself is foreign (e.g. `"svg
+  desc"`), elements created directly under it should inherit the foreign
+  namespace via the spec's "adjusted current node" concept, but
+  `should_process_in_foreign_content` keys off `self.current()` (the
+  synthetic HTML root, always HTML namespace, since the real context
+  element is never pushed as a node in this fragment model -- see
+  `tree::build_fragment`'s own doc comment). Needs generalizing
+  `is_mathml_text_integration_point`/`is_html_integration_point`-style
+  predicates to work off `(namespace, name)` directly instead of a
+  `NodeIdx`, for the case where only the synthetic root is on the stack.
+- `webkit02.dat`: 9 failures -- `<select><button><selectedcontent>` (a newer
+  HTML feature, `<selectedcontent>` should mirror the selected `<option>`'s
+  text), `xml:base`/`xlink:*` attribute-expansion gaps on foreign elements
+  when combined with unprefixed `definitionurl`, and a `<font><select>...
+  </font></select>` adoption-agency-shaped case.
+- An EOF-mid-tag tokenizer fallback (`Tokenizer::finish_eof`, states
+  `TagName`/`BeforeAttrName`/etc.) unconditionally re-emits the raw,
+  partially-consumed tag source as literal text (there's an existing test,
+  `eof_mid_tag_falls_back_to_literal_text`, pinning exactly this). Per spec,
+  only the *tag-open*/*end-tag-open* states (before any tag-name character
+  is consumed) re-emit anything (a literal `<` or `</`) at EOF; `tag name`
+  state and every attribute state say "emit an end-of-file token" with NO
+  text re-emission at all. `webkit01.dat` case 4 (`<di`, mid tag name) is
+  the clean repro; correcting this touches core tokenizer EOF handling
+  broadly enough (many states, an existing pinned test) that it deserves its
+  own ticket with a full-corpus before/after rather than a one-off fix here.
+- A handful of one-off cases not triaged in depth: `tests10.dat`
+  (SVG/`xlink:`/`xml:lang` attribute-expansion gaps distinct from
+  webkit02's), an adoption-agency case where a formatting element's
+  "furthest block" descendant is itself a block/special element
+  (`template.dat` case 77, `<i><menu>Foo</i>` -- the general adoption-agency
+  algorithm already passes `adoption01.dat`/`adoption02.dat` and this
+  crate's own `second_anchor_frees_first_via_agency` tests, so this looks
+  like a narrower gap in that same algorithm, not a separate mechanism), a
+  tag-name state gap where an embedded `<` inside an already-started tag
+  name should just be an ordinary tag-name character rather than
+  re-triggering a new tag-open (`webkit02.dat` case 19), and
+  `webkit02.dat` case 5 (`<img alt="` with no closing quote and no further
+  `"` anywhere in the rest of the document -- EOF inside a quoted attribute
+  value should abandon the tag with no text at all; instead the whole
+  unterminated remainder became a body text node, likely the same root
+  tokenizer-EOF-handling family as `finish_eof` above).
+
+Did not reach WPT `encoding/` this series (html5lib absorbed the whole
+budget) -- next up for whoever picks up the third coordinator instruction.
+
+### (3) `parse_fragment_with_shadow_roots` for `setHTMLUnsafe`/`parseHTMLUnsafe`
+
+dom-bindings' proposal (their `questions.md`, 2026-09-27): a non-breaking
+sibling to `parse_fragment`/`parse_fragment_with_namespace` that turns on
+declarative shadow roots, for exactly the two fragment-parsing entry points
+spec requires it (`Element.setHTMLUnsafe`, `Document.parseHTMLUnsafe`) and
+nothing else (`innerHTML`/`insertAdjacentHTML` must stay off).
+
+Implementation: `tree::build_fragment` gained an explicit
+`allow_declarative_shadow_roots: bool` parameter (was hardcoded `false`;
+its one call site is `lib.rs`), reusing `start_template`'s existing
+full-document shadow-attach logic completely unchanged --
+`parse_fragment_with_shadow_roots` is the only caller that passes `true`.
+The harder half was `lib.rs`'s `clone_subtree` (the export step that copies
+the fragment parser's internal, throwaway `Dom` into the standalone one
+callers get back): a declarative template's actual content lives under a
+*separate* `ShadowRootData`-tracked node reached only via
+`Dom::shadow_root_of_host`, never as an ordinary light-DOM child of its
+host (the template element that requested it is deliberately never
+attached to the tree at all -- `start_template`'s shadow branch pushes it
+onto the open-elements stack via `alloc_element` + `self.open.push(...)`
+directly, skipping `insert_element`'s `attach_before`/`append_child`
+entirely, so it's fully orphaned once popped). Without a fix, every
+declarative shadow tree a fragment parse produced was silently dropped on
+export. Fixed by checking `source.shadow_root_of_host(source_node)` for
+every cloned node and, if present, calling `target.attach_declarative_
+shadow` on the clone with the same `ShadowOptions`/registry-null flag, then
+recursing into the shadow root's own children.
+
+**Scope limit, intentional, documented on the function and replied in
+dom-bindings' `questions.md`:** only the *nested* shape is handled -- a
+real element ancestor already open in the fragment's own markup (e.g.
+`<div><template shadowrootmode=open>...`), which works end-to-end exactly
+like a full document parse. A *top-level* `<template shadowrootmode>` with
+no such ancestor at all -- `el.setHTMLUnsafe('<template
+shadowrootmode="open">...')`, dom-bindings' single most common case, meant
+to attach to `el` itself -- still comes back as an ordinary leftover
+`<template>` child. Why: the fragment parser's synthetic root standing in
+for the context element is never a valid shadow host in the first place
+(`Dom::attach_shadow` rejects the element name `"html"`), and this function
+never has a real `NodeIdx` for the caller's actual host element even if it
+were -- only the binding layer does. dom-bindings owns detecting that exact
+shape (first top-level fragment child is a `<template>` with a
+`shadowrootmode` attribute of `"open"`/`"closed"`) and attaching it to
+their real host directly via `Dom::attach_declarative_shadow`, using that
+template's `template_contents` children as the shadow root's own.
+
+Two new tests in `declarative_shadow_tests.rs` cover both shapes exactly
+(`shadow_roots_fragment_parser_attaches_nested_declarative_templates`,
+`shadow_roots_fragment_parser_still_leaves_a_top_level_template_as_a_
+leftover`), including the exact expected dump shape for the leftover-
+template case.
+
+### Gate (combined, all three items, debug per the standing release-profile-
+### flake note; venus-001)
+
+`amazing-html` + `amazing-dom` + `amazing` nextest: **786/786 passed, 6
+skipped**. Doctests: `amazing_dom` 0 passed, `amazing_html` 1 passed, both 0
+failed. html5lib/WPT tree-construction (62 `.dat` files, 1894 eligible
+cases): **1655/1894 (87.38%) -> 1824/1894 (96.30%)**.
+
+Status: items 1 and 3 done. Item 2 (html5lib cluster) done to a good
+stopping point -- remaining failures are now individually small,
+architecturally distinct one-offs (see list above), each warranting its own
+focused ticket rather than more time against a shrinking, increasingly
+long-tailed corpus. WPT `encoding/` (the coordinator's second half of item
+2) not started -- next up.

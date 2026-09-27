@@ -572,6 +572,24 @@ impl Dom {
                 out.push_str("?>\n");
             }
         }
+        // HTML lane: a `<template>` element's children live in a separate,
+        // inert `template_contents` fragment (never as ordinary light-DOM
+        // children -- the tree builder's `start_template` never attaches
+        // anything under the template itself), so this dump silently
+        // dropped every template's content entirely. html5lib/WPT's own
+        // tree-dump format expects a literal "content" line one level
+        // deeper than the template, with the fragment's own children below
+        // that (html5lib/WPT resources/template.dat: 111 of this dump's own
+        // corpus mismatches were exactly this, not a tree-construction bug).
+        if let Some(contents) = self.template_contents(idx) {
+            for _ in 0..depth + 1 {
+                out.push_str("  ");
+            }
+            out.push_str("content\n");
+            for child in self.children(contents) {
+                self.dump_rec(child, depth + 2, out);
+            }
+        }
         for child in self.children(idx) {
             self.dump_rec(child, depth + 1, out);
         }

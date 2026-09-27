@@ -124,6 +124,48 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
 /// element's real namespace instead of always the HTML fragment root's
 /// (see `tree::build_fragment`'s own doc comment).
 pub fn parse_fragment_with_namespace(context: &str, namespace: Namespace, src: &str) -> Result<Dom, String> {
+    parse_fragment_inner(context, namespace, src, false)
+}
+
+/// `parse_fragment`, but with declarative shadow roots enabled (HTML
+/// namespace context only, matching `parse_fragment`'s own scope) -- the
+/// fragment-parsing entry point `Element.setHTMLUnsafe`/`Document.
+/// parseHTMLUnsafe` need per spec, as opposed to ordinary `innerHTML`/
+/// `insertAdjacentHTML`, which must keep this off (`parse_fragment`/
+/// `parse_fragment_with_namespace` are unchanged and still always parse
+/// with it off, so every existing caller keeps its current behavior).
+///
+/// A `<template shadowrootmode>` whose host is a real, already-open
+/// ancestor element *within this same fragment's own markup* (e.g. `<div>
+/// <template shadowrootmode=open>...`) attaches to that ancestor exactly as
+/// it would in a full document parse, and the attached shadow root's
+/// content survives into the returned `Dom` (see `clone_subtree` below).
+///
+/// A *top-level* `<template shadowrootmode>` -- with no such ancestor
+/// element present in the fragment at all, which is `Element.
+/// setHTMLUnsafe`'s single most common shape (`el.setHTMLUnsafe('<template
+/// shadowrootmode="open">...')`, meant to attach to `el` itself) -- still
+/// comes back as an ordinary leftover `<template>` child instead. The
+/// fragment parser's internal synthetic root standing in for the context
+/// element is never a valid shadow host (`Dom::attach_shadow` rejects the
+/// element name "html"), and even if it were, this function has no real
+/// `NodeIdx` for the caller's actual host element to attach to -- only the
+/// caller does. The caller detects this shape itself (the fragment's first
+/// top-level child is a `<template>` with a `shadowrootmode` attribute
+/// whose value is `"open"` or `"closed"`) and attaches it to its own real
+/// host via `Dom::attach_declarative_shadow`, using that template's content
+/// as the shadow root's children and dropping the template from the
+/// fragment before inserting the rest.
+pub fn parse_fragment_with_shadow_roots(context: &str, src: &str) -> Result<Dom, String> {
+    parse_fragment_inner(context, Namespace::Html, src, true)
+}
+
+fn parse_fragment_inner(
+    context: &str,
+    namespace: Namespace,
+    src: &str,
+    allow_declarative_shadow_roots: bool,
+) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     if context.is_empty() || context.chars().any(|c| c.is_ascii_whitespace() || matches!(c, '<' | '>' | '\0')) {
         return Err("invalid HTML fragment context name".into());
@@ -135,10 +177,29 @@ pub fn parse_fragment_with_namespace(context: &str, namespace: Namespace, src: &
     } else {
         src
     };
-    let source = tree::build_fragment(src, &context, namespace);
+    let source = tree::build_fragment(src, &context, namespace, allow_declarative_shadow_roots);
 
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         let created = target.append_child(parent, source.get(source_node).kind.clone());
+        // A declarative shadow root's content lives under a separate
+        // `ShadowRootData`-tracked node (`shadow_root_of_host`), never as an
+        // ordinary DOM child of its host -- the template that requested it
+        // is never attached to the tree at all (`start_template`'s shadow
+        // branch pushes it onto the open-elements stack without ever
+        // calling `attach_before`/`append_child`), so without this, cloning
+        // silently dropped every declarative shadow tree a fragment parse
+        // produced.
+        if let Some(shadow_root) = source.shadow_root_of_host(source_node) {
+            if let Some(data) = source.shadow_data(shadow_root) {
+                let options = data.options;
+                let keep_registry_null = data.keep_custom_element_registry_null;
+                if let Ok(target_root) = target.attach_declarative_shadow(created, options, keep_registry_null) {
+                    for child in source.children(shadow_root) {
+                        clone_subtree(source, child, target, target_root);
+                    }
+                }
+            }
+        }
         if let Some(contents) = source.template_contents(source_node) {
             let target_contents = target.ensure_template_contents(created).expect("cloned template");
             for child in source.children(contents) {
