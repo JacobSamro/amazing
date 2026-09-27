@@ -1468,4 +1468,70 @@ mod class_name_tests {
                 .unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
         }
     }
+
+    #[test]
+    fn with_statement_resolves_through_the_bound_object() {
+        for source in [
+            // Reads and writes go to the bound object's own properties.
+            "var o = {x: 1}; var r; with (o) { r = x; } r === 1",
+            "var o = {x: 1}; with (o) { x = 2; } o.x === 2",
+            // A name the object doesn't have falls through to the outer scope.
+            "var o = {}; var y = 'outer'; var r; with (o) { r = y; } r === 'outer'",
+            // Symbol.unscopables hides a property from the with-scope lookup.
+            "var o = {x: 'inner'}; o[Symbol.unscopables] = {x: true}; var x = 'outer'; \
+             var r; with (o) { r = x; } r === 'outer'",
+            // var declared inside the body hoists to the enclosing function.
+            "function f() { with ({}) { var y = 5; } return y; } f() === 5",
+            // Primitives are boxed (ToObject), not rejected.
+            "var ok = true; try { with (0) {} } catch (e) { ok = false } ok === true",
+            "var ok = true; try { with ('s') {} } catch (e) { ok = false } ok === true",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn with_statement_throws_for_null_or_undefined() {
+        for source in [
+            "try { with (null) {} throw 'no throw'; } catch (e) { e instanceof TypeError }",
+            "try { with (undefined) {} throw 'no throw'; } catch (e) { e instanceof TypeError }",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn tagged_templates_pass_a_frozen_strings_array_and_the_substitutions() {
+        for source in [
+            "function tag(strings, ...values) { return strings.join('|') + ':' + values.join(','); } \
+             tag`a${1}b${2}c` === 'a|b|c:1,2'",
+            "function tag(strings) { return Array.isArray(strings.raw) && strings.raw.join('|') === 'a|b|c'; } \
+             tag`a${1}b${2}c`",
+            "function tag(strings) { return Object.isFrozen(strings) && Object.isFrozen(strings.raw); } tag`x`",
+            "function tag(strings) { return Object.getOwnPropertyDescriptor(strings, 'raw').enumerable === false; } tag`x`",
+            // `this` follows the tag's own MemberExpression, like an ordinary call.
+            "var o = { tag() { return this === o; } }; o.tag`x`",
+            // A bare identifier tag still sees the with-object as `this` when applicable.
+            "var seen; var o = { tag() { seen = this; } }; with (o) { tag`x`; } seen === o",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn tagged_template_object_is_cached_per_call_site() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "function tag(s) { return s; } \
+             function make() { return tag`x${1}y`; } \
+             make() === make()"
+        ).unwrap();
+        assert_eq!(result, JsValue::Bool(true), "the same call site must return the same Strings object");
+    }
 }

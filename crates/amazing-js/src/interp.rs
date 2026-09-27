@@ -1350,6 +1350,7 @@ impl Interpreter {
                     blocked.truncate(blocked.len() - pushed);
                 }
                 StmtKind::Labeled { body, .. } => self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?,
+                StmtKind::With { body, .. } => self.hoist_inner(std::slice::from_ref(body), env, true, blocked)?,
                 StmtKind::Try(statement) => {
                     self.hoist(&statement.block.body, env)?;
                     if let Some(catch) = &statement.catch {
