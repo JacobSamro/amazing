@@ -2511,3 +2511,108 @@ regression).
 Evidence: `crates/amazing-bindings/evidence/dom-b-audit/` (`before-domact`,
 `after-domact` — the latter regenerated once, after the disabled-control
 fixup).
+
+## DOM-B-REFLECT (2fec1d2a): ARIAMixin reflection, HTMLInputElement.switch, Element.animate(), navigator.clipboard
+
+Base `0654b5d3`. Four routed items in one ticket.
+
+**1. ARIAMixin reflection.** New `crates/amazing-bindings/src/aria_reflection.rs`:
+`Operation::AriaGet`/`AriaSet(&'static str)` bake the content-attribute name
+into the operation and gate only on "is an Element" -- unlike
+`element_reflection.rs`'s `LegacyReflectGet`/`Set`, which is tag/interface
+gated and cannot express "every Element, any namespace, any tag" without
+either hacking that shared gate or wrongly excluding SVG/MathML elements.
+`role` plus all 41 `aria-*` `DOMString?` attributes are installed on
+`ELEMENT`'s member table. Getter returns `null` for an absent attribute (not
+`""`); setter removes the attribute on `null`/`undefined`, otherwise reuses
+`html_reflection::set()` for CEReactions-safe writes. **Scope cut:** the
+element-reference attributes (`ariaLabelledByElements` and friends,
+`FrozenArray<Element>?`/`Element?`) are not implemented -- they need an
+explicitly-set-element override that the accessible name/description
+computation (`amazing-a11y`, the a11y lane) must consult ahead of any ID-ref
+fallback; an ID-ref-only getter would silently diverge from that algorithm.
+Routed to a11y coordination in `questions.md` rather than half-implemented.
+
+**2. `HTMLInputElement.switch`.** Reuses the existing generic
+`LegacyReflectGet`/`LegacyReflectSet(Interface, &'static str,
+LegacyReflectionKind)` boolean-reflection mechanism (the same one `align`/
+`useMap` already use), gated on `html_element_interface("input") ==
+I::HTMLInputElement`.
+
+**3. `Element.prototype.animate()` / minimal `Animation`.** New
+`crates/amazing-dom/src/animation.rs`: a `Dom`-owned, id-keyed `Animations`
+registry mirroring `abort.rs`/`observable.rs`'s pattern (an opaque
+`AnimationId`, a private `Vec<AnimationData>`, checked `impl Dom` accessors).
+New `crates/amazing-bindings/src/animation_bindings.rs` implements
+`Element.animate()` and the `Animation` method/getter/setter set
+(`finished`/`ready`/`cancel`/`finish`/`play`/`pause`/`onfinish`). Deliberately
+**not** the full Web Animations timing model: no timeline, no keyframe/effect
+application, no real pending-then-later-resolve scheduling -- an animation is
+created already `Finished`, with `finished`/`ready` resolved synchronously
+(at creation) to the `Animation` itself. `cancel()` swaps in a freshly
+rejected (`AbortError`) promise for the getter to return afterwards and is a
+no-op once already idle; `finish()` invokes `onfinish` synchronously (via
+`host.call`) on every call, matching a real re-dispatched `finish` event.
+This is enough that real pages calling `.animate(...)` and using the returned
+object's promises/methods stop throwing "value is not callable"
+(`app-kanban.html` in IA's real-pages corpus; also closes the
+`Element.prototype.animate` gap IA-LIVE-PAGES flagged as `undefined` on
+37/37 probed real pages).
+
+**4. `navigator.clipboard`.** New `crates/amazing-bindings/src/clipboard_bindings.rs`
+plus `Dom::clipboard_text`/`set_clipboard_text` (a plain `Vec<u16>` field on
+`Dom`): a `Clipboard` singleton per document arena (`PlatformKey { slot: 0,
+.. }`), `readText`/`writeText` round-tripping through that field. Not real OS
+clipboard integration, just same-page/same-session round trips -- what real
+pages exercise (also closes the `navigator.clipboard` IA-LIVE-PAGES gap).
+Wired via a new `install_navigator_clipboard` in dom-bindings' own
+`crates/amazing/src/runtime_host_dom_bindings.rs` adapter file (mirroring the
+storage lane's lazy `navigator.<singleton>` getter pattern in
+`runtime_host_storage.rs`, since `navigator` is an ad-hoc plain object, not a
+WebIDL interface installed through `interfaces.rs`), plus one new call line
+in `runtime_binding_host.rs`'s shared `install()`.
+
+Native tests: `crates/amazing-bindings/src/tests_dom_b_reflect.rs` (5 new
+tests, at the binding-op level against this crate's mock `Host`) cover all
+four features, including reading back `Promise` resolution values
+(`finished`/`ready` resolving to the `Animation`; `readText` resolving to the
+written text) -- something the JS-level test harness in `crates/amazing`
+cannot observe without a real microtask-pumping scheduler (those tests use
+`Interpreter::new_with_external_scheduler`, which does not auto-drain jobs
+at script end).
+
+**Measured** (`k-test` host). Workspace gate (`cargo nextest run --workspace
+--locked --no-fail-fast`): **3378/3378 passed, 17 skipped, 0 failed**.
+Doctests (`cargo test --workspace --locked --doc`): all `ok`; `amazing_js`
+and `amazing_html` explicitly re-checked at 1/1 each. `amazing-bindings`
+crate: 122/122 including the 5 new tests; combined `amazing-dom` +
+`amazing-bindings` + `amazing` crate run: 707/707.
+
+WPT before/after (`crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py`,
+before = `0654b5d3` via `--ref`, after = this ticket;
+`html/dom`+`wai-aria`+`web-animations/interfaces/Animatable`, whole
+directories): before **10902 pass / 3561 fail** subtests -> after **10946
+pass / 3380 fail**. Raw Counter diff: 178 gained, 134 lost. **Every one of
+the 134 "lost" subtests is page-timing noise, not a regression**: all 134
+sit in five pre-existing, untouched `html/dom/reflection-*.html` pages
+(auto-generated `reflection.js` harnesses with hundreds to thousands of
+subtests, run under the WPT runner's 20s per-page wall-clock budget) --
+each such page reports **identical fail counts** before and after (e.g.
+`reflection-embedded.html` 721/388 -> 701/388, `reflection-grouping.html`
+1180/114 -> 1142/114), both `status: "timeout"` /
+`"worker deadline exceeded; completed subtests retained"`; only the number
+of subtests that finished executing before the deadline differs. None of
+the lost subtests' attributes (`img.decoding`, `input.size`, `legend.lang`,
+`blockquote.title`, `pre.width`, `noscript.className`, ...) are touched by
+this ticket, and the 178 gained show the identical pattern in the other
+direction on different, also-untouched pages. **Zero of the 134 lost
+subtests touch anything this ticket changed; 158 of the 178 gained do.**
+File-status flips: `html/dom/aria-attribute-reflection.html` and
+`html/dom/aria-attribute-reflection.tentative.html`, both `fail -> pass`.
+`input.switch`/`navigator.clipboard` have no automated coverage in this
+pinned WPT checkout (covered by the new native tests instead);
+`web-animations/interfaces/Animatable` mostly fails/errors identically
+before and after (missing vendored resources, or the full timing/query
+model this ticket doesn't implement) -- not a regression.
+
+Evidence: `crates/amazing-bindings/evidence/dom-b-reflect/`.
