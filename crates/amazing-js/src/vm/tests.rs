@@ -414,6 +414,53 @@ fn jsvm10_suspending_for_heads_and_using_declarations_stay_off_the_vm() {
 }
 
 #[test]
+fn jsvm10_suspension_free_unsupported_expressions_run_through_the_tree_walker() {
+    for source in [
+        "var o = {a: 1}; delete o.a; 'a' in o;",
+        "var a, b; [a, b] = [1, 2]; a + b;",
+        "function t(s, ...v) { return s.raw.join('|') + v.join(','); } t`x${1}y${2}`;",
+        "var o = null; String(o?.a) + String(o?.b.c) + String(o?.());",
+        "var calls = 0; function f() { calls++; return 'k'; } var o = null; \
+         String(o?.b[f()]) + String(o?.b.c()) + calls;",
+        "var o = {m() { return this === o; }}; String(o?.m()) + String(o.n?.());",
+        "function sum() { var t = 0; for (var i = 0; i < arguments.length; i++) t += arguments[i]; return t; } \
+         var xs = [1, 2]; sum(...xs, 3) + [...xs, ...'ab'].join('');",
+        "typeof 10n + String(10n + 5n);",
+        "function* g() { var a, b; var x = yield 1; [a, b] = [x, 2]; yield a + b; } \
+         var it = g(); it.next(); var out = it.next(5).value; out;",
+        "var out = ''; async function h() { var p = {q: {r: 3}}; await 0; out = String(p?.q?.r) + t`z`; } \
+         function t(s) { return s[0]; } h(); 0;",
+    ] {
+        differential(source, &["out", "a"]);
+    }
+    // A yield inside an otherwise-unsupported expression still cannot be
+    // delegated: the tree walker has no way to suspend there.
+    let program = parse_script("function* g() { var a; [a] = [yield 1]; }").unwrap();
+    let function = match &program.body[0].kind {
+        crate::ast::StmtKind::Function(function) => function,
+        other => panic!("expected function: {other:?}"),
+    };
+    assert!(compile_function_item(function, program.body[0].span, false).is_err());
+}
+
+#[test]
+fn jsvm10_lexical_for_heads_match() {
+    for source in [
+        "var fs = []; for (let i = 0; i < 3; i++) fs.push(() => i); fs.map(f => f()).join(',');",
+        "var fs = []; for (let i = 0; i < 3; i++) { fs.push(() => i); i += 0; } fs.map(f => f()).join(',');",
+        "var out = ''; for (let i = 0, j = 10; i < 3; i++, j--) out += i + ':' + j + ';'; out;",
+        "var out = ''; for (const x = 5; out.length < 3;) out += x; out;",
+        "var out = ''; for (let i = 0; i < 5; i++) { if (i === 1) continue; if (i === 3) break; out += i; } let i = 'after'; out + i;",
+        "var fs = []; for (let i = 0; i < 4; i++) { if (i % 2) continue; fs.push(() => i); } fs.map(f => f()).join(',');",
+        "var out = ''; outer: for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { if (j === 1) continue outer; out += i + '' + j; } out;",
+        "var f; for (let i = 0; f = () => i, i < 2; i++) {} f();",
+        "var out = ''; for (let i = 0; i < 3; i++) { try { if (i === 1) continue; out += i; } finally { out += 'f'; } } out;",
+    ] {
+        differential(source, &["out"]);
+    }
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",
@@ -426,7 +473,7 @@ fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
         "changed = 1; try { throw [1]; } catch ([a]) { a; }",
         "changed = 1; let [...a] = [1];",
         "changed = 1; let [a] = [2];",
-        "changed = 1; delete changed;",
+        "changed = 1; var [b] = [2];",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);

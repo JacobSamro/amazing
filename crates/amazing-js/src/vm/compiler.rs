@@ -483,7 +483,7 @@ impl Compiler {
 
     fn enter(&mut self, span: Span) -> Result<(), CompileError> {
         if self.depth >= MAX_DEPTH || self.program.code.len() >= MAX_INSTRUCTIONS {
-            return Err(self.error(span, "compiler resource limit"));
+            return Err(self.error(span, RESOURCE_LIMIT));
         }
         self.depth += 1;
         Ok(())
@@ -628,6 +628,31 @@ impl Compiler {
                 update,
                 body,
             } => {
+                // `for (let/const ...;;)`: the head gets its own scope, and
+                // each iteration of a `let` head gets a fresh copy of it
+                // (CreatePerIterationEnvironment) so closures capture the
+                // iteration's value. Break/continue targets sit inside that
+                // scope; the break target is the closing `LeaveScope`.
+                let lexical = match init {
+                    Some(ast::ForInit::Decl(declaration)) if declaration.kind != VarKind::Var => {
+                        if declaration.resource_kind.is_some() {
+                            return Err(self.error(statement.span, "lexical for binding"));
+                        }
+                        Some(declaration)
+                    }
+                    _ => None,
+                };
+                let mut per_iteration = Vec::new();
+                if let Some(declaration) = lexical {
+                    self.emit(Instruction::EnterScope);
+                    if declaration.kind == VarKind::Let {
+                        for binding in &declaration.decls {
+                            if let Binding::Ident(name) = &binding.binding {
+                                per_iteration.push(name.name.clone());
+                            }
+                        }
+                    }
+                }
                 let labels = std::mem::take(&mut self.pending_labels);
                 self.push_loop(labels, true);
                 self.emit(Instruction::Complete(0));
@@ -635,16 +660,16 @@ impl Compiler {
                     Some(ast::ForInit::Expr(expression)) => {
                         self.expression(expression)?;
                     }
-                    Some(ast::ForInit::Decl(declaration)) if declaration.kind == VarKind::Var => {
+                    Some(ast::ForInit::Decl(declaration)) => {
                         self.statement(&Stmt::new(
                             StmtKind::Var((**declaration).clone()),
                             statement.span,
                         ))?;
                     }
-                    Some(ast::ForInit::Decl(_)) => {
-                        return Err(self.error(statement.span, "lexical for binding"))
-                    }
                     None => {}
+                }
+                if !per_iteration.is_empty() {
+                    self.emit(Instruction::CopyScope(per_iteration.clone()));
                 }
                 let start = self.program.code.len();
                 let end = if let Some(test) = test {
@@ -658,6 +683,9 @@ impl Compiler {
                 // re-testing, so its target is here -- right after the body,
                 // right before `update` -- not back at `start`.
                 let continue_target = self.program.code.len();
+                if !per_iteration.is_empty() {
+                    self.emit(Instruction::CopyScope(per_iteration));
+                }
                 if let Some(update) = update {
                     self.expression(update)?;
                 }
@@ -667,6 +695,9 @@ impl Compiler {
                 }
                 let break_target = self.program.code.len();
                 self.pop_loop(break_target, Some(continue_target));
+                if lexical.is_some() {
+                    self.emit(Instruction::LeaveScope);
+                }
             }
             StmtKind::ForOf { left, right, body } => {
                 let labels = std::mem::take(&mut self.pending_labels);
@@ -961,7 +992,35 @@ impl Compiler {
 
     fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         self.enter(expression.span)?;
-        let result = self.expression_inner(expression);
+        // The VM has no optional chains: hand the whole chain, from its
+        // outermost link, to the tree walker so short-circuiting covers
+        // every link (`o?.b[f()]` must not call `f`).
+        if in_optional_chain(expression) && !may_suspend(expression) {
+            let result = self.register(expression.span).map(|dst| {
+                self.emit(Instruction::TreeEval(dst, Rc::new(expression.clone())));
+                dst
+            });
+            self.depth -= 1;
+            return result;
+        }
+        let mark = (self.program.code.len(), self.scope_depth);
+        let result = match self.expression_inner(expression) {
+            // Direct eval stays excluded: its var/arguments scoping in
+            // parameter defaults differs from a plain tree-walker eval.
+            Err(error)
+                if !matches!(error.message, RESOURCE_LIMIT | "register limit" | "direct eval")
+                    && !context_dependent(expression)
+                    && !may_suspend(expression) =>
+            {
+                self.program.code.truncate(mark.0);
+                self.scope_depth = mark.1;
+                self.register(expression.span).map(|dst| {
+                    self.emit(Instruction::TreeEval(dst, Rc::new(expression.clone())));
+                    dst
+                })
+            }
+            other => other,
+        };
         self.depth -= 1;
         result
     }
@@ -1571,6 +1630,23 @@ fn binding_may_suspend(binding: &Binding) -> bool {
         Binding::Default(inner, value) => binding_may_suspend(inner) || may_suspend(value),
     }
 }
+
+fn in_optional_chain(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Member { obj, optional, .. } => *optional || in_optional_chain(obj),
+        ExprKind::Call { callee, optional, .. } => *optional || in_optional_chain(callee),
+        _ => false,
+    }
+}
+
+/// Nodes whose meaning depends on their parent (a spread element, a bare
+/// `super` or `#x`): delegating them alone would lose that context, so the
+/// failure propagates and the parent is delegated instead.
+fn context_dependent(expression: &Expr) -> bool {
+    matches!(expression.kind, ExprKind::Spread(_) | ExprKind::Super | ExprKind::PrivateName(_))
+}
+
+const RESOURCE_LIMIT: &str = "compiler resource limit";
 
 /// Whether evaluating `expression` could reach a `yield` or `await` of the
 /// body being compiled. Nested function bodies are their own frames and do
