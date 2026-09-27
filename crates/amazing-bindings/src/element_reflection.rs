@@ -3,7 +3,7 @@ use crate::{host::{Interface, InterfaceBrand, LegacyReflectionKind as L, Operati
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList }
+enum Kind { String, LegacyString, UsvUrl, Url, Boolean, Unsigned, ReflectedUnsigned, Signed(i32), InputType, Loading, Decoding, ColSpan, RowSpan, TokenList, LimitedKnownValues(&'static [&'static str]) }
 #[derive(Clone, Copy)]
 struct Spec { interface: Option<Interface>, attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -13,7 +13,8 @@ fn spec(op: O) -> Option<Spec> {
     if let O::LegacyReflectGet(interface, attribute, kind) | O::LegacyReflectSet(interface, attribute, kind) = op {
         let kind = match kind { L::String => K::String, L::LegacyString => K::LegacyString,
             L::Url => K::Url, L::UsvUrl => K::UsvUrl, L::Boolean => K::Boolean,
-            L::Unsigned => K::ReflectedUnsigned, L::Signed => K::Signed(0) };
+            L::Unsigned => K::ReflectedUnsigned, L::Signed => K::Signed(0),
+            L::LimitedKnownValues(keywords) => K::LimitedKnownValues(keywords) };
         return Some(Spec { interface: Some(interface), attribute, tags: &[], kind,
             setter: matches!(op, O::LegacyReflectSet(..)) });
     }
@@ -181,6 +182,10 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Decoding => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
             &["sync", "async", "auto"]).unwrap_or_else(|| "auto".encode_utf16().collect())),
         Kind::String | Kind::LegacyString => host.string(&value.unwrap_or_default()),
+        // Getter-only limiting, per the WebIDL reflection algorithm --
+        // setting falls through to the plain-string `_` arm above.
+        Kind::LimitedKnownValues(keywords) => host.string(&html_reflection::keyword(
+            value.as_deref().unwrap_or_default(), keywords).unwrap_or_default()),
         Kind::TokenList => unreachable!(),
     }
 }
