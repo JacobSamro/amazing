@@ -1859,14 +1859,29 @@ impl RuntimeBindingHost<'_> {
         let host = self.state.borrow().host.clone();
         let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
         let global = self.js.binding_global_object();
-        let previous = std::mem::replace(
-            &mut self.state.borrow_mut().window_named_property_keys,
-            entries.iter().map(|(name, _)| name.clone()).collect(),
-        );
+        let previous = std::mem::take(&mut self.state.borrow_mut().window_named_property_keys);
         for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
             self.js.binding_delete_property(&global, stale)?;
         }
+        // Only names we actually define below (not skipped for colliding
+        // with a pre-existing property) count as "owned" for next time.
+        let mut owned = Vec::with_capacity(entries.len());
         for (name, nodes) in entries {
+            // Named access is a [[Get]] fallback in the spec (Window's named
+            // properties object is only consulted when ordinary property
+            // lookup fails), so it must never shadow a property that is
+            // already there for a different reason -- a `var`/function
+            // declaration, a built-in like `document`, or a testharness.js
+            // global such as `test`/`async_test`. `<div id="test">` is
+            // common in WPT fixtures and would otherwise clobber the
+            // `test()` function every such page relies on. We can only
+            // eagerly materialize properties (no engine-level [[Get]] hook
+            // for window -- see the with_dom call site), so approximate the
+            // fallback rule by skipping any name we did not already own
+            // from a previous refresh when something is already there.
+            if !previous.contains(&name) && self.js.binding_get_own_property(&global, &name)?.is_some() {
+                continue;
+            }
             let value = if let [single] = nodes[..] {
                 self.wrap_node(single)?
             } else {
@@ -1877,7 +1892,9 @@ impl RuntimeBindingHost<'_> {
             };
             self.js.binding_define_data_property(&global, &name, value,
                 BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
+            owned.push(name);
         }
+        self.state.borrow_mut().window_named_property_keys = owned;
         Ok(())
     }
 }
