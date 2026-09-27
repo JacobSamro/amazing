@@ -16,6 +16,7 @@ the table, once per license.
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_helpers.rs`, `crates/amazing-js/src/interp_class_private.rs`, `crates/amazing-js/src/interp_stmt.rs` (JSRT-19: NamedEvaluation shape and Annex B.3.4 if-position function-declaration sync) |
 | [DioxusLabs/taffy](https://github.com/DioxusLabs/taffy) | `e661b35980d9644ad8f1df64e183d27e5884533b` | MIT | Copyright (c) 2018 Visly Inc.; Copyright (c) 2026 Taffy Authors | `crates/amazing-layout/src/grid_algorithm.rs` |
 | [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/coroutine.rs`, pooled-OS-thread generator coroutines) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_coroutine.rs` |
+| [lucid-softworks/lumen](https://github.com/lucid-softworks/lumen) (`crates/lumen/src/interpreter.rs` `drive_async`, `crates/lumen/src/coroutine.rs` `coroutine_await`: await-driven coroutine async functions) | `f6c9860d44fa52249cfd647122edea184d32c863` | MIT | Copyright (c) 2026 Lucid Softworks limited | `crates/amazing-js/src/interp_coroutine.rs` (JSVM-9) |
 
 ## MIT License
 

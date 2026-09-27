@@ -17,6 +17,10 @@ impl Interpreter {
     }
 
     pub(super) fn await_iteration_value(&mut self, mut value: JsValue) -> Result<JsValue, Throw> {
+        // Inside a coroutine-backed async function body, suspend for real (interp_coroutine.rs).
+        if let Some(result) = coroutine_await(self, value.clone()) {
+            return result;
+        }
         for _ in 0..1_000 {
             let JsValue::Object(object) = &value else { return Ok(value) };
             let state = match &object.borrow().exotic {
@@ -97,7 +101,9 @@ impl Interpreter {
             }
             if self.get_prop(&result, "done")?.to_boolean() { return Ok(Flow::Normal); }
             let value = self.get_prop(&result, "value")?;
-            let value = self.await_iteration_value(value)?;
+            // Only a sync iterator's value is awaited (CreateAsyncFromSyncIterator); an async
+            // iterator's result value is used as is.
+            let value = if async_iterator { value } else { self.await_iteration_value(value)? };
             let iteration_env = for_iteration_env(left, env);
             if let Err(error) = self.bind_for(left, value, &iteration_env) {
                 let _ = self.close_async_iterator(&iterator);
