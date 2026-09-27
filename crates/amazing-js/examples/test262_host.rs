@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::{
     cell::RefCell,
     io::{self, Read},
+    rc::Rc,
 };
 
 thread_local! {
@@ -238,19 +239,62 @@ fn run_module_request() -> io::Result<()> {
         }
     }
     let root_path = Path::new(&root).canonicalize()?;
-    let resolver = |specifier: &str, referrer: &str| -> Result<(String, String), String> {
-        let referrer = if referrer == path { root_path.join(&path) }
+    let root_path_for_resolver = root_path.clone();
+    let path_for_resolver = path.clone();
+    let resolve_specifier = move |specifier: &str, referrer: &str| -> Result<(String, String), String> {
+        let referrer = if referrer == path_for_resolver { root_path_for_resolver.join(&path_for_resolver) }
             else { Path::new(referrer).to_path_buf() };
-        let candidate = referrer.parent().unwrap_or(&root_path).join(specifier);
+        let candidate = referrer.parent().unwrap_or(&root_path_for_resolver).join(specifier);
         let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
-        if !canonical.starts_with(&root_path) {
+        if !canonical.starts_with(&root_path_for_resolver) {
             return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
         }
         let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
         Ok((canonical.to_string_lossy().into_owned(), source))
     };
-    let mut linker = ModuleLinker::new(resolver);
-    if let Err(failure) = linker.link(&path, &source).and_then(|_| linker.evaluate(&path, &mut i).map(|_| ())) {
+    let linker = Rc::new(RefCell::new(ModuleLinker::new(resolve_specifier)));
+    // JS-19 item 1: install the dynamic-import loader hook onto the SAME linker the static
+    // graph below links/evaluates through, so `import()` from inside a Test262 module test
+    // resolves through the identical module registry (per-realm singleton instances,
+    // `ModuleLinker::instances` now persists across `evaluate` calls -- see module.rs) instead
+    // of unconditionally rejecting with "dynamic import is not supported by this host". This
+    // was the harness gap named in questions.md for
+    // `top-level-await/await-dynamic-import-resolution.js`,
+    // `top-level-await/dynamic-import-of-waiting-module.js` and
+    // `top-level-await/module-graphs-does-not-hang.js`.
+    let linker_for_hook = Rc::clone(&linker);
+    let root_path_for_hook = root_path.clone();
+    let path_for_hook = path.clone();
+    i.binding_set_module_loader_hook(Rc::new(
+        move |interp: &mut amazing_js::Interpreter, specifier: &str, referrer: &str| -> Result<JsValue, String> {
+            // The root module's own "\0module.id" is the raw (possibly non-canonical) `path`
+            // the protocol sent, exactly like the static resolver above special-cases; every
+            // other module's id is already the canonical path the resolver returned.
+            let referrer_path = if referrer.is_empty() || referrer == path_for_hook {
+                root_path_for_hook.join(&path_for_hook)
+            } else {
+                std::path::PathBuf::from(referrer)
+            };
+            let candidate = referrer_path.parent().unwrap_or(&root_path_for_hook).join(specifier);
+            let canonical = candidate.canonicalize().map_err(|error| error.to_string())?;
+            if !canonical.starts_with(&root_path_for_hook) {
+                return Err(format!("module specifier escapes Test262 checkout: {specifier}"));
+            }
+            let id = canonical.to_string_lossy().into_owned();
+            let source = std::fs::read_to_string(&canonical).map_err(|error| error.to_string())?;
+            let mut linker = linker_for_hook.borrow_mut();
+            linker.link(&id, &source).map_err(|failure| failure.message)?;
+            linker.evaluate(&id, interp).map_err(|failure| failure.message)?;
+            Ok(linker
+                .namespace_object(&id)
+                .expect("just-evaluated module has an instance"))
+        },
+    ));
+    let evaluation = {
+        let mut linker = linker.borrow_mut();
+        linker.link(&path, &source).and_then(|_| linker.evaluate(&path, &mut i).map(|_| ()))
+    };
+    if let Err(failure) = evaluation {
         match failure.phase {
             ModulePhase::Parse => emit_module("parse", "SyntaxError", &failure.message, None),
             ModulePhase::Resolution => emit_module("resolution", "SyntaxError", &failure.message, None),
