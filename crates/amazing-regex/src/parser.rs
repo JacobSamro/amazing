@@ -30,6 +30,14 @@ pub(crate) enum Member {
     Digit(bool),
     Word(bool),
     Space(bool),
+    /// `\p{Name}`/`\P{Name}` used inside a plain (non-`v`-flag) character
+    /// class, e.g. `[\p{Hex}]` (valid since property escapes were added in
+    /// ES2018, well before `v`-mode's string-set notation existed --
+    /// built-ins/RegExp/property-escapes/character-class.js). Always a
+    /// single-codepoint property here: `property()` already rejects a
+    /// property-of-strings outside `v` mode before this variant is ever
+    /// constructed.
+    Property(Box<str>, bool),
 }
 #[derive(Debug, Clone)]
 pub(crate) struct Class {
@@ -657,6 +665,16 @@ impl Parser {
         match n {
             Node::Char(c) => Ok(Member::Range(c, c)),
             Node::Class(mut c) if c.members.len() == 1 => Ok(c.members.remove(0)),
+            // `\p{Name}`/`\P{Name}` (`escape()` always returns
+            // `Node::Set(SetExpr::Property(..))` for these, `v`-mode or not
+            // -- see the `Some('p' | 'P')` arm of `escape()`): outside `v`
+            // mode this is the *only* shape `Node::Set` can take here
+            // (`property()` already rejected a property-of-strings unless
+            // `self.flags.unicode_sets`), so it converts directly to the
+            // plain-class `Member` representation.
+            Node::Set(SetExpr::Property(name, invert)) => {
+                Ok(Member::Property(name.into_boxed_str(), invert))
+            }
             _ => self.error("invalid class escape"),
         }
     }
@@ -717,7 +735,29 @@ impl Parser {
                 match self.peek() {
                     Some(c) if c != '>' as u32 => {
                         self.pos += 1;
-                        c
+                        // `self.chars` is UTF-16 code *units*, but GroupName
+                        // identifier validation (ID_Start/ID_Continue) works
+                        // on Unicode code *points*, always -- regardless of
+                        // the `u`/`v` flags (the source text itself is
+                        // Unicode text; see `identifier_escape`'s own doc
+                        // comment above, which already combines a `\uD835\
+                        // uDC53`-style escape pair the same way). A literal
+                        // astral character in the name (e.g. `(?<𝑓𝑜𝑥>...)`,
+                        // built-ins/RegExp/named-groups/
+                        // non-unicode-property-names-valid.js) is written as
+                        // a real surrogate pair in the source and must be
+                        // combined here too, or its lone high half fails
+                        // every ID_Start/ID_Continue check on its own.
+                        if (0xD800..=0xDBFF).contains(&c) {
+                            if let Some(low @ 0xDC00..=0xDFFF) = self.peek() {
+                                self.pos += 1;
+                                0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00)
+                            } else {
+                                c
+                            }
+                        } else {
+                            c
+                        }
                     }
                     _ => break,
                 }
@@ -946,9 +986,31 @@ impl Parser {
             // Outside unicode mode, `\k<...>` is only GroupName syntax when
             // the pattern has a named group somewhere (Annex B); otherwise
             // it is a plain identity escape for `k`, and `<name>` that
-            // follows is ordinary literal text. The scanning pre-pass
-            // always takes this branch since it doesn't yet know the
-            // pattern-wide answer, but that's harmless for name discovery.
+            // follows is ordinary literal text. In unicode mode, by
+            // contrast, `\k<name>` is *always* NamedBackreference syntax,
+            // unconditionally (there's no Annex B ambiguity to defer), so
+            // the scan must still consume it as a unit there -- skipping it
+            // (as non-unicode mode's ambiguous case needs to) broke every
+            // unicode-mode named-backreference pattern's scan pass, since
+            // falling through to the plain-identity-escape catch-all below
+            // is invalid in strict/unicode mode for a non-SyntaxCharacter
+            // like `k` (built-ins/RegExp/named-groups/unicode-*.js).
+            // The scan doesn't need the parsed name for anything (`(?<name>
+            // ...)` *declarations* -- the only thing it collects -- are
+            // found entirely by the separate `(` atom branch), but it does
+            // need to correctly skip past `\k<...>` as one unit rather than
+            // mis-tokenizing it. Ambiguity only bites for a malformed
+            // candidate name in non-unicode mode, where the pattern's real,
+            // final interpretation might turn out to have `\k` mean
+            // something else entirely (no named groups anywhere ->
+            // Annex B literal fallback) -- `group_name()` hard-erroring on
+            // that (e.g. `\k<4>`, a digit can't start an identifier) would
+            // fail the scan before the real pass got a chance to notice
+            // (annexB/built-ins/RegExp/named-groups/non-unicode-malformed.js).
+            // So: always attempt to consume `\k<...>` here, but when
+            // scanning AND not in unicode mode (the only case with real
+            // ambiguity), tolerate a malformed name by backing off to just
+            // the literal `k` instead of propagating the error.
             Some('k')
                 if !in_class
                     && self.peek() == Some('<' as u32)
@@ -956,11 +1018,33 @@ impl Parser {
                         || self.flags.unicode_mode()
                         || !self.known_names.is_empty()) =>
             {
+                let save = self.pos;
                 self.pos += 1;
-                let name = self.group_name()?;
-                if !self.eat('>') {
-                    return self.error("unterminated group name");
-                }
+                let parsed = self.group_name().and_then(|name| {
+                    if self.eat('>') {
+                        Ok(name)
+                    } else {
+                        self.error("unterminated group name")
+                    }
+                });
+                let name = match parsed {
+                    Ok(name) => name,
+                    Err(err) => {
+                        if self.scanning && !self.flags.unicode_mode() {
+                            // Back off entirely: this candidate name was
+                            // malformed, and in non-unicode mode that just
+                            // means `\k` isn't name syntax after all here --
+                            // it falls through to the same plain identity
+                            // escape `_ => Ok(Node::Char(c))` arm at the end
+                            // of this match would give it outside unicode
+                            // mode (every `Some(ch) if ...unicode_mode()...`
+                            // guard above that arm is inapplicable here).
+                            self.pos = save;
+                            return Ok(Node::Char('k' as u32));
+                        }
+                        return Err(err);
+                    }
+                };
                 // A name may be declared on several mutually-exclusive
                 // alternatives (checked at the end of `parse_utf16`); collect
                 // every capture index it maps to so the backref can pick out
