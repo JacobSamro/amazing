@@ -228,7 +228,11 @@ impl Interpreter {
             },
             Binding::Default(inner, expression) => {
                 let value = if value.is_undefined() {
-                    let mut v = self.eval_expr(expression, env)?;
+                    let mut v = match inner.as_ref() {
+                        Binding::Ident(identifier) =>
+                            self.eval_named_class_expr(expression, env, &identifier.name.clone().into())?,
+                        _ => self.eval_expr(expression, env)?,
+                    };
                     if let Binding::Ident(identifier) = inner.as_ref() {
                         self.named_evaluation(expression, &mut v, &identifier.name);
                     }

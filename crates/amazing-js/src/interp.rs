@@ -41,11 +41,16 @@ pub enum ExecutionBackend {
     Bytecode,
 }
 
+#[path = "interp_event_handler.rs"]
+mod event_handler;
+
 #[path = "interp_bindings.rs"]
 mod bindings;
 pub use bindings::BindingPropertyFlags;
 #[path = "interp_legacy.rs"]
 mod legacy;
+#[path = "interp_async_iter.rs"]
+mod async_iter;
 pub use legacy::{LegacyPlatformHooks, PairIterableHooks};
 
 /// The embedding's per-interpreter native entry point. `new_target` is present

@@ -13,6 +13,10 @@ operation. The JavaScript interpreter owns RegExp objects and `lastIndex`.
   hexadecimal and Unicode escapes, control escapes and word boundaries.
 - Alternation, capturing and noncapturing groups, decimal backreferences,
   positive and negative lookahead, start/end assertions.
+- Annex B legacy decimal/octal and incomplete hex/Unicode escape fallbacks,
+  legacy control/class-range escapes, and quantified lookahead. Decimal
+  backreferences use the total capture count, including forward references.
+  These permissive forms remain rejected in Unicode modes.
 - Greedy and lazy `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`. Repetition clears
   nested captures and rejects optional zero-progress iterations. Lookahead
   captures propagate on success and cannot be revisited by outer backtracking.
@@ -58,9 +62,6 @@ error rather than being silently interpreted as a different regex:
 - Named captures/references, lookbehind, inline flag modifiers, most Unicode
   character property escapes, and `d` indices. Unsupported properties are
   rejected explicitly.
-- Annex B octal/decimal escape fallbacks, incomplete hex/Unicode escapes,
-  quantified lookahead and legacy class-range escape exceptions. Some otherwise
-  valid legacy identity escapes (`\p`, `\P`, `\k`) are conservatively rejected.
 - The JS binding does not implement the RegExp Symbol protocols, custom `exec`
   dispatch in String methods, species/subclass construction, regex-aware
   `String.split`, `matchAll`, `replaceAll`, `RegExp.escape`, legacy static capture

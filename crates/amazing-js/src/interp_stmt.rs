@@ -92,7 +92,10 @@ impl Interpreter {
                     let mut v = x
                         .init
                         .as_ref()
-                        .map(|e| self.eval_expr(e, env))
+                        .map(|e| match &x.binding {
+                            Binding::Ident(name) => self.eval_named_class_expr(e, env, &Self::class_binding_name(&name.name)),
+                            _ => self.eval_expr(e, env),
+                        })
                         .transpose()?
                         .unwrap_or(JsValue::Undefined);
                     if d.kind == ast::VarKind::Const && x.init.is_none() {
@@ -170,7 +173,18 @@ impl Interpreter {
                     if let StmtKind::Function(f) = &stmt.kind {
                         if let Some(n) = &f.name {
                             let v = self.make_function(f, &e);
-                            e.declare_lexical(&n.name, v, true)?;
+                            if e.local_cell(&n.name).is_some() {
+                                // Annex B.3.3.4: non-strict code may give the same name more
+                                // than one FunctionDeclaration directly in one block (the
+                                // duplicate-LexicallyDeclaredNames early error is relaxed only
+                                // when every duplicate is a FunctionDeclaration).
+                                // BlockDeclarationInstantiation still runs InitializeBinding once
+                                // per declaration in source order, so the last one silently wins
+                                // rather than re-declaring into a cell that already exists.
+                                let _ = e.assign(&n.name, v);
+                            } else {
+                                e.declare_lexical(&n.name, v, true)?;
+                            }
                         }
                     }
                 }
@@ -251,7 +265,11 @@ impl Interpreter {
                 let v = self.eval_expr(right, env)?;
                 self.exec_for_of(left, &v, body, env)
             }
-            StmtKind::ForAwaitOf { .. } => Err(Throw::type_error("async iteration is not implemented")),
+            StmtKind::ForAwaitOf { left, right, body } => {
+                self.completion = JsValue::Undefined;
+                let iterable = self.eval_expr(right, env)?;
+                self.exec_for_await_of(left, &iterable, body, env)
+            }
             StmtKind::Switch { disc, cases } => {
                 self.completion = JsValue::Undefined;
                 let d = self.eval_expr(disc, env)?;
@@ -678,8 +696,8 @@ impl Interpreter {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
                     let ce = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                    if let Some(p) = &c.param {
-                        ce.declare_lexical(&p.name, th.0, true)?;
+                    if let Some(binding) = &c.binding {
+                        self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                     }
                     self.hoist(&c.body.body, env)?;
                     self.exec_stmts(&c.body.body, &ce)
@@ -819,11 +837,9 @@ impl Interpreter {
                                 }
                             }
                             let v = match &p.value {
-                                ast::PropValue::Shorthand(i) => env
-                                    .resolve(&i.name)
+                                ast::PropValue::Shorthand(i) => self.identifier_value(env, &i.name)?
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
                                 ast::PropValue::Init(x) => {
-                                    let mut val = self.eval_expr(x, env)?;
                                     // PropertyDefinitionEvaluation (spec 13.2.5.5) skips NamedEvaluation
                                     // entirely for a non-computed `__proto__` key ("isProtoSetter" is
                                     // true): an anonymous `{ __proto__: function(){} }` value must NOT
@@ -832,6 +848,16 @@ impl Interpreter {
                                     // (usually none) it already had.
                                     let is_proto_setter = !matches!(&p.key, PropKey::Computed(_))
                                         && k.as_string().is_some_and(|name| *name == "__proto__");
+                                    let mut val = if is_proto_setter {
+                                        self.eval_expr(x, env)?
+                                    } else {
+                                        // Same class-self-reference-before-eval need as every other
+                                        // NamedEvaluation call site (see the comment on `assign`).
+                                        // `Self::property_function_name` (not the lossy
+                                        // `property_key_as_fn_name` used below for the ordinary
+                                        // function case) keeps a lone-surrogate string key exact.
+                                        self.eval_named_class_expr(x, env, &Self::property_function_name(&k))?
+                                    };
                                     if !is_proto_setter {
                                         self.named_evaluation(x, &mut val, &property_key_as_fn_name(&k));
                                     }
@@ -867,7 +893,16 @@ impl Interpreter {
                 Ok(o)
             }
             ExprKind::Spread(x) => self.eval_expr(x, env),
-            ExprKind::Function(f) => Ok(self.make_function(f, env)),
+            ExprKind::Function(f) => {
+                if let Some(name) = &f.name {
+                    let named_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    let value = self.make_function(f, &named_env);
+                    named_env.declare_lexical(&name.name, value.clone(), false)?;
+                    Ok(value)
+                } else {
+                    Ok(self.make_function(f, env))
+                }
+            }
             ExprKind::Arrow(a) => Ok(self.make_arrow(a, env)),
             ExprKind::Class(c) => self.eval_class(c, env),
             ExprKind::Paren(x) => self.eval_expr(x, env),
@@ -1016,6 +1051,8 @@ impl Interpreter {
                 self.unary_value(op, value)
             }
             ast::UnOp::Delete => match &x.kind {
+                ExprKind::Paren(inner) => self.unary(op, inner, env),
+                ExprKind::Ident(name) => self.delete_scoped_name(env, &name.name),
                 ExprKind::Member { obj, prop, .. } if matches!(prop, MemberProp::Private(_)) => {
                     // A private member's `delete` target is an early SyntaxError
                     // (§13.5.1.1); the parser does not reject it yet, so guard here.
@@ -1227,14 +1264,40 @@ impl Interpreter {
         r: &ast::Expr,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
+        if op == ast::AssignOp::Assign {
+            if let ExprKind::Member { obj, prop: MemberProp::Private(identifier), .. } = &t.kind {
+                let receiver = self.eval_expr(obj, e)?;
+                let name = e.resolve_private(&identifier.name).ok_or_else(|| {
+                    Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
+                })?;
+                let value = self.eval_expr(r, e)?;
+                private_field_set(self, &receiver, &name, value.clone())?;
+                return Ok(value);
+            }
+        }
         if op == ast::AssignOp::Assign && is_destructuring_expr(t) {
             let value = self.eval_expr(r, e)?;
             self.assign_pattern_expr(t, &value, e)?;
             return Ok(value);
         }
-        let (reference, old) = self.resolve_reference(t, e)?;
+        let (reference, old) = if op == ast::AssignOp::Assign {
+            if let Some(name) = event_handler::identifier_name(t) {
+                (self.name_reference(e, name)?, JsValue::Undefined)
+            } else { self.resolve_reference(t, e)? }
+        } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
-            let mut v = self.eval_expr(r, e)?;
+            // A named class expression's own self-reference binding needs the name available
+            // *before* the class body runs (computed keys/static blocks may already observe it),
+            // which the post-hoc `infer_function_name` rename below cannot retroactively supply.
+            // Unlike that unconditional legacy heuristic, this one really does need the strict
+            // spec restriction (13.15.2's IsIdentifierRef check on the *source* target, not
+            // `reference`'s resolved kind: a global binding and `obj.prop` can both resolve to
+            // `Reference::Property`, but only the former is an IdentifierRef) -- `holder.C=class
+            // {}` must stay unnamed while `C=class{}` (even at global scope) must not.
+            let mut v = match event_handler::identifier_name(t) {
+                Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
+                None => self.eval_expr(r, e)?,
+            };
             // Plain assignment intentionally keeps the pre-existing, value-based heuristic
             // (rename whatever nameless function/class the RHS produced -- no source-expression
             // check, no IsIdentifierRef/Reference::Binding restriction) rather than switching to
@@ -1249,6 +1312,9 @@ impl Interpreter {
             // reference kind, matching the name both backends already agree on. A symbol-keyed
             // member target with no description has no derivable name at all (`reference_name`
             // returns `None`, exactly as `amazing-js/src/vm` treats it) -- skipped, not "".
+            // (A no-op for a value `eval_named_class_expr` already named above, since
+            // `infer_function_name` only renames a still-nameless function/class -- and classes
+            // never reach this heuristic for a non-identifier target anyway, matching spec.)
             if let Some(name) = reference_name(&reference) {
                 self.infer_function_name(&mut v, &name);
             }
@@ -1269,7 +1335,13 @@ impl Interpreter {
         if op == ast::AssignOp::Nullish && !old.is_null() && !old.is_undefined() {
             return Ok(old);
         }
-        let mut v = self.eval_expr(r, e)?;
+        // Same class-self-reference-before-eval need, and same strict IsIdentifierRef gate
+        // (13.15.4's LogicalAssignmentEvaluation goes through the same NamedEvaluation
+        // definition as plain `=`), as `assign`'s AssignOp::Assign arm above.
+        let mut v = match event_handler::identifier_name(t) {
+            Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
+            None => self.eval_expr(r, e)?,
+        };
         // Same legacy, unconditional value-based heuristic as plain `=` (see the comment
         // there) applies to the logical-assignment operators.
         if let Some(name) = reference_name(&reference) {
@@ -1309,6 +1381,8 @@ impl Interpreter {
     fn infer_function_name(&self, value: &mut JsValue, name: &str) {
         if let JsValue::Object(object) = value {
             let mut object = object.borrow_mut();
+            // Class names are installed before static elements by NamedEvaluation.
+            if object.class_constructor { return; }
             if let Some(function) = &mut object.func {
                 if function.name.is_empty() {
                     function.name = name.to_string();
@@ -1338,21 +1412,31 @@ impl Interpreter {
     // testharness.js exports its API by assigning properties of global_scope.
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
-        if env.is_uninitialized(name) {
-            return Err(Throw::reference_error(format!("{name} is uninitialized")));
-        }
-        if let Some(global) = env.global_binding_object(name) {
-            return self.get_prop(&JsValue::Object(global), name).map(Some);
-        }
-        if let Some(value) = env.resolve(name) {
-            return Ok(Some(value));
-        }
-        let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
-        if exists {
-            let global = JsValue::Object(self.global_obj.clone());
-            self.get_prop(&global, name).map(Some)
-        } else {
-            Ok(None)
+        match self.scoped_reference(env, name)? {
+            None => {
+                // Nothing lexical, no object-environment binding, and the raw
+                // check in `scoped_reference`'s own global fallback missed it
+                // either -- but that raw check doesn't dispatch Proxy `has`
+                // traps. Give the real global object one more look through
+                // the full `[[HasProperty]]` algorithm before giving up.
+                let exists = self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(name))?;
+                if exists {
+                    let global = JsValue::Object(self.global_obj.clone());
+                    self.get_prop(&global, name).map(Some)
+                } else {
+                    Ok(None)
+                }
+            }
+            Some(Reference::Property(base, key)) => self.get_prop(&base, &key).map(Some),
+            Some(_) => {
+                if env.is_uninitialized(name) {
+                    return Err(Throw::reference_error(format!("{name} is uninitialized")));
+                }
+                if let Some(global) = env.global_binding_object(name) {
+                    return self.get_prop(&JsValue::Object(global), name).map(Some);
+                }
+                Ok(env.resolve(name))
+            }
         }
     }
 
@@ -1363,22 +1447,40 @@ impl Interpreter {
     ) -> Result<(Reference, JsValue), Throw> {
         match &target.kind {
             ExprKind::Ident(identifier) => {
-                if let Some(global) = env.global_binding_object(&identifier.name) {
-                    let global = JsValue::Object(global);
-                    let value = self.get_prop(&global, &identifier.name)?;
-                    return Ok((Reference::Property(global, identifier.name.clone().into()), value));
-                }
-                if let Some(value) = env.resolve(&identifier.name) {
-                    Ok((Reference::Binding(identifier.name.clone()), value))
-                } else if self.default_has_property(&self.global_obj.clone(), &PropertyKey::from(identifier.name.as_str()))? {
-                    let global = JsValue::Object(self.global_obj.clone());
-                    let value = self.get_prop(&global, &identifier.name)?;
-                    Ok((Reference::Property(global, identifier.name.clone().into()), value))
-                } else {
-                    Ok((
-                        Reference::Binding(identifier.name.clone()),
-                        JsValue::Undefined,
-                    ))
+                let name = &identifier.name;
+                match self.scoped_reference(env, name)? {
+                    Some(Reference::Property(base, key)) => {
+                        let value = self.get_prop(&base, &key)?;
+                        Ok((Reference::Property(base, key), value))
+                    }
+                    Some(reference) => {
+                        if env.is_uninitialized(name) {
+                            return Err(Throw::reference_error(format!("{name} is uninitialized")));
+                        }
+                        if let Some(global) = env.global_binding_object(name) {
+                            let global = JsValue::Object(global);
+                            let value = self.get_prop(&global, name)?;
+                            return Ok((Reference::Property(global, name.clone().into()), value));
+                        }
+                        let value = env.resolve(name).unwrap_or(JsValue::Undefined);
+                        Ok((reference, value))
+                    }
+                    None => {
+                        // Same Proxy-aware global fallback as `identifier_value`:
+                        // a raw has-property miss everywhere else doesn't mean
+                        // the real global object's `[[HasProperty]]` (which may
+                        // dispatch through a Proxy) would also miss.
+                        let exists = self.default_has_property(
+                            &self.global_obj.clone(), &PropertyKey::from(name.as_str()),
+                        )?;
+                        if exists {
+                            let global = JsValue::Object(self.global_obj.clone());
+                            let value = self.get_prop(&global, name)?;
+                            Ok((Reference::Property(global, name.clone().into()), value))
+                        } else {
+                            Ok((Reference::Binding(name.clone()), JsValue::Undefined))
+                        }
+                    }
                 }
             }
             ExprKind::Member { obj, prop, .. } => {
@@ -1457,7 +1559,8 @@ impl Interpreter {
                     }
                 }
                 if !env.assign(&name, value.clone())? {
-                    self.global_env.declare_var(&name, value)?;
+                    let global = JsValue::Object(self.global_obj.clone());
+                    self.put_reference(Reference::Property(global, name.into()), value, env)?;
                 }
                 Ok(())
             }
@@ -1478,7 +1581,9 @@ impl Interpreter {
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
-        let (reference, _) = self.resolve_reference(t, e)?;
+        let reference = if let Some(name) = event_handler::identifier_name(t) {
+            self.name_reference(e, name)?
+        } else { self.resolve_reference(t, e)?.0 };
         self.put_reference(reference, v, e)
     }
 
@@ -1496,7 +1601,11 @@ impl Interpreter {
                 value: default,
             } => {
                 if value.is_undefined() {
-                    let mut fallback = self.eval_expr(default, env)?;
+                    let mut fallback = match &target.kind {
+                        ExprKind::Ident(identifier) =>
+                            self.eval_named_class_expr(default, env, &identifier.name.clone().into())?,
+                        _ => self.eval_expr(default, env)?,
+                    };
                     if let ExprKind::Ident(identifier) = &target.kind {
                         self.named_evaluation(default, &mut fallback, &identifier.name);
                     }
@@ -1549,7 +1658,7 @@ impl Interpreter {
                                 }
                                 ast::PropValue::CoverInitializedName { binding, default } => {
                                     let assigned = if matches!(&item, JsValue::Undefined) {
-                                        let mut v = self.eval_expr(default, env)?;
+                                        let mut v = self.eval_named_class_expr(default, env, &binding.name.clone().into())?;
                                         self.named_evaluation(default, &mut v, &binding.name);
                                         v
                                     } else {
@@ -1609,21 +1718,23 @@ impl Interpreter {
             if (optional || *m) && (o.is_null() || o.is_undefined()) {
                 return Ok(JsValue::Undefined);
             }
-            if let MemberProp::Private(identifier) = prop {
+            let receiver = if matches!(&obj.kind, ExprKind::Super) {
+                e.resolve_this_checked()?
+            } else {
+                o.clone()
+            };
+            let function = if let MemberProp::Private(identifier) = prop {
                 let name = e.resolve_private(&identifier.name).ok_or_else(|| {
                     Throw::syntax_error(format!("private name #{} is not defined", identifier.name))
                 })?;
-                let value = private_field_get(self, &o, &name)?;
-                (value, o.clone())
+                private_field_get(self, &receiver, &name)?
             } else {
                 let k = self.member_key(prop, e)?;
-                let receiver = if matches!(&obj.kind, ExprKind::Super) {
-                    e.resolve_this_checked()?
-                } else {
-                    o.clone()
-                };
-                (self.get_prop(&o, &k)?, receiver)
-            }
+                self.get_prop(&o, &k)?
+            };
+            (function, receiver)
+        } else if let Some(name) = event_handler::identifier_name(c) {
+            self.scoped_call(e, name)?
         } else {
             (self.eval_expr(c, e)?, JsValue::Undefined)
         };
@@ -1721,11 +1832,15 @@ impl Interpreter {
             }
         } else { this };
         let derived_constructor = o.borrow().derived_constructor.clone();
+        if o.borrow().class_constructor && new_target.is_none() {
+            return Err(Throw::type_error("class constructor requires new"));
+        }
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
         let async_body = self.async_body_code(&o, &fun, strict_function);
-        let bytecode_async = async_body.is_some()
-            || (fun.is_async && matches!(&fun.body, FunctionBody::Bytecode(_)));
+        let bytecode_async = fun.is_async && !fun.is_generator
+            && (async_body.is_some() || matches!(&fun.body, FunctionBody::Bytecode(_)));
+        let async_generator = fun.is_async && fun.is_generator;
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -1744,16 +1859,16 @@ impl Interpreter {
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
                 FunctionBody::Bytecode(code) => {
-                    let generator_proto = if fun.is_generator {
-                        match o.borrow().get_own("prototype") {
-                            Some(JsValue::Object(proto)) => Some(proto),
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
+                    // The generator's own object, not a pre-read prototype: a
+                    // parameter default can replace `functionObject.prototype`
+                    // during FunctionDeclarationInstantiation, and per spec
+                    // (OrdinaryCreateFromConstructor) that later value is what
+                    // the created generator's `[[Prototype]]` must observe, not
+                    // whatever "prototype" held before parameters were bound.
+                    // `call` reads it fresh after binding parameters.
                     code.call(
-                        self, fun.env.clone(), fun.is_arrow, this, args, generator_proto,
+                        self, fun.env.clone(), fun.is_arrow, this, args,
+                        fun.is_generator.then(|| o.clone()),
                         derived_constructor.clone(), new_target.clone().or(lexical_new_target.clone()),
                     )
                 }
@@ -1848,7 +1963,12 @@ impl Interpreter {
         self.strict_eval_context = previous_strict;
         self.frames.pop();
         self.depth -= 1;
-        if bytecode_async {
+        if async_generator {
+            // Parameter binding runs when an async generator is called. An
+            // abrupt binding completion is synchronous, before any iterator
+            // result promise exists.
+            r
+        } else if bytecode_async {
             match r {
                 Ok(value) => Ok(value),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
@@ -1889,7 +2009,11 @@ impl Interpreter {
             };
             let v = if v.is_undefined() {
                 if let Some(default) = &p.default {
-                    let mut d = self.eval_expr(default, e)?;
+                    let mut d = match &p.binding {
+                        Binding::Ident(identifier) =>
+                            self.eval_named_class_expr(default, e, &identifier.name.clone().into())?,
+                        _ => self.eval_expr(default, e)?,
+                    };
                     if let Binding::Ident(identifier) = &p.binding {
                         self.named_evaluation(default, &mut d, &identifier.name);
                     }
@@ -1995,6 +2119,11 @@ impl Interpreter {
         }
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
+        if f.is_generator {
+            if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
+                return code.instantiate(self, e);
+            }
+        }
         let mut o = JsObject::function(JsFunction {
             name: f.name.as_ref().map(|x| x.name.clone()).unwrap_or_default(),
             params: f.params.clone(),
@@ -2093,6 +2222,31 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
+        if m.kind != ast::MethodKind::Constructor {
+            if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
+                let value = code.instantiate(self, e);
+                if let JsValue::Object(function) = &value {
+                    let mut function = function.borrow_mut();
+                    function.constructible = false;
+                    function.strict_function = class_method
+                        || self.strict_eval_context
+                        || has_use_strict_directive(&m.body.body);
+                    function.proto = Some(if m.is_async && m.is_generator {
+                        self.async_generator_function_proto.clone()
+                    } else if m.is_async {
+                        self.async_function_proto.clone()
+                    } else if m.is_generator {
+                        self.generator_function_proto.clone()
+                    } else {
+                        self.function_proto.clone()
+                    });
+                    if !m.is_generator {
+                        function.delete_own("prototype");
+                    }
+                }
+                return value;
+            }
+        }
         let mut o = JsObject::function(JsFunction {
             name: "".into(),
             params: m.params.clone(),
@@ -2118,14 +2272,104 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
+        self.eval_class_named(c, e, None)
+    }
+
+    // NamedEvaluation (§15.7.14 ClassTail) supplies an anonymous class's name
+    // before static work runs. It does not create a class-local lexical
+    // binding for the inferred name (only an explicit class name gets one).
+    fn eval_named_class_expr(&mut self, expression: &ast::Expr, env: &EnvHandle,
+        name: &crate::value::JsString) -> Result<JsValue, Throw>
+    {
+        match &expression.kind {
+            ExprKind::Paren(inner) => self.eval_named_class_expr(inner, env, name),
+            ExprKind::Class(class) if class.name.is_none() =>
+                self.eval_class_named(class, env, Some(name)),
+            _ => self.eval_expr(expression, env),
+        }
+    }
+
+    // Shared by the VM's MakeClass instruction, which defines each compiled
+    // class method the same way the tree-walk evaluator does: a get/set pair
+    // sharing one accessor descriptor, everything else a plain data method.
+    fn define_class_method(&mut self, target: &JsValue, key: &PropertyKey,
+        kind: ast::MethodKind, value: JsValue) -> Result<(), Throw>
+    {
+        let JsValue::Object(object) = target else { unreachable!() };
+        let mut descriptor = object.borrow().own_prop(key).cloned().unwrap_or(Property {
+            value: JsValue::Undefined, writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        });
+        if matches!(kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+            descriptor.writable = false;
+            if kind == ast::MethodKind::Get { descriptor.getter = Some(value); }
+            else { descriptor.setter = Some(value); }
+        } else {
+            descriptor = Property {
+                value, writable: true, enumerable: false, configurable: true,
+                getter: None, setter: None,
+            };
+        }
+        object.borrow_mut().define(key, descriptor)
+            .map_err(|_| Throw::type_error("could not define class method"))
+    }
+
+    fn class_binding_name(name: &str) -> crate::value::JsString {
+        // The module front end lowers anonymous default exports into this slot.
+        if name == "\0module.default" { "default".into() } else { name.into() }
+    }
+
+    fn property_function_name(key: &PropertyKey) -> crate::value::JsString {
+        match key {
+            PropertyKey::String(name) => name.clone(),
+            PropertyKey::Symbol(symbol) => match symbol.description() {
+                Some(description) => {
+                    let mut units = vec![b'[' as u16];
+                    units.extend_from_slice(description.units());
+                    units.push(b']' as u16);
+                    crate::value::JsString::from_units(units)
+                }
+                None => crate::value::JsString::from(""),
+            },
+        }
+    }
+
+    // SetFunctionName (§10.2.9) plus the length recomputation a class method
+    // needs on top of it: an accessor's own `name` is "get "/"set " prefixed,
+    // and `length` counts the method's own leading required parameters
+    // rather than the constructor-style default `method_value` gave it.
+    fn name_class_method(method: &mut JsValue, base_name: &str, kind: ast::MethodKind, params: &[ast::Param]) {
+        let JsValue::Object(function) = method else { return };
+        let name = match kind {
+            ast::MethodKind::Get => format!("get {base_name}"),
+            ast::MethodKind::Set => format!("set {base_name}"),
+            _ => base_name.to_string(),
+        };
+        let length = params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
+        let mut function = function.borrow_mut();
+        function.func.as_mut().unwrap().name = name.clone();
+        function.define("name", Property {
+            value: JsValue::str(name), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("method name property");
+        function.define("length", Property {
+            value: JsValue::num(length as f64), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).expect("method length property");
+    }
+
+    fn eval_class_named(&mut self, c: &ast::ClassItem, e: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>) -> Result<JsValue, Throw>
+    {
         let previous_strict = self.strict_eval_context;
         self.strict_eval_context = true;
-        let result = self.eval_class_inner(c, e);
+        let result = self.eval_class_inner(c, e, inferred_name);
         self.strict_eval_context = previous_strict;
         result
     }
 
-    fn eval_class_inner(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
+    fn eval_class_inner(&mut self, c: &ast::ClassItem, e: &EnvHandle,
+        inferred_name: Option<&crate::value::JsString>) -> Result<JsValue, Throw> {
         let ctor = c.members.iter().find_map(|m| {
             if let ast::ClassMember::Method(x) = m {
                 (x.kind == ast::MethodKind::Constructor).then_some(x)
@@ -2202,17 +2446,33 @@ impl Interpreter {
                     function.home = Some(p.clone());
                 }
                 drop(class_function);
+                // An explicit class name gets its own class-local lexical
+                // binding (so a method/field/static block can reference the
+                // class by name even before any outer binding is initialized);
+                // NamedEvaluation's inferred name never creates one.
+                if let Some(name) = &c.name {
+                    class_env.declare_lexical(&name.name, f.clone(), false)?;
+                }
+                let class_name = c.name.as_ref().map(|name| crate::value::JsString::from(name.name.clone()))
+                    .or_else(|| inferred_name.cloned()).unwrap_or_else(|| crate::value::JsString::from(""));
+                o.borrow_mut().func.as_mut().unwrap().name = class_name.to_utf8_lossy();
+                o.borrow_mut().define("name", Property {
+                    value: JsValue::str(class_name), writable: false, enumerable: false,
+                    configurable: true, getter: None, setter: None,
+                }).expect("class name property");
                 let mut instance_elements: Vec<InstanceElement> = Vec::new();
                 let mut static_elements: Vec<StaticElement> = Vec::new();
                 for m in &c.members {
                     match m {
                         ast::ClassMember::Method(x) if x.kind != ast::MethodKind::Constructor => {
                             let target_home = if x.is_static { o.clone() } else { p.clone() };
-                            let method = self.method_value(x, &class_env, true);
+                            let mut method = self.method_value(x, &class_env, true);
                             if let JsValue::Object(method_object) = &method {
                                 method_object.borrow_mut().func.as_mut().unwrap().home = Some(target_home.clone());
                             }
                             if let ast::PropKey::Private(identifier) = &x.key {
+                                // Private identifier text already includes the leading '#'.
+                                Self::name_class_method(&mut method, &identifier.name, x.kind, &x.params);
                                 let name = class_env
                                     .resolve_private(&identifier.name)
                                     .expect("collect_private_names recorded every private key");
@@ -2233,6 +2493,11 @@ impl Interpreter {
                                 Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&x.key, &class_env)?,
                             };
+                            let key_name = match &k {
+                                PropertyKey::String(s) => s.to_utf8_lossy(),
+                                PropertyKey::Symbol(symbol) => symbol.descriptive_string(),
+                            };
+                            Self::name_class_method(&mut method, &key_name, x.kind, &x.params);
                             let target = if x.is_static { &o } else { &p };
                             if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
                                 let mut property =

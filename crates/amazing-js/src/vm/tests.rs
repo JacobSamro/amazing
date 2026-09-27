@@ -215,12 +215,13 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "changed = 1; class A { x = 1; }",
+        "changed = 1; class A { x=7; }",
         "changed = 1; class A { static { 1; } }",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
+        "changed = 1; async function g() { for await (const x of [1]) { break; } }",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);
@@ -983,6 +984,74 @@ fn rank_test262_first_blockers() {
             .concat()
     });
     std::fs::write(output, rows).unwrap();
+}
+
+#[test]
+fn merged_class_accessors_and_arrow_arguments() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for source in [
+            "class C { get x() { return this.value; } set x(v) { this.value=v; } } var a=Object.getOwnPropertyDescriptor(C.prototype,'x'); var b=Object.getOwnPropertyDescriptor(C.prototype,'x'); var c=new C(); c.x=7; a.get===b.get && a.set===b.set && a.get.name==='get x' && a.set.length===1 && c.x===7",
+            "class C { method() {} } Object.getOwnPropertyDescriptor(C.prototype,'method').enumerable===false && C.prototype.method.name==='method'",
+            "function f(value) { return (({x}={x:3}) => arguments[0]+x)(); } f(7)===10",
+        ] {
+            let mut interpreter = Interpreter::new();
+            let result = interpreter.run_script_with_backend(source, backend)
+                .unwrap_or_else(|error| panic!("{backend:?}: {source}: {}", error.describe()));
+            assert_eq!(result, JsValue::Bool(true), "{backend:?}: {source}");
+        }
+    }
+}
+
+#[test]
+fn compiled_method_and_generator_boundaries_preserve_eval_strictness_and_names() {
+    for source in [
+        "function* g() {} var d=Object.getOwnPropertyDescriptor(g,'name'); d.value==='g' && !d.writable && !d.enumerable && d.configurable",
+        "var o={m(){ let x; eval('var x'); }}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
+        "var o={*m(p=eval('var arguments')){let arguments;}}; try { o.m(); false; } catch(e) { e instanceof SyntaxError; }",
+        "'use strict'; var o={m(){return function(){return typeof this;};}}; o.m().call('x')==='string'",
+    ] {
+        let mut interpreter=Interpreter::new();
+        assert_eq!(interpreter.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+    }
+}
+
+#[test]
+fn async_iterator_close_preserves_body_throw_over_every_close_failure() {
+    for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+        for close in [
+            "get return() { throw closeError; }",
+            "return: true",
+            "return() { throw closeError; }",
+            "return() { return Promise.reject(closeError); }",
+            "return() { return Promise.resolve(1); }",
+        ] {
+            for completion in ["throw bodyError", "return 1"] {
+                let mut interpreter = Interpreter::new();
+                let source = format!(r#"
+                    var bodyError = {{origin: 'body'}}, closeError = {{origin: 'close'}};
+                    var observed, settled = false, iterations = 0;
+                    var iterable = {{[Symbol.asyncIterator]() {{
+                        return {{next() {{ return {{value: 1, done: false}}; }}, {close}}};
+                    }}}};
+                    async function work() {{
+                        for await (const value of iterable) {{ iterations++; {completion}; }}
+                    }}
+                    work().then(function(value) {{ observed = value; settled = true; }},
+                        function(error) {{ observed = error; settled = true; }});
+                "#);
+                interpreter.run_script_with_backend(&source, backend).unwrap();
+                let expected = if completion.starts_with("throw") {
+                    "settled && iterations === 1 && observed === bodyError"
+                } else if close == "return: true" || close.contains("Promise.resolve(1)") {
+                    "settled && iterations === 1 && observed instanceof TypeError"
+                } else {
+                    "settled && iterations === 1 && observed === closeError"
+                };
+                assert_eq!(interpreter.run_script(expected).unwrap(), JsValue::Bool(true),
+                    "{backend:?}: {completion}: {close}");
+            }
+        }
+    }
 }
 
 #[test]

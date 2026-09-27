@@ -79,12 +79,19 @@ pub(crate) fn parse_utf16(
     } else {
         pattern.iter().copied().map(u32::from).collect()
     };
+    // DecimalEscape's backref-vs-octal disambiguation needs every capturing
+    // parenthesis up front (see `count_captures`/`numeric_escape`), same as
+    // `\k<name>` needs every declared name up front for a forward reference:
+    // both are collected before the real parse, which resolves each
+    // reference against the now-complete set.
+    let total_captures = count_captures(&chars, flags);
     // `\k<name>` may reference a group declared later in the pattern, so the
     // set of names is collected with a throwaway pre-pass before the real
     // parse resolves each reference to its (stable, deterministic) index.
     let known_names = {
         let mut scan = Parser {
             chars: chars.clone(),
+            total_captures,
             pos: 0,
             flags,
             captures: 0,
@@ -105,6 +112,7 @@ pub(crate) fn parse_utf16(
     };
     let mut p = Parser {
         chars,
+        total_captures,
         pos: 0,
         flags,
         captures: 0,
@@ -122,7 +130,7 @@ pub(crate) fn parse_utf16(
         return p.error("unmatched closing parenthesis");
     }
     if p.refs.iter().any(|n| *n > p.captures) {
-        return p.error("invalid backreference (legacy decimal/octal escapes are unsupported)");
+        return p.error("invalid backreference");
     }
     // Two `(?<name>...)` declarations may share a name only if some ancestor
     // disjunction they are both nested in sent them down different
@@ -136,11 +144,36 @@ pub(crate) fn parse_utf16(
     }
     Ok((ast, p.captures, p.names))
 }
+// DecimalEscape depends on every capturing parenthesis, including later groups.
+// Escaped delimiters and brackets within classes do not introduce captures.
+fn count_captures(chars: &[u32], flags: Flags) -> usize {
+    let mut count = 0;
+    let mut class_depth = 0usize;
+    let mut pos = 0;
+    while pos < chars.len() {
+        match chars[pos] {
+            92 => { pos += 2; continue; }
+            91 if class_depth == 0 || flags.unicode_sets => class_depth += 1,
+            93 if class_depth > 0 => class_depth -= 1,
+            40 if class_depth == 0 => {
+                let special = chars.get(pos + 1) == Some(&63);
+                let named = chars.get(pos + 2) == Some(&60)
+                    && !matches!(chars.get(pos + 3), Some(61 | 33));
+                if !special || named { count += 1; }
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+    count
+}
+
 struct Parser {
     chars: Vec<u32>,
     pos: usize,
     flags: Flags,
     captures: usize,
+    total_captures: usize,
     depth: usize,
     refs: Vec<usize>,
     /// True only for the throwaway pre-pass: `\k<name>` accepts any
@@ -296,7 +329,7 @@ impl Parser {
                 }
                 self.depth -= 1;
                 Ok(match kind {
-                    0 => inner,
+                    0 => Node::Seq(vec![inner]),
                     1 => Node::Look(Box::new(inner), true),
                     2 => Node::Look(Box::new(inner), false),
                     4 => Node::LookBehind(Box::new(inner), true),
@@ -366,9 +399,14 @@ impl Parser {
         if let Some((min, max)) = q {
             if matches!(
                 atom,
-                Node::Start | Node::End | Node::Boundary(_) | Node::Look(..) | Node::LookBehind(..)
-            ) {
-                return self.error("quantified assertions are unsupported");
+                Node::Start | Node::End | Node::Boundary(_) | Node::LookBehind(..)
+            ) || (self.flags.unicode_mode() && matches!(atom, Node::Look(..))) {
+                // Per Annex B.1.2's extended quantifier grammar, a lookahead
+                // assertion may be quantified outside Unicode mode (e.g.
+                // `/(?=a)+/`); lookbehind never gained an equivalent
+                // extension and stays rejected in both modes, and `^`/`$`/`\b`
+                // are never quantifiable in either mode.
+                return self.error("invalid quantified assertion");
             }
             let greedy = !self.eat('?');
             Ok(Node::Repeat(Box::new(atom), min, max, greedy))
@@ -407,6 +445,10 @@ impl Parser {
                 match (a, b) {
                     (Member::Range(a, _), Member::Range(b, _)) if a <= b => {
                         members.push(Member::Range(a, b))
+                    }
+                    (a, b) if !self.flags.unicode_mode()
+                        && (!matches!(a, Member::Range(..)) || !matches!(b, Member::Range(..))) => {
+                        members.extend([a, Member::Range(45, 45), b]);
                     }
                     _ => return self.error("invalid character class range"),
                 }
@@ -754,6 +796,49 @@ impl Parser {
         }
         Ok(n)
     }
+    fn hex_or_identity(&mut self, count: usize, character: u32) -> Result<Node, Error> {
+        let saved = self.pos;
+        match self.hex(count) {
+            Ok(value) => Ok(Node::Char(value)),
+            Err(_) if !self.flags.unicode_mode() => {
+                self.pos = saved;
+                Ok(Node::Char(character))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn numeric_escape(&mut self, first: u32, in_class: bool) -> Result<Node, Error> {
+        if first != 48 && !in_class {
+            let saved = self.pos;
+            let mut number = (first - 48) as usize;
+            while let Some(digit @ 48..=57) = self.peek() {
+                number = number.saturating_mul(10).saturating_add((digit - 48) as usize);
+                self.pos += 1;
+            }
+            if number <= self.total_captures {
+                self.refs.push(number);
+                return Ok(Node::Backref(vec![number]));
+            }
+            if self.flags.unicode_mode() { return self.error("invalid backreference"); }
+            self.pos = saved;
+        }
+        if self.flags.unicode_mode() {
+            return if first == 48 && !self.peek().is_some_and(|c| (48..=57).contains(&c)) {
+                Ok(Node::Char(0))
+            } else { self.error("invalid decimal character escape") };
+        }
+        if first >= 56 { return Ok(Node::Char(first)); }
+        let mut value = first - 48;
+        let additional = if first <= 51 { 2 } else { 1 };
+        for _ in 0..additional {
+            let Some(digit @ 48..=55) = self.peek() else { break };
+            self.pos += 1;
+            value = value * 8 + digit - 48;
+        }
+        Ok(Node::Char(value))
+    }
+
     fn escape(&mut self, in_class: bool) -> Result<Node, Error> {
         let Some(c) = self.take() else {
             return self.error("trailing escape");
@@ -782,27 +867,23 @@ impl Parser {
             Some('t') => Ok(Node::Char(9)),
             Some('v') => Ok(Node::Char(11)),
             Some('f') => Ok(Node::Char(12)),
-            Some('0') => {
-                if self.peek().is_some_and(|c| (48..=57).contains(&c)) {
-                    return self.error("legacy octal escapes are unsupported");
-                }
-                Ok(Node::Char(0))
-            }
-            Some('1'..='9') if !in_class => {
-                self.pos -= 1;
-                let n = self.decimal()?.unwrap();
-                self.refs.push(n);
-                Ok(Node::Backref(vec![n]))
-            }
-            Some('1'..='9') => self.error("legacy decimal class escapes are unsupported"),
+            Some('0'..='9') => self.numeric_escape(c, in_class),
             Some('c') => {
-                let c = self.take().unwrap_or(0);
-                if !(65..=90).contains(&c) && !(97..=122).contains(&c) {
-                    return self.error("invalid control escape");
+                if let Some(next) = self.peek() {
+                    if (65..=90).contains(&next) || (97..=122).contains(&next)
+                        || (!self.flags.unicode_mode() && in_class
+                            && ((48..=57).contains(&next) || next == 95)) {
+                        self.pos += 1;
+                        return Ok(Node::Char(next % 32));
+                    }
                 }
-                Ok(Node::Char(c % 32))
+                if !self.flags.unicode_mode() {
+                    // Annex B's '\\ [lookahead = c]' consumes only the slash.
+                    self.pos -= 1;
+                    Ok(Node::Char(92))
+                } else { self.error("invalid control escape") }
             }
-            Some('x') => Ok(Node::Char(self.hex(2)?)),
+            Some('x') => self.hex_or_identity(2, c),
             Some('u') => {
                 let braced = self.flags.unicode_mode() && self.eat('{');
                 let mut n = if braced {
@@ -828,7 +909,15 @@ impl Parser {
                     self.pos += 1;
                     n
                 } else {
-                    self.hex(4)?
+                    let saved = self.pos;
+                    match self.hex(4) {
+                        Ok(value) => value,
+                        Err(_) if !self.flags.unicode_mode() => {
+                            self.pos = saved;
+                            return Ok(Node::Char(c));
+                        }
+                        Err(error) => return Err(error),
+                    }
                 };
                 if self.flags.unicode_mode()
                     && !braced
@@ -848,7 +937,12 @@ impl Parser {
             Some('p' | 'P') if self.flags.unicode_mode() => {
                 Ok(Node::Set(self.property(c == 'P' as u32)?))
             }
-            Some('p' | 'P') => self.error("Unicode properties are unsupported"),
+            // Outside unicode mode, `\p`/`\P` are not property-escape syntax
+            // at all (that's `[+UnicodeMode]`-only per spec) and fall through
+            // to the plain-identity-escape catch-all below, same as any other
+            // unrecognized letter -- matching Annex B's permissive
+            // SourceCharacterIdentityEscape and this crate's own
+            // `annex_b_identity_control_and_class_range_fallbacks` test.
             // Outside unicode mode, `\k<...>` is only GroupName syntax when
             // the pattern has a named group somewhere (Annex B); otherwise
             // it is a plain identity escape for `k`, and `<name>` that

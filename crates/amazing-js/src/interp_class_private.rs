@@ -33,6 +33,8 @@ fn eval_class_element_scope<T>(
 /// DefineField (§15.7.10): evaluates the initializer (or Undefined) with
 /// `this` = the field's owner, then creates the field as an own property
 /// (public) or PrivateElement (private) — never through an inherited setter.
+/// NamedEvaluation (§15.7.14 ClassFieldDefinitionEvaluation) supplies an
+/// anonymous function/class initializer with the field's own key as its name.
 fn define_field(
     i: &mut Interpreter,
     owner: &JsValue,
@@ -41,14 +43,28 @@ fn define_field(
     key: &FieldKey,
     init: &Option<ast::Expr>,
 ) -> Result<(), Throw> {
-    let value = eval_class_element_scope(i, owner.clone(), home, class_env, |i, scope| {
+    let name: crate::value::JsString = match key {
+        FieldKey::Public(property_key) => Interpreter::property_function_name(property_key),
+        // Private identifier text already includes the leading '#'.
+        FieldKey::Private(private_name) => private_name.text().into(),
+    };
+    let mut value = eval_class_element_scope(i, owner.clone(), home, class_env, |i, scope| {
         match init {
             // ClassFieldDefinitionEvaluation's own NamedEvaluation (spec 15.7.10): an
             // anonymous function/class field initializer is named after the field's own
             // key (already resolved to a PropertyKey/PrivateName by class-definition time,
             // per spec -- computed keys are evaluated once, not per instance).
             Some(expr) => {
-                let mut v = i.eval_expr(expr, scope)?;
+                // Same class-self-reference-before-eval need as every other NamedEvaluation
+                // call site here: `named_evaluation`/`infer_function_name` deliberately skip
+                // class_constructor objects (a class's own name is installed before its own
+                // static elements run, not after the fact), so an anonymous class field
+                // initializer -- `field = class { static seen = this.name; }` -- needs
+                // `eval_named_class_expr` to make that name visible *during* evaluation.
+                // Reuses the outer, lossless `name: JsString` (a lone-surrogate computed key
+                // stays exact) rather than recomputing it through the lossy `String` helper
+                // `named_evaluation`'s own signature requires below for the ordinary function case.
+                let mut v = i.eval_named_class_expr(expr, scope, &name)?;
                 let name = match key {
                     FieldKey::Public(property_key) => property_key_as_fn_name(property_key),
                     FieldKey::Private(private_name) => private_name.text().to_string(),
@@ -59,6 +75,9 @@ fn define_field(
             None => Ok(JsValue::Undefined),
         }
     })?;
+    if init.is_some() {
+        i.infer_function_name(&mut value, &name.to_utf8_lossy());
+    }
     let JsValue::Object(object) = owner else {
         return Err(Throw::type_error("class field target is not an object"));
     };

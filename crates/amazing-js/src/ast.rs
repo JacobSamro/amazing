@@ -327,8 +327,8 @@ pub struct ClassItem {
 pub enum ClassMember {
     Method(ClassMethod),
     StaticBlock(Block),
-    /// Field definition — **storage only** in this phase (initializers are
-    /// captured but not scheduled/evaluated semantics-wise yet).
+    /// Field definition; initializers run during class construction or
+    /// static initialization in source order.
     Field(ClassField),
 }
 
@@ -509,6 +509,8 @@ pub struct TemplateLit {
     pub quasis_utf16: Vec<Vec<u16>>,
     /// Raw source spelling of each quasi as UTF-16 code units.
     pub raw_quasis_utf16: Vec<Vec<u16>>,
+    /// False denotes an undefined cooked entry in a tagged template object.
+    pub cooked_valid: Vec<bool>,
     pub exprs: Vec<Expr>,
 }
 

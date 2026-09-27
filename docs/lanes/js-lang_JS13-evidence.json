@@ -1,0 +1,622 @@
+{
+  "ticket": "JS-13",
+  "source_commit": "e0e9d64a",
+  "platform": "Linux Boat",
+  "corpus": {
+    "test262_revision": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "input_sha256": "91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5",
+    "runner_sha256": "3b9f65119576b64e1753230e11dab8dbded3e135fe3a6d25a565652835af2717",
+    "timeout_seconds": 60.0,
+    "jobs": 4,
+    "filter": "",
+    "limit": 0
+  },
+  "comparison": {
+    "before": {
+      "classification_sha256": "57200b2353e2d10897783fe02654ab4c6307e8293794eb95712289be624d8c97",
+      "host_sha256": "09db566cdc2a494411ac73e64966552530af5aa4dd784e0ee597bd1eca29f93a"
+    },
+    "after": {
+      "classification_sha256": "a23f5d317984a57720fe3a11e6059b186ec49dead4ed5c77f586e26dbe76cc8c",
+      "host_sha256": "582b50c900411317585df8c08c8ecf921cee8706ad12b42fc9301f86961ffc4f"
+    },
+    "file_passes": [
+      39953,
+      39999
+    ],
+    "variant_passes": [
+      77691,
+      77762
+    ],
+    "file_gains": 46,
+    "variant_gains": 71,
+    "file_losses": [],
+    "variant_losses": [],
+    "gains_by_directory": {
+      "language/statements/for-await-of": 12,
+      "staging/sm/strict": 7,
+      "language/expressions/object": 3,
+      "language/expressions/template-literal": 3,
+      "staging/sm/syntax": 3,
+      "language/expressions/generators": 2,
+      "language/statements/generators": 2,
+      "language/expressions/async-generator": 1,
+      "language/expressions/delete": 1,
+      "language/expressions/function": 1,
+      "language/expressions/yield": 1,
+      "language/statements/break": 1,
+      "language/statements/class": 1,
+      "language/statements/continue": 1,
+      "language/statements/for-of": 1,
+      "language/statements/labeled": 1,
+      "language/statements/try": 1,
+      "staging/sm/async-functions": 1,
+      "staging/sm/expressions": 1,
+      "staging/sm/generators": 1,
+      "staging/sm/module": 1
+    }
+  },
+  "owned_nextest": {
+    "passed": 348,
+    "skipped": 1
+  },
+  "owned_doctests": {
+    "passed": 1,
+    "failed": 0
+  },
+  "frontier_before": 64,
+  "frontier_after": {
+    "passing": 32,
+    "runtime_failures": 4,
+    "parse_failures": 28
+  },
+  "gained_files": [
+    "language/expressions/async-generator/early-errors-expression-await-as-function-binding-identifier.js",
+    "language/expressions/delete/identifier-strict-recursive.js",
+    "language/expressions/function/static-init-await-binding.js",
+    "language/expressions/generators/static-init-await-binding.js",
+    "language/expressions/generators/yield-weak-binding.js",
+    "language/expressions/object/getter-body-strict-inside.js",
+    "language/expressions/object/method-definition/yield-weak-binding.js",
+    "language/expressions/object/setter-body-strict-inside.js",
+    "language/expressions/template-literal/invalid-legacy-octal-escape-sequence-8.js",
+    "language/expressions/template-literal/invalid-legacy-octal-escape-sequence-9.js",
+    "language/expressions/template-literal/invalid-legacy-octal-escape-sequence.js",
+    "language/expressions/yield/rhs-template-middle.js",
+    "language/statements/break/S12.8_A6.js",
+    "language/statements/class/definition/methods-gen-yield-weak-binding.js",
+    "language/statements/continue/S12.7_A6.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-elem-init-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-array-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-obj-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-elem-target-yield-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-rest-nested-array-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-rest-nested-obj-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-array-rest-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-id-init-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-prop-elem-init-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-prop-elem-target-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-prop-nested-array-yield-ident-valid.js",
+    "language/statements/for-await-of/async-func-decl-dstr-obj-prop-nested-obj-yield-ident-valid.js",
+    "language/statements/for-of/head-lhs-async-invalid.js",
+    "language/statements/generators/yield-as-generator-declaration-binding-identifier.js",
+    "language/statements/generators/yield-weak-binding.js",
+    "language/statements/labeled/value-yield-non-strict-escaped.js",
+    "language/statements/try/early-catch-function.js",
+    "staging/sm/async-functions/await-in-parameters-of-async-func.js",
+    "staging/sm/expressions/delete-name-parenthesized-early-error-strict-mode.js",
+    "staging/sm/generators/syntax.js",
+    "staging/sm/module/await-restricted-nested.js",
+    "staging/sm/strict/10.4.2.js",
+    "staging/sm/strict/11.4.1.js",
+    "staging/sm/strict/13.1.js",
+    "staging/sm/strict/B.1.1.js",
+    "staging/sm/strict/deprecated-octal-noctal-tokens.js",
+    "staging/sm/strict/regress-532254.js",
+    "staging/sm/strict/strict-function-statements.js",
+    "staging/sm/syntax/declaration-forbidden-in-label.js",
+    "staging/sm/syntax/escaped-let-static-identifier.js",
+    "staging/sm/syntax/let-as-label.js"
+  ],
+  "remaining_frontier": [
+    {
+      "path": "annexB/language/literals/regexp/class-escape.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/identity-escape.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/legacy-octal-escape.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/non-empty-class-ranges-no-dash.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/non-empty-class-ranges.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/quantifiable-assertion-followed-by.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "annexB/language/literals/regexp/quantifiable-assertion-not-followed-by.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-call-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-call-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-member-expr-decorator-member-expr.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-member-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-member-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/expressions/dynamic-import/import-attributes/2nd-param-in.js",
+      "reason": "runtime:TypeError"
+    },
+    {
+      "path": "language/expressions/tagged-template/invalid-escape-sequences.js",
+      "reason": "runtime:TypeError"
+    },
+    {
+      "path": "language/literals/regexp/named-groups/forward-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/await-using/syntax/await-using-declaring-let-split-across-two-lines.js",
+      "reason": "runtime:Test262Error"
+    },
+    {
+      "path": "language/statements/await-using/syntax/await-using-invalid-arraybindingpattern-does-not-break-element-access.js",
+      "reason": "runtime:Test262Error"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/class-element-decorator-call-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-decorator-member-expr.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/class-element-decorator-parenthesized-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-call-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-call-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-member-expr-decorator-member-expr.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-member-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-member-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference-yield.js",
+      "reason": "parse:SyntaxError"
+    },
+    {
+      "path": "language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js",
+      "reason": "parse:SyntaxError"
+    }
+  ],
+  "parser_corpus_source_commit": "e0e9d64a",
+  "merged_runtime_validation": {
+    "before": {
+      "classification_sha256": "a23f5d317984a57720fe3a11e6059b186ec49dead4ed5c77f586e26dbe76cc8c",
+      "host_sha256": "582b50c900411317585df8c08c8ecf921cee8706ad12b42fc9301f86961ffc4f"
+    },
+    "after": {
+      "classification_sha256": "33391817b044086b55a71812139ff54058ddbb033bfd115e0111834fb3219486",
+      "host_sha256": "6b610b00f0525ebbe01ecc4d4b177b446be709831845b94186bc8111411d24eb"
+    },
+    "file_passes": [
+      39999,
+      40132
+    ],
+    "variant_passes": [
+      77762,
+      77958
+    ],
+    "file_gains": 133,
+    "variant_gains": 196,
+    "file_losses": [],
+    "variant_losses": [],
+    "gains_by_directory": {
+      "built-ins/Array/prototype": 17,
+      "language/expressions/delete": 12,
+      "language/statements/class": 7,
+      "language/expressions/class": 6,
+      "language/statements/function": 6,
+      "language/expressions/await": 4,
+      "language/expressions/object": 4,
+      "built-ins/String/prototype": 3,
+      "language/arguments-object/mapped": 3,
+      "language/expressions/assignment": 3,
+      "language/types/reference": 3,
+      "staging/sm/Function": 3,
+      "staging/sm/object": 3,
+      "staging/sm/strict": 3,
+      "built-ins/Object/defineProperty": 2,
+      "built-ins/Object/freeze": 2,
+      "built-ins/Object/fromEntries": 2,
+      "built-ins/Object/getOwnPropertyDescriptor": 2,
+      "language/expressions/async-function": 2,
+      "language/expressions/async-generator": 2,
+      "language/expressions/grouping": 2,
+      "staging/sm/Symbol": 2,
+      "staging/sm/eval": 2,
+      "staging/sm/extensions": 2,
+      "staging/sm/regress": 2,
+      "built-ins/Infinity/S15.1.1.2_A3_T2.js": 1,
+      "built-ins/NaN/S15.1.1.1_A3_T2.js": 1,
+      "built-ins/Object/preventExtensions": 1,
+      "built-ins/Object/seal": 1,
+      "built-ins/String/S15.5.5.1_A1.js": 1,
+      "built-ins/String/S15.5.5.1_A2.js": 1,
+      "built-ins/String/S15.5.5.1_A3.js": 1,
+      "built-ins/String/S15.5.5.1_A4_T2.js": 1,
+      "built-ins/String/length.js": 1,
+      "built-ins/String/numeric-properties.js": 1,
+      "built-ins/undefined/S15.1.1.3_A3_T2.js": 1,
+      "language/arguments-object/non-strict-arguments-object-is-immutable.js": 1,
+      "language/expressions/arrow-function": 1,
+      "language/expressions/async-arrow-function": 1,
+      "language/expressions/function": 1,
+      "language/expressions/generators": 1,
+      "language/expressions/property-accessors": 1,
+      "language/function-code/S10.2.1_A2.js": 1,
+      "language/function-code/S10.2.1_A3.js": 1,
+      "language/function-code/S10.2.1_A4_T1.js": 1,
+      "language/function-code/S10.2.1_A5.1_T2.js": 1,
+      "language/function-code/S10.2.1_A5.2_T1.js": 1,
+      "language/global-code/S10.4.1_A1_T2.js": 1,
+      "language/statements/async-function": 1,
+      "language/statements/async-generator": 1,
+      "language/statements/generators": 1,
+      "language/statements/try": 1,
+      "language/types/number": 1,
+      "language/types/object": 1,
+      "staging/sm/Array": 1,
+      "staging/sm/Proxy": 1,
+      "staging/sm/expressions": 1,
+      "staging/sm/misc": 1,
+      "staging/sm/types": 1
+    },
+    "scope": "Joint integration gate includes incoming runtime changes, async-close repair, and JS14 facade; these gains are separate from the parser-only comparison.",
+    "elapsed_seconds": 764.903
+  },
+  "discarded_workspace_gate": {
+    "commit": "bbe7bec9d8a4846fdf43277dbd4c2db7d89f0ab0",
+    "nextest_passed": 2740,
+    "nextest_skipped": 10,
+    "nextest_seconds": 89.662,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0,
+    "owned_nextest_passed": 359,
+    "reason": "Retained pool-primary cache omitted both JS12 regex tests and reproduced all 15 fixed class-budget failures; not valid evidence."
+  },
+  "clean_baseline_workspace": {
+    "base": "bbe7bec9",
+    "target": "$HOME/amazing/target-js-lang-86c44031",
+    "passed": 2742,
+    "skipped": 10,
+    "seconds": 63.056,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0,
+    "owned_passed": 361
+  },
+  "merged_runtime_baseline": {
+    "before": {
+      "classification_sha256": "a23f5d317984a57720fe3a11e6059b186ec49dead4ed5c77f586e26dbe76cc8c",
+      "host_sha256": "582b50c900411317585df8c08c8ecf921cee8706ad12b42fc9301f86961ffc4f"
+    },
+    "after": {
+      "classification_sha256": "2fa7c99b01be3de4c290c3f4a21e8f0903b5d200f5c7769bb6e6108ba39a7b57",
+      "host_sha256": "c19bf3d878593c3857aec16c86b0f6fe893c18214ad994700f46a89642106a1c"
+    },
+    "file_passes": [
+      39999,
+      40096
+    ],
+    "variant_passes": [
+      77762,
+      77919
+    ],
+    "file_gains": 100,
+    "variant_gains": 163,
+    "file_losses": [
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-abrupt.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "runtime:Test262Error",
+            "observed": {
+              "protocol": 1,
+              "phase": "runtime",
+              "error_type": "Test262Error",
+              "detail": "Test262Error: Test262Error: Expected SameValue(\u00abfunction Object() { [native code] }\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+              "unsupported": null
+            }
+          },
+          {
+            "variant": "strict",
+            "status": "fail",
+            "reason": "runtime:Test262Error",
+            "observed": {
+              "protocol": 1,
+              "phase": "runtime",
+              "error_type": "Test262Error",
+              "detail": "Test262Error: Test262Error: Expected SameValue(\u00abfunction Object() { [native code] }\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+              "unsupported": null
+            }
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "async"
+          ],
+          "features": [
+            "async-iteration"
+          ],
+          "esid": "sec-asynciteratorclose"
+        },
+        "status": "fail",
+        "reason": "runtime:Test262Error"
+      },
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "fail",
+            "reason": "runtime:Test262Error",
+            "observed": {
+              "protocol": 1,
+              "phase": "runtime",
+              "error_type": "Test262Error",
+              "detail": "Test262Error: Test262Error: Expected SameValue(\u00abundefined\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+              "unsupported": null
+            }
+          },
+          {
+            "variant": "strict",
+            "status": "fail",
+            "reason": "runtime:Test262Error",
+            "observed": {
+              "protocol": 1,
+              "phase": "runtime",
+              "error_type": "Test262Error",
+              "detail": "Test262Error: Test262Error: Expected SameValue(\u00abundefined\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+              "unsupported": null
+            }
+          }
+        ],
+        "metadata": {
+          "flags": [
+            "async"
+          ],
+          "features": [
+            "async-iteration"
+          ],
+          "esid": "sec-asynciteratorclose"
+        },
+        "status": "fail",
+        "reason": "runtime:Test262Error"
+      },
+      {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "variants": [
+          {
+            "variant": "non-strict",
+            "status": "timeout",
+            "reason": "execution.deadline"
+          },
+          {
+            "variant": "strict",
+            "status": "pass",
+            "reason": "completed"
+          }
+        ],
+        "metadata": {
+          "esid": "pending"
+        },
+        "status": "timeout",
+        "reason": "execution.deadline"
+      }
+    ],
+    "variant_losses": [
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-abrupt.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Test262Error: Test262Error: Expected SameValue(\u00abfunction Object() { [native code] }\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-abrupt.js",
+        "variant": "strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Test262Error: Test262Error: Expected SameValue(\u00abfunction Object() { [native code] }\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js",
+        "variant": "non-strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Test262Error: Test262Error: Expected SameValue(\u00abundefined\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "language/statements/for-await-of/iterator-close-throw-get-method-non-callable.js",
+        "variant": "strict",
+        "status": "fail",
+        "reason": "runtime:Test262Error",
+        "observed": {
+          "protocol": 1,
+          "phase": "runtime",
+          "error_type": "Test262Error",
+          "detail": "Test262Error: Test262Error: Expected SameValue(\u00abundefined\u00bb, \u00abfunction Test262Error() { [native code] }\u00bb) to be true",
+          "unsupported": null
+        }
+      },
+      {
+        "path": "staging/sm/String/string-upper-lower-mapping.js",
+        "variant": "strict",
+        "status": "timeout",
+        "reason": "execution.deadline"
+      },
+      {
+        "path": "staging/sm/TypedArray/sort_modifications.js",
+        "variant": "non-strict",
+        "status": "timeout",
+        "reason": "execution.deadline"
+      }
+    ],
+    "gains_by_directory": {
+      "built-ins/Array/prototype": 17,
+      "language/statements/class": 7,
+      "language/expressions/class": 6,
+      "language/expressions/await": 4,
+      "language/expressions/object": 4,
+      "built-ins/String/prototype": 3,
+      "language/arguments-object/mapped": 3,
+      "language/statements/function": 3,
+      "staging/sm/Function": 3,
+      "staging/sm/object": 3,
+      "staging/sm/strict": 3,
+      "built-ins/Object/defineProperty": 2,
+      "built-ins/Object/freeze": 2,
+      "built-ins/Object/fromEntries": 2,
+      "built-ins/Object/getOwnPropertyDescriptor": 2,
+      "language/expressions/assignment": 2,
+      "language/expressions/async-function": 2,
+      "language/expressions/async-generator": 2,
+      "staging/sm/Symbol": 2,
+      "staging/sm/extensions": 2,
+      "built-ins/Object/preventExtensions": 1,
+      "built-ins/Object/seal": 1,
+      "built-ins/String/S15.5.5.1_A1.js": 1,
+      "built-ins/String/S15.5.5.1_A2.js": 1,
+      "built-ins/String/S15.5.5.1_A3.js": 1,
+      "built-ins/String/S15.5.5.1_A4_T2.js": 1,
+      "built-ins/String/length.js": 1,
+      "built-ins/String/numeric-properties.js": 1,
+      "language/expressions/arrow-function": 1,
+      "language/expressions/async-arrow-function": 1,
+      "language/expressions/function": 1,
+      "language/expressions/generators": 1,
+      "language/expressions/property-accessors": 1,
+      "language/function-code/S10.2.1_A2.js": 1,
+      "language/function-code/S10.2.1_A3.js": 1,
+      "language/function-code/S10.2.1_A4_T1.js": 1,
+      "language/function-code/S10.2.1_A5.1_T2.js": 1,
+      "language/function-code/S10.2.1_A5.2_T1.js": 1,
+      "language/statements/async-function": 1,
+      "language/statements/async-generator": 1,
+      "language/statements/generators": 1,
+      "language/types/number": 1,
+      "language/types/object": 1,
+      "staging/sm/Array": 1,
+      "staging/sm/misc": 1,
+      "staging/sm/types": 1
+    }
+  },
+  "fixed_base_commit": "bbe7bec9d8a4846fdf43277dbd4c2db7d89f0ab0",
+  "integration_repair_commit": "1de87f21ae7585d6cc5a6eb0466a06c3af43db6a",
+  "gate_source_commit": "04f896835ea42b6c4001673307d07518339cc722",
+  "workspace_gate": {
+    "source_commit": "04f896835ea42b6c4001673307d07518339cc722",
+    "platform": "Linux Boat",
+    "target": "$HOME/amazing/target-js-lang-86c44031",
+    "nextest_passed": 2750,
+    "nextest_skipped": 10,
+    "nextest_seconds": 57.146,
+    "owned_nextest_passed": 369,
+    "owned_nextest_skipped": 1,
+    "owned_doctests_passed": 1,
+    "doctest_suites": 31,
+    "doctests_passed": 4,
+    "doctests_failed": 0
+  },
+  "validated_source_sha256": {
+    "crates/amazing-js/src/env.rs": "a89e4ee698a5eb4b2a32bf2f318b92892edd055a1144563433b52ab7b013fcff",
+    "crates/amazing-js/src/interp.rs": "55b7fe467ed17f6ca2ee254be4db0bf8ea515a81e6cbc825daee2858cb9bc484",
+    "crates/amazing-js/src/interp_event_handler.rs": "b17613ce340c74012a13d511c2163508330ed6b7cb54aec85469cdaf016ba558",
+    "crates/amazing-js/src/parser.rs": "9c3ff7fc7d82e3ce83143277897c85fe2897f1f0880d90f294df5b458d99f9c1",
+    "crates/amazing-js/src/parser_event_handler.rs": "8ae6a07f4d030083e2d2fdd547e6de4daff57adc9e120bc551640725962e2cf9",
+    "crates/amazing-js/src/vm/compiler.rs": "46fc0641be14ee9181d3229e5ba3cbe34853ed5ca2f55f06fb4d351a4b57f654",
+    "crates/amazing-js/src/vm/mod.rs": "89ad626c387e8a31b6649e4983d9fcab02764cba113271f35d6c76a184d496c6",
+    "crates/amazing-js/src/vm/tests.rs": "511558bf90047c4dc6584a16d660c109b29c007b6387a416f9d37b9abbb76860"
+  }
+}

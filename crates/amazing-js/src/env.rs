@@ -126,6 +126,8 @@ pub struct Env {
     /// borrowing the whole frame, so a held `borrow()` on the frame never
     /// conflicts with an inner write.
     vars: HashMap<String, BindingCell>,
+    /// Live binding object for an HTML handler (a with-environment record).
+    pub(crate) binding_object: Option<Obj>,
     /// Receiver recorded by a call (`None` = transparent frame).
     pub this_binding: Option<JsValue>,
     /// Derived constructors have a local `this` binding that throws until super().
@@ -284,10 +286,17 @@ impl EnvHandle {
             kind,
             parent,
             vars: HashMap::new(),
+            binding_object: None,
             this_binding: None,
             this_uninitialized: false,
             class_private: None,
         })))
+    }
+
+    pub(crate) fn new_object(object: Obj, parent: EnvHandle) -> EnvHandle {
+        let frame = Self::new(EnvKind::Block, Some(parent));
+        frame.0.borrow_mut().binding_object = Some(object);
+        frame
     }
 
     /// Installs this frame's own class's private-name map (§9.2 NewPrivateEnvironment).
@@ -326,6 +335,15 @@ impl EnvHandle {
 
     pub(crate) fn realm(&self) -> Option<u64> { self.0.borrow().realm }
     pub(crate) fn set_realm(&self, realm: u64) { self.0.borrow_mut().realm = Some(realm); }
+
+    /// Nearest realm's global object, walking outward past object/with scopes
+    /// so a with-scope's final fallback checks the correct realm (§9.1.1.4.15).
+    pub(crate) fn realm_global_object(&self) -> Option<Obj> {
+        let frame = self.0.borrow();
+        frame.global_object.clone()
+            .or_else(|| frame.parent.as_ref().and_then(EnvHandle::realm_global_object))
+    }
+
 
     /// `var` declaration: mutable, non-lexical, redeclaration-friendly.
     pub fn declare_var(&self, name: &str, value: JsValue) -> Result<(), Throw> {
@@ -415,6 +433,17 @@ impl EnvHandle {
             }))),
         );
         Ok(())
+    }
+
+    /// Remove the mirrored environment entry after deleting a configurable
+    /// property of the global object. Lexical declarations are never removed.
+    pub(crate) fn remove_object_binding(&self, name: &str) -> bool {
+        let mut env = self.0.borrow_mut();
+        if env.vars.get(name).is_some_and(|cell| cell.0.borrow().lexical) {
+            return false;
+        }
+        env.vars.remove(name);
+        true
     }
 
     /// The cell in this frame, without consulting parent environments.

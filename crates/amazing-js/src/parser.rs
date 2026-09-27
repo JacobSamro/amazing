@@ -61,6 +61,9 @@ mod expressions;
 mod cover;
 #[path = "parser_module.rs"]
 mod module;
+#[path = "parser_event_handler.rs"]
+mod event_handler;
+pub use event_handler::parse_event_handler;
 
 /// Parses a full script; static imports and exports require [`parse_module`].
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
@@ -467,7 +470,7 @@ impl Parser {
         let t = self.cur().clone();
         match t.kind {
             TokenKind::Ident(name) => {
-                if name == "await" && (self.in_async > 0 || self.in_static_block > 0) {
+                if name == "await" && (self.in_async > 0 || self.in_static_block > 0 || self.module_goal) {
                     return Err(self.err_at(t.span.start, "await is reserved in async functions"));
                 }
                 if self.forbidden_binding_name(&name) {
@@ -707,6 +710,14 @@ fn ensure_simple_assignable(expr: &Expr, sloppy: bool) -> Result<(), SyntaxError
         ExprKind::Paren(inner) => ensure_simple_assignable(inner, sloppy),
         ExprKind::Call { .. } if sloppy && !optional_chain_target(expr) => Ok(()),
         _ => Err(SyntaxError::new("invalid simple assignment target", expr.span.start.line, expr.span.start.column)),
+    }
+}
+
+fn is_identifier_reference(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Ident(_) => true,
+        ExprKind::Paren(inner) => is_identifier_reference(inner),
+        _ => false,
     }
 }
 
@@ -2201,4 +2212,67 @@ mod construct_tests {
         assert!(parse_script("class C { #x = () => 1; m() { return this.#x; } }").is_ok());
         assert!(parse_script("async function outer() { function inner() { await(1); } }").is_ok());
     }
+
+    #[test]
+    fn parser_frontier_rejects_invalid_grammar_contexts() {
+        let cases = [
+            "(async function* await() {});",
+            "'use strict'; delete ((identifier));",
+            "function* g() { yield 3 + yield 4; }",
+            "var g = function*() { yield 3 + yield 4; };",
+            "({ *g() { yield 3 + yield 4; } });",
+            "class A { *g() { yield 3 + yield 4; } }",
+            "void { get x() { 'use strict'; public = 42; } };",
+            "void { set x(value) { 'use strict'; public = 42; } };",
+            r"`\8`;",
+            r"`\9`;",
+            r"`\00`;",
+            "outer: do { (function(){break outer;})(); } while(0);",
+            "outer: do { (function(){continue outer;})(); } while(0);",
+            "while (0) { (() => { break; })(); }",
+            "outer: while (0) { ({ m() { continue outer; } }); }",
+            "for (async of [1]) ;",
+            "try {} catch (e) { function e() {} }",
+        ];
+        let accepted: Vec<_> = cases.into_iter().filter(|s| parse_script(s).is_ok()).collect();
+        assert!(accepted.is_empty(), "accepted invalid sources: {accepted:?}");
+    }
+
+    #[test]
+    fn parser_frontier_accepts_valid_grammar_contexts() {
+        let cases = [
+            "function* yield() { (yield 3) + (yield 4); }",
+            r"for (asy\u006ec of [1]) ;",
+            "for ((async) of [1]) ;",
+            r"yi\u0065ld: while (false) { continue yi\u0065ld; }",
+            "outer: yield: while (false) { continue outer; }",
+            "class C { static { (function await(await) {}); } }",
+            "class C { static { (function* await(await) {}); } }",
+            "let yield = 4; async function f() { for await ([x = yield] of [[]]) {} }",
+            r"yi\u0065ld: 1;",
+            "function* g() { return `1${yield}3${4}5`; }",
+            r"tag`\xg`; tag`\u{110000}`; tag`\8`;",
+            "`outer${tag`inner`}`;",
+            "for (p = import('x', 'key' in {}); false;) ;",
+            "async function f() { await using\n let = 'x'; var using, let; }",
+            "async function f() { await using[x]; }",
+            "async function outer() { ({ m() { await(1); } }); }",
+            "function* outer() { ({ m() { yield(1); } }); }",
+            "outer: while (0) { (function() { outer: while (0) { break outer; } })(); }",
+        ];
+        let rejected: Vec<_> = cases.into_iter().filter_map(|s| parse_script(s).err().map(|e| (s,e))).collect();
+        assert!(rejected.is_empty(), "rejected valid sources: {rejected:?}");
+    }
+
+    #[test]
+    fn tagged_template_preserves_invalid_cooked_entries() {
+        let p = parse_script(r"tag`\u{110000}${x}\8`").unwrap();
+        let StmtKind::Expression(Expr { kind: ExprKind::TaggedTemplate { template, .. }, .. }) = &p.body[0].kind else {
+            panic!("tagged template");
+        };
+        assert_eq!(template.cooked_valid, [false, false]);
+        assert_eq!(template.raw_quasis_utf16[0], r"\u{110000}".encode_utf16().collect::<Vec<_>>());
+        assert_eq!(template.raw_quasis_utf16[1], r"\8".encode_utf16().collect::<Vec<_>>());
+    }
+
 }
