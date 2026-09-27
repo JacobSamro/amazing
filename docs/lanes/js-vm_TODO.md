@@ -577,3 +577,114 @@ Workspace `cargo nextest run --workspace --locked --no-fail-fast`: **3,288
 tests run, 3,288 passed (2 slow), 15 skipped, 0 failed.** `cargo test
 --workspace --locked --doc`: all green (amazing_js 1 passed, amazing_html 1
 passed, every other crate 0 as expected).
+
+## JSVM-9: measuring and closing the generator/async gap at full scale
+
+Base: dev `196439b5` (JS-18 cluster 1). The lane branch was rebased onto it mid-ticket; the
+series is `765fc876..d9a7b16c`.
+
+### Why JSVM-8 only gained 8 files
+
+- **The timeout was not the cause.** Nine generator-heavy directories at `--timeout 60`
+  (`statements|expressions/generators`, `statements|expressions/async-generator`,
+  `statements/class/elements`, `GeneratorPrototype`, `AsyncGeneratorPrototype`, `Iterator`,
+  `for-await-of`) went from 4200 passing files at `079f2030` to 4278 at `d4c0da6e` (+78, 0 lost).
+  Neither run had a single timeout.
+- **Most generators never reach the coroutine.** `make_function` and `method_value` compile every
+  generator function or method body they can to per-function bytecode (`vm::compile_function_item`
+  and `compile_class_method`), whether or not `AMAZING_JS_VM` is set. Only bodies the compiler
+  rejects fall back to `FunctionBody::Block` and the JSVM-8 coroutine; before JSVM-8 there were 56
+  of those in the nine directories ("generators are not implemented"). The fallback itself works:
+  a `CompileError` leaves the function an ordinary `Block` body, which the coroutine hook catches.
+- **The failures triage counted as "generator failures" were bugs in the VM's own async generator
+  and in shared prototypes.** None of them was a missing coroutine:
+  - `yield*` in an async generator used the sync iterator protocol and never awaited.
+  - `yield` and `return` did not await their operand.
+  - `return()` resumptions did not await.
+  - Each VM generator got a private stand-in for `%GeneratorPrototype%` and
+    `%AsyncGeneratorPrototype%`.
+  - There was no `%AsyncIteratorPrototype%`.
+  - Rejections carried un-normalized engine errors.
+  - Async functions the VM does not compile ran synchronously, with `await` of a pending promise
+    evaluating to `undefined`.
+
+  In the whole `language/` directory, `class` statements and expressions (739 failures at base)
+  and async-generator (191 failures) were mostly these clusters.
+
+### What landed
+
+| Commit | Change | Cluster closed |
+|---|---|---|
+| `765fc876` | VM async generators: `yield v`/`return v` await (compiler emits `Await`); a `return(v)` resumption at a yield awaits `v` first (AsyncGeneratorUnwrapYieldResumption, `VmFrame::await_return`); new `YieldDelegateAsync` instruction backed by `vm/async_delegate.rs` (GetIterator async with CreateAsyncFromSyncIterator fallback, every inner result awaited, AsyncIteratorClose when `throw` is missing); `return()` on a not-started or completed generator awaits (AsyncGeneratorAwaitReturn); Await's PromiseResolve reads `constructor`. VM generators inherit the realm's shared `%GeneratorPrototype%`/`%AsyncGeneratorPrototype%`, whose `next`/`return`/`throw` dispatch to either backend with brand checks (async ones reject instead of throwing); `@@toStringTag`, `constructor`, `%GeneratorPrototype%` → `%IteratorPrototype%`, and a real `%AsyncIteratorPrototype%` | yield* protocol (~450 files across the async-generator, class async-gen-method and private-method dirs), Iterator helpers on generators (~140), GeneratorFunction and AsyncGeneratorFunction `instance-prototype`/`prototype/prototype`/`proto-from-ctor-realm-prototype` |
+| `6b61110c` | Normalize engine-internal errors before rejecting async function and generator promises | `reason.constructor === TypeError` checks (~200) |
+| `624b8c78` | Async functions the VM does not compile run on the coroutine: they execute synchronously until their first `await`, park with `Suspend::Await`, and resume from the awaited value's reaction; completion settles through `vm::async_complete`, so thenables are adopted. `for-await-of` in such a body parks the same way. Every coroutine body runs in segments that re-establish the function's own frame (`this`/`new.target`/`super`/home) and strictness on each resumption. Port of lumen `drive_async`/`coroutine_await` @ `f6c9860d`, MIT (THIRD_PARTY_NOTICES row appended) | Private and static async methods returning or awaiting promises (class/elements), and async functions with pending awaits |
+| `d2c5830d` | `for-await-of` awaits the value only for a sync iterator | Tick order (`await/for-await-of-interleaved.js`) |
+| `d9a7b16c` | Idle coroutine workers are capped at 16 | Thread retention after bursts (below) |
+
+### Measured numbers (venus-001, `--timeout 60`)
+
+- **Nine directories, `079f2030` → `d9a7b16c`:** 4200 → 4849 files passing, **0 lost, +649**.
+  Failures went from 811 to 162.
+- **`language/` plus the generator, async-function, Promise and Iterator built-ins directories,
+  `196439b5` → `d9a7b16c`:** 22363 → 23391 passing, **+1030, 2 lost**. `language/` alone went
+  from 20835 to 21695 (failures 2629 → 1769).
+  - Both losses were false passes that are now exposed:
+    `statements/await-using/syntax/await-using-invalid-assignment-next-expression-for.js` and
+    `statements/for-of/head-await-using-bound-names-fordecl-tdz.js`.
+  - The inner `for (await using …)` never throws, at base or head; it is a pre-existing tree-walker
+    bug.
+  - At base, the outer `asyncTest` body could not be compiled either. It ran synchronously, and its
+    `await assert.throwsAsync(...)` evaluated a pending promise as `undefined`, so `$DONE` fired
+    before the assertion.
+- **Tests:** crate nextest 445/445 (1 skipped), crate doctest 1/1. Workspace nextest 3465/3465
+  (17 skipped); workspace doctests 4 passed, 0 failed.
+
+### Thread and memory cost of the pooled-OS-thread coroutine
+
+- **Full `language/` run.** Every Test262 file is its own host process. Sampled at 1 s over 292
+  samples, no host process had more than 7 threads, and the peak RSS of a single process was
+  59 MB (60408 kB). The corpus does not accumulate threads.
+- **In-process probes** (`host_final`; the bodies use a private name so they stay off the VM):
+
+  | Probe | Peak threads | Threads at end | Peak RSS |
+  |---|---|---|---|
+  | 20 000 generators run to completion one after another | 4 | 4 | 14 MB |
+  | 5 000 async functions in flight together, each awaiting twice | 5001 | 17 | 193 MB |
+  | 2 000 concurrently suspended generators, then drained | 1578 | 17 | 66 MB |
+  | 2 000 generators suspended and abandoned | 2001 | — | 70 MB |
+
+  - The sequential case shows the pool reuses workers.
+  - In the two concurrent cases, each suspended coroutine held its own OS thread. Before the idle
+    cap, all 5000 workers stayed parked after the burst; now 16 do.
+  - Stacks reserve 64 MB of address space each but commit only about 35 kB.
+- **Known limitation: threads grow with concurrency and leak on abandonment.**
+  - The thread count grows with the number of concurrently suspended coroutine bodies, with no
+    upper bound.
+  - A coroutine that is suspended and never resumed or completed keeps its thread parked for the
+    life of the process. When the driver is dropped, `park` refuses to unwind, because unwinding
+    would run `finally`/`return()` JS against an interpreter that may be tearing down.
+  - This applies only to bodies the bytecode VM cannot compile; VM generators and async functions
+    use heap frames and no threads.
+  - Real fixes, not done here, would be moving more bodies onto the VM, or unwinding abandoned
+    coroutines with JS disabled.
+  - If a platform cannot spawn another thread, generators throw `UNSUPPORTED_MSG` and async
+    functions fall back to the old synchronous path.
+
+### Remaining clusters (not generator machinery; flagged in `questions.md`)
+
+In the nine directories:
+
+- 46 files: `$DONE called more than once` in `for-await-of` dstr.
+- 42 files in the wide run: `invalid assignment target` for an object-rest assignment pattern in
+  `for (… of …)` heads, and no IteratorClose for assignment array patterns. Identical in plain
+  `for-of`.
+- 80 files: `ary-ptrn-elem-id-iter-val-array-prototype`. Destructuring ignores an overridden
+  `Array.prototype[Symbol.iterator]`, for generator and ordinary functions alike.
+- Parameter defaults referencing `arguments` throw a ReferenceError in ordinary functions too.
+- Static class elements named `prototype` (methods, getters and setters as well as generators) do
+  not throw.
+- `GeneratorFunction/instance-restricted-properties.js`: `caller`/`arguments` are not restricted.
+- Direct-eval private-name, `super` and `new.target` scoping in class elements.
+- Async generator bodies on the coroutine path still use the synchronous `await_value`. They are
+  rare now that the VM handles async generators correctly; porting lumen's `drive_async_gen`
+  queue would close it.
