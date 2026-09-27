@@ -268,6 +268,15 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::html_reflection::handles(operation) {
         return crate::html_reflection::invoke(host, operation, receiver, args);
     }
+    if crate::aria_reflection::handles(operation) {
+        return crate::aria_reflection::invoke(host, operation, receiver, args);
+    }
+    if crate::animation_bindings::handles(operation) {
+        return crate::animation_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::clipboard_bindings::handles(operation) {
+        return crate::clipboard_bindings::invoke(host, operation, receiver, args);
+    }
     let constructor = matches!(
         operation,
         O::TextConstructor

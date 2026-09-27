@@ -700,6 +700,7 @@ pub(crate) fn install(
     adapter.install_dom_unscopables()?;
     adapter.install_window_event_target()?;
     adapter.install_selection_global()?;
+    adapter.install_navigator_clipboard()?;
     adapter.install_storage_interfaces()?;
     adapter.install_messaging()?;
     adapter.install_integrator_assist_globals()?;

@@ -19,6 +19,7 @@ pub mod attr;
 pub mod dataset;
 pub mod collection;
 pub mod abort;
+pub mod animation;
 pub mod observable;
 pub mod document_surface;
 pub mod legacy_document;
@@ -159,6 +160,12 @@ pub struct Dom {
     template_contents: Vec<(NodeIdx, NodeIdx)>,
     template_owner_documents: Vec<(NodeIdx, NodeIdx)>,
     observables: observable::Observables,
+    animations: animation::Animations,
+    /// In-memory backing store for `navigator.clipboard`'s `readText`/
+    /// `writeText` (DOM-B-REFLECT). Not a real OS clipboard integration --
+    /// scoped to this Dom, like every other piece of embedding-free state
+    /// here -- but enough for same-page/same-session copy-paste round trips.
+    clipboard_text: Vec<u16>,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -173,6 +180,9 @@ impl Dom {
     pub fn dom_exception(&self, slot: usize) -> Option<&DomExceptionData> {
         self.dom_exceptions.get(slot)
     }
+    /// In-memory `navigator.clipboard` backing store (DOM-B-REFLECT).
+    pub fn clipboard_text(&self) -> &[u16] { &self.clipboard_text }
+    pub fn set_clipboard_text(&mut self, text: Vec<u16>) { self.clipboard_text = text; }
     /// Listener and event registry for this document arena.
     pub fn events(&self) -> &events::EventTargets { &self.events }
     pub fn events_mut(&mut self) -> &mut events::EventTargets { &mut self.events }
@@ -225,6 +235,8 @@ impl Dom {
             template_contents: Vec::new(),
             template_owner_documents: Vec::new(),
             observables: observable::Observables::default(),
+            animations: animation::Animations::default(),
+            clipboard_text: Vec::new(),
             doctype: None,
         };
         dom.nodes.push(Node {
