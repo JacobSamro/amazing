@@ -279,6 +279,24 @@ impl Interpreter {
     // code, so they are pure overhead: this writes the identical Property
     // this Interpreter and value.rs would have produced, directly.
     fn ordinary_set_data_property(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, existing: Option<Property>) -> Result<bool, Throw> {
+        // define_own_property's own entry point checks these two traps before
+        // touching `target`; skipping straight to the ordinary algorithm below
+        // would silently bypass a Proxy's/WindowProxy's [[DefineOwnProperty]]
+        // trap when `receiver_object` (passed in here as `target`) is itself
+        // one, which is the general path this fast path replaces. Traps need a
+        // real descriptor object handed to arbitrary trap code, so build one
+        // and fall back for this (rare -- ordinary objects are the common
+        // case) branch only.
+        if self.is_window_proxy(target) || self.proxy_parts(target).is_some() {
+            let mut descriptor = JsObject::ordinary();
+            descriptor.set_own("value", value);
+            if existing.is_none() {
+                for name in ["writable", "enumerable", "configurable"] {
+                    descriptor.set_own(name, JsValue::Bool(true));
+                }
+            }
+            return self.define_own_property(target, key, &JsValue::object(descriptor));
+        }
         if let Some(mut property) = existing {
             // Caller (set_with_receiver) already confirmed this property has
             // no getter/setter and is writable, so only .value changes here;
