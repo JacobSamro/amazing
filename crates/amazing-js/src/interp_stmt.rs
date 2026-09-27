@@ -1958,6 +1958,23 @@ impl Interpreter {
                             return Err(Throw::type_error("generator functions are not constructors"));
                         }
                         self.hoist(&b.body, &e)?;
+                        // The rest of FDI's lexical-name reservation is fused with statement
+                        // execution in this tree walker (`exec_stmts` declares a top-level
+                        // `let`/`const`/class binding when it reaches that statement, not
+                        // up front) -- fine for an ordinary function, whose body runs
+                        // synchronously right here anyway, but wrong for a generator, whose
+                        // body is about to be deferred to a coroutine. A same-frame
+                        // redeclaration conflict (e.g. a parameter default's `eval("var x")`
+                        // against a top-level `let x` in the body) must still surface from
+                        // this call, synchronously, per spec -- so check for it here, against
+                        // exactly the names `exec_stmts` would later try to declare.
+                        for name in block_lexical_names(&b.body) {
+                            if e.would_conflict_as_lexical(&name) {
+                                return Err(Throw::syntax_error(format!(
+                                    "identifier '{name}' has already been declared"
+                                )));
+                            }
+                        }
                         return Ok(self.start_thread_generator(&o, b, e, fun.is_async, strict_function));
                     }
                     if let Some(code) = &async_body { return code.call_async_with_env(self, e); }
