@@ -169,6 +169,23 @@ impl RuntimeBindingHost<'_> {
             .ok_or_else(|| Throw::type_error("Missing EventTarget prototype"))?;
         self.js.binding_set_global_prototype(&prototype)
     }
+
+    /// `navigator.clipboard` (DOM-B-REFLECT). `navigator` is an ad-hoc plain
+    /// object (not a WebIDL interface installed via `install_interfaces`), so
+    /// this mirrors the storage lane's lazy-singleton-getter pattern in
+    /// `runtime_host_storage.rs` rather than going through `interfaces.rs`.
+    pub(super) fn install_navigator_clipboard(&mut self) -> Result<(), Throw> {
+        let global = self.js.binding_global_object();
+        let navigator = self.js.binding_get_property(&global, "navigator")?;
+        let navigator = if matches!(navigator, JsValue::Object(_)) { navigator } else {
+            let value = self.js.binding_create_object(None)?;
+            self.define_data_property(&global, "navigator", value.clone(), true, false, true)?;
+            value
+        };
+        let getter = self.native("clipboard", 0,
+            NativeEntry::Operation(Operation::NavigatorClipboard), HostCallPolicy::CallOnly);
+        self.define_accessor_property(&navigator, "clipboard", Some(getter), None, true, true)
+    }
 }
 
 #[cfg(test)]
