@@ -738,7 +738,7 @@ fn std_temporal_parse_time(text: &str, fields: &mut [i64; 10]) -> Result<(), Thr
     Ok(())
 }
 
-fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool, Option<&str>), Throw> {
+fn std_temporal_parse_annotations(text: &str, require_iso_calendar: bool) -> Result<(&str, bool, Option<&str>), Throw> {
     let invalid = || Throw::range_error("invalid Temporal annotation");
     let Some(first) = text.find('[') else { return Ok((text, false, None)); };
     let body = &text[..first];
@@ -753,7 +753,18 @@ fn std_temporal_parse_annotations(text: &str) -> Result<(&str, bool, Option<&str
         tail = &rest[end + 1..];
         let annotation = value.strip_prefix('!').unwrap_or(value);
         if let Some(name) = annotation.strip_prefix("u-ca=") {
-            if (!calendar && !name.eq_ignore_ascii_case("iso8601"))
+            // Only the FIRST calendar annotation is ever consulted (later
+            // ones are still grammar-checked but otherwise ignored, per
+            // "second annotation ignored" in both PlainDate's and
+            // PlainTime's own argument-string-calendar-annotation.js). This
+            // engine's calendar model is iso8601-only (ADR-locked), so a
+            // calendar-bearing kind (PlainDate/PlainDateTime/PlainYearMonth/
+            // PlainMonthDay/ZonedDateTime) must reject any other value --
+            // but Temporal.PlainTime has no calendar slot at all and never
+            // canonicalizes this value, so any syntactically valid calendar
+            // ID (including a real but unsupported one like "hebrew", or an
+            // outright unknown one) is accepted and simply discarded.
+            if (!calendar && require_iso_calendar && !name.eq_ignore_ascii_case("iso8601"))
                 || (calendar && (critical_calendar || value.starts_with('!'))) {
                 return Err(invalid());
             }
@@ -847,7 +858,7 @@ fn std_temporal_parse(kind: StdTemporalKind, text: &str) -> Result<[i64; 10], Th
         return Ok(values);
     }
     let invalid = || Throw::range_error("invalid Temporal string");
-    let (text, _calendar, _zone) = std_temporal_parse_annotations(text)?;
+    let (text, _calendar, _zone) = std_temporal_parse_annotations(text, kind != StdTemporalKind::PlainTime)?;
     if text.ends_with('Z') || text.ends_with('z') { return Err(invalid()); }
     let mut values = [0; 10];
     match kind {
@@ -951,7 +962,23 @@ fn std_temporal_from_fields(i: &mut Interpreter, kind: StdTemporalKind, value: J
     }
     if let Ok(data) = std_epoch_record(&value, Some(StdEpochKind::ZonedDateTime)) {
         if matches!(kind, StdTemporalKind::PlainDate | StdTemporalKind::PlainTime | StdTemporalKind::PlainDateTime) {
-            return std_epoch_local_fields(&data);
+            let mut fields = std_epoch_local_fields(&data)?;
+            // std_epoch_local_fields always returns the full local
+            // date+time; PlainDate/PlainTime keep only their own half,
+            // matching the zeroing convention every other conversion path
+            // above uses (a bare PlainTime's own fields[0..3] are always
+            // 0) -- confirmed by PlainTime's own
+            // argument-zoneddatetime-negative-epochnanoseconds.js/
+            // argument-zoneddatetime-balance-negative-time-units.js, where
+            // compare()/equals() against a ZonedDateTime instance compared
+            // the receiver's zeroed date fields against the ZDT's real
+            // local date and never matched.
+            match kind {
+                StdTemporalKind::PlainDate => fields[3..9].fill(0),
+                StdTemporalKind::PlainTime => fields[0..3].fill(0),
+                _ => {}
+            }
+            return Ok(fields);
         }
     }
     match &value {
@@ -1271,12 +1298,14 @@ fn std_temporal_to_string(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>
     if !option.is_undefined() && !option.is_object() {
         return Err(Throw::type_error("Temporal options must be an object"));
     }
-    // Duration.prototype.toString has no calendarName option (Durations
-    // carry no calendar) -- reading it at all is observable (and wrong)
-    // via a Proxy-like options bag, confirmed by
-    // Duration/prototype/toString/order-of-operations.js, whose expected
-    // property-access log never includes "get options.calendarName".
-    let calendar_name = if data.kind == StdTemporalKind::Duration { "auto".to_string() }
+    // Duration.prototype.toString/PlainTime.prototype.toString have no
+    // calendarName option (neither Durations nor a bare time-of-day carry a
+    // calendar) -- reading it at all is observable (and wrong) via a
+    // Proxy-like options bag, confirmed by
+    // Duration/prototype/toString/order-of-operations.js and PlainTime's own
+    // options-read-before-algorithmic-validation.js, whose expected
+    // property-access logs never include "get options.calendarName".
+    let calendar_name = if matches!(data.kind, StdTemporalKind::Duration | StdTemporalKind::PlainTime) { "auto".to_string() }
         else if option.is_undefined() { "auto".to_string() }
         else {
             let value = i.get_prop(&option, "calendarName")?;

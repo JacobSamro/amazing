@@ -216,10 +216,17 @@ fn std_temporal_add_values(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
             std_temporal_validate(StdTemporalKind::Duration, &result)?;
         }
         StdTemporalKind::PlainTime => {
-            if duration[0..4].iter().any(|value| *value != 0) {
-                return Err(Throw::range_error("date units are not valid for PlainTime"));
-            }
-            let total = std_temporal_time_ns(&result) + factor as i128 * std_temporal_duration_time_ns(&duration);
+            // AddDurationToTime (spec): ToInternalDurationRecord splits the
+            // duration into a [[Date]] part (years/months/weeks/days) and a
+            // [[Time]] part (hour..nanosecond); AddTime only ever consumes
+            // the [[Time]] part -- a duration's date units are silently
+            // IGNORED here, never a RangeError, unlike Duration.add/subtract
+            // (which reject calendar units unconditionally since there is no
+            // relativeTo to redistribute them through). Confirmed by
+            // argument-higher-units.js.
+            let time_only = std_temporal_duration_time_ns(&[0, 0, 0, 0,
+                duration[4], duration[5], duration[6], duration[7], duration[8], duration[9]]);
+            let total = std_temporal_time_ns(&result) + factor as i128 * time_only;
             std_temporal_set_time_ns(&mut result, total);
         }
         StdTemporalKind::PlainDate | StdTemporalKind::PlainDateTime | StdTemporalKind::PlainYearMonth => {
