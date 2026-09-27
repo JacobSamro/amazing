@@ -1505,17 +1505,94 @@ Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
   since/until's calls to the shared validator are untouched. Re-verified
   zero-loss after the fix.
 
-Remaining PlainDateTime-cluster files not yet triaged: calendar-field-
-ordering (`calendarresolvefields-error-ordering.js`), monthCode strict-type
-corpus inconsistency (`month-code-wrong-type.js`, `monthcode-invalid.js`),
-`observable-get-overflow-argument-primitive.js`, sub-second precision
-(`add-large-subseconds.js`/`subtract-large-subseconds.js`), a likely
-`RoundNumberToIncrementAsIfPositive` sign-handling gap
-(`negative-time.js`/`rounding-direction.js`), `rounding-edge-of-range.js`,
-`toZonedDateTime/timezone-string-datetime.js` (same theme as the reverted
-Duration timezone-string item, likely the same unresolved root cause),
-`withCalendar/calendar-time-string.js` + `missing-argument.js`, four
-`withPlainTime/argument-string-*.js`/`year-zero.js` files (PlainTime's parse
-arm not validating the date-prefix grammar it discards), and
-`order-of-operations.js` (deprioritized). PlainDate (42 files) is next per
-the coordinator's ordering.
+## JSS-temporal-port item 2 continued: PlainDate cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8704 pass / 502 fail | 8794 pass / 412 fail |
+| `built-ins/Temporal` files | 4352 pass / 251 fail | 4397 pass / 206 fail |
+
++90 pass variants (+45 pass files), zero lost, verified by a full (path,
+variant) pass-set diff against the PlainDateTime-cluster commit's baseline
+(`js-stdlib-pdt-round-fix.jsonl`, captured at 084c0fd1/3a5a1b2e). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (17
+skipped, 0 failed). `cargo test --workspace --locked --doc`: all green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_plain_to_zoned`'s PlainDate branch required `item` to be an
+  object with a `timeZone` property, but per spec
+  (`PlainDate.prototype.toZonedDateTime`) `item` may be a bare
+  TimeZoneLike value directly (a string or a ZonedDateTime instance), and
+  when `item` IS an object whose `timeZone` property is itself `undefined`,
+  the WHOLE object is used as the TimeZoneLike value (rather than
+  throwing). Restructured to match, and added the missing
+  `ISODateTimeWithinLimits` check on the combined date+time when a
+  `plainTime` is supplied (the date alone or the time alone can each be
+  within their own narrower limits without the combination being valid).
+- `std_epoch_zone_from_string` was missing the "no `Z`, no explicit numeric
+  offset, but a bracket annotation present" branch (e.g.
+  `"2021-08-19T17:30[UTC]"`) -- it always required an offset sign even
+  when an annotation could supply the zone on its own. Added the missing
+  branch (falls through to the pre-existing `Err(invalid())` only when
+  there is truly no zone information at all -- no `Z`, no offset, AND no
+  annotation).
+- The bare-numeric-offset-as-zone-identifier check (`"+01:00"` used
+  directly as a zone, no annotation) only rejected sub-minute offsets by
+  their NUMBER value (`ns % 60s != 0`), missing that
+  `TimeZoneNumericUTCOffset` forbids a seconds/sub-second component
+  *syntactically* -- `"+01:00:00"` must be rejected even though it is
+  numerically a whole minute. Added a syntactic check (offset text has a
+  fractional part, a 6-digit compact form, or two `:` separators) alongside
+  the numeric one.
+- `std_temporal_parse`'s `PlainTime` arm discarded its date prefix (before
+  a `T`/`t`/space separator) entirely unvalidated -- a syntactically
+  invalid or out-of-range discarded date (extended year `-000000`, a
+  non-ASCII minus sign, ...) must still throw. Fixed to validate the date
+  prefix via `std_temporal_parse_date` whenever it is non-empty (an
+  explicit bare `"T15:23:30"` with NO date at all -- an empty prefix --
+  is not itself a failure, confirmed by `PlainTime.from`'s own
+  `argument-string.js`/`argument-string-with-time-designator.js`; the
+  first attempt at this fix validated even the empty case unconditionally
+  and regressed 39 files before this distinction was found).
+- The `Temporal.ZonedDateTime` constructor's `timeZone` parameter reused
+  the same lenient zone resolver as `.from()`/`toZonedDateTime()`
+  (`ToTemporalTimeZoneIdentifier`, which accepts a full ISO date-time
+  string or a ZonedDateTime instance), but per spec the constructor uses
+  the much narrower `ParseTimeZoneIdentifier` (a bare TimeZoneIdentifier
+  string only -- an IANA name or a minute-precision numeric offset; even a
+  ZonedDateTime instance is a `TypeError`, not reused for its own zone).
+  Added `std_epoch_zone_value_strict` and switched the constructor to it --
+  this also fixes `ZonedDateTime/timezone-iso-string.js`, a regression an
+  earlier segment introduced and reverted while investigating a different,
+  related test (`relativeto-propertybag-timezone-string-datetime.js`,
+  which is now ALSO fixed as a side effect of the annotation-without-offset
+  branch above, along with its Duration/ZonedDateTime siblings across
+  compare/round/total/from/equals/since/until -- 6 files that were
+  previously left as an unidentified blocker).
+
+Remaining PlainDate-cluster files (8, down from 35): `from`'s
+`calendarresolvefields-error-ordering.js`, `month-code-wrong-type.js`/
+`monthcode-invalid.js` (known monthCode strict-type corpus inconsistency),
+`observable-get-overflow-argument-primitive.js`,
+`options-read-before-algorithmic-validation.js`; `add`/`subtract`'s
+`argument-duration-max(-plus-min-date).js`, `order-of-operations.js`,
+`balance-smaller-units-basic.js`; `toPlainDateTime`/`toZonedDateTime`'s
+`argument-string-calendar-annotation.js` and
+`argument-string-time-designator-required-for-disambiguation.js` (both are
+the still-deferred PlainTime-string-ambiguity-grammar feature -- a string
+that could also parse as a date requires an explicit `T` prefix to be
+accepted as a time; this needs the real `TemporalTimeString` ambiguity
+production, not a local bug fix, and was intentionally not attempted this
+checkpoint); `withCalendar`'s `calendar-time-string.js`/
+`missing-argument.js`. PlainTime (39 files) is next per the coordinator's
+ordering (Duration/PlainDateTime/PlainDate now all worked this ticket). Note:
+the PlainDateTime-cluster checkpoint above listed several files as still
+open (`toZonedDateTime/timezone-string-datetime.js`, the `withPlainTime`
+`argument-string-*.js`/`year-zero.js` family, `calendarresolvefields-error-
+ordering.js`, monthCode/`observable-get-overflow-argument-primitive.js`) --
+all of the timezone-string-datetime.js/withPlainTime/year-zero/minus-sign
+ones were fixed as part of THIS (PlainDate) checkpoint's shared-machinery
+fixes, since they all funnel through the same epoch-string/PlainTime-parse
+code paths; the rest remain open and are re-listed in the "remaining" set
+above.
