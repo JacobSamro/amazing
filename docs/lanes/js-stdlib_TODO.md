@@ -1346,3 +1346,96 @@ Instant 22, PlainMonthDay 11, Now 8, from the item-2 survey table) were not
 started.
 
 
+
+## JSS-temporal-port item 2 continued: Duration cluster (checkpoint)
+
+Fixed base: `d62e6d9e` (item 2's ZonedDateTime.from checkpoint, merged into
+`dev`). Pinned Test262 unchanged: `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+Coordinator's instruction: work the rest of item 2's cluster table, largest
+first -- Duration (63/60 measured), then PlainDateTime (45), then PlainDate
+(42) -- porting from `boa-dev/temporal` (temporal_rs) or `lucid-softworks/lumen`
+where that's faster, checkpointing and committing after each cluster.
+
+**Fixed (6 root-cause bug classes, all local fixes, no porting needed):**
+
+1. `std_temporal_make` (the single Duration-creation choke point) stored the
+   exact `i64` for every Duration field instead of canonicalizing to the
+   nearest float64-representable integer -- added an `(f as f64) as i64`
+   round-trip for Duration fields there.
+2. `Duration.compare`/`.round`/`.total` each had their own separately-written,
+   partial `relativeTo` (ToRelativeTemporalObject) implementation -- unified
+   into one shared `std_temporal_resolve_relative_to` reusing the
+   already-correct ZonedDateTime/PlainDateTime bag machinery; deleted the
+   now-dead `std_temporal_validate_relative_to_offset`.
+3. That resolver's no-zone-annotation string branch parsed via
+   `std_temporal_parse(PlainDateTime, ...)`, which wrongly *requires* a
+   time-of-day component (a bare date string like `"2023-02-21"` failed) --
+   fixed by parsing as `PlainDate` instead, matching ToRelativeTemporalObject
+   discarding any time-of-day on a non-zoned string.
+4. `std_epoch_parse_syntax` (shared by `ZonedDateTime.from` and the
+   resolver's zoned-string branch) unconditionally required a `T`/`t`/` `
+   separator, rejecting a valid bare `Date TimeZoneAnnotation` string
+   (`"2000-01-01[UTC]"`) -- relaxed to allow an empty time-of-day for
+   ZonedDateTime kind, defaulting to 0.
+5. Same function was also missing `InterpretISODateTimeOffset`'s
+   ~option~/~reject~ `CheckISODaysRange` gate: an explicit non-`Z` numeric
+   offset resolved against a zone must reject a *local* date more than 10^8
+   days from the epoch even when the offset would shift the final instant
+   back into Instant's own valid range. Pinned down by fetching the real
+   tc39/proposal-temporal spec text directly (`abstractops.html`,
+   `zoneddatetime.html`, `instant.html`, `plaindatetime.html`) after a
+   hand-calculation contradiction. Added the local-date-epoch-day check
+   ahead of offset resolution.
+6. `Duration.prototype.round`/`.total` each read+resolved `relativeTo` only
+   inside a fast-path branch gated on whether the duration/unit combination
+   needs calendar units at all, so a malformed `relativeTo` bag silently
+   never got parsed when the duration was calendar-unit-free. Fetched the
+   real `options-read-before-algorithmic-validation.js` source for the exact
+   expected option-read order (round: largestUnit, relativeTo,
+   roundingIncrement, roundingMode, smallestUnit; total: relativeTo, unit)
+   and reordered both to read+resolve `relativeTo` unconditionally, before
+   any algorithmic validation, at that exact position.
+
+**Reverted, not kept**: relaxing `std_epoch_zone_from_string`'s `T`-separator
+requirement, attempting to fix `relativeto-propertybag-timezone-string-
+datetime.js` (a full ISO date-time string as a `timeZone` property-bag value
+resolving via its bracket annotation with no `Z`/offset). Measured as 0
+gains / 1 regression (`ZonedDateTime/timezone-iso-string.js`, whose
+constructor path needs the raw `timeZone` argument to reject a full
+date-time string outright) -- reverted cleanly, verified byte-identical
+against the pre-attempt pass-set. The intended test's real blocker is still
+unidentified.
+
+**Measured (zero-loss at every one of 6 intermediate steps, not just
+totals; final state re-verified byte-identical after the revert above):**
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8598 pass / 608 fail | 8654 pass / 552 fail |
+| `built-ins/Temporal` files | 4299 pass / 304 fail | 4327 pass / 276 fail |
+
++56 pass variants (+28 pass files), zero lost. Workspace `cargo nextest run
+--workspace --locked`: 3399/3399 passed, 17 skipped, 0 failed. `cargo test
+--workspace --locked --doc`: all green (31 crates, `amazing_js` 1/1,
+`amazing_html` 1/1).
+
+15 of the original 60 Duration fail files fixed. 45 remain, in four rough
+sub-clusters: a ~15-file relativeTo out-of-range/large-time-component group
+(partly blocked on the reverted timezone-string item, rest untriaged); an
+11-file `argument-duration-precision-exact-numerical-values.js`/
+`precision-exact-mathematical-values*.js` group (likely a genuine
+i128-precision or algorithm gap -- the strongest temporal_rs/lumen porting
+candidate found so far); a 4-file round balancing/rounding-algorithm group
+(`balances-up-to-weeks.js`, `case-where-relativeto-affects-rounding-mode-
+half-even.js`, `round-and-balance-calendar-units-with-increment-
+disallowed.js`, `float64-representable-integer.js` -- second porting
+candidate); 4 `result-out-of-range-{1,3}.js` files (add/subtract); 6
+`order-of-operations.js` files (deprioritized per established pattern); and
+`total/options-wrong-type.js` (untriaged).
+
+No temporal_rs/lumen porting was actually needed for any Duration fix this
+session -- every bug found was an existing-code defect (wrong order, missing
+gate, missing check), not a missing algorithm. PlainDateTime (45 files) and
+PlainDate (42 files) are next per the coordinator's ordering, not yet
+started.
