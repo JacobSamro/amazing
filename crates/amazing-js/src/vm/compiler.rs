@@ -641,7 +641,15 @@ impl Compiler {
             }
             StmtKind::Return(expression) if self.program.is_function => {
                 let value = if let Some(expression) = expression {
-                    self.expression(expression)?
+                    let value = self.expression(expression)?;
+                    if self.is_async && self.is_generator {
+                        // An async generator's `return expr` awaits the value.
+                        let awaited = self.register(statement.span)?;
+                        self.emit(Instruction::Await(awaited, value));
+                        awaited
+                    } else {
+                        value
+                    }
                 } else {
                     0
                 };
@@ -704,15 +712,25 @@ impl Compiler {
                 self.emit(Instruction::Constant(dst, JsValue::Null));
             }
             ExprKind::Yield { argument, delegate: false } if self.is_generator => {
-                let value = match argument {
+                let mut value = match argument {
                     Some(argument) => self.expression(argument)?,
                     None => 0,
                 };
+                if self.is_async {
+                    // AsyncGeneratorYield(? Await(value)).
+                    let awaited = self.register(expression.span)?;
+                    self.emit(Instruction::Await(awaited, value));
+                    value = awaited;
+                }
                 self.emit(Instruction::Yield(dst, value));
             }
             ExprKind::Yield { argument: Some(argument), delegate: true } if self.is_generator => {
                 let value = self.expression(argument)?;
-                self.emit(Instruction::YieldDelegate(dst, value));
+                self.emit(if self.is_async {
+                    Instruction::YieldDelegateAsync(dst, value)
+                } else {
+                    Instruction::YieldDelegate(dst, value)
+                });
             }
             ExprKind::Unary { op: UnOp::Await, operand } if self.is_async => {
                 let value = self.expression(operand)?;

@@ -467,33 +467,83 @@ fn thread_async_settle(i: &Interpreter, result: Result<JsValue, Throw>) -> JsVal
     }
 }
 
-fn thread_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    thread_generator_resume(i, &this, Resume::Next(v))
+/// The receiver's generator kind: `Some(is_async)` for a VM-backed or coroutine-backed
+/// generator instance, `None` for anything else (GeneratorValidate's brand check).
+fn generator_brand(this: &JsValue) -> Option<bool> {
+    if let Some(is_async) = vm::vm_generator_kind(this) {
+        return Some(is_async);
+    }
+    match this {
+        JsValue::Object(o) => match &o.borrow().exotic {
+            Exotic::ThreadGenerator(state) => Some(state.borrow().is_async),
+            _ => None,
+        },
+        _ => None,
+    }
 }
-fn thread_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+
+/// %GeneratorPrototype%.next/return/throw (kind 0/1/2), shared by both generator backends: the
+/// bytecode VM's frames (`vm::generator_*`) and this file's coroutine-backed bodies.
+fn generator_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, kind: u8) -> Result<JsValue, Throw> {
+    if generator_brand(&this) != Some(false) {
+        return Err(Throw::type_error("method called on an incompatible receiver"));
+    }
+    if vm::vm_generator_kind(&this).is_some() {
+        return match kind {
+            0 => vm::generator_next(i, this, args),
+            1 => vm::generator_return(i, this, args),
+            _ => vm::generator_throw(i, this, args),
+        };
+    }
     let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    thread_generator_resume(i, &this, Resume::Return(v))
+    thread_generator_resume(i, &this, match kind { 0 => Resume::Next(v), 1 => Resume::Return(v), _ => Resume::Throw(v) })
 }
-fn thread_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let e = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    thread_generator_resume(i, &this, Resume::Throw(e))
+
+/// %AsyncGeneratorPrototype%.next/return/throw: a receiver that is not an async generator
+/// rejects the returned promise rather than throwing (AsyncGeneratorValidate under
+/// IfAbruptRejectPromise).
+fn async_generator_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, kind: u8) -> Result<JsValue, Throw> {
+    if generator_brand(&this) != Some(true) {
+        let error = Throw::type_error("method called on an incompatible receiver");
+        let error = i.normalize_throw(error);
+        return Ok(new_promise(i, PromiseFate::Rejected(error.0)));
+    }
+    if vm::vm_generator_kind(&this).is_some() {
+        return match kind {
+            0 => vm::async_generator_next(i, this, args),
+            1 => vm::async_generator_return(i, this, args),
+            _ => vm::async_generator_throw(i, this, args),
+        };
+    }
+    let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
+    let resumed = thread_generator_resume(i, &this, match kind { 0 => Resume::Next(v), 1 => Resume::Return(v), _ => Resume::Throw(v) });
+    Ok(thread_async_settle(i, resumed))
+}
+
+fn generator_prototype_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_method(i, this, args, 0)
+}
+fn generator_prototype_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_method(i, this, args, 1)
+}
+fn generator_prototype_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_method(i, this, args, 2)
+}
+fn async_generator_prototype_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_method(i, this, args, 0)
+}
+fn async_generator_prototype_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_method(i, this, args, 1)
+}
+fn async_generator_prototype_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    async_generator_method(i, this, args, 2)
 }
 fn thread_generator_return_self(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(this)
 }
-
-fn thread_async_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    Ok(thread_async_settle(i, thread_generator_resume(i, &this, Resume::Next(v))))
-}
-fn thread_async_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let v = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    Ok(thread_async_settle(i, thread_generator_resume(i, &this, Resume::Return(v))))
-}
-fn thread_async_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let e = args.into_iter().next().unwrap_or(JsValue::Undefined);
-    Ok(thread_async_settle(i, thread_generator_resume(i, &this, Resume::Throw(e))))
+/// %AsyncIteratorPrototype%[@@asyncIterator] (27.1.3.1): returns `this`.
+fn async_iterator_prototype_async_iterator(_i: &mut Interpreter, this: JsValue, _args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(this)
 }
 
 impl Interpreter {
@@ -505,32 +555,56 @@ impl Interpreter {
     /// proto`, the std collection iterator protos, ...).
     pub(crate) fn install_thread_generator_methods(&mut self) {
         for (name, length, native) in [
-            ("next", 1, thread_generator_next as crate::value::NativeFn),
-            ("return", 1, thread_generator_return as crate::value::NativeFn),
-            ("throw", 1, thread_generator_throw as crate::value::NativeFn),
+            ("next", 1, generator_prototype_next as crate::value::NativeFn),
+            ("return", 1, generator_prototype_return as crate::value::NativeFn),
+            ("throw", 1, generator_prototype_throw as crate::value::NativeFn),
         ] {
             let method = symbol_method(self, name, native);
             symbol_method_length(&method, length);
             self.generator_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
-        let iter_method = symbol_method(self, "[Symbol.iterator]", thread_generator_return_self);
-        symbol_method_length(&iter_method, 0);
+        // %GeneratorPrototype%'s [[Prototype]] is %IteratorPrototype% (whose own @@iterator
+        // returns `this`), installed just before this by `install_std_iterator_helpers`.
+        if let Some((iterator_proto, _, _)) = self.std_iterator_prototypes() {
+            self.generator_proto.borrow_mut().proto = Some(iterator_proto);
+        } else {
+            let iter_method = symbol_method(self, "[Symbol.iterator]", thread_generator_return_self);
+            self.generator_proto.borrow_mut()
+                .define(WellKnownSymbol::Iterator.symbol(), symbol_data(iter_method, true, true)).unwrap();
+        }
         self.generator_proto.borrow_mut()
-            .define(WellKnownSymbol::Iterator.symbol(), symbol_data(iter_method, true, true)).unwrap();
+            .define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str("Generator"), false, true)).unwrap();
+        // 27.5.1.1/27.6.1.1: `constructor` links back to %GeneratorFunction.prototype% (resp. the
+        // async one), {writable:false, enumerable:false, configurable:true}.
+        let generator_function_proto = JsValue::Object(self.generator_function_proto.clone());
+        self.generator_proto.borrow_mut()
+            .define("constructor", symbol_data(generator_function_proto, false, true)).unwrap();
+        let async_generator_function_proto = JsValue::Object(self.async_generator_function_proto.clone());
+        self.async_generator_proto.borrow_mut()
+            .define("constructor", symbol_data(async_generator_function_proto, false, true)).unwrap();
 
         for (name, length, native) in [
-            ("next", 1, thread_async_generator_next as crate::value::NativeFn),
-            ("return", 1, thread_async_generator_return as crate::value::NativeFn),
-            ("throw", 1, thread_async_generator_throw as crate::value::NativeFn),
+            ("next", 1, async_generator_prototype_next as crate::value::NativeFn),
+            ("return", 1, async_generator_prototype_return as crate::value::NativeFn),
+            ("throw", 1, async_generator_prototype_throw as crate::value::NativeFn),
         ] {
             let method = symbol_method(self, name, native);
             symbol_method_length(&method, length);
             self.async_generator_proto.borrow_mut().define(name, symbol_data(method, true, true)).unwrap();
         }
-        let async_iter_method = symbol_method(self, "[Symbol.asyncIterator]", thread_generator_return_self);
-        symbol_method_length(&async_iter_method, 0);
         self.async_generator_proto.borrow_mut()
+            .define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str("AsyncGenerator"), false, true)).unwrap();
+        // %AsyncIteratorPrototype% (27.1.3): an ordinary object holding only @@asyncIterator,
+        // the [[Prototype]] of %AsyncGeneratorPrototype%. Reachable as that object's prototype.
+        let async_iterator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(self.object_proto.clone());
+            o
+        })));
+        let async_iter_method = symbol_method(self, "[Symbol.asyncIterator]", async_iterator_prototype_async_iterator);
+        async_iterator_proto.borrow_mut()
             .define(WellKnownSymbol::AsyncIterator.symbol(), symbol_data(async_iter_method, true, true)).unwrap();
+        self.async_generator_proto.borrow_mut().proto = Some(async_iterator_proto);
     }
 
     /// Build and spawn a coroutine-backed generator object for a just-called generator function

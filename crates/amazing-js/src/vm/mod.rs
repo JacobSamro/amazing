@@ -2,6 +2,7 @@
 //! execution never falls back to AST statement/expression evaluation.
 #![forbid(unsafe_code)]
 
+mod async_delegate;
 mod compiler;
 mod fast_path;
 #[cfg(test)]
@@ -203,6 +204,8 @@ enum Instruction {
     Throw(Register),
     Yield(Register, Register),
     YieldDelegate(Register, Register),
+    /// `yield*` in an async generator: awaits each inner result (see `async_delegate`).
+    YieldDelegateAsync(Register, Register),
     Await(Register, Register),
     AsyncIteratorStart(usize, Register),
     AsyncIteratorNext(Register, usize),
@@ -274,7 +277,11 @@ struct VmFrame {
     pending_resume: Option<Abrupt>,
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
+    async_delegate: Option<async_delegate::AsyncDelegate>,
     await_dst: Option<Register>,
+    /// Async generators: a `return(v)` resumption at a yield is awaiting `v`
+    /// (AsyncGeneratorUnwrapYieldResumption) before it is delivered.
+    await_return: bool,
     async_iterators: Vec<Option<AsyncIteratorState>>,
 }
 
@@ -427,7 +434,9 @@ impl Program {
             pending_resume: None,
             delegate: None,
             delegate_input: None,
+            async_delegate: None,
             await_dst: None,
+            await_return: false,
             async_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
         });
         for name in &self.hoisted {
@@ -475,7 +484,9 @@ impl Program {
             pending_resume: _,
             delegate,
             delegate_input,
+            async_delegate,
             await_dst,
+            await_return: _,
             async_iterators,
         } = frame.as_mut();
         let mut steps = 0;
@@ -1044,6 +1055,37 @@ impl Program {
                             *pc -= 1;
                         }
                     }
+                    Instruction::YieldDelegateAsync(dst, src) => {
+                        let (kind, input) = delegate_input.take().unwrap_or((0, JsValue::Undefined));
+                        if async_delegate.is_none() {
+                            *async_delegate = Some(async_delegate::start(i, &registers[*src])?);
+                        }
+                        let step = async_delegate::step(i, async_delegate.as_mut().unwrap(), kind, input);
+                        match step {
+                            Ok(async_delegate::AsyncDelegateStep::Yield(value)) => {
+                                registers[*dst] = value;
+                                *yield_dst = Some(*dst);
+                                *pc -= 1;
+                            }
+                            Ok(async_delegate::AsyncDelegateStep::Await(value)) => {
+                                registers[*dst] = value;
+                                *await_dst = Some(*dst);
+                                *pc -= 1;
+                            }
+                            Ok(async_delegate::AsyncDelegateStep::Complete(value)) => {
+                                *async_delegate = None;
+                                registers[*dst] = value;
+                            }
+                            Ok(async_delegate::AsyncDelegateStep::Return(value)) => {
+                                *async_delegate = None;
+                                return Ok(Some(Abrupt::Return(value)));
+                            }
+                            Err(error) => {
+                                *async_delegate = None;
+                                return Err(error);
+                            }
+                        }
+                    }
                     Instruction::Await(dst, _) => {
                         *await_dst = Some(*dst);
                         return Ok(None);
@@ -1155,14 +1197,18 @@ impl Program {
             if yield_dst.is_some() {
                 let value = match op {
                     Instruction::Yield(_, src) => registers[*src].clone(),
-                    Instruction::YieldDelegate(dst, _) => registers[*dst].clone(),
+                    Instruction::YieldDelegate(dst, _) | Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
                     _ => unreachable!(),
                 };
                 return Ok(FrameOutcome::Yielded(value));
             }
             if await_dst.is_some() {
-                let Instruction::Await(_, src) = op else { unreachable!() };
-                return Ok(FrameOutcome::Awaited(registers[*src].clone()));
+                let value = match op {
+                    Instruction::Await(_, src) => registers[*src].clone(),
+                    Instruction::YieldDelegateAsync(dst, _) => registers[*dst].clone(),
+                    _ => unreachable!(),
+                };
+                return Ok(FrameOutcome::Awaited(value));
             }
         }
         let value = if self.is_function {
@@ -1276,26 +1322,15 @@ impl FunctionCode {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
-                let mut methods = JsObject::ordinary();
-                methods.proto = Some(i.object_proto.clone());
-                if self.0.is_async {
-                    methods.set_own("next", Interpreter::native("next", async_generator_next, &i.function_proto));
-                    methods.set_own("return", Interpreter::native("return", async_generator_return, &i.function_proto));
-                    methods.set_own("throw", Interpreter::native("throw", async_generator_throw, &i.function_proto));
-                    methods.set_own(
-                        WellKnownSymbol::AsyncIterator.symbol(),
-                        Interpreter::native("[Symbol.asyncIterator]", async_generator_async_iterator, &i.function_proto),
-                    );
+                // OrdinaryObjectCreate(%GeneratorFunction.prototype.prototype%)
+                // (or the async equivalent): the realm's shared generator
+                // prototype, whose `next`/`return`/`throw` dispatch to this VM's
+                // drivers (interp_coroutine.rs `install_thread_generator_methods`).
+                prototype.proto = Some(if self.0.is_async {
+                    i.async_generator_proto.clone()
                 } else {
-                    methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
-                    methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
-                    methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
-                    methods.set_own(
-                        WellKnownSymbol::Iterator.symbol(),
-                        Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto),
-                    );
-                }
-                prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
+                    i.generator_proto.clone()
+                });
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
             if !self.0.is_generator {
@@ -1441,7 +1476,11 @@ impl FunctionCode {
         generator_proto: Option<Obj>,
     ) -> JsValue {
         let mut object = JsObject::ordinary();
-        object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
+        object.proto = generator_proto.or_else(|| Some(if self.0.is_async {
+            i.async_generator_proto.clone()
+        } else {
+            i.generator_proto.clone()
+        }));
         object.exotic = Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
             code: self.clone(),
             env,
@@ -1594,7 +1633,16 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
 
 fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
     if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
-        return value;
+        // PromiseResolve(%Promise%, value): a native promise is reused only
+        // when its `constructor` is %Promise% (recognised here by its own
+        // `prototype` being %Promise.prototype%); reading it may throw.
+        match i.get_prop(&value, "constructor") {
+            Ok(JsValue::Object(constructor))
+                if matches!(constructor.borrow().get_own("prototype"),
+                    Some(JsValue::Object(proto)) if Rc::ptr_eq(&proto.0, &i.promise_proto.0)) => return value,
+            Ok(_) => {}
+            Err(Throw(error)) => return new_promise(i, PromiseFate::Rejected(error)),
+        }
     }
     let promise = new_promise(i, PromiseFate::Pending);
     let JsValue::Object(target) = &promise else { unreachable!() };
@@ -1676,6 +1724,15 @@ fn generator_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
     JsValue::object(result)
 }
 
+/// `Some(is_async)` when `value` is a VM-backed generator instance.
+pub(crate) fn vm_generator_kind(value: &JsValue) -> Option<bool> {
+    let JsValue::Object(object) = value else { return None };
+    match &object.borrow().exotic {
+        Exotic::Generator(state) => Some(state.borrow().code.0.is_async),
+        _ => None,
+    }
+}
+
 fn generator_state(this: JsValue) -> Result<Rc<RefCell<GeneratorState>>, Throw> {
     let JsValue::Object(object) = this else {
         return Err(Throw::type_error("generator method receiver is not an object"));
@@ -1687,20 +1744,15 @@ fn generator_state(this: JsValue) -> Result<Rc<RefCell<GeneratorState>>, Throw> 
     state.ok_or_else(|| Throw::type_error("generator method receiver is not a generator"))
 }
 
-fn generator_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    generator_state(this.clone())?;
-    Ok(this)
-}
-
-fn generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
 }
 
-fn generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
 }
 
-fn generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
 }
 
@@ -1743,7 +1795,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         (state.code.clone(), frame, state.completion.clone())
     };
     if let Some(dst) = frame.yield_dst.take() {
-        if frame.delegate.is_some() {
+        if frame.delegate.is_some() || frame.async_delegate.is_some() {
             frame.delegate_input = Some((kind, value));
         } else {
             match kind {
@@ -1762,9 +1814,17 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
                 _ => break,
             };
             let destination = frame.await_dst.take().expect("await instruction destination");
-            match i.await_iteration_value(value) {
-                Ok(value) => frame.registers[destination] = value,
-                Err(error) => frame.pending_resume = Some(Abrupt::Throw(error)),
+            let settled = i.await_iteration_value(value);
+            if frame.async_delegate.is_some() {
+                frame.delegate_input = Some(match settled {
+                    Ok(value) => (0, value),
+                    Err(Throw(error)) => (2, error),
+                });
+            } else {
+                match settled {
+                    Ok(value) => frame.registers[destination] = value,
+                    Err(error) => frame.pending_resume = Some(Abrupt::Throw(error)),
+                }
             }
             outcome = resume_frame_with_strictness(i, &code, &mut frame);
         }
@@ -1815,21 +1875,16 @@ fn async_generator_enqueue(i: &mut Interpreter, this: JsValue, value: JsValue, k
     Ok(promise)
 }
 
-fn async_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn async_generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
 }
 
-fn async_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn async_generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
 }
 
-fn async_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+pub(crate) fn async_generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     async_generator_enqueue(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
-}
-
-fn async_generator_async_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    generator_state(this.clone())?;
-    Ok(this)
 }
 
 /// Settle a queued request's promise without ever touching a VM frame --
@@ -1869,11 +1924,17 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
         // the generator directly without running any of its code.
         if !state.borrow().started && request.kind != 0 {
             state.borrow_mut().started = true;
+            if request.kind == 1 {
+                return async_generator_await_return(i, state, request);
+            }
             async_generator_settle_without_frame(i, request)?;
             continue;
         }
         // The body already ran to completion on an earlier request.
         if state.borrow().started && state.borrow().frame.is_none() {
+            if request.kind == 1 {
+                return async_generator_await_return(i, state, request);
+            }
             async_generator_settle_without_frame(i, request)?;
             continue;
         }
@@ -1905,7 +1966,7 @@ fn async_generator_run(
     i: &mut Interpreter,
     state: Rc<RefCell<GeneratorState>>,
     target: Obj,
-    kind: u8,
+    mut kind: u8,
     value: JsValue,
 ) -> Result<(), Throw> {
     let (code, mut frame, completion) = {
@@ -1915,8 +1976,31 @@ fn async_generator_run(
         s.awaiting = false;
         (s.code.clone(), frame, s.completion.clone())
     };
+    if frame.await_return {
+        // The awaited `return(v)` resumption settled: deliver it as a return
+        // of the awaited value, or as a throw of the rejection reason.
+        frame.await_return = false;
+        kind = if kind == 0 { 1 } else { 2 };
+    } else if kind == 1 && frame.yield_dst.is_some() {
+        // AsyncGeneratorUnwrapYieldResumption: a `return(v)` delivered at a
+        // yield first awaits `v`; the frame stays suspended at its yield and
+        // is resumed from that await's reaction instead.
+        frame.await_return = true;
+        {
+            let mut s = state.borrow_mut();
+            s.executing = false;
+            s.awaiting = true;
+            s.frame = Some(frame);
+        }
+        let awaited = async_resolve_value(i, value);
+        let fulfilled = async_generator_step_handler(i, state.clone(), target.clone(), false);
+        let rejected = async_generator_step_handler(i, state, target, true);
+        let then = i.get_prop(&awaited, "then")?;
+        i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+        return Ok(());
+    }
     if let Some(dst) = frame.yield_dst.take() {
-        if frame.delegate.is_some() {
+        if frame.delegate.is_some() || frame.async_delegate.is_some() {
             frame.delegate_input = Some((kind, value));
         } else {
             match kind {
@@ -1926,9 +2010,15 @@ fn async_generator_run(
             }
         }
     } else if let Some(dst) = frame.await_dst.take() {
-        match kind {
-            0 => frame.registers[dst] = value,
-            _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+        if frame.async_delegate.is_some() {
+            // An await inside `yield*`: the delegation state machine consumes
+            // the settlement itself (see `async_delegate::step`).
+            frame.delegate_input = Some((kind, value));
+        } else {
+            match kind {
+                0 => frame.registers[dst] = value,
+                _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+            }
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
@@ -1976,15 +2066,70 @@ fn async_generator_run(
 /// promise. Both are stashed as env-declared internal slots on the callback's
 /// own closure, read back by `async_generator_step_state`.
 fn async_generator_step_handler(i: &Interpreter, state: Rc<RefCell<GeneratorState>>, target: Obj, reject: bool) -> JsValue {
+    if reject {
+        async_generator_callback(i, state, target, "asyncGeneratorStepRejected", async_generator_step_rejected)
+    } else {
+        async_generator_callback(i, state, target, "asyncGeneratorStepFulfilled", async_generator_step_fulfilled)
+    }
+}
+
+/// AsyncGeneratorAwaitReturn (27.6.3.9): a `return(v)` on a generator that
+/// never started or already completed awaits `v` before settling. The queue
+/// stays blocked (`awaiting`) until then, like the spec's awaiting-return state.
+fn async_generator_await_return(
+    i: &mut Interpreter,
+    state: Rc<RefCell<GeneratorState>>,
+    request: AsyncGeneratorRequest,
+) -> Result<(), Throw> {
+    state.borrow_mut().awaiting = true;
+    let awaited = async_resolve_value(i, request.value);
+    let fulfilled = async_generator_callback(i, state.clone(), request.target.clone(),
+        "asyncGeneratorAwaitReturnFulfilled", async_generator_return_fulfilled);
+    let rejected = async_generator_callback(i, state.clone(), request.target.clone(),
+        "asyncGeneratorAwaitReturnRejected", async_generator_return_rejected);
+    let then = i.get_prop(&awaited, "then");
+    let chained = then.and_then(|then| i.call_value(&then, awaited, vec![fulfilled, rejected]));
+    if let Err(Throw(error)) = chained {
+        state.borrow_mut().awaiting = false;
+        settle_promise(&request.target, PromiseFate::Rejected(error), i)?;
+        return async_generator_drain(i, state);
+    }
+    Ok(())
+}
+
+fn async_generator_return_fulfilled(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    state.borrow_mut().awaiting = false;
+    let value = args.into_iter().next().unwrap_or(JsValue::Undefined);
+    settle_promise(&target, PromiseFate::Fulfilled(generator_result(i, value, true)), i)?;
+    async_generator_drain(i, state)?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_generator_return_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let (state, target) = async_generator_step_state(i)?;
+    state.borrow_mut().awaiting = false;
+    settle_promise(&target, PromiseFate::Rejected(args.into_iter().next().unwrap_or(JsValue::Undefined)), i)?;
+    async_generator_drain(i, state)?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_generator_callback(
+    i: &Interpreter,
+    state: Rc<RefCell<GeneratorState>>,
+    target: Obj,
+    name: &str,
+    native: crate::value::NativeFn,
+) -> JsValue {
     let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
     let mut holder = JsObject::ordinary();
     holder.exotic = Exotic::Generator(state);
     let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
     let _ = env.declare_var("[[VmAsyncGeneratorTarget]]", JsValue::Object(target));
     let mut function = JsObject::function(JsFunction {
-        name: if reject { "asyncGeneratorStepRejected" } else { "asyncGeneratorStepFulfilled" }.into(),
+        name: name.into(),
         params: vec![],
-        body: FunctionBody::Native(if reject { async_generator_step_rejected } else { async_generator_step_fulfilled }),
+        body: FunctionBody::Native(native),
         is_arrow: false,
         is_async: false,
         is_generator: false,
