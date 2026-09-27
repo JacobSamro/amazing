@@ -840,7 +840,6 @@ impl Interpreter {
                                 ast::PropValue::Shorthand(i) => self.identifier_value(env, &i.name)?
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
                                 ast::PropValue::Init(x) => {
-                                    let mut val = self.eval_expr(x, env)?;
                                     // PropertyDefinitionEvaluation (spec 13.2.5.5) skips NamedEvaluation
                                     // entirely for a non-computed `__proto__` key ("isProtoSetter" is
                                     // true): an anonymous `{ __proto__: function(){} }` value must NOT
@@ -849,6 +848,16 @@ impl Interpreter {
                                     // (usually none) it already had.
                                     let is_proto_setter = !matches!(&p.key, PropKey::Computed(_))
                                         && k.as_string().is_some_and(|name| *name == "__proto__");
+                                    let mut val = if is_proto_setter {
+                                        self.eval_expr(x, env)?
+                                    } else {
+                                        // Same class-self-reference-before-eval need as every other
+                                        // NamedEvaluation call site (see the comment on `assign`).
+                                        // `Self::property_function_name` (not the lossy
+                                        // `property_key_as_fn_name` used below for the ordinary
+                                        // function case) keeps a lone-surrogate string key exact.
+                                        self.eval_named_class_expr(x, env, &Self::property_function_name(&k))?
+                                    };
                                     if !is_proto_setter {
                                         self.named_evaluation(x, &mut val, &property_key_as_fn_name(&k));
                                     }
@@ -1277,7 +1286,18 @@ impl Interpreter {
             } else { self.resolve_reference(t, e)? }
         } else { self.resolve_reference(t, e)? };
         if op == ast::AssignOp::Assign {
-            let mut v = self.eval_expr(r, e)?;
+            // A named class expression's own self-reference binding needs the name available
+            // *before* the class body runs (computed keys/static blocks may already observe it),
+            // which the post-hoc `infer_function_name` rename below cannot retroactively supply.
+            // Unlike that unconditional legacy heuristic, this one really does need the strict
+            // spec restriction (13.15.2's IsIdentifierRef check on the *source* target, not
+            // `reference`'s resolved kind: a global binding and `obj.prop` can both resolve to
+            // `Reference::Property`, but only the former is an IdentifierRef) -- `holder.C=class
+            // {}` must stay unnamed while `C=class{}` (even at global scope) must not.
+            let mut v = match event_handler::identifier_name(t) {
+                Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
+                None => self.eval_expr(r, e)?,
+            };
             // Plain assignment intentionally keeps the pre-existing, value-based heuristic
             // (rename whatever nameless function/class the RHS produced -- no source-expression
             // check, no IsIdentifierRef/Reference::Binding restriction) rather than switching to
@@ -1292,6 +1312,9 @@ impl Interpreter {
             // reference kind, matching the name both backends already agree on. A symbol-keyed
             // member target with no description has no derivable name at all (`reference_name`
             // returns `None`, exactly as `amazing-js/src/vm` treats it) -- skipped, not "".
+            // (A no-op for a value `eval_named_class_expr` already named above, since
+            // `infer_function_name` only renames a still-nameless function/class -- and classes
+            // never reach this heuristic for a non-identifier target anyway, matching spec.)
             if let Some(name) = reference_name(&reference) {
                 self.infer_function_name(&mut v, &name);
             }
@@ -1312,7 +1335,13 @@ impl Interpreter {
         if op == ast::AssignOp::Nullish && !old.is_null() && !old.is_undefined() {
             return Ok(old);
         }
-        let mut v = self.eval_expr(r, e)?;
+        // Same class-self-reference-before-eval need, and same strict IsIdentifierRef gate
+        // (13.15.4's LogicalAssignmentEvaluation goes through the same NamedEvaluation
+        // definition as plain `=`), as `assign`'s AssignOp::Assign arm above.
+        let mut v = match event_handler::identifier_name(t) {
+            Some(name) => self.eval_named_class_expr(r, e, &name.into())?,
+            None => self.eval_expr(r, e)?,
+        };
         // Same legacy, unconditional value-based heuristic as plain `=` (see the comment
         // there) applies to the logical-assignment operators.
         if let Some(name) = reference_name(&reference) {
@@ -1572,7 +1601,11 @@ impl Interpreter {
                 value: default,
             } => {
                 if value.is_undefined() {
-                    let mut fallback = self.eval_expr(default, env)?;
+                    let mut fallback = match &target.kind {
+                        ExprKind::Ident(identifier) =>
+                            self.eval_named_class_expr(default, env, &identifier.name.clone().into())?,
+                        _ => self.eval_expr(default, env)?,
+                    };
                     if let ExprKind::Ident(identifier) = &target.kind {
                         self.named_evaluation(default, &mut fallback, &identifier.name);
                     }
@@ -1625,7 +1658,7 @@ impl Interpreter {
                                 }
                                 ast::PropValue::CoverInitializedName { binding, default } => {
                                     let assigned = if matches!(&item, JsValue::Undefined) {
-                                        let mut v = self.eval_expr(default, env)?;
+                                        let mut v = self.eval_named_class_expr(default, env, &binding.name.clone().into())?;
                                         self.named_evaluation(default, &mut v, &binding.name);
                                         v
                                     } else {
@@ -1976,7 +2009,11 @@ impl Interpreter {
             };
             let v = if v.is_undefined() {
                 if let Some(default) = &p.default {
-                    let mut d = self.eval_expr(default, e)?;
+                    let mut d = match &p.binding {
+                        Binding::Ident(identifier) =>
+                            self.eval_named_class_expr(default, e, &identifier.name.clone().into())?,
+                        _ => self.eval_expr(default, e)?,
+                    };
                     if let Binding::Ident(identifier) = &p.binding {
                         self.named_evaluation(default, &mut d, &identifier.name);
                     }

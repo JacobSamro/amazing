@@ -55,7 +55,16 @@ fn define_field(
             // key (already resolved to a PropertyKey/PrivateName by class-definition time,
             // per spec -- computed keys are evaluated once, not per instance).
             Some(expr) => {
-                let mut v = i.eval_expr(expr, scope)?;
+                // Same class-self-reference-before-eval need as every other NamedEvaluation
+                // call site here: `named_evaluation`/`infer_function_name` deliberately skip
+                // class_constructor objects (a class's own name is installed before its own
+                // static elements run, not after the fact), so an anonymous class field
+                // initializer -- `field = class { static seen = this.name; }` -- needs
+                // `eval_named_class_expr` to make that name visible *during* evaluation.
+                // Reuses the outer, lossless `name: JsString` (a lone-surrogate computed key
+                // stays exact) rather than recomputing it through the lossy `String` helper
+                // `named_evaluation`'s own signature requires below for the ordinary function case.
+                let mut v = i.eval_named_class_expr(expr, scope, &name)?;
                 let name = match key {
                     FieldKey::Public(property_key) => property_key_as_fn_name(property_key),
                     FieldKey::Private(private_name) => private_name.text().to_string(),
