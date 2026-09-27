@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "subdir": "css/CSS2/normal-flow",
+  "mismatch_count": 5,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "small-region, top-left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__normal-flow__block-in-inline-align-last-001.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__normal-flow__intrinsic-size-with-negative-margins.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__normal-flow__overflow-scroll-paint-order.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__normal-flow__block-in-inline-float-in-layer-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__normal-flow__float-percentage-resolution-quirks-mode.html"
+      ]
+    }
+  ]
+}

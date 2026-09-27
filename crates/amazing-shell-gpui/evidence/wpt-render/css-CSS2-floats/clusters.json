@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "subdir": "css/CSS2/floats",
+  "mismatch_count": 16,
+  "unreadable": 0,
+  "clusters": [
+    {
+      "signature": "medium-region, top-left, same tone, different shape",
+      "count": 4,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-3.html",
+        "css__CSS2__floats__float-nowrap-9.html",
+        "css__CSS2__floats__float-nowrap-2.html",
+        "css__CSS2__floats__float-nowrap-8.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__CSS2__floats__table-sizing-with-adjacent-floats.html",
+        "css__CSS2__floats__zero-width-floats-positioning.tentative.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, darker than reference",
+      "count": 2,
+      "examples": [
+        "css__CSS2__floats__overflow-scroll-float-paint-order.html",
+        "css__CSS2__floats__float-after-block-with-collapsed-margin-inside-inline.html"
+      ]
+    },
+    {
+      "signature": "large-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__intrinsic-size-float-and-line.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-7.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__new-fc-separates-from-float-2.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top, less red than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-hyphen-rewind-1.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, same tone, different shape",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__float-nowrap-5.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, redder than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__new-fc-beside-adjoining-float.html"
+      ]
+    },
+    {
+      "signature": "small-region, top-left, greener than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__floats-line-wrap-shifted-001.html"
+      ]
+    },
+    {
+      "signature": "medium-region, top-left, lighter than reference",
+      "count": 1,
+      "examples": [
+        "css__CSS2__floats__new-fc-beside-adjoining-float-2.html"
+      ]
+    }
+  ]
+}
