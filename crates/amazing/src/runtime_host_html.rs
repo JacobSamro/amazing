@@ -1374,7 +1374,27 @@ impl RuntimeBindingHost<'_> {
         self.define_accessor_property(&prototype, "contentWindow", Some(window_getter), None, true, true)?;
         let src_getter = self.native("get src", 0, NativeEntry::IFrameSrcGet, HostCallPolicy::CallOnly);
         let src_setter = self.native("set src", 1, NativeEntry::IFrameSrcSet, HostCallPolicy::CallOnly);
-        self.define_accessor_property(&prototype, "src", Some(src_getter), Some(src_setter), true, true)
+        self.define_accessor_property(&prototype, "src", Some(src_getter), Some(src_setter), true, true)?;
+        let srcdoc_getter = self.native("get srcdoc", 0,
+            NativeEntry::IFrameSrcdocGet, HostCallPolicy::CallOnly);
+        let srcdoc_setter = self.native("set srcdoc", 1,
+            NativeEntry::IFrameSrcdocSet, HostCallPolicy::CallOnly);
+        self.define_accessor_property(&prototype, "srcdoc", Some(srcdoc_getter), Some(srcdoc_setter), true, true)?;
+        // `onload` is an `EventHandlerNonNull?` IDL attribute (HTML's
+        // GlobalEventHandlers mixin): unlike an `addEventListener`-registered
+        // listener, it is content-attribute-style state keyed by (target,
+        // event type), the same slot `dom.events()`/`events_mut()` already
+        // expose generically and that `HTMLElement.onclick` (see
+        // `input_activation_bindings::invoke` in amazing-bindings) already
+        // uses for "click". No interface elsewhere in this engine wires
+        // `onload` yet (an iframe's own `load` event is HTML-25's, entirely
+        // this lane's own concern), so it is installed here rather than
+        // filed as a cross-lane request.
+        let onload_getter = self.native("get onload", 0,
+            NativeEntry::IFrameOnloadGet, HostCallPolicy::CallOnly);
+        let onload_setter = self.native("set onload", 1,
+            NativeEntry::IFrameOnloadSet, HostCallPolicy::CallOnly);
+        self.define_accessor_property(&prototype, "onload", Some(onload_getter), Some(onload_setter), true, true)
     }
 
     fn iframe_node(&self, receiver: &JsValue) -> Result<NodeIdx, Throw> {
@@ -1408,6 +1428,46 @@ impl RuntimeBindingHost<'_> {
         let value = args.first().cloned().unwrap_or(JsValue::Undefined);
         self.invoke_operation_with_html_hooks(Operation::ElementSetAttribute, receiver,
             &[JsValue::str("src"), value])
+    }
+
+    /// `srcdoc` reflects its content attribute directly (a plain `DOMString`,
+    /// unlike `src` there is no URL resolution): HTML `attribute DOMString
+    /// srcdoc;` on `HTMLIFrameElement`.
+    pub(super) fn iframe_srcdoc_get(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        let node = self.iframe_node(&receiver)?;
+        let state = self.state.borrow();
+        let source = state.host.borrow().dom.get_attribute_ns(node, None, "srcdoc").map(str::to_owned);
+        Ok(JsValue::str(source.as_deref().unwrap_or("")))
+    }
+
+    pub(super) fn iframe_srcdoc_set(&mut self, receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        self.iframe_node(&receiver)?;
+        let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+        self.invoke_operation_with_html_hooks(Operation::ElementSetAttribute, receiver,
+            &[JsValue::str("srcdoc"), value])
+    }
+
+    pub(super) fn iframe_onload_get(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
+        let node = self.iframe_node(&receiver)?;
+        let target = amazing_dom::events::EventTarget::Node(node);
+        let root = self.state.borrow().host.borrow().dom.events().event_handler(target, "load");
+        Ok(root.and_then(|root| self.root_value(root)).unwrap_or(JsValue::Null))
+    }
+
+    pub(super) fn iframe_onload_set(&mut self, receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        let node = self.iframe_node(&receiver)?;
+        let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+        // `EventHandlerNonNull?`: a non-object (including null/undefined)
+        // clears the handler without throwing; an object is stored as-is,
+        // matching `onclick`'s own handling (callable-ness is only checked
+        // when the handler is invoked, never when it is assigned).
+        let is_object = self.is_object_value(&value)?;
+        let callback = if is_object { Some(self.retain_value(value)) } else { None };
+        let target = amazing_dom::events::EventTarget::Node(node);
+        let old = self.state.borrow_mut().host.borrow_mut().dom.events_mut()
+            .set_event_handler(target, "load", callback);
+        if let Some(old) = old { self.release_value(old); }
+        Ok(JsValue::Undefined)
     }
 
     pub(super) fn iframe_content_document(&mut self, receiver: JsValue) -> Result<JsValue, Throw> {
