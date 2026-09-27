@@ -1,0 +1,35 @@
+{
+  "fixed_base": "b72bc231",
+  "measured_at": "2026-09-27T19:45:00Z",
+  "platform": "Linux venus-001, dom-bindings lane tree (hetzner-ktest gate died silently mid-run; redone here -- see README.md)",
+  "workspace_pass": 3466,
+  "workspace_skip": 17,
+  "workspace_fail": 0,
+  "doctests": "all crate doc-test suites ok, including amazing_js (1 passed) and amazing_html (1 passed)",
+  "crate_pass": {
+    "amazing-bindings": 123,
+    "amazing-dom_amazing-bindings_amazing_combined": 736
+  },
+  "combined_run_skipped": 6,
+  "corpus": {
+    "directories": ["html/dom", "wai-aria", "web-animations/interfaces/Animatable"],
+    "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "before_files_selected": 502,
+    "after_files_selected": 269,
+    "before_files_timing_out": 262,
+    "after_files_timing_out": 21,
+    "timeout_accounting": "233 wai-aria/manual (now excluded) + 8 reflection-*.html (now fixed) + 21 unchanged pre-existing unimplemented cluster = 262",
+    "before_pass_subtests": 35336,
+    "before_fail_subtests": 9678,
+    "after_pass_subtests": 47347,
+    "after_fail_subtests": 12528,
+    "gained_subtests": 12011,
+    "lost_subtests": 0,
+    "before_binary": "dom-b-next-before (built at fixed_base b72bc231 via --ref, that commit's own unfixed run-corpus.py)",
+    "after_binary_sha256": "fd6cfc8299c0ebad68b11c99104679119b52928162574da46db2a880b139b1fb",
+    "before_results": "before.json",
+    "after_results": "after.json",
+    "compare_script": "compare-corpus.py",
+    "note": "after.json is the run AFTER fixing the window-named-access shadowing regression (see README.md); an intermediate run measured 55 lost subtests from that bug and is not included here."
+  }
+}

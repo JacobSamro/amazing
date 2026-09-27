@@ -28,7 +28,8 @@ use amazing_js::{
     interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, RealmHandle,
         LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
-        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue, Throw,
+        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue,
+        Obj, Property, PropertyKey, Throw,
     },
 };
 
@@ -163,6 +164,19 @@ struct BindingState {
     /// working unchanged; that map's *value* is never read for a document
     /// with a live entry here.
     active_parsers: HashMap<NodeIdx, Rc<RefCell<amazing_html::ResumableParser>>>,
+    /// DOM-B-NEXT: one prototype object's own (name, accessor) pairs,
+    /// computed once and reused by every later `materialize_accessors` call
+    /// instead of re-walking that prototype's (linearly-scanned) own
+    /// properties on every single element wrap. Keyed by the prototype
+    /// `Obj`'s `Rc` pointer, which is stable for the process lifetime (every
+    /// WebIDL prototype is a long-lived intrinsic). See `materialize_accessors`.
+    accessor_cache: HashMap<usize, Rc<Vec<(PropertyKey, Property)>>>,
+    /// HTML-35: names most recently installed on the global object by
+    /// `refresh_window_named_properties` (HTML SS7.2.2.3), so a name that
+    /// stops qualifying (its `id`/`name` attribute changed, or the
+    /// contributing element left the tree) gets deleted rather than left
+    /// stale. See `Dom::window_named_objects`/`mark_named_objects_dirty`.
+    window_named_property_keys: Vec<String>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -375,27 +389,80 @@ impl RuntimeBindingHost<'_> {
         self.wrap_platform_object(PlatformKey { arena: handle.arena, slot: handle.slot,
             generation: handle.generation }, InterfaceBrand(handle.brand))
     }
+    /// Copies every accessor (getter/setter) property from `wrapper`'s
+    /// prototype chain onto its own properties, nearest prototype winning,
+    /// so this crate's per-instance property lookup sees them without a
+    /// prototype-chain walk of its own.
+    ///
+    /// DOM-B-NEXT: this used to recompute "which of this prototype's own
+    /// properties are accessors" from scratch (two full linear scans of that
+    /// prototype's property list, since both `own_keys_enumerable()` and the
+    /// per-name `own_prop()` lookup after it are O(n) each) on *every single
+    /// element wrap*, and check "does the wrapper already have this name"
+    /// via another O(n) `own_prop()` scan per candidate -- overall
+    /// quadratic in the prototype chain's total accessor count, paid again
+    /// for every element ever created. That is why `html/dom/reflection-*.html`
+    /// (which creates and queries huge numbers of elements) were hitting the
+    /// WPT harness's wall-clock deadline: profiling one such page
+    /// (`perf record` against a release build) showed the hot path was
+    /// exactly this -- `JsObject::get_own`/`own_prop`'s linear `Vec` scan and
+    /// the UTF-16 re-encoding of each candidate `PropertyKey`, not the WPT
+    /// harness or an individual reflected attribute being slow per se.
+    /// Fixed two ways: `self.prototype_accessors()` below computes a given
+    /// prototype's own accessor list exactly once and caches it (a
+    /// prototype's own properties never change after interface
+    /// installation), and the "already defined" check here now uses one
+    /// `HashSet` built from the wrapper's current own keys instead of one
+    /// `own_prop()` scan per candidate.
     fn materialize_accessors(&self, wrapper: &JsValue) {
         let JsValue::Object(object) = wrapper else { return; };
+        let mut seen: HashSet<PropertyKey> =
+            object.borrow().own_property_keys().into_iter().collect();
         let mut prototype = object.borrow().proto.clone();
         while let Some(current) = prototype {
-            let (next, accessors) = {
-                let current = current.borrow();
-                let accessors = current.own_keys_enumerable().into_iter()
-                    .filter_map(|name| current.own_prop(&name).cloned()
-                        .filter(|property| property.getter.is_some() || property.setter.is_some())
-                        .map(|property| (name, property)))
-                    .collect::<Vec<_>>();
-                (current.proto.clone(), accessors)
-            };
-            for (name, property) in accessors {
-                let mut object = object.borrow_mut();
-                if object.own_prop(&name).is_none() {
-                    let _ = object.define(&name, property);
+            let next = current.borrow().proto.clone();
+            for (name, property) in self.prototype_accessors(&current).iter() {
+                if seen.insert(name.clone()) {
+                    object.borrow_mut().define(name.clone(), property.clone());
                 }
             }
             prototype = next;
         }
+    }
+
+    /// `prototype`'s own accessor (getter/setter) properties, computed once
+    /// and cached by the prototype object's stable `Rc` identity (every
+    /// WebIDL prototype this crate installs is a long-lived intrinsic, never
+    /// dropped and never re-created at a new address for the same
+    /// interface). Note this does not track a *later* mutation of the
+    /// prototype (e.g. a page's own `Object.defineProperty(Element.prototype,
+    /// ...)`): the engine already only materializes accessors once, at
+    /// element-wrap time, rather than walking the live prototype chain on
+    /// every property access, so an element wrapped *before* such a mutation
+    /// was already never going to observe it either -- this cache extends
+    /// that same pre-existing "materialized once, at wrap time" contract to
+    /// elements wrapped after the mutation too, rather than introducing a
+    /// new kind of staleness. See `materialize_accessors`.
+    fn prototype_accessors(&self, prototype: &Obj) -> Rc<Vec<(PropertyKey, Property)>> {
+        let key = Rc::as_ptr(&prototype.0) as usize;
+        if let Some(cached) = self.state.borrow().accessor_cache.get(&key) {
+            return cached.clone();
+        }
+        let accessors = Rc::new({
+            let current = prototype.borrow();
+            current.own_property_keys().into_iter()
+                // `own_keys_enumerable()` (what this replaces) only ever
+                // considered String keys; preserved here so this stays a
+                // pure perf fix, not a behavior change.
+                .filter(|name| matches!(name, PropertyKey::String(_)))
+                .filter_map(|name| current.own_prop(name.clone()).cloned()
+                    .filter(|property| property.enumerable
+                        && (property.getter.is_some() || property.setter.is_some()))
+                    .map(|property| (name, property)))
+                .collect::<Vec<_>>()
+        });
+        self.state.borrow_mut().accessor_cache.insert(key, accessors.clone());
+        accessors
     }
 
     fn preserve_legacy_element_extensions(&mut self, node: NodeIdx, wrapper: &JsValue) -> Result<(), Throw> {
@@ -711,6 +778,8 @@ pub(crate) fn install(
         integrator_assist: IaRuntime::new(),
         write_insertion_points: HashMap::new(),
         active_parsers: HashMap::new(),
+        accessor_cache: HashMap::new(),
+        window_named_property_keys: Vec::new(),
     }));
     js.set_host_native_dispatcher(build_host_native_dispatcher(state.clone()));
     let mut adapter = RuntimeBindingHost {
@@ -1733,6 +1802,17 @@ impl BindingHost for RuntimeBindingHost<'_> {
             self.js.enqueue_native_microtask(request.global, request.kind)?;
             host.borrow_mut().acknowledge_native_microtask(request);
         }
+        // HTML-35: named access on window (SS7.2.2.3). Every DOM-mutating
+        // binding call passes through this one function, so this is the
+        // single choke point that can keep window's named properties live
+        // without a hook into amazing-js's property lookup itself. The flag
+        // check is one bool per call in the overwhelming common case
+        // (nothing id/name/tree-membership-relevant changed); the O(document
+        // size) rescan behind it only runs when `Dom::mark_named_objects_dirty`
+        // actually fired.
+        if result.is_ok() && host.borrow_mut().dom.take_named_objects_dirty() {
+            self.refresh_window_named_properties()?;
+        }
         result.map_err(|error| throw_dom_error(self, error))
     }
     fn is_html_document(&self, document: NodeIdx) -> bool {
@@ -1775,6 +1855,55 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn type_error(&mut self, message: &'static str) -> Throw {
         Throw::type_error(message)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    /// See the call site in `with_dom` above and `Dom::window_named_objects`
+    /// for the spec algorithm and its one deliberate omission (nested
+    /// browsing contexts by name -- this engine has no iframe content
+    /// navigables yet).
+    fn refresh_window_named_properties(&mut self) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
+        let global = self.js.binding_global_object();
+        let previous = std::mem::take(&mut self.state.borrow_mut().window_named_property_keys);
+        for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
+            self.js.binding_delete_property(&global, stale)?;
+        }
+        // Only names we actually define below (not skipped for colliding
+        // with a pre-existing property) count as "owned" for next time.
+        let mut owned = Vec::with_capacity(entries.len());
+        for (name, nodes) in entries {
+            // Named access is a [[Get]] fallback in the spec (Window's named
+            // properties object is only consulted when ordinary property
+            // lookup fails), so it must never shadow a property that is
+            // already there for a different reason -- a `var`/function
+            // declaration, a built-in like `document`, or a testharness.js
+            // global such as `test`/`async_test`. `<div id="test">` is
+            // common in WPT fixtures and would otherwise clobber the
+            // `test()` function every such page relies on. We can only
+            // eagerly materialize properties (no engine-level [[Get]] hook
+            // for window -- see the with_dom call site), so approximate the
+            // fallback rule by skipping any name we did not already own
+            // from a previous refresh when something is already there.
+            if !previous.contains(&name) && self.js.binding_get_own_property(&global, &name)?.is_some() {
+                continue;
+            }
+            let value = if let [single] = nodes[..] {
+                self.wrap_node(single)?
+            } else {
+                let slot = host.borrow_mut().dom.create_static_node_list(nodes);
+                let mut key = self.node_platform_key(self.current_document());
+                key.slot = slot as u64;
+                self.wrap_platform_object(key, InterfaceBrand::STATIC_NODE_LIST)?
+            };
+            self.js.binding_define_data_property(&global, &name, value,
+                BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
+            owned.push(name);
+        }
+        self.state.borrow_mut().window_named_property_keys = owned;
+        Ok(())
     }
 }
 

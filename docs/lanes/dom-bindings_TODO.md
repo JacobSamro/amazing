@@ -2616,3 +2616,88 @@ before and after (missing vendored resources, or the full timing/query
 model this ticket doesn't implement) -- not a regression.
 
 Evidence: `crates/amazing-bindings/evidence/dom-b-reflect/`.
+
+## DOM-B-NEXT + HTML-35 (a3b471f8)
+
+Fixed base `b72bc231`. Coordinator's ordered list: (1) fix the noisy
+`html/dom/reflection-*.html` WPT timeouts, (2) HTML-35 item 1: `window.<id>`
+named access (HTML SS7.2.2.3), (3) HTML-35 item 2: `HTMLScriptElement.async`
+reflecting the "force async" flag.
+
+**1. Reflection timeouts**: three compounding bugs in
+`crates/amazing-bindings/evidence/dom-b-audit/run-corpus.py`, not an engine
+perf regression -- `wai-aria/manual/*.html` (233 files, human-interaction
+pages that never call `done()`) wrongly selected by a naive
+`'testharness.js' in text` rule; the harness copied the *debug* binary
+(4-5x slower than release for this CPU-bound work); the per-test deadline
+(20s) was simply too small for pages with thousands of subtests even in
+release (worst measured 84.2s). Fixed: exclude `/manual/` paths, copy
+`release/amazing`, and split a `--heavy-timeout-ms 150000 --heavy-workers 1`
+budget for the nine `reflection-*.html` pages specifically. Zero of them
+time out on either side of the before/after diff now.
+
+**2. Window named access**: `crates/amazing-dom/src/window_names.rs` (new)
+computes the spec's supported-names list (`name` of
+embed/form/img/object, `id` of any element) in tree order; a `Dom`-side
+dirty flag (`named_objects_dirty`, set by the four real mutation choke
+points: `set_attribute_ns`/`remove_attribute_ns` for id/name,
+`insert_internal`/`remove_internal` for tree membership) lets
+`crates/amazing/src/runtime_binding_host.rs`'s `with_dom` -- the one choke
+point every DOM-mutating binding call passes through -- recompute and
+redefine the global object's properties only when something relevant
+actually changed. Scope cut: no nested-navigable/iframe-by-name support (no
+content navigables in this engine yet); the multi-match case uses a
+`STATIC_NODE_LIST`, not a true live `HTMLCollection`. **Found by the corpus
+gate, not by inspection**: the first version unconditionally defined the
+property, silently clobbering any pre-existing global with the same name
+(`<div id="test">`, routine in WPT fixtures, overwrote testharness.js's own
+`test()` function -- 55 lost subtests measured). Fixed by tracking which
+keys the mechanism itself owns from the previous refresh and refusing to
+(re)define a name that newly collides with something it doesn't already
+own -- approximates the spec's "`[[Get]]` fallback, never shadows" rule
+without an engine-level hook (out of this lane's granted paths). Re-verified
+after the fix: 0 lost subtests.
+- HTML-35 item 1's originally-cited motivating test,
+  `dom/nodes/insertion-removing-steps/Node-appendChild-script-in-script.html`,
+  turned out **not** to use `window.<id>` at all (confirmed by direct
+  execution) -- its real gap is the HTML "children-changed steps"
+  script-execution-model algorithm (whatwg/html#10188), a materially larger,
+  separate feature needing an "already started" flag and mutation-triggered
+  script preparation. Not started; routed to `questions.md` for html/
+  js-runtime coordination. Implemented window named access anyway since
+  it's independently spec-required and was already in scope as HTML-35
+  item 1.
+
+**3. `HTMLScriptElement.async`**: new `Node.force_async: bool` in
+`amazing-dom`, initialized `true` by `create_element_local_in`/
+`create_element_ns_in` (i.e. `createElement`/`createElementNS`) via a new
+`init_force_async`; parser-inserted `<script>` elements go through
+`amazing-html`'s structurally separate `tree.rs::insert_element` and so
+correctly default to `false` with no html-lane change needed. Getter in
+`element_reflection.rs` returns true if the flag is set OR the content
+attribute is present; setter clears the flag before applying the boolean
+attribute logic. New test:
+`tests.rs::html_35_script_async_reflects_force_async_flag`.
+
+**Measured** (venus-001; the k-test host died silently mid-gate -- see
+`questions.md`). Workspace: **3466 passed / 17 skipped / 0 failed**
+(`cargo nextest run --workspace --locked --no-fail-fast`); `cargo test
+--workspace --locked --doc` all `ok` (`amazing_js`/`amazing_html` 1/1 each).
+`amazing-bindings` crate: 123/123. Combined `amazing-dom` +
+`amazing-bindings` + `amazing`: 736/736 passed, 6 skipped.
+
+WPT before/after (`run-corpus.py`, before = `b72bc231` via `--ref` using
+*that commit's own unfixed script*, after = this candidate;
+`html/dom`+`wai-aria`+`web-animations/interfaces/Animatable`, whole
+directories): **502 files/262 timeouts -> 269 files/21 timeouts** (exact
+accounting: 233 manual-excluded + 8 reflection-fixed + 21 unchanged
+pre-existing unimplemented cluster = 262). Subtests: 35336/9678 ->
+47347/12528. Counter diff: **12011 gained, 0 lost**.
+
+Also found and fixed in passing: venus-001's shared `/data` disk was at
+100% full, crashing the workspace-test linker with SIGBUS on unrelated
+crates. Freed 9.4 GB by deleting only this lane's own rebuildable
+`debug/incremental` cache; flagged the underlying cross-lane disk-fullness
+in `questions.md` rather than touching other lanes' directories.
+
+Evidence: `crates/amazing-bindings/evidence/dom-b-next/`.

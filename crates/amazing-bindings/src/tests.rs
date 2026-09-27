@@ -2057,6 +2057,32 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
 }
 
+/// HTML-35: `HTMLScriptElement.async` reflects the "force async" flag, not a
+/// plain boolean content attribute (HTML SS4.5.6). `Document.createElement`
+/// starts the flag `true`; the setter always clears it first, so once
+/// cleared only the content attribute controls the getter. A script element
+/// created the way the HTML parser creates one (the plain, low-level
+/// `Dom::create_element` that `amazing-html`'s tree builder uses, never
+/// `create_element_local_in`/`create_element_ns_in`) never gets the flag set
+/// and defaults to `false`.
+#[test]
+fn html_35_script_async_reflects_force_async_flag() {
+    let mut h = Host::default();
+    let script = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("script")]));
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
+    call(&mut h, O::ScriptSetAsync, V::Node(script), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(false));
+    assert!(h.dom.attribute_utf16(script, "async").is_none());
+    // The flag is now cleared; only the content attribute drives the getter.
+    h.dom.set_attribute(script, "async", "").unwrap();
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
+    call(&mut h, O::ScriptSetAsync, V::Node(script), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(false));
+
+    let parser_script = h.dom.create_element(NodeIdx(0), "script");
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(parser_script), &[]), V::Bool(false));
+}
+
 #[test]
 fn wpt_html_token_list_attributes_are_live_and_canonical() {
     let mut h = Host::default();

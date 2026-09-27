@@ -118,6 +118,12 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         if matches!(spec.kind, Kind::Boolean) {
             let enabled = host.to_boolean(value);
+            // HTML-35: HTMLScriptElement.async's setter must clear the
+            // "force async" flag on every call, per spec, before applying
+            // the ordinary boolean-attribute set/remove below.
+            if op == O::ScriptSetAsync {
+                host.with_dom(|dom| { dom.set_force_async(node, false); Ok(()) })?;
+            }
             host.with_dom(|dom| if enabled {
                 html_reflection::set(dom, node, spec.attribute, Vec::new())
             } else { dom.remove_attribute(node, spec.attribute) })?;
@@ -145,6 +151,14 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     }
     let value = host.with_dom(|dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
     match spec.kind {
+        // HTML-35: HTMLScriptElement.async reflects the "force async" flag,
+        // not a plain boolean content attribute -- true if the flag is set
+        // OR the async attribute is present (see init_force_async/
+        // set_force_async in amazing-dom's namespace.rs).
+        Kind::Boolean if op == O::ScriptAsync => {
+            let force_async = host.with_dom(|dom| Ok(dom.force_async(node)))?;
+            Ok(host.boolean(value.is_some() || force_async))
+        }
         Kind::Boolean => Ok(host.boolean(value.is_some())),
         Kind::ReflectedUnsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
             .filter(|value| *value <= i32::MAX as u32).unwrap_or(0) as f64)),

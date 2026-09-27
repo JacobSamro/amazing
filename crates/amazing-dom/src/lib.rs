@@ -43,6 +43,7 @@ pub mod range;
 pub mod selection;
 pub mod traversal;
 mod tree;
+mod window_names;
 pub use tree::{DocumentPosition, DomError};
 
 /// Index into a [`Dom`] arena.
@@ -109,6 +110,18 @@ pub struct Node {
     character_data_units: Option<Vec<u16>>,
     processing_instruction_attributes: Option<processing_instruction::Attributes>,
     prefix: Option<String>,
+    /// HTMLScriptElement's "force async" flag (HTML SS4.5.6, HTML-35). Initially
+    /// `true` only for a script element created via `Document.createElement`/
+    /// `createElementNS` (set explicitly in `namespace.rs`'s
+    /// `create_element_local_in`/`create_element_ns_in`); every other node
+    /// defaults to `false`, which is already correct for a parser-inserted
+    /// script element without needing the HTML parser (a different lane) to
+    /// clear it -- the parser's own `insert_element` never goes through those
+    /// two functions. Meaningless for non-script nodes; kept as a plain field
+    /// rather than a side table for the same reason `character_data_units`
+    /// and `processing_instruction_attributes` are, despite being unused by
+    /// most node kinds.
+    force_async: bool,
     pub kind: NodeKind,
     pub parent: Option<NodeIdx>,
     pub first_child: Option<NodeIdx>,
@@ -166,6 +179,17 @@ pub struct Dom {
     /// scoped to this Dom, like every other piece of embedding-free state
     /// here -- but enough for same-page/same-session copy-paste round trips.
     clipboard_text: Vec<u16>,
+    /// HTML-35: bumped whenever a mutation could change the result of
+    /// "named access on the Window object" (HTML SS7.2.2.3) -- an `id`/`name`
+    /// attribute change, or any node insertion/removal (an element with an
+    /// existing `id`/`name` can be moved into or out of a document tree
+    /// without any attribute mutation). The driver's `with_dom` choke point
+    /// (`crates/amazing/src/runtime_binding_host.rs`) checks and clears this
+    /// after every DOM-mutating binding call and only then recomputes the
+    /// global object's named properties -- see `window_named_objects` below.
+    /// Not persisted/observable from JS; a plain dirty flag, not part of any
+    /// node's identity.
+    named_objects_dirty: bool,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -237,6 +261,7 @@ impl Dom {
             observables: observable::Observables::default(),
             animations: animation::Animations::default(),
             clipboard_text: Vec::new(),
+            named_objects_dirty: true,
             doctype: None,
         };
         dom.nodes.push(Node {
@@ -246,6 +271,7 @@ impl Dom {
             character_data_units: None,
             processing_instruction_attributes: None,
             prefix: None,
+            force_async: false,
             kind: NodeKind::Document,
             parent: None,
             first_child: None,
@@ -285,6 +311,7 @@ impl Dom {
             character_data_units: None,
             processing_instruction_attributes: None,
             prefix: None,
+            force_async: false,
             kind,
             parent: None,
             first_child: None,
