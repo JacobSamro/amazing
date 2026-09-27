@@ -2830,3 +2830,47 @@ before the wiring lands would show zero movement and be misleading
 evidence, not real signal.
 
 Evidence: `crates/amazing-bindings/evidence/window-named-access-script-timing/`.
+
+## setHTMLUnsafe: implement the missing Element/ShadowRoot method (base fa514dc9)
+
+`Element`/`ShadowRoot.setHTMLUnsafe(html, options?)` (HTML Sanitizer API) was
+entirely absent -- no `Operation` variant, no interface member -- so every WPT
+test calling it crashed with `TypeError: value is not callable`, aborting the
+whole test file before any assertion ran. Next actionable item from the
+`declarative-shadow-dom-basic.html` remaining-failures queue entry.
+
+**Fix**: added `O::ElementSetHTMLUnsafe` (`host.rs`), routed in
+`markup_bindings.rs` into the exact same fragment-replacement body as
+`O::ElementSetInnerHTML` (this engine has no sanitizer either way, so "skip
+sanitizing" and the ordinary setter currently behave identically), declared
+`method("setHTMLUnsafe", O::ElementSetHTMLUnsafe, 1)` on both `ELEMENT` and
+`SHADOW_ROOT` in `interfaces.rs`. Options argument is accepted but ignored (no
+sanitizer to apply against).
+
+**Escalated, not fixed here**: `amazing_html::parse_fragment` has no way to
+enable declarative shadow roots (`build_fragment` in `tree.rs` hardcodes
+`allow_declarative_shadow_roots = false` for every fragment parse), so
+`<template shadowrootmode=open>` markup passed to `setHTMLUnsafe` still
+becomes an ordinary leftover template rather than an attached shadow root.
+Routed to `questions.md` with a proposed non-breaking sibling function
+(`parse_fragment_with_shadow_roots`) -- `amazing-html` is outside this lane's
+granted paths. Once it lands, this lane's `FragmentParser` trait in `host.rs`
+needs a second method/parameter to expose it to `markup_bindings.rs`.
+
+**Measured** (venus-001, freshly rebuilt release binary both sides, fixed base
+`fa514dc9`): `declarative-shadow-dom-basic.html` fail{pass:15,fail:7} ->
+fail{pass:17,fail:5} (the 7 crashes gone; 5 remaining fail for the exact
+escalated reason above). `declarative-shadow-dom-attachment.html`: 0/654 pass
+-> 586/68 pass -- large genuine improvement, this file exercises
+`setHTMLUnsafe` heavily. Whole-`shadow-dom/declarative` (56 files) naive diff
+showed 588 gained/608 lost; the entire "lost" figure traces to `gethtml.html`
+alone, an auto-generated page whose retained-pass count is a function of a
+hard wall-clock worker-deadline timeout, not correctness (three consecutive
+runs of the same unchanged binary against that one file gave 1216, 608, and
+530 passes) -- not usable as a before/after signal, not a regression.
+
+**Gate**: workspace `cargo nextest run --workspace --locked --no-fail-fast` --
+**3482 passed / 17 skipped / 0 failed**; doctests all `ok`. Crate:
+`amazing` + `amazing-bindings` + `amazing-dom` **736/736 passed, 6 skipped**.
+
+Evidence: `crates/amazing-bindings/evidence/set-html-unsafe/`.

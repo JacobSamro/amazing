@@ -437,6 +437,20 @@ pub enum Operation {
     ElementInnerHTML,
     TemplateContent,
     ElementSetInnerHTML,
+    /// `Element`/`ShadowRoot.setHTMLUnsafe(html, options?)` (HTML sanitizer
+    /// API). Routed to the exact same fragment-replacement body as
+    /// `ElementSetInnerHTML` in `markup_bindings.rs`: this engine has no
+    /// sanitizer to apply either way (so "unsafe" -- skip sanitizing -- and
+    /// the ordinary setter currently behave identically), and neither path
+    /// yet parses with declarative shadow roots enabled --
+    /// `amazing_html::parse_fragment` hardcodes `allow_declarative_shadow_
+    /// roots = false` for every fragment context, a parser-level flag only
+    /// html lane's crate can add (routed to `questions.md`). Exists mainly
+    /// so the method is callable at all -- previously entirely absent, so
+    /// any WPT test calling it (e.g. `shadow-dom/declarative/declarative-
+    /// shadow-dom-basic.html`) crashed with `TypeError: value is not
+    /// callable` before running any of its assertions.
+    ElementSetHTMLUnsafe,
     ElementOuterHTML,
     ElementSetOuterHTML,
     ElementInsertAdjacentHTML,

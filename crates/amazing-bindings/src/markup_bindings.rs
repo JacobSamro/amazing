@@ -2,7 +2,7 @@ use crate::host::{BindingHost, FragmentContext, FragmentParser, InterfaceBrand, 
 use amazing_dom::{DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementOuterHTML
+    matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe | O::ElementOuterHTML
         | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML
         | O::ElementInsertAdjacentElement | O::ElementInsertAdjacentText | O::ElementInnerText
         | O::ElementSetInnerText | O::ParentQuerySelector | O::ParentQuerySelectorAll
@@ -70,7 +70,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
         };
     }
     host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { .. })
-        || (matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML)
+        || (matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe)
             && dom.is_shadow_root(node)) { Ok(()) }
         else { Err(DomError::TypeError) })?;
     match op {
@@ -152,7 +152,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             if op == O::ElementInsertAdjacentText { return Ok(host.undefined()) }
             match inserted { Some(node) => host.wrap_node(node), None => Ok(host.null()) }
         }
-        O::ElementSetInnerHTML | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML => {
+        O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML => {
             let position = if op == O::ElementInsertAdjacentHTML {
                 let units = required_string(host, args.first())?;
                 let text = String::from_utf16(&units).unwrap_or_default().to_ascii_lowercase();
@@ -186,12 +186,12 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             let result = host.parse_fragment(parse_context, &markup);
             let parsed = seam_result(host, result)?;
             host.with_dom(|dom| {
-                let insertion = if op == O::ElementSetInnerHTML && dom.is_html_template(node) {
+                let insertion = if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) && dom.is_html_template(node) {
                     dom.ensure_template_contents(node)?
                 } else { parent };
                 let document = dom.owner_document(insertion).unwrap_or(insertion);
                 let fragment = dom.import_fragment(&parsed, document)?;
-                if op == O::ElementSetInnerHTML { dom.replace_all(insertion, Some(fragment)) }
+                if matches!(op, O::ElementSetInnerHTML | O::ElementSetHTMLUnsafe) { dom.replace_all(insertion, Some(fragment)) }
                 else if op == O::ElementSetOuterHTML { dom.replace(node, fragment, parent).map(|_| ()) }
                 else { dom.pre_insert(fragment, parent, reference).map(|_| ()) }
             })?;
