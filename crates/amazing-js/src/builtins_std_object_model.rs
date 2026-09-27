@@ -298,6 +298,32 @@ impl Interpreter {
             return self.define_own_property(target, key, &JsValue::object(descriptor));
         }
         if let Some(mut property) = existing {
+            // An Array's "length" is exotic even through plain [[Set]]: unlike
+            // every other data property, writing it can delete existing
+            // elements (ArraySetLength, 10.4.2.1), so it needs ToNumber +
+            // range validation and array_prepare_length_change here -- this
+            // was previously handled inside the general path's
+            // define_own_property call, which this fast path bypasses.
+            // Losing this branch silently kept stale elements above a
+            // shrunk length (caught by built-ins/Array/length/* and the
+            // ES5 15.4.5.1 corpus: -56 Test262 passes without it).
+            if matches!(target.borrow().exotic, Exotic::Array)
+                && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
+                let number = self.to_number(&value)?;
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
+                    return Err(Throw::range_error("invalid array length"));
+                }
+                if !property.writable && property.value != JsValue::num(number) {
+                    return Ok(false);
+                }
+                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
+                property.value = JsValue::num(number);
+                if let Some(name) = key.as_string() {
+                    if self.legacy_define(target, name, &property)? { return Ok(true); }
+                }
+                target.borrow_mut().define(key, property).unwrap();
+                return Ok(true);
+            }
             // Caller (set_with_receiver) already confirmed this property has
             // no getter/setter and is writable, so only .value changes here;
             // a plain [[Set]] never touches writable/enumerable/configurable.
