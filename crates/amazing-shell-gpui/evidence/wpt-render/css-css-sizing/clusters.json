@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "subdir": "css/css-sizing",
-  "mismatch_count": 53,
+  "mismatch_count": 51,
   "unreadable": 0,
   "clusters": [
     {
@@ -46,24 +46,6 @@
       ]
     },
     {
-      "signature": "medium-region, left, darker than reference",
-      "count": 3,
-      "examples": [
-        "css__css-sizing__aspect-ratio__block-aspect-ratio-012.html",
-        "css__css-sizing__aspect-ratio__block-aspect-ratio-011.html",
-        "css__css-sizing__svg-no-ar-max-height-min-content.html"
-      ]
-    },
-    {
-      "signature": "medium-region, left, lighter than reference",
-      "count": 3,
-      "examples": [
-        "css__css-sizing__aspect-ratio__flex-aspect-ratio-025.html",
-        "css__css-sizing__fit-content-block-size-abspos.html",
-        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-015.html"
-      ]
-    },
-    {
       "signature": "medium-region, top-left, redder than reference",
       "count": 3,
       "examples": [
@@ -82,11 +64,27 @@
       ]
     },
     {
+      "signature": "large-region, left, same tone, different shape",
+      "count": 2,
+      "examples": [
+        "css__css-sizing__stretch__block-height-003.html",
+        "css__css-sizing__aspect-ratio__flex-aspect-ratio-025.html"
+      ]
+    },
+    {
       "signature": "large-region, left, darker than reference",
       "count": 2,
       "examples": [
         "css__css-sizing__aspect-ratio__flex-aspect-ratio-026.html",
         "css__css-sizing__svg-intrinsic-size-006.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, lighter than reference",
+      "count": 2,
+      "examples": [
+        "css__css-sizing__fit-content-block-size-abspos.html",
+        "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-015.html"
       ]
     },
     {
@@ -98,17 +96,17 @@
       ]
     },
     {
-      "signature": "large-region, left, same tone, different shape",
-      "count": 1,
-      "examples": [
-        "css__css-sizing__stretch__block-height-003.html"
-      ]
-    },
-    {
       "signature": "medium-region, left, redder than reference",
       "count": 1,
       "examples": [
         "css__css-sizing__contain-intrinsic-size__contain-intrinsic-size-026.html"
+      ]
+    },
+    {
+      "signature": "medium-region, left, darker than reference",
+      "count": 1,
+      "examples": [
+        "css__css-sizing__svg-no-ar-max-height-min-content.html"
       ]
     },
     {
