@@ -1596,3 +1596,60 @@ ones were fixed as part of THIS (PlainDate) checkpoint's shared-machinery
 fixes, since they all funnel through the same epoch-string/PlainTime-parse
 code paths; the rest remain open and are re-listed in the "remaining" set
 above.
+
+## JSS-temporal-port item 2 continued: PlainTime cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` files | 4397 pass / 206 fail | 4414 pass / 189 fail |
+
++17 pass files, zero lost, verified by a full (path, variant) pass-set diff
+against the PlainDate-cluster commit's baseline (`js-stdlib-pd-r4.jsonl`,
+captured at 2bfe3d85/14aab57f). Workspace `cargo nextest run --workspace
+--locked --no-fail-fast`: 3399/3399 passed. `cargo test --workspace --locked
+--doc`: all green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_parse_annotations`'s calendar-annotation check unconditionally
+  rejected any FIRST `u-ca=` value other than `"iso8601"` -- correct for
+  calendar-bearing kinds (this engine's calendar model is iso8601-only,
+  ADR-locked) but wrong for `PlainTime`, which has no calendar slot at all
+  and never canonicalizes the annotation's value (a real-but-unsupported
+  calendar like `"hebrew"`, or an outright unknown one, is simply accepted
+  and discarded). Added a `require_iso_calendar` parameter, `false` only
+  for `PlainTime`.
+- `std_temporal_from_fields`'s ZonedDateTime-instance-argument branch
+  returned the FULL local date+time unconditionally instead of zeroing the
+  half the target kind doesn't use, unlike the sibling "compatible Temporal
+  record" branch just above it (which already does this correctly) --
+  `PlainTime`/`PlainDate` `.compare()`/`.equals()` against a ZonedDateTime
+  never matched because the receiver's own zeroed date (or time) fields were
+  compared against the ZDT's real local date (or time). Fixed to zero
+  `fields[3..9]` for `PlainDate` / `fields[0..3]` for `PlainTime`, matching
+  the sibling branch's convention.
+- `std_temporal_add_values`'s `PlainTime` branch incorrectly threw
+  `RangeError` for any duration with a nonzero year/month/week/day component
+  -- a rule copied from `Duration.add` (which DOES throw for calendar units,
+  since it has no `relativeTo` to redistribute them through). Per spec's
+  `AddDurationToTime`, `PlainTime.add`/`.subtract` simply IGNORE a
+  duration's date part entirely (`ToInternalDurationRecord` splits it off,
+  `AddTime` never consumes it) -- never throw. Fixed to discard the date
+  part instead of rejecting it.
+- `std_temporal_to_string`'s `calendarName` option read was already
+  excluded for `Duration` (no calendar) but not for `PlainTime` (also no
+  calendar, per spec's `PlainTime.prototype.toString` algorithm, which never
+  reads `calendarName` at all) -- extended the existing exclusion.
+
+Remaining PlainTime-cluster files (11, down from 39): 5 are the deferred
+PlainTime-string-ambiguity-grammar feature
+(`argument-string-time-designator-required-for-disambiguation.js` across
+`compare`/`from`/`equals`/`since`/`until` -- the same gap noted for
+PlainDate/PlainDateTime in the two prior checkpoints: a string that could
+also parse as a date requires an explicit `T` prefix to be accepted as a
+time, needing the real `TemporalTimeString` ambiguity production rather than
+a local bug fix); 6 are an unrelated precision cluster not yet investigated
+(`add-large-subseconds.js`, `subtract-large-subseconds.js`,
+`argument-duration-precision-exact-numerical-values.js` x2 add/subtract,
+`order-of-operations.js` x2 add/subtract). PlainYearMonth (29 files) is next
+per the coordinator's ordering.
