@@ -1847,3 +1847,222 @@ with this lane's *next* ticket, not retroactively to LAYOUT-27.
 Next: cluster this lane's layout/layout-flexgrid geometry/flex/grid WPT
 failures and port matching `DioxusLabs/taffy` algorithm sections in bulk
 onto Amazing's own box tree and types, per the verified porting policy.
+
+## LAYOUT-28 -- CSS Grid track sizing: clustering, and a scoped taffy port (base `91d4d8a0`)
+
+### Clustering, and why this ticket ports one narrow piece rather than the whole algorithm
+
+Compared `amazing-layout`'s flex and grid track-sizing against
+`DioxusLabs/taffy` (MIT, source suggested by the new porting policy) before
+writing anything:
+
+- **Flexbox's core "Resolving Flexible Lengths" (CSS Flexbox s9.7)**:
+  `flex_algorithm.rs`'s `resolve_flexible_lengths` is already a faithful,
+  spec-correct, freeze/distribute/clamp implementation, functionally
+  equivalent to taffy's own `resolve_flexible_lengths`. Verified by manual
+  trace, not just inspection. Porting here would be pure churn for no
+  behavioral gain, at real regression risk -- not attempted.
+- **Grid's "Resolve Intrinsic Track Sizes" (CSS Grid 2 s11.5.1)**: taffy's
+  version (`src/compute/grid/track_sizing.rs`, ~470 lines) is deeply coupled
+  to its own `GridTrack`/`GridItem`/live-remeasurement `Tree` abstraction
+  (per-item min-content AND max-content contributions measured on demand at
+  an other-axis-dependent available space, scroll-container and
+  fit-content-limit quirks, baseline-alignment shims). `amazing-layout`'s
+  `Contrib`/`TrackSize` model precomputes a single (max-content-only)
+  contribution per item ahead of time, with none of that machinery. A
+  faithful full port would mean redesigning `Contrib` and the item
+  measurement pipeline first -- real, but too large and risky to land
+  blind in one ticket without a live iteration loop against the specific
+  behaviors it changes; deferred as this ticket's own next step (see
+  "Follow-up" below), not ported now.
+
+What WAS safe and high-value to port: the single self-contained, tree-free
+helper the above steps both lean on, and one caller-side bug it exposed by
+comparison.
+
+### What landed
+
+1. **`grid_algorithm.rs::distribute_up_to_limits`** -- ported from taffy's
+   `distribute_space_up_to_limits` (`src/compute/grid/track_sizing.rs` @
+   `e661b35980d9644ad8f1df64e183d27e5884533b`, MIT; attribution header in
+   the file, row in `THIRD_PARTY_NOTICES.md`). Simplified to
+   equal-proportion only (taffy's flex-factor weighting only applies when
+   every affected track is itself flexible, a Chrome-matching quirk this
+   crate doesn't otherwise model). `size_axis`'s "intrinsic contributions"
+   loop now calls this instead of a single equal share hard-clamped per
+   track independently, which could clamp a saturated track down without
+   ever handing its unused portion to a still-growable sibling in the same
+   span -- undersizing a mixed-limit span (e.g. `[minmax(0,40px) auto]`)
+   below what the spanning item actually needs.
+2. **Fixed the same loop's "extra space still needed" formula** to subtract
+   *every* track's current base in the span (matching taffy's
+   `space - track_sizes.sum()`), not just the definite ones. The old
+   formula double-counted: a second item landing in an already-grown
+   intrinsic track re-added its full contribution on top of the track's
+   existing size instead of recognizing it was already satisfied. Caught by
+   `intrinsic_track_contributions_include_chrome_only_once` (pre-existing
+   test) failing after the `distribute_up_to_limits` swap alone.
+3. **`TrackSize::maximize_limit()`** (CSS Grid 2 s11.6 "Maximize Tracks"):
+   `maximize_tracks`'s `growable` filter only ever admitted a track whose
+   limit was `Some(_)`, and `growth_limit()` returns `None` for *any* track
+   with no explicit numeric max -- silently excluding plain `auto` columns
+   from ever absorbing leftover container space (found by comparing against
+   taffy's `maximise_tracks`, which the spec text backs directly: "a track
+   without an upper limit is treated as having a growth limit of
+   infinity"). First cut treated a literal `auto` max as `Some(INFINITY)`
+   (unconditionally unbounded); a second pass (see "3 patch-correlated
+   losses, resolved" below) found this over-broad and corrected it to
+   freeze at `current_base` instead, the same as an explicit
+   `max-content`/`min-content` max (`TrackSize::Content`, conflating the
+   two, or `minmax(_, max-content)`) -- both have a real, finite growth
+   limit derived from their items' content, not an unbounded one. `fr`
+   stays excluded (`None`; `resolve_flexible_tracks` computes it afterward
+   independently).
+
+### Triage of the render-corpus losses this exposed
+
+Two pre-existing tests' expected values baked in the bug this ticket fixed
+and needed updating, not reverting:
+- `dense_backflow_differs_from_sparse_cursor` and
+  `intrinsic_track_contributions_include_chrome_only_once` needed no
+  numeric changes -- they failed only because of the double-counting bug
+  above, now fixed.
+- `subgrid_child_sizing_contributes_to_parent_auto_track` asserted a 200px
+  container left its `auto` column at 120px total -- correct only because
+  of the excluded-from-maximize bug. Changed the container to exactly 120px
+  (no leftover space to grow into), which isolates the test back to its own
+  stated purpose (a subgrid child's contribution reaching the parent's
+  track sizing) without relying on the fixed bug's absence. Added two new
+  tests (`auto_track_grows_past_content_size_to_fill_leftover_container_
+  space`, `minmax_content_max_does_not_grow_past_its_content_size`) that
+  directly cover the `auto`-vs-`max-content` distinction the three-way fix
+  depends on, since nothing previously exercised it.
+
+Pinned `css/css-grid` render (`--baseline auto`, checked-in evidence), first
+pass (commit `8fccf8a4`, the `maximize_limit`-returns-`Some(INFINITY)`
+version): **pass 385/945 -- gained=46, lost=7.** 4 of the 7 are pre-existing
+drift from other lanes' merges since the checked-in baseline (confirmed by
+re-rendering on the reverted code: the *same* 4 losses reproduce with zero
+grid.rs/grid_algorithm.rs changes in the tree). The remaining **3 losses were
+specific to this patch** (`grid-lanes-track-sizing-explicit-block.html`,
+`grid-lanes-track-sizing-overflow-left-side.html`,
+`subgrid/writing-directions-002.html`); an initial unit reproduction of the
+first test's exact grid-lanes CSS (`display:grid-lanes;
+grid-template-columns:100px 1fr`) showed byte-identical geometry
+patched-vs-reverted, which was a real but incomplete finding: that fixture's
+own `Px 1fr` columns indeed never touch `maximize_limit`'s `auto` branch, but
+its *reference* file does -- `grid-lanes-track-sizing-explicit-block-ref.html`
+uses ordinary `display:grid; grid-template-columns:auto 1fr`, and it was the
+reference's render, not the test's, that changed. Confirmed with direct
+`render-wpt` PPM SHA256 hashing (bypassing the fuzzy-compare classifier
+entirely): fully deterministic on both the patched and reverted build (5/5
+identical hashes each, ruling out flakiness), and for all 3 tests the
+*reverted* build's test-file hash matched one of the *patched* build's
+hashes exactly, proving the render pipeline itself is stable and the
+regression is real, not noise.
+
+Root cause: a bare `auto` max track's growth limit is bounded by its items'
+own max-content contribution (already folded into `current_base` in this
+crate's single-contribution `Contrib` model, see item 3 above) -- it is
+*never* actually infinite except when there is no other claim on the
+leftover space. Treating it as unconditionally `Some(f32::INFINITY)` let
+`auto` win an axis's entire leftover space in the Maximize Tracks step
+*before* `resolve_flexible_tracks` ever ran, starving a sibling `fr` track
+down to zero -- breaking the extremely common `grid-template-columns: auto
+1fr` idiom (exactly what all 3 references use), where `auto` must stay
+content-sized and `1fr` must absorb the remainder. Traced by reading
+taffy's `resolve_intrinsic_track_sizes`/`maximise_tracks`
+(`src/compute/grid/track_sizing.rs` @ `e661b35980d9644ad8f1df64e183d27e5884533b`):
+a flexible track's growth limit is deliberately frozen to its own base size
+*before* Maximize Tracks runs specifically "to ensure the Maximise Tracks
+step doesn't affect flexible tracks" (its comment, verbatim), leaving that
+space for `resolve_flexible_tracks` to hand out afterward; a plain `auto`
+max only ever gets its growth limit raised by max-content contributions
+that this crate's model has already folded into `current_base`, so there is
+no legitimate extra headroom for it to claim either. Fix: `maximize_limit()`
+now freezes a bare `auto` max at `current_base`, the same treatment as an
+explicit `max-content`/`min-content` max -- removing the three-way split in
+favor of a two-way one (`fr` excluded via `None`; everything else frozen at
+`current_base` unless it has a real explicit numeric max). Rewrote the two
+unit tests that had encoded the wrong premise
+(`auto_track_grows_past_content_size_to_fill_leftover_container_space` ->
+`auto_track_does_not_grow_past_content_size_when_no_flexible_sibling`,
+asserting the *opposite*) and added
+`fr_sibling_absorbs_leftover_space_while_auto_track_stays_content_sized` to
+cover the actual regression (`auto 1fr`, container 300px, item 70px: `auto`
+column stays 70px, `1fr` column takes the remaining 230px).
+
+Re-ran the full `css/css-grid` render after the fix, same baseline: **pass
+388/945 -- gained=46, lost=4.** First confirmed by re-running the render at
+`8fccf8a4` (this ticket's own first commit, with the fix's two files
+reverted via patch-file, never `git stash`) that the remaining 4 losses are
+byte-for-byte the same 4 as before the fix. The coordinator correctly
+pointed out `8fccf8a4` is this ticket's own commit, not a real "pre-LAYOUT-28"
+baseline, so re-ran the same render at `8fccf8a4^` (`fb2f946e`, the actual
+`dev` base this ticket started from, `grid.rs`/`grid_algorithm.rs` checked
+out to that ref, then restored via `git checkout HEAD --` afterward): **the
+identical 4 tests are lost there too** (`gained=47 lost=4`, same LOST list --
+`abspos/positioned-grid-items-{008,016}`, `abspos/orthogonal-positioned-
+grid-items-008`, `grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-
+003`), confirming they predate LAYOUT-28 entirely and are not this ticket's
+regression. This pass fixed exactly the 3 patch-correlated losses and
+changed nothing else. **Zero unexplained losses.** `css/css-flexbox`
+(untouched this ticket) reproduces
+its own pre-existing 15-loss baseline drift identically with and without
+this patch (re-checked on this pass too), confirming that corpus's drift is
+unrelated to this change.
+
+Workspace nextest (worker-2, uncommitted-edits gate at the final fix):
+**3403/3403 passed** (17 skipped, 3 slow), doctests clean. Crate:
+**381/381** (1 skipped).
+
+### Follow-up (this lane's next taffy-porting step, not started)
+
+Restructure `Contrib` to carry both a min-content and a max-content
+contribution per item (the real spec distinction this crate currently
+conflates into one max-content-only number), then port taffy's per-span,
+per-substep `resolve_intrinsic_track_sizes` structure (grouped by span size
+ascending; base-size-from-min-content, base-size-from-max-content,
+growth-limit-from-min-content, growth-limit-from-max-content as four
+distinguishable sub-passes) onto that richer `Contrib`, dropping taffy's
+scroll-container/fit-content-limit/percentage-indefinite quirks as a
+documented simplification (not modeled in `TrackSize` today).
+
+**Correction (2026-09-27, same day, before starting it):** this was guessed
+to be "the real fix for the SHELL-L8 auto-repeat/track-sizing mismatch
+clusters" without checking an actual failing case first -- checked one
+before committing to the rewrite, and the guess doesn't hold. Pulled the
+`css/css-grid` render's compact report and bucketed its 556 mismatches by
+test-id substring: **97 contain "track-sizing"**, the single largest named
+cluster. Read `grid-lanes/track-sizing/row-track-sizing-001.html` (52
+lines, the shortest, cleanest case in that cluster) directly: its
+`grid-template-rows` is `5% repeat(3, 10px 15%) repeat(1, 15px 5px 20px)` --
+**every row track is an explicit length or percentage**, zero `auto`/`fr`/
+`max-content` anywhere. Contrib's min-vs-max-content conflation cannot be
+this test's problem; there is no intrinsic sizing in it to conflate.
+Reproduced its exact `layout_row_lanes` call directly in a scratch unit
+test (30 items, the same 10 widths cycled 3x, matching the fixture) and
+hand-verified two of its ten row-lanes against the WPT reference's manual
+`translateX`-encoded expected layout (`row-track-sizing-001-ref.html`,
+which fakes the same masonry packing with ordinary `display:grid` + negative
+`translateX` offsets, since Grid Lanes 3's lane axis literally is "the
+ordinary track-sizing model"): lane 0's members and their x-offsets
+(items of width 50/60/40, landing in that order at x=0/60/130 -- exactly
+`width + 10px gap` apart) match the reference's block A precisely; lane 5's
+four members (widths 60/15/30/90 at x=0/70/95/135) match block F precisely
+too. **`layout_row_lanes`'s track sizing and packing are correct for this
+fixture** -- the corpus mismatch is real (confirmed separately by an actual
+`render-wpt` pixel diff, bounding box roughly x:8-232 y:76-599, not a
+1px-class difference) but its cause is *not* in `grid.rs`'s track-sizing or
+lane-packing logic at all. Candidates not yet checked: the reference file's
+own ordinary-`display:grid` + `translateX` rendering (a different code
+path, `translateX` handling in paint/transform, or ordinary ROW-axis
+percentage-track resolution against a definite height), or something
+downstream of layout geometry entirely (paint, compositing) -- outside this
+lane's normal tooling to isolate further without checking whether it's
+even a `layout` bug vs. a `paint`/`compositor`-owned one. **Do not restart
+the Contrib rewrite on the strength of this cluster** until a *different*
+failing case is confirmed to actually exercise the min/max-content gap by
+direct inspection first, the same way this one was ruled out. Escalating
+via `questions.md` rather than guessing further or unilaterally digging
+into paint/compositor territory.
