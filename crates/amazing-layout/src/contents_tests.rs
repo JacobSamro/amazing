@@ -584,3 +584,32 @@ fn row_lanes_subgrid_chrome_matches_grid_sizing() {
     let (lanes_dom, lanes) = page(html, &format!("{css}#c{{display:grid-lanes}}"), false);
     near(get(&lanes, id(&lanes_dom, "s")).border_box.w, get(&grid, id(&grid_dom, "s")).border_box.w);
 }
+
+#[test]
+fn stretch_sized_abspos_with_no_insets_fills_the_containing_block_edge_to_edge() {
+    // css-sizing-4 stretch/positioned-non-replaced-1.html: `width/height:
+    // stretch` with no insets on either axis must fill the WHOLE containing
+    // block, starting at the containing block's own edge -- not the box's
+    // static-position anchor. `#inner`'s margin trick deliberately shifts
+    // the static anchor away from `#outer`'s padding-box edge so the two
+    // only coincide if this is implemented correctly; `#outer`'s own
+    // negative margin then places that edge at (-50,-50) in page
+    // coordinates, matching the WPT reference's 100x100 on-page visible
+    // square (the off-page -50..0 portion is clipped by the viewport).
+    let (dom, root) = page(
+        r#"<body>
+<div id=outer style="display:flow-root;position:relative;width:150px;height:150px;margin-top:-50px;margin-left:-50px">
+  <div id=inner style="margin-left:50px;margin-top:50px">
+    <div id=target style="position:absolute;background:green;min-width:50px;min-height:25px;width:stretch;height:stretch"></div>
+  </div>
+</div>
+"#,
+        "",
+        false,
+    );
+    let target = get(&root, id(&dom, "target"));
+    near(target.border_box.x, -50.0);
+    near(target.border_box.y, -50.0);
+    near(target.border_box.w, 150.0);
+    near(target.border_box.h, 150.0);
+}

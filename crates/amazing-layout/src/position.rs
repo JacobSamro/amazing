@@ -195,6 +195,21 @@ fn position_subtree(
             values::resolve_margins_with_units(&child.style, units, containing_block.rect.w);
         // Used sizes are temporary inputs to normal layout, not computed style.
         let computed_style = child.style.clone();
+        // css-sizing-4 stretch-fit-sizing: `prepare_sizes` below overwrites
+        // `width`/`height` in `child.style` with their resolved-px used value
+        // (see `set_used_length`), so a `stretch`/`-webkit-fill-available`
+        // keyword is gone from `child.style` by the time `absolute_origin`
+        // runs later. Read it now, off the still-unmutated computed style.
+        let stretch_axes = (
+            matches!(
+                computed_style.get("width"),
+                Some("stretch" | "-webkit-fill-available")
+            ),
+            matches!(
+                computed_style.get("height"),
+                Some("stretch" | "-webkit-fill-available")
+            ),
+        );
         prepare_sizes(child, containing_block.rect, static_anchor, fonts, text, grid_generates_cb);
         layout_child(
             child,
@@ -221,6 +236,7 @@ fn position_subtree(
             containing_block,
             static_anchor,
             specified_margins,
+            stretch_axes,
             text,
         );
         shift_box(child, x - child.border_box.x, y - child.border_box.y);
@@ -582,9 +598,11 @@ fn absolute_origin(
     containing_block: ContainingBlock,
     anchor: StaticAnchor,
     margins: values::SidesM,
+    stretch_axes: (bool, bool),
     text: Option<&dyn TextSystem>,
 ) -> (f32, f32) {
     let cb = containing_block.rect;
+    let (width_stretches, height_stretches) = stretch_axes;
     let x = Axis {
         extent: cb.w,
         start: resolve_inset(box_, "left", cb.w, text),
@@ -596,6 +614,7 @@ fn absolute_origin(
         static_end: anchor.right,
         end_wins: containing_block.rtl,
         split_negative: false,
+        stretch: width_stretches,
     }
     .solve();
     let y = Axis {
@@ -609,6 +628,7 @@ fn absolute_origin(
         static_end: false,
         end_wins: false,
         split_negative: true,
+        stretch: height_stretches,
     }
     .solve();
     box_.margin = values::SidesM {

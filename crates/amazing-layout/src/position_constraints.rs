@@ -15,6 +15,17 @@ pub(super) struct Axis {
     /// CSS2 distributes negative vertical auto margins equally. Horizontal
     /// overflow instead consumes the margin on the containing block's end side.
     pub split_negative: bool,
+    /// css-sizing-4 stretch-fit-sizing (stretch/positioned-non-replaced-1.html):
+    /// `width`/`height: stretch` with both insets auto on this axis fills
+    /// the WHOLE containing block, which requires starting at the
+    /// containing block's own edge, not the box's static-position anchor
+    /// (the two only coincide when nothing shifts the static-flow position
+    /// away from the containing block's edge, e.g. no margin trick on an
+    /// intervening ancestor). `static_edge` still determines *size* upstream
+    /// (through `border_size`, already resolved to the stretch-fit value by
+    /// the caller) -- this only changes where that already-resolved size is
+    /// placed.
+    pub stretch: bool,
 }
 
 pub(super) struct UsedAxis {
@@ -49,6 +60,7 @@ impl Axis {
             }
             (Some(start), None) => start + before,
             (None, Some(end)) => self.extent - end - after - self.border_size,
+            (None, None) if self.stretch => before,
             (None, None) if self.static_end => self.static_edge - after - self.border_size,
             (None, None) => self.static_edge + before,
         };
