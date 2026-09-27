@@ -1501,7 +1501,7 @@ impl FunctionCode {
         let frame = match self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
             Ok(frame) => Some(frame),
             Err(Throw(error)) => {
-                settle_promise(target, PromiseFate::Rejected(error), i)?;
+                settle_promise(target, rejection(i, error), i)?;
                 return Ok(promise);
             }
         };
@@ -1626,9 +1626,15 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
         }
         Ok(FrameOutcome::Yielded(_)) => unreachable!("async function yielded"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async slice suspended"),
-        Err(Throw(error)) => settle_promise(&target, PromiseFate::Rejected(error), i)?,
+        Err(Throw(error)) => settle_promise(&target, rejection(i, error), i)?,
     }
     Ok(())
+}
+
+/// A rejection with an engine-internal error normalized to its JS error object (a bare
+/// `Throw::type_error` is not yet a `TypeError` instance until `normalize_throw`).
+fn rejection(i: &Interpreter, error: JsValue) -> PromiseFate {
+    PromiseFate::Rejected(i.normalize_throw(Throw(error)).0)
 }
 
 fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
@@ -1641,7 +1647,7 @@ fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
                 if matches!(constructor.borrow().get_own("prototype"),
                     Some(JsValue::Object(proto)) if Rc::ptr_eq(&proto.0, &i.promise_proto.0)) => return value,
             Ok(_) => {}
-            Err(Throw(error)) => return new_promise(i, PromiseFate::Rejected(error)),
+            Err(Throw(error)) => return new_promise(i, rejection(i, error)),
         }
     }
     let promise = new_promise(i, PromiseFate::Pending);
@@ -1650,7 +1656,7 @@ fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
         match i.get_prop(&value, "then") {
             Ok(then) => then,
             Err(Throw(error)) => {
-                let _ = settle_promise(target, PromiseFate::Rejected(error), i);
+                let _ = settle_promise(target, rejection(i, error), i);
                 return promise;
             }
         }
@@ -1674,7 +1680,7 @@ fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(
     if value.is_object() {
         let then = match i.get_prop(&value, "then") {
             Ok(then) => then,
-            Err(Throw(error)) => return settle_promise(target, PromiseFate::Rejected(error), i),
+            Err(Throw(error)) => return settle_promise(target, rejection(i, error), i),
         };
         if callable_function(&then).is_some() {
             async_enqueue_thenable(i, target, value, then);
@@ -1693,7 +1699,7 @@ fn async_enqueue_thenable(i: &mut Interpreter, target: &Obj, value: JsValue, the
         object.set_own("[[Target]]", JsValue::Object(target.clone()));
     }
     if let Err(Throw(error)) = i.queue_microtask(job) {
-        let _ = settle_promise(target, PromiseFate::Rejected(error), i);
+        let _ = settle_promise(target, rejection(i, error), i);
     }
 }
 
@@ -1711,7 +1717,7 @@ fn async_thenable_job(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Resul
     let resolve = promise_callback(i, "resolve", &target, native_promise_resolve);
     let reject = promise_callback(i, "reject", &target, native_promise_reject);
     if let Err(Throw(error)) = i.call_value(&then, thenable, vec![resolve, reject]) {
-        settle_promise(&target, PromiseFate::Rejected(error), i)?;
+        settle_promise(&target, rejection(i, error), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -1764,7 +1770,7 @@ fn generator_call(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) 
     let JsValue::Object(target) = &promise else { unreachable!() };
     match result {
         Ok(value) => settle_promise(target, PromiseFate::Fulfilled(value), i)?,
-        Err(Throw(error)) => settle_promise(target, PromiseFate::Rejected(error), i)?,
+        Err(Throw(error)) => settle_promise(target, rejection(i, error), i)?,
     }
     Ok(promise)
 }
@@ -1818,7 +1824,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
             if frame.async_delegate.is_some() {
                 frame.delegate_input = Some(match settled {
                     Ok(value) => (0, value),
-                    Err(Throw(error)) => (2, error),
+                    Err(error) => (2, i.normalize_throw(error).0),
                 });
             } else {
                 match settled {
@@ -1947,7 +1953,7 @@ fn async_generator_drain(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>
             match code.0.program.start_frame(i, env, DEFAULT_INSTRUCTION_LIMIT) {
                 Ok(frame) => state.borrow_mut().frame = Some(frame),
                 Err(Throw(error)) => {
-                    settle_promise(&request.target, PromiseFate::Rejected(error), i)?;
+                    settle_promise(&request.target, rejection(i, error), i)?;
                     continue;
                 }
             }
@@ -2052,7 +2058,7 @@ fn async_generator_run(
         }
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async generator slice suspended"),
         Err(Throw(error)) => {
-            settle_promise(&target, PromiseFate::Rejected(error), i)?;
+            settle_promise(&target, rejection(i, error), i)?;
             async_generator_drain(i, state)
         }
     }
@@ -2091,7 +2097,7 @@ fn async_generator_await_return(
     let chained = then.and_then(|then| i.call_value(&then, awaited, vec![fulfilled, rejected]));
     if let Err(Throw(error)) = chained {
         state.borrow_mut().awaiting = false;
-        settle_promise(&request.target, PromiseFate::Rejected(error), i)?;
+        settle_promise(&request.target, rejection(i, error), i)?;
         return async_generator_drain(i, state);
     }
     Ok(())

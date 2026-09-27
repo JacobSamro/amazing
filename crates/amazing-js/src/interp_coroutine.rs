@@ -463,7 +463,10 @@ fn thread_generator_resume(
 fn thread_async_settle(i: &Interpreter, result: Result<JsValue, Throw>) -> JsValue {
     match result {
         Ok(v) => new_promise(i, PromiseFate::Fulfilled(v)),
-        Err(Throw(e)) => new_promise(i, PromiseFate::Rejected(e)),
+        Err(thrown) => {
+            let error = i.normalize_throw(thrown).0;
+            new_promise(i, PromiseFate::Rejected(error))
+        }
     }
 }
 
