@@ -19,6 +19,7 @@ impl Interpreter {
             _ => return None,
         };
         let compiled = vm::compile_async_body(&body, strict);
+        jsvm10_record("async", compiled.as_ref().map(|_| ()));
         object.borrow_mut().async_body_code = Some(compiled.clone());
         compiled.ok()
     }

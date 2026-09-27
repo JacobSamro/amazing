@@ -185,6 +185,11 @@ enum Instruction {
     Move(Register, Register),
     Jump(usize),
     Branch(Register, Condition, usize),
+    /// `break`/`continue` (JSVM-10): unlike a plain `Jump`, goes through
+    /// `route_abrupt` so a jump that actually leaves an active try/finally
+    /// (including a for-of/for-await-of's `IteratorClose` finally) runs it
+    /// first, per spec. Compile-time-resolved target, same as `Jump`.
+    ExitTo(usize),
     EnterScope,
     LeaveScope,
     PushTry {
@@ -216,6 +221,21 @@ enum Instruction {
     AsyncIteratorAwaitValue(Register, usize, Register),
     AsyncIteratorClose(Register, usize),
     AsyncIteratorCloseCheck(Register),
+    /// Plain (sync-only) `for-of`'s iterator start (JSVM-10): unlike
+    /// `AsyncIteratorStart`, never tries `@@asyncIterator` -- a sync `for-of`
+    /// must use `@@iterator` even when both are present. Reuses
+    /// `AsyncIteratorState`'s `Iterator`/`Values` shape (and the existing
+    /// `AsyncIteratorNext`/`Done`/`Value`/`Close`/`CloseCheck` instructions
+    /// unchanged) since the sync half of that state machine is exactly a
+    /// plain iterator's.
+    IteratorStart(usize, Register),
+    /// `for-in`'s enumeration start (JSVM-10): builds a `ForInState` from the
+    /// tree walker's own `array_receiver`/prototype-walk rules, `None` for a
+    /// nullish right-hand side (the loop body then never runs).
+    ForInStart(usize, Register),
+    /// `for-in`'s per-iteration step: `next_for_in_key` into `value` (a
+    /// string), `done` set once the key chain is exhausted.
+    ForInNext(Register, Register, usize),
     BindFor(ForLeft, Register),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
     /// `new.target`: the active call's constructor target, or `undefined`
@@ -260,6 +280,7 @@ pub struct Program {
     functions: Vec<HoistedFunction>,
     is_function: bool,
     async_iterator_slots: usize,
+    for_in_slots: usize,
 }
 
 /// Mutable execution state owned by a heap allocation. The try stack is empty
@@ -286,6 +307,13 @@ struct VmFrame {
     /// (AsyncGeneratorUnwrapYieldResumption) before it is delivered.
     await_return: bool,
     async_iterators: Vec<Option<AsyncIteratorState>>,
+    /// `for-in`'s enumeration state (JSVM-10): one slot per syntactic `for-in`
+    /// in the compiled body, mirroring `async_iterators`'s per-slot shape.
+    /// Reuses the tree walker's own `ForInState`/`next_for_in_key` (private
+    /// items in `interp.rs`/`interp_property_access.rs`, visible here because
+    /// `vm` is declared as a child module of `interp`) rather than
+    /// re-deriving for-in's live-mutation-safe enumeration order.
+    for_in_states: Vec<Option<super::ForInState>>,
 }
 
 enum AsyncIteratorState {
@@ -367,6 +395,15 @@ impl std::fmt::Debug for GeneratorState {
 enum Abrupt {
     Return(JsValue),
     Throw(Throw),
+    /// `break`/`continue` (JSVM-10): jump to a compile-time-resolved `pc`,
+    /// running any try/finally (including a for-of/for-await-of's
+    /// `IteratorClose` finally) whose protected region the jump actually
+    /// leaves, exactly like `Return`/`Throw` already do -- but, unlike
+    /// those, a `Goto` may resolve *within* an active handler's own region
+    /// (a `continue` back to a loop nested inside a `try`, or a `break` to
+    /// just past that same loop but still inside the `try`), in which case
+    /// no finally runs at all. See `route_abrupt`'s early-exit check.
+    Goto(usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -441,6 +478,7 @@ impl Program {
             await_dst: None,
             await_return: false,
             async_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
+            for_in_states: (0..self.for_in_slots).map(|_| None).collect(),
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
@@ -491,6 +529,7 @@ impl Program {
             await_dst,
             await_return: _,
             async_iterators,
+            for_in_states,
         } = frame.as_mut();
         let mut steps = 0;
         while let Some(op) = self.code.get(*pc) {
@@ -874,6 +913,9 @@ impl Program {
                     Instruction::Return(src) => {
                         return Ok(Some(Abrupt::Return(registers[*src].clone())));
                     }
+                    Instruction::ExitTo(target) => {
+                        return Ok(Some(Abrupt::Goto(*target)));
+                    }
                     Instruction::MakeFunction(dst, code) => {
                         registers[*dst] = code.instantiate(i, &env);
                     }
@@ -1187,6 +1229,49 @@ impl Program {
                             return Err(Throw::type_error("async iterator return result is not an object"));
                         }
                     }
+                    Instruction::IteratorStart(slot, source) => {
+                        let iterable = registers[*source].clone();
+                        let state = if let Some(value) = i.custom_iterator(&iterable)? {
+                            let next = i.get_prop(&value, "next")?;
+                            if callable_function(&next).is_none() {
+                                return Err(Throw::type_error("iterator next is not callable"));
+                            }
+                            AsyncIteratorState::Iterator { value, next, exhausted: false, sync: true }
+                        } else {
+                            AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
+                        };
+                        async_iterators[*slot] = Some(state);
+                    }
+                    Instruction::ForInStart(slot, source) => {
+                        let v = registers[*source].clone();
+                        let object = match v {
+                            JsValue::Null | JsValue::Undefined => None,
+                            other => match super::array_receiver(i, other)? {
+                                JsValue::Object(object) => Some(object),
+                                _ => None,
+                            },
+                        };
+                        for_in_states[*slot] = Some(super::ForInState {
+                            object,
+                            object_was_visited: false,
+                            visited_keys: std::collections::HashSet::new(),
+                            remaining_keys: std::collections::VecDeque::new(),
+                        });
+                    }
+                    Instruction::ForInNext(value, done, slot) => {
+                        let state = for_in_states[*slot].as_mut()
+                            .ok_or_else(|| Throw::type_error("missing for-in frame"))?;
+                        match i.next_for_in_key(state)? {
+                            Some(key) => {
+                                registers[*value] = JsValue::str(key);
+                                registers[*done] = JsValue::Bool(false);
+                            }
+                            None => {
+                                registers[*value] = JsValue::Undefined;
+                                registers[*done] = JsValue::Bool(true);
+                            }
+                        }
+                    }
                     Instruction::BindFor(left, source) => {
                         let previous = env.clone();
                         let iteration = for_iteration_env(left, env);
@@ -1252,8 +1337,19 @@ fn route_abrupt(
             return match abrupt {
                 Abrupt::Return(value) => Ok(Some(value)),
                 Abrupt::Throw(error) => Err(error),
+                Abrupt::Goto(target) => { *pc = target; Ok(None) }
             };
         };
+        if let Abrupt::Goto(target) = &abrupt {
+            // The jump's target is still inside this handler's own protected
+            // region (e.g. `continue` back to a loop nested in a `try`, or
+            // `break` to a point still inside it) -- resolve directly, no
+            // finally, and leave the handler active on `try_stack`.
+            if *target < handler.end {
+                *pc = *target;
+                return Ok(None);
+            }
+        }
         scopes.truncate(handler.scope_depth);
         *env = handler.env.clone();
         if handler.phase == TryPhase::Body {

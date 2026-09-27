@@ -376,6 +376,21 @@ pub(crate) fn eval_yield(
 /// near-zero (a worker only pushes itself back *after* handing its final value to the driver).
 static IDLE: Mutex<Vec<Sender<CoroutineJob>>> = Mutex::new(Vec::new());
 
+// JSVM-10 measurement scaffolding (temporary): with JSVM10_FALLBACK_LOG set,
+// append one `kind<TAB>ok|reason` line per generator/async body compile attempt.
+pub(crate) fn jsvm10_record(kind: &str, result: Result<(), &vm::CompileError>) {
+    if let Some(path) = std::env::var_os("JSVM10_FALLBACK_LOG") {
+        use std::io::Write;
+        let line = match result {
+            Ok(()) => format!("{kind}\tok\n"),
+            Err(error) => format!("{kind}\t{}\n", error.message),
+        };
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+}
+
 /// One unit of work for a pooled worker.
 struct CoroutineJob {
     ptr: InterpPtr,

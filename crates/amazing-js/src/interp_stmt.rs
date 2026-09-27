@@ -319,7 +319,16 @@ impl Interpreter {
                         Flow::Normal => {
                             i = (n + 1 < cases.len()).then_some(n + 1);
                         }
-                        Flow::Break(_) => break,
+                        // An UNLABELED break targets the nearest enclosing
+                        // switch/loop -- this switch, here -- and is
+                        // swallowed. A LABELED break (JSVM-10 fix: this
+                        // previously swallowed it unconditionally too, so
+                        // `outer: for (...) { switch (x) { case 1: break
+                        // outer; } }` silently did nothing instead of
+                        // breaking the outer loop) must keep propagating
+                        // upward exactly like any other Flow -- only the
+                        // matching `Labeled` wrapper may swallow it.
+                        Flow::Break(None) => break,
                         x => return Ok(x),
                     }
                 }
@@ -2314,7 +2323,9 @@ impl Interpreter {
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
         if f.is_generator {
-            if let Ok(code) = vm::compile_function_item(f, f.body.span, self.strict_eval_context) {
+            let compiled = vm::compile_function_item(f, f.body.span, self.strict_eval_context);
+            jsvm10_record(if f.is_async { "asyncgen" } else { "gen" }, compiled.as_ref().map(|_| ()));
+            if let Ok(code) = compiled {
                 return code.instantiate(self, e);
             }
         }
@@ -2417,7 +2428,13 @@ impl Interpreter {
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
         if m.kind != ast::MethodKind::Constructor {
-            if let Ok(code) = vm::compile_class_method(m, class_method || self.strict_eval_context) {
+            let compiled = vm::compile_class_method(m, class_method || self.strict_eval_context);
+            if m.is_generator || m.is_async {
+                jsvm10_record(match (m.is_async, m.is_generator) {
+                    (true, true) => "asyncgen-method", (false, true) => "gen-method", _ => "async-method",
+                }, compiled.as_ref().map(|_| ()));
+            }
+            if let Ok(code) = compiled {
                 let value = code.instantiate(self, e);
                 if let JsValue::Object(function) = &value {
                     let mut function = function.borrow_mut();

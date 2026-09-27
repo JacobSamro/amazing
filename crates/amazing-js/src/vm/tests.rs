@@ -213,15 +213,62 @@ fn bindings_branches_loops_and_completion_match() {
 }
 
 #[test]
+fn jsvm10_break_continue_switch_for_in_for_of_labels_match() {
+    for source in [
+        // Plain break/continue in every loop shape.
+        "var sum=0,i=0; while(true){ i++; if(i>5) break; sum+=i; } sum+':'+i;",
+        "var sum=0,i=0; do { i++; if(i%2===0) continue; sum+=i; } while(i<6); sum+':'+i;",
+        "var sum=0; for(var i=0;i<10;i++){ if(i===7) break; if(i%2) continue; sum+=i; } sum+':'+i;",
+        "var out=''; for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(j===1) continue; if(i===2) break; out+=i+','+j+';'; } } out;",
+        // Labeled break/continue across nested loops.
+        "var out=''; outer: for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(j===1) continue outer; out+=i+','+j+';'; } } out;",
+        "var out=''; outer: for(var i=0;i<3;i++){ for(var j=0;j<3;j++){ if(i===1&&j===1) break outer; out+=i+','+j+';'; } } out;",
+        "var out=''; a: b: for(var i=0;i<3;i++){ if(i===1) continue b; out+=i+';'; } out;",
+        "l: { var x=1; break l; x=2; } x;",
+        // switch: fallthrough, default anywhere, break, no-default no-match.
+        "var out=''; for(var i=0;i<4;i++){ switch(i){ case 0: out+='a'; case 1: out+='b'; break; case 2: out+='c'; break; default: out+='d'; } } out;",
+        "var out=''; switch(2){ default: out+='d'; case 0: out+='a'; break; case 1: out+='b'; } out;",
+        "var out='x'; switch(99){ case 0: out+='a'; } out;",
+        "var calls=0; function f(){ calls++; return 1; } switch(f()){ case 0: break; case f(): break; } calls;",
+        "var out=''; outer: for(var i=0;i<3;i++){ switch(i){ case 1: continue outer; } out+=i+';'; } out;",
+        "var out=''; loop: for(var i=0;i<3;i++){ switch(i){ case 1: break loop; } out+=i+';'; } out;",
+        // for-in: own+inherited enumerable keys, order, skips non-enumerable.
+        "var out=''; for(var k in {a:1,b:2,c:3}) out+=k; out;",
+        "var out=''; function P(){} P.prototype.p=1; var o=new P(); o.own=2; for(var k in o) out+=k; out;",
+        "var out=''; for(var k in [10,20,30]) out+=k; out;",
+        "var out=''; for(var k in null) out+=k; for(var k2 in undefined) out+=k2; out+'done';",
+        "var out=''; outer: for(var i=0;i<2;i++){ for(var k in {a:1,b:2}){ if(k==='b') continue outer; out+=i+k+';'; } } out;",
+        // for-of: arrays, strings, custom iterators, break closes early.
+        "var out=''; for(var v of [1,2,3]) out+=v; out;",
+        "var out=''; for(var v of 'abc') out+=v; out;",
+        "var out=''; for(var v of [1,2,3,4]){ if(v===3) break; out+=v; } out;",
+        "var out=''; for(var [a,b] of [[1,2],[3,4]]) out+=a+':'+b+';'; out;",
+        "var closed=false; var it={ [Symbol.iterator](){ return { i:0, next(){ return {value:this.i++, done:this.i>5}; }, return(v){ closed=true; return {value:v,done:true}; } }; } };\
+         for(var v of it){ if(v===2) break; } closed;",
+        "var out=''; try { for(var v of [1,2,3]){ if(v===2) throw 'x'; out+=v; } } catch(e){ out+=e; } out;",
+        // continue/break through try/finally must still run finally.
+        "var out=''; for(var i=0;i<3;i++){ try { if(i===1) continue; out+=i; } finally { out+='f'; } } out;",
+        "var out=''; outer: for(var i=0;i<3;i++){ try { if(i===1) break outer; out+=i; } finally { out+='f'; } } out;",
+        "var out=''; while(true){ try { out+='a'; break; } finally { out+='b'; } } out;",
+    ] {
+        differential(source, &["out", "sum", "i", "calls", "closed"]);
+    }
+}
+
+#[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
         "changed = 1; class A { x=7; }",
         "changed = 1; class A { static { 1; } }",
-        "changed = 1; for (;;) { break; }",
-        "changed = 1; while (true) { break; }",
+        // for/while/for-of/for-await-of/labeled break/continue are all VM-
+        // compilable as of JSVM-10; these three cover constructs the
+        // compiler still declines, keeping this test's actual point (atomic
+        // whole-program rejection before hoisting or side effects) real.
+        "changed = 1; with ({}) { 1; }",
+        "changed = 1; try { throw [1]; } catch ([a]) { a; }",
+        "changed = 1; let [...a] = [1];",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
-        "changed = 1; async function g() { for await (const x of [1]) { break; } }",
     ] {
         let mut interpreter = Interpreter::new();
         let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode);
