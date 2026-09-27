@@ -121,7 +121,7 @@ impl Grid {
         }
         let mut occupied_until = vec![0; MAX_COLUMNS];
         let mut cells = Vec::new();
-        let mut count = columns.len();
+        let mut count = 0;
         for (r, row) in rows.iter().enumerate() {
             let mut col = 0;
             for (i, cell) in children(at(b, &row.path)).iter().enumerate() {
@@ -156,6 +156,27 @@ impl Grid {
                 count = count.max(col);
             }
         }
+        // css-tables-3 #missing-cells-fixup: a `<colgroup>`/`<col>` beyond
+        // the last column any real cell occupies only forces a "missing
+        // cell" placeholder column to exist when that column itself has a
+        // definite (absolute-length) `width` or `min-width` -- a `%`/
+        // `calc()`-with-percentage size, or no size at all, does not, and
+        // that trailing column is dropped as if the colgroup had never
+        // declared it (`col-definite-min-size-001.html`: tables with
+        // `min-width: 50%`/`calc(100px + 1%)`/unset collapse to only the
+        // columns real cells use, while `min-width: 100px` keeps all four).
+        // Scanned from the end so a definite column past a non-definite one
+        // still extends the count, matching ordinary trailing-trim.
+        count = count.max(
+            columns
+                .iter()
+                .enumerate()
+                .skip(count)
+                .filter(|(_, path)| column_has_definite_size(at(b, path)))
+                .map(|(i, _)| i + 1)
+                .max()
+                .unwrap_or(count),
+        );
         Self {
             rows,
             cells,
@@ -169,6 +190,21 @@ fn length(b: &LayoutBox, name: &str, basis: f32) -> Option<f32> {
         MaybeLen::Px(v) => Some(v.max(0.0)),
         MaybeLen::Auto => None,
     }
+}
+/// True when a `<col>`/`<colgroup>` has a definite (absolute-length)
+/// `width` or `min-width` -- a bare number/px, not a percentage or a
+/// `calc()` that contains one. Resolving against basis `0.0` and checking
+/// for `%` in the raw source (rather than trusting `MaybeLen::Px` alone,
+/// which a percentage still produces once resolved against *some* basis)
+/// is what distinguishes "genuinely definite" from "resolves to a number
+/// only because there was a basis to resolve against" for this
+/// structural, pre-layout column-count decision.
+fn column_has_definite_size(col: &LayoutBox) -> bool {
+    ["width", "min-width"].into_iter().any(|prop| {
+        col.style
+            .get(prop)
+            .is_some_and(|raw| !raw.contains('%') && length(col, prop, 0.0).is_some())
+    })
 }
 fn spacing(b: &LayoutBox) -> (f32, f32) {
     if collapsed(b) {
