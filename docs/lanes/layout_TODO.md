@@ -1993,15 +1993,21 @@ cover the actual regression (`auto 1fr`, container 300px, item 70px: `auto`
 column stays 70px, `1fr` column takes the remaining 230px).
 
 Re-ran the full `css/css-grid` render after the fix, same baseline: **pass
-388/945 -- gained=46, lost=4.** Confirmed by re-running the render at
-`8fccf8a4` (before this second pass, with the fix's two files reverted via
-patch-file, never `git stash`) that the remaining 4 losses are byte-for-byte
-the same 4 pre-existing ones (`abspos/positioned-grid-items-{008,016}`,
-`abspos/orthogonal-positioned-grid-items-008`,
-`grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-003`) -- present
-identically whether this ticket's fix is applied or not, so this pass fixed
-exactly the 3 patch-correlated losses and changed nothing else. **Zero
-unexplained losses.** `css/css-flexbox` (untouched this ticket) reproduces
+388/945 -- gained=46, lost=4.** First confirmed by re-running the render at
+`8fccf8a4` (this ticket's own first commit, with the fix's two files
+reverted via patch-file, never `git stash`) that the remaining 4 losses are
+byte-for-byte the same 4 as before the fix. The coordinator correctly
+pointed out `8fccf8a4` is this ticket's own commit, not a real "pre-LAYOUT-28"
+baseline, so re-ran the same render at `8fccf8a4^` (`fb2f946e`, the actual
+`dev` base this ticket started from, `grid.rs`/`grid_algorithm.rs` checked
+out to that ref, then restored via `git checkout HEAD --` afterward): **the
+identical 4 tests are lost there too** (`gained=47 lost=4`, same LOST list --
+`abspos/positioned-grid-items-{008,016}`, `abspos/orthogonal-positioned-
+grid-items-008`, `grid-lanes/.../row-auto-placed-subgrid-inherited-tracks-
+003`), confirming they predate LAYOUT-28 entirely and are not this ticket's
+regression. This pass fixed exactly the 3 patch-correlated losses and
+changed nothing else. **Zero unexplained losses.** `css/css-flexbox`
+(untouched this ticket) reproduces
 its own pre-existing 15-loss baseline drift identically with and without
 this patch (re-checked on this pass too), confirming that corpus's drift is
 unrelated to this change.
