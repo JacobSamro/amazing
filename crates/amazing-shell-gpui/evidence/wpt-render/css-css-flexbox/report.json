@@ -29,8 +29,8 @@
     }
   },
   "counts": {
-    "pass": 340,
-    "mismatch": 180,
+    "pass": 325,
+    "mismatch": 195,
     "error": 0,
     "timeout": 0,
     "unsupported": 0,
@@ -1579,17 +1579,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-0-0-unitless.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-0-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flexbox_columns-flexitems.html",
@@ -2265,17 +2265,17 @@
     },
     {
       "id": "css__css-flexbox__flex-inline.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "reference/flex-inline-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 109,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "5d7b601c85f0fa88806b0ecf0f32ee8e38dbd06b415912b8095fc9cf5b94a6a7",
-      "reference_sha256": "5d7b601c85f0fa88806b0ecf0f32ee8e38dbd06b415912b8095fc9cf5b94a6a7",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "100f32f8e2b4abd1608e6a7dc97c552b9f52ec2c09cced5722bdc7a98396dcfb",
+      "diff_sha256": "4674d9923a6229b9ee3c637b5470bd758e7852edd2f2477cbd408e670325b863",
+      "detail": "maxDifference=255/0; totalPixels=109/0"
     },
     {
       "id": "css__css-flexbox__flexbox-overflow-horiz-001.html",
@@ -3189,17 +3189,17 @@
     },
     {
       "id": "css__css-flexbox__position-fixed-001.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "reference/position-fixed-001-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 4308,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "092b1406a2b468f37d97410ee480618f1bab85f453fae24fbbcc7df212986499",
-      "reference_sha256": "092b1406a2b468f37d97410ee480618f1bab85f453fae24fbbcc7df212986499",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "d48cccf2a34af6b93094f2351dea520547129fe9235eda040f8ff884bb8fe8ee",
+      "diff_sha256": "49a1a87cdece6e365f82025cc0617e7658f8bd1d6ab9a989c6515aeeffc03d3a",
+      "detail": "maxDifference=255/0; totalPixels=4308/0"
     },
     {
       "id": "css__css-flexbox__flex-grow-009.html",
@@ -3329,17 +3329,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-1.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-1-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flex-box-wrap.html",
@@ -3847,17 +3847,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_inline.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_inline-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 674,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2503fb4e948c3c8a96e55ce622e34dad12c826327ee3055f8ecc1121798ebd9a",
-      "reference_sha256": "2503fb4e948c3c8a96e55ce622e34dad12c826327ee3055f8ecc1121798ebd9a",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "868186ec0936483c558acec0c95c8422bcd7d72bdd3b62c958b8493367698073",
+      "diff_sha256": "7a728c04c04d1be623c20c36f5f8ccc54ec48923f169ce6031011e684261f767",
+      "detail": "maxDifference=255/0; totalPixels=674/0"
     },
     {
       "id": "css__css-flexbox__alignment__flex-align-baseline-column-rtl-direction.html",
@@ -4057,17 +4057,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_fbfc.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_fbfc-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 1205,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "590052a4acdea0c41d9fcee3d2f7ac329bc43d796e392a277b87505b57d91b36",
-      "reference_sha256": "590052a4acdea0c41d9fcee3d2f7ac329bc43d796e392a277b87505b57d91b36",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "e08c2c552930a287800561e7da895f8d1da36670f4ac22b892068c92baeda74c",
+      "diff_sha256": "2e7a11d0b704e0abd6eeaa1e63e48b74a01ebdf82d655f8fb89cdfcdbf0ffe03",
+      "detail": "maxDifference=255/0; totalPixels=1205/0"
     },
     {
       "id": "css__css-flexbox__flexbox-baseline-multi-line-horiz-001.html",
@@ -4267,17 +4267,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-N.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-N-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flexbox-flex-direction-column.htm",
@@ -4855,17 +4855,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-N-0.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-N-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flex-base-size-ignores-max-width.html",
@@ -5499,17 +5499,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-N-0-unitless.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-N-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-0-Npercent.html",
@@ -5555,17 +5555,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-0-0.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-0-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__aspect-ratio-transferred-max-size.html",
@@ -5681,17 +5681,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-0.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-0-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flexbox_generated-flex.html",
@@ -5849,17 +5849,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_first-line.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_first-line-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 11558,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "e6b5edc93e2a15ffb11cecbcf80111dfd29de328e0ee454886cc0441118a1482",
-      "reference_sha256": "e6b5edc93e2a15ffb11cecbcf80111dfd29de328e0ee454886cc0441118a1482",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "db5b6f108337094a30fd3bf9eddcd99dacecb8ad0ddd38873dcf4128577d64c2",
+      "diff_sha256": "9f25f36f21347e1c04629c39282deea277f97af3b30182131822f8e31921b7e3",
+      "detail": "maxDifference=255/0; totalPixels=11558/0"
     },
     {
       "id": "css__css-flexbox__flexbox-baseline-nested-001.html",
@@ -6325,17 +6325,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-1-0-unitless.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-1-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__flex-direction-column-reverse.html",
@@ -6773,17 +6773,17 @@
     },
     {
       "id": "css__css-flexbox__order__order-with-row-reverse.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "order-with-row-reverse-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 1216,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "b52b7dea4b9bd6c2ebd75ef96d3ede4a4ac1e48c6e510c4f8d2da448f5e34f3d",
-      "reference_sha256": "b52b7dea4b9bd6c2ebd75ef96d3ede4a4ac1e48c6e510c4f8d2da448f5e34f3d",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "4c9bd9a3ef7df6d131d13ba0a4275e55fd75a80c58240b7e8d96e72b803fb914",
+      "diff_sha256": "f3a0ebaef8fef6d5aab69077acc48587e13b0c912d727bce3dcc85f40b77fb91",
+      "detail": "maxDifference=255/0; totalPixels=1216/0"
     },
     {
       "id": "css__css-flexbox__flexbox_inline-float.html",
@@ -7123,17 +7123,17 @@
     },
     {
       "id": "css__css-flexbox__flexbox_flex-0-1-0.html",
-      "classification": "pass",
+      "classification": "mismatch",
       "relation": "match",
       "reference_href": "flexbox_flex-0-1-0-ref.html",
-      "differing_pixels": 0,
-      "max_difference": 0,
+      "differing_pixels": 2613,
+      "max_difference": 255,
       "allowed_max_difference": 0,
       "allowed_differing_pixels": 0,
       "actual_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "reference_sha256": "2ab78efde4d0c4cdf76062434ff6257de544339cfd1386999220b37077492d89",
-      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
-      "detail": "maxDifference=0/0; totalPixels=0/0"
+      "reference_sha256": "3c207c0b7633aea9757cc29ad73d067ef8a3251bac3f10a33ad39ebb7036d2d2",
+      "diff_sha256": "4f6481cc60f527c0d1102251348f1ca28794c4c1790638d96006f47a1ed048e3",
+      "detail": "maxDifference=255/0; totalPixels=2613/0"
     },
     {
       "id": "css__css-flexbox__css-flexbox-row-reverse-wrap-reverse.html",
