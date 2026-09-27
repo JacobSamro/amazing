@@ -2579,3 +2579,62 @@ identical counts (dev moved since HTML-37's 3,447/3,447; no loss). Doctests:
 **31 crates, 0 FAILED**.
 
 Status: done.
+
+## HTML-39 -- table-context elements dropped when placed directly in `<template>`
+
+Immediate follow-up to HTML-38's own filed finding: `caption`/`colgroup`/
+`tbody`/`td`/`tfoot`/`th`/`thead`/`tr` placed directly inside a `<template>`
+via a full-document `body.innerHTML`-style parse (no enclosing `<table>`)
+vanished instead of landing in `template.content` --
+`template-owner-document.html`'s remaining failures.
+
+### Root cause
+
+`clear_back_to_table`, `clear_back_to_section`, and `clear_back_to_row` in
+`amazing-html/src/tree.rs` each implement one of the spec's "clear the stack
+back to a table/table-body/table-row context" algorithms, all three of
+which stop popping at their own named target, **or a `template` element, or
+`html`**. All three were only checking for their named target and `html` --
+missing `template` entirely. With no `<table>` on the open-elements stack
+(the case for table-context markup written straight into a `<template>`),
+the loop didn't stop at the template and instead popped the template
+element itself (and anything above it, e.g. `body`) off the parser's open
+stack before inserting the new element. The insertion then computed its
+place from whatever was left on the stack once the template was gone,
+landing outside `template.content` (typically under `<html>` or wherever
+the stack bottomed out), and left the parser's own bookkeeping for the
+enclosing template corrupted for the rest of the parse.
+
+Fixed by adding `template` to all three functions' stop conditions.
+
+### Verification
+
+Isolated check (`amazing domrun` against `<template><tbody><tr><td>x</td>
+</tr></tbody></template>`): all three of `template.content.querySelector`
+for `tbody`/`tr`/`td` now resolve, with `td.textContent === "x"` and
+`template.content.childNodes.length === 1` (just the `tbody`, correctly
+nested) -- all `no`/dropped before the fix.
+
+### Gate
+
+`amazing-html` + `amazing-dom` crate nextest: **420/420 passed** (unchanged
+count; this is a bug-for-bug behavior fix, no new tests added this ticket).
+
+WPT (`html/syntax/parsing`, 56 files, strict per-test status-map diff
+against HTML-38's own after-state): **0 lost passes, +2 gained files**
+(`template-owner-document.html` -- the exact target file -- and
+`template-is-a-foster-parent-element.html`, a second file that happened to
+exercise the same stop-condition gap), **0 other changes**. File totals:
+pass 24 -> 26, fail 25 -> 23, timeout/error/unsupported unchanged (3/1/3).
+
+Workspace nextest: **3,461/3,461 passed, 17 skipped**, same count as
+HTML-38's own gate (no drift; this ticket landed right on top of it).
+Doctests: **31 crates, 0 FAILED**.
+
+This ticket touches only `amazing-html/src/tree.rs` -- no `amazing-dom`
+edits, so no cross-lane commit-message flag or `questions.md` filing is
+needed this time (per the coordinator's note on HTML-38's own small
+`amazing-dom` touch: define the hook in `amazing-dom`'s own interface and
+file it, or keep it under 10 lines and name it in the commit message).
+
+Status: done.
