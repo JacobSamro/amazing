@@ -259,6 +259,12 @@ enum Instruction {
     /// expression outside this one position (checked directly on the AST at
     /// compile time, not through a resolved register).
     HasPrivateField(Register, Register, String),
+    /// Evaluate an expression the compiler cannot lower with the tree
+    /// walker's `eval_expr`, against the frame's current environment. Only
+    /// emitted for expressions with no `yield`/`await`, so the tree walker
+    /// never needs to suspend; the enclosing body stays on the VM instead of
+    /// falling back to a coroutine thread.
+    TreeEval(Register, Rc<crate::ast::Expr>),
     /// `ResolvePrivate` without the read, for a plain `=` target.
     ResolvePrivateWrite(usize, Register, String),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
@@ -731,6 +737,9 @@ impl Program {
                             Throw::syntax_error(format!("private name #{name} is not defined"))
                         })?;
                         references[*slot] = Some(Reference::Private(registers[*base].clone(), private));
+                    }
+                    Instruction::TreeEval(dst, expression) => {
+                        registers[*dst] = i.eval_expr(expression, env)?;
                     }
                     Instruction::HasPrivateField(dst, base, name) => {
                         let private = env.resolve_private(name).ok_or_else(|| {
