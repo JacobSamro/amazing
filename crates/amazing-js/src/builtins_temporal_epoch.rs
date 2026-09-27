@@ -139,11 +139,41 @@ fn std_epoch_zone(text: &str) -> Result<String, Throw> {
     tz_canonicalize(text).ok_or_else(|| Throw::range_error("invalid Temporal time zone"))
 }
 
+// ToTemporalTimeZoneIdentifier: unlike a generic ToString coercion, a
+// non-string, non-ZonedDateTime-instance value is a TypeError, not converted
+// through its own toString/valueOf and then rejected as a malformed zone
+// string (RangeError) -- so `undefined` (no `timeZone` property at all), a
+// Symbol, a plain object, or any other Temporal instance all throw
+// TypeError, while only an actual STRING that fails to parse as a zone
+// identifier throws RangeError. Confirmed by ZonedDateTime.from's own
+// `argument-propertybag-timezone-wrong-type.js` (an empty bag's `timeZone`
+// is `undefined`, matching `argument-propertybag-empty-throws.js`'s/
+// `argument-object.js`'s "empty object throws TypeError" too).
 fn std_epoch_zone_value(i: &mut Interpreter, value: &JsValue) -> Result<String, Throw> {
     if let Ok(data) = std_epoch_record(value, Some(StdEpochKind::ZonedDateTime)) {
         return Ok(data.zone_id);
     }
-    std_epoch_zone_from_string(&i.to_string(value)?)
+    match value {
+        JsValue::Str(text) => std_epoch_zone_from_string(&text.to_utf8_lossy()),
+        _ => Err(Throw::type_error("time zone must be a string or a ZonedDateTime instance")),
+    }
+}
+
+// GetTemporalOffsetStringFor (PrepareCalendarFields' handling of a
+// string-valued field like `offset`): a String or a non-null Object is
+// still coerced via ToString (an Object's own toString/valueOf can still
+// produce a garbage string, which then fails as a malformed offset and
+// throws RangeError, not TypeError) -- but null, a boolean, a number, or a
+// BigInt throw TypeError immediately, without ever attempting ToString,
+// even though plain ToString(null)/(true)/(1000n) would not themselves
+// throw. Confirmed by ZonedDateTime.from's own
+// `argument-propertybag-invalid-offset-string.js`.
+fn std_epoch_string_field_value(i: &mut Interpreter, value: &JsValue) -> Result<String, Throw> {
+    if matches!(value, JsValue::Str(_)) || value.is_object() {
+        i.to_string(value)
+    } else {
+        Err(Throw::type_error("value must be a string or an object"))
+    }
 }
 
 // ParseTemporalTimeZoneString: a bare TimeZoneIdentifier (IANA name, "UTC",
@@ -238,10 +268,15 @@ fn std_epoch_parse_offset(text: &str) -> Result<i128, Throw> {
     Ok(sign * (((hour * 60 + minute) * 60 + second) * STD_TEMPORAL_NS_SECOND + fraction))
 }
 
-fn std_epoch_disambiguate(zone: &str, local_ns: i128, mode: &str) -> Result<i128, Throw> {
+fn std_epoch_validate_disambiguation(mode: &str) -> Result<(), Throw> {
     if !matches!(mode, "compatible" | "earlier" | "later" | "reject") {
         return Err(Throw::range_error("invalid disambiguation"));
     }
+    Ok(())
+}
+
+fn std_epoch_disambiguate(zone: &str, local_ns: i128, mode: &str) -> Result<i128, Throw> {
+    std_epoch_validate_disambiguation(mode)?;
     let possible = tz_possible_epoch_ns(zone, local_ns);
     match possible.as_slice() {
         [one] => Ok(*one),
@@ -321,8 +356,22 @@ fn std_epoch_validate_annotations(text: &str) -> Result<(&str, Option<&str>), Th
     Ok((body, time_zone))
 }
 
-fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
-    disambiguation: &str) -> Result<(i128, String), Throw> {
+// The string parse is split into a pure-syntax phase (`std_epoch_parse_syntax`)
+// and an options-dependent resolution phase (`std_epoch_resolve_parsed`) so
+// that callers can surface a malformed string's RangeError before ever
+// reading (and possibly rejecting the type of) `options` -- ToTemporalZoned
+// DateTime/ToTemporalInstant parse the string as part of resolving `item`
+// ahead of validating `options`.
+struct StdEpochParsed {
+    fields: [i64; 10],
+    zone: String,
+    offset_absent: bool,
+    exact: bool,
+    offset: i128,
+    minute_precision: bool,
+}
+
+fn std_epoch_parse_syntax(text: &str, kind: StdEpochKind) -> Result<StdEpochParsed, Throw> {
     let invalid = || Throw::range_error("invalid Temporal instant string");
     // Annotations are validated syntactically for every epoch type. Instant
     // ignores the zone and calendar; ZonedDateTime requires a zone it can
@@ -356,27 +405,45 @@ fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
     fields[0] = year; fields[1] = month; fields[2] = day;
     std_temporal_parse_time(clock, &mut fields)?;
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
-    if kind == StdEpochKind::ZonedDateTime && offset_absent {
-        return Ok((std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?, zone));
-    }
-    let epoch_ns = std_temporal_epoch_ns(&fields) - offset;
+    let minute_precision = time[clock.len()..].matches(':').count() == 1;
+    Ok(StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision })
+}
+
+fn std_epoch_check_range(epoch_ns: i128) -> Result<i128, Throw> {
     if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
         return Err(Throw::range_error("instant outside Temporal range"));
     }
+    Ok(epoch_ns)
+}
+
+fn std_epoch_resolve_parsed(parsed: StdEpochParsed, kind: StdEpochKind, offset_option: &str,
+    disambiguation: &str) -> Result<(i128, String), Throw> {
+    let invalid = || Throw::range_error("invalid Temporal instant string");
+    let StdEpochParsed { fields, zone, offset_absent, exact, offset, minute_precision } = parsed;
+    if kind == StdEpochKind::ZonedDateTime && offset_absent {
+        let epoch_ns = std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?;
+        return Ok((std_epoch_check_range(epoch_ns)?, zone));
+    }
+    let epoch_ns = std_epoch_check_range(std_temporal_epoch_ns(&fields) - offset)?;
     if kind == StdEpochKind::ZonedDateTime && !exact {
         let actual_offset = tz_offset_ns(&zone, epoch_ns);
-        let minute_precision = time[clock.len()..].matches(':').count() == 1;
         let matches = actual_offset == offset || (minute_precision
             && std_temporal_round_integer(actual_offset, 60 * STD_TEMPORAL_NS_SECOND, "halfExpand")? == offset);
         return match offset_option {
             "use" => Ok((epoch_ns, zone)),
-            "ignore" => Ok((std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?, zone)),
-            "prefer" if !matches => Ok((std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?, zone)),
+            "ignore" => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone)),
+            "prefer" if !matches => Ok((std_epoch_check_range(std_epoch_disambiguate(&zone, std_temporal_epoch_ns(&fields), disambiguation)?)?, zone)),
             _ if matches => Ok((epoch_ns, zone)),
             _ => Err(invalid()),
         };
     }
     Ok((epoch_ns, zone))
+}
+
+fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
+    disambiguation: &str) -> Result<(i128, String), Throw> {
+    let parsed = std_epoch_parse_syntax(text, kind)?;
+    std_epoch_resolve_parsed(parsed, kind, offset_option, disambiguation)
 }
 
 fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind) -> Result<(i128, String), Throw> {
@@ -385,12 +452,49 @@ fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind)
 
 fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: StdEpochKind,
     options: JsValue) -> Result<(i128, String), Throw> {
-    if let Ok(data) = std_epoch_record(&value, Some(kind)) { return Ok((data.epoch_ns, data.zone_id.clone())); }
+    if let Ok(data) = std_epoch_record(&value, Some(kind)) {
+        // `item` is already the target kind: ZonedDateTime.from clones it
+        // without applying overflow/disambiguation/offset, but per spec
+        // still reads and validates them (surfacing e.g. a wrong-type
+        // TypeError) before returning the clone.
+        if kind == StdEpochKind::ZonedDateTime {
+            std_temporal_overflow(i, options.clone())?;
+            let disambiguation = std_temporal_option_string(i, &options, "disambiguation")?
+                .unwrap_or_else(|| "compatible".into());
+            std_epoch_validate_disambiguation(&disambiguation)?;
+            let offset_option = std_temporal_option_string(i, &options, "offset")?
+                .unwrap_or_else(|| "reject".into());
+            if !matches!(offset_option.as_str(), "reject" | "use" | "ignore" | "prefer") {
+                return Err(Throw::range_error("invalid Temporal offset option"));
+            }
+        }
+        return Ok((data.epoch_ns, data.zone_id.clone()));
+    }
     // ToTemporalInstant also accepts a ZonedDateTime instance.
     if kind == StdEpochKind::Instant {
         if let Ok(data) = std_epoch_record(&value, Some(StdEpochKind::ZonedDateTime)) {
             return Ok((data.epoch_ns, data.zone_id.clone()));
         }
+    }
+    // A string argument is parsed -- and any syntax error surfaced -- before
+    // its options are read: ToTemporalZonedDateTime/ToTemporalInstant parse
+    // the string while resolving `item`, ahead of validating `options`.
+    if let JsValue::Str(text) = &value {
+        let parsed = std_epoch_parse_syntax(&text.to_utf8_lossy(), kind)?;
+        let (disambiguation, offset_option) = if kind == StdEpochKind::ZonedDateTime {
+            (std_temporal_option_string(i, &options, "disambiguation")?
+                .unwrap_or_else(|| "compatible".into()),
+             std_temporal_option_string(i, &options, "offset")?
+                .unwrap_or_else(|| "reject".into()))
+        } else { ("compatible".into(), "reject".into()) };
+        if !matches!(offset_option.as_str(), "reject" | "use" | "ignore" | "prefer") {
+            return Err(Throw::range_error("invalid Temporal offset option"));
+        }
+        if kind == StdEpochKind::ZonedDateTime {
+            std_epoch_validate_disambiguation(&disambiguation)?;
+            std_temporal_overflow(i, options.clone())?;
+        }
+        return std_epoch_resolve_parsed(parsed, kind, &offset_option, &disambiguation);
     }
     let (disambiguation, offset_option) = if kind == StdEpochKind::ZonedDateTime {
         (std_temporal_option_string(i, &options, "disambiguation")?
@@ -403,19 +507,32 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
     }
     let reject = kind == StdEpochKind::ZonedDateTime && std_temporal_overflow(i, options.clone())?;
     match value {
-        JsValue::Str(text) => std_epoch_parse(&text.to_utf8_lossy(), kind, &offset_option, &disambiguation),
         JsValue::Object(_) if kind == StdEpochKind::ZonedDateTime => {
+            // Calendar resolution (RangeError for an unsupported calendar id,
+            // e.g. "islamic") happens before PrepareCalendarFields' field
+            // reads, which is in turn before timeZone is read/validated --
+            // std_temporal_bag validates the calendar as its first action.
+            let mut fields = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
             let zone_value = i.get_prop(&value, "timeZone")?;
             let zone = std_epoch_zone_value(i, &zone_value)?;
-            let mut fields = std_temporal_bag(i, StdTemporalKind::PlainDateTime, &value)?;
             std_temporal_regulate(StdTemporalKind::PlainDateTime, &mut fields, reject);
             std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
             let local_ns = std_temporal_epoch_ns(&fields);
             let given_offset = i.get_prop(&value, "offset")?;
-            let epoch_ns = if given_offset.is_undefined() || offset_option == "ignore" {
+            // The offset field's syntax is validated (via
+            // std_epoch_parse_offset, RangeError on a malformed string) as
+            // soon as it is read, regardless of the offset *option* -- even
+            // "ignore", which discards the parsed value, still requires it
+            // to have been well-formed.
+            let offset_ns = if given_offset.is_undefined() {
+                None
+            } else {
+                Some(std_epoch_parse_offset(&std_epoch_string_field_value(i, &given_offset)?)?)
+            };
+            let epoch_ns = if offset_ns.is_none() || offset_option == "ignore" {
                 std_epoch_disambiguate(&zone, local_ns, &disambiguation)?
             } else {
-                let offset_ns = std_epoch_parse_offset(&i.to_string(&given_offset)?)?;
+                let offset_ns = offset_ns.unwrap();
                 let candidate = local_ns - offset_ns;
                 let matches = tz_offset_ns(&zone, candidate) == offset_ns;
                 match offset_option.as_str() {
@@ -425,7 +542,7 @@ fn std_epoch_from_value_with_options(i: &mut Interpreter, value: JsValue, kind: 
                     _ => return Err(Throw::range_error("Temporal offset does not match time zone")),
                 }
             };
-            Ok((epoch_ns, zone))
+            Ok((std_epoch_check_range(epoch_ns)?, zone))
         }
         // Any other object is coerced to its string form, as ToTemporalInstant does.
         JsValue::Object(_) => {
