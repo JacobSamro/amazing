@@ -121,7 +121,17 @@ fn general_category() -> &'static RangeMap {
     })
 }
 
-/// Script, keyed by its long value name (e.g. `Latin`, `Common`).
+/// Script, keyed by its long value name (e.g. `Latin`, `Common`). Unicode's
+/// Scripts.txt only lists code points that have an assigned script -- it
+/// never spells out `Unknown` (Zzzz) for the rest of the codespace, the way
+/// DerivedGeneralCategory.txt spells out `Cn` -- but ECMA-262 still accepts
+/// `\p{Script=Unknown}`/`\p{scx=Unknown}` as valid property-value syntax
+/// (PropertyValueAliases.txt has the `sc;Zzzz;Unknown` alias row,
+/// built-ins/RegExp/property-escapes/generated/Script(_Extensions)_-_Unknown.js).
+/// So `Unknown` here is computed the same way `assigned()` computes its
+/// complement of `Cn` below: whatever code point isn't in any other script's
+/// range is `Unknown`, by construction covering the entire codespace exactly
+/// once between this map's values.
 fn scripts() -> &'static RangeMap {
     static MAP: OnceLock<RangeMap> = OnceLock::new();
     MAP.get_or_init(|| {
@@ -130,6 +140,9 @@ fn scripts() -> &'static RangeMap {
         for ranges in map.values_mut() {
             merge(ranges);
         }
+        let mut assigned_scripts: Ranges = map.values().flatten().copied().collect();
+        merge(&mut assigned_scripts);
+        map.insert("Unknown", complement(&assigned_scripts));
         map
     })
 }
