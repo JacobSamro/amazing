@@ -2919,3 +2919,35 @@ project-wide and needs a full `dom/observable` before/after gate to attempt safe
 ticket's budget. Full detail, including the exact spec quotes and reproduction commands, is in
 `.agents/dom-bindings/questions.md` (not git-tracked; ask the lane agent or re-derive from this
 entry plus the WICG Observable spec at https://wicg.github.io/observable/ if picking this up later).
+
+## Observable unit tests + notify_terminate ordering + takeUntil mapping fix (e80581b3)
+
+Coordinator-assigned, in order: (1) add crate-level Observable unit tests covering `takeUntil` and
+`notify_terminate` ordering (closing the gap that let the earlier initializer-throw regression
+through both gates undetected), (2) fix the ordering and mapping against those tests, with a full
+`dom/observable` WPT before/after in one batch.
+
+Added a `V::Script` mock-host callable (`tests.rs`) -- a boxed Rust closure run against the live
+`Host` via the ordinary `BindingHost::call` path, so a test's "user callback" can perform real side
+effects (`subscriber.next()`/`.error()`/`.complete()`/`.addTeardown()` on the exact `Subscriber` it
+was invoked with) without a JS engine. Five tests in the new `tests_observable.rs`. Verified 4 of 5
+fail against the unmodified `680d7659` code (temporarily swapped in via `git show HEAD:... >
+observable_bindings.rs`, restored after -- no `git stash`), confirming they're real tests, not
+vacuously true.
+
+Fixed both bugs found in the prior ticket's investigation, against the live WICG Observable spec
+text: `notify_terminate` now aborts its own signal and runs teardowns *before* forwarding to
+observers (was backwards); `takeUntil()`'s `RelayKind::TakeUntilNotifier` arm now maps notifier
+`Next`/`Error` to the outer completing (was: `Error` incorrectly mapped to outer *error*) and
+notifier `Complete` to a no-op (was incorrectly mapped to outer *complete*).
+
+Measured: workspace 3487/3487 passed (+5 new tests), 17 skipped, doctests ok; crate 741/741 passed,
+6 skipped. Full `dom/observable/tentative` (29 files, two independent `after` runs agree exactly,
+zero flakiness unlike the reverted initializer-throw attempt): **+6 subtests gained, 0 lost, 0 new
+timeouts/errors** -- `observable-constructor.any.js` 24/20->26/18,
+`observable-filter.any.js` 3/3->4/2, `observable-map.any.js` 3/3->4/2,
+`observable-take.any.js` 2/4->4/2; every other file byte-for-byte unchanged.
+`observable-takeUntil.any.js` itself remains unaffected (still blocked by the separate whole-page
+`"[object]"` crash documented in the prior ticket, not attempted here).
+
+Evidence: `crates/amazing-bindings/evidence/observable-notify-terminate-ordering/`.
