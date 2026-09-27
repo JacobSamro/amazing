@@ -2374,8 +2374,21 @@ impl Interpreter {
                 // getter/setter (JS-18's AddRestrictedFunctionProperties), fetched live from
                 // its descriptor rather than re-created, so `built-ins/ThrowTypeError/
                 // unique-per-realm-function-proto.js`'s cross-check (`arguments.callee.get
-                // === Function.prototype.arguments.get`) holds. Sloppy (mapped) arguments
-                // objects get no "callee" here (unimplemented; out of this fix's scope).
+                // === Function.prototype.arguments.get`) holds.
+                //
+                // 10.4.4.6 CreateMappedArgumentsObject step 15 (sloppy functions get the mapped
+                // arguments exotic object instead): "callee" is a plain, writable, configurable
+                // data property pointing at the function itself -- found while chasing a JS-19
+                // zero-loss regression (language/arguments-object/10.6-13-a-{2,3}.js): those
+                // tests read `arguments.callee.caller` and, if `arguments.callee` is undefined,
+                // deliberately fall back to "extension not supported, fake it" by comparing
+                // `.caller` against `undefined` -- which used to accidentally succeed only
+                // because `undefined.caller` silently evaluated to `undefined` instead of
+                // throwing (the tree-walker's own missing null-check, fixed separately this
+                // same ticket); fixing that null-check exposed this real, separate gap. The
+                // current call's own function object is `self.frames.last()`'s `own_function`:
+                // a fresh frame for THIS call was pushed before `bind_params` runs (see the
+                // call dispatch above), so it's always present here.
                 if strict {
                     let thrower = self.function_proto.borrow().own_prop("arguments").and_then(|p| p.getter.clone());
                     if let Some(thrower) = thrower {
@@ -2384,6 +2397,11 @@ impl Interpreter {
                             configurable: false, getter: Some(thrower.clone()), setter: Some(thrower),
                         }).unwrap();
                     }
+                } else if let Some(callee) = self.frames.last().and_then(|frame| frame.own_function.clone()) {
+                    object.borrow_mut().define("callee", Property {
+                        value: JsValue::Object(callee), writable: true, enumerable: false,
+                        configurable: true, getter: None, setter: None,
+                    }).unwrap();
                 }
             }
             e.declare_var("arguments", a)?;
