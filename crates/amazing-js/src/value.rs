@@ -228,6 +228,7 @@ impl fmt::Debug for Obj {
             (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::WindowProxy(_), _) => write!(f, "[WindowProxy]"),
             (Exotic::Proxy(_), _) => write!(f, "[proxy]"),
+            (Exotic::DisposableStack(_), _) => write!(f, "[disposable stack]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }

@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, ClassElements, DerivedConstructor, Exotic, FieldKey, FunctionBody, HostCallPolicy,
+    number_to_string, ClassElements, DerivedConstructor, DisposableStackEntry, DisposableStackState,
+    Exotic, FieldKey, FunctionBody, HostCallPolicy,
     HostFunctionId, HostHandle, InstanceElement, JsFunction, JsObject, JsValue, LegacyIteratorKind,
     LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PrivateElementKind,
     PrivateName, PromiseFate,
