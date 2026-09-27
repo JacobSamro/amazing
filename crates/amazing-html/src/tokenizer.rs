@@ -10,7 +10,7 @@
 
 use std::collections::VecDeque;
 
-use crate::entities::{LEGACY_NO_SEMI, MAX_NAME_LEN, NAMED};
+use crate::entities::MAX_NAME_LEN;
 
 /// A tokenizer token, per §13.2.5 "Emitting tokens".
 #[derive(Debug, Clone, PartialEq)]
@@ -1778,54 +1778,52 @@ impl Tokenizer {
 
     /// Longest-match against the named tables. Full names (with ';') always
     /// decode; legacy semicolon-less names follow the attribute rule.
+    ///
+    /// Probes candidate lengths longest-first via `entities::named_lookup`/
+    /// `legacy_lookup` (O(1) hashmap lookups) rather than scanning all 2,231
+    /// table entries per candidate — see `entities.rs`'s module doc (HTML-34)
+    /// for why the linear scan stopped being viable once the table grew from
+    /// ~85 entries to the full spec table.
     fn named_reference(&mut self, in_attr: bool) -> Option<String> {
+        // Every table name is pure ASCII, so a non-ASCII char can never be
+        // part of one — truncating the window there (rather than at
+        // MAX_NAME_LEN unconditionally) keeps `window`'s byte indices equal
+        // to its char indices, so every candidate length below can be a
+        // cheap byte-range slice instead of a fresh per-candidate `String`.
         let window: String = self
             .input
             .iter()
             .skip(self.pos)
+            .take_while(|c| c.is_ascii())
             .take(MAX_NAME_LEN)
-            .collect::<String>();
+            .collect();
         if window.is_empty() {
             return None;
         }
 
-        // Names in the tables include the leading '&'; the window does not.
-        let mut best: Option<(&str, &str)> = None;
-        for (name, replacement) in NAMED {
-            let bare = &name[1..]; // drop '&'
-            if window.len() >= bare.len()
-                && window.starts_with(bare)
-                && best.is_none_or(|(b, _)| bare.len() > b.len())
-            {
-                best = Some((bare, replacement));
+        for len in (1..=window.len()).rev() {
+            if let Some(replacement) = crate::entities::named_lookup(&window[..len]) {
+                self.pos += len; // ASCII: bytes == chars == positions consumed
+                return Some(replacement.to_string());
             }
-        }
-        if let Some((bare, replacement)) = best {
-            self.pos += bare.len(); // ASCII: bytes == chars
-            return Some(replacement.to_string());
         }
 
-        // Legacy semicolon-less names. `window[name.len()-1]` is the char
-        // immediately after the name (index shifts by the skipped '&').
-        let mut best_legacy: Option<(&str, &str)> = None;
-        for (name, replacement) in LEGACY_NO_SEMI {
-            let bare = &name[1..];
-            if window.len() >= bare.len()
-                && window.starts_with(bare)
-                && best_legacy.is_none_or(|(b, _)| bare.len() > b.len())
-            {
-                best_legacy = Some((bare, replacement));
-            }
-        }
-        if let Some((bare, replacement)) = best_legacy {
-            let next = window.as_bytes().get(bare.len()).map(|b| *b as char);
-            // Attribute rule: legacy ref followed by '=' or alphanumeric
-            // must not decode.
-            let blocked = in_attr
-                && next.is_some_and(|c| c == '=' || c.is_ascii_alphanumeric());
-            if !blocked {
-                self.pos += bare.len();
-                return Some(replacement.to_string());
+        // Legacy semicolon-less names: only the single longest match is ever
+        // considered (matching the table's own no-overlapping-prefix
+        // invariant), and the attribute rule can only block that one match —
+        // it never falls back to a shorter legacy candidate.
+        for len in (1..=window.len()).rev() {
+            if let Some(replacement) = crate::entities::legacy_lookup(&window[..len]) {
+                let next = window.as_bytes().get(len).map(|b| *b as char);
+                // Attribute rule: legacy ref followed by '=' or alphanumeric
+                // must not decode.
+                let blocked = in_attr
+                    && next.is_some_and(|c| c == '=' || c.is_ascii_alphanumeric());
+                if !blocked {
+                    self.pos += len;
+                    return Some(replacement.to_string());
+                }
+                break;
             }
         }
         None

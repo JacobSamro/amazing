@@ -1829,3 +1829,180 @@ substituting a different (unrequested) porting target.
 ### Gate
 
 `amazing`+`amazing-html` crate nextest: **513/513 passed, 6 skipped**.
+
+## HTML-34 — iframe interleaved parsing, per-frame storage origin, full
+named-character-reference table
+
+Base: fast-forwarded a fresh `lane/html34` off `dev` at `8c4de237` (HTML-33's
+merge). Brief, in order: (1) implement one of HTML-32's two iframe
+script-interleaving designs; (2) per-frame `localStorage`/`sessionStorage`
+keyed by the frame's own origin; (3) the largest remaining WPT `html/`
+failure cluster in this lane's paths.
+
+### (1) Iframe interleaved parsing: Design 1, incremental graft-as-you-go
+
+Picked Design 1 over Design 2 (a private per-frame arena, rejected in
+HTML-32 for rippling into layout/paint/compositor, which all assume one
+shared arena). `ResumableParser::swap_dom`'s existing top-level trick
+(`cmd/js.rs::run_interleaved_parse`) could not be reused directly:
+`TreeBuilder::from_dom` assumes the document root sits at `NodeIdx(0)` (~31
+literal references throughout `tree.rs`), true only for an otherwise-fresh
+`Dom::new()` -- an iframe's document instead has to live at an arbitrary
+`NodeIdx` inside the *already-populated* shared host arena.
+
+Added `IncrementalDocumentImport` (`amazing-dom/src/markup.rs`): grafts a
+private, script-interleaved parser's arena into an existing node of a
+different, already-populated arena, incrementally, preserving already-
+imported nodes' destination identity across repeated `sync()` calls (so a
+script pause sees a *stable* partial tree, not a fresh reimport each time).
+`sync_children` recurses into every child every call; `sync_special_
+containers` re-descends into shadow roots and template contents (not
+reachable via ordinary `Dom::children`) once their host/template is first
+imported. Wired into a new `run_interleaved_iframe_parse` in
+`runtime_host_html.rs`, replacing the old post-hoc `collect_classic_scripts`
+walk for HTML (not XML/XHTML) iframe documents; reuses
+`crate::cmd::js::script_source_from_node` (already `pub(crate)` for exactly
+this). `document.write` into an interleaving iframe routes through the
+existing `register_active_parser`/`unregister_active_parser` machinery, same
+as the top-level page -- no new insertion-point bookkeeping needed.
+
+`about:blank`'s canned skeleton stayed on the eager, one-shot
+`import_inert_document` path rather than moving to the new deferred path:
+it never has scripts, so deferring it has no benefit, and a real regression
+surfaced when it was moved there first -- `iframe.contentDocument.
+documentElement`/`.body` must be synchronously available immediately after
+insertion (a pre-existing regression test references WPT's
+`lang-attribute-document-element-replacement.html`), which an un-parsed
+deferred document breaks. `LoadedChildDocument::{Deferred, Eager}` splits
+the two: `srcdoc` and fetched `text/html` (the cases that can genuinely
+contain scripts) are `Deferred`; `about:blank` and fetched XML/XHTML stay
+`Eager`.
+
+New regression test: `iframe_interleaved_script_sees_document_so_far_not_
+the_finished_tree` (`runtime_host_html.rs`) -- an iframe script pause sees
+only the DOM built so far (`document.getElementById('b')` is `null` while
+paused before `<div id=b>` is parsed), and the full tree is there once
+parsing reaches EOF.
+
+### (2) Per-frame storage keyed by the frame's own origin
+
+`amazing-storage` already has full per-origin partitioning
+(`StorageKey { origin, top_level_site }`, `BucketKey`) -- no request filed;
+the API didn't need to change. The real gap was architectural:
+`BindingState.document_url` (`runtime_binding_host.rs`) is a single,
+host-wide field shared via one `Rc<RefCell<BindingState>>` across the
+top-level realm *and every child realm*. `storage_key()`, `fetch_base()`/
+cookie access, and `iframe_src_get` all read this one field, so HTML-33's
+NET-42 fix (installing net/storage/messaging onto child realms) made those
+APIs *present* in an iframe but left them resolving the *parent's* origin,
+not the iframe's own.
+
+Fixed entirely within this lane's own `runtime_host_html.rs`:
+`setup_iframe_window` now saves the current `document_url`, sets it to the
+child's own URL for the duration of the child realm's script execution
+(covering both the new interleaved path and the pre-existing
+`collect_classic_scripts` fallback), then restores it -- no edit to
+`runtime_host_storage.rs`/`runtime_host_net.rs` (other lanes' files)
+needed. Residual gap, flagged rather than silently assumed solved: an async
+callback running inside a child realm *outside* these explicit
+script-execution call sites (e.g. a timer fired later) is not covered by
+this save/restore and would still resolve against whatever `document_url`
+happens to be set at that moment.
+
+New regression test: `iframe_localstorage_is_keyed_by_the_frames_own_
+origin_not_the_parents` -- a cross-origin iframe writes to its own
+`localStorage`, verified from the *parent's own* side only (checking the
+parent's `localStorage` was not polluted), since JSRT-9's cross-origin
+`WindowProxy` gate blocks the parent from reading `frame.contentWindow.
+localStorage` directly for a genuinely cross-origin frame; a same-origin
+test could not have distinguished old from new behavior.
+
+### (3) Largest cluster: named character references were still a ~85-entry
+"pragmatic subset," not the full spec table
+
+Ran the standing 1,112-file pinned sweep (`html/syntax`, `html/dom`,
+`html/semantics/scripting-1`, `html/webappapis/scripting`, `dom/nodes/
+MutationObserver-*`) and clustered by non-passing subtest count per file.
+The largest clusters not already owned by another lane (the `reflection-
+*.html`/`innertext`/`nameditem` files are `amazing-dom`/`amazing-bindings`,
+i.e. dom-bindings' paths) were `script-type-and-language-js.html` (218
+non-pass) and `html/syntax/parsing/named-character-references.html`, whose
+own file-level count under-reports its size (it times out before finishing
+all 2,231 subtests) -- a manual run showed only 35/856 (4%) of what it did
+complete were correct. `entities.rs`'s own header comment already flagged
+this: "Phase 1 ships a pragmatic subset... the full 2,231-entry named table
+is a data-generation task... deferred to a follow-up."
+
+Considered porting html5ever's or WPT's copy of this table per the ticket's
+porting-policy line, but both are unsuitable sources under this project's
+"MIT/Apache-2.0 only" bar: WPT is 3-Clause BSD (`corpora/wpt/LICENSE.md`).
+Used the canonical source instead -- `https://html.spec.whatwg.org/
+entities.json`, the WHATWG HTML Living Standard's own machine-readable
+table, which is exactly what html5ever and every other conformant parser
+draws from. This is normative specification data (the name/codepoint pairs
+every HTML parser must agree on for interoperability), not copied engine
+code, so it carries no `THIRD_PARTY_NOTICES.md` row -- consistent with how
+the tokenizer's other spec-table constants are already implemented directly
+from the WHATWG spec without one.
+
+Replaced `entities.rs`'s ~85-entry `NAMED`/`LEGACY_NO_SEMI` tables with the
+full spec table: 2,125 semicolon-terminated names (`NAMED`) + 106 legacy
+semicolon-less names (`LEGACY_NO_SEMI`, unchanged in shape/rule), verified
+against the spec JSON's exact counts and against every no-semicolon name's
+codepoints matching its semicolon counterpart (`table_matches_the_whatwg_
+spec_count`, `semicolon_names_are_supersets_of_legacy`). `MAX_NAME_LEN`
+12 -> 32 (`&CounterClockwiseContourIntegral;`, the longest bare name).
+
+**Perf regression caught before shipping, not after:** the tokenizer's
+`named_reference` did a linear scan of the whole table per `&`, previously
+fine at ~85 entries but a real cost at 2,231 -- `named-character-
+references.html`'s own tight per-entity loop is exactly the pathological
+case, and a manual timing run confirmed the file (already `timeout` at
+baseline, unrelated to this change) got no further along per run under the
+larger table. Fixed with `LazyLock<HashMap<&str, &str>>` built once from the
+const tables (`named_lookup`/`legacy_lookup` in `entities.rs`) and rewrote
+`named_reference` to probe successively shorter *byte-slices* of a single
+pre-collected window (no per-candidate allocation -- entity names are pure
+ASCII, so the window is truncated at the first non-ASCII char to keep byte
+index == char index) against those maps, longest match first: at most
+`MAX_NAME_LEN` (32) O(1) lookups instead of up to 2,231 linear scans per
+candidate length.
+
+Measured (1,112-file pinned sweep, before = `8c4de237`, after = this diff,
+strict per-test status-map diff, same venus-001 host): **0 lost passes**,
+**+1 gained** (`html/syntax/parsing/math-parse01.html` fail -> pass), 1
+unrelated churn (`html/dom/reflection-obsolete.html` fail <-> timeout,
+shared-host timing noise on a file already borderline at baseline --
+flagged, not chased). `named-character-references.html` itself stays
+classified `timeout` in both before and after runs (a pre-existing,
+harness-overhead-driven ceiling on this specific file, present at baseline
+before any of this ticket's changes and not something a table/lookup fix
+can move) but every subtest it completes before the deadline went from
+mostly-wrong (35/856 correct in one before sample) to entirely correct
+(592/592 and 1307/1307 correct in two after samples) -- the fix's real
+effect doesn't show up in this one file's pass/fail bucket, only in its
+subtest detail. `scripts/html5lib.py`: unchanged, 243/243 (100%).
+
+**Not done, flagged as a follow-up, not folded into this ticket:**
+dynamically-inserted `<script>` elements (`document.createElement("script")`
++ `appendChild`, no parser involvement) never execute at all -- the root
+cause of every one of `script-type-and-language-js.html`'s 218 "should run"
+failures (218/218 fail; all 238 "shouldn't run" cases pass, consistent with
+dynamic script execution being entirely unwired rather than a type-sniffing
+bug). Investigated the wiring: there is no "prepare a script" algorithm
+independent of the parser's own pause signal anywhere in the engine; the
+natural hook point is `runtime_host_html.rs::invoke_operation_with_html_
+hooks` (already exactly "a JS-driven DOM mutation just happened, run an
+HTML side effect," used today for `navigate_iframes`), but it needs a new
+"already started" flag on script elements and spec-compliant sync-vs-queued
+handling for `src` vs inline -- a real feature addition, not a mechanical
+fix, and by itself larger than this ticket's three items combined. Filed as
+a numbered option in `.agents/html/questions.md` rather than attempted here.
+
+### Gate
+
+`amazing-html` crate nextest: **171/171 passed** (was 166/166 at HTML-33).
+`amazing-dom`: **239 lib + 10 integration passed**. Workspace nextest:
+**3,389/3,389 passed (0 slow-flagged as failures), 17 skipped**, run twice
+stable (was 3,381/3,381 at HTML-33's own gate). Doctests: **31 crates, 0
+FAILED**.
