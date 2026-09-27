@@ -528,6 +528,7 @@ pub(crate) fn layout_lines_shaped(
     first_line_position: Option<&str>,
     text_align: &str,
     text_align_last: &str,
+    text_justify: &str,
     plaintext: bool,
 ) -> Option<Vec<LineBox>> {
     let InlineContainingBlock {
@@ -648,7 +649,8 @@ pub(crate) fn layout_lines_shaped(
         );
         glyphs.append(ruby_glyphs);
         let alignment = line_alignment::Alignment {
-            value: text_align, last: text_align_last, final_line: !select_discretionary || force_empty,
+            value: text_align, last: text_align_last, justify: text_justify,
+            final_line: !select_discretionary || force_empty,
             direction: line_direction, writing_mode,
             start: line_start.get(), end: inline_end.get(), used_end: *cursor,
         };
@@ -1657,6 +1659,7 @@ fn shape_chunk_in_mode(
             source_mappings,
             font_size,
             style,
+            font_size_adjust,
             letter_spacing,
             word_spacing,
             tab_size,
@@ -1671,7 +1674,18 @@ fn shape_chunk_in_mode(
             previous_after = ShapingBoundary::Hard;
             continue;
         };
-        previous_style = Some((node.0, style.as_ref().clone()));
+        // CSS Fonts 4 font-size-adjust: rescale the size used for glyph
+        // selection/shaping to hit the requested metric-to-size aspect ratio,
+        // without changing the CSS-visible font-size (letter/word spacing
+        // and other em-relative values above are already resolved off the
+        // unadjusted font_size and must stay that way).
+        let adjusted_style = font_size_adjust.map(|(metric, aspect)| {
+            let mut adjusted = style.as_ref().clone();
+            adjusted.size = text_system.adjusted_font_size(&adjusted, metric, aspect);
+            adjusted
+        });
+        let style_for_span = adjusted_style.as_ref().unwrap_or(style.as_ref());
+        previous_style = Some((node.0, style_for_span.clone()));
         if text.is_empty() {
             continue;
         }
@@ -1716,7 +1730,7 @@ fn shape_chunk_in_mode(
         spans.push(TextSpan {
             range: start..end,
             source: node.0,
-            style: style.as_ref().clone(),
+            style: style_for_span.clone(),
             boundary_before: stronger_boundary(previous_after, *boundary_before),
         });
         spacing.push(SpacingSpan { tab_size: *tab_size, start, end, letter: *letter_spacing,
@@ -2454,6 +2468,7 @@ mod tests {
                 .collect(),
             font_size: 16.0,
             style: Box::new(amazing_text::TextStyle::default()),
+            font_size_adjust: None,
             letter_spacing: 0.0,
             word_spacing: crate::values::LengthPercentage::default(),
             tab_size: crate::TabSize::default(),
@@ -2513,7 +2528,7 @@ mod tests {
             InlineContainingBlock { x: 0.0, y: 0.0, width: 100.0, height: 32.0 },
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl, &provider,
-            &crate::floats::FloatContext::default(), true, None, "start", "auto", false,
+            &crate::floats::FloatContext::default(), true, None, "start", "auto", "auto", false,
         ).unwrap();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].words.iter().all(|word| !word.text.contains('「')));
@@ -2547,7 +2562,7 @@ mod tests {
             &strut(), amazing_text::Direction::LeftToRight,
             amazing_text::WritingMode::VerticalRl,
             &amazing_text::FallbackTextSystem::new(),
-            &crate::floats::FloatContext::default(), true, None, "start", "auto", false,
+            &crate::floats::FloatContext::default(), true, None, "start", "auto", "auto", false,
         ).unwrap();
         assert_eq!(lines.len(), 1);
         assert!(lines[0].replaced[0].x > 80.0);

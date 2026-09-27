@@ -176,6 +176,11 @@ pub struct LayoutBox {
     pub(crate) font_metric_style: Option<amazing_text::TextStyle>,
     /// Root element's face request for rch/ric/rex/rcap.
     pub(crate) root_font_metric_style: Option<amazing_text::TextStyle>,
+    /// Root element's own used line-height, for the `rlh` unit
+    /// (css-values-4 §6.2). Defaults to the 1.2 x font-size convention
+    /// (`font.rs`'s `ScaledMetrics` floor) until the tree walk from the
+    /// document root assigns the real value.
+    pub(crate) root_line_height: f32,
     pub flow: Flow,
     /// Absolute/fixed descendants removed from this box's formatting context.
     /// They are laid out by the post-normal-flow positioning pass.
@@ -243,6 +248,7 @@ impl LayoutBox {
             line_height,
             font_metric_style: None,
             root_font_metric_style: None,
+            root_line_height: line_height,
             flow: Flow::Empty,
             positioned: Vec::new(),
             inline_atomic: false,
@@ -380,6 +386,13 @@ pub enum InlineNode {
         source_mappings: Vec<TextSourceMapping>,
         font_size: f32,
         style: Box<amazing_text::TextStyle>,
+        /// CSS Fonts 4 `font-size-adjust`, resolved to the metric basis and
+        /// aspect number the shaper's `TextSystem::adjusted_font_size` call
+        /// expects; `None` for `font-size-adjust: none` (the initial value).
+        /// This crate's own `font_properties.rs` grammar only accepts the
+        /// single-value `<number>` syntax today, which is always the
+        /// ex-height basis.
+        font_size_adjust: Option<(amazing_text::FontSizeAdjustMetric, f32)>,
         /// Used CSS letter spacing in px; applied between visual character units.
         letter_spacing: f32,
         /// Used CSS word spacing; the percentage is relative to the current font size.
@@ -638,6 +651,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 layout.first_line_style.as_ref().and_then(|style| style.get("ruby-position")),
                 layout.style.get("text-align").unwrap_or("start"),
                 layout.style.get("text-align-last").unwrap_or("auto"),
+                layout.style.get("text-justify").unwrap_or("auto"),
                 layout.style.get("unicode-bidi") == Some("plaintext"),
             ) {
                 let old_height = if style.writing_mode.is_vertical_flow() {
