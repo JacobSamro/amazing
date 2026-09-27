@@ -218,6 +218,15 @@ fn layout_block_in_context(
     let has_ruby = matches!(&b.flow, Flow::Inlines(items) if items.iter().any(|item| matches!(item, crate::InlineNode::Ruby { .. })));
     let vertical_text = b.font_metric_style.as_ref().is_some_and(|style| style.writing_mode.is_vertical_flow());
     let width_keyword = matches!(b.style.get("width"), Some("min-content" | "max-content" | "fit-content"));
+    // CSS Sizing 4 `contain-intrinsic-size` (#intrinsic-size-override): under
+    // `contain: size`/`strict`, this box's own intrinsic contribution is the
+    // given length, not whatever its content would measure to. Feeding the
+    // width half into `intrinsic()` below covers every caller that already
+    // goes through it (the max-content/min-content/fit-content keywords,
+    // min-width/max-width, and float/atomic auto shrink-to-fit); the height
+    // half is merged into `def_h` further down, which already outranks
+    // content-based auto height.
+    let (contain_width_override, contain_height_override) = contain_size_override(b, font_px);
     let shaped_intrinsic = if let (Flow::Inlines(items), Some(text)) = (&b.flow, text) {
         (has_ruby || floating || b.inline_atomic || vertical_text || width_keyword).then(|| {
             crate::inline::intrinsic_widths_shaped(items,
@@ -229,7 +238,8 @@ fn layout_block_in_context(
     // (floats/atomic/vertical) keeps using shaped_intrinsic directly where
     // it already applies, without forcing every such box through this path.
     let keyword_shaped_intrinsic = shaped_intrinsic.filter(|_| has_ruby || width_keyword);
-    let intrinsic = |b: &LayoutBox, minimum| keyword_shaped_intrinsic.map(|pair| if minimum {pair.0} else {pair.1})
+    let intrinsic = |b: &LayoutBox, minimum| contain_width_override.map(|w| w + bl + pl + pr + br_)
+        .or_else(|| keyword_shaped_intrinsic.map(|pair| if minimum {pair.0} else {pair.1}))
         .unwrap_or_else(|| if minimum { crate::flex::min_content_width(b, fonts) }
             else { crate::flex::max_content_width(b, fonts) });
     let mut vertical_intrinsic = vertical_inline_measure(b, cbw, text);
@@ -423,8 +433,13 @@ fn layout_block_in_context(
     let height_constraint = |property| values::style_length_percentage_with_units(&constraint_style, property, font_units)
         .and_then(|length| length.resolve(containing_block_height))
         .map(|height| height.max(0.0));
+    // `contain-intrinsic-size`'s height half only fills in for a `height`
+    // that isn't already a definite length -- an explicit `height:300px`
+    // still wins over containment, matching width's treatment in
+    // `intrinsic()` above (only the intrinsic *contribution* is overridden).
     let def_h = values::style_length_percentage_with_units(&b.style, "height", font_units)
-        .and_then(|length| length.resolve(b.containing_block_height));
+        .and_then(|length| length.resolve(b.containing_block_height))
+        .or(contain_height_override);
     let inline_basis = def_h.map(|h| {
         constrain_height(
             h,
@@ -781,6 +796,42 @@ fn pt(b: &LayoutBox) -> f32 {
 }
 fn pb(b: &LayoutBox) -> f32 {
     b.padding.bottom
+}
+
+/// CSS Sizing 4 `contain-intrinsic-size` (#intrinsic-size-override): under
+/// `contain: size` or `contain: strict`, a box's own intrinsic width/height
+/// contribution comes from this property instead of measuring its content.
+/// Returns `(width, height)` content-box overrides, in px; either is `None`
+/// when that axis has no override (`none`, unparseable, or containment not
+/// active on this box at all). Only handles the plain `<length>` form of
+/// each axis, not `auto <length>` (the "remembered size" fallback, which
+/// needs last-rendered-size tracking this codebase does not have); an
+/// `auto`-prefixed axis is treated as having no override rather than
+/// guessed at, since the `<length>` half of that form is a fallback for
+/// before the element has ever been sized, not the value to always use.
+/// `contain-intrinsic-size` is not registered in `amazing-css` as a
+/// shorthand, so its raw two-token source (or one token for both axes)
+/// survives on this single property name rather than being expanded into
+/// `contain-intrinsic-width`/`-height` longhands.
+fn contain_size_override(b: &LayoutBox, font_px: f32) -> (Option<f32>, Option<f32>) {
+    let contains_size = b.style.get("contain").is_some_and(|value| {
+        value.split_ascii_whitespace()
+            .any(|token| token.eq_ignore_ascii_case("size") || token.eq_ignore_ascii_case("strict"))
+    });
+    if !contains_size {
+        return (None, None);
+    }
+    let Some(source) = b.style.get("contain-intrinsic-size") else { return (None, None); };
+    let parse_one = |token: &str| -> Option<f32> {
+        if token.eq_ignore_ascii_case("none") || token.eq_ignore_ascii_case("auto") {
+            return None;
+        }
+        values::parse_length_percentage(token, font_px, font_px * 0.6)?.resolve(None)
+    };
+    let mut tokens = source.split_ascii_whitespace().map(parse_one);
+    let first = tokens.next().flatten();
+    let second = tokens.next().flatten().or(first);
+    (first, second)
 }
 
 /// Specified `height` in px, or None (auto). Percentages need the
