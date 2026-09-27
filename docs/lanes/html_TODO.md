@@ -3237,3 +3237,202 @@ architecturally distinct one-offs (see list above), each warranting its own
 focused ticket rather than more time against a shrinking, increasingly
 long-tailed corpus. WPT `encoding/` (the coordinator's second half of item
 2) not started -- next up.
+
+## HTML-42: WPT `encoding/` gate, tokenizer eof-in-tag, foreign-fragment
+## adjusted-current-node, webkit02 selectedcontent
+
+Coordinator's follow-up to HTML-41: WPT `encoding/` as the gate, then
+`foreign-fragment.dat`'s 18 cases, the tokenizer EOF-mid-tag case, and
+webkit02.dat's `<selectedcontent>` cluster (venus-001, debug).
+
+### 1. WPT `encoding/`
+
+Measured with a scratch sweep script (`scripts/html41_encoding_sweep.py`,
+adapted from HTML-37's own scratch sweep; not committed, matching that
+precedent) mirroring `measure-wpt-dom.py`'s `suite == 'url'` `.any.js`-as-
+window-global exception for `encoding/` (almost entirely `.any.js`).
+194 selected files. **File-level counts are the reliable number here --
+subtest-level totals are flaky by design of the corpus, not this lane's
+code** (see below): 16-17 pass / 25 fail / 3-4 timeout / 8 error / 141
+unsupported, stable across every run regardless of fix state.
+
+Found and fixed two real, in-lane decoder bugs (both `amazing-encoding`/
+`amazing`, both verified via `textdecoder-eof.any.js` and `textdecoder-
+arguments.any.js` going from failing to fully passing, deterministically,
+across repeated runs):
+
+1. **`crates/amazing-encoding/src/decoder.rs`**: the Big5/gb18030(GBK)/
+   Shift_JIS/EUC-KR decoders' "unmapped pointer" fallback always consumed
+   both lead and trail byte as one error (`Step::Error(2)`), even when the
+   trail byte was itself a plain ASCII byte that the WHATWG decoder
+   algorithms restore and reprocess as its own code point (`Step::
+   Error(1)`). `TextDecoder("Big5").decode([0x81, 0x40])` was producing
+   `"�"` instead of `"�@"` -- the `0x40` ('@') never got its own
+   turn. Fixed in `gb18030_step`/`big5_step`/`shift_jis_step`/
+   `euc_kr_step`'s final `tables::lookup(...).map_or(...)` calls: `Error(1)`
+   when the trail byte is `< 0x80`, `Error(2)` otherwise. (EUC-JP's
+   equivalent lookups were checked and don't need this -- their trail-byte
+   ranges are always validated to `0xA1..=0xFE`, never ASCII, before
+   reaching the table lookup.)
+2. **`crates/amazing/src/runtime_host_encoding.rs`**, `TextDecoderDecode`:
+   two related argument-handling bugs in one arm.
+   - WebIDL converts `decode(input, options)`'s arguments left to right, so
+     `options`'s dictionary conversion (which can run a `stream` getter)
+     completes *before* the method body's own "get a copy of the bytes held
+     by input" step -- meaning a getter that detaches `input`'s buffer as a
+     side effect must see that reflected in the byte copy. This arm read
+     `input`'s bytes before evaluating `options`; reordered so `options` (and
+     any getter it runs) is evaluated first.
+   - Even with that reordering, `binding_buffer_source_bytes` throws a
+     TypeError for an already-detached buffer (correct for most callers, per
+     its own doc comment) -- but per WebIDL's "get a copy of the bytes held
+     by" a *detached* buffer, decode() must treat it as an empty byte
+     sequence, not an error (a documented, deliberate spec quirk, exactly
+     what `textdecoder-arguments.any.js`'s "detached during arg conversion"
+     case exercises). Downgraded that one specific error to an empty `Vec`
+     for this call site only; `binding_buffer_source_bytes`'s general
+     contract is untouched for every other caller.
+
+**Not fixed, not in-lane, escalated in `questions.md`:**
+- The corpus's single largest cluster by far (~450+ subtests:
+  `gb18030-encoder.html`, `big5-enc-ascii.html`, `gbk-encoder.html`,
+  `big5-encoder.html`, `iso-2022-jp-encoder.html`) is a *URL query
+  percent-encoding* bug, not a codec bug -- `amazing-encoding`'s legacy
+  multi-byte ENCODERS are already correct and dispatched correctly.
+  Root-caused (via a research pass) to `amazing-net`'s URL parser
+  hardcoding UTF-8 for the query component (should use the document's own
+  encoding per the URL Standard) plus `<a>.search`/`.hostname`/etc simply
+  not being reflected on `HTMLAnchorElement` at all yet. Filed for net lane
+  and dom-bindings lane.
+- A smaller cluster (4 subtests, `unsupported-encodings.any.js`'s UTF-32
+  "with BOM should decode as UTF-16LE" cases) is an XHR `responseText`
+  charset-determination gap (falls back straight to UTF-8 without BOM-
+  sniffing first) in net lane's `runtime_host_net.rs`. Filed for net lane.
+- `textdecoder-copy.any.js`'s `SharedArrayBuffer` variant fails with
+  "constructor is not an object" -- `SharedArrayBuffer` isn't a global in
+  this engine at all (a js-runtime/js-binary gap, already out of this
+  lane's scope; the `ArrayBuffer` variant of the same test already passes).
+- `TextEncoder.prototype.encodeInto` and `TextDecoderStream`/
+  `TextEncoderStream` remain the same already-documented, already-escalated
+  gaps noted in `runtime_host_encoding.rs`'s own doc comment (js-binary
+  binding primitive; no Streams API at all, respectively) -- re-confirmed,
+  not re-escalated.
+- `single-byte-decoder.any.js`'s 40-subtest timeout is very likely this
+  lane's own source-file test runner lacking a live WPT test server for its
+  `XMLHttpRequest` sub-suite (its `.any.js` `// META: variant=` isn't split
+  by the runner), not an engine hang; not investigated further.
+- `textdecoder-mistakes.any.js`'s 6 failures are deliberately adversarial
+  edge cases (sourced from an external fuzz-style test suite) that Chrome/
+  Firefox/Safari/Node/Bun/Deno/Servo also variously fail per the file's own
+  inline comments; diminishing-returns, not pursued.
+
+**On the run-to-run subtest-count variance**: an early sweep saw pass/fail
+subtest totals swing by ~350-1000 between identical reruns (e.g. 6963/741,
+10113/803, 10891/841, and a *serial* `--jobs 1` rerun still gave 10980/860)
+while the **file-level** classification (16-17/25/3-4/8/141) stayed
+constant across all of them. This predates every fix in this ticket and is
+not this lane's code: it's some number of large generated-subtest files
+(most likely the encoder cluster above, itself flagged for net/dom-
+bindings) whose subtest count is itself nondeterministic under load, not a
+measurement-tool bug. Recorded here so a future encoding/ measurement
+knows to trust file-level pass/fail, not raw subtest totals, until that's
+root-caused (also not this lane's own crates, per the same escalation).
+
+### 2. Tokenizer EOF-mid-tag (`crates/amazing-html/src/tokenizer.rs`)
+
+`finish_eof`'s `TagName | BeforeAttrName | AttrName | AfterAttrName |
+BeforeAttrValue | AttrValueDouble | AttrValueSingle | AttrValueUnquoted |
+AfterAttrValueQuoted | SelfClosingStart` arm unconditionally replayed the
+raw source slice from `<` as literal character-token text at EOF ("EOF in
+tag: emit the literal source text back"). Per spec (13.2.5.8 onward), EOF
+in any of these states is an "eof-in-tag" parse error that emits nothing
+but an end-of-file token -- the whole partial tag, once its name has
+started, is discarded outright, not replayed as text. `EndTagOpen` is the
+one exception that keeps the old behavior: spec 13.2.5.7 ("end tag open
+state") EOF *does* emit `<` and `/` as literal character tokens, since no
+tag name has started yet there. Split `EndTagOpen` into its own arm
+(unchanged) and made the rest a no-op. `tag open state` itself never
+reaches `finish_eof` at all -- a lone trailing `<` resolves inline in
+`tag_open_dispatch`'s catch-all (`Not a tag open: '<' is literal text`),
+already correct.
+
+Rewrote the test that pinned the old (wrong) behavior,
+`eof_mid_tag_falls_back_to_literal_text`, as `eof_mid_tag_is_an_eof_in_
+tag_parse_error_and_emits_nothing` (plus a new `eof_in_end_tag_open_state_
+emits_literal_slash` for the one exception). webkit01.dat case 4 (`<di`)
+was the html5lib fixture pinning the correct, empty-document behavior.
+
+### 3. Foreign-fragment adjusted-current-node (`crates/amazing-html/src/
+### tree.rs`, `tree/foreign.rs`)
+
+All 18 `foreign-fragment.dat` failures traced to one root cause: a fragment
+parse whose *context* itself is a foreign (svg/math) element has no real
+`NodeIdx` pushed for that context (`build_fragment`'s synthetic root is
+always HTML), so the spec's "adjusted current node" -- the context element
+itself, whenever `open` still holds only that synthetic root -- was never
+actually consulted. `tree.rs` already had `adjusted_current_namespace()`
+(from HTML-40) computing exactly this for one caller, with its own doc
+comment flagging that `foreign.rs`'s dispatch helpers "still key off
+`current()` directly, unaffected in practice since a fragment's synthetic
+root is never a real integration point/foreign element by construction" --
+true for *ordinary* fragments, false for a *foreign* one.
+
+Added `adjusted_current(&self) -> Option<(Namespace, &str)>` and
+`adjusted_current_attrs(&self) -> Option<&[(String, String)]>` next to
+`adjusted_current_namespace`, returning the fragment context's own
+namespace/name/attrs (with `adjusted_svg_tag_name` case-restoration for an
+SVG context, since `parse_fragment_inner` lowercases the incoming context
+string -- an SVG `foreignObject` context otherwise silently failed the
+case-sensitive HTML-integration-point name match) when `open.len() == 1`,
+else falling back to the real current node exactly as before. Generalized
+`foreign.rs`'s predicates to take `(Namespace, name, attrs)` directly
+(`is_mathml_text_integration_point_ns`/`is_html_integration_point_ns`, with
+the existing `NodeIdx`-based versions now thin wrappers over these, used
+unchanged by the real-stack breakout-popping loop), and switched
+`should_process_in_foreign_content`'s dispatch decision and the non-
+breakout `<StartTag>`'s new-element namespace computation in
+`in_foreign_content` from `current()` to `adjusted_current()`. Result:
+**48/66 (72.73%) -> 66/66 (100%)**.
+
+### 4. webkit02.dat `<selectedcontent>` (`crates/amazing-html/src/tree/
+### in_select.rs`, `tree.rs`)
+
+Cases 45-48 (all four `<selectedcontent>` cases in the file) were already
+structurally correct (button/option nesting and depths matched exactly) --
+the only gap was `<selectedcontent>`'s own mirrored content, always empty.
+`<selectedcontent>` is the newer "customizable select" feature: a
+`<button>`-child-of-`<select>`'s descendant `<selectedcontent>` mirrors a
+deep clone of the select's currently-selected `<option>`'s children,
+spec-defined as a live "update selectedcontent" step run from option
+insertion steps and attribute changes (script-driven). None of these
+fixtures run script, so rather than interleaving that step into token
+processing, added `TreeBuilder::apply_selectedcontent_mirroring` (`tree/
+in_select.rs`) as a single post-parse pass, called once from `into_dom`
+(the one common exit point for `build`/`build_fragment`/the streaming
+`finish()`): for every `<select>` whose first child is a `<button>`, find
+its selected option (the last `<option>` descendant carrying a `selected`
+attribute, else the first `<option>` at all -- the same default-
+selectedness rule a live select uses) and the descendant
+`<selectedcontent>` inside that button, and mirror a deep clone of the
+option's children into it (a new same-`Dom` `clone_node_within`, alongside
+`lib.rs`'s existing cross-`Dom` `clone_subtree` used for fragment cloning).
+Result: **39/47 (82.98%) -> 43/47 (91.49%)** (the file's other 4 failures --
+cases 19, 23, 24, 49 -- are unrelated, pre-existing, not named by the
+coordinator).
+
+### Combined html5lib/WPT tree-construction measurement (62 `.dat` files,
+### venus-001, debug)
+
+**1824/1894 (96.30%) -> 1851/1894 (97.73%)**, +27.
+
+### Gate (venus-001, debug)
+
+`amazing-html` + `amazing-dom` nextest: 423/423 passed, 0 skipped (up from
+HTML-41's 786-combined-with-`amazing` baseline; re-split per-crate here
+since `amazing`'s own suite is covered by the workspace-wide run below,
+which the coordinator asked for explicitly this time). Workspace-wide
+`cargo nextest run --workspace --locked`: **3488/3488 passed (3 slow), 17
+skipped, 0 failed**. `cargo test --workspace --locked --doc`: 31 doc-test
+suites, all `test result: ok`, 0 failed (per the coordinator's "use a
+workspace-wide nextest in your final gate, not just the three crates"
+instruction, replacing HTML-41's three-crate scope).

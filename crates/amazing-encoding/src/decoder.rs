@@ -129,7 +129,10 @@ impl Decoder {
         }
         let offset = if second < 0x7F { 0x40 } else { 0x41 };
         let pointer = ((first as usize - 0x81)*190) + (second as usize - offset);
-        tables::lookup("gb18030", pointer).map_or(Step::Error(2), |cp| Step::Emit(cp, 2))
+        // WHATWG gb18030 decoder: an unmapped pointer with an ASCII second
+        // byte only consumes the lead byte; the ASCII byte is reprocessed.
+        tables::lookup("gb18030", pointer)
+            .map_or(Step::Error(if second < 0x80 { 1 } else { 2 }), |cp| Step::Emit(cp, 2))
     }
     fn big5_step(&self) -> Step {
         let p=&self.pending; let first=p[0];
@@ -145,7 +148,10 @@ impl Decoder {
         match pointer {
             1133 => Step::Pair(0xCA,0x304,2), 1135 => Step::Pair(0xCA,0x30C,2),
             1164 => Step::Pair(0xEA,0x304,2), 1166 => Step::Pair(0xEA,0x30C,2),
-            _ => tables::lookup("big5",pointer).map_or(Step::Error(2), |cp| Step::Emit(cp,2)),
+            // WHATWG Big5 decoder: an unmapped pointer with an ASCII second
+            // byte only consumes the lead byte; the ASCII byte is reprocessed.
+            _ => tables::lookup("big5",pointer)
+                .map_or(Step::Error(if second < 0x80 { 1 } else { 2 }), |cp| Step::Emit(cp,2)),
         }
     }
     fn euc_jp_step(&self) -> Step {
@@ -185,7 +191,10 @@ impl Decoder {
         let offset=if second<0x7F {0x40}else{0x41};
         let pointer=(first as usize-lead_offset)*188+(second as usize-offset);
         if (8836..=10715).contains(&pointer) { return Step::Emit(0xE000+pointer as u32-8836,2); }
-        tables::lookup("jis0208",pointer).map_or(Step::Error(2), |cp| Step::Emit(cp,2))
+        // WHATWG Shift_JIS decoder: an unmapped pointer with an ASCII second
+        // byte only consumes the lead byte; the ASCII byte is reprocessed.
+        tables::lookup("jis0208",pointer)
+            .map_or(Step::Error(if second < 0x80 { 1 } else { 2 }), |cp| Step::Emit(cp,2))
     }
     fn euc_kr_step(&self) -> Step {
         let p=&self.pending; let first=p[0];
@@ -197,7 +206,10 @@ impl Decoder {
             return Step::Error(if second<0x80 {1}else{2});
         }
         let pointer=(first as usize-0x81)*190+(second as usize-0x41);
-        tables::lookup("euc-kr",pointer).map_or(Step::Error(2), |cp| Step::Emit(cp,2))
+        // WHATWG EUC-KR decoder: an unmapped pointer with an ASCII second
+        // byte only consumes the lead byte; the ASCII byte is reprocessed.
+        tables::lookup("euc-kr",pointer)
+            .map_or(Step::Error(if second < 0x80 { 1 } else { 2 }), |cp| Step::Emit(cp,2))
     }
     fn iso2022_step(&mut self) -> Step {
         let p=&self.pending; let first=p[0];

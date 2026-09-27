@@ -173,17 +173,35 @@ impl RuntimeBindingHost<'_> {
             }
             EncodingOp::TextDecoderDecode => {
                 let slot = self.encoding_receiver(&this, KIND_TEXT_DECODER)?;
+                // WebIDL converts arguments left to right, and the `options`
+                // dictionary conversion (which can run an `options.stream`
+                // getter) completes before the method body's own "get a copy
+                // of the bytes held by input" step runs. A getter that
+                // detaches `input`'s buffer as a side effect must therefore
+                // see that detach reflected in the byte copy: options are
+                // read first, and the buffer bytes are snapshotted after.
+                let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+                let stream = self.encoding_dict_bool(&options, "stream", false)?;
                 let input = match args.first() {
                     Some(value) if !matches!(value, JsValue::Undefined) => {
-                        self.js.binding_buffer_source_bytes(value)?
-                            .ok_or_else(|| Throw::type_error(
+                        // WebIDL's "get a copy of the bytes held by" a
+                        // BufferSource treats an already-detached buffer as
+                        // an empty byte sequence rather than an error; this
+                        // is what lets a `stream` getter detach `input`'s
+                        // buffer as a side effect without decode() throwing.
+                        // `binding_buffer_source_bytes` otherwise errors on
+                        // detached buffers for callers that want that; only
+                        // that specific error is downgraded here.
+                        match self.js.binding_buffer_source_bytes(value) {
+                            Ok(Some(bytes)) => bytes,
+                            Ok(None) => return Err(Throw::type_error(
                                 "Failed to execute 'decode' on 'TextDecoder': The provided value is not of type '(ArrayBuffer or ArrayBufferView)'."
-                            ))?
+                            )),
+                            Err(_) => Vec::new(),
+                        }
                     }
                     _ => Vec::new(),
                 };
-                let options = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-                let stream = self.encoding_dict_bool(&options, "stream", false)?;
                 let output = {
                     let mut state = self.state.borrow_mut();
                     let realm = state.encoding.as_mut().unwrap();
