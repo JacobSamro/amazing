@@ -540,31 +540,43 @@ fn constraints(
     let sx = spacing(b).0;
     for (i, path) in g.columns.iter().enumerate() {
         let col = at(b, path);
-        let width = length(col, "width", basis)
+        // css-tables-3 #computing-column-measures: a `<col>`/`<colgroup>`'s
+        // own used width is `width` clamped by its own `min-width`/
+        // `max-width` -- checked on both the `<col>` and its owning
+        // `<colgroup>` for each property independently (a `<col>` can
+        // declare `width` while its `<colgroup>` declares `min-width`, and
+        // vice versa), matching how `width` alone already falls back to the
+        // colgroup. Only a definite (non-percentage) `min-width`/`max-width`
+        // participates (col-definite-min-size-001.html /
+        // col-definite-max-size-001.html use `%` and `calc()`-with-`%`
+        // variants specifically to probe this); a percentage `width` still
+        // resolves through `length()`'s own basis as before. Applying
+        // `max-width` first and `min-width` second means `min-width` wins
+        // when the two conflict (col-definite-max-size-001.html's
+        // `max-width:0; min-width:100px` case), same precedence CSS box
+        // sizing uses everywhere else.
+        let col_or_group_limit = |prop| {
+            intrinsic_limit(col, prop).or_else(|| {
+                (path.len() == 2)
+                    .then(|| intrinsic_limit(at(b, &path[..1]), prop))
+                    .flatten()
+            })
+        };
+        let mut width = length(col, "width", basis)
             .or_else(|| {
                 (path.len() == 2)
                     .then(|| length(at(b, &path[..1]), "width", basis))
                     .flatten()
             })
             .unwrap_or(0.0);
+        if let Some(max_width) = col_or_group_limit("max-width") {
+            width = width.min(max_width);
+        }
+        if let Some(min_width) = col_or_group_limit("min-width") {
+            width = width.max(min_width);
+        }
         min[i] = width;
         max[i] = width;
-        // css-tables-3 #computing-column-measures (col-definite-min-size-001.html):
-        // a definite (non-percentage) `<col>`/`<colgroup>` `min-width` floors
-        // the column independent of `width` -- checked on both the `<col>`
-        // and its owning `<colgroup>`, same fallback `width` uses above.
-        // `max-width` interacting with an explicit `width` on the same
-        // column is a separate, not-yet-implemented resolution
-        // (col-definite-max-size-001.html) left for its own pass.
-        let min_width = intrinsic_limit(col, "min-width").or_else(|| {
-            (path.len() == 2)
-                .then(|| intrinsic_limit(at(b, &path[..1]), "min-width"))
-                .flatten()
-        });
-        if let Some(min_width) = min_width {
-            min[i] = min[i].max(min_width);
-            max[i] = max[i].max(min_width);
-        }
     }
     let mut cells: Vec<_> = g.cells.iter().collect();
     cells.sort_by_key(|c| c.cols);

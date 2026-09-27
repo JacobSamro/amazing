@@ -866,3 +866,31 @@ fn col_definite_min_size_trailing_columns_only_extend_definite_ones() {
     assert!(tables[0].border_box.w >= 400.0, "t1: {}", tables[0].border_box.w);
     assert!(tables[2].border_box.w < 100.0, "t3: {}", tables[2].border_box.w);
 }
+
+#[test]
+fn col_max_width_clamps_a_definite_width_and_min_width_still_wins_over_it() {
+    // css-tables-3 #computing-column-measures (col-definite-max-size-001.html):
+    // a <col>'s own used width is `width` clamped by its own min-width/
+    // max-width, applying max-width first so a conflicting min-width still
+    // wins (t1: width:100px clamped down to max-width:40px -> narrow;
+    // t2: only min-width:100px against a losing max-width:0 -> min wins,
+    // stays wide).
+    let b = layout(
+        r#"<body>
+<table id=t1 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:40px;width:100px"><col style="max-width:40px;width:100px">
+  <col style="max-width:40px;width:100px"><col style="max-width:40px;width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+<table id=t2 border="1" cellspacing="10"><colgroup>
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+  <col style="max-width:0;min-width:100px"><col style="max-width:0;min-width:100px">
+</colgroup><thead><tr><td>1</td><td>2</td></tr></thead></table>
+"#,
+        "",
+        false,
+    );
+    let tables = collect(&b, Role::Table);
+    assert_eq!(tables.len(), 2);
+    assert!(tables[0].border_box.w < 250.0, "t1: {}", tables[0].border_box.w);
+    assert!(tables[1].border_box.w >= 400.0, "t2: {}", tables[1].border_box.w);
+}
