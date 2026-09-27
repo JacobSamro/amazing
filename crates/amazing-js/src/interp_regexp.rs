@@ -132,6 +132,18 @@ impl Interpreter {
             prop.getter = Some(getter);
             let _ = self.regexp_proto.borrow_mut().define(name, prop);
         }
+        // Annex B.2.5.1 `RegExp.prototype.compile ( pattern, flags )`: a
+        // real, own method (test262's `B.RegExp.prototype.compile.js` and
+        // the `length`/`name` descriptor tests need it to actually exist,
+        // not just be dispatched by name).
+        let compile = Self::native_arity("compile", native_regexp_compile, &self.function_proto, 2);
+        if let JsValue::Object(o) = &compile {
+            o.borrow_mut().constructible = false;
+        }
+        let _ = self
+            .regexp_proto
+            .borrow_mut()
+            .define("compile", regexp_property(compile, true));
         for (symbol, tag_name, fun) in [
             (
                 WellKnownSymbol::Match,
@@ -166,6 +178,54 @@ impl Interpreter {
                 .regexp_proto
                 .borrow_mut()
                 .define(symbol.symbol(), regexp_property(method, true));
+        }
+        // Annex B.2.5 "legacy RegExp static properties" ($1-$9, input/$_,
+        // lastMatch/$&, lastParen/$+, leftContext/$`, rightContext/$'):
+        // accessor properties on the *constructor* object itself (not its
+        // prototype -- test262 looks these up via
+        // `Object.getOwnPropertyDescriptor(RegExp, "...")`). `legacy_regexp_store`
+        // lazily creates the realm-scoped backing values (a hidden data
+        // property on `regexp_proto`, not a new Interpreter/RealmState
+        // field, so this stays entirely inside js-date's own grant) the
+        // first time any of these is touched.
+        if let JsValue::Object(object) = &constructor {
+            for (name, alias, has_setter) in [
+                ("input", Some("$_"), true),
+                ("lastMatch", Some("$&"), false),
+                ("lastParen", Some("$+"), false),
+                ("leftContext", Some("$`"), false),
+                ("rightContext", Some("$'"), false),
+            ] {
+                for key in std::iter::once(name).chain(alias) {
+                    let getter = Self::native(
+                        &format!("get {key}"),
+                        native_regexp_legacy_getter,
+                        &self.function_proto,
+                    );
+                    let mut prop = regexp_property(JsValue::Undefined, false);
+                    prop.getter = Some(getter);
+                    if has_setter {
+                        prop.setter = Some(Self::native_arity(
+                            &format!("set {key}"),
+                            native_regexp_legacy_setter,
+                            &self.function_proto,
+                            1,
+                        ));
+                    }
+                    let _ = object.borrow_mut().define(key, prop);
+                }
+            }
+            for n in 1..=9 {
+                let key = format!("${n}");
+                let getter = Self::native(
+                    &format!("get {key}"),
+                    native_regexp_legacy_getter,
+                    &self.function_proto,
+                );
+                let mut prop = regexp_property(JsValue::Undefined, false);
+                prop.getter = Some(getter);
+                let _ = object.borrow_mut().define(key, prop);
+            }
         }
         self.install_regexp_string_iterator_proto();
         self.define_global("RegExp", constructor);
@@ -204,6 +264,194 @@ impl Interpreter {
             crate::value::Property { value: JsValue::str("RegExp String Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None },
         );
     }
+}
+// Annex B.2.5's legacy RegExp static properties need a mutable, realm-scoped
+// place to live. Rather than adding a field to `Interpreter`/`RealmState`
+// (owned outside this lane's grant -- see AGENTS.md's LANE_PATHS), the
+// values are kept as an ordinary hidden data property directly on
+// `regexp_proto`, which is itself already realm-scoped and swapped on
+// cross-realm entry. The key is a string no JS source can spell as an
+// identifier or an ordinary property-access string (`RegExp["\0..."]` is
+// technically possible but not something any test262 test does), so it
+// can't collide with a real property and doesn't need a new internal-slot
+// mechanism in `value.rs`.
+const LEGACY_STATICS_KEY: &str = "\u{0}legacyRegExpStatics";
+const LEGACY_STATICS_FIELDS: [&str; 14] = [
+    "input", "lastMatch", "lastParen", "leftContext", "rightContext",
+    "paren1", "paren2", "paren3", "paren4", "paren5", "paren6", "paren7", "paren8", "paren9",
+];
+fn legacy_regexp_store(i: &mut Interpreter) -> JsValue {
+    if let Some(existing) = i.regexp_proto.borrow().get_own(LEGACY_STATICS_KEY) {
+        return existing;
+    }
+    let mut store = JsObject::ordinary();
+    store.proto = None;
+    for key in LEGACY_STATICS_FIELDS {
+        let _ = store.define(key, regexp_property(JsValue::str(""), true));
+    }
+    let value = JsValue::object(store);
+    let _ = i
+        .regexp_proto
+        .borrow_mut()
+        .define(LEGACY_STATICS_KEY, regexp_property(value.clone(), true));
+    value
+}
+/// Maps a legacy accessor's own name (its canonical form or its `$`-sigil
+/// alias) to the backing field `legacy_regexp_store` uses for it.
+fn legacy_regexp_field(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "input" | "$_" => "input",
+        "lastMatch" | "$&" => "lastMatch",
+        "lastParen" | "$+" => "lastParen",
+        "leftContext" | "$`" => "leftContext",
+        "rightContext" | "$'" => "rightContext",
+        "$1" => "paren1",
+        "$2" => "paren2",
+        "$3" => "paren3",
+        "$4" => "paren4",
+        "$5" => "paren5",
+        "$6" => "paren6",
+        "$7" => "paren7",
+        "$8" => "paren8",
+        "$9" => "paren9",
+        _ => return None,
+    })
+}
+/// `GetLegacyRegExpStaticProperty`/`SetLegacyRegExpStaticProperty`'s shared
+/// receiver check (Annex B.2.5): every legacy accessor throws unless `this`
+/// is *exactly* the current realm's own `%RegExp%` intrinsic -- not a
+/// subclass, not a cross-realm `%RegExp%`, not `RegExp.prototype`. Read via
+/// `regexp_proto`'s own "constructor" property (set in `install_regexp`)
+/// rather than a new Interpreter field, for the same lane-grant reason as
+/// `legacy_regexp_store` above.
+fn legacy_regexp_receiver_ok(i: &Interpreter, this: &JsValue) -> bool {
+    let Some(JsValue::Object(expected)) = i.regexp_proto.borrow().get_own("constructor") else {
+        return false;
+    };
+    matches!(this, JsValue::Object(actual) if Rc::ptr_eq(&actual.0, &expected.0))
+}
+fn native_regexp_legacy_getter(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let name = i
+        .native_stack
+        .last()
+        .and_then(|o| o.borrow().func.as_ref().map(|f| f.name.clone()))
+        .unwrap_or_default();
+    let key = name.strip_prefix("get ").unwrap_or("");
+    if !legacy_regexp_receiver_ok(i, &this) {
+        return Err(Throw::type_error(
+            "legacy RegExp static property receiver must be the RegExp constructor",
+        ));
+    }
+    let field = legacy_regexp_field(key).unwrap_or("input");
+    let store = legacy_regexp_store(i);
+    i.get_prop(&store, field)
+}
+/// Only `RegExp.input`/`RegExp.$_` has a setter (Annex B.2.5.1); every other
+/// legacy accessor is get-only (`[[Set]]: undefined`), so this doesn't need
+/// the getter's name-sniffing trick.
+fn native_regexp_legacy_setter(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if !legacy_regexp_receiver_ok(i, &this) {
+        return Err(Throw::type_error(
+            "legacy RegExp static property receiver must be the RegExp constructor",
+        ));
+    }
+    let value = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let store = legacy_regexp_store(i);
+    i.set_prop(&store, "input", JsValue::Str(value))?;
+    Ok(JsValue::Undefined)
+}
+/// Annex B.2.5.2 `UpdateLegacyRegExpStaticProperties`, called from every
+/// successful built-in match (both `RegExp.prototype.exec` itself and the
+/// `RegExpExec` fallback path other RegExp algorithms use when `exec` isn't
+/// overridden -- see the two call sites below). `matched.captures[0]` is
+/// `amazing_regex::Match`'s own convention for the whole-match range;
+/// `captures[1..]` are the capturing groups in declaration order.
+fn update_legacy_regexp_statics(
+    i: &mut Interpreter,
+    source: &crate::value::JsString,
+    matched: &amazing_regex::Match,
+) -> Result<(), Throw> {
+    let units = regexp_units(source.clone())?;
+    let text = |r: std::ops::Range<usize>| JsValue::str_units(units[r].to_vec());
+    let store = legacy_regexp_store(i);
+    i.set_prop(&store, "input", JsValue::Str(source.clone()))?;
+    i.set_prop(&store, "lastMatch", text(matched.range.clone()))?;
+    i.set_prop(&store, "leftContext", text(0..matched.range.start))?;
+    i.set_prop(&store, "rightContext", text(matched.range.end..units.len()))?;
+    let last_paren = matched
+        .captures
+        .iter()
+        .skip(1)
+        .rev()
+        .find_map(|c| c.clone())
+        .map(text)
+        .unwrap_or_else(|| JsValue::str(""));
+    i.set_prop(&store, "lastParen", last_paren)?;
+    for n in 1..=9usize {
+        let value = matched
+            .captures
+            .get(n)
+            .and_then(|c| c.clone())
+            .map(text)
+            .unwrap_or_else(|| JsValue::str(""));
+        i.set_prop(&store, &format!("paren{n}"), value)?;
+    }
+    Ok(())
+}
+/// Annex B.2.5.1 `RegExp.prototype.compile ( pattern, flags )`: re-runs
+/// `RegExpInitialize` on the *same* object (unlike `new RegExp(...)`, which
+/// always allocates a fresh one), including resetting `lastIndex` to 0.
+fn native_regexp_compile(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else {
+        return Err(Throw::type_error(
+            "RegExp.prototype.compile called on non-object receiver",
+        ));
+    };
+    if regexp_data(&this).is_none() {
+        return Err(Throw::type_error(
+            "RegExp.prototype.compile called on incompatible receiver",
+        ));
+    }
+    let pattern_arg = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let flags_arg = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let (pattern_units, flags_string) = if let Some(other) = regexp_data(&pattern_arg) {
+        if !flags_arg.is_undefined() {
+            return Err(Throw::type_error(
+                "cannot supply flags when recompiling RegExp.prototype.compile from a RegExp",
+            ));
+        }
+        (other.pattern_utf16().to_vec(), other.flags().as_string())
+    } else {
+        let pattern_units = if pattern_arg.is_undefined() {
+            Vec::new()
+        } else {
+            i.to_js_string(&pattern_arg)?.units().to_vec()
+        };
+        let flags_string = if flags_arg.is_undefined() {
+            String::new()
+        } else {
+            i.to_string(&flags_arg)?
+        };
+        (pattern_units, flags_string)
+    };
+    let regex = amazing_regex::Regex::new_utf16(&pattern_units, &flags_string).map_err(regexp_error)?;
+    object.borrow_mut().exotic = Exotic::RegExp(Rc::new(regex));
+    let mut last_index = regexp_property(JsValue::num(0.0), true);
+    last_index.configurable = false;
+    let _ = object.borrow_mut().define("lastIndex", last_index);
+    Ok(this)
 }
 fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let pattern = args.first().cloned().unwrap_or(JsValue::Undefined);
@@ -616,7 +864,10 @@ fn regexp_exec_call(
         return Err(Throw::type_error("incompatible RegExp receiver"));
     };
     match regexp_match(i, this, source.clone())? {
-        Some(m) => regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices),
+        Some(m) => {
+            update_legacy_regexp_statics(i, &source, &m)?;
+            regexp_result(i, source.clone(), m, regex.group_names(), regex.flags().has_indices)
+        }
         None => Ok(JsValue::Null),
     }
 }
@@ -646,7 +897,10 @@ fn native_regexp_exec(
     };
     let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
     match regexp_match(i, &this, &source)? {
-        Some(m) => regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices),
+        Some(m) => {
+            update_legacy_regexp_statics(i, &source, &m)?;
+            regexp_result(i, &source, m, regex.group_names(), regex.flags().has_indices)
+        }
         None => Ok(JsValue::Null),
     }
 }
