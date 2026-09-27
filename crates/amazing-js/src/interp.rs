@@ -1658,6 +1658,7 @@ include!("builtins_intl_segmenter.rs");
 include!("builtins_intl_names.rs");
 include!("builtins_intl_display.rs");
 include!("builtins_intl_locale_methods.rs");
+include!("builtins_temporal_calendar.rs");
 include!("builtins_temporal.rs");
 include!("builtins_temporal_arithmetic.rs");
 include!("builtins_temporal_epoch.rs");

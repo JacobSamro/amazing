@@ -1346,3 +1346,549 @@ Instant 22, PlainMonthDay 11, Now 8, from the item-2 survey table) were not
 started.
 
 
+
+## JSS-temporal-port item 2 continued: Duration cluster (checkpoint)
+
+Fixed base: `d62e6d9e` (item 2's ZonedDateTime.from checkpoint, merged into
+`dev`). Pinned Test262 unchanged: `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+
+Coordinator's instruction: work the rest of item 2's cluster table, largest
+first -- Duration (63/60 measured), then PlainDateTime (45), then PlainDate
+(42) -- porting from `boa-dev/temporal` (temporal_rs) or `lucid-softworks/lumen`
+where that's faster, checkpointing and committing after each cluster.
+
+**Fixed (6 root-cause bug classes, all local fixes, no porting needed):**
+
+1. `std_temporal_make` (the single Duration-creation choke point) stored the
+   exact `i64` for every Duration field instead of canonicalizing to the
+   nearest float64-representable integer -- added an `(f as f64) as i64`
+   round-trip for Duration fields there.
+2. `Duration.compare`/`.round`/`.total` each had their own separately-written,
+   partial `relativeTo` (ToRelativeTemporalObject) implementation -- unified
+   into one shared `std_temporal_resolve_relative_to` reusing the
+   already-correct ZonedDateTime/PlainDateTime bag machinery; deleted the
+   now-dead `std_temporal_validate_relative_to_offset`.
+3. That resolver's no-zone-annotation string branch parsed via
+   `std_temporal_parse(PlainDateTime, ...)`, which wrongly *requires* a
+   time-of-day component (a bare date string like `"2023-02-21"` failed) --
+   fixed by parsing as `PlainDate` instead, matching ToRelativeTemporalObject
+   discarding any time-of-day on a non-zoned string.
+4. `std_epoch_parse_syntax` (shared by `ZonedDateTime.from` and the
+   resolver's zoned-string branch) unconditionally required a `T`/`t`/` `
+   separator, rejecting a valid bare `Date TimeZoneAnnotation` string
+   (`"2000-01-01[UTC]"`) -- relaxed to allow an empty time-of-day for
+   ZonedDateTime kind, defaulting to 0.
+5. Same function was also missing `InterpretISODateTimeOffset`'s
+   ~option~/~reject~ `CheckISODaysRange` gate: an explicit non-`Z` numeric
+   offset resolved against a zone must reject a *local* date more than 10^8
+   days from the epoch even when the offset would shift the final instant
+   back into Instant's own valid range. Pinned down by fetching the real
+   tc39/proposal-temporal spec text directly (`abstractops.html`,
+   `zoneddatetime.html`, `instant.html`, `plaindatetime.html`) after a
+   hand-calculation contradiction. Added the local-date-epoch-day check
+   ahead of offset resolution.
+6. `Duration.prototype.round`/`.total` each read+resolved `relativeTo` only
+   inside a fast-path branch gated on whether the duration/unit combination
+   needs calendar units at all, so a malformed `relativeTo` bag silently
+   never got parsed when the duration was calendar-unit-free. Fetched the
+   real `options-read-before-algorithmic-validation.js` source for the exact
+   expected option-read order (round: largestUnit, relativeTo,
+   roundingIncrement, roundingMode, smallestUnit; total: relativeTo, unit)
+   and reordered both to read+resolve `relativeTo` unconditionally, before
+   any algorithmic validation, at that exact position.
+
+**Reverted, not kept**: relaxing `std_epoch_zone_from_string`'s `T`-separator
+requirement, attempting to fix `relativeto-propertybag-timezone-string-
+datetime.js` (a full ISO date-time string as a `timeZone` property-bag value
+resolving via its bracket annotation with no `Z`/offset). Measured as 0
+gains / 1 regression (`ZonedDateTime/timezone-iso-string.js`, whose
+constructor path needs the raw `timeZone` argument to reject a full
+date-time string outright) -- reverted cleanly, verified byte-identical
+against the pre-attempt pass-set. The intended test's real blocker is still
+unidentified.
+
+**Measured (zero-loss at every one of 6 intermediate steps, not just
+totals; final state re-verified byte-identical after the revert above):**
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8598 pass / 608 fail | 8654 pass / 552 fail |
+| `built-ins/Temporal` files | 4299 pass / 304 fail | 4327 pass / 276 fail |
+
++56 pass variants (+28 pass files), zero lost. Workspace `cargo nextest run
+--workspace --locked`: 3399/3399 passed, 17 skipped, 0 failed. `cargo test
+--workspace --locked --doc`: all green (31 crates, `amazing_js` 1/1,
+`amazing_html` 1/1).
+
+15 of the original 60 Duration fail files fixed. 45 remain, in four rough
+sub-clusters: a ~15-file relativeTo out-of-range/large-time-component group
+(partly blocked on the reverted timezone-string item, rest untriaged); an
+11-file `argument-duration-precision-exact-numerical-values.js`/
+`precision-exact-mathematical-values*.js` group (likely a genuine
+i128-precision or algorithm gap -- the strongest temporal_rs/lumen porting
+candidate found so far); a 4-file round balancing/rounding-algorithm group
+(`balances-up-to-weeks.js`, `case-where-relativeto-affects-rounding-mode-
+half-even.js`, `round-and-balance-calendar-units-with-increment-
+disallowed.js`, `float64-representable-integer.js` -- second porting
+candidate); 4 `result-out-of-range-{1,3}.js` files (add/subtract); 6
+`order-of-operations.js` files (deprioritized per established pattern); and
+`total/options-wrong-type.js` (untriaged).
+
+No temporal_rs/lumen porting was actually needed for any Duration fix this
+session -- every bug found was an existing-code defect (wrong order, missing
+gate, missing check), not a missing algorithm. PlainDateTime (45 files) and
+PlainDate (42 files) are next per the coordinator's ordering, not yet
+started.
+
+## JSS-temporal-port item 2 continued: PlainDateTime cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8218 pass / 988 fail | 8704 pass / 502 fail |
+| `built-ins/Temporal` files | 4109 pass / 494 fail | 4352 pass / 251 fail |
+
++486 pass variants (+243 pass files), zero lost, verified by a full
+(path, variant) pass-set diff against the Duration-cluster commit's baseline
+(`js-stdlib-sinceuntil-baseline.jsonl`, captured at 1aeaf16e). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (3
+slow, 17 skipped, 0 failed). `cargo test --workspace --locked --doc`: all
+green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_validate`'s PlainDate/PlainDateTime range check used a crude
+  day-count-only cutoff instead of the spec's `ISODateTimeWithinLimits`/
+  `ISODateWithinLimits` (fetched from the real tc39/proposal-temporal spec
+  text to resolve a hand-calculation contradiction between the two
+  algorithms). Replaced with the precise ns-based check: PlainDateTime uses
+  its own literal time-of-day; PlainDate defers to the same check with a
+  noon (hour 12) reference time, both padded by a full extra day
+  (`nsPerDay`) beyond Instant's own `nsMinInstant`/`nsMaxInstant` range.
+- `std_temporal_resolve_relative_to`'s no-zone string branch parsed via
+  `std_temporal_parse(PlainDateTime, ...)`, wrongly requiring a
+  time-of-day -- same bug class as the Duration-cluster fix, third
+  occurrence found this segment. Fixed to parse as `PlainDate`.
+- That same resolver's property-bag-without-`timeZone` branch validated the
+  resolved fields as `PlainDateTime` (midnight-anchored), but
+  `ToRelativeTemporalObject` actually constructs a `PlainDate` (time fields
+  are read/range-checked then discarded) -- fixed to validate as
+  `PlainDate` (noon-anchored), which is what a boundary date like
+  `{year:-271821, month:4, day:19}` needs to pass.
+- `PlainDateTime.from`'s own string parser also mandated time-of-day (same
+  bug class, a separate code path from the resolver) -- made optional.
+- `std_temporal_round` (the bare PlainTime/PlainDateTime `.round()`, not
+  Duration.round) read `smallestUnit` before `roundingIncrement`/
+  `roundingMode`, backwards from spec's alphabetical-property-read order;
+  it also never called the divisibility-into-next-unit check at all (only
+  a bare 1..1e9 numeric range check existed). Reordered the reads and added
+  the missing `std_temporal_validate_rounding_increment` call.
+- `smallestUnit: "week"` didn't throw for PlainTime/PlainDateTime.round
+  (only year/month were rejected; week is a real duration unit elsewhere,
+  just not a legal `round()` smallestUnit) -- added to the rejected set.
+- `smallestUnit: "day"` didn't throw for PlainTime.round at all (per spec,
+  `ValidateTemporalUnitValue` for PlainTime.round excludes "day" outright,
+  unlike PlainDateTime.round which allows it with `roundingIncrement`
+  pinned to exactly 1) -- added a PlainTime-only day rejection alongside
+  the week/year/month check.
+- First attempt at the increment-must-be-1-for-day rule put it inside the
+  *shared* `std_temporal_validate_rounding_increment`, used by
+  Duration.round (with relativeTo) and by the since/until difference-
+  rounding machinery for PlainDate/PlainDateTime -- both of which
+  legitimately allow day increments > 1 (confirmed by
+  `Duration/prototype/round/roundingincrement-days-large.js` and
+  `PlainDate(Time)/prototype/since|until/roundingincrement.js`). That
+  first attempt caused an 18-file regression (-30 net). Reverted the
+  shared-function change and instead added the day-increment-must-be-1
+  rule locally inside `std_temporal_round` only, per spec's
+  `PlainDateTime.prototype.round` algorithm (`smallestUnit` is `day` =>
+  `maximum` is 1, `inclusive` is `true`) -- Duration.round's and
+  since/until's calls to the shared validator are untouched. Re-verified
+  zero-loss after the fix.
+
+## JSS-temporal-port item 2 continued: PlainDate cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` variants | 8704 pass / 502 fail | 8794 pass / 412 fail |
+| `built-ins/Temporal` files | 4352 pass / 251 fail | 4397 pass / 206 fail |
+
++90 pass variants (+45 pass files), zero lost, verified by a full (path,
+variant) pass-set diff against the PlainDateTime-cluster commit's baseline
+(`js-stdlib-pdt-round-fix.jsonl`, captured at 084c0fd1/3a5a1b2e). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (17
+skipped, 0 failed). `cargo test --workspace --locked --doc`: all green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_plain_to_zoned`'s PlainDate branch required `item` to be an
+  object with a `timeZone` property, but per spec
+  (`PlainDate.prototype.toZonedDateTime`) `item` may be a bare
+  TimeZoneLike value directly (a string or a ZonedDateTime instance), and
+  when `item` IS an object whose `timeZone` property is itself `undefined`,
+  the WHOLE object is used as the TimeZoneLike value (rather than
+  throwing). Restructured to match, and added the missing
+  `ISODateTimeWithinLimits` check on the combined date+time when a
+  `plainTime` is supplied (the date alone or the time alone can each be
+  within their own narrower limits without the combination being valid).
+- `std_epoch_zone_from_string` was missing the "no `Z`, no explicit numeric
+  offset, but a bracket annotation present" branch (e.g.
+  `"2021-08-19T17:30[UTC]"`) -- it always required an offset sign even
+  when an annotation could supply the zone on its own. Added the missing
+  branch (falls through to the pre-existing `Err(invalid())` only when
+  there is truly no zone information at all -- no `Z`, no offset, AND no
+  annotation).
+- The bare-numeric-offset-as-zone-identifier check (`"+01:00"` used
+  directly as a zone, no annotation) only rejected sub-minute offsets by
+  their NUMBER value (`ns % 60s != 0`), missing that
+  `TimeZoneNumericUTCOffset` forbids a seconds/sub-second component
+  *syntactically* -- `"+01:00:00"` must be rejected even though it is
+  numerically a whole minute. Added a syntactic check (offset text has a
+  fractional part, a 6-digit compact form, or two `:` separators) alongside
+  the numeric one.
+- `std_temporal_parse`'s `PlainTime` arm discarded its date prefix (before
+  a `T`/`t`/space separator) entirely unvalidated -- a syntactically
+  invalid or out-of-range discarded date (extended year `-000000`, a
+  non-ASCII minus sign, ...) must still throw. Fixed to validate the date
+  prefix via `std_temporal_parse_date` whenever it is non-empty (an
+  explicit bare `"T15:23:30"` with NO date at all -- an empty prefix --
+  is not itself a failure, confirmed by `PlainTime.from`'s own
+  `argument-string.js`/`argument-string-with-time-designator.js`; the
+  first attempt at this fix validated even the empty case unconditionally
+  and regressed 39 files before this distinction was found).
+- The `Temporal.ZonedDateTime` constructor's `timeZone` parameter reused
+  the same lenient zone resolver as `.from()`/`toZonedDateTime()`
+  (`ToTemporalTimeZoneIdentifier`, which accepts a full ISO date-time
+  string or a ZonedDateTime instance), but per spec the constructor uses
+  the much narrower `ParseTimeZoneIdentifier` (a bare TimeZoneIdentifier
+  string only -- an IANA name or a minute-precision numeric offset; even a
+  ZonedDateTime instance is a `TypeError`, not reused for its own zone).
+  Added `std_epoch_zone_value_strict` and switched the constructor to it --
+  this also fixes `ZonedDateTime/timezone-iso-string.js`, a regression an
+  earlier segment introduced and reverted while investigating a different,
+  related test (`relativeto-propertybag-timezone-string-datetime.js`,
+  which is now ALSO fixed as a side effect of the annotation-without-offset
+  branch above, along with its Duration/ZonedDateTime siblings across
+  compare/round/total/from/equals/since/until -- 6 files that were
+  previously left as an unidentified blocker).
+
+Remaining PlainDate-cluster files (8, down from 35): `from`'s
+`calendarresolvefields-error-ordering.js`, `month-code-wrong-type.js`/
+`monthcode-invalid.js` (known monthCode strict-type corpus inconsistency),
+`observable-get-overflow-argument-primitive.js`,
+`options-read-before-algorithmic-validation.js`; `add`/`subtract`'s
+`argument-duration-max(-plus-min-date).js`, `order-of-operations.js`,
+`balance-smaller-units-basic.js`; `toPlainDateTime`/`toZonedDateTime`'s
+`argument-string-calendar-annotation.js` and
+`argument-string-time-designator-required-for-disambiguation.js` (both are
+the still-deferred PlainTime-string-ambiguity-grammar feature -- a string
+that could also parse as a date requires an explicit `T` prefix to be
+accepted as a time; this needs the real `TemporalTimeString` ambiguity
+production, not a local bug fix, and was intentionally not attempted this
+checkpoint); `withCalendar`'s `calendar-time-string.js`/
+`missing-argument.js`. PlainTime (39 files) is next per the coordinator's
+ordering (Duration/PlainDateTime/PlainDate now all worked this ticket). Note:
+the PlainDateTime-cluster checkpoint above listed several files as still
+open (`toZonedDateTime/timezone-string-datetime.js`, the `withPlainTime`
+`argument-string-*.js`/`year-zero.js` family, `calendarresolvefields-error-
+ordering.js`, monthCode/`observable-get-overflow-argument-primitive.js`) --
+all of the timezone-string-datetime.js/withPlainTime/year-zero/minus-sign
+ones were fixed as part of THIS (PlainDate) checkpoint's shared-machinery
+fixes, since they all funnel through the same epoch-string/PlainTime-parse
+code paths; the rest remain open and are re-listed in the "remaining" set
+above.
+
+## JSS-temporal-port item 2 continued: PlainTime cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` files | 4397 pass / 206 fail | 4414 pass / 189 fail |
+
++17 pass files, zero lost, verified by a full (path, variant) pass-set diff
+against the PlainDate-cluster commit's baseline (`js-stdlib-pd-r4.jsonl`,
+captured at 2bfe3d85/14aab57f). Workspace `cargo nextest run --workspace
+--locked --no-fail-fast`: 3399/3399 passed. `cargo test --workspace --locked
+--doc`: all green.
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_parse_annotations`'s calendar-annotation check unconditionally
+  rejected any FIRST `u-ca=` value other than `"iso8601"` -- correct for
+  calendar-bearing kinds (this engine's calendar model is iso8601-only,
+  ADR-locked) but wrong for `PlainTime`, which has no calendar slot at all
+  and never canonicalizes the annotation's value (a real-but-unsupported
+  calendar like `"hebrew"`, or an outright unknown one, is simply accepted
+  and discarded). Added a `require_iso_calendar` parameter, `false` only
+  for `PlainTime`.
+- `std_temporal_from_fields`'s ZonedDateTime-instance-argument branch
+  returned the FULL local date+time unconditionally instead of zeroing the
+  half the target kind doesn't use, unlike the sibling "compatible Temporal
+  record" branch just above it (which already does this correctly) --
+  `PlainTime`/`PlainDate` `.compare()`/`.equals()` against a ZonedDateTime
+  never matched because the receiver's own zeroed date (or time) fields were
+  compared against the ZDT's real local date (or time). Fixed to zero
+  `fields[3..9]` for `PlainDate` / `fields[0..3]` for `PlainTime`, matching
+  the sibling branch's convention.
+- `std_temporal_add_values`'s `PlainTime` branch incorrectly threw
+  `RangeError` for any duration with a nonzero year/month/week/day component
+  -- a rule copied from `Duration.add` (which DOES throw for calendar units,
+  since it has no `relativeTo` to redistribute them through). Per spec's
+  `AddDurationToTime`, `PlainTime.add`/`.subtract` simply IGNORE a
+  duration's date part entirely (`ToInternalDurationRecord` splits it off,
+  `AddTime` never consumes it) -- never throw. Fixed to discard the date
+  part instead of rejecting it.
+- `std_temporal_to_string`'s `calendarName` option read was already
+  excluded for `Duration` (no calendar) but not for `PlainTime` (also no
+  calendar, per spec's `PlainTime.prototype.toString` algorithm, which never
+  reads `calendarName` at all) -- extended the existing exclusion.
+
+Remaining PlainTime-cluster files (11, down from 39): 5 are the deferred
+PlainTime-string-ambiguity-grammar feature
+(`argument-string-time-designator-required-for-disambiguation.js` across
+`compare`/`from`/`equals`/`since`/`until` -- the same gap noted for
+PlainDate/PlainDateTime in the two prior checkpoints: a string that could
+also parse as a date requires an explicit `T` prefix to be accepted as a
+time, needing the real `TemporalTimeString` ambiguity production rather than
+a local bug fix); 6 are an unrelated precision cluster not yet investigated
+(`add-large-subseconds.js`, `subtract-large-subseconds.js`,
+`argument-duration-precision-exact-numerical-values.js` x2 add/subtract,
+`order-of-operations.js` x2 add/subtract). PlainYearMonth (29 files) is next
+per the coordinator's ordering.
+
+## JSS-temporal-port item 2 continued: PlainYearMonth cluster (checkpoint)
+
+| Selection | Before | After |
+|---|---|---|
+| `built-ins/Temporal` files | 4432 pass | 4472 pass |
+
++40 pass files, zero lost, verified by a full (path, variant) pass-set diff
+against the PlainTime-cluster baseline (`js-stdlib-pym-base.jsonl`). Workspace
+`cargo nextest run --workspace --locked --no-fail-fast`: 3399/3399 passed (3
+slow, 17 skipped). `cargo test --workspace --locked --doc`: all green
+(`amazing_js`/`amazing_html` doctests re-verified individually).
+
+Root causes fixed (all local bug fixes; no temporal_rs/lumen porting needed):
+
+- `std_temporal_validate` had no `ISOYearMonthWithinLimits` check at all --
+  `PlainYearMonth` only ever went through the day-precise
+  `PlainDate`/`PlainDateTime` range check (which does not apply to it) or no
+  range check beyond plain field bounds. Added the coarser year+boundary-month
+  check from the real spec algorithm (year -271821 requires month >= 4; year
+  275760 requires month <= 9).
+- `std_temporal_construct` read `PlainYearMonth`/`PlainMonthDay`'s trailing
+  `referenceISODay`/`referenceISOYear` argument BEFORE validating the
+  `calendar` argument, backwards from every constructor's own spec order
+  (calendar type-check/canonicalize always precedes both the trailing extra
+  argument's read and the final `IsValidISODate` check). Reordered; confirmed
+  by `PlainYearMonth`'s own `calendar-invalid.js`.
+- `std_temporal_yearmonth_to_date` (`toPlainDate`) set the day field directly
+  from the input without constraining it to the target month's length --
+  `toPlainDate` always uses `~constrain~` overflow (there is no overflow
+  option to read), so day 29 in a common-year February must clamp to 28, not
+  throw. Fixed to clamp into `[1, days_in_month]`.
+- `PlainYearMonth.prototype.add`/`.subtract` used the object's own
+  `referenceISODay` (not day 1) as the anchor for the month-arithmetic
+  overflow check, and never validated the day-1 anchor (before or after the
+  add) against the full day-precise `PlainDate` range -- per
+  `AddDurationToYearMonth`, the anchor is always day 1 of the month, and both
+  `CalendarDateFromFields` (before) and `CalendarDateAdd` (after) are gated by
+  `ISODateWithinLimits`, narrower at the two extreme years than
+  `PlainYearMonth`'s own limits. Fixed; confirmed by
+  `throws-if-year-outside-valid-iso-range.js` (throws even for a blank
+  duration, from materializing `-271821-04-01` alone).
+- `PlainYearMonth.prototype.since`/`.until` had only an ad hoc
+  `+-100_000_000` epoch-day sanity check, not the real
+  `CalendarDateFromFields`/`CalendarDateAdd`-style range gating, and rounded
+  by flattening the whole span to a single unit before re-splitting into
+  years+months -- disagreeing with the real per-unit rounding (an increment
+  coarser than a month rounds the *remainder after extracting whole years*,
+  not the flattened total; confirmed by
+  `roundingincrement-as-expected.js`'s "mixed with years" case, which needs
+  2y5mo, not 2y6mo). Also added: an early zero-duration return for equal
+  year-months (spec's own short-circuit, needed so `minYearMonth.since(
+  minYearMonth)` does NOT throw even though materializing its own day-1
+  anchor would), and a bracket-candidate range check gated to only run when
+  `smallestUnit != month || roundingIncrement != 1` (the real spec algorithm
+  skips its NudgeToCalendarUnit bracket search entirely for the default
+  case -- confirmed by two regressions caught and fixed in the same pass:
+  probing one unit past a valid boundary argument wrongly rejected it, and
+  `since`/`until`'s own `argument-string-limits.js` needed the bracket
+  search *disabled* for default options).
+- `std_temporal_bag`'s Duration-bag field reads used the natural years-down-
+  to-nanoseconds order instead of the spec's alphabetical order (days, hours,
+  microseconds, milliseconds, minutes, months, nanoseconds, seconds, weeks,
+  years) -- a pre-existing, previously-unnoticed bug affecting EVERY kind's
+  `.add()`/`.subtract()`/`.compare()`/`Duration.from()`, not just
+  PlainYearMonth's. Fixed the shared function; this alone fixed
+  `order-of-operations.js` for Duration, Instant, PlainDate, PlainDateTime,
+  PlainTime and PlainYearMonth's own add/subtract in one pass (part of the
+  +40, spanning kinds outside this cluster).
+- `std_temporal_bag`'s monthCode SUITABILITY check (a calendar-dependent
+  RangeError) ran immediately inside the shared bag reader, before any
+  caller could read/coerce an `overflow` option in between --
+  `CalendarYearMonthFromFields`/`CalendarDateFromFields` read
+  `GetTemporalOverflowOption` before running `CalendarResolveFields`'s own
+  suitability check. Split `std_temporal_bag` to return the raw
+  month/monthCode-text pair instead of resolving eagerly, added
+  `std_temporal_bag_resolve_month` for callers to invoke at the right point,
+  and deferred it past the overflow read in `.from()`'s bag branch only
+  (other call sites resolve immediately, matching their own existing,
+  untouched order). Fixed `options-read-before-algorithmic-validation.js`
+  for `.from()` across PlainDate, PlainDateTime, PlainMonthDay and
+  PlainYearMonth in one pass.
+- `std_temporal_to_string` unconditionally called the shared
+  fractionalSecondDigits/roundingMode/smallestUnit option reader even for
+  `PlainDate`/`PlainYearMonth`/`PlainMonthDay`, which have no time-of-day and
+  whose spec algorithms only ever call
+  `GetTemporalShowCalendarNameOption` -- reading (and finding absent) three
+  extra options is observable via a Proxy options bag. Skipped the call
+  entirely for those three kinds; fixed `toString/order-of-operations.js`
+  for PlainDate, PlainMonthDay and PlainYearMonth in one pass.
+
+Remaining PlainYearMonth-cluster files: 1
+(`from/month-code-wrong-type.js`), a deliberately-unresolved,
+previously-documented tradeoff (monthCode is read via `ToString` coercion to
+keep 13 passing `order-of-operations.js`-style tests; a TypeError-on-
+non-string read would flip this one test but regress those 13). Not
+revisited this checkpoint.
+
+PlainYearMonth cluster done. Remaining item2 clusters per the coordinator's
+ordering: PlainMonthDay (11 files, last surveyed), Instant (22 files), Now (8
+files).
+
+## JSS-calendars: non-ISO Temporal calendar support (priority-change ticket)
+
+Coordinator priority-change, mid-PlainYearMonth-cluster: implement non-ISO
+calendar support for `Temporal.Plain*` (gregory, japanese, buddhist, roc,
+islamic-civil/tbla/umalqura, hebrew, chinese, dangi, persian, indian, coptic,
+ethiopic, ethioaa -- 16 calendars total including iso8601), citing a RangeError
+at `builtins_temporal.rs`'s calendar gate as the largest remaining intl402
+cluster. Addressed as the ticket's first commit (architecture + all 16
+calendars' pure math + full read-direction support); ZonedDateTime and
+calendar-aware date-arithmetic for the non-ISO-grid calendars are documented
+gaps, not yet done (see below).
+
+**Port.** `boa-dev/temporal` (the coordinator's suggested Apache-2.0 source)
+turned out to delegate ALL calendar math to `icu_calendar` (ICU4X) -- it
+contains no portable calendar algorithm to copy, only glue around that crate.
+Ported instead from `lucid-softworks/lumen`
+(`crates/lumen/src/temporal.rs` @ `f6c9860d44fa52249cfd647122edea184d32c863`,
+MIT, already used elsewhere in this codebase -- see `THIRD_PARTY_NOTICES.md`'s
+new row for this file), which has a complete from-scratch (non-ICU4X)
+implementation of every listed calendar. Rewritten onto this engine's own
+`std_temporal_epoch_day`/`std_temporal_civil_from_epoch_day` day-counting
+helpers rather than porting lumen's equivalent ones, and onto plain
+`(i64, i64, i64)` tuples instead of lumen's `IsoDate` struct. New file:
+`crates/amazing-js/src/builtins_temporal_calendar.rs` (attribution header at
+top; 16 calendar ids, era tables, 13-month coptic/ethiopic/ethioaa, tabular
+islamic-civil/tbla, indian (Saka), persian (arithmetic Solar Hijri), hebrew
+(Metonic lunisolar), and a full from-scratch Meeus-series astronomical
+chinese/dangi lunisolar implementation -- solar longitude, new-moon,
+winter-solstice and leap-month-detection algorithms, not a stub). Included
+into the shared compilation unit via a new line in `interp.rs`.
+`islamic-umalqura` is approximated by the tabular civil algorithm --
+lumen's real Umm al-Qura data table (`crates/lumen/src/umalqura.rs`) was not
+ported (out of scope this commit). Bare `"islamic"`/`"islamic-rgsa"` remain
+rejected (Intl.DateTimeFormat-only aliases per lumen's own comment; not part
+of Temporal's `KNOWN_CALENDARS`).
+
+**Architecture.** `StdTemporalData` gained a `calendar: String` field
+(default `"iso8601"`); the internal `fields: [i64; 10]` stay ALWAYS
+proleptic-Gregorian (ISO) regardless of calendar -- a non-iso8601 calendar's
+own year/month/day/era/monthCode/daysInMonth/monthsInYear/inLeapYear are
+VIEWS computed on demand from those ISO fields (read direction), and
+calendar-native `.from()`/bag construction CONVERTS calendar-native fields
+into ISO before storing (write direction). `std_temporal_make` split into a
+default-iso8601 wrapper plus `std_temporal_make_cal(..., calendar)`; every
+call site across `builtins_temporal.rs`/`builtins_temporal_arithmetic.rs`
+that operates on an existing receiver now threads `data.calendar.clone()`
+through instead of silently resetting to iso8601 (add/subtract/since/until/
+round/with/to*-conversions/equals). `std_temporal_iso_calendar` (unchanged,
+iso8601-only) still gates ZonedDateTime's calendar argument --
+**ZonedDateTime remains iso8601-locked this commit** (see Gaps). Two new
+calendar-argument resolvers replace it for Plain*:
+`std_temporal_resolve_calendar_id` (accepts any of the 16 ids, plus -- like
+the pre-existing `std_temporal_calendar_from_value` it wraps for this
+fallback -- a full ISO string carrying a u-ca annotation, e.g.
+`"2020-01-01[u-ca=iso8601]"`, for `with()`/`withCalendar()`/a bag's own
+`calendar` property) and `std_temporal_resolve_calendar_id_strict` (no ISO-
+string fallback, used only by the constructor's own calendar argument --
+confirmed as the right split by `calendar-invalid-iso-string.js`, which
+requires the constructor to reject that exact fallback form while
+`argument-propertybag-calendar-iso-string.js`/`withCalendar`'s own
+`calendar-iso-string.js` require the other two sites to accept it).
+`std_temporal_bag_resolve_calendar` (new) resolves a bag's calendar-native
+year/month/monthCode/day into ISO via the ported per-calendar tables, for
+every kind except PlainMonthDay (documented gap: its bag path has no
+calendar-native year to convert from at all). `std_temporal_parse`/
+`std_temporal_parse_annotations` widened to canonicalize (not just validate)
+a string's u-ca annotation, with a fixed bug caught mid-port: a *second*
+annotation (grammar-checked but supposed to be ignored) was overwriting the
+first's already-resolved name instead of just being checked for a `!`
+disagreement -- caught by `PlainYearMonth/from/argument-string-calendar-
+annotation.js`'s `[u-ca=iso8601][u-ca=discord]` case. `std_temporal_getter`
+and `toString`'s calendar-name `"auto"` display now consult
+`std_calendar_fields`/`std_calendar_era` when `calendar != "iso8601"`.
+
+**Arithmetic scope.** gregory/japanese/roc/buddhist share the exact ISO
+day/month grid, so `add`/`subtract`/`since`/`until`/`round` needed NO math
+changes at all -- only the calendar tag had to survive the trip (the bug
+class the zero-loss regressions below were about). Every other listed
+calendar (13-month, islamic, indian, persian, hebrew, chinese/dangi) gets
+correct GETTERS and (non-leap-month cases) correct bag CONSTRUCTION via the
+ported tables, but `add`/`subtract`/`since`/`until`/`.with()`'s `year`/`month`
+fields still operate in ISO terms -- a documented gap (calendar-native
+`CalendarDateAdd`/`CalendarDateUntil` for these is follow-up work, per
+calendar family, as originally planned).
+
+**Zero-loss regressions caught and fixed before commit (self-caught, not
+reported by a stale gate):** three iterations were needed to reach zero
+loss on `built-ins/Temporal`, each diagnosed with a real baseline (`--ref`
+to the pre-calendar commit, never assumed):
+1. The constructor's calendar-argument resolver was given the SAME ISO-
+   string fallback as `with()`/`withCalendar()`, but the constructor never
+   had that fallback before -- regressed `calendar-invalid-iso-string.js`
+   (4 files: PlainDate/PlainDateTime/PlainMonthDay/PlainYearMonth), whose
+   `"1997-12-04[u-ca=iso8601]"` case requires the constructor specifically
+   to reject it. Split into `_strict` (constructor only) vs. the original
+   (every other site) resolver.
+2. Restricting non-iso8601 string ANNOTATIONS to PlainDate/PlainDateTime
+   only (PlainYearMonth/PlainMonthDay's short "YYYY-MM"/"--MM-DD" string
+   forms lack the day precision to resolve a non-iso8601 calendar's real
+   year-month/month-day -- confirmed by `PlainYearMonth/from/argument-
+   string-invalid.js`'s `"2022-09[u-ca=hebrew]"`) was implemented as a
+   blanket "no non-iso8601 annotation for these two kinds" check, which
+   collided with #3 below and regressed a different, larger cluster
+   (`argument-propertybag-calendar-*.js`, `withCalendar/calendar-*-string.js`
+   -- 57 files) until the `_strict` split (#1) was in place.
+3. The second-annotation-overwrites-the-first bug (above) regressed
+   `argument-string-calendar-annotation.js` for PlainYearMonth/PlainMonthDay
+   (7 files) once #2's stricter check made the wrongly-overwritten name
+   ("discord" instead of "iso8601") visible as a throw.
+
+**Measured** (venus-003, base `b4cf29a7`, this ticket's commit on top):
+`built-ins/Temporal`: 4,472 -> 4,472 pass files, confirmed zero-loss AND
+zero-gain by a full path-level diff against the `--ref b4cf29a7` baseline
+(this suite is iso8601-only by construction, so no gain was expected here).
+`intl402/Temporal`: 744 -> 744 pass files, **no measured gain** -- diagnosed
+why before committing rather than reporting a hollow number: every
+calendar-named fail file in this directory
+(`ZonedDateTime/*/canonicalize-calendar.js`, `*/calendarId/basic.js`,
+`*/toString/calendarname-*.js`, `*/withCalendar/*.js`,
+`*/{monthCode,inLeapYear,monthsInYear}/{chinese,dangi}-calendar-*.js`, ~45
+files sampled) is on `Temporal.ZonedDateTime`, which this commit deliberately
+leaves iso8601-locked (`StdEpochData` has no `calendar` field at all;
+extending it needs the same-sized construction/getter/toString/arithmetic
+work again, plus changing `std_epoch_from_value_with_options`'s shared
+`(i128, String)` return into a 3-tuple across its ~10 call sites -- sized
+like this whole commit, not a quick add-on). `intl402/` as a whole:
+1,949 pass / ~1,409 fail (variants) -- far smaller than the "3,520 of
+3,969" the priority-change message cited; that figure appears stale
+relative to the current pinned corpus/host (other lanes' concurrent intl402
+work likely moved it), not a measurement error here. **Recommendation for
+whoever picks up JSS-calendars next: Temporal.ZonedDateTime is the
+highest-value remaining family** -- intl402/Temporal's calendar tests
+concentrate there, not on Plain*.
+Workspace gate: `cargo nextest run --workspace --locked --no-fail-fast`
+3,399/3,399 pass (3 slow, 17 skipped, 0 failed); `cargo test --workspace
+--locked --doc` all green (`amazing_js`/`amazing_html` doctests individually
+confirmed, 1 passed each, matching prior runs).
