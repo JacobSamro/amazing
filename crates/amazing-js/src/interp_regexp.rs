@@ -453,35 +453,80 @@ fn native_regexp_compile(
     let _ = object.borrow_mut().define("lastIndex", last_index);
     Ok(this)
 }
+/// `IsRegExp ( argument )` (§21.2.3.2.1): an actual RegExp instance, or any
+/// other object exposing a truthy `@@match` -- and, notably, NOT a real
+/// RegExp instance whose `@@match` has been overridden to something falsy
+/// (`built-ins/RegExp/call_with_regexp_match_falsy.js`).
+fn is_regexp_like(i: &mut Interpreter, value: &JsValue) -> Result<bool, Throw> {
+    if !value.is_object() {
+        return Ok(false);
+    }
+    let matcher = i.get_prop(value, WellKnownSymbol::Match.symbol())?;
+    Ok(if matcher.is_undefined() {
+        regexp_data(value).is_some()
+    } else {
+        matcher.to_boolean()
+    })
+}
 fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let pattern = args.first().cloned().unwrap_or(JsValue::Undefined);
     let flag_value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-    if let Some(original) = regexp_data(&pattern) {
-        let constructing = matches!(&this, JsValue::Object(o) if o.borrow().proto.as_ref().is_some_and(|p|Rc::ptr_eq(&p.0,&i.regexp_proto.0)));
-        if flag_value.is_undefined() && !constructing {
+    let pattern_is_regexp = is_regexp_like(i, &pattern)?;
+    // This engine's `NativeFn` calling convention has no NewTarget, so
+    // "was this invoked via `new`" is approximated the same way the
+    // pre-existing code already did: a freshly `[[Construct]]`-allocated
+    // `this` carries `regexp_proto` as its prototype, which a plain
+    // `RegExp(...)` call's `this` (the global object, or undefined) does
+    // not.
+    let constructing = matches!(&this, JsValue::Object(o) if o.borrow().proto.as_ref().is_some_and(|p| Rc::ptr_eq(&p.0, &i.regexp_proto.0)));
+    if pattern_is_regexp && flag_value.is_undefined() && !constructing {
+        // Step 4b: only short-circuits to the *same* pattern object when
+        // its own "constructor" is exactly this realm's active %RegExp%
+        // (`from-regexp-like-short-circuit.js` requires the check;
+        // `call_with_regexp_not_same_constructor.js` requires it to
+        // otherwise fall through and build a distinct, equal-content
+        // object instead).
+        let pattern_ctor = i.get_prop(&pattern, "constructor")?;
+        let active_ctor = i.regexp_proto.borrow().get_own("constructor");
+        let same = matches!(
+            (&pattern_ctor, &active_ctor),
+            (JsValue::Object(a), Some(JsValue::Object(b))) if Rc::ptr_eq(&a.0, &b.0)
+        );
+        if same {
             return Ok(pattern);
         }
-        let flags = if flag_value.is_undefined() {
-            original.flags().as_string()
+    }
+    // Steps 6-9: a RegExp-like pattern's source/flags come from property
+    // GETS -- observing overrides and forwarding thrown errors exactly
+    // where the spec puts them, e.g. `from-regexp-like-flag-override.js`
+    // requires "flags" to go entirely unread once an explicit `flags`
+    // argument is given -- never from ToString-ing the whole object (which
+    // is what a plain, non-regexp-like pattern gets instead).
+    let (pattern_units, flags_string) = if pattern_is_regexp {
+        let source = i.get_prop(&pattern, "source")?;
+        let source_units = i.to_js_string(&source)?.units().to_vec();
+        let flags_string = if flag_value.is_undefined() {
+            let flags = i.get_prop(&pattern, "flags")?;
+            i.to_string(&flags)?
         } else {
             i.to_string(&flag_value)?
         };
-        return i.make_regexp(Rc::new(
-            amazing_regex::Regex::new_utf16(original.pattern_utf16(), &flags).map_err(regexp_error)?,
-        ));
-    }
-    let pattern = if pattern.is_undefined() {
-        crate::value::JsString::from("")
+        (source_units, flags_string)
     } else {
-        i.to_js_string(&pattern)?
-    };
-    let flags = if flag_value.is_undefined() {
-        String::new()
-    } else {
-        i.to_string(&flag_value)?
+        let pattern_units = if pattern.is_undefined() {
+            Vec::new()
+        } else {
+            i.to_js_string(&pattern)?.units().to_vec()
+        };
+        let flags_string = if flag_value.is_undefined() {
+            String::new()
+        } else {
+            i.to_string(&flag_value)?
+        };
+        (pattern_units, flags_string)
     };
     i.make_regexp(Rc::new(
-        amazing_regex::Regex::new_utf16(pattern.units(), &flags).map_err(regexp_error)?,
+        amazing_regex::Regex::new_utf16(&pattern_units, &flags_string).map_err(regexp_error)?,
     ))
 }
 fn native_regexp_getter(
@@ -981,12 +1026,20 @@ fn native_regexp_symbol_match(
         ));
     }
     let s = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let global = i.get_prop(&this, "global")?.to_boolean();
-    if !global {
+    // §22.2.6.8 step 4 reads the *composed* "flags" string exactly once,
+    // even on a non-global regexp that returns right after -- which is why
+    // an overridden "unicode" accessor must still be observed for a
+    // non-global receiver too (`Symbol.match/get-unicode-error.js`: both
+    // `nonGlobalRe` and `globalRe` must throw). Reading "global"/"unicode"
+    // as separate, conditionally-skipped property gets (the previous
+    // approach) can never do that.
+    let flags_value = i.get_prop(&this, "flags")?;
+    let flags = i.to_js_string(&flags_value)?;
+    if !flags.units().contains(&(b'g' as u16)) {
         return regexp_exec_abstract(i, &this, &s);
     }
     let full_unicode =
-        i.get_prop(&this, "unicode")?.to_boolean() || i.get_prop(&this, "unicodeSets")?.to_boolean();
+        flags.units().contains(&(b'u' as u16)) || flags.units().contains(&(b'v' as u16));
     i.set_prop(&this, "lastIndex", JsValue::num(0.0))?;
     let mut results = Vec::new();
     loop {
@@ -1328,8 +1381,20 @@ struct RegexpReplaceMatch {
 fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[JsValue]) -> Result<JsValue, Throw> {
     let regexp = &args[0];
     let regex = regexp_data(regexp).unwrap();
-    let global = regex.flags().global;
-    let unicode = regex.flags().unicode;
+    // RegExp.prototype[Symbol.replace] (§22.2.6.11) reads the *composed*
+    // "flags" string exactly once (step 6.a.i for a string replacement,
+    // and unconditionally for a functional one too), not "global"/
+    // "unicode" as separate own-property reads -- reading "flags" is what
+    // transitively touches every individual flag accessor (including ones
+    // this function never otherwise looks at, like "unicode" on a
+    // non-global regexp), so an override on any of them must be observed
+    // here (`Symbol.replace/get-global-err.js`, `get-unicode-error.js`,
+    // `get-flags-err.js`), which reading straight off `regex.flags()`
+    // (bypassing property access entirely) could never do.
+    let flags_value = i.get_prop(regexp, "flags")?;
+    let flags = i.to_js_string(&flags_value)?;
+    let global = flags.units().contains(&(b'g' as u16));
+    let unicode = flags.units().contains(&(b'u' as u16)) || flags.units().contains(&(b'v' as u16));
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let callable = callable_function(&replacement).is_some();
     let text = if callable {
