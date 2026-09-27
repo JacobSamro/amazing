@@ -1520,7 +1520,10 @@ impl Interpreter {
     }
     fn to_number(&mut self, v: &JsValue) -> Result<f64, Throw> {
         if v.is_object() {
-            let p = self.primitive(v.clone())?;
+            // ToNumber(argument) on an Object is defined via ToNumeric, which calls
+            // ToPrimitive(argument, number) (7.1.4/7.1.3) -- the number hint, not default,
+            // must reach an exotic @@toPrimitive method.
+            let p = self.primitive_number_hint(v.clone())?;
             self.to_number(&p)
         } else {
             v.to_number()

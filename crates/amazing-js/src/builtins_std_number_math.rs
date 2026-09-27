@@ -187,7 +187,9 @@ impl Interpreter {
 
 fn std_number_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = if let Some(value) = args.first() {
-        let primitive = i.primitive(value.clone())?;
+        // Number(value) is ToNumeric(value) (21.1.1.1) -- ToPrimitive with the number
+        // hint, not default.
+        let primitive = i.primitive_number_hint(value.clone())?;
         if let JsValue::BigInt(bigint) = &primitive { bigint.to_f64() }
         else { i.to_number(&primitive)? }
     } else { 0.0 };

@@ -1297,14 +1297,17 @@ impl Interpreter {
     fn unary_value(&mut self, op: ast::UnOp, value: JsValue) -> Result<JsValue, Throw> {
         match op {
             ast::UnOp::Neg => {
-                let primitive = self.primitive(value)?;
+                // Unary minus is ToNumeric(expr) (13.5.6) -- ToPrimitive with the number
+                // hint, not default, per 7.1.3.
+                let primitive = self.primitive_number_hint(value)?;
                 if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.negated())) }
                 else { Ok(JsValue::num(-self.to_number(&primitive)?)) }
             },
             ast::UnOp::Pos => Ok(JsValue::num(self.to_number(&value)?)),
             ast::UnOp::Not => Ok(JsValue::Bool(!value.to_boolean())),
             ast::UnOp::BitNot => {
-                let primitive = self.primitive(value)?;
+                // Bitwise NOT is also ToNumeric(expr) (13.5.8) -- number hint.
+                let primitive = self.primitive_number_hint(value)?;
                 if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.bit_not())) }
                 else { Ok(JsValue::num((!self.to_int32(&primitive)?) as f64)) }
             },
@@ -1314,7 +1317,8 @@ impl Interpreter {
         }
     }
     fn update_value(&mut self, op: ast::UpdateOp, old: JsValue) -> Result<JsValue, Throw> {
-        let primitive = self.primitive(old)?;
+        // ++/-- are ToNumeric(oldValue) (13.4.x) -- number hint, not default.
+        let primitive = self.primitive_number_hint(old)?;
         if let JsValue::BigInt(value) = primitive {
             Ok(Self::bigint_value(if op == ast::UpdateOp::Inc { value.add(&BinaryBigInt::one()) }
                 else { value.sub(&BinaryBigInt::one()) }))
@@ -1331,9 +1335,15 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         let (reference, old) = self.resolve_reference(x, env)?;
-        let next = self.update_value(op, old.clone())?;
+        // 13.4.2/13.4.3: postfix ++/-- return ToNumeric(oldValue), not the raw
+        // pre-conversion operand -- observable when the operand is an object with a
+        // custom valueOf/@@toPrimitive. Convert once here; update_value() re-deriving
+        // it from an already-primitive value is a no-op re-entry, not a second
+        // ToPrimitive call, so this does not double the conversion's side effects.
+        let old_numeric = self.primitive_number_hint(old)?;
+        let next = self.update_value(op, old_numeric.clone())?;
         self.put_reference(reference, next.clone(), env)?;
-        Ok(if prefix { next } else { old })
+        Ok(if prefix { next } else { old_numeric })
     }
     fn binary(&mut self, op: ast::BinOp, a: JsValue, b: JsValue) -> Result<JsValue, Throw> {
         use ast::BinOp::*;
@@ -1355,8 +1365,11 @@ impl Interpreter {
                 }
             }
             Sub | Mul | Div | Rem | Pow | Shl | Shr | UShr | BitAnd | BitOr | BitXor => {
-                let x = self.primitive(a)?;
-                let y = self.primitive(b)?;
+                // Every numeric/bitwise operator other than `+` is
+                // ApplyStringOrNumericBinaryOperator's ToNumeric(lval)/ToNumeric(rval)
+                // (13.15.3) -- ToPrimitive with the number hint, not default.
+                let x = self.primitive_number_hint(a)?;
+                let y = self.primitive_number_hint(b)?;
                 if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
                     return self.bigint_operator(op, x, y);
                 }
@@ -1384,8 +1397,10 @@ impl Interpreter {
                 }))
             }
             Lt | Gt | Le | Ge => {
-                let x = self.primitive(a)?;
-                let y = self.primitive(b)?;
+                // IsLessThan(x, y, LeftFirst) (7.2.13) calls ToPrimitive on each operand
+                // with the number hint, not default.
+                let x = self.primitive_number_hint(a)?;
+                let y = self.primitive_number_hint(b)?;
                 let c = if x.is_str() && y.is_str() {
                     Some(x.as_str().unwrap().cmp(y.as_str().unwrap()))
                 } else if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {

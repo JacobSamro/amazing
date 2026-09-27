@@ -1699,6 +1699,43 @@ mod class_name_tests {
         }
     }
 
+    // Numeric operators call ToPrimitive/ToNumeric with the "number" hint (7.1.3/7.1.4,
+    // 13.5.6, 13.5.8, 13.4.x, 13.15.3, 7.2.13), not "default"; only `+` (Add) and
+    // IsLooselyEqual use "default". An object with an observing @@toPrimitive can tell
+    // the difference even though ordinary valueOf/toString objects can't.
+    #[test]
+    fn numeric_operators_pass_the_number_hint_to_to_primitive() {
+        for source in [
+            // unary minus / bitwise NOT (13.5.6 / 13.5.8): ToNumeric -> number hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; -o === -5",
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; ~o === ~5",
+            // prefix/postfix ++/-- (13.4.x): ToNumeric -> number hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; ++o === 6",
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; o-- === 5",
+            // binary numeric/bitwise operators other than `+` (13.15.3): number hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; (o - 1) === 4",
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; (o * 2) === 10",
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; (o | 0) === 5",
+            // relational comparisons (7.2.13 IsLessThan): number hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; (o < 6)",
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; (o > 4)",
+            // Number(value) (21.1.1.1 ToNumeric): number hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; Number(o) === 5",
+            // ToNumber applied directly to an object (Math.max/min, array length, etc):
+            // number hint, via the shared to_number() path.
+            "var o = {[Symbol.toPrimitive](hint) { return hint === 'number' ? 5 : 0; }}; Math.max(o, 0) === 5",
+            // `+` (Add, 13.15.3) is explicitly the one operator that keeps the default
+            // hint (it may end up doing string concatenation instead).
+            "var o = {[Symbol.toPrimitive](hint) { return hint; }}; (o + '') === 'default'",
+            // IsLooselyEqual (7.2.14) also keeps the default hint.
+            "var o = {[Symbol.toPrimitive](hint) { return hint; }}; (o == 'default')",
+        ] {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")),
+                JsValue::Bool(true), "{source}");
+        }
+    }
+
     #[test]
     fn destructuring_honors_an_overridden_array_prototype_iterator() {
         let mut i = Interpreter::new();
