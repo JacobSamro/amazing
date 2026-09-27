@@ -186,6 +186,82 @@ impl RuntimeBindingHost<'_> {
             NativeEntry::Operation(Operation::NavigatorClipboard), HostCallPolicy::CallOnly);
         self.define_accessor_property(&navigator, "clipboard", Some(getter), None, true, true)
     }
+
+    /// HTML-35: named access on `window` (HTML SS7.2.2.3). Call site is
+    /// `with_dom`'s dirty-flag check in `runtime_binding_host.rs`, the one
+    /// choke point every DOM-mutating binding call passes through; see
+    /// `Dom::window_named_objects`/`mark_named_objects_dirty` for the spec
+    /// algorithm and its one deliberate omission (nested browsing contexts
+    /// by name -- this engine has no iframe content navigables yet).
+    pub(super) fn dom_refresh_window_named_properties(&mut self) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        let entries = host.borrow().dom.window_named_objects(NodeIdx(0));
+        let global = self.js.binding_global_object();
+        let previous = std::mem::take(&mut self.state.borrow_mut().window_named_property_keys);
+        for stale in previous.iter().filter(|name| !entries.iter().any(|(fresh, _)| fresh == *name)) {
+            self.js.binding_delete_property(&global, stale)?;
+        }
+        // Only names we actually define below (not skipped for colliding
+        // with a pre-existing property) count as "owned" for next time.
+        let mut owned = Vec::with_capacity(entries.len());
+        for (name, nodes) in entries {
+            // Named access is a [[Get]] fallback in the spec (Window's named
+            // properties object is only consulted when ordinary property
+            // lookup fails), so it must never shadow a property that is
+            // already there for a different reason -- a `var`/function
+            // declaration, a built-in like `document`, or a testharness.js
+            // global such as `test`/`async_test`. `<div id="test">` is
+            // common in WPT fixtures and would otherwise clobber the
+            // `test()` function every such page relies on. We can only
+            // eagerly materialize properties (no engine-level [[Get]] hook
+            // for window -- see the with_dom call site), so approximate the
+            // fallback rule by skipping any name we did not already own
+            // from a previous refresh when something is already there.
+            if !previous.contains(&name) && self.js.binding_get_own_property(&global, &name)?.is_some() {
+                continue;
+            }
+            let value = if let [single] = nodes[..] {
+                self.wrap_node(single)?
+            } else {
+                let slot = host.borrow_mut().dom.create_static_node_list(nodes);
+                let mut key = self.node_platform_key(self.current_document());
+                key.slot = slot as u64;
+                self.wrap_platform_object(key, InterfaceBrand::STATIC_NODE_LIST)?
+            };
+            self.js.binding_define_data_property(&global, &name, value,
+                BindingPropertyFlags { writable: false, enumerable: true, configurable: true })?;
+            owned.push(name);
+        }
+        self.state.borrow_mut().window_named_property_keys = owned;
+        Ok(())
+    }
+
+    /// WebIDL `sequence<ShadowRoot>` for `Element.getHTML({shadowRoots})`
+    /// (DOM-18). Array-like walk mirrors `sequence_values`/
+    /// `sequence_dom_strings` in `runtime_binding_host.rs`; each item only
+    /// needs to resolve to a Node platform object here -- `markup_bindings
+    /// ::invoke`'s `O::ElementGetHTML` arm already re-checks every returned
+    /// `NodeIdx` with `Dom::is_shadow_root` and throws `TypeError` for the
+    /// whole list if any item isn't actually a shadow root, so this doesn't
+    /// duplicate that check per element.
+    pub(super) fn dom_sequence_shadow_roots(&mut self, value: &JsValue) -> Result<Vec<NodeIdx>, Throw> {
+        self.require_object(value)?;
+        let length = self.js.binding_get_property(value, "length")?;
+        let length = self.js.binding_to_number(&length)?;
+        if !length.is_finite() || length < 0.0 || length > u32::MAX as f64 {
+            return Err(Throw::type_error("Invalid sequence length"));
+        }
+        let mut roots = Vec::new();
+        for index in 0..length.trunc() as u32 {
+            let item = self.js.binding_get_property(value, &index.to_string())?;
+            let key = self.platform_object(&item, InterfaceBrand::NODE)
+                .ok_or_else(|| Throw::type_error("Expected a ShadowRoot"))?;
+            let node = self.node_from_platform_key(key)
+                .ok_or_else(|| Throw::type_error("Expected a ShadowRoot"))?;
+            roots.push(node);
+        }
+        Ok(roots)
+    }
 }
 
 #[cfg(test)]

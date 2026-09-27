@@ -2701,3 +2701,47 @@ crates. Freed 9.4 GB by deleting only this lane's own rebuildable
 in `questions.md` rather than touching other lanes' directories.
 
 Evidence: `crates/amazing-bindings/evidence/dom-b-next/`.
+
+## DOM-18 follow-up: `sequence_shadow_roots` + `runtime_binding_host.rs` file-move (fixed base 5cd043b2)
+
+**File-move (coordinator request)**: `runtime_binding_host.rs` had reached
+2058 lines. Moved `refresh_window_named_properties` (HTML-35's
+window-named-access mechanism) into this lane's own adapter file,
+`runtime_host_dom_bindings.rs`, renamed `dom_refresh_window_named_properties`,
+`pub(super)`, per the per-lane adapter convention in `AGENTS.md`. Pure move,
+no behavior change; the shared file keeps one call site
+(`self.dom_refresh_window_named_properties()?` in `with_dom`). After:
+`runtime_binding_host.rs` 2013 lines, `runtime_host_dom_bindings.rs` 1164
+lines.
+
+**`BindingHost::sequence_shadow_roots`**: implemented (in
+`runtime_host_dom_bindings.rs`, as `dom_sequence_shadow_roots`), replacing
+the unconditional `NotSupportedError` default. WebIDL `sequence<ShadowRoot>`
+conversion for `Element.getHTML({shadowRoots})` (DOM-18), same array-like-walk
+shape as `sequence_values`/`sequence_dom_strings`; resolves each item to a
+`NodeIdx` and leaves the actual `Dom::is_shadow_root` check to
+`markup_bindings::invoke`'s existing `O::ElementGetHTML` handler (already
+re-validates the whole list and throws `TypeError` if any item isn't a
+shadow root).
+
+**Measured**: `run-corpus.py --directory shadow-dom/declarative` (all 56
+files under that directory) at fixed base `5cd043b2` vs this candidate:
+**zero diffs** -- every file's status/counts identical. Root cause: the
+only file in this pinned corpus exercising the `shadowRoots` option,
+`gethtml.html`, errors in both runs before reaching any assertion on a
+missing-resource harness gap (`html/resources/common.js` not in
+`run-corpus.py`'s sparse checkout list), unrelated to this change. The fix
+is still correct and needed (a real `getHTML({shadowRoots})` call would
+previously throw unconditionally); it just isn't observable in this
+snapshot yet. Routed the sparse-checkout gap, plus a found-in-passing
+`HTMLTemplateElement.shadowRootMode`/`shadowRootDelegatesFocus`/
+`shadowRootClonable` reflection gap (entirely unimplemented, driving several
+`declarative-shadow-dom-basic.html` failures), to `questions.md` rather than
+implementing them this ticket.
+
+**Gate** (`venus-001`, base `5cd043b2` + this diff): workspace
+`cargo nextest run --workspace --locked --no-fail-fast` -- **3482 passed /
+17 skipped / 0 failed**. `cargo test --workspace --locked --doc` -- all
+`ok` (`amazing_js`/`amazing_html` 1/1 each).
+
+Evidence: `crates/amazing-bindings/evidence/dom-18-shadow-roots/`.
