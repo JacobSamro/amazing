@@ -676,15 +676,26 @@ impl Interpreter {
                 }
             }
         }
-        // JS-19 (js-vm cross-lane report, 2026-09-27): a `const` for-head binding is still
-        // lexically re-declared fresh in every per-iteration copy (13.7.4.8/14.7.4.3's
-        // CreatePerIterationEnvironment), but each of those copies must stay immutable, or
-        // `for (const c = 1; ; c++)` never throws on its own `c++` and loops forever instead of
-        // a TypeError on the first update. `per_iteration_mutable` carries the head's actual
-        // `let`-vs-`const`-ness through every copy below, instead of the `true` this hardcoded.
-        let per_iteration_mutable = !matches!(init, Some(ForInit::Decl(decl)) if decl.kind == ast::VarKind::Const);
+        // JS-19 (js-vm cross-lane report, 2026-09-27): 14.7.4.2 step 8 sets perIterationLets to
+        // the EMPTY list when the head's LexicalDeclaration isConst -- a `const` (or `using`/
+        // `await using`, which the parser also represents as VarKind::Const, see
+        // parser_statements.rs) for-head binding gets NO per-iteration copy at all. It keeps
+        // living in the one `loopEnv` binding created once, above, via the ordinary `const`
+        // path of executing that declaration statement (CreateImmutableBinding) -- test, body,
+        // and update all read/write that SAME binding directly. This was previously computing
+        // per_iteration_names for const too and copying it through fresh state/iteration/update
+        // environments every iteration (correct only for `let`), which broke in two opposite
+        // ways depending on how one first tried to fix it: with the copies left mutable,
+        // `for (const c = 1; ; c++) {}` never threw and looped forever; naively making the
+        // copies immutable instead made the ALWAYS-RUNS internal copy-back below
+        // (`state_env.assign`, step 9.e of CreatePerIterationEnvironment, which is not a user
+        // assignment and must never itself check constness) throw on every `for (const [x] =
+        // ...; ...) {}`, even when nothing ever reassigns `x`. Treating const's
+        // perIterationLets as empty -- matching the spec text -- avoids both: there is no
+        // separate copy for the internal step to touch, and the update clause's own assignment
+        // still throws because `loopEnv`'s binding is genuinely immutable.
         let per_iteration_names = match init {
-            Some(ForInit::Decl(decl)) if decl.kind != ast::VarKind::Var => decl
+            Some(ForInit::Decl(decl)) if !matches!(decl.kind, ast::VarKind::Var | ast::VarKind::Const) => decl
                 .decls
                 .iter()
                 .flat_map(|declarator| binding_names(&declarator.binding))
@@ -697,7 +708,7 @@ impl Interpreter {
             let state = EnvHandle::new(EnvKind::Block, Some(env.clone()));
             for name in &per_iteration_names {
                 let value = loop_env.resolve(name).unwrap_or(JsValue::Undefined);
-                state.declare_lexical(name, value, per_iteration_mutable)?;
+                state.declare_lexical(name, value, true)?;
             }
             state
         };
@@ -708,7 +719,7 @@ impl Interpreter {
                 let iteration = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
                 for name in &per_iteration_names {
                     let value = state_env.resolve(name).unwrap_or(JsValue::Undefined);
-                    iteration.declare_lexical(name, value, per_iteration_mutable)?;
+                    iteration.declare_lexical(name, value, true)?;
                 }
                 iteration
             };
@@ -735,7 +746,7 @@ impl Interpreter {
                 let update_env = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
                 for name in &per_iteration_names {
                     let value = iteration_env.resolve(name).unwrap_or(JsValue::Undefined);
-                    update_env.declare_lexical(name, value, per_iteration_mutable)?;
+                    update_env.declare_lexical(name, value, true)?;
                 }
                 if let Some(update) = update {
                     self.eval_expr(update, &update_env)?;
