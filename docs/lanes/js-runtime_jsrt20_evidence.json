@@ -30,7 +30,14 @@
     "status": "in progress, not the ticket this evidence file gates -- included here because its 3 commits sit in the same tree this gate measured",
     "item_1_redundant_lookups": {
       "root_cause": "set_with_receiver's fallback (builtins_std_object_model.rs) built a throwaway JsObject descriptor and round-tripped it through define_own_property, which re-parses each field via std_descriptor_fields (has_property+get_prop per field) and re-fetches the same own-property `existing` set_with_receiver had already looked up. set_prop (interp_property_access.rs) called own_prop(&key) twice back-to-back with nothing mutating the object in between, and refetched \"length\" twice per array-index write.",
-      "fix": "Added ordinary_set_data_property, reusing the already-fetched property/length directly. Merged set_prop's duplicate fetches, keeping a re-fetch only around the \"length\" ToNumber conversion (a hostile valueOf can mutate/delete the property as a side effect there)."
+      "fix": "Added ordinary_set_data_property, reusing the already-fetched property/length directly. Merged set_prop's duplicate fetches, keeping a re-fetch only around the \"length\" ToNumber conversion (a hostile valueOf can mutate/delete the property as a side effect there).",
+      "microbenchmark_isolated": {
+        "method": "Same idle host (venus-003, load average 0.33 at measurement time, no other lane's job running there), same release build, back-to-back: JSRT-20-only (builtins_std_object_model.rs/interp_property_access.rs reverted to their 6a002829 pre-JSRT-21 content) vs the full JSRT-20+21 HEAD (fb12afc5).",
+        "jsrt20_only": {"object_100000": "1.24s", "array_push_1000000": "14.83s", "array_index_assign_1000000": "12.44s"},
+        "jsrt20_plus_21": {"object_100000": "0.72s", "array_push_1000000": "7.51s", "array_index_assign_1000000": "6.94s"},
+        "improvement": "~42% faster (object), ~49% faster / ~2x (array push), ~44% faster (array index-assign)",
+        "note": "An earlier contended run on venus-001 (load average up to 32 from other lanes' concurrent builds) showed no clear improvement and was correctly not reported as a measured result; this isolated re-run supersedes it."
+      }
     },
     "item_2_proxy_trap_bug_fixed": {
       "root_cause": "ordinary_set_data_property skipped the window_proxy_define/proxy_define trap checks define_own_property makes on entry, so setting through a Proxy or WindowProxy silently used the ordinary algorithm instead of invoking the trap.",
@@ -81,7 +88,6 @@
     }
   },
   "known_gaps": [
-    "built-ins/RegExp/property-escapes timeouts are essentially unchanged (421 -> 419); the dominant cost there is very likely JsString concatenation (buildString()-style repeated += on an immutable Rc<[u16]>), not property access. Candidate for a follow-up ticket, out of JSRT-20's value.rs-only scope.",
-    "JSRT-21's own micro-benchmark (push/index-assign per-element cost) did not show a clear, isolated improvement in this session's measurements -- runs were contended with other lanes' concurrent builds on shared venus hosts (observed load average up to 32). The redundant-lookup removal is behavior-preserving and gate-clean, but its performance impact needs a re-measurement on an idle host before being reported as a win."
+    "built-ins/RegExp/property-escapes timeouts are essentially unchanged (421 -> 419); the dominant cost there is very likely JsString concatenation (buildString()-style repeated += on an immutable Rc<[u16]>), not property access. Candidate for a follow-up ticket, out of JSRT-20's value.rs-only scope."
   ]
 }
